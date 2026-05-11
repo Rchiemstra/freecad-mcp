@@ -88,3 +88,27 @@ class FreeCADConnection:
 
     def list_documents(self) -> list[str]:
         return self.server.list_documents()
+
+    def sketch_create(self, doc_name: str, sketch_name: str, body_name: str | None = None, attach_to: str | None = None) -> dict[str, Any]:
+        return self.server.sketch_create(doc_name, sketch_name, body_name, attach_to)
+
+    def sketch_add_geometry(self, doc_name: str, sketch_name: str, geometry: list) -> dict[str, Any]:
+        return self.server.sketch_add_geometry(doc_name, sketch_name, geometry)
+
+    def sketch_add_constraint(self, doc_name: str, sketch_name: str, constraints: list) -> dict[str, Any]:
+        return self.server.sketch_add_constraint(doc_name, sketch_name, constraints)
+
+    def pad_feature(self, doc_name: str, sketch_name: str, pad_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict[str, Any]:
+        return self.server.pad_feature(doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir)
+
+    def pocket_feature(self, doc_name: str, sketch_name: str, pocket_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict[str, Any]:
+        return self.server.pocket_feature(doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir)
+
+    def recompute_document(self, doc_name: str) -> dict[str, Any]:
+        return self.server.recompute_document(doc_name)
+
+    def undo(self, doc_name: str) -> dict[str, Any]:
+        return self.server.undo(doc_name)
+
+    def redo(self, doc_name: str) -> dict[str, Any]:
+        return self.server.redo(doc_name)

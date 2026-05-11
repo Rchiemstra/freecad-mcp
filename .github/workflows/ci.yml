@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "verify-freecad"]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: tools/mcp/freecad-mcp
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Lint
+  # -------------------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check src/ tests/
+
+  # -------------------------------------------------------------------------
+  # Layer-A + Layer-B: schema and code-fragment tests (no FreeCAD)
+  # -------------------------------------------------------------------------
+  schema:
+    name: Schema & code-fragment tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e ".[dev]" || pip install -e . && pip install pytest
+      - name: Run Layer-A + Layer-B tests
+        run: |
+          pytest tests/test_mcp_extended.py \
+                 tests/test_p1_sketch_curves.py \
+                 tests/test_p2_sketch_editing.py \
+                 tests/test_p3_features.py \
+                 tests/test_p4_gears.py \
+                 tests/test_p5_measure.py \
+                 tests/test_p6_io.py \
+                 -v --tb=short -q
+        timeout-minutes: 5
+
+  # -------------------------------------------------------------------------
+  # Layer-C: Analytic / math conformance tests (pure Python, no FreeCAD)
+  # -------------------------------------------------------------------------
+  math:
+    name: Math conformance tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e . && pip install pytest
+      - name: Run Layer-C math tests
+        run: |
+          pytest tests/test_p4_gears.py::TestInvoluteMathLayerC \
+                 tests/test_p4_gears.py::TestComputeGearGeometryLayerC \
+                 tests/test_p1_sketch_curves.py::TestSketchAddParametricCurve::test_involute_expressions_correct \
+                 -v --tb=short
+        timeout-minutes: 3
+
+  # -------------------------------------------------------------------------
+  # Layer-D: Gear pair compatibility tests
+  # -------------------------------------------------------------------------
+  gear-pairs:
+    name: Gear pair tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e . && pip install pytest
+      - name: Run gear-pair tests
+        run: |
+          pytest tests/test_p4_gears.py::TestCheckGearPairLayerD \
+                 tests/integration/test_eight_gears.py::TestEightGearPairs \
+                 tests/integration/test_eight_gears.py::TestEightGearGeometry \
+                 -v --tb=short
+        timeout-minutes: 3
+
+  # -------------------------------------------------------------------------
+  # Integration: 8-gear parametric suite (mock-based, no FreeCAD runtime)
+  # -------------------------------------------------------------------------
+  integration:
+    name: Integration (mock-based)
+    runs-on: ubuntu-latest
+    needs: [schema, math]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e . && pip install pytest
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --tb=short -q
+        timeout-minutes: 5
+
+  # -------------------------------------------------------------------------
+  # Full test-suite summary
+  # -------------------------------------------------------------------------
+  all-tests:
+    name: Full test suite
+    runs-on: ubuntu-latest
+    needs: [schema, math, gear-pairs, integration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e . && pip install pytest pytest-cov
+      - name: Run all unit tests with coverage
+        run: |
+          pytest tests/ \
+            --ignore=tests/integration \
+            --cov=freecad_mcp \
+            --cov-report=term-missing \
+            -v --tb=short -q
+        timeout-minutes: 10
+      - name: Print test count
+        run: |
+          pytest tests/ --ignore=tests/integration --collect-only -q 2>&1 | tail -5

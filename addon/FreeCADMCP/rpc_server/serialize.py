@@ -40,23 +40,28 @@ def serialize_value(value):
 def serialize_shape(shape):
     if shape is None:
         return None
-    return {
-        "Volume": shape.Volume,
-        "Area": shape.Area,
-        "VertexCount": len(shape.Vertexes),
-        "EdgeCount": len(shape.Edges),
-        "FaceCount": len(shape.Faces),
-    }
+    try:
+        return {
+            "Volume": shape.Volume,
+            "Area": shape.Area,
+            "VertexCount": len(shape.Vertexes),
+            "EdgeCount": len(shape.Edges),
+            "FaceCount": len(shape.Faces),
+        }
+    except Exception as e:
+        return {"error": f"Invalid shape: {e}"}
 
 
 def serialize_view_object(view):
     if view is None:
         return None
-    return {
-        "ShapeColor": serialize_value(view.ShapeColor),
-        "Transparency": view.Transparency,
-        "Visibility": view.Visibility,
-    }
+    result = {}
+    for attr in ("ShapeColor", "Transparency", "Visibility"):
+        try:
+            result[attr] = serialize_value(getattr(view, attr))
+        except Exception:
+            pass
+    return result
 
 
 def serialize_object(obj):
@@ -86,8 +91,10 @@ def serialize_object(obj):
             except Exception as e:
                 result["Properties"][prop] = f"<error: {str(e)}>"
 
-        if hasattr(obj, "ViewObject") and obj.ViewObject is not None:
-            view = obj.ViewObject
-            result["ViewObject"] = serialize_view_object(view)
+        try:
+            if hasattr(obj, "ViewObject") and obj.ViewObject is not None:
+                result["ViewObject"] = serialize_view_object(obj.ViewObject)
+        except Exception:
+            pass
 
         return result
