@@ -98,7 +98,9 @@ def execute_code_operation(
 ) -> ToolResponse:
     try:
         res = freecad.execute_code(code)
-        screenshot = freecad.get_active_screenshot()
+        # Preserve the user's camera after arbitrary code execution. Named views
+        # are still handled by get_view_operation().
+        screenshot = freecad.get_active_screenshot(view_name=None)
 
         if res["success"]:
             response = text_response(f"Code executed successfully: {res['message']}")

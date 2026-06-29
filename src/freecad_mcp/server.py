@@ -116,14 +116,12 @@ state = ServerState()
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     try:
         logger.info("FreeCADMCP server starting up")
-        try:
-            _ = get_freecad_connection()
-            logger.info("Successfully connected to FreeCAD on startup")
-        except Exception as e:
-            logger.warning(f"Could not connect to FreeCAD on startup: {str(e)}")
-            logger.warning(
-                "Make sure the FreeCAD addon is running before using FreeCAD resources or tools"
-            )
+        # Do not connect to FreeCAD here: probing the RPC server can block for a
+        # couple of seconds, which delays the MCP `initialize` handshake long
+        # enough that clients with a short init timeout (e.g. the interactive
+        # Cursor agent panel) mark the server as failed. The connection is
+        # established lazily on first tool use via get_freecad_connection().
+        logger.info("FreeCAD connection deferred until first tool use")
         yield {}
     finally:
         if state.freecad_connection:
