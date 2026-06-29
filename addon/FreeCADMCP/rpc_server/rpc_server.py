@@ -339,7 +339,7 @@ class FreeCADRPC:
     def get_parts_list(self):
         return get_parts_list()
 
-    def get_active_screenshot(self, view_name: str = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None) -> str:
+    def get_active_screenshot(self, view_name: str | None = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None) -> str:
         """Get a screenshot of the active view.
         
         Returns a base64-encoded string of the screenshot or None if a screenshot
@@ -512,33 +512,34 @@ class FreeCADRPC:
         except Exception as e:
             return str(e)
 
-    def _save_active_screenshot(self, save_path: str, view_name: str = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None):
+    def _save_active_screenshot(self, save_path: str, view_name: str | None = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None):
         try:
             view = FreeCADGui.ActiveDocument.ActiveView
             # Check if the view supports screenshots
             if not hasattr(view, 'saveImage'):
                 return "Current view does not support screenshots"
                 
-            if view_name == "Isometric":
-                view.viewIsometric()
-            elif view_name == "Front":
-                view.viewFront()
-            elif view_name == "Top":
-                view.viewTop()
-            elif view_name == "Right":
-                view.viewRight()
-            elif view_name == "Back":
-                view.viewBack()
-            elif view_name == "Left":
-                view.viewLeft()
-            elif view_name == "Bottom":
-                view.viewBottom()
-            elif view_name == "Dimetric":
-                view.viewDimetric()
-            elif view_name == "Trimetric":
-                view.viewTrimetric()
-            else:
-                raise ValueError(f"Invalid view name: {view_name}")
+            if view_name is not None:
+                if view_name == "Isometric":
+                    view.viewIsometric()
+                elif view_name == "Front":
+                    view.viewFront()
+                elif view_name == "Top":
+                    view.viewTop()
+                elif view_name == "Right":
+                    view.viewRight()
+                elif view_name == "Back":
+                    view.viewBack()
+                elif view_name == "Left":
+                    view.viewLeft()
+                elif view_name == "Bottom":
+                    view.viewBottom()
+                elif view_name == "Dimetric":
+                    view.viewDimetric()
+                elif view_name == "Trimetric":
+                    view.viewTrimetric()
+                else:
+                    raise ValueError(f"Invalid view name: {view_name}")
 
             # Focus on specific object or fit all
             if focus_object:
@@ -550,7 +551,7 @@ class FreeCADRPC:
                     FreeCADGui.SendMsgToActiveView("ViewSelection")
                 else:
                     view.fitAll()
-            else:
+            elif view_name is not None:
                 view.fitAll()
             FreeCADGui.updateGui()
             if width is not None and height is not None:

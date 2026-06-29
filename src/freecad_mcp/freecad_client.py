@@ -61,7 +61,7 @@ class FreeCADConnection:
 
     def get_active_screenshot(
         self,
-        view_name: str = "Isometric",
+        view_name: str | None = "Isometric",
         width: int | None = None,
         height: int | None = None,
         focus_object: str | None = None,
