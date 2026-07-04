@@ -108,6 +108,8 @@ def process_gui_tasks(reschedule: bool = True) -> None:
 
     shutdown = False
     try:
+        if _rpc_request_queue.empty():
+            return  # nothing queued; skip cursor/status-bar churn on idle heartbeat ticks
         if QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton:
             return  # user is dragging; defer to next tick
         if QtWidgets.QApplication.activePopupWidget() is not None:
