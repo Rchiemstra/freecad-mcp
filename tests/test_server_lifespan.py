@@ -46,3 +46,9 @@ class ServerLifespanTest(unittest.TestCase):
 
         connection.disconnect.assert_called_once_with()
         self.assertIsNone(server.state.freecad_connection)
+
+    def test_asset_creation_strategy_prompt_loads_resource(self):
+        prompt = server.asset_creation_strategy()
+
+        self.assertIn("Asset Creation Strategy for FreeCAD MCP", prompt)
+        self.assertIn("get_objects()", prompt)
