@@ -110,6 +110,19 @@ from .p6_io import (
     set_color_operation,
 )
 
+# P7 - Assembly references, sketch geometry, path wires
+from .p7_assembly import (
+    build_path_wire_operation,
+    create_datum_plane_operation,
+    create_part_container_operation,
+    create_subshape_binder_operation,
+    get_document_tree_operation,
+    get_sketch_geometry_operation,
+    move_object_operation,
+    sketch_add_external_projection_operation,
+    sweep_pipe_operation,
+)
+
 __all__ = [
     # Core
     "close_document_operation",
@@ -203,4 +216,14 @@ __all__ = [
     "export_brep_operation",
     "import_brep_operation",
     "set_color_operation",
+    # P7
+    "build_path_wire_operation",
+    "create_datum_plane_operation",
+    "create_part_container_operation",
+    "create_subshape_binder_operation",
+    "get_document_tree_operation",
+    "get_sketch_geometry_operation",
+    "move_object_operation",
+    "sketch_add_external_projection_operation",
+    "sweep_pipe_operation",
 ]

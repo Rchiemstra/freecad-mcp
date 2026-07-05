@@ -235,10 +235,12 @@ class TestValidateGeometry:
         validate_geometry_operation(conn, "Doc", "Obj1")
         assert_code_contains(_code(conn), "isValid")
 
-    def test_analyze_called(self):
+    def test_check_called_with_exception_capture(self):
         conn = _ok_conn()
         validate_geometry_operation(conn, "Doc", "Obj1")
-        assert_code_contains(_code(conn), "analyze")
+        code = _code(conn)
+        assert_code_contains(code, "check(False)", "check_ok", "check_errors", "except Exception as _check_err")
+        assert "analyze" not in code
 
 
 # ---------------------------------------------------------------------------

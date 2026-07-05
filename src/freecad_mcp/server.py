@@ -99,6 +99,16 @@ from .operations import (
     export_brep_operation,
     import_brep_operation,
     set_color_operation,
+    # P7 — Assembly references, sketch geometry, path wires
+    build_path_wire_operation,
+    create_datum_plane_operation,
+    create_part_container_operation,
+    create_subshape_binder_operation,
+    get_document_tree_operation,
+    get_sketch_geometry_operation,
+    move_object_operation,
+    sketch_add_external_projection_operation,
+    sweep_pipe_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_state import ServerState
@@ -2735,6 +2745,239 @@ def set_color(
     return set_color_operation(
         get_freecad_connection(), state.only_text_feedback,
         doc_name, obj_name, r, g, b, transparency,
+    )
+
+
+# =============================================================================
+# P7 — Assembly references, sketch geometry, path wires
+# =============================================================================
+
+@mcp.tool()
+def get_document_tree(
+    ctx: Context,
+    doc_name: str,
+    root_filter: str | None = None,
+    max_depth: int = 4,
+    include: list[str] | None = None,
+    include_properties: list[str] | None = None,
+    selected_nodes: list[str] | None = None,
+) -> list[TextContent]:
+    """Return a compact document/container tree.
+
+    Args:
+        doc_name: Document to inspect.
+        root_filter: Optional Name/Label substring used to select tree roots.
+        max_depth: Maximum container depth to include.
+        include: Fields to include, defaulting to Name/Label/TypeId/Visibility/State.
+        include_properties: Optional object properties to include.
+        selected_nodes: Names/labels whose properties should be included.
+
+    Returns:
+        JSON tree for compact agent inspection.
+    """
+    return get_document_tree_operation(
+        get_freecad_connection(),
+        doc_name,
+        root_filter,
+        max_depth,
+        include,
+        include_properties,
+        selected_nodes,
+    )
+
+
+@mcp.tool()
+def create_part_container(
+    ctx: Context,
+    doc_name: str,
+    part_name: str,
+    parent_container: str | None = None,
+    if_exists: Literal["error", "skip", "replace"] = "error",
+) -> list[TextContent | ImageContent]:
+    """Create an App::Part assembly container."""
+    return create_part_container_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        part_name,
+        parent_container,
+        if_exists,
+    )
+
+
+@mcp.tool()
+def move_object(
+    ctx: Context,
+    doc_name: str,
+    obj_name: str,
+    target_container: str,
+    remove_from_old_parent: bool = True,
+) -> list[TextContent | ImageContent]:
+    """Move an object into a PartDesign Body or App::Part container."""
+    return move_object_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        obj_name,
+        target_container,
+        remove_from_old_parent,
+    )
+
+
+@mcp.tool()
+def create_subshape_binder(
+    ctx: Context,
+    doc_name: str,
+    binder_name: str,
+    source_object: str,
+    sub_elements: list[str] | None = None,
+    target_body: str | None = None,
+    target_container: str | None = None,
+    relative: bool = False,
+    sync_placement: bool = True,
+    if_exists: Literal["error", "skip", "replace"] = "error",
+) -> list[TextContent | ImageContent]:
+    """Create a PartDesign SubShapeBinder with placement validation."""
+    return create_subshape_binder_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        binder_name,
+        source_object,
+        sub_elements,
+        target_body,
+        target_container,
+        relative,
+        sync_placement,
+        if_exists,
+    )
+
+
+@mcp.tool()
+def create_datum_plane(
+    ctx: Context,
+    doc_name: str,
+    plane_name: str,
+    body_name: str,
+    mode: Literal[
+        "midpoint_between_faces",
+        "through_point",
+        "offset_from_face",
+        "between_parallel_planes",
+        "plane_from_binder_face",
+    ],
+    source_ref: str | None = None,
+    face_a: str | None = None,
+    face_b: str | None = None,
+    offset_along_normal: list[float] | None = None,
+    map_mode: str = "FlatFace",
+    if_exists: Literal["error", "skip", "replace"] = "error",
+) -> list[TextContent | ImageContent]:
+    """Create a PartDesign datum plane for assembly reference workflows."""
+    return create_datum_plane_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        plane_name,
+        body_name,
+        mode,
+        source_ref,
+        face_a,
+        face_b,
+        offset_along_normal,
+        map_mode,
+        if_exists,
+    )
+
+
+@mcp.tool()
+def get_sketch_geometry(
+    ctx: Context,
+    doc_name: str,
+    sketch_name: str,
+    include_constraints: bool = True,
+    include_external: bool = True,
+    global_coords: bool = True,
+) -> list[TextContent]:
+    """Return sketch geometry endpoints, construction flags, constraints, and external refs."""
+    return get_sketch_geometry_operation(
+        get_freecad_connection(),
+        doc_name,
+        sketch_name,
+        include_constraints,
+        include_external,
+        global_coords,
+    )
+
+
+@mcp.tool()
+def sketch_add_external_projection(
+    ctx: Context,
+    doc_name: str,
+    sketch_name: str,
+    source_ref: str,
+    projection_mode: Literal["auto", "edge", "face", "point"] = "auto",
+    defining: bool = False,
+) -> list[TextContent | ImageContent]:
+    """Add external geometry to a sketch with assembly-aware preflight checks."""
+    return sketch_add_external_projection_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        source_ref,
+        projection_mode,
+        defining,
+    )
+
+
+@mcp.tool()
+def build_path_wire(
+    ctx: Context,
+    doc_name: str,
+    wire_name: str,
+    segments: list[dict[str, Any]],
+    tolerance_mm: float = 0.5,
+    container: str | None = None,
+    if_exists: Literal["error", "skip", "replace"] = "error",
+) -> list[TextContent | ImageContent]:
+    """Build a Part wire from sketch geometry and optional bridge segments."""
+    return build_path_wire_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        wire_name,
+        segments,
+        tolerance_mm,
+        container,
+        if_exists,
+    )
+
+
+@mcp.tool()
+def sweep_pipe(
+    ctx: Context,
+    doc_name: str,
+    path_wire: str,
+    diameter_mm: float,
+    solid_name: str,
+    profile_mode: str = "frenet",
+    color: list[float] | None = None,
+    container: str | None = None,
+    if_exists: Literal["error", "skip", "replace"] = "error",
+) -> list[TextContent | ImageContent]:
+    """Sweep a circular solid pipe along a wire path."""
+    return sweep_pipe_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        path_wire,
+        diameter_mm,
+        solid_name,
+        profile_mode,
+        color,
+        container,
+        if_exists,
     )
 
 
