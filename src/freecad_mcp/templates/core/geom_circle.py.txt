@@ -1,0 +1,1 @@
+_idx = _sk.addGeometry(Part.Circle(FreeCAD.Vector($cx,$cy,0),FreeCAD.Vector(0,0,1),$radius),$construction); _idxs.append(_idx)

@@ -1,0 +1,19 @@
+_t0, _t1, _n = $t_start, $t_end, $samples
+_sample_pts = []
+for _si in range(_n + 1):
+    t = _t0 + (_t1 - _t0) * _si / _n
+    _x_val = $x_expr
+    _y_val = $y_expr
+    _sample_pts.append(FreeCAD.Vector(_x_val, _y_val, 0))
+_unique_pts = [_sample_pts[0]]
+for _p in _sample_pts[1:]:
+    if (_p - _unique_pts[-1]).Length > 1e-9:
+        _unique_pts.append(_p)
+if len(_unique_pts) < 2:
+    raise ValueError('Parametric curve collapsed to a single point')
+_bsp = Part.BSplineCurve()
+_bsp.interpolate(_unique_pts)
+_idx = _sk.addGeometry(_bsp, $construction)
+_doc.recompute()
+print('geometry_index=' + str(_idx))
+print('sample_count=' + str(len(_unique_pts)))

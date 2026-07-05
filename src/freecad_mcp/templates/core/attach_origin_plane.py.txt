@@ -1,0 +1,7 @@
+_plane = None
+for _o in _doc.Objects:
+    if _o.TypeId == 'App::Origin':
+        for _f in getattr(_o, 'OriginFeatures', []):
+            if _f.Label == $attach_to: _plane = _f; break
+        if _plane: break
+if _plane: _sk.AttachmentSupport = [(_plane, '')]; _sk.MapMode = 'FlatFace'

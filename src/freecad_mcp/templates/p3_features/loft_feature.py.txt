@@ -1,0 +1,12 @@
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+_sk_names = $sketch_names
+_profiles = [(_doc.getObject(_n), ['']) for _n in _sk_names]
+if any(_p[0] is None for _p in _profiles): raise RuntimeError('One or more sketches not found')
+_loft = _body.newObject('PartDesign::AdditiveLoft', $loft_name) if _body else _doc.addObject('PartDesign::AdditiveLoft', $loft_name)
+_loft.Sections = _profiles
+_loft.Ruled = $ruled
+_loft.Closed = $closed
+_doc.recompute()
+print('loft_name=' + _loft.Name)

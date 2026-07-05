@@ -1,0 +1,11 @@
+def _set_feature_bool(_feature, _property_names, _value):
+    _properties = set(getattr(_feature, 'PropertiesList', []))
+    for _name in _property_names:
+        if _name in _properties:
+            setattr(_feature, _name, bool(_value))
+            return _name
+    if _value:
+        raise RuntimeError(
+            'Feature does not support any of: ' + ', '.join(_property_names)
+        )
+    return None

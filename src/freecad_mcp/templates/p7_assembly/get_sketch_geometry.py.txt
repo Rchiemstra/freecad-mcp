@@ -1,0 +1,50 @@
+_sketch_name = $sketch_name
+_include_constraints = $include_constraints
+_include_external = $include_external
+_global_coords = $global_coords
+_sk = _doc.getObject(_sketch_name)
+if not _sk: raise RuntimeError('Sketch not found: ' + _sketch_name)
+def _maybe_global(_v):
+    if not _global_coords: return _v
+    try: return _sk.getGlobalPlacement().multVec(_v)
+    except Exception: return _sk.Placement.multVec(_v)
+def _construction(_idx, _geo):
+    try:
+        import Sketcher
+        return bool(Sketcher.GeometryFacade.getConstruction(_geo))
+    except Exception:
+        try: return bool(_sk.getConstruction(_idx))
+        except Exception: return False
+def _geo_info(_idx, _geo):
+    _info = {'index': _idx, 'type': type(_geo).__name__, 'construction': _construction(_idx, _geo)}
+    for _name in ('StartPoint', 'EndPoint', 'Center', 'Location'):
+        if hasattr(_geo, _name):
+            _val = getattr(_geo, _name)
+            _info[_name[0].lower() + _name[1:] + '_local'] = _vec(_val)
+            _info[_name[0].lower() + _name[1:] + '_global'] = _vec(_maybe_global(_val))
+    if hasattr(_geo, 'Radius'): _info['radius'] = round(float(_geo.Radius), 6)
+    if hasattr(_geo, 'MajorRadius'): _info['major_radius'] = round(float(_geo.MajorRadius), 6)
+    if hasattr(_geo, 'MinorRadius'): _info['minor_radius'] = round(float(_geo.MinorRadius), 6)
+    return _info
+_result = {'ok': True, 'sketch_name': _sk.Name, 'geometry_count': len(getattr(_sk, 'Geometry', [])), 'geometry': [_geo_info(i, g) for i, g in enumerate(getattr(_sk, 'Geometry', []))]}
+if _include_constraints:
+    _constraints = []
+    for _idx, _c in enumerate(getattr(_sk, 'Constraints', [])):
+        _constraints.append({
+            'index': _idx, 'type': str(getattr(_c, 'Type', '')),
+            'first': getattr(_c, 'First', None), 'first_pos': getattr(_c, 'FirstPos', None),
+            'second': getattr(_c, 'Second', None), 'second_pos': getattr(_c, 'SecondPos', None),
+            'third': getattr(_c, 'Third', None), 'third_pos': getattr(_c, 'ThirdPos', None),
+            'value': getattr(_c, 'Value', None),
+        })
+    _result['constraints'] = _constraints
+if _include_external:
+    _external = []
+    for _idx, _entry in enumerate(getattr(_sk, 'ExternalGeometry', [])):
+        try:
+            _obj, _subs = _entry
+            _external.append({'index': _idx, 'negative_index': -3 - _idx, 'object': _obj.Name, 'sub_elements': list(_subs) if isinstance(_subs, (list, tuple)) else [_subs]})
+        except Exception as _err:
+            _external.append({'index': _idx, 'error': str(_err)})
+    _result['external_geometry'] = _external
+print(json.dumps(_result, default=str))

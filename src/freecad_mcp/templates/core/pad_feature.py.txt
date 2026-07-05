@@ -1,0 +1,20 @@
+import FreeCAD
+_doc = FreeCAD.getDocument($doc_name)
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+if not _body:
+    for _o in _doc.Objects:
+        if _o.TypeId == 'PartDesign::Body' and _sk in _o.Group: _body = _o; break
+_pad = _body.newObject('PartDesign::Pad', $pad_name) if _body else _doc.addObject('PartDesign::Pad', $pad_name)
+_pad.Profile = (_sk, [''])
+_pad.Length = $length
+$extrusion_helpers
+$bool_helpers
+_set_extrusion_symmetric(_pad, $symmetric)
+_set_feature_bool(_pad, ('Reversed',), $reversed_dir)
+_sk.Visibility = False
+_doc.recompute()
+print('pad_name=' + _pad.Name)

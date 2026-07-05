@@ -1,0 +1,19 @@
+_obj_name = $obj_name
+_target_name = $target_container
+_remove_old = $remove_from_old_parent
+_obj = _doc.getObject(_obj_name)
+if not _obj: raise RuntimeError('Object not found: ' + _obj_name)
+_target = _doc.getObject(_target_name)
+if not _target: raise RuntimeError('Target container not found: ' + _target_name)
+_old = []
+if _remove_old:
+    for _parent in list(getattr(_obj, 'InList', [])):
+        try:
+            if _obj in getattr(_parent, 'Group', []):
+                _old.append(_parent.Name)
+                _remove_from_container(_parent, _obj)
+        except Exception:
+            pass
+_add_to_container(_target, _obj)
+_doc.recompute()
+print(json.dumps({'ok': True, 'object_name': _obj.Name, 'target_container': _target.Name, 'old_parents': _old}))

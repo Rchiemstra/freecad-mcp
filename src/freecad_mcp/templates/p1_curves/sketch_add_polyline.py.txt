@@ -1,0 +1,4 @@
+_idxs = []
+$segment_lines
+_doc.recompute()
+print('indices=' + str(_idxs))

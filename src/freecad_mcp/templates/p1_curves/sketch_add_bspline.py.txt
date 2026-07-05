@@ -1,0 +1,9 @@
+_poles = $poles
+_weights = $weights
+_degree = $degree
+_periodic = $periodic
+_bsp = Part.BSplineCurve()
+$build_line
+_idx = _sk.addGeometry(_bsp, $construction)
+_doc.recompute()
+print('geometry_index=' + str(_idx))

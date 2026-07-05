@@ -1,0 +1,7 @@
+import FreeCAD, Part
+_doc = FreeCAD.getDocument($doc_name)
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')
+_idx = _sk.addGeometry(Part.Circle(FreeCAD.Vector($cx,$cy,0),FreeCAD.Vector(0,0,1),$radius),$construction)
+_doc.recompute()
+print('geometry_index=' + str(_idx))

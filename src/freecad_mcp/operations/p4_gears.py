@@ -15,7 +15,7 @@ import logging
 
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse, text_response
-from ..template_resources import read_template_lines
+from ..template_resources import read_template_lines, render_template_lines
 from .core import _run_code, _partdesign_extrusion_helper_code, _partdesign_bool_property_helper_code
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -43,83 +43,33 @@ def _gear_header_code(
     samples_per_flank: int,
 ) -> list[str]:
     """Common preamble for all gear generators."""
-    return [
-        "import math, FreeCAD, Part, Sketcher",
-        f"_doc = FreeCAD.getDocument({doc_name!r})",
-        f"if not _doc: raise RuntimeError({f'Document {doc_name!r} not found'!r})",
-        f"_gear_name   = {gear_name!r}",
-        f"_body_name   = {body_name!r}",
-        f"_sketch_name = {sketch_name!r} or (_gear_name + '_Sketch')",
-        f"_teeth          = int({teeth})",
-        f"_module         = float({module})",
-        f"_width          = float({width})",
-        f"_pressure_angle = math.radians(float({pressure_angle}))",
-        f"_bore_diameter  = float({bore_diameter})",
-        f"_clearance      = float({clearance})",
-        f"_backlash       = float({backlash})",
-        f"_samples        = max(6, int({samples_per_flank}))",
-        "if _teeth < 3: raise ValueError('teeth must be >= 3')",
-        "if _module <= 0: raise ValueError('module must be > 0')",
-        "if _width <= 0: raise ValueError('width must be > 0')",
-        "if not (0 < _pressure_angle < math.radians(45)): raise ValueError('pressure_angle must be 1-44 degrees')",
-        "_pitch_radius = _module * _teeth / 2.0",
-        "_base_radius  = _pitch_radius * math.cos(_pressure_angle)",
-        "_outer_radius = _pitch_radius + _module",
-        "_root_radius  = max(_pitch_radius - (1.25 * _module + _clearance), _module * 0.05)",
-        "if _bore_diameter and _bore_diameter >= 2.0 * _root_radius:",
-        "    raise ValueError('bore_diameter must be smaller than root diameter')",
-        # Body
-        "_body = _doc.getObject(_body_name) if _body_name else None",
-        "if _body_name and not _body: raise RuntimeError('Body not found: ' + _body_name)",
-        "if not _body: _body = _doc.addObject('PartDesign::Body', _gear_name + '_Body')",
-        # Sketch
-        "_sk = _body.newObject('Sketcher::SketchObject', _sketch_name)",
-        "_origin = getattr(_body, 'Origin', None)",
-        "_plane = None",
-        "for _f in getattr(_origin, 'OriginFeatures', []):",
-        "    if getattr(_f, 'Label', '') == 'XY_Plane': _plane = _f; break",
-        "if _plane: _sk.AttachmentSupport = [(_plane,'')]; _sk.MapMode = 'FlatFace'",
-        # Point collector
-        "_points = []",
-        "def _add_point(_x, _y):",
-        "    _pt = FreeCAD.Vector(_x, _y, 0)",
-        "    if not _points or (_points[-1] - _pt).Length > 1e-8:",
-        "        _points.append(_pt)",
-    ]
+    return render_template_lines(
+        "p4_gears/gear_header.py.txt",
+        doc_name=repr(doc_name),
+        doc_missing=repr(f"Document {doc_name!r} not found"),
+        gear_name=repr(gear_name),
+        body_name=repr(body_name),
+        sketch_name=repr(sketch_name),
+        teeth=repr(teeth),
+        module=repr(module),
+        width=repr(width),
+        pressure_angle=repr(pressure_angle),
+        bore_diameter=repr(bore_diameter),
+        clearance=repr(clearance),
+        backlash=repr(backlash),
+        samples_per_flank=repr(samples_per_flank),
+    )
 
 
 def _gear_footer_code(gear_name: str, bore_diameter: float) -> list[str]:
-    lines = list(_PROFILE_TO_SKETCH_CODE)
-    lines += [
-        # Bore
-        f"if {bore_diameter} > 0:",
-        f"    _bore_idx = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0,0,0),FreeCAD.Vector(0,0,1),{bore_diameter}/2.0),False)",
-        f"    try:",
-        f"        _sk.addConstraint(Sketcher.Constraint('Radius',_bore_idx,{bore_diameter}/2.0))",
-        f"        _sk.addConstraint(Sketcher.Constraint('Coincident',_bore_idx,3,-1,1))",
-        f"    except Exception: pass",
-        "try: _sk.solve()",
-        "except Exception: pass",
-        # Pad
-        *_partdesign_extrusion_helper_code(),
-        *_partdesign_bool_property_helper_code(),
-        f"_pad = _body.newObject('PartDesign::Pad', {gear_name!r})",
-        "_pad.Profile = (_sk, [''])",
-        "_pad.Length = _width",
-        "_set_extrusion_symmetric(_pad, False)",
-        "_sk.Visibility = False",
-        "_doc.recompute()",
-        "print('body_name='   + _body.Name)",
-        "print('sketch_name=' + _sk.Name)",
-        "print('pad_name='    + _pad.Name)",
-        "print('teeth='       + str(_teeth))",
-        "print('module='      + str(_module))",
-        "print('pitch_dia='   + str(2.0 * _pitch_radius))",
-        "print('base_dia='    + str(2.0 * _base_radius))",
-        "print('outer_dia='   + str(2.0 * _outer_radius))",
-        "print('root_dia='    + str(2.0 * _root_radius))",
-    ]
-    return lines
+    return render_template_lines(
+        "p4_gears/gear_footer.py.txt",
+        profile_to_sketch="\n".join(_PROFILE_TO_SKETCH_CODE),
+        bore_diameter=repr(bore_diameter),
+        extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
+        bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
+        gear_name=repr(gear_name),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -180,32 +130,15 @@ def create_helical_gear_operation(
         _gear_header_code(doc_name, gear_name, body_name, None, teeth, module, width,
                           pressure_angle, bore_diameter, clearance, backlash, samples_per_flank)
         + list(_INVOLUTE_PROFILE_CODE)
-        + list(_PROFILE_TO_SKETCH_CODE)
-        + [
-            # Bore
-            f"if {bore_diameter} > 0:",
-            f"    _bi = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0,0,0),FreeCAD.Vector(0,0,1),{bore_diameter}/2.0),False)",
-            "try: _sk.solve()\nexcept Exception: pass",
-            # Helix via AdditiveHelix (twist the profile)
-            *_partdesign_extrusion_helper_code(),
-            *_partdesign_bool_property_helper_code(),
-            f"_ha = math.radians({helix_angle})",
-            "_helix_pitch = _width / math.tan(_ha) if abs(math.tan(_ha)) > 1e-9 else 1e6",
-            f"_hel = _body.newObject('PartDesign::AdditiveHelix', {gear_name!r})",
-            "_hel.Profile = (_sk, [''])",
-            "_hel.Pitch = _helix_pitch",
-            "_hel.Height = _width",
-            "_hel.Angle = 0",
-            "_sk.Visibility = False",
-            "_doc.recompute()",
-            "print('body_name='     + _body.Name)",
-            "print('sketch_name='   + _sk.Name)",
-            "print('helix_name='    + _hel.Name)",
-            "print('helix_angle='   + str({helix_angle}))",
-            "print('teeth='         + str(_teeth))",
-            "print('module='        + str(_module))",
-            "print('pitch_dia='     + str(2.0 * _pitch_radius))",
-        ]
+        + render_template_lines(
+            "p4_gears/helical_footer.py.txt",
+            profile_to_sketch="\n".join(_PROFILE_TO_SKETCH_CODE),
+            bore_diameter=repr(bore_diameter),
+            extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
+            bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
+            helix_angle=repr(helix_angle),
+            gear_name=repr(gear_name),
+        )
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Helical gear '{gear_name}' created", "Failed to create helical gear")

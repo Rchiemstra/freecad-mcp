@@ -1,0 +1,5 @@
+_o1 = _doc.getObject($shape1_ref)
+_o2 = _doc.getObject($shape2_ref)
+if not _o1 or not _o2: raise RuntimeError('Object not found')
+_d = _o1.Shape.distToShape(_o2.Shape)
+print(json.dumps({'distance': _d[0], 'unit': 'mm'}))

@@ -1,0 +1,59 @@
+def _get_body(_doc, _source, _body_name=None):
+    if _body_name:
+        _body = _doc.getObject(_body_name)
+        if not _body:
+            raise RuntimeError('Body not found: ' + _body_name)
+        return _body
+    for _obj in _doc.Objects:
+        if getattr(_obj, 'TypeId', '') == 'PartDesign::Body' and _source in getattr(_obj, 'Group', []):
+            return _obj
+    raise RuntimeError('Source feature must be inside a PartDesign Body')
+def _set_originals(_feature, _source):
+    _properties = set(getattr(_feature, 'PropertiesList', []))
+    if 'Originals' in _properties:
+        _feature.Originals = [_source]
+        return 'Originals'
+    if 'Original' in _properties:
+        _feature.Original = _source
+        return 'Original'
+    raise RuntimeError('Pattern feature has no Originals/Original property')
+def _set_property(_feature, _property_names, _value):
+    _properties = set(getattr(_feature, 'PropertiesList', []))
+    for _name in _property_names:
+        if _name in _properties:
+            setattr(_feature, _name, _value)
+            return _name
+    raise RuntimeError('Feature does not support any of: ' + ', '.join(_property_names))
+def _origin_feature(_container, _name):
+    _origin = getattr(_container, 'Origin', None)
+    for _feature in getattr(_origin, 'OriginFeatures', []):
+        if getattr(_feature, 'Name', '') == _name or getattr(_feature, 'Label', '') == _name:
+            return _feature
+    return None
+def _resolve_linksub(_doc, _body, _spec):
+    if ':' in _spec:
+        _obj_name, _sub_name = _spec.split(':', 1)
+        _obj = _doc.getObject(_obj_name)
+        if not _obj:
+            raise RuntimeError('Reference object not found: ' + _obj_name)
+        return (_obj, [_sub_name])
+    for _container in (_body, _doc):
+        _obj = _origin_feature(_container, _spec)
+        if _obj:
+            return (_obj, [''])
+    _obj = _doc.getObject(_spec)
+    if _obj:
+        return (_obj, [''])
+    raise RuntimeError('Reference not found: ' + _spec)
+def _set_linksub(_feature, _property_names, _link):
+    _properties = set(getattr(_feature, 'PropertiesList', []))
+    for _name in _property_names:
+        if _name in _properties:
+            setattr(_feature, _name, _link)
+            return _name
+    raise RuntimeError('Feature does not support any of: ' + ', '.join(_property_names))
+def _set_tip(_body, _feature):
+    try:
+        _body.Tip = _feature
+    except Exception:
+        pass

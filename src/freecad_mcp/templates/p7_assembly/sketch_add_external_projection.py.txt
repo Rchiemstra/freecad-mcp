@@ -1,0 +1,48 @@
+_sketch_name = $sketch_name
+_source_ref = $source_ref
+_projection_mode = $projection_mode
+_defining = $defining
+_sk = _doc.getObject(_sketch_name)
+if not _sk: raise RuntimeError('Sketch not found: ' + _sketch_name)
+_src, _sub = _parse_ref(_source_ref)
+_sk_parent = _parent_of(_sk)
+_src_parent = _parent_of(_src)
+if _sk_parent is not None and _src_parent is not None and _sk_parent != _src_parent:
+    print(json.dumps({'ok': False, 'error': 'binder and sketch must share parent container', 'sketch_parent': _sk_parent.Name, 'source_parent': _src_parent.Name}))
+else:
+    _bad_support = False
+    if getattr(_src, 'TypeId', '') == 'PartDesign::SubShapeBinder':
+        for _support in getattr(_src, 'Support', []):
+            try:
+                _support_obj = _support[0]
+                if getattr(_support_obj, 'TypeId', '') == 'Sketcher::SketchObject': _bad_support = True
+            except Exception: pass
+    if _bad_support:
+        print(json.dumps({'ok': False, 'error': 'binder Support must reference Part::Feature, not Sketcher::SketchObject'}))
+    else:
+        _candidate_edges = []
+        try: _candidate_edges = [_src.Name + ':Edge' + str(i + 1) for i in range(len(_src.Shape.Edges))]
+        except Exception: pass
+        _mode = _projection_mode
+        if _mode == 'auto':
+            if _sub.startswith('Edge'): _mode = 'edge'
+            elif _sub.startswith('Vertex'): _mode = 'point'
+            elif _sub.startswith('Face'): _mode = 'face'
+        _parallel = True
+        if _sub.startswith('Face'):
+            try:
+                _face = _subshape(_src, _sub)
+                _u0, _u1, _v0, _v1 = _face.ParameterRange
+                _face_normal = _face.normalAt((_u0 + _u1) * 0.5, (_v0 + _v1) * 0.5)
+                _sk_normal = _global_placement(_sk).Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+                _parallel = abs(abs(_face_normal.normalize().dot(_sk_normal.normalize())) - 1.0) < 1e-3
+            except Exception:
+                _parallel = True
+        if _sub.startswith('Face') and _mode == 'face' and not _parallel:
+            print(json.dumps({'ok': False, 'error': 'datum normal not parallel to face; use edge projection', 'candidate_edges': _candidate_edges}))
+        else:
+            _before = len(getattr(_sk, 'ExternalGeometry', []))
+            _idx = _sk.addExternal(_src, _sub, bool(_defining))
+            _doc.recompute()
+            _after = len(getattr(_sk, 'ExternalGeometry', []))
+            print(json.dumps({'ok': _idx >= 0, 'sketch_name': _sk.Name, 'source_ref': _source_ref, 'projection_mode': _mode, 'external_index': _idx, 'external_count_before': _before, 'external_count_after': _after}))

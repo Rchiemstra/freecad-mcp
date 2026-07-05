@@ -20,3 +20,7 @@ def read_template_lines(name: str) -> list[str]:
 
 def render_template_text(name: str, **values: str) -> str:
     return Template(read_template_text(name)).substitute(values)
+
+
+def render_template_lines(name: str, **values: str) -> list[str]:
+    return render_template_text(name, **values).strip().splitlines()

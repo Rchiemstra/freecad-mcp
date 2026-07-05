@@ -7,19 +7,18 @@ import logging
 
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse
+from ..template_resources import render_template_lines
 from .core import _run_code
 
 logger = logging.getLogger("FreeCADMCPserver")
 
 
 def _sk_preamble(doc_name: str, sketch_name: str) -> list[str]:
-    return [
-        "import FreeCAD, Part, Sketcher, math",
-        f"_doc = FreeCAD.getDocument({doc_name!r})",
-        "if not _doc: raise RuntimeError('Document not found')",
-        f"_sk = _doc.getObject({sketch_name!r})",
-        "if not _sk: raise RuntimeError('Sketch not found')",
-    ]
+    return render_template_lines(
+        "p2_editing/sk_preamble.py.txt",
+        doc_name=repr(doc_name),
+        sketch_name=repr(sketch_name),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -35,11 +34,13 @@ def sketch_trim_operation(
     point_x: float,
     point_y: float,
 ) -> ToolResponse:
-    lines = _sk_preamble(doc_name, sketch_name) + [
-        f"_sk.trim({geo_index}, FreeCAD.Vector({point_x}, {point_y}, 0))",
-        "_doc.recompute()",
-        f"print('trimmed geometry {geo_index}')",
-    ]
+    lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
+        "p2_editing/sketch_trim.py.txt",
+        geo_index=repr(geo_index),
+        point_x=repr(point_x),
+        point_y=repr(point_y),
+        message=repr(f"trimmed geometry {geo_index}"),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Trim applied to geometry {geo_index}", "Failed to trim")
 
@@ -57,11 +58,13 @@ def sketch_extend_operation(
     increment: float,
     end_point: int = 2,
 ) -> ToolResponse:
-    lines = _sk_preamble(doc_name, sketch_name) + [
-        f"_sk.extend({geo_index}, {increment}, {end_point})",
-        "_doc.recompute()",
-        f"print('extended geometry {geo_index}')",
-    ]
+    lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
+        "p2_editing/sketch_extend.py.txt",
+        geo_index=repr(geo_index),
+        increment=repr(increment),
+        end_point=repr(end_point),
+        message=repr(f"extended geometry {geo_index}"),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Extend applied to geometry {geo_index}", "Failed to extend")
 
@@ -79,11 +82,13 @@ def sketch_split_operation(
     point_x: float,
     point_y: float,
 ) -> ToolResponse:
-    lines = _sk_preamble(doc_name, sketch_name) + [
-        f"_sk.split({geo_index}, FreeCAD.Vector({point_x}, {point_y}, 0))",
-        "_doc.recompute()",
-        f"print('split geometry {geo_index}')",
-    ]
+    lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
+        "p2_editing/sketch_split.py.txt",
+        geo_index=repr(geo_index),
+        point_x=repr(point_x),
+        point_y=repr(point_y),
+        message=repr(f"split geometry {geo_index}"),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Split applied to geometry {geo_index}", "Failed to split")
 
@@ -104,11 +109,12 @@ def sketch_fillet_operation(
     if radius <= 0:
         from ..responses import text_response
         return text_response("fillet radius must be > 0")
-    lines = _sk_preamble(doc_name, sketch_name) + [
-        f"_sk.fillet({geo1}, {geo2}, FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,0), {radius}, True, False)",
-        "_doc.recompute()",
-        "print('fillet applied')",
-    ]
+    lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
+        "p2_editing/sketch_fillet.py.txt",
+        geo1=repr(geo1),
+        geo2=repr(geo2),
+        radius=repr(radius),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Fillet (r={radius}) added between {geo1} and {geo2}",
                      "Failed to add fillet")
@@ -128,18 +134,12 @@ def sketch_offset_operation(
     copy: bool = True,
     construction: bool = False,
 ) -> ToolResponse:
-    c = "True" if construction else "False"
-    lines = _sk_preamble(doc_name, sketch_name) + [
-        f"_indices = {repr(geo_indices)}",
-        f"_offset = {offset}",
-        "_result = _sk.createSketchFillet if hasattr(_sk, 'createSketchFillet') else None",
-        "try:",
-        f"    _sk.addSymmetric(_indices, {c})",
-        "except Exception:",
-        "    pass",
-        "_doc.recompute()",
-        "print('offset applied')",
-    ]
+    lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
+        "p2_editing/sketch_offset.py.txt",
+        geo_indices=repr(geo_indices),
+        offset=repr(offset),
+        construction=repr(construction),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Offset applied to {geo_indices}", "Failed to apply offset")
 
@@ -157,17 +157,11 @@ def sketch_symmetry_operation(
     symmetry_geo: int,
     copy: bool = True,
 ) -> ToolResponse:
-    lines = _sk_preamble(doc_name, sketch_name) + [
-        f"_indices = {repr(geo_indices)}",
-        f"_sym_geo = {symmetry_geo}",
-        "try:",
-        "    _sk.addSymmetric(_indices, _sym_geo)",
-        "except AttributeError:",
-        "    for _gi in _indices:",
-        "        _sk.addConstraint(Sketcher.Constraint('Symmetric', _gi, 1, _gi, 2, _sym_geo))",
-        "_doc.recompute()",
-        "print('symmetry applied')",
-    ]
+    lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
+        "p2_editing/sketch_symmetry.py.txt",
+        geo_indices=repr(geo_indices),
+        symmetry_geo=repr(symmetry_geo),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Symmetry applied to {geo_indices} about geometry {symmetry_geo}",
                      "Failed to apply symmetry")

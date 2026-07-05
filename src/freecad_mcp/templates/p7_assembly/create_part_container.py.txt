@@ -1,0 +1,15 @@
+_part_name = $part_name
+_parent_name = $parent_container
+_if_exists = $if_exists
+_existing = _doc.getObject(_part_name)
+if _existing and _if_exists == 'skip':
+    print(json.dumps({'ok': True, 'skipped': True, 'part_name': _existing.Name, 'type': _existing.TypeId}))
+else:
+    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _part_name)
+    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)
+    _part = _doc.addObject('App::Part', _part_name)
+    _parent = _doc.getObject(_parent_name) if _parent_name else None
+    if _parent_name and not _parent: raise RuntimeError('Parent container not found: ' + _parent_name)
+    _add_to_container(_parent, _part)
+    _doc.recompute()
+    print(json.dumps({'ok': True, 'part_name': _part.Name, 'label': _part.Label, 'parent_container': getattr(_parent, 'Name', None)}))

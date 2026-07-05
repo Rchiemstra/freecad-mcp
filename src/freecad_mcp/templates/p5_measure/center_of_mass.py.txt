@@ -1,0 +1,4 @@
+_obj = _doc.getObject($obj_name)
+if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object not found')
+_com = _obj.Shape.CenterOfMass
+print(json.dumps({'x':round(_com.x,6),'y':round(_com.y,6),'z':round(_com.z,6),'unit':'mm'}))

@@ -1,0 +1,26 @@
+$profile_to_sketch
+if $bore_diameter > 0:
+    _bore_idx = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0,0,0),FreeCAD.Vector(0,0,1),$bore_diameter/2.0),False)
+    try:
+        _sk.addConstraint(Sketcher.Constraint('Radius',_bore_idx,$bore_diameter/2.0))
+        _sk.addConstraint(Sketcher.Constraint('Coincident',_bore_idx,3,-1,1))
+    except Exception: pass
+try: _sk.solve()
+except Exception: pass
+$extrusion_helpers
+$bool_helpers
+_pad = _body.newObject('PartDesign::Pad', $gear_name)
+_pad.Profile = (_sk, [''])
+_pad.Length = _width
+_set_extrusion_symmetric(_pad, False)
+_sk.Visibility = False
+_doc.recompute()
+print('body_name='   + _body.Name)
+print('sketch_name=' + _sk.Name)
+print('pad_name='    + _pad.Name)
+print('teeth='       + str(_teeth))
+print('module='      + str(_module))
+print('pitch_dia='   + str(2.0 * _pitch_radius))
+print('base_dia='    + str(2.0 * _base_radius))
+print('outer_dia='   + str(2.0 * _outer_radius))
+print('root_dia='    + str(2.0 * _root_radius))

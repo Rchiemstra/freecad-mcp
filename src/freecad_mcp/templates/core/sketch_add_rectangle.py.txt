@@ -1,0 +1,9 @@
+import FreeCAD, Part
+_doc = FreeCAD.getDocument($doc_name)
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')
+_idxs = []
+for _p1,_p2 in [(($x1,$y1),($x2,$y1)),(($x2,$y1),($x2,$y2)),(($x2,$y2),($x1,$y2)),(($x1,$y2),($x1,$y1))]:
+    _idxs.append(_sk.addGeometry(Part.LineSegment(FreeCAD.Vector(_p1[0],_p1[1],0),FreeCAD.Vector(_p2[0],_p2[1],0)),$construction))
+_doc.recompute()
+print('indices=' + str(_idxs))

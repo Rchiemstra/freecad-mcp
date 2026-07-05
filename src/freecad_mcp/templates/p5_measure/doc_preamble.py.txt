@@ -1,0 +1,3 @@
+import FreeCAD, Part, math, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)

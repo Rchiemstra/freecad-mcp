@@ -1,0 +1,25 @@
+_x1, _y1, _x2, _y2, _w = $x1, $y1, $x2, $y2, $width
+_dx = _x2 - _x1
+_dy = _y2 - _y1
+_L = math.hypot(_dx, _dy)
+if _L < 1e-9: raise ValueError('slot start and end are the same point')
+_ux, _uy = _dx / _L, _dy / _L
+_px, _py = -_uy * _w / 2.0, _ux * _w / 2.0
+_r = _w / 2.0
+_idxs = []
+_idxs.append(_sk.addGeometry(Part.LineSegment(
+FreeCAD.Vector(_x1 + _px, _y1 + _py, 0),
+FreeCAD.Vector(_x2 + _px, _y2 + _py, 0)),$construction))
+_idxs.append(_sk.addGeometry(Part.LineSegment(
+FreeCAD.Vector(_x2 - _px, _y2 - _py, 0),
+FreeCAD.Vector(_x1 - _px, _y1 - _py, 0)),$construction))
+_a1_l = math.atan2(_uy, _ux) + math.pi / 2.0
+_a2_l = math.atan2(_uy, _ux) + 3.0 * math.pi / 2.0
+_c1 = Part.Circle(FreeCAD.Vector(_x1, _y1, 0), FreeCAD.Vector(0,0,1), _r)
+_idxs.append(_sk.addGeometry(Part.ArcOfCircle(_c1, _a1_l, _a2_l),$construction))
+_a1_r = math.atan2(_uy, _ux) - math.pi / 2.0
+_a2_r = math.atan2(_uy, _ux) + math.pi / 2.0
+_c2 = Part.Circle(FreeCAD.Vector(_x2, _y2, 0), FreeCAD.Vector(0,0,1), _r)
+_idxs.append(_sk.addGeometry(Part.ArcOfCircle(_c2, _a1_r, _a2_r),$construction))
+_doc.recompute()
+print('indices=' + str(_idxs))

@@ -1,0 +1,22 @@
+_obj = _doc.getObject($obj_name)
+if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object not found')
+_sh = _obj.Shape
+_result = {
+    'is_null':   _sh.isNull(),
+    'is_valid':  _sh.isValid(),
+    'is_closed': _sh.isClosed(),
+    'volume_mm3': round(_sh.Volume, 6),
+    'area_mm2':   round(_sh.Area, 6),
+    'face_count': len(_sh.Faces),
+    'edge_count': len(_sh.Edges),
+    'vertex_count': len(_sh.Vertexes),
+    'shape_type': _sh.ShapeType,
+}
+try:
+    _sh.check(False)
+    _result['check_ok'] = True
+    _result['check_errors'] = []
+except Exception as _check_err:
+    _result['check_ok'] = False
+    _result['check_errors'] = [str(_check_err)]
+print(json.dumps(_result))

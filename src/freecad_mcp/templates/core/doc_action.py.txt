@@ -1,0 +1,5 @@
+import FreeCAD
+_d=FreeCAD.getDocument($doc_name)
+if not _d: raise RuntimeError('not found')
+$action_line
+print($message)

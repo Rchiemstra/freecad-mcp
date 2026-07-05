@@ -7,17 +7,18 @@ import logging
 
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse
+from ..template_resources import render_template_lines
 from .core import _run_code, _partdesign_pattern_helper_code
 
 logger = logging.getLogger("FreeCADMCPserver")
 
 
 def _doc_preamble(doc_name: str) -> list[str]:
-    return [
-        "import FreeCAD, Part, math",
-        f"_doc = FreeCAD.getDocument({doc_name!r})",
-        f"if not _doc: raise RuntimeError({f'Document {doc_name!r} not found'!r})",
-    ]
+    return render_template_lines(
+        "p3_features/doc_preamble.py.txt",
+        doc_name=repr(doc_name),
+        doc_missing=repr(f"Document {doc_name!r} not found"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -36,33 +37,17 @@ def revolve_feature_operation(
     symmetric: bool = False,
     reversed_dir: bool = False,
 ) -> ToolResponse:
-    lines = _doc_preamble(doc_name) + [
-        f"_sk = _doc.getObject({sketch_name!r})",
-        "if not _sk: raise RuntimeError('Sketch not found')",
-        *_partdesign_pattern_helper_code(),
-    ]
-    if body_name:
-        lines += [
-            f"_body = _doc.getObject({body_name!r})",
-            "if not _body: raise RuntimeError('Body not found')",
-        ]
-    else:
-        lines += [
-            "_body = None",
-            "for _o in _doc.Objects:",
-            "    if _o.TypeId == 'PartDesign::Body' and _sk in getattr(_o,'Group',[]): _body = _o; break",
-        ]
-    lines += [
-        f"_rev = _body.newObject('PartDesign::Revolution', {revolve_name!r}) if _body else _doc.addObject('PartDesign::Revolution', {revolve_name!r})",
-        "_rev.Profile = (_sk, [''])",
-        f"_rev.Angle = {angle}",
-        f"_set_linksub(_rev, ('ReferenceAxis', 'Axis'), _resolve_linksub(_doc, _body, {axis!r}))",
-        f"_rev.Symmetric = {symmetric}",
-        f"_rev.Reversed = {reversed_dir}",
-        "_sk.Visibility = False",
-        "_doc.recompute()",
-        "print('revolve_name=' + _rev.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/revolve_feature.py.txt",
+        sketch_name=repr(sketch_name),
+        pattern_helpers="\n".join(_partdesign_pattern_helper_code()),
+        body_name=repr(body_name),
+        revolve_name=repr(revolve_name),
+        angle=repr(angle),
+        axis=repr(axis),
+        symmetric=repr(symmetric),
+        reversed_dir=repr(reversed_dir),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Revolution '{revolve_name}' created", "Failed to create revolution")
 
@@ -84,25 +69,14 @@ def loft_feature_operation(
     if len(sketch_names) < 2:
         from ..responses import text_response
         return text_response("loft requires at least 2 sketches")
-    lines = _doc_preamble(doc_name)
-    if body_name:
-        lines += [
-            f"_body = _doc.getObject({body_name!r})",
-            "if not _body: raise RuntimeError('Body not found')",
-        ]
-    else:
-        lines += ["_body = None"]
-    lines += [
-        f"_sk_names = {repr(sketch_names)}",
-        "_profiles = [(_doc.getObject(_n), ['']) for _n in _sk_names]",
-        "if any(_p[0] is None for _p in _profiles): raise RuntimeError('One or more sketches not found')",
-        f"_loft = _body.newObject('PartDesign::AdditiveLoft', {loft_name!r}) if _body else _doc.addObject('PartDesign::AdditiveLoft', {loft_name!r})",
-        "_loft.Sections = _profiles",
-        f"_loft.Ruled = {ruled}",
-        f"_loft.Closed = {closed}",
-        "_doc.recompute()",
-        "print('loft_name=' + _loft.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/loft_feature.py.txt",
+        body_name=repr(body_name),
+        sketch_names=repr(sketch_names),
+        loft_name=repr(loft_name),
+        ruled=repr(ruled),
+        closed=repr(closed),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Loft '{loft_name}' created", "Failed to create loft")
 
@@ -121,24 +95,14 @@ def sweep_feature_operation(
     body_name: str | None = None,
     frenet: bool = False,
 ) -> ToolResponse:
-    lines = _doc_preamble(doc_name) + [
-        f"_profile = _doc.getObject({profile_sketch!r})",
-        f"_path = _doc.getObject({path_sketch!r})",
-        "if not _profile: raise RuntimeError('Profile sketch not found')",
-        "if not _path: raise RuntimeError('Path sketch not found')",
-    ]
-    if body_name:
-        lines += [f"_body = _doc.getObject({body_name!r})", "if not _body: raise RuntimeError('Body not found')"]
-    else:
-        lines += ["_body = None", "for _o in _doc.Objects:", "    if _o.TypeId == 'PartDesign::Body' and _profile in getattr(_o,'Group',[]): _body = _o; break"]
-    lines += [
-        f"_sw = _body.newObject('PartDesign::AdditivePipe', {sweep_name!r}) if _body else _doc.addObject('PartDesign::AdditivePipe', {sweep_name!r})",
-        "_sw.Profile = (_profile, [''])",
-        "_sw.Spine = (_path, [''])",
-        f"_sw.Frenet = {frenet}",
-        "_doc.recompute()",
-        "print('sweep_name=' + _sw.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/sweep_feature.py.txt",
+        profile_sketch=repr(profile_sketch),
+        path_sketch=repr(path_sketch),
+        body_name=repr(body_name),
+        sweep_name=repr(sweep_name),
+        frenet=repr(frenet),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Sweep '{sweep_name}' created", "Failed to create sweep")
 
@@ -160,25 +124,17 @@ def helical_sweep_feature_operation(
     left_handed: bool = False,
     reversed_dir: bool = False,
 ) -> ToolResponse:
-    lines = _doc_preamble(doc_name) + [
-        f"_profile = _doc.getObject({profile_sketch!r})",
-        "if not _profile: raise RuntimeError('Profile sketch not found')",
-    ]
-    if body_name:
-        lines += [f"_body = _doc.getObject({body_name!r})", "if not _body: raise RuntimeError('Body not found')"]
-    else:
-        lines += ["_body = None", "for _o in _doc.Objects:", "    if _o.TypeId == 'PartDesign::Body' and _profile in getattr(_o,'Group',[]): _body = _o; break"]
-    lines += [
-        f"_hel = _body.newObject('PartDesign::AdditiveHelix', {helix_name!r}) if _body else _doc.addObject('PartDesign::AdditiveHelix', {helix_name!r})",
-        "_hel.Profile = (_profile, [''])",
-        f"_hel.Pitch = {pitch}",
-        f"_hel.Height = {height}",
-        f"_hel.Radius = {radius}",
-        f"_hel.LeftHanded = {left_handed}",
-        f"_hel.Reversed = {reversed_dir}",
-        "_doc.recompute()",
-        "print('helix_name=' + _hel.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/helical_sweep_feature.py.txt",
+        profile_sketch=repr(profile_sketch),
+        body_name=repr(body_name),
+        helix_name=repr(helix_name),
+        pitch=repr(pitch),
+        height=repr(height),
+        radius=repr(radius),
+        left_handed=repr(left_handed),
+        reversed_dir=repr(reversed_dir),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Helical sweep '{helix_name}' created", "Failed to create helical sweep")
 
@@ -200,25 +156,14 @@ def fillet_feature_operation(
     if radius <= 0:
         from ..responses import text_response
         return text_response("fillet radius must be > 0")
-    edge_str = repr(edge_refs or [])
-    lines = _doc_preamble(doc_name) + [
-        f"_base = _doc.getObject({base_feature!r})",
-        "if not _base: raise RuntimeError('Base feature not found')",
-    ]
-    if body_name:
-        lines += [f"_body = _doc.getObject({body_name!r})", "if not _body: raise RuntimeError('Body not found')"]
-    else:
-        lines += ["_body = None", "for _o in _doc.Objects:", "    if _o.TypeId == 'PartDesign::Body' and _base in getattr(_o,'Group',[]): _body = _o; break"]
-    lines += [
-        f"_fil = _body.newObject('PartDesign::Fillet', {fillet_name!r}) if _body else _doc.addObject('PartDesign::Fillet', {fillet_name!r})",
-        "_fil.Base = (_base, [])",
-        f"_fil.Radius = {radius}",
-        f"_edge_refs = {edge_str}",
-        "if _edge_refs:",
-        "    _fil.Base = (_base, _edge_refs)",
-        "_doc.recompute()",
-        "print('fillet_name=' + _fil.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/fillet_feature.py.txt",
+        base_feature=repr(base_feature),
+        body_name=repr(body_name),
+        fillet_name=repr(fillet_name),
+        radius=repr(radius),
+        edge_refs=repr(edge_refs or []),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Fillet '{fillet_name}' (r={radius}) created", "Failed to create fillet")
 
@@ -240,25 +185,14 @@ def chamfer_feature_operation(
     if size <= 0:
         from ..responses import text_response
         return text_response("chamfer size must be > 0")
-    edge_str = repr(edge_refs or [])
-    lines = _doc_preamble(doc_name) + [
-        f"_base = _doc.getObject({base_feature!r})",
-        "if not _base: raise RuntimeError('Base feature not found')",
-    ]
-    if body_name:
-        lines += [f"_body = _doc.getObject({body_name!r})", "if not _body: raise RuntimeError('Body not found')"]
-    else:
-        lines += ["_body = None", "for _o in _doc.Objects:", "    if _o.TypeId == 'PartDesign::Body' and _base in getattr(_o,'Group',[]): _body = _o; break"]
-    lines += [
-        f"_chm = _body.newObject('PartDesign::Chamfer', {chamfer_name!r}) if _body else _doc.addObject('PartDesign::Chamfer', {chamfer_name!r})",
-        "_chm.Base = (_base, [])",
-        f"_chm.Size = {size}",
-        f"_edge_refs = {edge_str}",
-        "if _edge_refs:",
-        "    _chm.Base = (_base, _edge_refs)",
-        "_doc.recompute()",
-        "print('chamfer_name=' + _chm.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/chamfer_feature.py.txt",
+        base_feature=repr(base_feature),
+        body_name=repr(body_name),
+        chamfer_name=repr(chamfer_name),
+        size=repr(size),
+        edge_refs=repr(edge_refs or []),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Chamfer '{chamfer_name}' (s={size}) created", "Failed to create chamfer")
 
@@ -278,19 +212,13 @@ def _boolean_operation(
 ) -> ToolResponse:
     type_map = {"union": "Part::Fuse", "difference": "Part::Cut", "intersection": "Part::Common"}
     fc_type = type_map.get(bool_type, "Part::Fuse")
-    lines = _doc_preamble(doc_name) + [
-        f"_s1 = _doc.getObject({shape1!r})",
-        f"_s2 = _doc.getObject({shape2!r})",
-        "if not _s1: raise RuntimeError('Shape1 not found')",
-        "if not _s2: raise RuntimeError('Shape2 not found')",
-        f"_bool = _doc.addObject({fc_type!r}, {result_name!r})",
-        "_bool.Base = _s1",
-        "_bool.Tool = _s2",
-        "_s1.Visibility = False",
-        "_s2.Visibility = False",
-        "_doc.recompute()",
-        "print('result_name=' + _bool.Name)",
-    ]
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p3_features/boolean_operation.py.txt",
+        shape1=repr(shape1),
+        shape2=repr(shape2),
+        fc_type=repr(fc_type),
+        result_name=repr(result_name),
+    )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Boolean {bool_type} '{result_name}' created",
                      f"Failed to create boolean {bool_type}")

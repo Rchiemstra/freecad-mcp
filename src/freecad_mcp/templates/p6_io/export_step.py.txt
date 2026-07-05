@@ -1,0 +1,8 @@
+_path = $file_path
+_names = $obj_names
+_objs = [_doc.getObject(_n) for _n in _names] if _names else list(_doc.Objects)
+_objs = [_o for _o in _objs if _o and hasattr(_o,'Shape')]
+if not _objs: raise RuntimeError('No exportable objects found')
+import Import
+Import.export(_objs, _path)
+print(json.dumps({'exported': len(_objs), 'path': _path}))

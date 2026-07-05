@@ -1,0 +1,17 @@
+_profile = _doc.getObject($profile_sketch)
+if not _profile: raise RuntimeError('Profile sketch not found')
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+if not _body:
+    for _o in _doc.Objects:
+        if _o.TypeId == 'PartDesign::Body' and _profile in getattr(_o,'Group',[]): _body = _o; break
+_hel = _body.newObject('PartDesign::AdditiveHelix', $helix_name) if _body else _doc.addObject('PartDesign::AdditiveHelix', $helix_name)
+_hel.Profile = (_profile, [''])
+_hel.Pitch = $pitch
+_hel.Height = $height
+_hel.Radius = $radius
+_hel.LeftHanded = $left_handed
+_hel.Reversed = $reversed_dir
+_doc.recompute()
+print('helix_name=' + _hel.Name)

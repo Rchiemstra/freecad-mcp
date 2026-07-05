@@ -1,0 +1,6 @@
+_raw_pts = $points
+_idxs = []
+for _px, _py in _raw_pts:
+    _idxs.append(_sk.addGeometry(Part.Point(FreeCAD.Vector(_px, _py, 0)), $construction))
+_doc.recompute()
+print('indices=' + str(_idxs))

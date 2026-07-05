@@ -1,0 +1,18 @@
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')
+$pattern_helpers
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+if not _body:
+    for _o in _doc.Objects:
+        if _o.TypeId == 'PartDesign::Body' and _sk in getattr(_o,'Group',[]): _body = _o; break
+_rev = _body.newObject('PartDesign::Revolution', $revolve_name) if _body else _doc.addObject('PartDesign::Revolution', $revolve_name)
+_rev.Profile = (_sk, [''])
+_rev.Angle = $angle
+_set_linksub(_rev, ('ReferenceAxis', 'Axis'), _resolve_linksub(_doc, _body, $axis))
+_rev.Symmetric = $symmetric
+_rev.Reversed = $reversed_dir
+_sk.Visibility = False
+_doc.recompute()
+print('revolve_name=' + _rev.Name)

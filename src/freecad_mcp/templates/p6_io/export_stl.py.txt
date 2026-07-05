@@ -1,0 +1,15 @@
+_path = $file_path
+_names = $obj_names
+_dev = $mesh_deviation
+_objs = [_doc.getObject(_n) for _n in _names] if _names else list(_doc.Objects)
+_objs = [_o for _o in _objs if _o and hasattr(_o,'Shape')]
+if not _objs: raise RuntimeError('No exportable objects found')
+import Mesh
+_meshes = []
+for _o in _objs:
+    _mesh = Mesh.Mesh(_o.Shape.tessellate(_dev))
+    _meshes.append(_mesh)
+_combined = Mesh.Mesh()
+for _m in _meshes: _combined.addMesh(_m)
+_combined.write(_path)
+print(json.dumps({'exported': len(_objs), 'faces': _combined.CountFacets, 'path': _path}))

@@ -1,0 +1,7 @@
+_obj = _doc.getObject($obj_name)
+if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object with Shape not found')
+_m = FreeCAD.Matrix()
+_m.scale($sx,$sy,$sz)
+_obj.Shape = _obj.Shape.transformGeometry(_m)
+_doc.recompute()
+print('scaled')

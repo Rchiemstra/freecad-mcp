@@ -1,0 +1,21 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError('Document not found')
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')
+_info = {
+    'name': _sk.Name,
+    'geometry_count': len(_sk.Geometry) if hasattr(_sk, 'Geometry') else 0,
+    'constraint_count': len(_sk.Constraints) if hasattr(_sk, 'Constraints') else 0,
+    'state': list(getattr(_sk, 'State', [])),
+    'conflicting': list(getattr(_sk, 'ConflictingConstraints', [])),
+    'redundant': list(getattr(_sk, 'RedundantConstraints', [])),
+    'malformed': list(getattr(_sk, 'MalformedConstraints', [])),
+    'solver_message': getattr(_sk, 'SolverMessage', None),
+    'is_closed': None,
+}
+try:
+    _shape = _sk.Shape
+    if _shape and not _shape.isNull(): _info['is_closed'] = _shape.isClosed()
+except Exception: pass
+print(json.dumps(_info))

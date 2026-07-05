@@ -1,0 +1,8 @@
+_obj = _doc.getObject($obj_name)
+if not _obj: raise RuntimeError('Object not found')
+try:
+    _obj.ViewObject.ShapeColor = ($r,$g,$b,1.0)
+    _obj.ViewObject.Transparency = int($transparency * 100)
+except Exception as _e:
+    print('Warning: ' + str(_e))
+print('color applied')

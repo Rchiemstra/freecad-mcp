@@ -1,0 +1,7 @@
+import FreeCAD, Sketcher
+_doc = FreeCAD.getDocument($doc_name)
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')
+$constraint_line
+_doc.recompute()
+print($message)

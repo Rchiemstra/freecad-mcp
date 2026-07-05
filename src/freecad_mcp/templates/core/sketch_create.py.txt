@@ -1,0 +1,13 @@
+import FreeCAD
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_body_name = $body_name
+if _body_name:
+    _body = _doc.getObject(_body_name)
+    if not _body: raise RuntimeError($body_missing)
+    _sk = _body.newObject('Sketcher::SketchObject', $sketch_name)
+else:
+    _sk = _doc.addObject('Sketcher::SketchObject', $sketch_name)
+$attachment_code
+_doc.recompute()
+print('sketch_name=' + _sk.Name)

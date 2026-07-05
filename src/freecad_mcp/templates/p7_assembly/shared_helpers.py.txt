@@ -1,0 +1,82 @@
+def _vec(_v):
+    if _v is None: return None
+    return {'x': round(float(_v.x), 6), 'y': round(float(_v.y), 6), 'z': round(float(_v.z), 6)}
+def _bb(_bbx):
+    return {
+        'xmin': round(float(_bbx.XMin), 6), 'ymin': round(float(_bbx.YMin), 6), 'zmin': round(float(_bbx.ZMin), 6),
+        'xmax': round(float(_bbx.XMax), 6), 'ymax': round(float(_bbx.YMax), 6), 'zmax': round(float(_bbx.ZMax), 6),
+        'dx': round(float(_bbx.XLength), 6), 'dy': round(float(_bbx.YLength), 6), 'dz': round(float(_bbx.ZLength), 6),
+    }
+def _parent_of(_obj):
+    for _candidate in getattr(_obj, 'InList', []):
+        try:
+            if _obj in getattr(_candidate, 'Group', []): return _candidate
+        except Exception:
+            pass
+    for _candidate in _doc.Objects:
+        try:
+            if _obj in getattr(_candidate, 'Group', []): return _candidate
+        except Exception:
+            pass
+    return None
+def _add_to_container(_container, _obj):
+    if _container is None: return
+    if hasattr(_container, 'addObject'):
+        _container.addObject(_obj)
+        return
+    if hasattr(_container, 'Group'):
+        _grp = list(getattr(_container, 'Group', []))
+        if _obj not in _grp:
+            _grp.append(_obj)
+            _container.Group = _grp
+def _remove_from_container(_container, _obj):
+    if _container is None: return
+    if hasattr(_container, 'removeObject'):
+        try:
+            _container.removeObject(_obj)
+            return
+        except Exception:
+            pass
+    if hasattr(_container, 'Group'):
+        _container.Group = [o for o in _container.Group if o != _obj]
+def _parse_ref(_ref):
+    if ':' in _ref:
+        _name, _sub = _ref.split(':', 1)
+    else:
+        _name, _sub = _ref, ''
+    _obj = _doc.getObject(_name)
+    if not _obj: raise RuntimeError('Object not found: ' + _name)
+    return _obj, _sub
+def _subshape(_obj, _sub):
+    if not _sub:
+        return getattr(_obj, 'Shape', None)
+    if _sub.startswith('Face'): return _obj.Shape.Faces[int(_sub[4:]) - 1]
+    if _sub.startswith('Edge'): return _obj.Shape.Edges[int(_sub[4:]) - 1]
+    if _sub.startswith('Vertex'): return _obj.Shape.Vertexes[int(_sub[6:]) - 1]
+    return getattr(_obj, 'Shape', None)
+def _global_placement(_obj):
+    try:
+        return _obj.getGlobalPlacement()
+    except Exception:
+        return getattr(_obj, 'Placement', FreeCAD.Placement())
+def _global_boundbox(_obj):
+    _shape = getattr(_obj, 'Shape', None)
+    if _shape is None or _shape.isNull(): return None
+    _copy = _shape.copy()
+    _pl = _global_placement(_obj)
+    try:
+        _copy.Placement = _pl.multiply(getattr(_copy, 'Placement', FreeCAD.Placement()))
+    except Exception:
+        try: _copy.Placement = _pl
+        except Exception: pass
+    return _copy.BoundBox
+def _bbox_delta(_a, _b):
+    if _a is None or _b is None: return None
+    _vals = ['XMin','YMin','ZMin','XMax','YMax','ZMax']
+    return max(abs(float(getattr(_a, _k)) - float(getattr(_b, _k))) for _k in _vals)
+def _safe_check(_shape):
+    try:
+        _shape.check(False)
+        return True, []
+    except Exception as _err:
+        return False, [str(_err)]

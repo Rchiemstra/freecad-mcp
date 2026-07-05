@@ -1,0 +1,23 @@
+$profile_to_sketch
+if $bore_diameter > 0:
+    _bi = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0,0,0),FreeCAD.Vector(0,0,1),$bore_diameter/2.0),False)
+try: _sk.solve()
+except Exception: pass
+$extrusion_helpers
+$bool_helpers
+_ha = math.radians($helix_angle)
+_helix_pitch = _width / math.tan(_ha) if abs(math.tan(_ha)) > 1e-9 else 1e6
+_hel = _body.newObject('PartDesign::AdditiveHelix', $gear_name)
+_hel.Profile = (_sk, [''])
+_hel.Pitch = _helix_pitch
+_hel.Height = _width
+_hel.Angle = 0
+_sk.Visibility = False
+_doc.recompute()
+print('body_name='     + _body.Name)
+print('sketch_name='   + _sk.Name)
+print('helix_name='    + _hel.Name)
+print('helix_angle='   + str($helix_angle))
+print('teeth='         + str(_teeth))
+print('module='        + str(_module))
+print('pitch_dia='     + str(2.0 * _pitch_radius))

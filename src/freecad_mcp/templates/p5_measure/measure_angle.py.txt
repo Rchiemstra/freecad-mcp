@@ -1,0 +1,17 @@
+def _parse_ref(_r):
+    _parts = _r.split(':')
+    _obj = _doc.getObject(_parts[0])
+    if not _obj: raise RuntimeError('Object not found: ' + _parts[0])
+    if len(_parts) > 1:
+        _sub = _parts[1]
+        if _sub.startswith('Edge'):
+            _idx = int(_sub[4:]) - 1
+            return _obj.Shape.Edges[_idx]
+    return _obj.Shape
+_e1 = _parse_ref($edge1_ref)
+_e2 = _parse_ref($edge2_ref)
+_v1 = _e1.tangentAt(_e1.FirstParameter)
+_v2 = _e2.tangentAt(_e2.FirstParameter)
+_cos_a = max(-1.0, min(1.0, _v1.dot(_v2) / (_v1.Length * _v2.Length)))
+_angle_deg = math.degrees(math.acos(_cos_a))
+print(json.dumps({'angle_deg': round(_angle_deg, 6), 'unit': 'degrees'}))

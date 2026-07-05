@@ -1,0 +1,7 @@
+_obj = _doc.getObject($obj_name)
+if not _obj: raise RuntimeError('Object not found')
+_pl = _obj.Placement
+_pl.Base = _pl.Base + FreeCAD.Vector($dx,$dy,$dz)
+_obj.Placement = _pl
+_doc.recompute()
+print($message)

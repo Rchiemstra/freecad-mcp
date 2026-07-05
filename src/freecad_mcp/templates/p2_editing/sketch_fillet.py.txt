@@ -1,0 +1,3 @@
+_sk.fillet($geo1, $geo2, FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,0), $radius, True, False)
+_doc.recompute()
+print('fillet applied')

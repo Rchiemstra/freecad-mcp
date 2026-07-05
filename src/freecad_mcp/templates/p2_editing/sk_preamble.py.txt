@@ -1,0 +1,5 @@
+import FreeCAD, Part, Sketcher, math
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError('Document not found')
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found')

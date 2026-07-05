@@ -1,0 +1,48 @@
+_plane_name = $plane_name
+_body_name = $body_name
+_mode = $mode
+_source_ref = $source_ref
+_face_a = $face_a
+_face_b = $face_b
+_offset = $offset_along_normal or [0, 0, 0]
+_map_mode = $map_mode
+_if_exists = $if_exists
+_body = _doc.getObject(_body_name)
+if not _body: raise RuntimeError('Body not found: ' + _body_name)
+_existing = _doc.getObject(_plane_name)
+if _existing and _if_exists == 'skip':
+    print(json.dumps({'ok': True, 'skipped': True, 'plane_name': _existing.Name}))
+else:
+    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _plane_name)
+    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)
+    _plane = _body.newObject('PartDesign::Plane', _plane_name)
+    _support_ref = _source_ref
+    _attachment_base = FreeCAD.Vector(float(_offset[0]), float(_offset[1]), float(_offset[2]))
+    if _mode == 'midpoint_between_faces':
+        if not _face_a or not _face_b: raise RuntimeError('midpoint_between_faces requires face_a and face_b')
+        _obj_a, _sub_a = _parse_ref(_face_a)
+        _obj_b, _sub_b = _parse_ref(_face_b)
+        _shape_a = _subshape(_obj_a, _sub_a)
+        _shape_b = _subshape(_obj_b, _sub_b)
+        _ca = _shape_a.CenterOfMass
+        _cb = _shape_b.CenterOfMass
+        _mid = (_ca + _cb).multiply(0.5)
+        _attachment_base = (_mid - _ca) + _attachment_base
+        _plane.AttachmentSupport = [(_obj_a, _sub_a)]
+    elif _mode in ('offset_from_face', 'plane_from_binder_face', 'between_parallel_planes'):
+        if not _support_ref: raise RuntimeError(_mode + ' requires source_ref')
+        _obj, _sub = _parse_ref(_support_ref)
+        _plane.AttachmentSupport = [(_obj, _sub)]
+    elif _mode == 'through_point':
+        if _source_ref:
+            _obj, _sub = _parse_ref(_source_ref)
+            _plane.AttachmentSupport = [(_obj, _sub)]
+    else:
+        raise RuntimeError('Unsupported datum plane mode: ' + _mode)
+    _plane.MapMode = _map_mode
+    _plane.AttachmentOffset = FreeCAD.Placement(_attachment_base, FreeCAD.Rotation())
+    _doc.recompute()
+    _normal = None
+    try: _normal = _vec(_plane.Shape.Surface.Axis)
+    except Exception: pass
+    print(json.dumps({'ok': True, 'plane_name': _plane.Name, 'body_name': _body.Name, 'mode': _mode, 'map_mode': _map_mode, 'attachment_offset': _vec(_attachment_base), 'normal': _normal}))

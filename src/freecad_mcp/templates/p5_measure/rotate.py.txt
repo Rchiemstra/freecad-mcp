@@ -1,0 +1,11 @@
+_obj = _doc.getObject($obj_name)
+if not _obj: raise RuntimeError('Object not found')
+_axis   = FreeCAD.Vector($axis_x,$axis_y,$axis_z)
+_center = FreeCAD.Vector($center_x,$center_y,$center_z)
+_angle  = $angle_deg
+_rot = FreeCAD.Rotation(_axis, _angle)
+_pl = _obj.Placement
+_new_pl = FreeCAD.Placement(_center, FreeCAD.Rotation()) * FreeCAD.Placement(FreeCAD.Vector(), _rot) * FreeCAD.Placement(-_center, FreeCAD.Rotation()) * _pl
+_obj.Placement = _new_pl
+_doc.recompute()
+print('rotated')

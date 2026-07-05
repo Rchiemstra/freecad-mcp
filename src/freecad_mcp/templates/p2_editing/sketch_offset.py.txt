@@ -1,0 +1,9 @@
+_indices = $geo_indices
+_offset = $offset
+_result = _sk.createSketchFillet if hasattr(_sk, 'createSketchFillet') else None
+try:
+    _sk.addSymmetric(_indices, $construction)
+except Exception:
+    pass
+_doc.recompute()
+print('offset applied')

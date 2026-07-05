@@ -1,0 +1,54 @@
+_wire_name = $wire_name
+_segments = $segments
+_tol = $tolerance_mm
+_container_name = $container
+_if_exists = $if_exists
+def _shape_from_sketch_geo(_sketch_name, _geo_index):
+    _sk = _doc.getObject(_sketch_name)
+    if not _sk: raise RuntimeError('Sketch not found: ' + _sketch_name)
+    _geo = _sk.Geometry[int(_geo_index)]
+    _shape = _geo.toShape()
+    try:
+        _shape.Placement = _global_placement(_sk).multiply(getattr(_shape, 'Placement', FreeCAD.Placement()))
+    except Exception:
+        pass
+    if getattr(_shape, 'ShapeType', '') == 'Edge': return _shape
+    if len(_shape.Edges) == 1: return _shape.Edges[0]
+    raise RuntimeError('Sketch geometry does not resolve to a single edge')
+def _endpoint(_edge, _which):
+    return _edge.Vertexes[0].Point if _which == 'start' else _edge.Vertexes[-1].Point
+_existing = _doc.getObject(_wire_name)
+if _existing and _if_exists == 'skip':
+    print(json.dumps({'ok': True, 'skipped': True, 'wire_name': _existing.Name}))
+else:
+    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _wire_name)
+    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)
+    _edges = []
+    _gaps = []
+    for _seg in _segments:
+        if _seg.get('type') == 'bridge':
+            if not _edges: raise RuntimeError('bridge segment requires a previous edge')
+            _to = _seg.get('to', {})
+            _target_edge = _shape_from_sketch_geo(_to['sketch'], _to['geo_index'])
+            _target_point = _endpoint(_target_edge, _to.get('end', 'start'))
+            _start_point = _endpoint(_edges[-1], 'end')
+            _gap = (_target_point - _start_point).Length
+            if _gap > _tol: raise RuntimeError('bridge gap %.6f exceeds tolerance %.6f' % (_gap, _tol))
+            if _gap > 1e-9: _edges.append(Part.LineSegment(_start_point, _target_point).toShape())
+            _gaps.append(round(float(_gap), 6))
+        else:
+            _edge = _shape_from_sketch_geo(_seg['sketch'], _seg['geo_index'])
+            if _seg.get('reverse', False): _edge = _edge.reversed()
+            _edges.append(_edge)
+    if not _edges: raise RuntimeError('No path segments supplied')
+    _groups = Part.sortEdges(_edges, _tol)
+    _sorted = _groups[0] if _groups and isinstance(_groups[0], list) else _groups
+    _wire = Part.Wire(_sorted)
+    _obj = _doc.addObject('Part::Feature', _wire_name)
+    _obj.Shape = _wire
+    _container = _doc.getObject(_container_name) if _container_name else None
+    if _container_name and not _container: raise RuntimeError('Container not found: ' + _container_name)
+    _add_to_container(_container, _obj)
+    _doc.recompute()
+    _ok, _check_errors = _safe_check(_wire)
+    print(json.dumps({'ok': True, 'wire_name': _obj.Name, 'edge_count': len(_wire.Edges), 'length_mm': round(float(_wire.Length), 6), 'bridge_gaps_mm': _gaps, 'sort_groups': len(_groups), 'check_ok': _ok, 'check_errors': _check_errors}))

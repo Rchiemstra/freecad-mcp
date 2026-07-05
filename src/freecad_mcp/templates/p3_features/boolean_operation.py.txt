@@ -1,0 +1,11 @@
+_s1 = _doc.getObject($shape1)
+_s2 = _doc.getObject($shape2)
+if not _s1: raise RuntimeError('Shape1 not found')
+if not _s2: raise RuntimeError('Shape2 not found')
+_bool = _doc.addObject($fc_type, $result_name)
+_bool.Base = _s1
+_bool.Tool = _s2
+_s1.Visibility = False
+_s2.Visibility = False
+_doc.recompute()
+print('result_name=' + _bool.Name)

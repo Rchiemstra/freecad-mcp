@@ -1,0 +1,9 @@
+_indices = $geo_indices
+_sym_geo = $symmetry_geo
+try:
+    _sk.addSymmetric(_indices, _sym_geo)
+except AttributeError:
+    for _gi in _indices:
+        _sk.addConstraint(Sketcher.Constraint('Symmetric', _gi, 1, _gi, 2, _sym_geo))
+_doc.recompute()
+print('symmetry applied')

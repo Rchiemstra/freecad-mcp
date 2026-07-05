@@ -1,0 +1,15 @@
+import FreeCAD
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_src = _doc.getObject($feature_name)
+if not _src: raise RuntimeError('Source feature not found')
+$pattern_helpers
+_body = _get_body(_doc, _src, $body_name)
+_mirror = _body.newObject('PartDesign::Mirrored', $mirror_name)
+_set_originals(_mirror, _src)
+_set_linksub(_mirror, ('MirrorPlane', 'Plane'), _resolve_linksub(_doc, _body, $plane))
+_set_tip(_body, _mirror)
+_doc.recompute()
+print('mirror_name=' + _mirror.Name)
+print('source_name=' + _src.Name)
+print('body_name=' + _body.Name)

@@ -1,0 +1,8 @@
+_rot = math.radians($angle)
+_major_pt = FreeCAD.Vector($cx + $major_radius*math.cos(_rot), $cy + $major_radius*math.sin(_rot), 0)
+_center = FreeCAD.Vector($cx, $cy, 0)
+_ell = Part.Ellipse(_major_pt, $minor_radius, _center)
+_arc = Part.ArcOfEllipse(_ell, math.radians($start_angle), math.radians($end_angle))
+_idx = _sk.addGeometry(_arc, $construction)
+_doc.recompute()
+print('geometry_index=' + str(_idx))

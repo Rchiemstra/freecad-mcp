@@ -1,0 +1,16 @@
+_profile = _doc.getObject($profile_sketch)
+_path = _doc.getObject($path_sketch)
+if not _profile: raise RuntimeError('Profile sketch not found')
+if not _path: raise RuntimeError('Path sketch not found')
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+if not _body:
+    for _o in _doc.Objects:
+        if _o.TypeId == 'PartDesign::Body' and _profile in getattr(_o,'Group',[]): _body = _o; break
+_sw = _body.newObject('PartDesign::AdditivePipe', $sweep_name) if _body else _doc.addObject('PartDesign::AdditivePipe', $sweep_name)
+_sw.Profile = (_profile, [''])
+_sw.Spine = (_path, [''])
+_sw.Frenet = $frenet
+_doc.recompute()
+print('sweep_name=' + _sw.Name)

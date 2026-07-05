@@ -1,0 +1,2 @@
+_ref = _doc.getObject($obj_name)
+if _ref: _sk.AttachmentSupport = [(_ref, $face_name)]; _sk.MapMode = 'FlatFace'

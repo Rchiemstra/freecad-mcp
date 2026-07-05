@@ -1,0 +1,4 @@
+_obj = _doc.getObject($obj_name)
+if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object with Shape not found')
+_area = _obj.Shape.Area
+print(json.dumps({'area_mm2': round(_area, 6), 'area_cm2': round(_area/100.0,6), 'unit': 'mm²'}))

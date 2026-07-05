@@ -1,0 +1,5 @@
+_path = $file_path
+import Import
+Import.insert(_path, _doc.Name)
+_doc.recompute()
+print(json.dumps({'imported': True, 'path': _path}))

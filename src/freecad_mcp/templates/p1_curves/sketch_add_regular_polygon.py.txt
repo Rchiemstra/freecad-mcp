@@ -1,0 +1,9 @@
+_cx, _cy, _r, _n = $cx, $cy, $radius, $sides
+_offset = math.radians($angle)
+_pts = [FreeCAD.Vector(_cx + _r*math.cos(_offset + 2*math.pi*_i/_n),
+ _cy + _r*math.sin(_offset + 2*math.pi*_i/_n), 0) for _i in range(_n)]
+_idxs = []
+for _i in range(_n):
+    _idxs.append(_sk.addGeometry(Part.LineSegment(_pts[_i], _pts[(_i+1)%_n]),$construction))
+_doc.recompute()
+print('indices=' + str(_idxs))

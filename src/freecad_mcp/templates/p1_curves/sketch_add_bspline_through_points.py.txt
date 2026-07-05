@@ -1,0 +1,6 @@
+_pts = $points
+_bsp = Part.BSplineCurve()
+_bsp.interpolate(_pts, $periodic)
+_idx = _sk.addGeometry(_bsp, $construction)
+_doc.recompute()
+print('geometry_index=' + str(_idx))

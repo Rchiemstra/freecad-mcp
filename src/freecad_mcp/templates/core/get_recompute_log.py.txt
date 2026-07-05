@@ -1,0 +1,11 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError('Document not found')
+_results = []
+for _o in _doc.Objects:
+    try:
+        _st = list(getattr(_o, 'State', []))
+        _results.append({'name': _o.Name, 'label': getattr(_o, 'Label', _o.Name), 'type': getattr(_o, 'TypeId', ''), 'state': _st, 'valid': not any(s in ('Invalid','Error') for s in _st)})
+    except Exception as _e:
+        _results.append({'name': getattr(_o, 'Name', '?'), 'error': str(_e)})
+print(json.dumps({'total': len(_doc.Objects), 'objects': _results}))

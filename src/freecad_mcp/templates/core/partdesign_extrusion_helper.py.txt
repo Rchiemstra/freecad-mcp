@@ -1,0 +1,25 @@
+def _set_extrusion_symmetric(_feature, _value):
+    _properties = set(getattr(_feature, 'PropertiesList', []))
+    _side_type = 'SideType' if 'SideType' in _properties else None
+    if _side_type:
+        _candidates = ('Two sides', 'Symmetric') if _value else ('One side',)
+        _last_error = None
+        for _candidate in _candidates:
+            try:
+                setattr(_feature, _side_type, _candidate)
+                return _side_type
+            except Exception as _err:
+                _last_error = _err
+        if _last_error:
+            raise _last_error
+    if 'Symmetric' in _properties:
+        setattr(_feature, 'Symmetric', bool(_value))
+        return 'Symmetric'
+    if 'Midplane' in _properties:
+        if _value:
+            setattr(_feature, 'Midplane', True)
+            return 'Midplane'
+        return None
+    if _value:
+        raise RuntimeError('Feature does not support symmetric extrusion')
+    return None

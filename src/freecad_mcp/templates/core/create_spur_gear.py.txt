@@ -1,0 +1,198 @@
+import math
+import FreeCAD, Part, Sketcher
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_gear_name = $gear_name
+_body_name = $body_name
+_sketch_name = $sketch_name or (_gear_name + '_Sketch')
+_teeth = int($teeth)
+_module = float($module)
+_width = float($width)
+_pressure_angle = math.radians(float($pressure_angle))
+_bore_diameter = float($bore_diameter)
+_clearance = float($clearance)
+_backlash = float($backlash)
+_samples = max(3, int($samples_per_flank))
+_tooth_profile = $tooth_profile.strip().lower().replace('-', '_').replace(' ', '_')
+_profile_aliases = {
+    'straight_teeth': 'straight',
+    'square': 'straight',
+    'spline': 'straight',
+    'trapezoid_straight_teeth': 'trapezoid',
+    'novikov': 'circular_arc',
+    'circular': 'circular_arc',
+    'arc': 'circular_arc',
+    'lantern': 'pin',
+    'pin_gear': 'pin',
+}
+_tooth_profile = _profile_aliases.get(_tooth_profile, _tooth_profile)
+_valid_profiles = {'involute', 'cycloidal', 'trapezoid', 'straight', 'circular_arc', 'pin'}
+if _tooth_profile not in _valid_profiles:
+    raise ValueError('tooth_profile must be one of: ' + ', '.join(sorted(_valid_profiles)))
+if _teeth < 3: raise ValueError('teeth must be >= 3')
+if _module <= 0: raise ValueError('module must be > 0')
+if _width <= 0: raise ValueError('width must be > 0')
+if not 0 < _pressure_angle < math.radians(45):
+    raise ValueError('pressure_angle must be between 0 and 45 degrees')
+if _bore_diameter < 0: raise ValueError('bore_diameter must be >= 0')
+if _clearance < 0: raise ValueError('clearance must be >= 0')
+if _backlash < 0: raise ValueError('backlash must be >= 0')
+_pitch_radius = _module * _teeth / 2.0
+_base_radius = _pitch_radius * math.cos(_pressure_angle)
+_outer_radius = _pitch_radius + _module
+_root_radius = max(_pitch_radius - (1.25 * _module + _clearance), _module * 0.05)
+if _root_radius >= _outer_radius:
+    raise ValueError('root radius must be smaller than outer radius')
+if _bore_diameter and _bore_diameter >= 2.0 * _root_radius:
+    raise ValueError('bore_diameter must be smaller than the root diameter')
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body:
+    raise RuntimeError('Body not found: ' + _body_name)
+if not _body:
+    _body = _doc.addObject('PartDesign::Body', _gear_name + '_Body')
+_sk = _body.newObject('Sketcher::SketchObject', _sketch_name)
+_plane = None
+_origin = getattr(_body, 'Origin', None)
+for _feature in getattr(_origin, 'OriginFeatures', []):
+    if getattr(_feature, 'Name', '') == 'XY_Plane' or getattr(_feature, 'Label', '') == 'XY_Plane':
+        _plane = _feature
+        break
+if _plane:
+    _sk.AttachmentSupport = [(_plane, '')]
+    _sk.MapMode = 'FlatFace'
+_points = []
+def _rotate(_x, _y, _angle):
+    _ca = math.cos(_angle)
+    _sa = math.sin(_angle)
+    return (_x * _ca - _y * _sa, _x * _sa + _y * _ca)
+def _add_point(_x, _y):
+    _pt = FreeCAD.Vector(_x, _y, 0)
+    if not _points or (_points[-1] - _pt).Length > 1e-7:
+        _points.append(_pt)
+def _add_arc(_radius, _start, _end, _steps):
+    _steps = max(1, int(_steps))
+    for _idx in range(1, _steps + 1):
+        _a = _start + (_end - _start) * _idx / _steps
+        _add_point(_radius * math.cos(_a), _radius * math.sin(_a))
+def _add_radial_point(_radius, _angle):
+    _add_point(_radius * math.cos(_angle), _radius * math.sin(_angle))
+def _build_involute_points():
+    _inv_alpha = math.tan(_pressure_angle) - _pressure_angle
+    _delta = math.pi / (2.0 * _teeth) - _backlash / (2.0 * _pitch_radius)
+    _t_tip = math.sqrt(max((_outer_radius / _base_radius) ** 2 - 1.0, 0.0))
+    for _tooth in range(_teeth):
+        _theta = 2.0 * math.pi * _tooth / _teeth
+        _left = _theta - _delta - _inv_alpha
+        _right = _theta + _delta + _inv_alpha
+        _add_radial_point(_root_radius, _left)
+        _add_radial_point(_outer_radius, _left + _t_tip * 0.02)
+        _add_radial_point(_outer_radius, _right - _t_tip * 0.02)
+        _add_radial_point(_root_radius, _right)
+        _add_arc(_root_radius, _right, _theta + 2.0 * math.pi / _teeth - _delta - _inv_alpha, max(1, _samples // 3))
+def _build_trapezoid_points():
+    _tooth_angle = 2.0 * math.pi / _teeth
+    for _tooth in range(_teeth):
+        _theta = 2.0 * math.pi * _tooth / _teeth
+        _add_radial_point(_root_radius, _theta - _tooth_angle * 0.32)
+        _add_radial_point(_outer_radius, _theta - _tooth_angle * 0.16)
+        _add_radial_point(_outer_radius, _theta + _tooth_angle * 0.16)
+        _add_radial_point(_root_radius, _theta + _tooth_angle * 0.32)
+        _add_arc(_root_radius, _theta + _tooth_angle * 0.32, _theta + _tooth_angle * 0.68, max(1, _samples // 3))
+def _build_straight_points():
+    _tooth_angle = 2.0 * math.pi / _teeth
+    for _tooth in range(_teeth):
+        _theta = 2.0 * math.pi * _tooth / _teeth
+        _add_radial_point(_root_radius, _theta - _tooth_angle * 0.25)
+        _add_radial_point(_outer_radius, _theta - _tooth_angle * 0.25)
+        _add_radial_point(_outer_radius, _theta + _tooth_angle * 0.25)
+        _add_radial_point(_root_radius, _theta + _tooth_angle * 0.25)
+        _add_arc(_root_radius, _theta + _tooth_angle * 0.25, _theta + _tooth_angle * 0.75, max(1, _samples // 3))
+def _smooth_tooth_radius(_local_angle, _half_angle, _kind):
+    _x = min(1.0, abs(_local_angle) / _half_angle)
+    _shape = 0.5 + 0.5 * math.cos(math.pi * _x)
+    return _root_radius + (_outer_radius - _root_radius) * _shape
+def _build_cycloidal_points():
+    _tooth_angle = 2.0 * math.pi / _teeth
+    _steps = max(8, _samples * 2)
+    for _tooth in range(_teeth):
+        _theta = 2.0 * math.pi * _tooth / _teeth
+        for _sample in range(_steps):
+            _local = -_tooth_angle / 2.0 + _tooth_angle * _sample / float(_steps)
+            _add_radial_point(_smooth_tooth_radius(_local, _tooth_angle / 2.0, 'cycloidal'), _theta + _local)
+def _build_circular_arc_points():
+    _tooth_angle = 2.0 * math.pi / _teeth
+    for _tooth in range(_teeth):
+        _theta = 2.0 * math.pi * _tooth / _teeth
+        _add_arc(_outer_radius, _theta - _tooth_angle * 0.25, _theta + _tooth_angle * 0.25, max(6, _samples))
+        _add_arc(_root_radius, _theta + _tooth_angle * 0.25, _theta + _tooth_angle * 0.75, max(2, _samples // 2))
+def _build_pin_points():
+    _tooth_angle = 2.0 * math.pi / _teeth
+    _hub_radius = max(_pitch_radius - 0.75 * _module, _module * 0.4)
+    _pin_radius = max(min(_module * 0.55, _hub_radius * math.sin(_tooth_angle * 0.34)), _module * 0.18)
+    _steps = max(16, _samples * 3)
+    for _tooth in range(_teeth):
+        _theta = 2.0 * math.pi * _tooth / _teeth
+        for _sample in range(_steps):
+            _local = -_tooth_angle / 2.0 + _tooth_angle * _sample / float(_steps)
+            _radius = _hub_radius + _pin_radius * max(0.0, math.cos(_local))
+            _add_radial_point(_radius, _theta + _local)
+if _tooth_profile == 'involute':
+    _build_involute_points()
+elif _tooth_profile == 'trapezoid':
+    _build_trapezoid_points()
+elif _tooth_profile == 'straight':
+    _build_straight_points()
+elif _tooth_profile == 'cycloidal':
+    _build_cycloidal_points()
+elif _tooth_profile == 'circular_arc':
+    _build_circular_arc_points()
+else:
+    _build_pin_points()
+if (_points[0] - _points[-1]).Length > 1e-7:
+    _points.append(_points[0])
+_profile_indices = []
+for _idx in range(len(_points) - 1):
+    _p1 = _points[_idx]
+    _p2 = _points[_idx + 1]
+    if (_p2 - _p1).Length <= 1e-7:
+        continue
+    _geo = _sk.addGeometry(Part.LineSegment(_p1, _p2), False)
+    _profile_indices.append(_geo)
+    if len(_profile_indices) > 1:
+        _sk.addConstraint(Sketcher.Constraint('Coincident', _profile_indices[-2], 2, _profile_indices[-1], 1))
+if len(_profile_indices) > 1:
+    _sk.addConstraint(Sketcher.Constraint('Coincident', _profile_indices[-1], 2, _profile_indices[0], 1))
+for _label, _radius in [('RootRadius', _root_radius), ('BaseRadius', _base_radius), ('PitchRadius', _pitch_radius), ('OuterRadius', _outer_radius)]:
+    _circle_idx = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), _radius), True)
+    try:
+        _sk.addConstraint(Sketcher.Constraint('Radius', _circle_idx, _radius))
+        _sk.addConstraint(Sketcher.Constraint('Coincident', _circle_idx, 3, -1, 1))
+    except Exception:
+        pass
+if _bore_diameter > 0:
+    _bore_idx = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), _bore_diameter / 2.0), False)
+    try:
+        _sk.addConstraint(Sketcher.Constraint('Radius', _bore_idx, _bore_diameter / 2.0))
+        _sk.addConstraint(Sketcher.Constraint('Coincident', _bore_idx, 3, -1, 1))
+    except Exception:
+        pass
+try:
+    _sk.solve()
+except Exception:
+    pass
+_pad = _body.newObject('PartDesign::Pad', $gear_name)
+_pad.Profile = (_sk, [''])
+_pad.Length = _width
+$extrusion_helpers
+$bool_helpers
+_set_extrusion_symmetric(_pad, False)
+_set_feature_bool(_pad, ('Reversed',), False)
+_sk.Visibility = False
+_doc.recompute()
+print('body_name=' + _body.Name)
+print('sketch_name=' + _sk.Name)
+print('pad_name=' + _pad.Name)
+print('profile_segments=' + str(len(_profile_indices)))
+print('teeth=' + str(_teeth))
+print('module=' + str(_module))
+print('tooth_profile=' + _tooth_profile)

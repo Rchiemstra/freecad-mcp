@@ -1,0 +1,23 @@
+import FreeCAD
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_src = _doc.getObject($feature_name)
+if not _src: raise RuntimeError('Source feature not found')
+_length = float($length)
+_occurrences = int($occurrences)
+if _length <= 0: raise ValueError('length must be > 0')
+if _occurrences < 2: raise ValueError('occurrences must be >= 2')
+$pattern_helpers
+$bool_helpers
+_body = _get_body(_doc, _src, $body_name)
+_pattern = _body.newObject('PartDesign::LinearPattern', $pattern_name)
+_set_originals(_pattern, _src)
+_set_property(_pattern, ('Length',), _length)
+_set_property(_pattern, ('Occurrences',), _occurrences)
+_set_linksub(_pattern, ('Direction',), _resolve_linksub(_doc, _body, $direction))
+_set_feature_bool(_pattern, ('Reversed',), $reversed_dir)
+_set_tip(_body, _pattern)
+_doc.recompute()
+print('pattern_name=' + _pattern.Name)
+print('source_name=' + _src.Name)
+print('body_name=' + _body.Name)

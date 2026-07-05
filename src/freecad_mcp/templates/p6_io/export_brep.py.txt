@@ -1,0 +1,4 @@
+_obj = _doc.getObject($obj_name)
+if not _obj or not hasattr(_obj,'Shape'): raise RuntimeError('Object not found')
+_obj.Shape.exportBrep($file_path)
+print(json.dumps({'exported': True, 'path': $file_path}))

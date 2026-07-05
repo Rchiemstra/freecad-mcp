@@ -1,0 +1,16 @@
+_base = _doc.getObject($base_feature)
+if not _base: raise RuntimeError('Base feature not found')
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+if not _body:
+    for _o in _doc.Objects:
+        if _o.TypeId == 'PartDesign::Body' and _base in getattr(_o,'Group',[]): _body = _o; break
+_chm = _body.newObject('PartDesign::Chamfer', $chamfer_name) if _body else _doc.addObject('PartDesign::Chamfer', $chamfer_name)
+_chm.Base = (_base, [])
+_chm.Size = $size
+_edge_refs = $edge_refs
+if _edge_refs:
+    _chm.Base = (_base, _edge_refs)
+_doc.recompute()
+print('chamfer_name=' + _chm.Name)

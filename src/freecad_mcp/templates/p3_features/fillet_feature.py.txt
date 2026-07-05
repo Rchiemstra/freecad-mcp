@@ -1,0 +1,16 @@
+_base = _doc.getObject($base_feature)
+if not _base: raise RuntimeError('Base feature not found')
+_body_name = $body_name
+_body = _doc.getObject(_body_name) if _body_name else None
+if _body_name and not _body: raise RuntimeError('Body not found')
+if not _body:
+    for _o in _doc.Objects:
+        if _o.TypeId == 'PartDesign::Body' and _base in getattr(_o,'Group',[]): _body = _o; break
+_fil = _body.newObject('PartDesign::Fillet', $fillet_name) if _body else _doc.addObject('PartDesign::Fillet', $fillet_name)
+_fil.Base = (_base, [])
+_fil.Radius = $radius
+_edge_refs = $edge_refs
+if _edge_refs:
+    _fil.Base = (_base, _edge_refs)
+_doc.recompute()
+print('fillet_name=' + _fil.Name)
