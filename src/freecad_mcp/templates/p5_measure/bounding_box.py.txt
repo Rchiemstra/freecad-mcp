@@ -1,0 +1,8 @@
+_obj = _doc.getObject($obj_name)
+if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object not found')
+_bb = _obj.Shape.BoundBox
+print(json.dumps({
+'xmin':round(_bb.XMin,6),'ymin':round(_bb.YMin,6),'zmin':round(_bb.ZMin,6),
+'xmax':round(_bb.XMax,6),'ymax':round(_bb.YMax,6),'zmax':round(_bb.ZMax,6),
+'dx':round(_bb.XLength,6),'dy':round(_bb.YLength,6),'dz':round(_bb.ZLength,6),
+'diagonal':round(_bb.DiagonalLength,6)}))

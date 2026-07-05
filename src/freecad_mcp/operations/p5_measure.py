@@ -7,6 +7,7 @@ import logging
 
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse
+from ..template_resources import render_template_text
 from .core import _run_code
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -123,16 +124,8 @@ def bounding_box_operation(
     doc_name: str,
     obj_name: str,
 ) -> ToolResponse:
-    lines = _doc_sk_preamble(doc_name) + [
-        f"_obj = _doc.getObject({obj_name!r})",
-        "if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object not found')",
-        "_bb = _obj.Shape.BoundBox",
-        "print(json.dumps({"
-        "'xmin':round(_bb.XMin,6),'ymin':round(_bb.YMin,6),'zmin':round(_bb.ZMin,6),"
-        "'xmax':round(_bb.XMax,6),'ymax':round(_bb.YMax,6),'zmax':round(_bb.ZMax,6),"
-        "'dx':round(_bb.XLength,6),'dy':round(_bb.YLength,6),'dz':round(_bb.ZLength,6),"
-        "'diagonal':round(_bb.DiagonalLength,6)}))",
-    ]
+    code = render_template_text("p5_measure/bounding_box.py.txt", obj_name=repr(obj_name))
+    lines = _doc_sk_preamble(doc_name) + code.strip().splitlines()
     return _run_code(freecad, True, "\n".join(lines),
                      f"Bounding box of '{obj_name}'", "Failed to get bounding box")
 

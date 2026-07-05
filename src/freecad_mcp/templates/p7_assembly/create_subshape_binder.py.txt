@@ -1,0 +1,34 @@
+_binder_name = $binder_name
+_source_name = $source_name
+_subs = $subs or []
+_target_body_name = $target_body_name
+_target_container_name = $target_container_name
+_relative = $relative
+_sync_placement = $sync_placement
+_if_exists = $if_exists
+_src = _doc.getObject(_source_name)
+if not _src: raise RuntimeError('Source object not found: ' + _source_name)
+_existing = _doc.getObject(_binder_name)
+if _existing and _if_exists == 'skip':
+    print(json.dumps({'ok': True, 'skipped': True, 'binder_name': _existing.Name, 'source_object': _source_name}))
+else:
+    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _binder_name)
+    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)
+    _body = _doc.getObject(_target_body_name) if _target_body_name else None
+    if _target_body_name and not _body: raise RuntimeError('Target body not found: ' + _target_body_name)
+    _container = _doc.getObject(_target_container_name) if _target_container_name else None
+    if _target_container_name and not _container: raise RuntimeError('Target container not found: ' + _target_container_name)
+    _binder = _body.newObject('PartDesign::SubShapeBinder', _binder_name) if _body else _doc.addObject('PartDesign::SubShapeBinder', _binder_name)
+    _binder.Support = [(_src, tuple(_subs) if _subs else ('',))]
+    if 'Relative' in getattr(_binder, 'PropertiesList', []): _binder.Relative = bool(_relative)
+    if (not _relative) and _sync_placement:
+        try: _binder.Placement = _global_placement(_src)
+        except Exception: pass
+    _add_to_container(_container, _binder)
+    _doc.recompute()
+    _src_bb = _global_boundbox(_src)
+    _binder_bb = _global_boundbox(_binder)
+    _delta = _bbox_delta(_src_bb, _binder_bb)
+    _warning = None
+    if _delta is not None and _delta > 0.01: _warning = 'Binder bbox differs from source by more than 0.01 mm'
+    print(json.dumps({'ok': True, 'binder_name': _binder.Name, 'source_object': _src.Name, 'sub_elements': _subs, 'relative': _relative, 'sync_placement': _sync_placement, 'bbox_delta_mm': None if _delta is None else round(_delta, 6), 'warning': _warning, 'source_bbox': None if _src_bb is None else _bb(_src_bb), 'binder_bbox': None if _binder_bb is None else _bb(_binder_bb)}))

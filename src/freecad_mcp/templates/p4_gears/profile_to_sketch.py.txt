@@ -1,0 +1,25 @@
+# Deduplicate and build sketch geometry
+if (_points[0] - _points[-1]).Length > 1e-7:
+    _points.append(_points[0])
+_profile_indices = []
+for _idx in range(len(_points) - 1):
+    _p1 = _points[_idx]
+    _p2 = _points[_idx + 1]
+    if (_p2 - _p1).Length <= 1e-7:
+        continue
+    _geo = _sk.addGeometry(Part.LineSegment(_p1, _p2), False)
+    _profile_indices.append(_geo)
+    if len(_profile_indices) > 1:
+        _sk.addConstraint(Sketcher.Constraint('Coincident', _profile_indices[-2], 2, _profile_indices[-1], 1))
+if len(_profile_indices) > 1:
+    _sk.addConstraint(Sketcher.Constraint('Coincident', _profile_indices[-1], 2, _profile_indices[0], 1))
+
+# Construction circles for reference
+for _label, _radius in [('RootRadius', _root_radius), ('BaseRadius', _base_radius),
+                          ('PitchRadius', _pitch_radius), ('OuterRadius', _outer_radius)]:
+    _ci = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,1), _radius), True)
+    try:
+        _sk.addConstraint(Sketcher.Constraint('Radius', _ci, _radius))
+        _sk.addConstraint(Sketcher.Constraint('Coincident', _ci, 3, -1, 1))
+    except Exception:
+        pass

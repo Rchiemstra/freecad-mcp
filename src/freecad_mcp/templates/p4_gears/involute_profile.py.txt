@@ -1,0 +1,68 @@
+# --- True involute gear profile ---
+_inv_alpha = math.tan(_pressure_angle) - _pressure_angle
+_delta = math.pi / (2.0 * _teeth) - _backlash / (2.0 * _pitch_radius)
+
+if _outer_radius <= _base_radius:
+    raise ValueError(
+        f"Addendum circle (r={_outer_radius:.4f}) must be larger than base circle (r={_base_radius:.4f}). "
+        "Increase module or reduce pressure_angle."
+    )
+
+_t_tip  = math.sqrt((_outer_radius / _base_radius) ** 2 - 1.0)
+_has_undercut = _root_radius < _base_radius
+_t_root = math.sqrt((_root_radius / _base_radius) ** 2 - 1.0) if not _has_undercut else 0.0
+
+def _ix(t):
+    return _base_radius * (math.cos(t) + t * math.sin(t))
+def _iy(t):
+    return _base_radius * (math.sin(t) - t * math.cos(t))
+def _polar(t):
+    return t - math.atan(t)
+def _rot(x, y, a):
+    _c = math.cos(a); _s = math.sin(a)
+    return _c * x - _s * y, _s * x + _c * y
+
+for _k in range(_teeth):
+    _theta = 2.0 * math.pi * _k / _teeth
+    _phi_r = _theta - _delta - _inv_alpha
+    _phi_l = _theta + _delta + _inv_alpha
+
+    # Right involute flank (from root/base to tip)
+    if _has_undercut:
+        # Radial extension from root to base-circle start
+        _add_point(_root_radius * math.cos(_phi_r), _root_radius * math.sin(_phi_r))
+
+    for _si in range(_samples + 1):
+        _t = _t_root + (_t_tip - _t_root) * _si / _samples
+        _x, _y = _rot(_ix(_t), _iy(_t), _phi_r)
+        _add_point(_x, _y)
+
+    # Tip arc
+    _r_tip_ang = _phi_r + _polar(_t_tip)
+    _l_tip_ang = _phi_l - _polar(_t_tip)
+    _tip_steps = max(2, _samples // 4)
+    for _ti in range(1, _tip_steps):
+        _a = _r_tip_ang + (_l_tip_ang - _r_tip_ang) * _ti / _tip_steps
+        _add_point(_outer_radius * math.cos(_a), _outer_radius * math.sin(_a))
+
+    # Left involute flank (from tip to root/base, mirror)
+    for _si in range(_samples, -1, -1):
+        _t = _t_root + (_t_tip - _t_root) * _si / _samples
+        _x, _y = _rot(_ix(_t), -_iy(_t), _phi_l)
+        _add_point(_x, _y)
+
+    if _has_undercut:
+        _add_point(_root_radius * math.cos(_phi_l), _root_radius * math.sin(_phi_l))
+
+    # Root arc to next tooth
+    if _has_undercut:
+        _arc_start = _phi_l
+        _arc_end   = (_theta + 2.0 * math.pi / _teeth) - _delta - _inv_alpha
+    else:
+        _arc_start = _phi_l - _polar(_t_root)
+        _arc_end   = (_theta + 2.0 * math.pi / _teeth) - _delta - _inv_alpha + _polar(_t_root)
+
+    _root_steps = max(2, _samples // 2)
+    for _ri in range(1, _root_steps + 1):
+        _a = _arc_start + (_arc_end - _arc_start) * _ri / _root_steps
+        _add_point(_root_radius * math.cos(_a), _root_radius * math.sin(_a))

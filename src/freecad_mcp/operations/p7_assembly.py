@@ -8,6 +8,7 @@ from typing import Any
 
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse, add_screenshot_if_available, text_response
+from ..template_resources import render_template_text
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -279,42 +280,18 @@ def create_subshape_binder_operation(
     invalid = _validate_if_exists(if_exists)
     if invalid:
         return invalid
-    lines = _doc_preamble(doc_name) + _shared_helpers() + [
-        f"_binder_name = {binder_name!r}",
-        f"_source_name = {source_object!r}",
-        f"_subs = {sub_elements!r} or []",
-        f"_target_body_name = {target_body!r}",
-        f"_target_container_name = {target_container!r}",
-        f"_relative = {relative!r}",
-        f"_sync_placement = {sync_placement!r}",
-        f"_if_exists = {if_exists!r}",
-        "_src = _doc.getObject(_source_name)",
-        "if not _src: raise RuntimeError('Source object not found: ' + _source_name)",
-        "_existing = _doc.getObject(_binder_name)",
-        "if _existing and _if_exists == 'skip':",
-        "    print(json.dumps({'ok': True, 'skipped': True, 'binder_name': _existing.Name, 'source_object': _source_name}))",
-        "else:",
-        "    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _binder_name)",
-        "    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)",
-        "    _body = _doc.getObject(_target_body_name) if _target_body_name else None",
-        "    if _target_body_name and not _body: raise RuntimeError('Target body not found: ' + _target_body_name)",
-        "    _container = _doc.getObject(_target_container_name) if _target_container_name else None",
-        "    if _target_container_name and not _container: raise RuntimeError('Target container not found: ' + _target_container_name)",
-        "    _binder = _body.newObject('PartDesign::SubShapeBinder', _binder_name) if _body else _doc.addObject('PartDesign::SubShapeBinder', _binder_name)",
-        "    _binder.Support = [(_src, tuple(_subs) if _subs else ('',))]",
-        "    if 'Relative' in getattr(_binder, 'PropertiesList', []): _binder.Relative = bool(_relative)",
-        "    if (not _relative) and _sync_placement:",
-        "        try: _binder.Placement = _global_placement(_src)",
-        "        except Exception: pass",
-        "    _add_to_container(_container, _binder)",
-        "    _doc.recompute()",
-        "    _src_bb = _global_boundbox(_src)",
-        "    _binder_bb = _global_boundbox(_binder)",
-        "    _delta = _bbox_delta(_src_bb, _binder_bb)",
-        "    _warning = None",
-        "    if _delta is not None and _delta > 0.01: _warning = 'Binder bbox differs from source by more than 0.01 mm'",
-        "    print(json.dumps({'ok': True, 'binder_name': _binder.Name, 'source_object': _src.Name, 'sub_elements': _subs, 'relative': _relative, 'sync_placement': _sync_placement, 'bbox_delta_mm': None if _delta is None else round(_delta, 6), 'warning': _warning, 'source_bbox': None if _src_bb is None else _bb(_src_bb), 'binder_bbox': None if _binder_bb is None else _bb(_binder_bb)}))",
-    ]
+    binder_code = render_template_text(
+        "p7_assembly/create_subshape_binder.py.txt",
+        binder_name=repr(binder_name),
+        source_name=repr(source_object),
+        subs=repr(sub_elements),
+        target_body_name=repr(target_body),
+        target_container_name=repr(target_container),
+        relative=repr(relative),
+        sync_placement=repr(sync_placement),
+        if_exists=repr(if_exists),
+    )
+    lines = _doc_preamble(doc_name) + _shared_helpers() + binder_code.strip().splitlines()
     return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create subshape binder", screenshot=True)
 
 
@@ -602,52 +579,15 @@ def sweep_pipe_operation(
     invalid = _validate_if_exists(if_exists)
     if invalid:
         return invalid
-    lines = _doc_preamble(doc_name) + _shared_helpers() + [
-        f"_path_wire_name = {path_wire!r}",
-        f"_diameter = {diameter_mm!r}",
-        f"_solid_name = {solid_name!r}",
-        f"_profile_mode = {profile_mode!r}",
-        f"_color = {color!r}",
-        f"_container_name = {container!r}",
-        f"_if_exists = {if_exists!r}",
-        "if _diameter <= 0: raise RuntimeError('diameter_mm must be > 0')",
-        "_path_obj = _doc.getObject(_path_wire_name)",
-        "if not _path_obj or not hasattr(_path_obj, 'Shape'): raise RuntimeError('Path wire not found: ' + _path_wire_name)",
-        "_existing = _doc.getObject(_solid_name)",
-        "if _existing and _if_exists == 'skip':",
-        "    print(json.dumps({'ok': True, 'skipped': True, 'solid_name': _existing.Name}))",
-        "else:",
-        "    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _solid_name)",
-        "    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)",
-        "    _wire = _path_obj.Shape.Wires[0] if len(_path_obj.Shape.Wires) else Part.Wire(_path_obj.Shape.Edges)",
-        "    if not _wire.Edges: raise RuntimeError('Path has no edges')",
-        "    _first = _wire.Edges[0]",
-        "    _start = _first.Vertexes[0].Point",
-        "    _tangent = _first.tangentAt(_first.FirstParameter)",
-        "    _profile_edge = Part.makeCircle(float(_diameter) / 2.0, _start, _tangent)",
-        "    _profile = Part.Wire([_profile_edge])",
-        "    _frenet = str(_profile_mode).lower() in ('frenet', 'true', '1', 'yes')",
-        "    _solid = _wire.makePipeShell([_profile], True, _frenet)",
-        "    _obj = _doc.addObject('Part::Feature', _solid_name)",
-        "    _obj.Shape = _solid",
-        "    if _color:",
-        "        try:",
-        "            _obj.ViewObject.ShapeColor = (float(_color[0]), float(_color[1]), float(_color[2]), 1.0)",
-        "            if len(_color) > 3: _obj.ViewObject.Transparency = int(max(0.0, min(1.0, float(_color[3]))) * 100)",
-        "        except Exception: pass",
-        "    _container = _doc.getObject(_container_name) if _container_name else None",
-        "    if _container_name and not _container: raise RuntimeError('Container not found: ' + _container_name)",
-        "    _add_to_container(_container, _obj)",
-        "    _doc.recompute()",
-        "    _radii = []",
-        "    for _edge in _wire.Edges:",
-        "        try:",
-        "            _r = float(getattr(_edge.Curve, 'Radius'))",
-        "            if _r > 0: _radii.append(_r)",
-        "        except Exception:",
-        "            pass",
-        "    _min_radius = min(_radii) if _radii else None",
-        "    _ok, _check_errors = _safe_check(_obj.Shape)",
-        "    print(json.dumps({'ok': True, 'solid_name': _obj.Name, 'path_wire': _path_obj.Name, 'diameter_mm': round(float(_diameter), 6), 'length_mm': round(float(_wire.Length), 6), 'volume_mm3': round(float(_obj.Shape.Volume), 6), 'min_bend_radius_mm': None if _min_radius is None else round(_min_radius, 6), 'check_ok': _ok, 'check_errors': _check_errors}))",
-    ]
+    sweep_code = render_template_text(
+        "p7_assembly/sweep_pipe.py.txt",
+        path_wire_name=repr(path_wire),
+        diameter=repr(diameter_mm),
+        solid_name=repr(solid_name),
+        profile_mode=repr(profile_mode),
+        color=repr(color),
+        container_name=repr(container),
+        if_exists=repr(if_exists),
+    )
+    lines = _doc_preamble(doc_name) + _shared_helpers() + sweep_code.strip().splitlines()
     return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to sweep pipe", screenshot=True)

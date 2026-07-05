@@ -15,6 +15,7 @@ import logging
 
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse, text_response
+from ..template_resources import read_template_lines
 from .core import _run_code, _partdesign_extrusion_helper_code, _partdesign_bool_property_helper_code
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -23,104 +24,8 @@ logger = logging.getLogger("FreeCADMCPserver")
 # Shared involute code fragment (executed inside FreeCAD via execute_code)
 # ---------------------------------------------------------------------------
 
-_INVOLUTE_PROFILE_CODE = r"""
-# --- True involute gear profile ---
-_inv_alpha = math.tan(_pressure_angle) - _pressure_angle
-_delta = math.pi / (2.0 * _teeth) - _backlash / (2.0 * _pitch_radius)
-
-if _outer_radius <= _base_radius:
-    raise ValueError(
-        f"Addendum circle (r={_outer_radius:.4f}) must be larger than base circle (r={_base_radius:.4f}). "
-        "Increase module or reduce pressure_angle."
-    )
-
-_t_tip  = math.sqrt((_outer_radius / _base_radius) ** 2 - 1.0)
-_has_undercut = _root_radius < _base_radius
-_t_root = math.sqrt((_root_radius / _base_radius) ** 2 - 1.0) if not _has_undercut else 0.0
-
-def _ix(t):
-    return _base_radius * (math.cos(t) + t * math.sin(t))
-def _iy(t):
-    return _base_radius * (math.sin(t) - t * math.cos(t))
-def _polar(t):
-    return t - math.atan(t)
-def _rot(x, y, a):
-    _c = math.cos(a); _s = math.sin(a)
-    return _c * x - _s * y, _s * x + _c * y
-
-for _k in range(_teeth):
-    _theta = 2.0 * math.pi * _k / _teeth
-    _phi_r = _theta - _delta - _inv_alpha
-    _phi_l = _theta + _delta + _inv_alpha
-
-    # Right involute flank (from root/base to tip)
-    if _has_undercut:
-        # Radial extension from root to base-circle start
-        _add_point(_root_radius * math.cos(_phi_r), _root_radius * math.sin(_phi_r))
-
-    for _si in range(_samples + 1):
-        _t = _t_root + (_t_tip - _t_root) * _si / _samples
-        _x, _y = _rot(_ix(_t), _iy(_t), _phi_r)
-        _add_point(_x, _y)
-
-    # Tip arc
-    _r_tip_ang = _phi_r + _polar(_t_tip)
-    _l_tip_ang = _phi_l - _polar(_t_tip)
-    _tip_steps = max(2, _samples // 4)
-    for _ti in range(1, _tip_steps):
-        _a = _r_tip_ang + (_l_tip_ang - _r_tip_ang) * _ti / _tip_steps
-        _add_point(_outer_radius * math.cos(_a), _outer_radius * math.sin(_a))
-
-    # Left involute flank (from tip to root/base, mirror)
-    for _si in range(_samples, -1, -1):
-        _t = _t_root + (_t_tip - _t_root) * _si / _samples
-        _x, _y = _rot(_ix(_t), -_iy(_t), _phi_l)
-        _add_point(_x, _y)
-
-    if _has_undercut:
-        _add_point(_root_radius * math.cos(_phi_l), _root_radius * math.sin(_phi_l))
-
-    # Root arc to next tooth
-    if _has_undercut:
-        _arc_start = _phi_l
-        _arc_end   = (_theta + 2.0 * math.pi / _teeth) - _delta - _inv_alpha
-    else:
-        _arc_start = _phi_l - _polar(_t_root)
-        _arc_end   = (_theta + 2.0 * math.pi / _teeth) - _delta - _inv_alpha + _polar(_t_root)
-
-    _root_steps = max(2, _samples // 2)
-    for _ri in range(1, _root_steps + 1):
-        _a = _arc_start + (_arc_end - _arc_start) * _ri / _root_steps
-        _add_point(_root_radius * math.cos(_a), _root_radius * math.sin(_a))
-"""
-
-_PROFILE_TO_SKETCH_CODE = r"""
-# Deduplicate and build sketch geometry
-if (_points[0] - _points[-1]).Length > 1e-7:
-    _points.append(_points[0])
-_profile_indices = []
-for _idx in range(len(_points) - 1):
-    _p1 = _points[_idx]
-    _p2 = _points[_idx + 1]
-    if (_p2 - _p1).Length <= 1e-7:
-        continue
-    _geo = _sk.addGeometry(Part.LineSegment(_p1, _p2), False)
-    _profile_indices.append(_geo)
-    if len(_profile_indices) > 1:
-        _sk.addConstraint(Sketcher.Constraint('Coincident', _profile_indices[-2], 2, _profile_indices[-1], 1))
-if len(_profile_indices) > 1:
-    _sk.addConstraint(Sketcher.Constraint('Coincident', _profile_indices[-1], 2, _profile_indices[0], 1))
-
-# Construction circles for reference
-for _label, _radius in [('RootRadius', _root_radius), ('BaseRadius', _base_radius),
-                          ('PitchRadius', _pitch_radius), ('OuterRadius', _outer_radius)]:
-    _ci = _sk.addGeometry(Part.Circle(FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,1), _radius), True)
-    try:
-        _sk.addConstraint(Sketcher.Constraint('Radius', _ci, _radius))
-        _sk.addConstraint(Sketcher.Constraint('Coincident', _ci, 3, -1, 1))
-    except Exception:
-        pass
-"""
+_INVOLUTE_PROFILE_CODE = read_template_lines("p4_gears/involute_profile.py.txt")
+_PROFILE_TO_SKETCH_CODE = read_template_lines("p4_gears/profile_to_sketch.py.txt")
 
 
 def _gear_header_code(
@@ -184,7 +89,7 @@ def _gear_header_code(
 
 
 def _gear_footer_code(gear_name: str, bore_diameter: float) -> list[str]:
-    lines = list(_PROFILE_TO_SKETCH_CODE.strip().splitlines())
+    lines = list(_PROFILE_TO_SKETCH_CODE)
     lines += [
         # Bore
         f"if {bore_diameter} > 0:",
@@ -240,7 +145,7 @@ def create_involute_gear_operation(
     lines = (
         _gear_header_code(doc_name, gear_name, body_name, sketch_name, teeth, module, width,
                           pressure_angle, bore_diameter, clearance, backlash, samples_per_flank)
-        + list(_INVOLUTE_PROFILE_CODE.strip().splitlines())
+        + list(_INVOLUTE_PROFILE_CODE)
         + _gear_footer_code(gear_name, bore_diameter)
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
@@ -274,8 +179,8 @@ def create_helical_gear_operation(
     lines = (
         _gear_header_code(doc_name, gear_name, body_name, None, teeth, module, width,
                           pressure_angle, bore_diameter, clearance, backlash, samples_per_flank)
-        + list(_INVOLUTE_PROFILE_CODE.strip().splitlines())
-        + list(_PROFILE_TO_SKETCH_CODE.strip().splitlines())
+        + list(_INVOLUTE_PROFILE_CODE)
+        + list(_PROFILE_TO_SKETCH_CODE)
         + [
             # Bore
             f"if {bore_diameter} > 0:",

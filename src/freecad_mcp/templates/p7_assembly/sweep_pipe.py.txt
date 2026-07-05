@@ -1,0 +1,46 @@
+_path_wire_name = $path_wire_name
+_diameter = $diameter
+_solid_name = $solid_name
+_profile_mode = $profile_mode
+_color = $color
+_container_name = $container_name
+_if_exists = $if_exists
+if _diameter <= 0: raise RuntimeError('diameter_mm must be > 0')
+_path_obj = _doc.getObject(_path_wire_name)
+if not _path_obj or not hasattr(_path_obj, 'Shape'): raise RuntimeError('Path wire not found: ' + _path_wire_name)
+_existing = _doc.getObject(_solid_name)
+if _existing and _if_exists == 'skip':
+    print(json.dumps({'ok': True, 'skipped': True, 'solid_name': _existing.Name}))
+else:
+    if _existing and _if_exists == 'error': raise RuntimeError('Object already exists: ' + _solid_name)
+    if _existing and _if_exists == 'replace': _doc.removeObject(_existing.Name)
+    _wire = _path_obj.Shape.Wires[0] if len(_path_obj.Shape.Wires) else Part.Wire(_path_obj.Shape.Edges)
+    if not _wire.Edges: raise RuntimeError('Path has no edges')
+    _first = _wire.Edges[0]
+    _start = _first.Vertexes[0].Point
+    _tangent = _first.tangentAt(_first.FirstParameter)
+    _profile_edge = Part.makeCircle(float(_diameter) / 2.0, _start, _tangent)
+    _profile = Part.Wire([_profile_edge])
+    _frenet = str(_profile_mode).lower() in ('frenet', 'true', '1', 'yes')
+    _solid = _wire.makePipeShell([_profile], True, _frenet)
+    _obj = _doc.addObject('Part::Feature', _solid_name)
+    _obj.Shape = _solid
+    if _color:
+        try:
+            _obj.ViewObject.ShapeColor = (float(_color[0]), float(_color[1]), float(_color[2]), 1.0)
+            if len(_color) > 3: _obj.ViewObject.Transparency = int(max(0.0, min(1.0, float(_color[3]))) * 100)
+        except Exception: pass
+    _container = _doc.getObject(_container_name) if _container_name else None
+    if _container_name and not _container: raise RuntimeError('Container not found: ' + _container_name)
+    _add_to_container(_container, _obj)
+    _doc.recompute()
+    _radii = []
+    for _edge in _wire.Edges:
+        try:
+            _r = float(getattr(_edge.Curve, 'Radius'))
+            if _r > 0: _radii.append(_r)
+        except Exception:
+            pass
+    _min_radius = min(_radii) if _radii else None
+    _ok, _check_errors = _safe_check(_obj.Shape)
+    print(json.dumps({'ok': True, 'solid_name': _obj.Name, 'path_wire': _path_obj.Name, 'diameter_mm': round(float(_diameter), 6), 'length_mm': round(float(_wire.Length), 6), 'volume_mm3': round(float(_obj.Shape.Volume), 6), 'min_bend_radius_mm': None if _min_radius is None else round(_min_radius, 6), 'check_ok': _ok, 'check_errors': _check_errors}))
