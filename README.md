@@ -176,16 +176,65 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 
 ## Tools
 
-* `create_document`: Create a new document in FreeCAD.
-* `create_object`: Create a new object in FreeCAD.
-* `edit_object`: Edit an object in FreeCAD.
-* `delete_object`: Delete an object in FreeCAD.
-* `execute_code`: Execute arbitrary Python code in FreeCAD.
-* `insert_part_from_library`: Insert a part from the [parts library](https://github.com/FreeCAD/FreeCAD-library).
-* `get_view`: Get a screenshot of the active view.
-* `get_objects`: Get all objects in a document.
-* `get_object`: Get an object in a document.
-* `get_parts_list`: Get the list of parts in the [parts library](https://github.com/FreeCAD/FreeCAD-library).
+### Documents & objects
+* `create_document`, `list_documents`, `close_document`
+* `get_objects`, `get_object`, `create_object`, `edit_object`
+* `delete_object` — deletes without silently orphaning dependents (P6): `recursive=True` removes dependents first, `force=True` deletes only the object and reports the orphans left, otherwise it refuses and lists them.
+* `execute_code`, `recompute_document`, `undo`, `redo`
+* `get_recompute_log` — per-object recompute state (read-only).
+
+### Sketching
+* `sketch_create`, `sketch_add_geometry`, `sketch_add_constraint`
+* `sketch_add_line`, `sketch_add_circle`, `sketch_add_arc`, `sketch_add_rectangle`
+* `sketch_add_polyline`, `sketch_add_bspline`, `sketch_add_bspline_through_points`, `sketch_add_bezier`, `sketch_add_ellipse`, `sketch_add_arc_of_ellipse`, `sketch_add_slot`, `sketch_add_regular_polygon`, `sketch_add_parametric_curve`, `sketch_import_points`, `sketch_toggle_construction`
+* `sketch_trim`, `sketch_extend`, `sketch_split`, `sketch_fillet`, `sketch_offset`, `sketch_symmetry`
+* `sketch_constrain_*` — coincident, horizontal, vertical, distance, radius, equal, parallel, perpendicular, tangent.
+* `get_sketch_geometry`, `get_sketch_diagnostics`
+
+### PartDesign features
+* `pad_feature`, `pocket_feature`, `revolve_feature`, `loft_feature`, `sweep_feature`, `helical_sweep_feature`
+* `fillet_feature`, `chamfer_feature`
+* `linear_pattern_feature`, `polar_pattern_feature`, `mirror_feature`
+* `create_spur_gear`
+* Pad/pocket/loft/sweep append a silent-build assertion (I2) so a wrong-direction or misplaced build surfaces as a clear failure instead of being marked "Up-to-date".
+
+### Booleans
+* `boolean_union`, `boolean_difference`, `boolean_intersection`
+
+### Gears
+* `create_involute_gear`, `create_helical_gear`, `compute_gear_geometry`, `check_gear_pair`
+
+### Measurement & transforms
+* `measure_distance`, `measure_angle`, `measure_area`, `measure_volume`
+* `bounding_box`, `center_of_mass`, `validate_geometry`
+* `translate`, `rotate`, `scale`
+
+### IO
+* `export_step`, `import_step`, `export_stl`, `export_brep`, `import_brep`, `set_color`
+
+### Assembly
+* `create_assembly`, `create_assembly_joint`, `create_assembly_grounded_joint`, `solve_assembly`
+* `build_path_wire`, `sweep_pipe`
+* `create_part_container`, `create_subshape_binder`, `create_datum_plane`, `move_object`
+* `get_document_tree`, `sketch_add_external_projection`
+* `create_assembly_joint` warns when a referenced component's body has cross-body datums attached (M4 / P5 guardrail).
+
+### Diagnostics (read-only guards for the silent FreeCAD behaviours in `doc/mcp-feedback-status.md`)
+* `preview_attachment` — inspect a datum's attachment and the cross-body placement-drop risk (P1).
+* `find_faces`, `find_edges` — locate sub-shapes by geometry (type / normal / centre / radius), removing face/edge-index fragility.
+* `face_normal`, `edge_axis` — global normal/axis of a single sub-shape, avoiding the Direction-vs-Axis trap (P8).
+* `placement_audit` — per Body/Part placement + `getGlobalPlacement()` + cross-body datums referencing it (M3).
+* `relink_references` — re-point every reference from one object to another, making rebuilds non-destructive (M5).
+* `capture_state`, `geometric_diff` — structured geometric diff as a text-only fallback when a viewable image can't be returned (I10 / P10).
+* Every mutating tool appends a compact recompute log (I3) so orphaned/Invalid objects surface immediately.
+
+### Snapshot / restore
+* `snapshot` — save the current document into a ring buffer of the last 5 states.
+* `restore` — restore a snapshot in place (latest, or by id). A bad step is one call to undo (I7 / P12).
+
+### Views & parts library
+* `get_view` — returns an `ImageContent` screenshot when available; otherwise a compact geometric state of the focus object (P10 / I10 fallback).
+* `insert_part_from_library`, `get_parts_list`
 
 ## Contributors
 

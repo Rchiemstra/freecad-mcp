@@ -568,6 +568,35 @@ class FreeCADRPC:
             return {"success": True}
         return {"success": False, "error": res}
 
+    def snapshot(self, doc_name: str) -> dict:
+        """I7 — save the current document into a ring buffer of the last 5
+        snapshots kept on the FreeCAD module (shared with the execute_code
+        snapshot tool). Returns {ok, snapshot_id, doc, count}."""
+        rpc_request_queue.put(lambda: self._snapshot_gui(doc_name))
+        res = self._get_res()
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": res}
+
+    def restore(self, doc_name: str, snapshot_id: str | None = None) -> dict:
+        """I7 — restore a snapshot in place (closes the current doc and reopens
+        the snapshot file). Latest snapshot when snapshot_id is None. Shares the
+        FreeCAD._mcp_snapshots ring buffer with the execute_code restore tool."""
+        rpc_request_queue.put(lambda: self._restore_gui(doc_name, snapshot_id))
+        res = self._get_res()
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": res}
+
+    def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
+        """I9 — re-solve an Assembly via the real internal solver. Tries
+        assembly.solve() (C++), then JointObject.solveIfAllowed, then recompute."""
+        rpc_request_queue.put(lambda: self._solve_assembly_gui(doc_name, assembly_name))
+        res = self._get_res()
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": res}
+
     def _get_objects_gui(self, doc_name):
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
@@ -1065,6 +1094,121 @@ class FreeCADRPC:
             return True
         except Exception as e:
             return str(e)
+
+    def _snapshot_gui(self, doc_name: str):
+        import os
+        import tempfile
+        import time
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return {"ok": False, "error": f"Document '{doc_name}' not found."}
+            if not hasattr(FreeCAD, "_mcp_snapshots"):
+                FreeCAD._mcp_snapshots = []
+            fd, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
+            os.close(fd)
+            try:
+                doc.save(path)
+            except Exception as e:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+                return {"ok": False, "error": f"Failed to save snapshot: {e}"}
+            sid = "snap-" + str(int(time.time() * 1000))
+            FreeCAD._mcp_snapshots.append(
+                {"id": sid, "path": path, "doc": doc.Name, "t": time.time()}
+            )
+            while len(FreeCAD._mcp_snapshots) > 5:
+                old = FreeCAD._mcp_snapshots.pop(0)
+                try:
+                    os.remove(old["path"])
+                except Exception:
+                    pass
+            return {"ok": True, "snapshot_id": sid, "doc": doc.Name,
+                    "count": len(FreeCAD._mcp_snapshots)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def _restore_gui(self, doc_name: str, snapshot_id):
+        import os
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return {"ok": False, "error": f"Document '{doc_name}' not found."}
+            snaps = getattr(FreeCAD, "_mcp_snapshots", [])
+            if not snaps:
+                return {"ok": False, "error": "No snapshots available to restore"}
+            target = None
+            if snapshot_id:
+                for s in snaps:
+                    if s["id"] == snapshot_id:
+                        target = s
+                        break
+                if target is None:
+                    return {"ok": False, "error": f"Snapshot not found: {snapshot_id}"}
+            else:
+                target = snaps[-1]
+            if not os.path.exists(target["path"]):
+                return {"ok": False, "error": f"Snapshot file missing: {target['path']}"}
+            cur = doc.Name
+            try:
+                FreeCAD.closeDocument(cur)
+            except Exception:
+                pass
+            restored = FreeCAD.open(target["path"])
+            return {"ok": True, "restored_id": target["id"], "doc": cur,
+                    "new_doc": restored.Name if restored is not None else cur,
+                    "count": len(snaps)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def _solve_assembly_gui(self, doc_name: str, assembly_name: str):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return {"ok": False, "error": f"Document '{doc_name}' not found."}
+            asm = doc.getObject(assembly_name)
+            if not asm:
+                return {"ok": False, "error": f"Assembly '{assembly_name}' not found."}
+            try:
+                is_asm = asm.isDerivedFrom("Assembly::AssemblyObject")
+            except Exception:
+                is_asm = False
+            if not is_asm:
+                return {"ok": False, "error": f"Object '{assembly_name}' is not an Assembly::AssemblyObject."}
+            method = None
+            status = None
+            error = None
+            try:
+                if hasattr(asm, "solve"):
+                    status = asm.solve()
+                    method = "assembly.solve()"
+            except Exception as e:
+                error = str(e)
+            if method is None:
+                try:
+                    import JointObject
+                    JointObject.solveIfAllowed(asm, True)
+                    method = "JointObject.solveIfAllowed"
+                    status = "ok"
+                except Exception as e:
+                    error = (str(e) if error is None else error + " | " + str(e))
+            if method is None:
+                try:
+                    asm.Document.recompute()
+                    method = "recompute"
+                    status = "ok"
+                except Exception as e:
+                    return {"ok": False, "error": f"solve_assembly failed: {error} | {e}"}
+            try:
+                doc.recompute()
+            except Exception:
+                pass
+            return {"ok": True, "assembly": asm.Name, "method": method,
+                    "status": str(status) if status is not None else None}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
 
 def start_rpc_server(port=9875):

@@ -1,0 +1,161 @@
+# I1 preview_attachment: read-only diagnostic of a datum's attachment.
+#
+# Reports, for an existing attachable datum (PartDesign::Plane/Line/Point, or any
+# object with AttachmentSupport):
+#   - the support reference (object:subshape)
+#   - the support face/edge global centre and normal/direction
+#   - the datum's global base and normal
+#   - the owning body of the datum and of the support, and each body's Placement
+#   - source_body_placement_dropped: True when the support lives in a different
+#     body than the datum AND that source body has a non-identity placement
+#     (the P1 cross-body attachment drop risk)
+#   - diff: signed distance (mm) from the support centre to the datum plane, and
+#     the angle (deg) between the datum normal and the support normal
+#
+# This is the ~80%-session-saver: point it at a misbehaving datum and see at a
+# glance whether the source body placement was dropped, instead of rebuilding
+# the whole model to find out.
+import json
+import math as _math
+
+_datum_name = $datum_name
+_datum = _doc.getObject(_datum_name)
+if not _datum:
+    raise RuntimeError('Datum not found: ' + _datum_name)
+
+
+def _v(_v):
+    if _v is None:
+        return None
+    return {'x': round(float(_v.x), 6), 'y': round(float(_v.y), 6), 'z': round(float(_v.z), 6)}
+
+
+def _parent_body(_obj):
+    if _obj is None:
+        return None
+    _seen = set()
+
+    def _walk(_o):
+        if _o is None or id(_o) in _seen:
+            return None
+        _seen.add(id(_o))
+        if getattr(_o, 'TypeId', '') == 'PartDesign::Body':
+            return _o
+        for _p in getattr(_o, 'InList', []) or []:
+            _r = _walk(_p)
+            if _r is not None:
+                return _r
+        return None
+
+    return _walk(_obj)
+
+
+def _placement_is_identity(_pl):
+    try:
+        return _pl.isIdentity()
+    except Exception:
+        return False
+
+
+def _subshape(_obj, _sub):
+    _shape = getattr(_obj, 'Shape', None)
+    if _shape is None or _shape.isNull() or not _sub:
+        return None
+    if _sub.startswith('Face'):
+        return _shape.Faces[int(_sub[4:]) - 1]
+    if _sub.startswith('Edge'):
+        return _shape.Edges[int(_sub[4:]) - 1]
+    if _sub.startswith('Vertex'):
+        return _shape.Vertexes[int(_sub[6:]) - 1]
+    return None
+
+
+def _subshape_axis(_sub):
+    # Normal/direction of a face (Surface.Axis) or edge (Curve.Axis), else None.
+    try:
+        if hasattr(_sub, 'Surface'):
+            _ax = _sub.Surface.Axis
+        elif hasattr(_sub, 'Curve'):
+            _ax = _sub.Curve.Axis
+        else:
+            return None
+        return FreeCAD.Vector(_ax.x, _ax.y, _ax.z)
+    except Exception:
+        return None
+
+
+# --- support reference (AttachmentSupport is a PropertyLinkSubList) ----------
+_support_obj = None
+_support_sub = ''
+_sup = getattr(_datum, 'AttachmentSupport', None)
+if _sup is not None:
+    try:
+        _objs = list(_sup.getValues())
+        _subs = list(_sup.getSubValues())
+    except Exception:
+        _objs, _subs = [], []
+    if _objs:
+        _support_obj = _objs[0]
+        _support_sub = _subs[0] if _subs else ''
+
+# --- support global centre / normal -----------------------------------------
+_support_center = None
+_support_normal = None
+if _support_obj is not None:
+    _sub = _subshape(_support_obj, _support_sub)
+    if _sub is not None:
+        _gp = _support_obj.getGlobalPlacement()
+        try:
+            _support_center = _gp * _sub.CenterOfMass
+        except Exception:
+            _support_center = None
+        _ax = _subshape_axis(_sub)
+        if _ax is not None:
+            _support_normal = _gp.Rotation * _ax
+
+# --- datum global pose -------------------------------------------------------
+_datum_gp = _datum.getGlobalPlacement()
+_datum_base = _datum_gp.Base
+_datum_normal = _datum_gp.Rotation * FreeCAD.Vector(0, 0, 1)
+
+# --- owning bodies -----------------------------------------------------------
+_datum_body = _parent_body(_datum)
+_support_body = _parent_body(_support_obj) if _support_obj is not None else None
+_datum_body_placement = _v(_datum_body.Placement.Base) if _datum_body is not None else None
+_support_body_placement = _v(_support_body.Placement.Base) if _support_body is not None else None
+_support_body_rot_identity = _placement_is_identity(_support_body.Placement) if _support_body is not None else True
+
+_source_body_placement_dropped = (
+    _support_body is not None
+    and _datum_body is not None
+    and _support_body.Name != _datum_body.Name
+    and not _support_body_rot_identity
+)
+
+# --- diff --------------------------------------------------------------------
+_distance = None
+_angle_deg = None
+if _support_center is not None:
+    _d = _support_center - _datum_base
+    _distance = round(float(_d.dot(_datum_normal)), 6)
+if _support_normal is not None:
+    _dot = float(_datum_normal.x * _support_normal.x + _datum_normal.y * _support_normal.y + _datum_normal.z * _support_normal.z)
+    _dot = max(-1.0, min(1.0, _dot))
+    _angle_deg = round(_math.degrees(_math.acos(abs(_dot))), 6)
+
+print(json.dumps({
+    'ok': True,
+    'datum': _datum.Name,
+    'map_mode': str(getattr(_datum, 'MapMode', None)),
+    'support': (_support_obj.Name + ':' + _support_sub) if _support_obj is not None else None,
+    'support_global_center': _v(_support_center),
+    'support_global_normal': _v(_support_normal),
+    'datum_global_base': _v(_datum_base),
+    'datum_global_normal': _v(_datum_normal),
+    'datum_body': _datum_body.Name if _datum_body is not None else None,
+    'support_body': _support_body.Name if _support_body is not None else None,
+    'datum_body_placement': _datum_body_placement,
+    'support_body_placement': _support_body_placement,
+    'source_body_placement_dropped': _source_body_placement_dropped,
+    'diff': {'signed_distance_mm': _distance, 'angle_deg': _angle_deg},
+}))

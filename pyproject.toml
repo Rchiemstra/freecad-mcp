@@ -13,11 +13,30 @@ dependencies = [
     "validators>=0.34.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-xdist>=3.5",
+    "pytest-cov>=5.0",
+]
+
 [project.scripts]
 freecad-mcp = "freecad_mcp.server:main"
 
 [tool.hatch.build.targets.sdist]
 exclude = ["assets", "results"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "unit: mock-based tests that do not require a FreeCAD install (fast, run anywhere)",
+    "e2e: live tests that drive a real headless FreeCAD (FreeCADCmd) inside Docker",
+    "core: tests reproducing FreeCAD core C++ behavior (placement/attacher/sketcher/pad)",
+]
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,66 @@
+# I10 / P10 fallback: capture a compact geometric state (placement + bbox + face
+# / edge counts) for a set of objects. The geometric_diff operation compares two
+# captured states to produce a text-only diff when a viewable image can't be
+# returned. Read-only; returns JSON.
+import json as _i10_json
+
+_names = $object_names
+
+
+def _v(_x):
+    if _x is None:
+        return None
+    return {'x': round(float(_x.x), 6), 'y': round(float(_x.y), 6), 'z': round(float(_x.z), 6)}
+
+
+def _rot(_r):
+    try:
+        return {'x': round(float(_r.x), 6), 'y': round(float(_r.y), 6),
+                'z': round(float(_r.z), 6), 'angle_deg': round(float(_r.Angle), 6)}
+    except Exception:
+        return None
+
+
+def _capture(_o):
+    _pl = getattr(_o, 'Placement', None)
+    _row = {
+        'name': _o.Name,
+        'type': getattr(_o, 'TypeId', ''),
+        'placement_base': _v(_pl.Base) if _pl is not None else None,
+        'placement_rotation': _rot(_pl.Rotation) if _pl is not None else None,
+        'bbox': None,
+        'face_count': None,
+        'edge_count': None,
+    }
+    _sh = getattr(_o, 'Shape', None)
+    if _sh is not None and not getattr(_sh, 'isNull', lambda: True)():
+        try:
+            _bb = _sh.BoundBox
+            _row['bbox'] = {
+                'xmin': round(float(_bb.XMin), 6), 'ymin': round(float(_bb.YMin), 6),
+                'zmin': round(float(_bb.ZMin), 6), 'xmax': round(float(_bb.XMax), 6),
+                'ymax': round(float(_bb.YMax), 6), 'zmax': round(float(_bb.ZMax), 6),
+            }
+        except Exception:
+            _row['bbox'] = None
+        try:
+            _row['face_count'] = len(_sh.Faces)
+        except Exception:
+            _row['face_count'] = None
+        try:
+            _row['edge_count'] = len(_sh.Edges)
+        except Exception:
+            _row['edge_count'] = None
+    return _row
+
+
+_objs = []
+if _names:
+    for _n in _names:
+        _o = _doc.getObject(_n)
+        if _o is not None:
+            _objs.append(_o)
+else:
+    _objs = list(_doc.Objects)
+
+print(_i10_json.dumps({'ok': True, 'doc': _doc.Name, 'objects': [_capture(_o) for _o in _objs]}))

@@ -1,7 +1,25 @@
-"""Shared pytest fixtures for the freecad-mcp test suite."""
+"""Shared pytest fixtures for the freecad-mcp test suite.
+
+Three test layers are supported via markers (declared in pyproject.toml and
+re-registered here defensively):
+
+* ``unit``  - mock-based tests of generated code; no FreeCAD required.
+* ``e2e``   - live tests driving a real headless FreeCAD (FreeCADCmd).
+* ``core``  - live tests reproducing FreeCAD core C++ behavior
+              (placement/attacher/sketcher/pad). These are the regression
+              gates for the bugs listed in doc/mcp-feedback.md.
+
+The live layers use the in-process ``exec`` pattern: the test interpreter is
+expected to be FreeCAD's own Python (e.g. running pytest inside the
+freecad-mcp-tests Docker image, or under FreeCADCmd). When FreeCAD is not
+importable the live fixtures skip automatically.
+"""
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import math
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,7 +27,16 @@ from mcp.types import ImageContent, TextContent
 
 
 # ---------------------------------------------------------------------------
-# Connection factories
+# Marker registration (defensive; also declared in [tool.pytest.ini_options])
+# ---------------------------------------------------------------------------
+
+def pytest_configure(config: pytest.Config) -> None:
+    for marker in ("unit", "e2e", "core"):
+        config.addinivalue_line("markers", marker)
+
+
+# ---------------------------------------------------------------------------
+# Mock connection factories (Layer A/B unit tests)
 # ---------------------------------------------------------------------------
 
 def _ok_conn(output: str = "done", recompute_errors: list | None = None):
@@ -31,7 +58,7 @@ def _fail_conn(error: str = "oops"):
 
 
 # ---------------------------------------------------------------------------
-# Response helpers
+# Mock-layer response helpers
 # ---------------------------------------------------------------------------
 
 def _text(response) -> str:
@@ -48,7 +75,7 @@ def _code(conn) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Mock fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -59,3 +86,147 @@ def ok_conn():
 @pytest.fixture
 def fail_conn():
     return _fail_conn()
+
+
+# ---------------------------------------------------------------------------
+# Live FreeCAD layer (e2e / core)
+# ---------------------------------------------------------------------------
+
+# These imports are deferred so the module can be imported in a plain-Python
+# environment (the unit layer must not require FreeCAD).
+FreeCAD = None
+_Part = None
+_Sketcher = None
+
+try:  # pragma: no cover - exercised only when FreeCAD is importable
+    import FreeCAD as _FreeCAD  # type: ignore
+    import Part as _PartMod  # type: ignore
+    import Sketcher as _SketcherMod  # type: ignore
+
+    FreeCAD = _FreeCAD
+    _Part = _PartMod
+    _Sketcher = _SketcherMod
+except Exception:  # FreeCAD not available in this interpreter
+    FreeCAD = None
+
+
+class LiveFreeCADConnection:
+    """In-process connection that ``exec``s generated MCP code against the
+    real FreeCAD modules, mirroring the contract of
+    ``freecad_mcp.freecad_client.FreeCADConnection.execute_code``.
+
+    This is the same strategy used by
+    ``tests/integration/test_assembly_path_live.py``'s ``DirectFreeCADConnection``,
+    generalised here so every e2e/core repro test can share it.
+    """
+
+    def __init__(self, doc_name: str):
+        if FreeCAD is None:  # pragma: no cover - guard
+            raise RuntimeError("FreeCAD is not importable in this interpreter")
+        self.doc = FreeCAD.newDocument(doc_name)
+        self._globals = {
+            "FreeCAD": FreeCAD,
+            "Part": _Part,
+            "Sketcher": _Sketcher,
+            "doc": self.doc,
+        }
+
+    # -- FreeCADConnection-compatible API ----------------------------------
+
+    def execute_code(self, code: str):
+        buffer = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buffer):
+                exec(code, self._globals)  # noqa: S102 - intentional exec
+            return {
+                "success": True,
+                "message": "Python code execution scheduled. \nOutput: " + buffer.getvalue(),
+                "recompute_errors": [],
+            }
+        except Exception as err:  # surface the failure to the test
+            return {"success": False, "error": f"{type(err).__name__}: {err}"}
+
+    def get_active_screenshot(self, *args, **kwargs):
+        # Screenshots require the GUI; unavailable in FreeCADCmd headless.
+        return None
+
+    # -- helpers used by repro tests ---------------------------------------
+
+    def recompute(self):
+        return self.doc.recompute()
+
+    def close(self):
+        try:
+            FreeCAD.closeDocument(self.doc.Name)
+        except Exception:  # pragma: no cover - best-effort cleanup
+            pass
+
+
+def _freecad_available() -> bool:
+    return FreeCAD is not None
+
+
+@pytest.fixture
+def freecad(request):
+    """Yield the FreeCAD module, skipping the test if it is unavailable.
+
+    Use this for low-level repro tests that build a model directly with the
+    FreeCAD/Part/Sketcher APIs rather than through MCP operations.
+    """
+    if not _freecad_available():
+        pytest.skip("FreeCAD not importable; run under FreeCADCmd or the Docker image")
+    return FreeCAD
+
+
+@pytest.fixture
+def freecad_session(request):
+    """Yield a :class:`LiveFreeCADConnection` bound to a fresh document.
+
+    The document is closed on teardown. Skip the test if FreeCAD is not
+    importable. Marks itself as ``e2e``/``core`` automatically so plain
+    ``pytest`` runs do not attempt it without ``-m e2e``/``-m core``.
+    """
+    if not _freecad_available():
+        pytest.skip("FreeCAD not importable; run under FreeCADCmd or the Docker image")
+    doc_name = f"MCP_{request.node.name.replace('[', '_').replace(']', '')}"
+    session = LiveFreeCADConnection(doc_name)
+    yield session
+    session.close()
+
+
+# ---------------------------------------------------------------------------
+# Vector / placement assertion helpers (used by core/e2e repro tests)
+# ---------------------------------------------------------------------------
+
+def vec_close(a, b, *, tol: float = 1e-4) -> bool:
+    """True if two 3-vectors (FreeCAD.Vector or tuple) are within *tol* mm."""
+    ax, ay, az = (a.x, a.y, a.z) if hasattr(a, "x") else a
+    bx, by, bz = (b.x, b.y, b.z) if hasattr(b, "x") else b
+    return math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2) <= tol
+
+
+def assert_vec_close(a, b, *, tol: float = 1e-4) -> None:
+    ax, ay, az = (a.x, a.y, a.z) if hasattr(a, "x") else a
+    bx, by, bz = (b.x, b.y, b.z) if hasattr(b, "x") else b
+    err = math.sqrt((ax - bx) ** 2 + (ay - by) ** 2 + (az - bz) ** 2)
+    assert err <= tol, f"Vector mismatch: {ax, ay, az} vs {bx, by, bz} (dist {err:.4e} > tol {tol:.2e})"
+
+
+def assert_parallel(a, b, *, angle_tol: float = 1e-3) -> None:
+    """Assert two unit-direction vectors are parallel (or anti-parallel)."""
+    ax, ay, az = (a.x, a.y, a.z) if hasattr(a, "x") else a
+    bx, by, bz = (b.x, b.y, b.z) if hasattr(b, "x") else b
+    dot = (ax * bx + ay * by + az * bz)
+    # |dot| ~ 1 means parallel; sin^2 = 1 - dot^2
+    sin2 = max(0.0, 1.0 - dot * dot)
+    assert sin2 <= angle_tol * angle_tol, (
+        f"Directions not parallel: {ax, ay, az} vs {bx, by, bz} (|sin|={math.sqrt(sin2):.4e})"
+    )
+
+
+def parse_json_response(response) -> dict:
+    """Parse the JSON payload out of an MCP tool response (TextContent)."""
+    text = " ".join(item.text for item in response if isinstance(item, TextContent))
+    if "Output:" in text:
+        text = text.split("Output:", 1)[1].strip()
+    return json.loads(text.splitlines()[-1])

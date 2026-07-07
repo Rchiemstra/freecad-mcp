@@ -1,0 +1,41 @@
+# I7 restore: replace the current document with a saved snapshot (the latest, or
+# one selected by id) from the FreeCAD-module ring buffer. Closes the current doc
+# and reopens the snapshot file so the document is restored in place (P12).
+import json as _r_json
+import os as _r_os
+
+_doc = FreeCAD.getDocument($doc_name)
+if _doc is None:
+    raise RuntimeError('Document not found: ' + $doc_name)
+_snaps = getattr(FreeCAD, '_mcp_snapshots', [])
+if not _snaps:
+    raise RuntimeError('No snapshots available to restore')
+_sid = $snapshot_id
+_target = None
+if _sid:
+    for _s in _snaps:
+        if _s['id'] == _sid:
+            _target = _s
+            break
+    if _target is None:
+        raise RuntimeError('Snapshot not found: ' + str(_sid))
+else:
+    _target = _snaps[-1]
+if not _r_os.path.exists(_target['path']):
+    raise RuntimeError('Snapshot file missing: ' + _target['path'])
+_cur = _doc.Name
+try:
+    FreeCAD.closeDocument(_cur)
+except Exception:
+    try:
+        FreeCAD.close(_cur)
+    except Exception:
+        pass
+_restored = FreeCAD.open(_target['path'])
+print(_r_json.dumps({
+    'ok': True,
+    'restored_id': _target['id'],
+    'doc': _cur,
+    'new_doc': _restored.Name if _restored is not None else _cur,
+    'count': len(_snaps),
+}))

@@ -1,0 +1,43 @@
+# Docker Compose for the freecad-mcp test suite.
+#
+#   docker compose run --rm unit      # fast mock-based tests (no FreeCAD)
+#   docker compose run --rm e2e       # live FreeCAD repro / regression tests
+#   docker compose run --rm shell     # drop into a shell in the test image
+#
+# The image is shared; only the command differs.
+
+services:
+  base-build:
+    image: freecad-mcp-tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  unit:
+    image: freecad-mcp-tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "unit", "-ra", "--tb=short"]
+
+  e2e:
+    image: freecad-mcp-tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "e2e", "-ra", "--tb=short"]
+
+  core:
+    image: freecad-mcp-tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "core", "-ra", "--tb=short"]
+
+  shell:
+    image: freecad-mcp-tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/bash"]
+    command: []

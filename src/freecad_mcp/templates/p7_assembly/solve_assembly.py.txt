@@ -1,0 +1,58 @@
+# I9 solve_assembly: re-solve an Assembly after editing a joint or a referenced
+# face. The solve API is undocumented, so this tries the known entry points in
+# order: the C++ `assembly.solve()`, then `JointObject.solveIfAllowed`, then a
+# plain recompute as a last resort. Returns JSON {ok, assembly, method, status}.
+import json as _sa_json
+
+_assembly = _doc.getObject($assembly_name)
+if not _assembly:
+    raise RuntimeError('Assembly not found: ' + $assembly_name)
+try:
+    _is_asm = _assembly.isDerivedFrom('Assembly::AssemblyObject')
+except Exception:
+    _is_asm = False
+if not _is_asm:
+    raise RuntimeError('Object is not an Assembly::AssemblyObject: ' + $assembly_name)
+
+_method = None
+_status = None
+_error = None
+
+# 1) C++ solver on the assembly object (AssemblyObject.solve).
+try:
+    if hasattr(_assembly, 'solve'):
+        _status = _assembly.solve()
+        _method = 'assembly.solve()'
+except Exception as _e:
+    _error = str(_e)
+
+# 2) Script-level solve (JointObject.solveIfAllowed).
+if _method is None:
+    try:
+        import JointObject
+        JointObject.solveIfAllowed(_assembly, True)
+        _method = 'JointObject.solveIfAllowed'
+        _status = 'ok'
+    except Exception as _e:
+        _error = (str(_e) if _error is None else _error + ' | ' + str(_e))
+
+# 3) Last resort: recompute the document so joint-driven placements refresh.
+if _method is None:
+    try:
+        _assembly.Document.recompute()
+        _method = 'recompute'
+        _status = 'ok'
+    except Exception as _e:
+        raise RuntimeError('solve_assembly failed: ' + (str(_e) if _error is None else _error + ' | ' + str(_e)))
+
+try:
+    _doc.recompute()
+except Exception:
+    pass
+
+print(_sa_json.dumps({
+    'ok': True,
+    'assembly': _assembly.Name,
+    'method': _method,
+    'status': str(_status) if _status is not None else None,
+}))

@@ -3,6 +3,7 @@ P7 - Assembly-aware references, sketch inspection, path wires, and pipe sweeps.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -20,6 +21,37 @@ def _extract_execute_output(message: str) -> str:
     return message.strip()
 
 
+_PREFLIGHT_SENTINEL = "__PREFLIGHT_WARN__"
+
+
+def _extract_preflight(output: str) -> tuple[str, str]:
+    """I6 — pull the `__PREFLIGHT_WARN__` sentinel out of the execute output.
+
+    Returns (clean_output, warning_text). The clean_output is the original JSON
+    payload with the sentinel line removed (so JSON callers stay happy); the
+    warning_text is a human-readable block surfaced to the agent when a
+    cross-body attachment risk was detected at creation time (P1).
+    """
+    idx = output.rfind(_PREFLIGHT_SENTINEL)
+    if idx < 0:
+        return output, ""
+    payload = output[idx + len(_PREFLIGHT_SENTINEL):]
+    payload = payload.strip().splitlines()[0] if payload.strip() else ""
+    clean = output[:idx].rstrip()
+    try:
+        warns = json.loads(payload) if payload else []
+    except Exception:
+        warns = []
+    if not warns:
+        return clean, ""
+    lines = []
+    for w in warns:
+        lines.append(
+            f"PREFLIGHT WARNING ({w.get('datum','?')}): {w.get('message','?')}"
+        )
+    return clean, "\n".join(lines)
+
+
 def _run_json_code(
     freecad: FreeCADConnection,
     only_text_feedback: bool,
@@ -33,10 +65,13 @@ def _run_json_code(
         image = freecad.get_active_screenshot() if screenshot else None
         if res.get("success"):
             output = _extract_execute_output(res.get("message", ""))
+            output, preflight = _extract_preflight(output)
             errors = res.get("recompute_errors", [])
             if errors and output.endswith("}"):
                 # Keep the response JSON-first without parsing possibly large payloads.
                 output += "\n" + str({"recompute_errors": errors})
+            if preflight:
+                output = output + "\n" + preflight
             return add_screenshot_if_available(text_response(output), image, only_text_feedback)
         return text_response(f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}")
     except Exception as exc:
@@ -148,6 +183,10 @@ def create_assembly_joint_operation(
         presolve=repr(presolve),
         recompute=repr(recompute),
         properties=repr(properties or {}),
+    ) + render_template_lines(
+        "diagnostics/joint_preflight.py.txt",
+        ref1_component=repr(ref1_component),
+        ref2_component=repr(ref2_component),
     )
     return _run_json_code(
         freecad,
@@ -248,7 +287,9 @@ def create_subshape_binder_operation(
         sync_placement=repr(sync_placement),
         if_exists=repr(if_exists),
     )
-    lines = _doc_preamble(doc_name) + _shared_helpers() + binder_code.strip().splitlines()
+    lines = _doc_preamble(doc_name) + _shared_helpers() + binder_code.strip().splitlines() + render_template_lines(
+        "diagnostics/cross_body_preflight.py.txt", obj_name=repr(binder_name),
+    )
     return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create subshape binder", screenshot=True)
 
 
@@ -280,8 +321,32 @@ def create_datum_plane_operation(
         offset_along_normal=repr(offset_along_normal),
         map_mode=repr(map_mode),
         if_exists=repr(if_exists),
+    ) + render_template_lines(
+        "diagnostics/cross_body_preflight.py.txt", obj_name=repr(plane_name),
     )
     return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create datum plane", screenshot=True)
+
+
+def solve_assembly_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    assembly_name: str,
+) -> ToolResponse:
+    """I9 — re-solve an Assembly after editing a joint or a referenced face.
+
+    Tries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a
+    plain recompute, and reports which method succeeded. Returns JSON
+    ``{ok, assembly, method, status}``. Fixes P9 (no documented solve API).
+    """
+    lines = _doc_preamble(doc_name) + render_template_lines(
+        "p7_assembly/solve_assembly.py.txt",
+        assembly_name=repr(assembly_name),
+    )
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(lines),
+        "Failed to solve assembly", screenshot=True,
+    )
 
 
 def get_sketch_geometry_operation(

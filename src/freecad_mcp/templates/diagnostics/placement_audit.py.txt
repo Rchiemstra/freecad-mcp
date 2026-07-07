@@ -1,0 +1,88 @@
+# M3 placement audit: list per Body/Part its Placement, getGlobalPlacement(), and
+# the cross-body datums that reference it. Surfaces P1 risk concentrations and
+# placement/geometry disagreements at a glance. Read-only; returns JSON.
+import json as _m3_json
+
+
+def _v(_x):
+    if _x is None:
+        return None
+    return {'x': round(float(_x.x), 6), 'y': round(float(_x.y), 6), 'z': round(float(_x.z), 6)}
+
+
+def _rot(_r):
+    try:
+        return {'x': round(float(_r.x), 6), 'y': round(float(_r.y), 6),
+                'z': round(float(_r.z), 6), 'angle_deg': round(float(_r.Angle), 6)}
+    except Exception:
+        return None
+
+
+def _parent_body(_o):
+    if _o is None:
+        return None
+    _seen = set()
+
+    def _walk(_x):
+        if _x is None or id(_x) in _seen:
+            return None
+        _seen.add(id(_x))
+        if getattr(_x, 'TypeId', '') in ('PartDesign::Body', 'App::Part'):
+            return _x
+        for _p in getattr(_x, 'InList', []) or []:
+            _r = _walk(_p)
+            if _r is not None:
+                return _r
+        return None
+
+    return _walk(_o)
+
+
+def _supports(_o):
+    _sup = getattr(_o, 'AttachmentSupport', None)
+    if _sup is None:
+        _sup = getattr(_o, 'Support', None)
+    if _sup is None:
+        return []
+    try:
+        return [s for s in _sup.getValues() if s is not None]
+    except Exception:
+        return []
+
+
+# Build a map: parent body name -> list of cross-body datums referencing it.
+_cross_by_body = {}
+for _o in _doc.Objects:
+    _o_body = _parent_body(_o)
+    if _o_body is None:
+        continue
+    for _sup in _supports(_o):
+        _sup_body = _parent_body(_sup)
+        if _sup_body is not None and _sup_body.Name != _o_body.Name:
+            _cross_by_body.setdefault(_sup_body.Name, []).append({
+                'datum': _o.Name,
+                'datum_body': _o_body.Name,
+                'support': _sup.Name,
+            })
+
+_rows = []
+for _o in _doc.Objects:
+    _tid = getattr(_o, 'TypeId', '')
+    if _tid not in ('PartDesign::Body', 'App::Part'):
+        continue
+    _pl = getattr(_o, 'Placement', None)
+    _gp_base = None
+    try:
+        _gp_base = _o.getGlobalPlacement().Base
+    except Exception:
+        _gp_base = None
+    _rows.append({
+        'name': _o.Name,
+        'type': _tid,
+        'placement_base': _v(_pl.Base) if _pl is not None else None,
+        'placement_rotation': _rot(_pl.Rotation) if _pl is not None else None,
+        'global_placement_base': _v(_gp_base),
+        'cross_body_datums': _cross_by_body.get(_o.Name, []),
+    })
+
+print(_m3_json.dumps({'ok': True, 'doc': _doc.Name, 'bodies': _rows}))

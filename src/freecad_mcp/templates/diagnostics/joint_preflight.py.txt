@@ -1,0 +1,73 @@
+# M4 joint<->PartDesign pre-flight: warn when a referenced component's body has
+# cross-body datums attached to it. An assembly joint moves the component's body,
+# which can break those cross-body datums (P5). Emits a `__PREFLIGHT_WARN__`
+# sentinel that _run_json_code surfaces as a warning, keeping the joint JSON clean.
+import json as _m4_json
+
+_c1 = $ref1_component
+_c2 = $ref2_component
+
+
+def _pf_parent_body(_o):
+    if _o is None:
+        return None
+    _seen = set()
+
+    def _walk(_x):
+        if _x is None or id(_x) in _seen:
+            return None
+        _seen.add(id(_x))
+        if getattr(_x, 'TypeId', '') in ('PartDesign::Body', 'App::Part'):
+            return _x
+        for _p in getattr(_x, 'InList', []) or []:
+            _r = _walk(_p)
+            if _r is not None:
+                return _r
+        return None
+
+    return _walk(_o)
+
+
+def _supports(_o):
+    _sup = getattr(_o, 'AttachmentSupport', None)
+    if _sup is None:
+        _sup = getattr(_o, 'Support', None)
+    if _sup is None:
+        return []
+    try:
+        return [s for s in _sup.getValues() if s is not None]
+    except Exception:
+        return []
+
+
+_warns = []
+for _cname in (_c1, _c2):
+    _comp = _doc.getObject(_cname)
+    if _comp is None:
+        continue
+    _body = _pf_parent_body(_comp)
+    if _body is None:
+        continue
+    # Find datums in OTHER bodies whose support lives in this body.
+    for _o in _doc.Objects:
+        _o_body = _pf_parent_body(_o)
+        if _o_body is None or _o_body.Name == _body.Name:
+            continue
+        for _sup in _supports(_o):
+            _sup_body = _pf_parent_body(_sup)
+            if _sup_body is not None and _sup_body.Name == _body.Name:
+                _warns.append({
+                    'component': _comp.Name,
+                    'component_body': _body.Name,
+                    'datum': _o.Name,
+                    'datum_body': _o_body.Name,
+                    'support': _sup.Name,
+                    'message': (
+                        'Joint references ' + _comp.Name + ' in body ' + _body.Name
+                        + ', which has a cross-body datum ' + _o.Name + ' (in body '
+                        + _o_body.Name + ') attached to ' + _sup.Name + '. Solving '
+                        + 'the joint may move the body and break that datum (P5).'
+                    ),
+                })
+
+print('__PREFLIGHT_WARN__' + _m4_json.dumps(_warns))

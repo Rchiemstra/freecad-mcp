@@ -1,0 +1,80 @@
+# I6 cross-body pre-flight: warn at creation time when a datum/binder attaches
+# to a support in a DIFFERENT body that has a non-identity placement — the P1
+# cross-body attachment-drop risk. Emits a `__PREFLIGHT_WARN__` sentinel that
+# _run_json_code strips out and surfaces as a warning, keeping the JSON clean.
+import json as _pf_json
+
+_pf_obj = _doc.getObject($obj_name)
+_pf_warns = []
+
+
+def _pf_parent_body(_o):
+    if _o is None:
+        return None
+    _seen = set()
+
+    def _walk(_x):
+        if _x is None or id(_x) in _seen:
+            return None
+        _seen.add(id(_x))
+        if getattr(_x, 'TypeId', '') == 'PartDesign::Body':
+            return _x
+        for _p in getattr(_x, 'InList', []) or []:
+            _r = _walk(_p)
+            if _r is not None:
+                return _r
+        return None
+
+    return _walk(_o)
+
+
+def _pf_placement_identity(_pl):
+    try:
+        return _pl.isIdentity()
+    except Exception:
+        try:
+            return (float(_pl.Base.x) == 0 and float(_pl.Base.y) == 0
+                    and float(_pl.Base.z) == 0
+                    and float(_pl.Rotation.Q[0]) == 0
+                    and float(_pl.Rotation.Q[1]) == 0
+                    and float(_pl.Rotation.Q[2]) == 0)
+        except Exception:
+            return True
+
+
+def _pf_supports(_o):
+    _sup = getattr(_o, 'AttachmentSupport', None)
+    if _sup is None:
+        _sup = getattr(_o, 'Support', None)
+    if _sup is None:
+        return []
+    try:
+        _objs = list(_sup.getValues())
+    except Exception:
+        _objs = []
+    return [s for s in _objs if s is not None]
+
+
+if _pf_obj is not None:
+    _pf_obj_body = _pf_parent_body(_pf_obj)
+    for _pf_sup in _pf_supports(_pf_obj):
+        _pf_sup_body = _pf_parent_body(_pf_sup)
+        if (_pf_sup_body is not None and _pf_obj_body is not None
+                and _pf_sup_body.Name != _pf_obj_body.Name
+                and not _pf_placement_identity(_pf_sup_body.Placement)):
+            _pf_warns.append({
+                'datum': _pf_obj.Name,
+                'datum_body': _pf_obj_body.Name,
+                'support': _pf_sup.Name,
+                'support_body': _pf_sup_body.Name,
+                'message': (
+                    'Cross-body attachment: ' + _pf_obj.Name + ' in body '
+                    + _pf_obj_body.Name + ' attaches to ' + _pf_sup.Name
+                    + ' in body ' + _pf_sup_body.Name + ', which has a '
+                    + 'non-identity placement. FreeCAD may drop the source '
+                    + 'body placement (P1). Consider preview_attachment, or '
+                    + 'use an identity-placement intermediate body.'
+                ),
+            })
+
+print('__PREFLIGHT_WARN__' + _pf_json.dumps(_pf_warns))

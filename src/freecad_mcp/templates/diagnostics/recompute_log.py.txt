@@ -1,0 +1,21 @@
+# I3 — auto-surface a compact recompute log on every mutating tool. After the
+# op's code has run (and recompute has happened), emit a sentinel line listing
+# document objects that are NOT Clean, so P6 orphans (children left Invalid/Error
+# after a delete/edit) and silent failures are surfaced immediately. Defensive
+# about _doc naming so it works with any op's preamble.
+import json as _i3_json
+try:
+    _i3_doc = _doc  # noqa: F821 — defined by the op's preamble, same exec namespace
+except Exception:
+    _i3_doc = getattr(FreeCAD, 'ActiveDocument', None)
+_i3_flagged = []
+if _i3_doc is not None:
+    for _i3_o in _i3_doc.Objects:
+        try:
+            _i3_st = str(getattr(_i3_o, 'State', '')).strip()
+        except Exception:
+            _i3_st = ''
+        if _i3_st and _i3_st != 'Clean':
+            _i3_valid = _i3_st not in ('Invalid', 'Error')
+            _i3_flagged.append({'name': _i3_o.Name, 'state': _i3_st, 'valid': _i3_valid})
+print('__RECOMPUTE_LOG__' + _i3_json.dumps(_i3_flagged))

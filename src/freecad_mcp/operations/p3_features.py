@@ -8,7 +8,7 @@ import logging
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse
 from ..template_resources import render_template_lines
-from .core import _run_code, _partdesign_pattern_helper_code
+from .core import _build_assertion_code, _run_code, _partdesign_pattern_helper_code
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -76,7 +76,7 @@ def loft_feature_operation(
         loft_name=repr(loft_name),
         ruled=repr(ruled),
         closed=repr(closed),
-    )
+    ) + _build_assertion_code(loft_name, sketch_names[0], check_direction=False)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Loft '{loft_name}' created", "Failed to create loft")
 
@@ -102,7 +102,7 @@ def sweep_feature_operation(
         body_name=repr(body_name),
         sweep_name=repr(sweep_name),
         frenet=repr(frenet),
-    )
+    ) + _build_assertion_code(sweep_name, profile_sketch, check_direction=False)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Sweep '{sweep_name}' created", "Failed to create sweep")
 
@@ -134,7 +134,7 @@ def helical_sweep_feature_operation(
         radius=repr(radius),
         left_handed=repr(left_handed),
         reversed_dir=repr(reversed_dir),
-    )
+    ) + _build_assertion_code(helix_name, profile_sketch, check_direction=False)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Helical sweep '{helix_name}' created", "Failed to create helical sweep")
 

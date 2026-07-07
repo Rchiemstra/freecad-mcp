@@ -1,0 +1,32 @@
+# I7 snapshot: save the current document to a temp FCStd file and push it onto a
+# ring buffer of the last 5 snapshots kept on the FreeCAD module. Cheap, in-process
+# document copies that make agent experimentation safe (P12). Returns JSON.
+import json as _s_json
+import os as _s_os
+import tempfile as _s_tmp
+import time as _s_t
+
+_doc = FreeCAD.getDocument($doc_name)
+if _doc is None:
+    raise RuntimeError('Document not found: ' + $doc_name)
+if not hasattr(FreeCAD, '_mcp_snapshots'):
+    FreeCAD._mcp_snapshots = []
+_fd, _path = _s_tmp.mkstemp(suffix='.FCStd', prefix='mcp_snap_')
+_s_os.close(_fd)
+try:
+    _doc.save(_path)
+except Exception as _e:
+    try:
+        _doc.FileName = _path
+        _doc.save()
+    except Exception:
+        raise RuntimeError('Failed to save snapshot: ' + str(_e))
+_sid = 'snap-' + str(int(_s_t.time() * 1000))
+FreeCAD._mcp_snapshots.append({'id': _sid, 'path': _path, 'doc': _doc.Name, 't': _s_t.time()})
+while len(FreeCAD._mcp_snapshots) > 5:
+    _old = FreeCAD._mcp_snapshots.pop(0)
+    try:
+        _s_os.remove(_old['path'])
+    except Exception:
+        pass
+print(_s_json.dumps({'ok': True, 'snapshot_id': _sid, 'doc': _doc.Name, 'count': len(FreeCAD._mcp_snapshots)}))

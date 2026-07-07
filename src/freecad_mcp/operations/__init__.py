@@ -123,7 +123,27 @@ from .p7_assembly import (
     get_sketch_geometry_operation,
     move_object_operation,
     sketch_add_external_projection_operation,
+    solve_assembly_operation,
     sweep_pipe_operation,
+)
+
+# Diagnostics — read-only P1/P8/P10 guards
+from .diagnostics import (
+    capture_state_operation,
+    edge_axis_operation,
+    face_normal_operation,
+    find_edges_operation,
+    find_faces_operation,
+    geometric_diff_operation,
+    placement_audit_operation,
+    preview_attachment_operation,
+    relink_references_operation,
+)
+
+# Snapshot — I7 in-process document copies (P12)
+from .snapshot import (
+    restore_operation,
+    snapshot_operation,
 )
 
 __all__ = [
@@ -232,4 +252,17 @@ __all__ = [
     "move_object_operation",
     "sketch_add_external_projection_operation",
     "sweep_pipe_operation",
+    # Diagnostics
+    "preview_attachment_operation",
+    "find_faces_operation",
+    "find_edges_operation",
+    "face_normal_operation",
+    "edge_axis_operation",
+    "placement_audit_operation",
+    "relink_references_operation",
+    "capture_state_operation",
+    "geometric_diff_operation",
+    # Snapshot
+    "snapshot_operation",
+    "restore_operation",
 ]

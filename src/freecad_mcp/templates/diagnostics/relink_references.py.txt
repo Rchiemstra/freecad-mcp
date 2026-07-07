@@ -1,0 +1,110 @@
+# M5 relink_references: re-point every reference to from_obj so it points to
+# to_obj instead, across all link-type properties of all document objects. Makes
+# rebuilds non-destructive: swap an old object for a new equivalent without
+# manually re-wiring each datum/sketch/feature. Mutates the document; returns
+# JSON listing what was relinked. Subshape names are preserved (FreeCAD will flag
+# Invalid via the recompute log if to_obj lacks them).
+import json as _m5_json
+
+_from_name = $from_obj
+_to_name = $to_obj
+_from = _doc.getObject(_from_name)
+_to = _doc.getObject(_to_name)
+if _from is None:
+    raise RuntimeError('from_obj not found: ' + _from_name)
+if _to is None:
+    raise RuntimeError('to_obj not found: ' + _to_name)
+
+
+def _set_link(_o, _name, _kind):
+    try:
+        _cur = _o.getPropertyByName(_name)
+    except Exception:
+        return False
+    if _kind == 'PropertyLink':
+        if _cur is _from:
+            try:
+                setattr(_o, _name, _to)
+                return True
+            except Exception:
+                return False
+        return False
+    if _kind == 'PropertyLinkSub':
+        # Stored as (obj, [subs]) or (obj, sub).
+        try:
+            _ref_obj, _subs = _cur
+        except Exception:
+            return False
+        if _ref_obj is _from:
+            try:
+                setattr(_o, _name, (_to, _subs))
+                return True
+            except Exception:
+                return False
+        return False
+    if _kind == 'PropertyLinkSubList':
+        _changed = False
+        _new = []
+        try:
+            _vals = list(_cur.getValues())
+            _subs = list(_cur.getSubValues())
+        except Exception:
+            return False
+        for _i, _ro in enumerate(_vals):
+            if _ro is _from:
+                _new.append((_to, _subs[_i] if _i < len(_subs) else ''))
+                _changed = True
+            else:
+                _new.append((_ro, _subs[_i] if _i < len(_subs) else ''))
+        if _changed:
+            try:
+                setattr(_o, _name, _new)
+                return True
+            except Exception:
+                return False
+        return False
+    if _kind == 'PropertyLinkList':
+        _changed = False
+        _new = []
+        for _ro in (_cur or []):
+            if _ro is _from:
+                _new.append(_to)
+                _changed = True
+            else:
+                _new.append(_ro)
+        if _changed:
+            try:
+                setattr(_o, _name, _new)
+                return True
+            except Exception:
+                return False
+        return False
+    return False
+
+
+_relinked = []
+for _o in _doc.Objects:
+    if _o is _from or _o is _to:
+        continue
+    for _name in getattr(_o, 'PropertiesList', []):
+        try:
+            _kind = _o.getTypeOfProperty(_name)
+        except Exception:
+            _kind = ''
+        if _kind in ('PropertyLink', 'PropertyLinkSub',
+                     'PropertyLinkSubList', 'PropertyLinkList'):
+            if _set_link(_o, _name, _kind):
+                _relinked.append({'object': _o.Name, 'property': _name, 'kind': _kind})
+
+try:
+    _doc.recompute()
+except Exception:
+    pass
+
+print(_m5_json.dumps({
+    'ok': True,
+    'from': _from.Name,
+    'to': _to.Name,
+    'relinked': _relinked,
+    'count': len(_relinked),
+}))

@@ -1,0 +1,96 @@
+# I5 recursive/warned delete_object: never silently orphan children (P6).
+#
+# FreeCAD's Document.removeObject does NOT auto-remove an object's dependents
+# (Body.cpp documents this as deliberate). So a bare delete leaves children
+# Invalid. This op instead:
+#   * recursive=True  -> remove dependents (leaves first) then the object;
+#   * force=True       -> remove only the object, report the orphans left behind;
+#   * otherwise        -> refuse and list the dependents so the agent decides.
+import json as _i5_json
+
+_doc = FreeCAD.getDocument($doc_name)
+_obj_name = $obj_name
+_recursive = $recursive
+_force = $force
+if _doc is None:
+    raise RuntimeError('Document not found: ' + $doc_name)
+_obj = _doc.getObject(_obj_name)
+if _obj is None:
+    raise RuntimeError('Object not found: ' + _obj_name)
+
+
+def _i5_dependents(_root):
+    # Transitive OutList (objects that depend on _root), excluding _root itself.
+    _seen = set()
+    _order = []
+
+    def _walk(_o):
+        for _c in getattr(_o, 'OutList', []) or []:
+            if id(_c) in _seen:
+                continue
+            _seen.add(id(_c))
+            _order.append(_c)
+            _walk(_c)
+
+    _walk(_root)
+    return _order
+
+
+_deps = _i5_dependents(_obj)
+_dep_names = [d.Name for d in _deps]
+_result = {'ok': True, 'object': _obj.Name, 'recursive': _recursive, 'force': _force}
+
+if _dep_names and not _recursive and not _force:
+    # Refuse: list the dependents so the agent can decide.
+    _result['refused'] = True
+    _result['deleted'] = []
+    _result['dependents'] = [
+        {'name': d.Name, 'type': getattr(d, 'TypeId', '?'),
+         'state': str(getattr(d, 'State', ''))}
+        for d in _deps
+    ]
+    _result['message'] = (
+        'Refused to delete ' + _obj.Name + ': it has ' + str(len(_dep_names))
+        + ' dependent object(s) that would be orphaned (P6). Re-issue with '
+        + 'recursive=True to delete them too, or force=True to delete only '
+        + 'this object and leave the dependents.'
+    )
+else:
+    _deleted = []
+    if _recursive and _dep_names:
+        # Remove dependents first (leaves before parents): reverse of the
+        # dependency walk so a child is gone before its parent.
+        for d in reversed(_deps):
+            try:
+                _doc.removeObject(d.Name)
+                _deleted.append(d.Name)
+            except Exception as _e:
+                _result.setdefault('errors', []).append(
+                    {'object': d.Name, 'error': str(_e)}
+                )
+    try:
+        _doc.removeObject(_obj.Name)
+        _deleted.append(_obj.Name)
+    except Exception as _e:
+        _result.setdefault('errors', []).append(
+            {'object': _obj.Name, 'error': str(_e)}
+        )
+    _doc.recompute()
+    _result['refused'] = False
+    _result['deleted'] = _deleted
+    if _force and _dep_names:
+        _result['orphans_left'] = _dep_names
+        _result['message'] = (
+            'Deleted ' + _obj.Name + ' and left ' + str(len(_dep_names))
+            + ' dependent object(s) orphaned (force=True). They may now be '
+            + 'Invalid; inspect with the recompute log.'
+        )
+    elif _recursive and _dep_names:
+        _result['message'] = (
+            'Deleted ' + _obj.Name + ' and ' + str(len(_dep_names))
+            + ' dependent object(s) (recursive=True).'
+        )
+    else:
+        _result['message'] = 'Deleted ' + _obj.Name + '.'
+
+print(json.dumps(_result))

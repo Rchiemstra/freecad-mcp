@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any
 
@@ -9,6 +10,32 @@ from ..template_resources import read_template_lines, render_template_lines, ren
 
 
 logger = logging.getLogger("FreeCADMCPserver")
+
+
+_RECOMPUTE_LOG_SENTINEL = "__RECOMPUTE_LOG__"
+
+
+def _format_recompute_log(output: str) -> str:
+    """I3 — turn the `__RECOMPUTE_LOG__` JSON sentinel in the execute output into a
+    compact human-readable summary. Returns '' when nothing is flagged (all Clean),
+    so mutating tools that build cleanly stay quiet."""
+    idx = output.rfind(_RECOMPUTE_LOG_SENTINEL)
+    if idx < 0:
+        return ""
+    payload = output[idx + len(_RECOMPUTE_LOG_SENTINEL):]
+    # The sentinel is the last printed line; trim any trailing addon chatter.
+    payload = payload.strip().splitlines()[0] if payload.strip() else ""
+    try:
+        flagged = json.loads(payload) if payload else []
+    except Exception:
+        return ""
+    if not flagged:
+        return ""
+    parts = []
+    for e in flagged:
+        mark = "" if e.get("valid", True) else " <INVALID>"
+        parts.append(f"{e.get('name','?')} ({e.get('state','?')}){mark}")
+    return "Recompute log (non-clean): " + ", ".join(parts)
 
 
 def create_document_operation(freecad: FreeCADConnection, name: str) -> ToolResponse:
@@ -77,15 +104,52 @@ def delete_object_operation(
     only_text_feedback: bool,
     doc_name: str,
     obj_name: str,
+    recursive: bool = False,
+    force: bool = False,
 ) -> ToolResponse:
-    try:
-        res = freecad.delete_object(doc_name, obj_name)
-        screenshot = freecad.get_active_screenshot()
+    """I5 — delete an object without silently orphaning its dependents (P6).
 
+    FreeCAD's ``Document.removeObject`` deliberately does not remove an object's
+    dependents, leaving them Invalid. This op instead:
+      * ``recursive=True`` -> remove dependents (leaves first) then the object;
+      * ``force=True``      -> remove only the object and report the orphans left;
+      * otherwise           -> refuse and list the dependents so the agent decides.
+
+    Returns JSON ``{ok, object, deleted, refused, dependents|orphans_left, ...}``
+    plus the I3 recompute log so any newly-Invalid objects surface immediately.
+    """
+    try:
+        code = "\n".join(
+            render_template_lines(
+                "core/delete_object.py.txt",
+                doc_name=repr(doc_name),
+                obj_name=repr(obj_name),
+                recursive=repr(recursive),
+                force=repr(force),
+            )
+            + render_template_lines("diagnostics/recompute_log.py.txt")
+        )
+        res = freecad.execute_code(code)
+        screenshot = freecad.get_active_screenshot()
         if res["success"]:
-            response = text_response(f"Object '{res['object_name']}' deleted successfully")
+            output = res.get("message", "")
+            marker = "Output:"
+            if marker in output:
+                output = output.split(marker, 1)[1].strip()
+            # Split the delete JSON from the I3 recompute-log sentinel.
+            log_summary = _format_recompute_log(output)
+            json_part = output
+            idx = output.rfind(_RECOMPUTE_LOG_SENTINEL)
+            if idx >= 0:
+                json_part = output[:idx].rstrip()
+            msg = json_part
+            if log_summary:
+                msg += "\n" + log_summary
+            response = text_response(msg)
         else:
-            response = text_response(f"Failed to delete object: {res['error']}")
+            response = text_response(
+                f"Failed to delete object: {res.get('error', res.get('message', 'unknown error'))}"
+            )
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to delete object: {str(e)}")
@@ -124,6 +188,30 @@ def get_view_operation(
     if screenshot is not None:
         label = f"View: {view_name}" + (f" | focus: {focus_object}" if focus_object else "")
         return [*text_response(label), ImageContent(type="image", data=screenshot, mimeType="image/png")]
+    # P10 / I10 fallback: no viewable image (headless / TechDraw / Spreadsheet).
+    # Return a compact geometric state of the focus object (or all objects) as a
+    # text-only stand-in so the agent still gets something to reason about.
+    try:
+        code = "\n".join(render_template_lines(
+            "diagnostics/active_state.py.txt",
+            focus_object=repr(focus_object),
+        ))
+        res = freecad.execute_code(code)
+        if res.get("success"):
+            output = res.get("message", "")
+            marker = "Output:"
+            if marker in output:
+                output = output.split(marker, 1)[1].strip()
+            note = (
+                "Cannot get a viewable screenshot in the current view type "
+                "(such as headless, TechDraw or Spreadsheet). Returning a "
+                "compact geometric state instead; use capture_state / "
+                "geometric_diff for richer text-only diffs, and find_faces / "
+                "face_normal for specific subshapes."
+            )
+            return text_response(note + "\n" + output)
+    except Exception as e:
+        logger.error(f"get_view fallback failed: {e}")
     return text_response("Cannot get screenshot in the current view type (such as TechDraw or Spreadsheet)")
 
 
@@ -201,13 +289,23 @@ def _run_code(
 ) -> ToolResponse:
     """Execute generated Python code in FreeCAD and return a formatted response."""
     try:
-        res = freecad.execute_code(code)
+        # I3 — append the recompute-log snippet so every mutating tool surfaces a
+        # compact {name, state, valid} summary of non-clean objects (catches P6
+        # orphans and silent failures). Read-only JSON diagnostics use
+        # _run_json_code and are not affected.
+        full_code = code + "\n" + "\n".join(
+            render_template_lines("diagnostics/recompute_log.py.txt")
+        )
+        res = freecad.execute_code(full_code)
         screenshot = freecad.get_active_screenshot()
         if res["success"]:
             output = res.get("message", "")
             msg = f"{success_msg}\n{output}".strip()
+            log_summary = _format_recompute_log(output)
+            if log_summary:
+                msg += f"\n{log_summary}"
             errors = res.get("recompute_errors", [])
-            if errors:
+            if errors and not log_summary:
                 names = ", ".join(
                     f"{e['name']} (doc={e.get('doc','?')}, state={e['state']})"
                     for e in errors
@@ -220,6 +318,26 @@ def _run_code(
     except Exception as e:
         logger.error(f"{fail_prefix}: {e}")
         return text_response(f"{fail_prefix}: {e}")
+
+
+def _build_assertion_code(
+    feature_name: str,
+    sketch_name: str,
+    check_direction: bool = True,
+) -> list[str]:
+    """I2 — render the silent-build assertion snippet for a PartDesign feature.
+
+    Appended to a pad/pocket/loft/sweep op's generated code so a wrong-direction
+    or misplaced build (P2/P3) is surfaced as a clear failure instead of being
+    silently marked Up-to-date.
+    """
+    return render_template_lines(
+        "diagnostics/build_assertion.py.txt",
+        feature_name=repr(feature_name),
+        feature_name_repr=repr(feature_name),
+        sketch_name=repr(sketch_name),
+        check_direction=repr(check_direction),
+    )
 
 
 def _geom_line(code: str, geom: dict) -> str:
@@ -435,7 +553,7 @@ def pad_feature_operation(
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
         symmetric=repr(symmetric),
         reversed_dir=repr(reversed_dir),
-    )
+    ) + _build_assertion_code(pad_name, sketch_name, check_direction=True)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Pad '{pad_name}' created", "Failed to create pad")
 
@@ -462,7 +580,7 @@ def pocket_feature_operation(
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
         symmetric=repr(symmetric),
         reversed_dir=repr(reversed_dir),
-    )
+    ) + _build_assertion_code(pocket_name, sketch_name, check_direction=True)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Pocket '{pocket_name}' created", "Failed to create pocket")
 

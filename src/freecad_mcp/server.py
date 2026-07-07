@@ -111,7 +111,21 @@ from .operations import (
     get_sketch_geometry_operation,
     move_object_operation,
     sketch_add_external_projection_operation,
+    solve_assembly_operation,
     sweep_pipe_operation,
+    # Diagnostics — read-only P1/P8/P10 guards
+    capture_state_operation,
+    edge_axis_operation,
+    face_normal_operation,
+    find_edges_operation,
+    find_faces_operation,
+    geometric_diff_operation,
+    placement_audit_operation,
+    preview_attachment_operation,
+    relink_references_operation,
+    # Snapshot — I7 in-process document copies (P12)
+    restore_operation,
+    snapshot_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_state import ServerState
@@ -345,21 +359,39 @@ def edit_object(
 
 
 @mcp.tool()
-def delete_object(ctx: Context, doc_name: str, obj_name: str) -> list[TextContent | ImageContent]:
-    """Delete an object in FreeCAD.
+def delete_object(
+    ctx: Context,
+    doc_name: str,
+    obj_name: str,
+    recursive: bool = False,
+    force: bool = False,
+) -> list[TextContent | ImageContent]:
+    """Delete an object without silently orphaning its dependents (I5 / P6).
+
+    FreeCAD's delete deliberately does not remove an object's dependents, leaving
+    them Invalid. To avoid silent orphans this tool:
+      * ``recursive=True`` -> remove dependents (leaves first) then the object;
+      * ``force=True``      -> remove only the object and report the orphans left;
+      * otherwise           -> refuse and list the dependents so the agent decides.
 
     Args:
         doc_name: The name of the document to delete the object from.
         obj_name: The name of the object to delete.
+        recursive: If True, delete the object's dependents first (no orphans).
+        force: If True, delete only the object even if it has dependents (orphans
+            remain and are reported).
 
     Returns:
-        A message indicating the success or failure of the object deletion and a screenshot of the object.
+        JSON ``{ok, object, deleted, refused, dependents|orphans_left, ...}``
+        plus a recompute log of any non-clean objects, and a screenshot.
     """
     return delete_object_operation(
         get_freecad_connection(),
         state.only_text_feedback,
         doc_name,
         obj_name,
+        recursive=recursive,
+        force=force,
     )
 
 
@@ -498,6 +530,14 @@ def sketch_create(
 
     Returns:
         A message indicating success or failure and a screenshot.
+
+    Recipe (avoid the silent P3 trap):
+      Prefer ``attach_to`` an origin plane ("XY_Plane"/"XZ_Plane"/"YZ_Plane")
+      and use ``AttachmentOffset`` to position the sketch, rather than creating
+      a sketch on a default axis and then rotating its Placement. A rotated
+      "Deactivated" attachment can drop the rotation (P3). For cross-body
+      supports, keep the source body at an identity placement (P1) and verify
+      with ``preview_attachment``.
 
     Examples:
         Create a sketch on the XY plane inside a Body:
@@ -2971,7 +3011,21 @@ def create_datum_plane(
     map_mode: str = "FlatFace",
     if_exists: Literal["error", "skip", "replace"] = "error",
 ) -> list[TextContent | ImageContent]:
-    """Create a PartDesign datum plane for assembly reference workflows."""
+    """Create a PartDesign datum plane for assembly reference workflows.
+
+    Recipes (avoid the silent P1/P3 traps):
+      * **XY_Plane + AttachmentOffset instead of a rotated datum.** Prefer
+        attaching to an origin ``XY_Plane``/``XZ_Plane``/``YZ_Plane`` and using
+        ``offset_along_normal`` + ``AttachmentOffset`` to position the plane,
+        rather than creating a datum on a default axis and then rotating its
+        Placement. A rotated ``Deactivated`` datum can drop the rotation (P3).
+      * **Identity-body rebuild for cross-body datums.** When a datum in Body A
+        must reference a face in Body B, keep Body B at an identity placement
+        (move the geometry into Body B via a pad/transform instead of moving the
+        body). FreeCAD's attacher can drop a non-identity source-body placement
+        (P1). Use ``preview_attachment`` to confirm, and ``placement_audit`` to
+        find risk concentrations.
+    """
     return create_datum_plane_operation(
         get_freecad_connection(),
         state.only_text_feedback,
@@ -3076,6 +3130,339 @@ def sweep_pipe(
         color,
         container,
         if_exists,
+    )
+
+
+@mcp.tool()
+def preview_attachment(
+    ctx: Context, doc_name: str, datum_name: str
+) -> list[TextContent | ImageContent]:
+    """Preview an existing datum's attachment — a read-only P1 diagnostic.
+
+    Reports the support reference, the support face/edge global centre and
+    normal, the datum's global base/normal, the owning bodies and their
+    placements, ``source_body_placement_dropped`` (True when the support lives
+    in a different body with a non-identity placement — the cross-body
+    attachment drop risk), and a signed distance + normal-angle diff between the
+    datum and its support.
+
+    Use this BEFORE building geometry on a cross-body datum, and to debug a
+    datum that landed in the wrong place, instead of rebuilding the model.
+
+    Args:
+        doc_name: The document containing the datum.
+        datum_name: The name of the datum (PartDesign::Plane/Line/Point, or any
+            object with an AttachmentSupport) to inspect.
+    """
+    return preview_attachment_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        datum_name,
+    )
+
+
+@mcp.tool()
+def find_faces(
+    ctx: Context,
+    doc_name: str,
+    object_name: str,
+    type: str | None = None,
+    normal_approx: dict | list | None = None,
+    center_approx: dict | list | None = None,
+    radius: float | None = None,
+    tol: float = 1e-3,
+    center_tol: float = 1.0,
+    limit: int = 10,
+) -> list[TextContent | ImageContent]:
+    """Find faces of an object by geometry — removes face-index fragility (I4).
+
+    Returns a ranked JSON list of faces matching the criteria, each with its
+    global centre, global normal, area and radius. Ask for "the top planar face"
+    (``type='Plane', normal_approx={'x':0,'y':0,'z':1}``) instead of guessing
+    ``Face6``.
+
+    Args:
+        doc_name: The document containing the object.
+        object_name: The object whose faces to search.
+        type: Optional surface type filter: 'Plane', 'Cylinder', 'Cone',
+            'Sphere', 'Toroid'.
+        normal_approx: Optional {'x','y','z'} (or [x,y,z]) vector; faces whose
+            normal is parallel to this within ``tol`` are kept.
+        center_approx: Optional point; faces whose global centre is within
+            ``center_tol`` mm of it are kept, and results are ranked by closeness.
+        radius: Optional radius; cylindrical/spherical faces within ``tol`` are kept.
+        tol: Parallelism and radius tolerance (default 1e-3).
+        center_tol: Centre proximity tolerance in mm (default 1.0).
+        limit: Maximum number of results (default 10).
+    """
+    return find_faces_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        type=type,
+        normal_approx=normal_approx,
+        center_approx=center_approx,
+        radius=radius,
+        tol=tol,
+        center_tol=center_tol,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+def find_edges(
+    ctx: Context,
+    doc_name: str,
+    object_name: str,
+    type: str | None = None,
+    direction_approx: dict | list | None = None,
+    center_approx: dict | list | None = None,
+    radius: float | None = None,
+    tol: float = 1e-3,
+    center_tol: float = 1.0,
+    limit: int = 10,
+) -> list[TextContent | ImageContent]:
+    """Find edges of an object by geometry — removes edge-index fragility (I4).
+
+    Returns a ranked JSON list of edges matching the criteria, each with its
+    global centre, global direction, length and radius. E.g. find the circular
+    edge of radius 5 on top of a cylinder with
+    ``type='Circle', radius=5, center_approx={'x':0,'y':0,'z':10}``.
+
+    Args:
+        doc_name: The document containing the object.
+        object_name: The object whose edges to search.
+        type: Optional curve type filter: 'Line', 'Circle', 'Ellipse',
+            'BSplineCurve'.
+        direction_approx: Optional vector; edges whose axis is parallel to this
+            within ``tol`` are kept (use for line edges).
+        center_approx: Optional point; edges whose global centre is within
+            ``center_tol`` mm are kept, results ranked by closeness.
+        radius: Optional radius; circular/elliptical edges within ``tol`` are kept.
+        tol: Parallelism and radius tolerance (default 1e-3).
+        center_tol: Centre proximity tolerance in mm (default 1.0).
+        limit: Maximum number of results (default 10).
+    """
+    return find_edges_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        type=type,
+        direction_approx=direction_approx,
+        center_approx=center_approx,
+        radius=radius,
+        tol=tol,
+        center_tol=center_tol,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+def face_normal(
+    ctx: Context, doc_name: str, object_name: str, face: str
+) -> list[TextContent | ImageContent]:
+    """Return the global normal (and centre) of a face (M6 / P8 guard).
+
+    Derives the vector from the face geometry via ``normalAt`` rotated by the
+    object's global placement, avoiding the Direction-vs-Axis trap. Returns JSON
+    ``{ok, object, subshape, type, global_center, global_normal, radius}``.
+
+    Args:
+        doc_name: The document containing the object.
+        object_name: The object whose face to inspect.
+        face: The face name, e.g. ``"Face3"``.
+    """
+    return face_normal_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        face,
+    )
+
+
+@mcp.tool()
+def edge_axis(
+    ctx: Context, doc_name: str, object_name: str, edge: str
+) -> list[TextContent | ImageContent]:
+    """Return the global axis/direction (and centre) of an edge (M6 / P8 guard).
+
+    Derives the vector from the curve geometry rotated by the object's global
+    placement. Returns JSON
+    ``{ok, object, subshape, type, global_center, global_normal, radius}``.
+
+    Args:
+        doc_name: The document containing the object.
+        object_name: The object whose edge to inspect.
+        edge: The edge name, e.g. ``"Edge2"``.
+    """
+    return edge_axis_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        edge,
+    )
+
+
+@mcp.tool()
+def placement_audit(
+    ctx: Context, doc_name: str
+) -> list[TextContent | ImageContent]:
+    """Audit placements per Body/Part (M3).
+
+    Lists each Body/Part's ``Placement``, ``getGlobalPlacement()`` base, and the
+    cross-body datums that reference it. Use to spot P1 risk concentrations and
+    placement/geometry disagreements. Returns JSON
+    ``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,
+    global_placement_base, cross_body_datums}]}``.
+
+    Args:
+        doc_name: The document to audit.
+    """
+    return placement_audit_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+    )
+
+
+@mcp.tool()
+def relink_references(
+    ctx: Context, doc_name: str, from_obj: str, to_obj: str
+) -> list[TextContent | ImageContent]:
+    """Re-point every reference to ``from_obj`` so it points to ``to_obj`` (M5).
+
+    Scans all link-type properties (AttachmentSupport, Support, Profile, Base,
+    Tool, Source, Group, ...) of all document objects and re-points them, making
+    rebuilds non-destructive. Subshape names are preserved; mismatches surface
+    via the recompute log. Returns JSON ``{ok, from, to, relinked, count}``.
+
+    Args:
+        doc_name: The document to edit.
+        from_obj: The object whose references are being redirected away from.
+        to_obj: The object references should now point to.
+    """
+    return relink_references_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        from_obj,
+        to_obj,
+    )
+
+
+@mcp.tool()
+def capture_state(
+    ctx: Context, doc_name: str, object_names: list[str] | None = None
+) -> list[TextContent | ImageContent]:
+    """Capture a compact geometric state for a set of objects (I10 / P10).
+
+    Records each object's placement, bounding box and face/edge counts. Pass the
+    returned JSON to ``geometric_diff`` to produce a text-only diff when a
+    viewable image can't be returned.
+
+    Args:
+        doc_name: The document to capture.
+        object_names: Optional list of object names; all objects when None.
+    """
+    return capture_state_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_names,
+    )
+
+
+@mcp.tool()
+def geometric_diff(
+    ctx: Context,
+    doc_name: str,
+    before: dict,
+    object_names: list[str] | None = None,
+) -> list[TextContent | ImageContent]:
+    """Structured geometric diff between a captured ``before`` state and now (I10).
+
+    The P10 text-only fallback: returns JSON
+    ``{ok, doc, diffs: [{name, bbox_before/after, placement_before/after,
+    faces_added/removed, changed}]}`` when a viewable image can't be returned.
+
+    Args:
+        doc_name: The document to diff against.
+        before: A state dict previously returned by ``capture_state``.
+        object_names: Optional list of object names; all objects when None.
+    """
+    return geometric_diff_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        before,
+        object_names,
+    )
+
+
+@mcp.tool()
+def snapshot(ctx: Context, doc_name: str) -> list[TextContent | ImageContent]:
+    """Snapshot the current document into a ring buffer of the last 5 states (I7).
+
+    Cheap, in-process document copy so a risky step can be undone with one
+    ``restore`` call. Returns JSON ``{ok, snapshot_id, doc, count}``.
+
+    Args:
+        doc_name: The document to snapshot.
+    """
+    return snapshot_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+    )
+
+
+@mcp.tool()
+def restore(
+    ctx: Context, doc_name: str, snapshot_id: str | None = None
+) -> list[TextContent | ImageContent]:
+    """Restore a snapshot, replacing the current document in place (I7).
+
+    If ``snapshot_id`` is omitted, the most recent snapshot is restored. The
+    current document is closed and the snapshot file is reopened, so the
+    document is restored in place. Returns JSON
+    ``{ok, restored_id, doc, new_doc, count}``.
+
+    Args:
+        doc_name: The document to restore into (replaced in place).
+        snapshot_id: Optional snapshot id returned by ``snapshot``; latest if omitted.
+    """
+    return restore_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        snapshot_id,
+    )
+
+
+@mcp.tool()
+def solve_assembly(
+    ctx: Context, doc_name: str, assembly_name: str
+) -> list[TextContent | ImageContent]:
+    """Re-solve an Assembly after editing a joint or a referenced face (I9 / P9).
+
+    Tries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a
+    plain recompute, and reports which method succeeded. Returns JSON
+    ``{ok, assembly, method, status}`` plus a screenshot.
+
+    Args:
+        doc_name: The document containing the assembly.
+        assembly_name: The name of the Assembly::AssemblyObject to solve.
+    """
+    return solve_assembly_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        assembly_name,
     )
 
 

@@ -1,0 +1,85 @@
+# M6 face_normal / edge_axis: return the global centre and normal/direction of a
+# specific subshape, avoiding the P8 Direction-vs-Axis trap by always deriving
+# the vector from the shape geometry (not from a possibly-stale attribute).
+import json as _m6_json
+
+_obj = _doc.getObject($object_name)
+if _obj is None:
+    raise RuntimeError('Object not found: ' + $object_name)
+_shape = getattr(_obj, 'Shape', None)
+if _shape is None or getattr(_shape, 'isNull', lambda: True)():
+    raise RuntimeError('Object has no shape: ' + $object_name)
+_sub = $subshape
+if not _sub or not (_sub.startswith('Face') or _sub.startswith('Edge')):
+    raise RuntimeError('subshape must be like "Face3" or "Edge2": ' + str(_sub))
+
+
+def _v(_x):
+    return {'x': round(float(_x.x), 6), 'y': round(float(_x.y), 6), 'z': round(float(_x.z), 6)}
+
+
+_gp = _obj.getGlobalPlacement()
+if _sub.startswith('Face'):
+    _idx = int(_sub[4:]) - 1
+    _sub_obj = _shape.Faces[_idx]
+else:
+    _idx = int(_sub[4:]) - 1
+    _sub_obj = _shape.Edges[_idx]
+
+_center = None
+try:
+    _center = _gp * _sub_obj.CenterOfMass
+except Exception:
+    try:
+        _center = _gp * _sub_obj.CenterOfBoundBox
+    except Exception:
+        _center = None
+
+_normal = None
+try:
+    if hasattr(_sub_obj, 'Surface'):
+        try:
+            _u, _v = _sub_obj.ParameterRange[0], _sub_obj.ParameterRange[2]
+            _n = _sub_obj.normalAt(_u, _v)
+        except Exception:
+            _ax = _sub_obj.Surface.Axis
+            _n = FreeCAD.Vector(_ax.x, _ax.y, _ax.z)
+    else:
+        _ax = getattr(_sub_obj.Curve, 'Axis', None)
+        if _ax is not None:
+            _n = FreeCAD.Vector(_ax.x, _ax.y, _ax.z)
+        else:
+            _tn = getattr(_sub_obj.Curve, 'Direction', None)
+            _n = FreeCAD.Vector(_tn.x, _tn.y, _tn.z) if _tn is not None else None
+    if _n is not None:
+        _normal = (_gp.Rotation * _n).normalize()
+except Exception:
+    _normal = None
+
+_type = ''
+try:
+    if hasattr(_sub_obj, 'Surface'):
+        _type = str(_sub_obj.Surface).split('(')[0].strip()
+    elif hasattr(_sub_obj, 'Curve'):
+        _type = str(_sub_obj.Curve).split('(')[0].strip()
+except Exception:
+    _type = ''
+
+_radius = None
+try:
+    if hasattr(_sub_obj, 'Surface'):
+        _radius = float(getattr(_sub_obj.Surface, 'Radius', getattr(_sub_obj.Surface, 'Radius1', 0.0)))
+    elif hasattr(_sub_obj, 'Curve'):
+        _radius = float(getattr(_sub_obj.Curve, 'Radius', 0.0))
+except Exception:
+    _radius = None
+
+print(_m6_json.dumps({
+    'ok': True,
+    'object': _obj.Name,
+    'subshape': _sub,
+    'type': _type,
+    'global_center': _v(_center) if _center is not None else None,
+    'global_normal': _v(_normal) if _normal is not None else None,
+    'radius': round(_radius, 6) if _radius is not None else None,
+}))

@@ -1,0 +1,56 @@
+# I2 silent-build assertion: catch P2/P3 where FreeCAD marks a pad/pocket/loft/
+# sweep "Up-to-date" but the geometry went the wrong way (or didn't build at all).
+# Raises on mismatch so the MCP surfaces a clear failure instead of silently
+# wrong geometry, stopping the error from propagating into later features.
+_fc_feat = _doc.getObject($feature_name)
+_fc_sk = _doc.getObject($sketch_name)
+if _fc_feat is None:
+    raise RuntimeError('I2: feature not found: ' + $feature_name)
+if _fc_sk is None:
+    raise RuntimeError('I2: profile sketch not found: ' + $sketch_name)
+_fc_shape = getattr(_fc_feat, 'Shape', None)
+if _fc_shape is None or getattr(_fc_shape, 'isNull', lambda: True)():
+    raise RuntimeError(
+        'SILENT BUILD MISMATCH: ' + $feature_name_repr + ' has no shape after recompute '
+        '(FreeCAD may have reported Up-to-date but produced nothing).'
+    )
+# Direction check (pad/pocket): the extrusion Direction must be parallel to the
+# profile sketch's global normal, else the pad went the wrong way (P2).
+if $check_direction:
+    _fc_skpl = _fc_sk.getGlobalPlacement()
+    _fc_skn = (_fc_skpl.Rotation * FreeCAD.Vector(0, 0, 1)).normalize()
+    _fc_dir = getattr(_fc_feat, 'Direction', None)
+    if _fc_dir is not None:
+        _fc_dv = _fc_dir if hasattr(_fc_dir, 'x') else FreeCAD.Vector(*list(_fc_dir)[:3])
+        try:
+            _fc_dv = _fc_dv.normalize()
+        except Exception:
+            _fc_dv = FreeCAD.Vector(0, 0, 1)
+        _fc_dot = abs(float(_fc_dv.dot(_fc_skn)))
+        if _fc_dot < 0.999:
+            raise RuntimeError(
+                'SILENT BUILD MISMATCH: ' + $feature_name_repr
+                + ' extrusion direction (' + str(_fc_dv)
+                + ') is not parallel to the profile sketch normal (' + str(_fc_skn)
+                + '). FreeCAD reported Up-to-date but the geometry likely went the '
+                + 'wrong way (P2). Check the sketch attachment plane and pad direction.'
+            )
+# Bounding-box sanity: the profile sketch's global position must lie on or near
+# the feature bbox (the sketch is the start profile). Flags a large positional
+# miss (P3-style rotated-placement drop) without failing on rounding.
+_fc_bb = _fc_shape.BoundBox
+_fc_skpos = _fc_sk.getGlobalPlacement().Base
+_fc_span = max(_fc_bb.XLength, _fc_bb.YLength, _fc_bb.ZLength, 1.0)
+_fc_miss = min(
+    abs(_fc_skpos.x - _fc_bb.XMin), abs(_fc_skpos.x - _fc_bb.XMax),
+    abs(_fc_skpos.y - _fc_bb.YMin), abs(_fc_skpos.y - _fc_bb.YMax),
+    abs(_fc_skpos.z - _fc_bb.ZMin), abs(_fc_skpos.z - _fc_bb.ZMax),
+)
+if _fc_miss > max(1e-3, 0.05 * _fc_span):
+    raise RuntimeError(
+        'SILENT BUILD MISMATCH: ' + $feature_name_repr + ' bbox ('
+        + str((_fc_bb.XMin, _fc_bb.YMin, _fc_bb.ZMin, _fc_bb.XMax, _fc_bb.YMax, _fc_bb.ZMax))
+        + ') does not contain the profile sketch global position ' + str(_fc_skpos)
+        + ' (miss ' + str(round(_fc_miss, 6)) + ' mm). The feature may have been built in '
+        + 'the wrong place (P2/P3).'
+    )

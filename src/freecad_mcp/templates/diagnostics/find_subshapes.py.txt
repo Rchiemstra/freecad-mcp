@@ -1,0 +1,161 @@
+# I4 find_faces / find_edges: locate sub-shapes by geometry, not by fragile index.
+#
+# Iterates the object's Faces or Edges, computes each one's global centre / normal
+# (or direction) / area (or length) / radius, filters by the supplied criteria,
+# ranks the survivors, and returns a JSON list. Lets the agent ask "give me the
+# top face of the pad" instead of guessing "Face6".
+import json as _i4_json
+import math as _i4_math
+
+_obj = _doc.getObject($object_name)
+if _obj is None:
+    raise RuntimeError('Object not found: ' + $object_name)
+_shape = getattr(_obj, 'Shape', None)
+if _shape is None or getattr(_shape, 'isNull', lambda: True)():
+    raise RuntimeError('Object has no shape: ' + $object_name)
+_gp = _obj.getGlobalPlacement()
+
+_kind = $kind              # 'Faces' or 'Edges'
+_kind_singular = $kind_singular  # 'Face' or 'Edge'
+_type_filter = $type_filter          # e.g. 'Plane' / 'Cylinder' or None
+_normal = $normal_approx             # {'x':..,'y':..,'z':..} or None
+_center = $center_approx             # {'x':..,'y':..,'z':..} or None
+_radius = $radius                    # float or None
+_tol = $tol
+_center_tol = $center_tol
+_limit = $limit
+
+
+def _v(_x):
+    if _x is None:
+        return None
+    return {'x': round(float(_x.x), 6), 'y': round(float(_x.y), 6), 'z': round(float(_x.z), 6)}
+
+
+def _to_vec(_p):
+    if _p is None:
+        return None
+    if isinstance(_p, dict):
+        return FreeCAD.Vector(float(_p.get('x', 0.0)), float(_p.get('y', 0.0)), float(_p.get('z', 0.0)))
+    if isinstance(_p, (list, tuple)):
+        return FreeCAD.Vector(float(_p[0]), float(_p[1]), float(_p[2]))
+    return None
+
+
+def _norm_type(_t):
+    _t = (_t or '').strip().lower()
+    return {
+        'planar': 'Plane', 'plane': 'Plane',
+        'cylinder': 'Cylinder', 'cylindrical': 'Cylinder',
+        'cone': 'Cone', 'sphere': 'Sphere', 'toroidal': 'Toroid', 'toroid': 'Toroid',
+        'line': 'Line', 'circle': 'Circle', 'arc': 'Circle', 'ellipse': 'Ellipse',
+        'bspline': 'BSplineCurve', 'bezier': 'BezierCurve',
+    }.get(_t, _t.capitalize() if _t else _t)
+
+
+def _sub_normal(_sub):
+    # Face -> surface normal at the parametric centre; Edge -> curve axis or tangent.
+    try:
+        if hasattr(_sub, 'Surface'):
+            try:
+                _u, _v = _sub.ParameterRange[0], _sub.ParameterRange[2]
+                return _sub.normalAt(_u, _v)
+            except Exception:
+                _ax = getattr(_sub.Surface, 'Axis', None)
+                return FreeCAD.Vector(_ax.x, _ax.y, _ax.z) if _ax is not None else None
+        if hasattr(_sub, 'Curve'):
+            _ax = getattr(_sub.Curve, 'Axis', None)
+            if _ax is not None:
+                return FreeCAD.Vector(_ax.x, _ax.y, _ax.z)
+            _tn = getattr(_sub.Curve, 'Direction', None)
+            return FreeCAD.Vector(_tn.x, _tn.y, _tn.z) if _tn is not None else None
+    except Exception:
+        return None
+    return None
+
+
+def _sub_type(_sub):
+    try:
+        if hasattr(_sub, 'Surface'):
+            return str(_sub.Surface).split('(')[0].strip()
+        if hasattr(_sub, 'Curve'):
+            return str(_sub.Curve).split('(')[0].strip()
+    except Exception:
+        return ''
+    return ''
+
+
+def _sub_radius(_sub):
+    try:
+        if hasattr(_sub, 'Surface'):
+            return float(getattr(_sub.Surface, 'Radius', getattr(_sub.Surface, 'Radius1', 0.0)))
+        if hasattr(_sub, 'Curve'):
+            return float(getattr(_sub.Curve, 'Radius', 0.0))
+    except Exception:
+        return None
+    return None
+
+
+_nv = _to_vec(_normal)
+_cv = _to_vec(_center)
+_type_want = _norm_type(_type_filter) if _type_filter else None
+_results = []
+_subshapes = list(getattr(_shape, _kind, []))
+for _i, _sub in enumerate(_subshapes, start=1):
+    try:
+        _c = _gp * _sub.CenterOfMass
+    except Exception:
+        try:
+            _c = _gp * _sub.CenterOfBoundBox
+        except Exception:
+            _c = None
+    if _c is None:
+        continue
+    _n = _sub_normal(_sub)
+    if _n is not None:
+        try:
+            _n = (_gp.Rotation * _n).normalize()
+        except Exception:
+            _n = None
+    _t = _sub_type(_sub)
+    _r = _sub_radius(_sub)
+    _measure = 0.0
+    try:
+        _measure = float(_sub.Area) if _kind == 'Faces' else float(_sub.Length)
+    except Exception:
+        _measure = 0.0
+    # --- filtering -----------------------------------------------------------
+    if _type_want and _norm_type(_t) != _type_want:
+        continue
+    if _nv is not None and _n is not None:
+        try:
+            _dot = abs(float(_n.dot(_nv.normalize())))
+        except Exception:
+            _dot = 0.0
+        if _dot < 1.0 - _tol:
+            continue
+    if _cv is not None:
+        _dist = float((_c - _cv).Length)
+        if _dist > _center_tol:
+            continue
+    if _radius is not None and _r is not None:
+        if abs(_r - float(_radius)) > _tol:
+            continue
+    _results.append({
+        'sub': _kind_singular + str(_i),
+        'type': _t,
+        'global_center': _v(_c),
+        'global_normal': _v(_n),
+        'radius': round(_r, 6) if _r is not None else None,
+        'area' if _kind == 'Faces' else 'length': round(_measure, 6),
+    })
+
+# Rank: by distance to center_approx (if given) ascending, else by area/length desc.
+if _cv is not None:
+    _results.sort(key=lambda _e: float((_to_vec(_e['global_center']) - _cv).Length))
+elif _kind == 'Faces':
+    _results.sort(key=lambda _e: _e.get('area', 0.0), reverse=True)
+else:
+    _results.sort(key=lambda _e: _e.get('length', 0.0), reverse=True)
+
+print(_i4_json.dumps({'ok': True, 'object': _obj.Name, 'kind': _kind_singular, 'count': len(_results), 'results': _results[:_limit]}))
