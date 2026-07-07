@@ -31,6 +31,13 @@ exclude = ["assets", "results"]
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra"
+# Put the package root on sys.path so `from tests.helpers...` resolves during
+# collection. Without this, pytest's prepend import mode inserts only the test
+# file's dir (tests/), not the package root, so `import tests` fails -- and
+# since pytest imports every module during collection (regardless of -m), that
+# aborts the whole run even for `-m unit`. `tests` has no __init__.py, so it is
+# imported as a namespace package from the root added here.
+pythonpath = ["."]
 markers = [
     "unit: mock-based tests that do not require a FreeCAD install (fast, run anywhere)",
     "e2e: live tests that drive a real headless FreeCAD (FreeCADCmd) inside Docker",
