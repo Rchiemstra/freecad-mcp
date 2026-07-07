@@ -113,6 +113,9 @@ from .p6_io import (
 # P7 - Assembly references, sketch geometry, path wires
 from .p7_assembly import (
     build_path_wire_operation,
+    create_assembly_grounded_joint_operation,
+    create_assembly_joint_operation,
+    create_assembly_operation,
     create_datum_plane_operation,
     create_part_container_operation,
     create_subshape_binder_operation,
@@ -218,6 +221,9 @@ __all__ = [
     "set_color_operation",
     # P7
     "build_path_wire_operation",
+    "create_assembly_grounded_joint_operation",
+    "create_assembly_joint_operation",
+    "create_assembly_operation",
     "create_datum_plane_operation",
     "create_part_container_operation",
     "create_subshape_binder_operation",

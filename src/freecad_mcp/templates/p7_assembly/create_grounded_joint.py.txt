@@ -1,0 +1,36 @@
+import Assembly
+
+_assembly_name = $assembly_name
+_component_name = $component_name
+_label = $label
+_recompute = $recompute
+
+_assembly = _doc.getObject(_assembly_name)
+if not _assembly:
+    raise RuntimeError('Assembly not found: ' + _assembly_name)
+try:
+    _is_assembly = _assembly.isDerivedFrom('Assembly::AssemblyObject')
+except Exception:
+    _is_assembly = False
+if not _is_assembly:
+    raise RuntimeError('Object is not an Assembly::AssemblyObject: ' + _assembly_name)
+
+_component = _doc.getObject(_component_name)
+if not _component:
+    raise RuntimeError('Component not found: ' + _component_name)
+
+_joint = Assembly.createGroundedJoint(
+    _assembly,
+    _component,
+    label=_label,
+    recompute=_recompute,
+)
+_grounded = getattr(_joint, 'ObjectToGround', None)
+print(json.dumps({
+    'ok': True,
+    'joint_name': _joint.Name,
+    'label': _joint.Label,
+    'joint_type': 'Grounded',
+    'assembly_name': _assembly.Name,
+    'component_name': getattr(_grounded, 'Name', _component.Name),
+}))

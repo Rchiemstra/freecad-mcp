@@ -101,6 +101,9 @@ from .operations import (
     set_color_operation,
     # P7 — Assembly references, sketch geometry, path wires
     build_path_wire_operation,
+    create_assembly_grounded_joint_operation,
+    create_assembly_joint_operation,
+    create_assembly_operation,
     create_datum_plane_operation,
     create_part_container_operation,
     create_subshape_binder_operation,
@@ -2783,6 +2786,101 @@ def get_document_tree(
         include,
         include_properties,
         selected_nodes,
+    )
+
+
+@mcp.tool()
+def create_assembly(
+    ctx: Context,
+    doc_name: str,
+    assembly_name: str = "Assembly",
+    create_joint_group: bool = True,
+    recompute: bool = False,
+    if_exists: Literal["error", "skip", "replace"] = "error",
+) -> list[TextContent | ImageContent]:
+    """Create a built-in Assembly workbench assembly object."""
+    return create_assembly_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        assembly_name,
+        create_joint_group,
+        recompute,
+        if_exists,
+    )
+
+
+@mcp.tool()
+def create_assembly_grounded_joint(
+    ctx: Context,
+    doc_name: str,
+    assembly_name: str,
+    component_name: str,
+    label: str | None = None,
+    recompute: bool = True,
+) -> list[TextContent | ImageContent]:
+    """Ground an assembly component through the headless Assembly API."""
+    return create_assembly_grounded_joint_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        assembly_name,
+        component_name,
+        label,
+        recompute,
+    )
+
+
+@mcp.tool()
+def create_assembly_joint(
+    ctx: Context,
+    doc_name: str,
+    assembly_name: str,
+    joint_type: Literal[
+        "Fixed",
+        "Revolute",
+        "Cylindrical",
+        "Slider",
+        "Ball",
+        "Distance",
+        "Parallel",
+        "Perpendicular",
+        "Angle",
+        "RackPinion",
+        "Screw",
+        "Gears",
+        "Belt",
+    ],
+    ref1_component: str,
+    ref2_component: str,
+    ref1_element: str = "",
+    ref2_element: str = "",
+    ref1_vertex: str | None = None,
+    ref2_vertex: str | None = None,
+    label: str | None = None,
+    solve: bool = True,
+    presolve: bool = True,
+    recompute: bool = True,
+    properties: dict[str, Any] | None = None,
+) -> list[TextContent | ImageContent]:
+    """Create a built-in Assembly joint from two component subelement references."""
+    return create_assembly_joint_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        assembly_name,
+        joint_type,
+        ref1_component,
+        ref2_component,
+        ref1_element,
+        ref2_element,
+        ref1_vertex,
+        ref2_vertex,
+        label,
+        solve,
+        presolve,
+        recompute,
+        properties,
     )
 
 

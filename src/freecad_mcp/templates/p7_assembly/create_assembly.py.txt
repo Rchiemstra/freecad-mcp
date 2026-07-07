@@ -1,0 +1,49 @@
+import Assembly
+
+_assembly_name = $assembly_name
+_create_joint_group = $create_joint_group
+_recompute = $recompute
+_if_exists = $if_exists
+_existing = _doc.getObject(_assembly_name)
+
+def _is_assembly(_obj):
+    try:
+        return _obj.isDerivedFrom('Assembly::AssemblyObject')
+    except Exception:
+        return False
+
+def _joint_group_name(_assembly):
+    if not _create_joint_group:
+        return None
+    import UtilsAssembly
+    return UtilsAssembly.getJointGroup(_assembly).Name
+
+if _existing and _if_exists == 'error':
+    raise RuntimeError('Object already exists: ' + _assembly_name)
+if _existing and _if_exists == 'skip':
+    if not _is_assembly(_existing):
+        raise RuntimeError('Existing object is not an Assembly::AssemblyObject: ' + _assembly_name)
+    print(json.dumps({
+        'ok': True,
+        'skipped': True,
+        'assembly_name': _existing.Name,
+        'label': _existing.Label,
+        'type': _existing.TypeId,
+        'joint_group': _joint_group_name(_existing),
+    }))
+else:
+    if _existing and _if_exists == 'replace':
+        _doc.removeObject(_existing.Name)
+    _assembly = Assembly.createAssembly(
+        _doc,
+        _assembly_name,
+        createJointGroup=_create_joint_group,
+        recompute=_recompute,
+    )
+    print(json.dumps({
+        'ok': True,
+        'assembly_name': _assembly.Name,
+        'label': _assembly.Label,
+        'type': _assembly.TypeId,
+        'joint_group': _joint_group_name(_assembly),
+    }))

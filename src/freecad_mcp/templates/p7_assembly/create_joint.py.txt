@@ -1,0 +1,69 @@
+import Assembly
+
+_assembly_name = $assembly_name
+_joint_type = $joint_type
+_ref1_component_name = $ref1_component
+_ref1_element = $ref1_element
+_ref1_vertex = $ref1_vertex
+_ref2_component_name = $ref2_component
+_ref2_element = $ref2_element
+_ref2_vertex = $ref2_vertex
+_label = $label
+_solve = $solve
+_presolve = $presolve
+_recompute = $recompute
+_properties = $properties
+
+if not isinstance(_properties, dict):
+    raise RuntimeError('properties must be a dict')
+
+_assembly = _doc.getObject(_assembly_name)
+if not _assembly:
+    raise RuntimeError('Assembly not found: ' + _assembly_name)
+try:
+    _is_assembly = _assembly.isDerivedFrom('Assembly::AssemblyObject')
+except Exception:
+    _is_assembly = False
+if not _is_assembly:
+    raise RuntimeError('Object is not an Assembly::AssemblyObject: ' + _assembly_name)
+
+_ref1_component = _doc.getObject(_ref1_component_name)
+if not _ref1_component:
+    raise RuntimeError('Reference component not found: ' + _ref1_component_name)
+_ref2_component = _doc.getObject(_ref2_component_name)
+if not _ref2_component:
+    raise RuntimeError('Reference component not found: ' + _ref2_component_name)
+
+_ref1 = Assembly.makeJointReference(_ref1_component, _ref1_element, _ref1_vertex)
+_ref2 = Assembly.makeJointReference(_ref2_component, _ref2_element, _ref2_vertex)
+_joint = Assembly.createJoint(
+    _assembly,
+    _joint_type,
+    _ref1,
+    _ref2,
+    label=_label,
+    solve=_solve,
+    presolve=_presolve,
+    recompute=_recompute,
+    **_properties,
+)
+
+print(json.dumps({
+    'ok': True,
+    'joint_name': _joint.Name,
+    'label': _joint.Label,
+    'joint_type': _joint.JointType,
+    'assembly_name': _assembly.Name,
+    'reference1': {
+        'component': _ref1_component.Name,
+        'element': _ref1_element,
+        'vertex': _ref1_vertex if _ref1_vertex is not None else _ref1_element,
+    },
+    'reference2': {
+        'component': _ref2_component.Name,
+        'element': _ref2_element,
+        'vertex': _ref2_vertex if _ref2_vertex is not None else _ref2_element,
+    },
+    'solve': bool(_solve),
+    'presolve': bool(_presolve),
+}))

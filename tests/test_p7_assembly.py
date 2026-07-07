@@ -8,6 +8,9 @@ from unittest.mock import MagicMock
 from mcp.types import TextContent
 
 from freecad_mcp.operations.p7_assembly import (
+    create_assembly_grounded_joint_operation,
+    create_assembly_joint_operation,
+    create_assembly_operation,
     create_datum_plane_operation,
     create_part_container_operation,
     create_subshape_binder_operation,
@@ -56,6 +59,52 @@ class TestDocumentTree:
     def test_json_output_is_returned_directly(self):
         resp = get_document_tree_operation(_ok_conn('{"doc_name": "Doc"}'), "Doc")
         assert _text(resp).startswith('{"doc_name": "Doc"}')
+
+
+class TestAssemblyApiTools:
+    def test_create_assembly_compiles_and_uses_public_api(self):
+        conn = _ok_conn()
+        create_assembly_operation(conn, True, "Doc", "MainAssembly", if_exists="replace")
+        code = _code(conn)
+        assert_code_compiles(code)
+        assert_code_contains(code, "Assembly.createAssembly", "UtilsAssembly.getJointGroup", "MainAssembly")
+
+    def test_create_assembly_invalid_if_exists(self):
+        resp = create_assembly_operation(_ok_conn(), True, "Doc", "Assembly", if_exists="bad")
+        assert "if_exists" in _text(resp)
+
+    def test_create_grounded_joint_compiles_and_uses_public_api(self):
+        conn = _ok_conn()
+        create_assembly_grounded_joint_operation(conn, True, "Doc", "Assembly", "BaseLink", label="Ground")
+        code = _code(conn)
+        assert_code_compiles(code)
+        assert_code_contains(code, "Assembly.createGroundedJoint", "ObjectToGround", "BaseLink")
+
+    def test_create_joint_compiles_and_uses_public_api(self):
+        conn = _ok_conn()
+        create_assembly_joint_operation(
+            conn,
+            True,
+            "Doc",
+            "Assembly",
+            "Cylindrical",
+            "ScrewLink",
+            "PlateLink",
+            ref1_element="Edge3",
+            ref2_element="Pocket001.Edge1",
+            label="Screw 1",
+            solve=False,
+        )
+        code = _code(conn)
+        assert_code_compiles(code)
+        assert_code_contains(
+            code,
+            "Assembly.makeJointReference",
+            "Assembly.createJoint",
+            "solve=_solve",
+            "presolve=_presolve",
+            "Pocket001.Edge1",
+        )
 
 
 class TestPartContainer:
