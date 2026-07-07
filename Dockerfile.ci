@@ -37,8 +37,11 @@ COPY src ./src
 COPY addon ./addon
 COPY tests ./tests
 
-# PIP_BREAK_SYSTEM_PACKAGES=1 is inherited from the base image.
-RUN pip install --no-cache-dir -e ".[dev]"
+# PIP_BREAK_SYSTEM_PACKAGES=1 is inherited from the base image. Ubuntu's
+# python3-typing-extensions package has no pip RECORD, so install the PyPI wheel
+# into /usr/local first; pip then does not try to uninstall the Debian package.
+RUN pip install --no-cache-dir --ignore-installed "typing-extensions>=4.16.0" \
+    && pip install --no-cache-dir -e ".[dev]"
 
 # Drop the build-only source copy; runtime uses the workspace source via the
 # editable finder repointed by the in-step `pip install --no-build-isolation
