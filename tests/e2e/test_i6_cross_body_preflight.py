@@ -24,8 +24,15 @@ def test_cross_body_datum_creation_warns(freecad_session):
     doc = freecad_session.doc
 
     body_b = doc.addObject("PartDesign::Body", "SourceBody")
-    body_b.Placement.Base = FreeCAD.Vector(0, 0, 10)  # non-identity placement
     _, pad = make_padded_circle(body_b, radius=5, length=5, plane_label="XY_Plane")
+    # Give the body its non-identity placement only after the sketch/pad exist:
+    # on this FreeCAD the attacher writes the origin plane's GLOBAL placement
+    # into the body-local sketch placement at attach time, so attaching inside
+    # an already-moved body double-applies the body offset (geometry lands at
+    # 2x the placement). Moving the body afterwards keeps the feature body-local
+    # and still gives the cross-body scenario this test needs.
+    body_b.Placement.Base = FreeCAD.Vector(0, 0, 10)  # non-identity placement
+    doc.recompute()
     top = find_face(pad, normal=(0, 0, 1), center=(0, 0, 15), tol=0.5)
     assert top, "could not locate the pad top face"
 

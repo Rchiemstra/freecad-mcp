@@ -11,22 +11,26 @@ if _doc is None:
     raise RuntimeError('Document not found: ' + $doc_name)
 if not hasattr(FreeCAD, '_mcp_snapshots'):
     FreeCAD._mcp_snapshots = []
-_fd, _path = _s_tmp.mkstemp(suffix='.FCStd', prefix='mcp_snap_')
-_s_os.close(_fd)
-try:
-    _doc.save(_path)
-except Exception as _e:
-    try:
-        _doc.FileName = _path
-        _doc.save()
-    except Exception:
-        raise RuntimeError('Failed to save snapshot: ' + str(_e))
+# One directory per snapshot, with the FCStd named after the DOCUMENT: restore
+# reopens this file, and FreeCAD names the reopened document after the file's
+# basename -- naming it <DocName>.FCStd is what lets restore keep the document
+# name stable ("restore in place"). saveCopy writes the copy WITHOUT touching
+# _doc.FileName; Document.save() takes no path, and the FileName-swap fallback
+# previously used here permanently repointed the user's document at the temp
+# snapshot file.
 _sid = 'snap-' + str(int(_s_t.time() * 1000))
+_dir = _s_tmp.mkdtemp(prefix='mcp_snap_')
+_path = _s_os.path.join(_dir, _doc.Name + '.FCStd')
+try:
+    _doc.saveCopy(_path)
+except Exception as _e:
+    raise RuntimeError('Failed to save snapshot: ' + str(_e))
 FreeCAD._mcp_snapshots.append({'id': _sid, 'path': _path, 'doc': _doc.Name, 't': _s_t.time()})
 while len(FreeCAD._mcp_snapshots) > 5:
     _old = FreeCAD._mcp_snapshots.pop(0)
     try:
         _s_os.remove(_old['path'])
+        _s_os.rmdir(_s_os.path.dirname(_old['path']))
     except Exception:
         pass
 print(_s_json.dumps({'ok': True, 'snapshot_id': _sid, 'doc': _doc.Name, 'count': len(FreeCAD._mcp_snapshots)}))

@@ -75,11 +75,14 @@ def _sub_normal(_sub):
 
 
 def _sub_type(_sub):
+    # type(...).__name__ gives the bare geometry class name ('Plane',
+    # 'Cylinder', 'Line', ...). str(Surface) is unusable for this: it renders
+    # as '<Plane object>', which never matches the type filter.
     try:
         if hasattr(_sub, 'Surface'):
-            return str(_sub.Surface).split('(')[0].strip()
+            return type(_sub.Surface).__name__
         if hasattr(_sub, 'Curve'):
-            return str(_sub.Curve).split('(')[0].strip()
+            return type(_sub.Curve).__name__
     except Exception:
         return ''
     return ''

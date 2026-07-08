@@ -26,7 +26,14 @@ def _payload(response) -> dict:
     text = "".join(item.text for item in response if hasattr(item, "text"))
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
-    return json.loads(text.splitlines()[0])
+    # Recompute progress noise can surround the payload line, so scan from the
+    # end for the first line that parses as JSON instead of trusting a fixed
+    # line position.
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    raise AssertionError(f"no JSON payload line in response text: {text!r}")
 
 
 def _approx(vec, target, tol=1e-2):

@@ -43,16 +43,29 @@ def _pf_placement_identity(_pl):
 
 
 def _pf_supports(_o):
-    _sup = getattr(_o, 'AttachmentSupport', None)
-    if _sup is None:
-        _sup = getattr(_o, 'Support', None)
-    if _sup is None:
-        return []
-    try:
-        _objs = list(_sup.getValues())
-    except Exception:
+    def _refs(_sup):
+        if _sup is None:
+            return []
+        try:
+            return [s for s in list(_sup.getValues()) if s is not None]
+        except Exception:
+            pass
+        try:
+            _items = list(_sup)
+        except Exception:
+            return []
         _objs = []
-    return [s for s in _objs if s is not None]
+        for _item in _items:
+            try:
+                _objs.append(_item[0] if isinstance(_item, tuple) else _item)
+            except Exception:
+                pass
+        return [s for s in _objs if s is not None]
+
+    _found = _refs(getattr(_o, 'AttachmentSupport', None))
+    if not _found:
+        _found = _refs(getattr(_o, 'Support', None))
+    return _found
 
 
 if _pf_obj is not None:

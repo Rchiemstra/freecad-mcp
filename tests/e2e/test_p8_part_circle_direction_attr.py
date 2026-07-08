@@ -8,12 +8,11 @@ import pytest
 
 Part = pytest.importorskip("Part")
 
+# First calibrated run against this branch's FreeCAD (1.2.0dev): the bug this
+# test reproduces is fixed, so the strict xfail flipped to XPASS and failed the
+# run. Keep the test as a plain regression gate against the bug returning.
 pytestmark = [
     pytest.mark.core,
-    pytest.mark.xfail(
-        strict=True,
-        reason="FreeCAD: Part.Circle str() prints Direction but the API uses Axis (P8)",
-    ),
 ]
 
 

@@ -330,7 +330,7 @@ class TestI5DeleteObject:
         delete_object_operation(conn, True, "Doc", "Body", recursive=True)
         code = _code(conn)
         assert_code_compiles(code)
-        assert_code_contains(code, "OutList", "removeObject", "recompute", "Body")
+        assert_code_contains(code, "OutList", "removeObject", "recompute", "_i5_json.dumps", "Body")
 
 
 class TestI7SnapshotRestore:
@@ -341,7 +341,10 @@ class TestI7SnapshotRestore:
         snapshot_operation(conn, True, "Doc")
         code = _code(conn)
         assert_code_compiles(code)
-        assert_code_contains(code, "_mcp_snapshots", "mkstemp", ".FCStd", "Doc")
+        # saveCopy (not save/FileName-swap) so the user's document FileName is
+        # untouched; mkdtemp because each snapshot lives in its own directory
+        # named <DocName>.FCStd for restore-in-place.
+        assert_code_contains(code, "_mcp_snapshots", "mkdtemp", "saveCopy", ".FCStd", "Doc")
 
     def test_restore_code_opens_snapshot_in_place(self):
         conn = _ok_conn()
@@ -403,7 +406,15 @@ class TestM6FaceNormalEdgeAxis:
         face_normal_operation(conn, True, "Doc", "Pad", "Face3")
         code = _code(conn)
         assert_code_compiles(code)
-        assert_code_contains(code, "getObject('Pad')", "normalAt", "getGlobalPlacement", "Face3")
+        assert_code_contains(
+            code,
+            "getObject('Pad')",
+            "normalAt",
+            "_u_param",
+            "getGlobalPlacement",
+            "normalize()",
+            "Face3",
+        )
 
     def test_edge_axis_code_derives_from_curve(self):
         conn = _ok_conn()

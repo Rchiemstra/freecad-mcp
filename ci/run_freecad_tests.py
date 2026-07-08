@@ -91,10 +91,18 @@ def _i(suite, name: str) -> int:
 
 
 def _parse_junit(path: str) -> tuple[int, int, int, int]:
-    """Return (collected, errors, failures, skipped) summed across testsuites.
+    """Return (collected, errors, failures, real_skips) summed across testsuites.
 
     A missing or unparseable report is treated as a single collection error:
     ``(0, 1, 0, 0)`` -> verdict 1.
+
+    The suite-level ``skipped=`` attribute lumps xfails together with genuine
+    skips (pytest writes xfail as ``<skipped type="pytest.xfail">``). The
+    skipped==0 gate exists to catch silent skips (importorskip and friends
+    reporting green while validating nothing) -- an xfail is the opposite of
+    silent: it is a deliberately recorded, still-open bug. Count only non-xfail
+    ``<skipped>`` entries so documented xfails don't fail the verdict, while a
+    strict xfail that unexpectedly passes still lands in ``failures``.
     """
     try:
         root = ET.parse(path).getroot()
@@ -104,13 +112,16 @@ def _parse_junit(path: str) -> tuple[int, int, int, int]:
         suites = [root]
     else:
         suites = list(root.iter("testsuite"))
-    collected = errors = failures = skipped = 0
+    collected = errors = failures = real_skips = 0
     for suite in suites:
         collected += _i(suite, "tests")
         errors += _i(suite, "errors")
         failures += _i(suite, "failures")
-        skipped += _i(suite, "skipped")
-    return collected, errors, failures, skipped
+        for case in suite.iter("testcase"):
+            for sk in case.iter("skipped"):
+                if sk.get("type") != "pytest.xfail":
+                    real_skips += 1
+    return collected, errors, failures, real_skips
 
 
 def main() -> int:
@@ -154,10 +165,22 @@ def main() -> int:
     print(
         f"[run_freecad_tests] marker={marker} pytest_rc={rc} "
         f"collected={collected} errors={errors} failures={failures} "
-        f"skipped={skipped} verdict={verdict} -> ci_rc_{marker}.txt"
+        f"skipped_non_xfail={skipped} verdict={verdict} -> ci_rc_{marker}.txt"
     )
     return int(rc)
 
 
+# Run main() at import time, not only under a __main__ guard: FreeCADCmd
+# executes a .py command-line argument via Base::Interpreter().loadModule()
+# (App/Application.cpp processFiles), i.e. it IMPORTS the script as a module
+# named "run_freecad_tests" -- __name__ is never "__main__" there, so a guarded
+# main() silently never runs (banner, exit 0, no output, no verdict file; the
+# exact blank-log failure this harness kept hitting). runFile()/__main__ is only
+# the fallback when the import raises. Nothing else imports this module (it
+# lives in ci/, outside the package and pytest's testpaths), so import-time
+# execution is safe; the sys.exit stays conditional because raising SystemExit
+# inside loadModule would trigger FreeCADCmd's runFile fallback and execute the
+# whole run a second time.
+_rc = main()
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_rc)

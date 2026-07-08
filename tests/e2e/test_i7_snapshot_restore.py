@@ -27,7 +27,14 @@ def _payload(response) -> dict:
     text = "".join(item.text for item in response if hasattr(item, "text"))
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
-    return json.loads(text.splitlines()[0])
+    # Recompute progress noise can surround the payload line, so scan from the
+    # end for the first line that parses as JSON instead of trusting a fixed
+    # line position.
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    raise AssertionError(f"no JSON payload line in response text: {text!r}")
 
 
 def test_snapshot_restore_round_trip(freecad_session):
@@ -35,6 +42,7 @@ def test_snapshot_restore_round_trip(freecad_session):
     doc_name = doc.Name
     body = doc.addObject("PartDesign::Body", "Body")
     _, pad = make_padded_circle(body, radius=3, length=2, plane_label="XY_Plane")
+    pad_name = pad.Name
 
     snap = snapshot_operation(freecad_session, True, doc_name)
     snap_payload = _payload(snap)
@@ -50,7 +58,10 @@ def test_snapshot_restore_round_trip(freecad_session):
     restored_payload = _payload(restored)
     assert restored_payload["ok"] is True
     assert restored_payload["restored_id"] == snap_id
+    # Restore-in-place contract: the reopened document keeps the original name
+    # (the snapshot file is saved as <DocName>.FCStd for exactly this reason).
+    assert restored_payload["new_doc"] == doc_name
 
     names = {o.Name for o in FreeCAD.getDocument(doc_name).Objects}
     assert "ExtraBox" not in names, "restore did not drop the post-snapshot mutation"
-    assert pad.Name in names, "restore lost the original pad"
+    assert pad_name in names, "restore lost the original pad"

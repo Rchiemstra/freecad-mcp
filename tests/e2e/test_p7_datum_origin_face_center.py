@@ -21,12 +21,11 @@ from tests.e2e._helpers import (
     plane_global_base,
 )
 
+# First calibrated run against this branch's FreeCAD (1.2.0dev): the bug this
+# test reproduces is fixed, so the strict xfail flipped to XPASS and failed the
+# run. Keep the test as a plain regression gate against the bug returning.
 pytestmark = [
     pytest.mark.core,
-    pytest.mark.xfail(
-        strict=True,
-        reason="FreeCAD: datum plane origin = plane nearest-to-origin point, not face centre (P7)",
-    ),
 ]
 
 

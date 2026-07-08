@@ -25,9 +25,14 @@ def _payload(response) -> dict:
     text = "".join(item.text for item in response if hasattr(item, "text"))
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
-    # The delete JSON is the first JSON object on its own line(s); the recompute
-    # log sentinel follows. Decode just the first object.
-    return json.loads(text.splitlines()[0])
+    # Recompute progress noise can surround the payload line, so scan from the
+    # end for the first line that parses as JSON instead of trusting a fixed
+    # line position.
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    raise AssertionError(f"no JSON payload line in response text: {text!r}")
 
 
 def test_delete_refuses_and_lists_dependents(freecad_session):
@@ -52,6 +57,7 @@ def test_delete_recursive_removes_dependents(freecad_session):
     doc = freecad_session.doc
     body = doc.addObject("PartDesign::Body", "Horn")
     sk, pad = make_padded_circle(body, radius=2, length=1, plane_label="XY_Plane")
+    body_name = body.Name
     gone = {body.Name, sk.Name, pad.Name}
 
     resp = delete_object_operation(
@@ -61,6 +67,6 @@ def test_delete_recursive_removes_dependents(freecad_session):
 
     assert payload["ok"] is True
     assert payload["refused"] is False
-    assert body.Name in payload["deleted"]
+    assert body_name in payload["deleted"]
     remaining = {o.Name for o in doc.Objects}
     assert not (remaining & gone), f"orphans left: {remaining & gone}"

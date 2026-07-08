@@ -84,19 +84,42 @@ def _subshape_axis(_sub):
         return None
 
 
-# --- support reference (AttachmentSupport is a PropertyLinkSubList) ----------
-_support_obj = None
-_support_sub = ''
-_sup = getattr(_datum, 'AttachmentSupport', None)
-if _sup is not None:
+def _support_refs(_sup):
+    if _sup is None:
+        return []
     try:
         _objs = list(_sup.getValues())
         _subs = list(_sup.getSubValues())
+        return [(_objs[i], _subs[i] if i < len(_subs) else '') for i in range(len(_objs))]
     except Exception:
-        _objs, _subs = [], []
-    if _objs:
-        _support_obj = _objs[0]
-        _support_sub = _subs[0] if _subs else ''
+        pass
+    try:
+        _items = list(_sup)
+    except Exception:
+        return []
+    _refs = []
+    for _item in _items:
+        try:
+            if isinstance(_item, tuple) and len(_item) >= 2:
+                _obj, _sub = _item[0], _item[1]
+                if isinstance(_sub, (list, tuple)):
+                    _sub = _sub[0] if _sub else ''
+                _refs.append((_obj, _sub or ''))
+            else:
+                _refs.append((_item, ''))
+        except Exception:
+            pass
+    return _refs
+
+
+# --- support reference (AttachmentSupport is a PropertyLinkSubList) ----------
+_support_obj = None
+_support_sub = ''
+_refs = _support_refs(getattr(_datum, 'AttachmentSupport', None))
+if not _refs:
+    _refs = _support_refs(getattr(_datum, 'Support', None))
+if _refs:
+    _support_obj, _support_sub = _refs[0]
 
 # --- support global centre / normal -----------------------------------------
 _support_center = None

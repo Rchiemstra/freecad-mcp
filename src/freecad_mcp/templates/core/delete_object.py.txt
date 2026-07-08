@@ -38,7 +38,8 @@ def _i5_dependents(_root):
 
 _deps = _i5_dependents(_obj)
 _dep_names = [d.Name for d in _deps]
-_result = {'ok': True, 'object': _obj.Name, 'recursive': _recursive, 'force': _force}
+_root_name = _obj.Name
+_result = {'ok': True, 'object': _root_name, 'recursive': _recursive, 'force': _force}
 
 if _dep_names and not _recursive and not _force:
     # Refuse: list the dependents so the agent can decide.
@@ -50,7 +51,7 @@ if _dep_names and not _recursive and not _force:
         for d in _deps
     ]
     _result['message'] = (
-        'Refused to delete ' + _obj.Name + ': it has ' + str(len(_dep_names))
+        'Refused to delete ' + _root_name + ': it has ' + str(len(_dep_names))
         + ' dependent object(s) that would be orphaned (P6). Re-issue with '
         + 'recursive=True to delete them too, or force=True to delete only '
         + 'this object and leave the dependents.'
@@ -60,20 +61,22 @@ else:
     if _recursive and _dep_names:
         # Remove dependents first (leaves before parents): reverse of the
         # dependency walk so a child is gone before its parent.
-        for d in reversed(_deps):
+        for _name in reversed(_dep_names):
             try:
-                _doc.removeObject(d.Name)
-                _deleted.append(d.Name)
+                if _doc.getObject(_name) is not None:
+                    _doc.removeObject(_name)
+                    _deleted.append(_name)
             except Exception as _e:
                 _result.setdefault('errors', []).append(
-                    {'object': d.Name, 'error': str(_e)}
+                    {'object': _name, 'error': str(_e)}
                 )
     try:
-        _doc.removeObject(_obj.Name)
-        _deleted.append(_obj.Name)
+        if _doc.getObject(_root_name) is not None:
+            _doc.removeObject(_root_name)
+            _deleted.append(_root_name)
     except Exception as _e:
         _result.setdefault('errors', []).append(
-            {'object': _obj.Name, 'error': str(_e)}
+            {'object': _root_name, 'error': str(_e)}
         )
     _doc.recompute()
     _result['refused'] = False
@@ -81,16 +84,16 @@ else:
     if _force and _dep_names:
         _result['orphans_left'] = _dep_names
         _result['message'] = (
-            'Deleted ' + _obj.Name + ' and left ' + str(len(_dep_names))
+            'Deleted ' + _root_name + ' and left ' + str(len(_dep_names))
             + ' dependent object(s) orphaned (force=True). They may now be '
             + 'Invalid; inspect with the recompute log.'
         )
     elif _recursive and _dep_names:
         _result['message'] = (
-            'Deleted ' + _obj.Name + ' and ' + str(len(_dep_names))
+            'Deleted ' + _root_name + ' and ' + str(len(_dep_names))
             + ' dependent object(s) (recursive=True).'
         )
     else:
-        _result['message'] = 'Deleted ' + _obj.Name + '.'
+        _result['message'] = 'Deleted ' + _root_name + '.'
 
-print(json.dumps(_result))
+print(_i5_json.dumps(_result))

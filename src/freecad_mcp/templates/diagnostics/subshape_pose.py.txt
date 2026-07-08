@@ -39,8 +39,8 @@ _normal = None
 try:
     if hasattr(_sub_obj, 'Surface'):
         try:
-            _u, _v = _sub_obj.ParameterRange[0], _sub_obj.ParameterRange[2]
-            _n = _sub_obj.normalAt(_u, _v)
+            _u_param, _v_param = _sub_obj.ParameterRange[0], _sub_obj.ParameterRange[2]
+            _n = _sub_obj.normalAt(_u_param, _v_param)
         except Exception:
             _ax = _sub_obj.Surface.Axis
             _n = FreeCAD.Vector(_ax.x, _ax.y, _ax.z)
@@ -52,16 +52,17 @@ try:
             _tn = getattr(_sub_obj.Curve, 'Direction', None)
             _n = FreeCAD.Vector(_tn.x, _tn.y, _tn.z) if _tn is not None else None
     if _n is not None:
-        _normal = (_gp.Rotation * _n).normalize()
+        _normal = _gp.Rotation * _n
+        _normal.normalize()
 except Exception:
     _normal = None
 
 _type = ''
 try:
     if hasattr(_sub_obj, 'Surface'):
-        _type = str(_sub_obj.Surface).split('(')[0].strip()
+        _type = type(_sub_obj.Surface).__name__
     elif hasattr(_sub_obj, 'Curve'):
-        _type = str(_sub_obj.Curve).split('(')[0].strip()
+        _type = type(_sub_obj.Curve).__name__
 except Exception:
     _type = ''
 
