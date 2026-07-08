@@ -8,8 +8,8 @@
 # freecad-mcp-load-preflight step verifies).
 #
 # Bakes the freecad-mcp package + [dev] extras (pytest, pytest-asyncio,
-# pytest-xdist, pytest-cov, mcp[cli], validators, hatchling) so the runtime
-# `pip install --no-build-isolation --no-deps -e .` is network-restricted-safe:
+# pytest-xdist, pytest-cov, mcp[cli], validators, hatchling, editables) so the
+# runtime `pip install --no-build-isolation --no-deps -e .` is network-restricted-safe:
 # the build backend (hatchling) and all test deps are already present, and the
 # deps track pyproject.toml rather than a frozen list. The baked /tmp/mcp copy is
 # dead weight at runtime (it only carries deps); the runtime editable install
