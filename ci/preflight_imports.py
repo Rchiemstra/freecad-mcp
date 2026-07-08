@@ -29,8 +29,12 @@ try:
     import Part
     import Sketcher
 except Exception as exc:
-    print(f"PREFLIGHT_FAIL: {exc!r}", file=sys.stderr)
+    # flush explicitly: FreeCADCmd can swallow sys.exit / exceptions and skip a
+    # clean interpreter shutdown, so a buffered print() redirected to a file
+    # (as the CI step does) can be lost entirely, leaving the log with no
+    # diagnostic at all.
+    print(f"PREFLIGHT_FAIL: {exc!r}", file=sys.stderr, flush=True)
     sys.exit(1)
 
-print(f"PREFLIGHT_OK pytest={pytest.__version__} freecad={FreeCAD.Version()}")
+print(f"PREFLIGHT_OK pytest={pytest.__version__} freecad={FreeCAD.Version()}", flush=True)
 sys.exit(0)
