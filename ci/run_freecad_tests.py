@@ -44,6 +44,37 @@ import sys
 import xml.etree.ElementTree as ET
 
 
+def _checkpoint(msg: str) -> None:
+    """Write a progress marker straight to the real stdout fd.
+
+    ``os.write(1, ...)`` bypasses every Python-level buffer and FreeCADCmd's
+    ``Base::Console`` stdout redirection, so these markers survive even a native
+    crash (segfault) that takes the interpreter down before any flush. They are
+    the ground truth for how far a run got when the log is otherwise blank.
+    """
+    try:
+        os.write(1, f"[run_freecad_tests] {msg}\n".encode())
+    except Exception:
+        pass
+
+
+def _bind_std_to_real_fds() -> None:
+    """Reattach sys.stdout/sys.stderr to the real OS fds, line-buffered.
+
+    FreeCADCmd redirects Python's ``sys.stdout``/``sys.stderr`` to its own
+    ``Base::Console`` sink. Under the CI file-redirect that sink buffered (or
+    routed elsewhere), so pytest's report never reached the captured log and a
+    mid-run crash left it blank -- ``reconfigure(line_buffering=True)`` on that
+    wrapper was a no-op. Rebinding to fds 1/2 sends all Python output (pytest
+    included) to the fd the shell ``>`` redirect actually captures.
+    """
+    try:
+        sys.stdout = open(1, "w", buffering=1, closefd=False)
+        sys.stderr = open(2, "w", buffering=1, closefd=False)
+    except Exception:
+        pass
+
+
 def _setup_paths() -> None:
     cwd = os.getcwd()
     sys.path.insert(0, cwd)
@@ -83,13 +114,8 @@ def _parse_junit(path: str) -> tuple[int, int, int, int]:
 
 
 def main() -> int:
-    # Redirected to a file (as the CI step does), stdout/stderr are fully
-    # buffered by default. If FreeCADCmd crashes mid-run (it can swallow a
-    # fatal error and still exit 0 -- see the module docstring), everything
-    # pytest printed so far is lost with it. Line-buffer so the log keeps
-    # whatever ran up to the crash.
-    sys.stdout.reconfigure(line_buffering=True)
-    sys.stderr.reconfigure(line_buffering=True)
+    _checkpoint("script entered")
+    _bind_std_to_real_fds()
 
     marker = os.environ.get("MARKER", "").strip()
     if not marker:
@@ -108,11 +134,17 @@ def main() -> int:
 
     junit = f"results_{marker}.xml"
     args = ["-m", marker, "-ra", "--tb=short", f"--junitxml={junit}"]
+    # Bracket pytest.main with fd-level checkpoints: if the log shows
+    # "pytest.main starting" but not "pytest.main returned", the run died
+    # natively during collection/execution (the case that left a blank log and
+    # no verdict file), pinning the crash to inside pytest rather than setup.
+    _checkpoint(f"pytest.main starting marker={marker}")
     try:
         rc = pytest.main(args)
     except Exception as exc:  # pragma: no cover - defensive
         print(f"pytest.main raised: {exc!r}", file=sys.stderr)
         rc = 2
+    _checkpoint(f"pytest.main returned rc={rc}")
 
     collected, errors, failures, skipped = _parse_junit(junit)
     verdict = 0 if (errors == 0 and failures == 0 and skipped == 0 and collected > 0) else 1
