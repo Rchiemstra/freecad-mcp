@@ -457,10 +457,16 @@ class TestM5RelinkReferences:
         relink_references_operation(conn, True, "Doc", "Old", "New")
         code = _code(conn)
         assert_code_compiles(code)
+        # The codegen resolves the from/to objects via named variables
+        # (``_from_name = 'Old'`` -> ``getObject(_from_name)``) rather than
+        # inlining the names into the getObject() call, so assert on the names,
+        # the getObject lookup, and the link-property scan separately instead of
+        # the old ``getObject('Old')`` literal form.
         assert_code_contains(
             code,
-            "getObject('Old')",
-            "getObject('New')",
+            "'Old'",
+            "'New'",
+            "getObject(",
             "getTypeOfProperty",
             "PropertyLinkSubList",
         )

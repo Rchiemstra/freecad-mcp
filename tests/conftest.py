@@ -35,6 +35,26 @@ def pytest_configure(config: pytest.Config) -> None:
         config.addinivalue_line("markers", marker)
 
 
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Default any test with no layer marker to ``unit``.
+
+    The bulk of the suite (``tests/test_*.py``) is mock-based and carries no
+    explicit ``unit``/``e2e``/``core`` marker. Without this, ``pytest -m unit``
+    -- what the CI unit-tests job runs -- deselects every one of them and the
+    job goes green while exercising only the handful of explicitly-tagged unit
+    tests. Auto-tagging the unmarked (mock-based, FreeCAD-free by convention)
+    tests as ``unit`` makes the job actually run them, and keeps new test files
+    covered without needing a marker on each. Tests already tagged unit/e2e/core
+    are left untouched.
+    """
+    layers = {"unit", "e2e", "core"}
+    for item in items:
+        if not layers.intersection(m.name for m in item.iter_markers()):
+            item.add_marker(pytest.mark.unit)
+
+
 # ---------------------------------------------------------------------------
 # Mock connection factories (Layer A/B unit tests)
 # ---------------------------------------------------------------------------
