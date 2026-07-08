@@ -83,6 +83,14 @@ def _parse_junit(path: str) -> tuple[int, int, int, int]:
 
 
 def main() -> int:
+    # Redirected to a file (as the CI step does), stdout/stderr are fully
+    # buffered by default. If FreeCADCmd crashes mid-run (it can swallow a
+    # fatal error and still exit 0 -- see the module docstring), everything
+    # pytest printed so far is lost with it. Line-buffer so the log keeps
+    # whatever ran up to the crash.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     marker = os.environ.get("MARKER", "").strip()
     if not marker:
         print("MARKER env var not set; defaulting to 'e2e'", file=sys.stderr)
