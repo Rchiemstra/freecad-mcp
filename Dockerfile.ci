@@ -18,15 +18,15 @@
 # Build context is THIS directory (tools/mcp/freecad-mcp/), so the COPY paths
 # below are relative to it and the context stays tiny. Built and pushed to the
 # local registry by .woodpecker/build-images.yml (kaniko), AFTER the deps image:
-#   image: registry:5000/freecad-ci-mcp:24.04
+#   image: registry-freecad:5000/freecad-ci-mcp:24.04
 # Rebuild when pyproject.toml changes (trigger the build-images workflow manually).
 # For a local build:
 #   docker build \
-#     --build-arg FREECAD_CI_DEPS_IMAGE=192.168.2.23:8081/freecad-ci-deps:24.04 \
-#     -t 192.168.2.23:8081/freecad-ci-mcp:24.04 \
+#     --build-arg FREECAD_CI_DEPS_IMAGE=192.168.2.23:5001/freecad-ci-deps:24.04 \
+#     -t 192.168.2.23:5001/freecad-ci-mcp:24.04 \
 #     tools/mcp/freecad-mcp/
 
-ARG FREECAD_CI_DEPS_IMAGE=registry:5000/freecad-ci-deps:24.04
+ARG FREECAD_CI_DEPS_IMAGE=registry-freecad:5000/freecad-ci-deps:24.04
 FROM ${FREECAD_CI_DEPS_IMAGE}
 
 # Bake the MCP package + [dev] deps. COPY only what the install needs (mirrors
