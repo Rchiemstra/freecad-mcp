@@ -2,7 +2,7 @@ import json
 
 from mcp.types import ImageContent, TextContent
 
-type ToolResponse = list[TextContent | ImageContent]
+ToolResponse = list[TextContent | ImageContent]
 
 
 def text_response(message: str) -> ToolResponse:

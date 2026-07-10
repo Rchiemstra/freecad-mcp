@@ -14,7 +14,7 @@ and `tests/e2e/test_mx_helpers.py`, run headlessly via Docker
 
 | ID | Problem | Root cause | Fix | Where | Upstream |
 |----|---------|-----------|-----|-------|----------|
-| P1 | Cross-body datum drops the source body's non-identity placement. | Attacher ignores the source body placement. | `preview_attachment` flags `source_body_placement_dropped`; `create_datum_plane`/`create_subshape_binder` emit a PREFLIGHT WARNING at creation time (I6); recipe in `create_datum_plane`/`sketch_create` docstrings (M2). | MCP-side | Still open upstream — file/track. |
+| P1 | Cross-body datum drops the source body's non-identity placement. | Attacher wrote a global attachment placement into the attached object's local `Placement` when the object lived inside a body/group. | Core fix converts the calculated global attachment placement back into the attached object's parent group coordinates before storing it; MCP diagnostics/preflight still report risky cross-body setups. | core + MCP-side | Fixed locally; keep MCP guardrails until upstreamed. |
 | P2 | Pad extrudes the wrong way silently. | Pad direction handling (#16539). | Pad/pocket append a silent-build assertion that checks the extrusion `Direction` is parallel to the profile sketch normal (I2); xfail repro `test_p2_*` arbitrates. | MCP-side | #16539 in fork; not merged upstream — file/track. |
 | P3 | Rotated "Deactivated" datum drops the rotation. | Attachment `Deactivated` path (#19571). | `preview_attachment` reports the angle diff; recipe "XY_Plane + AttachmentOffset instead of rotated datum" (M2); xfail repro `test_p3_*` arbitrates. | MCP-side | #19571 open upstream — file/track. |
 | P4 | Sketch solver errors swallowed. | — | `get_sketch_diagnostics` surfaces conflicting/redundant/malformed constraints + solver message. | MCP-side | n/a |
@@ -50,15 +50,13 @@ These are FreeCAD core behaviours the MCP now works around; the underlying
 upstream tickets should be filed or tracked so the guardrails can eventually be
 retired:
 
-1. **P1** — Attacher drops a non-identity source-body placement for cross-body
-   datums.
-2. **P2** — Pad direction (#16539); confirm the fork fix and upstream it.
-3. **P3** — Rotated "Deactivated" datum drops the rotation (#19571).
-4. **P6** — `removeObject(body)` orphans owned children (#26356 / #29034).
-5. **P8** — `Part.Circle` `Direction`/`Normal` alias (`ConicPyImp.cpp` change).
-6. **P9** — Document the Assembly solve API (`assembly.solve` /
+1. **P2** — Pad direction (#16539); confirm the fork fix and upstream it.
+2. **P3** — Rotated "Deactivated" datum drops the rotation (#19571).
+3. **P6** — `removeObject(body)` orphans owned children (#26356 / #29034).
+4. **P8** — `Part.Circle` `Direction`/`Normal` alias (`ConicPyImp.cpp` change).
+5. **P9** — Document the Assembly solve API (`assembly.solve` /
    `JointObject.solveIfAllowed`).
-7. **P11** — `Sketcher::Constraint` constructor/addConstraint signature forms.
+6. **P11** — `Sketcher::Constraint` constructor/addConstraint signature forms.
 
 > Filing these GitHub issues is an explicit, external action and is left to the
 > maintainer; this doc tracks them so the MCP guardrails can be retired once

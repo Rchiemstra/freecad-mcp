@@ -26,13 +26,7 @@ from tests.e2e._helpers import (
     plane_global_normal,
 )
 
-pytestmark = [
-    pytest.mark.core,
-    pytest.mark.xfail(
-        strict=True,
-        reason="FreeCAD #21942/#22615: cross-body attacher drops source body placement",
-    ),
-]
+pytestmark = pytest.mark.core
 
 
 def test_cross_body_datum_keeps_source_body_placement(freecad_session):
