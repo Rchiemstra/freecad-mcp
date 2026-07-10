@@ -93,6 +93,9 @@ def save_active_screenshot(
         apply_view_orientation(view, view_name)
 
         focused_selection = False
+        # The resolved object we frame on (when focus_object is given), kept so
+        # the framing can be re-applied synchronously right before saveImage().
+        focus_target = None
 
         if focus_object:
             doc = FreeCAD.ActiveDocument
@@ -102,6 +105,7 @@ def save_active_screenshot(
                 FreeCADGui.Selection.addSelection(obj)
                 FreeCADGui.SendMsgToActiveView("ViewSelection")
                 focused_selection = True
+                focus_target = obj
                 _flush_gui_events()
                 FreeCADGui.Selection.clearSelection()
             else:
@@ -110,6 +114,17 @@ def save_active_screenshot(
             view.fitAll()
 
         _flush_gui_events()
+        # On macOS, when the FreeCAD window is not exposed (fully occluded or
+        # minimized), saveImage() right after pumping the event loop grabs a blank
+        # frame. Re-issuing the framing synchronously forces a redraw first. The
+        # flush above is kept intentionally — Linux needs it for the stale-frame
+        # fix (#51/#53).
+        if focused_selection and focus_target is not None:
+            FreeCADGui.Selection.addSelection(focus_target)
+            FreeCADGui.SendMsgToActiveView("ViewSelection")
+            FreeCADGui.Selection.clearSelection()
+        else:
+            view.fitAll()
         resolved_width, resolved_height = _resolve_screenshot_size(view, width, height)
         view.saveImage(save_path, resolved_width, resolved_height, "Current")
 
