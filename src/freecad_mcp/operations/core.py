@@ -5,7 +5,16 @@ from typing import Any
 from mcp.types import ImageContent
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, add_screenshot_if_available, json_response, text_response
+from ..responses import (
+    ToolResponse,
+    add_screenshot_if_available,
+    from_execute_result,
+    json_response,
+    text_response,
+    tool_fail,
+    tool_ok,
+)
+from ..execute_options import ExecuteOptions, merge_execute_options
 from ..template_resources import read_template_lines, render_template_lines, render_template_text
 
 
@@ -42,11 +51,11 @@ def create_document_operation(freecad: FreeCADConnection, name: str) -> ToolResp
     try:
         res = freecad.create_document(name)
         if res["success"]:
-            return text_response(f"Document '{res['document_name']}' created successfully")
-        return text_response(f"Failed to create document: {res['error']}")
+            return tool_ok(f"Document '{res['document_name']}' created successfully")
+        return tool_fail(f"Failed to create document: {res['error']}")
     except Exception as e:
         logger.error(f"Failed to create document: {str(e)}")
-        return text_response(f"Failed to create document: {str(e)}")
+        return tool_fail(f"Failed to create document: {str(e)}")
 
 
 def create_object_operation(
@@ -69,13 +78,13 @@ def create_object_operation(
         screenshot = freecad.get_active_screenshot()
 
         if res["success"]:
-            response = text_response(f"Object '{res['object_name']}' created successfully")
+            response = tool_ok(f"Object '{res['object_name']}' created successfully")
         else:
-            response = text_response(f"Failed to create object: {res['error']}")
+            response = tool_fail(f"Failed to create object: {res['error']}")
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to create object: {str(e)}")
-        return text_response(f"Failed to create object: {str(e)}")
+        return tool_fail(f"Failed to create object: {str(e)}")
 
 
 def edit_object_operation(
@@ -90,13 +99,13 @@ def edit_object_operation(
         screenshot = freecad.get_active_screenshot()
 
         if res["success"]:
-            response = text_response(f"Object '{res['object_name']}' edited successfully")
+            response = tool_ok(f"Object '{res['object_name']}' edited successfully")
         else:
-            response = text_response(f"Failed to edit object: {res['error']}")
+            response = tool_fail(f"Failed to edit object: {res['error']}")
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to edit object: {str(e)}")
-        return text_response(f"Failed to edit object: {str(e)}")
+        return tool_fail(f"Failed to edit object: {str(e)}")
 
 
 def delete_object_operation(
@@ -145,36 +154,63 @@ def delete_object_operation(
             msg = json_part
             if log_summary:
                 msg += "\n" + log_summary
-            response = text_response(msg)
+            response = tool_ok(msg)
         else:
-            response = text_response(
+            response = tool_fail(
                 f"Failed to delete object: {res.get('error', res.get('message', 'unknown error'))}"
             )
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to delete object: {str(e)}")
-        return text_response(f"Failed to delete object: {str(e)}")
+        return tool_fail(f"Failed to delete object: {str(e)}")
 
 
 def execute_code_operation(
     freecad: FreeCADConnection,
     only_text_feedback: bool,
     code: str,
+    document: str | None = None,
+    recompute: str = "none",
+    recompute_documents: list[str] | None = None,
+    read_only: bool = False,
+    restore_active_document: bool = True,
+    activate_document: bool = False,
+    capture_view: bool = False,
 ) -> ToolResponse:
+    opts = ExecuteOptions(
+        document=document,
+        recompute=recompute,  # type: ignore[arg-type]
+        recompute_documents=recompute_documents,
+        read_only=read_only,
+        restore_active_document=restore_active_document,
+        activate_document=activate_document,
+        capture_view=capture_view,
+    )
     try:
-        res = freecad.execute_code(code)
-        # Preserve the user's camera after arbitrary code execution. Named views
-        # are still handled by get_view_operation().
-        screenshot = freecad.get_active_screenshot(view_name=None)
-
+        res = freecad.execute_code(code, opts)
+        screenshot = (
+            freecad.get_active_screenshot(view_name=None) if capture_view else None
+        )
         if res["success"]:
-            response = text_response(f"Code executed successfully: {res['message']}")
-        else:
-            response = text_response(f"Failed to execute code: {res['error']}")
-        return add_screenshot_if_available(response, screenshot, only_text_feedback)
+            return from_execute_result(
+                res,
+                success_prefix="Code executed successfully",
+                fail_prefix="Failed to execute code",
+                screenshot=screenshot,
+                only_text_feedback=only_text_feedback,
+                capture_view=capture_view,
+            )
+        return from_execute_result(
+            res,
+            success_prefix="Code executed successfully",
+            fail_prefix="Failed to execute code",
+            screenshot=screenshot if capture_view else None,
+            only_text_feedback=only_text_feedback,
+            capture_view=False,
+        )
     except Exception as e:
         logger.error(f"Failed to execute code: {str(e)}")
-        return text_response(f"Failed to execute code: {str(e)}")
+        return tool_fail(f"Failed to execute code: {str(e)}")
 
 
 def get_view_operation(
@@ -187,7 +223,7 @@ def get_view_operation(
     screenshot = freecad.get_active_screenshot(view_name, width, height, focus_object)
     if screenshot is not None:
         label = f"View: {view_name}" + (f" | focus: {focus_object}" if focus_object else "")
-        return [*text_response(label), ImageContent(type="image", data=screenshot, mimeType="image/png")]
+        return tool_ok(label, screenshot=screenshot)
     # P10 / I10 fallback: no viewable image (headless / TechDraw / Spreadsheet).
     # Return a compact geometric state of the focus object (or all objects) as a
     # text-only stand-in so the agent still gets something to reason about.
@@ -196,7 +232,10 @@ def get_view_operation(
             "diagnostics/active_state.py.txt",
             focus_object=repr(focus_object),
         ))
-        res = freecad.execute_code(code)
+        res = freecad.execute_code(
+            code,
+            ExecuteOptions(recompute="none", read_only=True, capture_view=False),
+        )
         if res.get("success"):
             output = res.get("message", "")
             marker = "Output:"
@@ -209,10 +248,10 @@ def get_view_operation(
                 "geometric_diff for richer text-only diffs, and find_faces / "
                 "face_normal for specific subshapes."
             )
-            return text_response(note + "\n" + output)
+            return tool_ok(note + "\n" + output)
     except Exception as e:
         logger.error(f"get_view fallback failed: {e}")
-    return text_response("Cannot get screenshot in the current view type (such as TechDraw or Spreadsheet)")
+    return tool_fail("Cannot get screenshot in the current view type (such as TechDraw or Spreadsheet)")
 
 
 def insert_part_from_library_operation(
@@ -225,13 +264,13 @@ def insert_part_from_library_operation(
         screenshot = freecad.get_active_screenshot()
 
         if res["success"]:
-            response = text_response(f"Part inserted from library: {res['message']}")
+            response = tool_ok(f"Part inserted from library: {res['message']}")
         else:
-            response = text_response(f"Failed to insert part from library: {res['error']}")
+            response = tool_fail(f"Failed to insert part from library: {res['error']}")
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to insert part from library: {str(e)}")
-        return text_response(f"Failed to insert part from library: {str(e)}")
+        return tool_fail(f"Failed to insert part from library: {str(e)}")
 
 
 def get_objects_operation(
@@ -245,7 +284,7 @@ def get_objects_operation(
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to get objects: {str(e)}")
-        return text_response(f"Failed to get objects: {str(e)}")
+        return tool_fail(f"Failed to get objects: {str(e)}")
 
 
 def get_object_operation(
@@ -260,7 +299,7 @@ def get_object_operation(
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to get object: {str(e)}")
-        return text_response(f"Failed to get object: {str(e)}")
+        return tool_fail(f"Failed to get object: {str(e)}")
 
 
 def get_parts_list_operation(freecad: FreeCADConnection) -> ToolResponse:
@@ -286,18 +325,24 @@ def _run_code(
     code: str,
     success_msg: str,
     fail_prefix: str,
+    *,
+    document: str | None = None,
+    recompute: str = "target",
+    capture_view: bool = True,
 ) -> ToolResponse:
     """Execute generated Python code in FreeCAD and return a formatted response."""
     try:
-        # I3 — append the recompute-log snippet so every mutating tool surfaces a
-        # compact {name, state, valid} summary of non-clean objects (catches P6
-        # orphans and silent failures). Read-only JSON diagnostics use
-        # _run_json_code and are not affected.
         full_code = code + "\n" + "\n".join(
             render_template_lines("diagnostics/recompute_log.py.txt")
         )
-        res = freecad.execute_code(full_code)
-        screenshot = freecad.get_active_screenshot()
+        opts = ExecuteOptions(
+            document=document,
+            recompute=recompute,  # type: ignore[arg-type]
+            recompute_documents=[document] if document and recompute == "target" else None,
+            capture_view=capture_view,
+        )
+        res = freecad.execute_code(full_code, opts)
+        screenshot = freecad.get_active_screenshot() if capture_view else None
         if res["success"]:
             output = res.get("message", "")
             msg = f"{success_msg}\n{output}".strip()
@@ -311,13 +356,16 @@ def _run_code(
                     for e in errors
                 )
                 msg += f"\nRecompute errors detected: {names}"
-            response = text_response(msg)
+            response = tool_ok(msg)
         else:
-            response = text_response(f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}")
+            response = tool_fail(
+                f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}",
+                structured=res.get("structured") if isinstance(res.get("structured"), dict) else None,
+            )
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"{fail_prefix}: {e}")
-        return text_response(f"{fail_prefix}: {e}")
+        return tool_fail(f"{fail_prefix}: {e}")
 
 
 def _build_assertion_code(

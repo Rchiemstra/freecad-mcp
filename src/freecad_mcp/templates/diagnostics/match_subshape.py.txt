@@ -1,0 +1,48 @@
+_source_object = $source_object
+_source_subshape = $source_subshape
+_target_object = $target_object
+_limit = $limit
+_tolerance = $tolerance
+_src = _doc.getObject(_source_object)
+_tgt = _doc.getObject(_target_object)
+if not _src or not _tgt:
+    raise RuntimeError('Source or target object not found')
+_src_shape = _subshape(_src, _source_subshape)
+if _src_shape is None:
+    raise RuntimeError('Source subshape not found')
+_src_type = _src_shape.ShapeType if hasattr(_src_shape, 'ShapeType') else None
+_src_area = float(_src_shape.Area) if hasattr(_src_shape, 'Area') else None
+_src_center = _vec(_src_shape.CenterOfMass)
+_src_normal = None
+try:
+    if _source_subshape.startswith('Face'):
+        _idx = int(_source_subshape[4:]) - 1
+        _face = _src.Shape.Faces[_idx]
+        _u0, _u1, _v0, _v1 = _face.ParameterRange
+        _src_normal = _vec(_global_placement(_src).Rotation.multVec(_face.normalAt((_u0 + _u1) * 0.5, (_v0 + _v1) * 0.5)).normalize())
+except Exception:
+    pass
+_kind = 'Faces' if _source_subshape.startswith('Face') else 'Edges'
+_candidates = []
+for _i, _face in enumerate(getattr(_tgt.Shape, _kind, [])):
+    _name = _kind[:-1] + str(_i + 1)
+    _score = 0.0
+    _area = float(_face.Area) if hasattr(_face, 'Area') else None
+    if _src_area and _area:
+        _score += max(0.0, 1.0 - abs(_src_area - _area) / max(_src_area, _area))
+    _c = _vec(_face.CenterOfMass)
+    if _c and _src_center:
+        _dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(_c.values(), _src_center.values())))
+        _score += max(0.0, 1.0 - _dist / max(_tolerance, 1e-9))
+    try:
+        _u0, _u1, _v0, _v1 = _face.ParameterRange
+        _n = _face.normalAt((_u0 + _u1) * 0.5, (_v0 + _v1) * 0.5)
+        _gn = _global_placement(_tgt).Rotation.multVec(_n).normalize()
+        if _src_normal:
+            _dot = abs(_gn.x * _src_normal['x'] + _gn.y * _src_normal['y'] + _gn.z * _src_normal['z'])
+            _score += _dot
+    except Exception:
+        pass
+    _candidates.append({'subshape': _name, 'score': round(_score, 6), 'area': _area, 'global_center': _c})
+_candidates.sort(key=lambda x: x['score'], reverse=True)
+print(json.dumps({'ok': True, 'source': _source_object + ':' + _source_subshape, 'target': _target_object, 'matches': _candidates[:_limit]}))

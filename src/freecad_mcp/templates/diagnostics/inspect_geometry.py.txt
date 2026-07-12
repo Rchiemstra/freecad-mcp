@@ -1,0 +1,45 @@
+_object_name = $object_name
+_subshape = $subshape
+_obj = _doc.getObject(_object_name)
+if not _obj:
+    raise RuntimeError('Object not found: ' + _object_name)
+_chain = []
+_cursor = _obj
+while _cursor is not None:
+    _chain.append({'name': _cursor.Name, 'type': getattr(_cursor, 'TypeId', ''), 'placement_base': _vec(getattr(_cursor, 'Placement', FreeCAD.Placement()).Base)})
+    _cursor = _parent_of(_cursor)
+try:
+    _global_pl = _global_placement(_obj)
+except Exception:
+    _global_pl = getattr(_obj, 'Placement', FreeCAD.Placement())
+_local_bb = None
+_global_bb = None
+try:
+    _shape = getattr(_obj, 'Shape', None)
+    if _shape and not _shape.isNull():
+        _local_bb = _bb(_shape.BoundBox)
+        _copy = _shape.copy()
+        try:
+            _copy.Placement = _global_pl
+        except Exception:
+            pass
+        _global_bb = _bb(_copy.BoundBox)
+except Exception:
+    pass
+_result = {
+    'ok': True,
+    'object': _object_name,
+    'type_id': getattr(_obj, 'TypeId', ''),
+    'placement': {'base': _vec(_obj.Placement.Base), 'rotation': str(_obj.Placement.Rotation)},
+    'global_placement': {'base': _vec(_global_pl.Base), 'rotation': str(_global_pl.Rotation)},
+    'parent_chain': list(reversed(_chain)),
+    'local_bbox': _local_bb,
+    'global_bbox': _global_bb,
+}
+if $subshape:
+    _sub = $subshape
+    _center, _normal = _face_pose(_obj, _sub)
+    _result['subshape'] = _sub
+    _result['global_center'] = _center
+    _result['global_normal'] = _normal
+print(json.dumps(_result))

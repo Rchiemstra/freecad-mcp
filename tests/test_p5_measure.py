@@ -44,7 +44,8 @@ def _code(conn) -> str:
 
 
 def _text(response) -> str:
-    return " ".join(item.text for item in response if isinstance(item, TextContent))
+    content = response.content if hasattr(response, "content") else response
+    return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
 # ---------------------------------------------------------------------------

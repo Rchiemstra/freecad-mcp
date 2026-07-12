@@ -18,13 +18,13 @@ from freecad_mcp.operations.snapshot import (  # noqa: E402
     restore_operation,
     snapshot_operation,
 )
-from tests.e2e._helpers import make_padded_circle  # noqa: E402
+from tests.e2e._helpers import make_padded_circle, tool_response_text  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 
 
 def _payload(response) -> dict:
-    text = "".join(item.text for item in response if hasattr(item, "text"))
+    text = tool_response_text(response)
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
     # Recompute progress noise can surround the payload line, so scan from the

@@ -1,0 +1,55 @@
+import math
+_source = $source
+_dependents = $dependents
+_translation = $translation
+_axis = $axis
+_angle_deg = $angle_deg
+_restore = $restore
+_tolerance = $tolerance
+_src = _doc.getObject(_source)
+if not _src:
+    raise RuntimeError('Source not found: ' + _source)
+_deps = [_doc.getObject(n) for n in _dependents]
+if any(d is None for d in _deps):
+    raise RuntimeError('One or more dependents not found')
+_orig_pl = _src.Placement
+_orig_centers = {}
+for _d in _deps:
+    try:
+        _orig_centers[_d.Name] = _vec(_d.Shape.CenterOfMass)
+    except Exception:
+        _orig_centers[_d.Name] = None
+_test_pl = FreeCAD.Placement(
+    FreeCAD.Vector(float(_translation[0]), float(_translation[1]), float(_translation[2])),
+    FreeCAD.Rotation(
+        FreeCAD.Vector(float(_axis[0]), float(_axis[1]), float(_axis[2])),
+        float(_angle_deg),
+    ),
+)
+_src.Placement = _test_pl
+_doc.recompute()
+_errors = []
+for _d in _deps:
+    _pe = (_src.Placement.Base - _d.Placement.Base).Length
+    try:
+        _ce = (_orig_centers[_d.Name], _vec(_d.Shape.CenterOfMass))
+        _center_err = None
+        if _ce[0] and _ce[1]:
+            _center_err = math.sqrt(sum((a - b) ** 2 for a, b in zip(_ce[0].values(), _ce[1].values())))
+    except Exception:
+        _center_err = None
+    _errors.append({'name': _d.Name, 'placement_translation_error_mm': round(_pe, 9), 'center_of_mass_error_mm': _center_err})
+if _restore:
+    _src.Placement = _orig_pl
+    _doc.recompute()
+    _restore_err = (_src.Placement.Base - _orig_pl.Base).Length
+else:
+    _restore_err = None
+print(json.dumps({
+    'ok': all((e.get('placement_translation_error_mm') or 0) <= _tolerance for e in _errors),
+    'source': _source,
+    'dependents': _dependents,
+    'placement_errors': _errors,
+    'restore_error_mm': _restore_err,
+    'tolerance': _tolerance,
+}))

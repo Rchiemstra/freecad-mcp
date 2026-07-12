@@ -9,7 +9,7 @@ class FakeFreeCAD:
         self.executed_code = None
         self.screenshot_request = None
 
-    def execute_code(self, code):
+    def execute_code(self, code, options=None):
         self.executed_code = code
         return {"success": True, "message": "ok"}
 
@@ -43,7 +43,9 @@ class ExecuteCodeCameraTest(unittest.TestCase):
     def test_execute_code_screenshot_preserves_active_camera(self):
         freecad = FakeFreeCAD()
 
-        execute_code_operation(freecad, only_text_feedback=False, code="print('hello')")
+        execute_code_operation(
+            freecad, only_text_feedback=False, code="print('hello')", capture_view=True
+        )
 
         self.assertEqual(freecad.executed_code, "print('hello')")
         self.assertEqual(freecad.screenshot_request, (None, None, None, None))

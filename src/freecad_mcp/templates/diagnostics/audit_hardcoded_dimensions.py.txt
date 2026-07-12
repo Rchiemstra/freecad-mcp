@@ -1,0 +1,71 @@
+_body_name = $body_name
+_flag_aliases = $flag_aliases
+_body = _doc.getObject(_body_name)
+if not _body:
+    raise RuntimeError('Body not found: ' + _body_name)
+_findings = []
+for _obj in getattr(_body, 'Group', []):
+    _type = getattr(_obj, 'TypeId', '')
+    if _type == 'Sketcher::SketchObject':
+        for _i, _c in enumerate(getattr(_obj, 'Constraints', [])):
+            _t = getattr(_c, 'Type', None)
+            if _t is None:
+                continue
+            _name = str(_t)
+            if _name not in ('Distance', 'DistanceX', 'DistanceY', 'Radius', 'Diameter', 'Angle'):
+                continue
+            _driving = None
+            for _meth in ('getDriving', 'isDriving'):
+                if hasattr(_obj, _meth):
+                    try:
+                        _driving = getattr(_obj, _meth)(_i)
+                        break
+                    except Exception:
+                        pass
+            if _driving is False:
+                continue
+            _expr = None
+            try:
+                _expr = _obj.getExpression('Constraints[' + str(_i) + ']')
+            except Exception:
+                pass
+            if not _expr:
+                _findings.append({'object': _obj.Name, 'kind': 'sketch_constraint', 'index': _i, 'type': _name})
+    if _type in ('PartDesign::Pad', 'PartDesign::Pocket'):
+        for _prop in ('Length', 'Length2'):
+            if _prop not in getattr(_obj, 'PropertiesList', []):
+                continue
+            _expr = None
+            try:
+                _expr = _obj.getExpression(_prop)
+            except Exception:
+                pass
+            if not _expr:
+                _val = getattr(_obj, _prop, None)
+                _findings.append({'object': _obj.Name, 'kind': 'extrusion_length', 'property': _prop, 'value': float(_val) if _val is not None else None})
+    if _type == 'PartDesign::Plane':
+        _off = getattr(_obj, 'AttachmentOffset', None)
+        if _off:
+            for _comp, _label in zip(('x', 'y', 'z'), ('Base.x', 'Base.y', 'Base.z')):
+                _expr = None
+                try:
+                    _expr = _obj.getExpression('AttachmentOffset.' + _label)
+                except Exception:
+                    pass
+                if not _expr:
+                    _findings.append({'object': _obj.Name, 'kind': 'datum_offset', 'component': _comp})
+    _pl = getattr(_obj, 'Placement', None)
+    if _pl:
+        _expr = None
+        try:
+            _expr = _obj.getExpression('Placement')
+        except Exception:
+            pass
+        if not _expr:
+            for _comp in ('x', 'y', 'z'):
+                try:
+                    if not _obj.getExpression('Placement.Base.' + _comp):
+                        _findings.append({'object': _obj.Name, 'kind': 'placement_component', 'component': _comp})
+                except Exception:
+                    pass
+print(json.dumps({'ok': len(_findings) == 0, 'body': _body_name, 'findings': _findings, 'count': len(_findings)}))

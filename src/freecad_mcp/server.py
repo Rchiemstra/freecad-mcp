@@ -123,6 +123,14 @@ from .operations import (
     placement_audit_operation,
     preview_attachment_operation,
     relink_references_operation,
+    create_placement_binder_operation,
+    create_placement_datum_operation,
+    run_transaction_operation,
+    validate_movement_follow_operation,
+    audit_hardcoded_dimensions_operation,
+    inspect_geometry_operation,
+    get_dependency_graph_operation,
+    match_subshape_operation,
     # Snapshot — I7 in-process document copies (P12)
     restore_operation,
     snapshot_operation,
@@ -396,16 +404,44 @@ def delete_object(
 
 
 @mcp.tool()
-def execute_code(ctx: Context, code: str) -> list[TextContent | ImageContent]:
+def execute_code(
+    ctx: Context,
+    code: str,
+    document: str | None = None,
+    recompute: str = "none",
+    recompute_documents: list[str] | None = None,
+    read_only: bool = False,
+    restore_active_document: bool = True,
+    activate_document: bool = False,
+    capture_view: bool = False,
+) -> list[TextContent | ImageContent]:
     """Execute arbitrary Python code in FreeCAD.
 
     Args:
         code: The Python code to execute.
+        document: Target document name for scoped recompute/error reporting.
+        recompute: ``none`` (default for inspection), ``target``, or ``all``.
+        recompute_documents: Explicit document list to recompute when recompute is ``target``.
+        read_only: When true, blocks ``save``/``saveAs`` on open documents.
+        restore_active_document: Restore the active document after execution.
+        activate_document: Activate ``document`` before running code.
+        capture_view: Include a viewport screenshot (default false).
 
     Returns:
-        A message indicating the success or failure of the code execution, the output of the code execution, and a screenshot of the object.
+        Execution output with structured session/recompute metadata, or an error with traceback.
     """
-    return execute_code_operation(get_freecad_connection(), state.only_text_feedback, code)
+    return execute_code_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        code,
+        document=document,
+        recompute=recompute,
+        recompute_documents=recompute_documents,
+        read_only=read_only,
+        restore_active_document=restore_active_document,
+        activate_document=activate_document,
+        capture_view=capture_view,
+    )
 
 
 @mcp.tool()
@@ -3327,6 +3363,181 @@ def placement_audit(
         get_freecad_connection(),
         state.only_text_feedback,
         doc_name,
+    )
+
+
+@mcp.tool()
+def create_placement_binder(
+    ctx: Context,
+    doc_name: str,
+    owner_body: str,
+    name: str,
+    source: str,
+    relative: bool = True,
+    bind_mode: str = "Synchronized",
+) -> list[TextContent | ImageContent]:
+    """Create a SubShapeBinder using a body subpath with placement diagnostics (M6).
+
+    ``source`` should be a body subpath such as ``MG996RHornRef.HornHubPad.Face3``.
+    Returns resolved source/binder local and global centers/normals and whether
+    parent-body placement was dropped.
+    """
+    return create_placement_binder_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        owner_body,
+        name,
+        source,
+        relative=relative,
+        bind_mode=bind_mode,
+    )
+
+
+@mcp.tool()
+def create_placement_datum(
+    ctx: Context,
+    doc_name: str,
+    owner_body: str,
+    name: str,
+    source: str,
+    relative: bool = True,
+    offset: list[float] | None = None,
+) -> list[TextContent | ImageContent]:
+    """Create a datum plane from a body subpath with local/global diagnostics (M6)."""
+    return create_placement_datum_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        owner_body,
+        name,
+        source,
+        relative=relative,
+        offset=offset,
+    )
+
+
+@mcp.tool()
+def run_transaction(
+    ctx: Context,
+    doc_name: str,
+    label: str,
+    code: str,
+    dry_run: bool = False,
+    commit_on_success: bool = True,
+) -> list[TextContent | ImageContent]:
+    """Run code inside ``openTransaction`` with automatic rollback on failure (M5)."""
+    return run_transaction_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        label,
+        code,
+        dry_run=dry_run,
+        commit_on_success=commit_on_success,
+    )
+
+
+@mcp.tool()
+def validate_movement_follow(
+    ctx: Context,
+    doc_name: str,
+    source: str,
+    dependents: list[str],
+    translation: list[float],
+    axis: list[float],
+    angle_deg: float,
+    restore: bool = True,
+    tolerance: float = 1e-7,
+) -> list[TextContent | ImageContent]:
+    """Validate that dependents follow a source body under an arbitrary rigid transform (M7)."""
+    return validate_movement_follow_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        source,
+        dependents,
+        translation,
+        axis,
+        angle_deg,
+        restore=restore,
+        tolerance=tolerance,
+    )
+
+
+@mcp.tool()
+def audit_hardcoded_dimensions(
+    ctx: Context,
+    doc_name: str,
+    body_name: str,
+    flag_aliases: bool = True,
+) -> list[TextContent | ImageContent]:
+    """Report driving dimensions in a body that lack expressions (M8)."""
+    return audit_hardcoded_dimensions_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        body_name,
+        flag_aliases=flag_aliases,
+    )
+
+
+@mcp.tool()
+def inspect_geometry(
+    ctx: Context,
+    doc_name: str,
+    object_name: str,
+    subshape: str | None = None,
+    activate: bool = False,
+    restore_active_document: bool = True,
+) -> list[TextContent | ImageContent]:
+    """Normalized local/global geometry inspection for any object type (M10/M11)."""
+    return inspect_geometry_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        subshape=subshape,
+        activate=activate,
+        restore_active_document=restore_active_document,
+    )
+
+
+@mcp.tool()
+def get_dependency_graph(
+    ctx: Context,
+    doc_name: str,
+    root: str,
+) -> list[TextContent | ImageContent]:
+    """Property-annotated dependency graph from a root object (M13)."""
+    return get_dependency_graph_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        root,
+    )
+
+
+@mcp.tool()
+def match_subshape(
+    ctx: Context,
+    doc_name: str,
+    source_object: str,
+    source_subshape: str,
+    target_object: str,
+    limit: int = 10,
+    tolerance: float = 1.0,
+) -> list[TextContent | ImageContent]:
+    """Rank target subshapes by semantic similarity to a source subshape (M14)."""
+    return match_subshape_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        source_object,
+        source_subshape,
+        target_object,
+        limit=limit,
+        tolerance=tolerance,
     )
 
 

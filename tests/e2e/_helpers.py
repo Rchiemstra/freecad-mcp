@@ -10,6 +10,11 @@ import math
 from typing import Optional
 
 
+def tool_response_text(response) -> str:
+    content = response.content if hasattr(response, "content") else response
+    return "".join(item.text for item in content if hasattr(item, "text"))
+
+
 def _fc():
     import FreeCAD  # type: ignore
     return FreeCAD

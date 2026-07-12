@@ -1,0 +1,37 @@
+_label = $label
+_code = $code
+_dry_run = $dry_run
+_commit = $commit_on_success
+_created = []
+_changed = []
+_removed = []
+_doc.openTransaction(_label)
+try:
+    _ns = {}
+    exec(_code, globals(), _ns)
+    _doc.recompute()
+    if _dry_run:
+        _doc.abortTransaction()
+        _committed = False
+    elif _commit_on_success:
+        _doc.commitTransaction()
+        _committed = True
+    else:
+        _doc.abortTransaction()
+        _committed = False
+except Exception as _exc:
+    _doc.abortTransaction()
+    try:
+        _doc.recompute()
+    except Exception:
+        pass
+    raise
+print(json.dumps({
+    'ok': True,
+    'label': _label,
+    'committed': _committed,
+    'dry_run': bool(_dry_run),
+    'created': _created,
+    'changed': _changed,
+    'removed': _removed,
+}))

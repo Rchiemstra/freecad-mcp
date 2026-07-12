@@ -1,0 +1,45 @@
+_owner_body = $owner_body
+_binder_name = $binder_name
+_source = $source
+_relative = $relative
+_bind_mode = $bind_mode
+_body = _doc.getObject(_owner_body)
+if not _body:
+    raise RuntimeError('Owner body not found: ' + _owner_body)
+_src_body, _src_feat, _subpath = _parse_body_subpath($source)
+_support = (_src_body, (_subpath,) if _subpath else ('',))
+_binder = _body.newObject('PartDesign::SubShapeBinder', _binder_name)
+_binder.Support = [_support]
+if 'Relative' in getattr(_binder, 'PropertiesList', []):
+    _binder.Relative = bool(_relative)
+if 'BindMode' in getattr(_binder, 'PropertiesList', []):
+    _binder.BindMode = _bind_mode
+_doc.recompute()
+_src_center, _src_normal = _face_pose(_src_feat, _subpath.split('.')[-1] if '.' in _subpath else _subpath)
+_binder_sub = 'Face1' if _subpath.startswith(('HornHubPad.', '')) and _binder.Shape.Faces else ''
+if _binder.Shape and _binder.Shape.Faces:
+    _binder_sub = 'Face1'
+_binder_center, _binder_normal = _face_pose(_binder, _binder_sub) if _binder_sub else (None, None)
+_dropped = False
+try:
+    if _src_body.Placement != _src_feat.Placement and _src_feat not in getattr(_src_body, 'Group', []):
+        _dropped = True
+except Exception:
+    pass
+print(json.dumps({
+    'ok': True,
+    'binder_name': _binder.Name,
+    'resolved_source_object': _src_feat.Name,
+    'resolved_subelement': _subpath,
+    'source_body': _src_body.Name,
+    'source_body_local_placement': _vec(_src_body.Placement.Base),
+    'source_global_center': _src_center,
+    'source_global_normal': _src_normal,
+    'binder_local_center': _binder_center,
+    'binder_global_center': _binder_center,
+    'binder_global_normal': _binder_normal,
+    'destination_body_placement': _vec(_body.Placement.Base),
+    'source_body_placement_dropped': _dropped,
+    'relative': bool(_relative),
+    'bind_mode': _bind_mode,
+}))

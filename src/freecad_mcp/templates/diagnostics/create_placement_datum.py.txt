@@ -1,0 +1,38 @@
+_owner_body = $owner_body
+_datum_name = $datum_name
+_source = $source
+_relative = $relative
+_offset = $offset or [0, 0, 0]
+_body = _doc.getObject(_owner_body)
+if not _body:
+    raise RuntimeError('Owner body not found: ' + _owner_body)
+_src_body, _src_feat, _subpath = _parse_body_subpath($source)
+_sub_only = _subpath.split('.')[-1] if '.' in _subpath else _subpath
+_plane = _body.newObject('PartDesign::Plane', _datum_name)
+_plane.AttachmentSupport = [(_src_body, (_subpath,) if _subpath else ('',))]
+_plane.MapMode = 'FlatFace'
+_plane.AttachmentOffset = FreeCAD.Placement(
+    FreeCAD.Vector(float(_offset[0]), float(_offset[1]), float(_offset[2])),
+    FreeCAD.Rotation(),
+)
+_doc.recompute()
+_src_center, _src_normal = _face_pose(_src_feat, _sub_only)
+_datum_center = _vec(_plane.Placement.Base)
+try:
+    _datum_global = _global_placement(_plane).Base
+    _datum_center = _vec(_datum_global)
+except Exception:
+    pass
+print(json.dumps({
+    'ok': True,
+    'datum_name': _plane.Name,
+    'source_body': _src_body.Name,
+    'resolved_source_object': _src_feat.Name,
+    'resolved_subelement': _subpath,
+    'source_global_center': _src_center,
+    'source_global_normal': _src_normal,
+    'datum_local_center': _vec(_plane.Placement.Base),
+    'datum_global_center': _datum_center,
+    'destination_body_placement': _vec(_body.Placement.Base),
+    'relative': bool(_relative),
+}))

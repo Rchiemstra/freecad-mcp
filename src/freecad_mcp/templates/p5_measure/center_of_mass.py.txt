@@ -1,4 +1,19 @@
 _obj = _doc.getObject($obj_name)
 if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object not found')
-_com = _obj.Shape.CenterOfMass
-print(json.dumps({'x':round(_com.x,6),'y':round(_com.y,6),'z':round(_com.z,6),'unit':'mm'}))
+_shape = _obj.Shape
+if hasattr(_shape, 'CenterOfMass') and _shape.Solids:
+    _com = _shape.CenterOfMass
+elif getattr(_shape, 'Solids', None):
+    _total_vol = 0.0
+    _weighted = FreeCAD.Vector(0, 0, 0)
+    for _solid in _shape.Solids:
+        _v = float(_solid.Volume)
+        _total_vol += _v
+        _c = _solid.CenterOfMass
+        _weighted = _weighted + FreeCAD.Vector(_c.x * _v, _c.y * _v, _c.z * _v)
+    if _total_vol <= 0:
+        raise RuntimeError('Compound has zero volume')
+    _com = FreeCAD.Vector(_weighted.x / _total_vol, _weighted.y / _total_vol, _weighted.z / _total_vol)
+else:
+    _com = _shape.CenterOfMass
+print(json.dumps({'x':round(_com.x,6),'y':round(_com.y,6),'z':round(_com.z,6),'unit':'mm','method':'solid' if _shape.Solids else 'shape'}))

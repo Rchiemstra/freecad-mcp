@@ -1,0 +1,46 @@
+_root = $root
+_edges = []
+_seen = set()
+_link_props = ('Support', 'AttachmentSupport', 'Profile', 'Base', 'Tool', 'Source', 'Original', 'Originals', 'References')
+def _walk(_obj, _stage):
+    if _obj.Name in _seen:
+        return
+    _seen.add(_obj.Name)
+    for _prop in _link_props:
+        if _prop not in getattr(_obj, 'PropertiesList', []):
+            continue
+        try:
+            _val = getattr(_obj, _prop)
+        except Exception:
+            continue
+        _targets = []
+        if isinstance(_val, (list, tuple)):
+            for _item in _val:
+                if isinstance(_item, tuple) and _item:
+                    _targets.append((_item[0], list(_item[1:]) if len(_item) > 1 else []))
+                elif hasattr(_item, 'Name'):
+                    _targets.append((_item, []))
+        elif hasattr(_val, 'Name'):
+            _targets.append((_val, []))
+        for _tgt, _subs in _targets:
+            if _tgt is None or not hasattr(_tgt, 'Name'):
+                continue
+            _edges.append({
+                'from': _obj.Name,
+                'to': _tgt.Name,
+                'property': _prop,
+                'subelements': _subs,
+                'stage': _stage,
+            })
+            if _tgt.Name not in _seen:
+                _walk(_tgt, _stage + 1)
+_root_obj = _doc.getObject(_root)
+if not _root_obj:
+    raise RuntimeError('Root not found: ' + _root)
+_history = []
+if hasattr(_root_obj, 'Group'):
+    _history = [o.Name for o in _root_obj.Group]
+_walk(_root_obj, 0)
+_cycle_nodes = []
+_names = {e['from'] for e in _edges} | {e['to'] for e in _edges}
+print(json.dumps({'ok': True, 'root': _root, 'history_order': _history, 'edges': _edges, 'cycle_detected': len(_cycle_nodes) > 0, 'node_count': len(_names)}))

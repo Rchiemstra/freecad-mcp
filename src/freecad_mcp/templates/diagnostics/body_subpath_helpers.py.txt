@@ -1,0 +1,38 @@
+def _parse_body_subpath(_ref):
+    """Resolve 'Body.Feature.Face3' into (body_obj, feature_obj, sub_name)."""
+    _parts = _ref.split('.')
+    if len(_parts) < 2:
+        raise RuntimeError('source must be a body subpath like Body.Feature.Face3: ' + _ref)
+    _body = _doc.getObject(_parts[0])
+    if not _body:
+        raise RuntimeError('Owner body not found: ' + _parts[0])
+    _feat = _doc.getObject(_parts[1]) if len(_parts) > 1 else None
+    if not _feat:
+        raise RuntimeError('Feature not found: ' + _parts[1])
+    _sub = _parts[-1] if _parts[-1].startswith(('Face', 'Edge', 'Vertex')) else ''
+    _inner = '.'.join(_parts[1:-1]) if _sub else '.'.join(_parts[1:])
+    if _sub and _inner:
+        return _body, _feat, _inner + '.' + _sub
+    if _sub:
+        return _body, _feat, _sub
+    return _body, _feat, _inner
+def _face_pose(_obj, _sub):
+    _shape = _subshape(_obj, _sub)
+    if _shape is None:
+        return None, None
+    _pl = _global_placement(_obj)
+    try:
+        if _sub.startswith('Face'):
+            _idx = int(_sub[4:]) - 1
+            _face = _obj.Shape.Faces[_idx]
+            _u0, _u1, _v0, _v1 = _face.ParameterRange
+            _local_n = _face.normalAt((_u0 + _u1) * 0.5, (_v0 + _v1) * 0.5)
+            _center = _face.CenterOfMass
+        else:
+            _center = _shape.CenterOfMass
+            _local_n = FreeCAD.Vector(0, 0, 1)
+        _global_c = _pl.multVec(_center)
+        _global_n = _pl.Rotation.multVec(_local_n)
+        return _vec(_global_c), _vec(_global_n.normalize())
+    except Exception:
+        return None, None

@@ -10,8 +10,10 @@ import re
 import base64
 import io
 import os
+import sys
 import tempfile
 import threading
+import traceback
 from dataclasses import dataclass, field
 from typing import Any
 from xmlrpc.server import SimpleXMLRPCServer
@@ -336,44 +338,226 @@ class FreeCADRPC:
         else:
             return {"success": False, "error": res}
 
-    def execute_code(self, code: str) -> dict[str, Any]:
-        output_buffer = io.StringIO()
+    @staticmethod
+    def _collect_invalid_objects() -> dict[str, list[dict[str, Any]]]:
+        flagged: dict[str, list[dict[str, Any]]] = {}
+        for doc_name, doc in FreeCAD.listDocuments().items():
+            entries = []
+            for obj in doc.Objects:
+                try:
+                    state = list(getattr(obj, "State", []))
+                    if any(s in ("Invalid", "Error", "Touched") for s in state):
+                        entries.append({
+                            "name": obj.Name,
+                            "label": getattr(obj, "Label", obj.Name),
+                            "state": state,
+                        })
+                except Exception:
+                    pass
+            if entries:
+                flagged[doc_name] = entries
+        return flagged
+
+    @staticmethod
+    def _classify_recompute_errors(
+        before: dict[str, list[dict[str, Any]]],
+        after: dict[str, list[dict[str, Any]]],
+        target_doc: str | None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        def _key(doc: str, name: str) -> tuple[str, str]:
+            return doc, name
+
+        before_keys = {
+            _key(doc, item["name"])
+            for doc, items in before.items()
+            for item in items
+        }
+        target_errors: list[dict[str, Any]] = []
+        pre_existing: list[dict[str, Any]] = []
+        unrelated: list[dict[str, Any]] = []
+        for doc, items in after.items():
+            for item in items:
+                entry = {"document": doc, "object": item["name"], "state": item["state"]}
+                key = _key(doc, item["name"])
+                if target_doc and doc == target_doc:
+                    if key in before_keys:
+                        pre_existing.append(entry)
+                    else:
+                        target_errors.append(entry)
+                else:
+                    unrelated.append(entry)
+        return {
+            "target_recompute_errors": target_errors,
+            "pre_existing_target_errors": pre_existing,
+            "unrelated_document_errors": unrelated,
+        }
+
+    def execute_code(self, code: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
+        options = options or {}
+
         def task():
+            output_buffer = io.StringIO()
+            opts = options
+            target_doc = opts.get("document")
+            recompute_mode = opts.get("recompute", "none")
+            recompute_docs = opts.get("recompute_documents") or (
+                [target_doc] if target_doc and recompute_mode == "target" else []
+            )
+            read_only = bool(opts.get("read_only", False))
+            restore_active = bool(opts.get("restore_active_document", True))
+            activate_doc = bool(opts.get("activate_document", False))
+
+            active_before = FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
+            dirty_before = {
+                name: bool(getattr(doc, "Modified", False))
+                for name, doc in FreeCAD.listDocuments().items()
+            }
+            invalid_before = self._collect_invalid_objects()
+
+            if target_doc and activate_doc:
+                doc = FreeCAD.getDocument(target_doc)
+                if doc:
+                    FreeCAD.setActiveDocument(target_doc)
+
+            saved_hooks: list[tuple[Any, str, Any]] = []
+
+            def _block_save(original):
+                def _wrapped(*args, **kwargs):
+                    raise RuntimeError("save blocked in read_only execute_code mode")
+
+                return _wrapped
+
+            if read_only:
+                for doc in FreeCAD.listDocuments().values():
+                    for attr in ("save", "saveAs", "saveCopy"):
+                        if hasattr(doc, attr):
+                            original = getattr(doc, attr)
+                            saved_hooks.append((doc, attr, original))
+                            setattr(doc, attr, _block_save(original))
+
+            tb_info = None
+            ok = False
             try:
                 with contextlib.redirect_stdout(output_buffer):
                     exec(code, globals())
+                ok = True
                 FreeCAD.Console.PrintMessage("Python code executed successfully.\n")
-                errors = []
-                for _doc_name, _doc in FreeCAD.listDocuments().items():
-                    for _obj in _doc.Objects:
+            except Exception as exc:
+                ok = False
+                exc_type, exc_val, exc_tb = sys.exc_info()
+                frames = traceback.extract_tb(exc_tb) if exc_tb else []
+                last = frames[-1] if frames else None
+                tb_info = {
+                    "exception_type": exc_type.__name__ if exc_type else "Exception",
+                    "message": str(exc_val),
+                    "traceback": traceback.format_exc(),
+                    "frames": [
+                        {
+                            "file": f.filename,
+                            "line": f.lineno,
+                            "function": f.name,
+                            "code": f.line,
+                        }
+                        for f in frames
+                    ],
+                    "line_number": last.lineno if last else None,
+                    "line_code": last.line if last else None,
+                    "stdout": output_buffer.getvalue(),
+                }
+                FreeCAD.Console.PrintError(f"Error executing Python code: {exc}\n")
+            finally:
+                for doc, attr, original in saved_hooks:
+                    try:
+                        setattr(doc, attr, original)
+                    except Exception:
+                        pass
+
+                if recompute_mode == "all":
+                    for doc in FreeCAD.listDocuments().values():
                         try:
-                            _st = list(getattr(_obj, "State", []))
-                            if any(s in ("Invalid", "Error") for s in _st):
-                                errors.append({
-                                    "doc": _doc_name,
-                                    "name": _obj.Name,
-                                    "label": getattr(_obj, "Label", _obj.Name),
-                                    "state": _st,
-                                })
+                            doc.recompute()
                         except Exception:
                             pass
-                return {"ok": True, "recompute_errors": errors}
-            except Exception as e:
-                FreeCAD.Console.PrintError(f"Error executing Python code: {e}\n")
-                return {"ok": False, "error": f"Error executing Python code: {e}"}
+                elif recompute_mode == "target" and recompute_docs:
+                    for doc_name in recompute_docs:
+                        doc = FreeCAD.getDocument(doc_name)
+                        if doc:
+                            try:
+                                doc.recompute()
+                            except Exception:
+                                pass
+
+                if restore_active and active_before:
+                    try:
+                        if FreeCAD.getDocument(active_before):
+                            FreeCAD.setActiveDocument(active_before)
+                    except Exception:
+                        pass
+
+            invalid_after = self._collect_invalid_objects()
+            classified = self._classify_recompute_errors(
+                invalid_before, invalid_after, target_doc
+            )
+            active_after = FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
+            dirty_after = {
+                name: bool(getattr(doc, "Modified", False))
+                for name, doc in FreeCAD.listDocuments().items()
+            }
+            target_doc_obj = FreeCAD.getDocument(target_doc) if target_doc else None
+            session = {
+                "active_document_before": active_before,
+                "active_document_after": active_after,
+                "dirty_before": dirty_before,
+                "dirty_after": dirty_after,
+                "saved": False,
+                "file_path": getattr(target_doc_obj, "FileName", "") if target_doc_obj else "",
+                **classified,
+            }
+            if ok:
+                return {"ok": True, "session": session, "stdout": output_buffer.getvalue()}
+            return {
+                "ok": False,
+                "error": tb_info["message"] if tb_info else "Unknown error",
+                "traceback": tb_info,
+                "session": session,
+                "stdout": output_buffer.getvalue(),
+            }
 
         rpc_request_queue.put(task)
         res = self._get_res(self.EXECUTE_TIMEOUT)
         if isinstance(res, str):
-            return {"success": False, "error": res}
+            return {"success": False, "error": res, "is_error": True}
         if res.get("ok"):
+            session = res.get("session", {})
+            flat_errors = []
+            for key in (
+                "target_recompute_errors",
+                "pre_existing_target_errors",
+                "unrelated_document_errors",
+            ):
+                for item in session.get(key, []):
+                    flat_errors.append({
+                        "doc": item.get("document", target_doc if target_doc else "?"),
+                        "name": item.get("object", "?"),
+                        "state": item.get("state", []),
+                    })
             return {
                 "success": True,
-                "message": "Python code execution scheduled. \nOutput: " + output_buffer.getvalue(),
-                "recompute_errors": res["recompute_errors"],
+                "message": "Python code execution completed.\nOutput: " + res.get("stdout", ""),
+                "recompute_errors": flat_errors,
+                "session": session,
+                "structured": session,
             }
-        else:
-            return {"success": False, "error": res.get("error", "Unknown error")}
+        tb = res.get("traceback")
+        return {
+            "success": False,
+            "error": res.get("error", "Unknown error"),
+            "traceback": tb,
+            "structured": tb,
+            "session": res.get("session", {}),
+            "message": res.get("stdout", ""),
+            "is_error": True,
+        }
 
     def get_objects(self, doc_name):
         # Must run in the GUI thread: serialize_object accesses ViewObject

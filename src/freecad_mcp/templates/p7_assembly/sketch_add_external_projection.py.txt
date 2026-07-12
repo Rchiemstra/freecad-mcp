@@ -43,6 +43,10 @@ else:
         else:
             _before = len(getattr(_sk, 'ExternalGeometry', []))
             _idx = _sk.addExternal(_src, _sub, bool(_defining))
+            if _idx is None:
+                _after_count = len(getattr(_sk, 'ExternalGeometry', []))
+                if _after_count > _before:
+                    _idx = -(_after_count - _before)
             _doc.recompute()
             _after = len(getattr(_sk, 'ExternalGeometry', []))
-            print(json.dumps({'ok': _idx >= 0, 'sketch_name': _sk.Name, 'source_ref': _source_ref, 'projection_mode': _mode, 'external_index': _idx, 'external_count_before': _before, 'external_count_after': _after}))
+            print(json.dumps({'ok': _idx is not None and (_idx >= 0 or _idx <= -3), 'sketch_name': _sk.Name, 'source_ref': _source_ref, 'projection_mode': _mode, 'external_index': _idx, 'external_count_before': _before, 'external_count_after': _after}))

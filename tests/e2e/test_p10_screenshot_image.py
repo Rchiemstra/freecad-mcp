@@ -37,7 +37,8 @@ def _no_screenshot_conn():
 def test_get_view_returns_structured_diff_when_no_screenshot():
     response = get_view_operation(_no_screenshot_conn(), "Isometric")
     # Must not be a bare prose string.
-    text = "".join(item.text for item in response if isinstance(item, TextContent))
+    content = response.content if hasattr(response, "content") else response
+    text = "".join(item.text for item in content if isinstance(item, TextContent))
     assert not text.startswith("Cannot get screenshot"), (
         f"get_view returned prose fallback: {text!r}"
     )

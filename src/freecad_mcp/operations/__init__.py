@@ -129,15 +129,23 @@ from .p7_assembly import (
 
 # Diagnostics — read-only P1/P8/P10 guards
 from .diagnostics import (
+    audit_hardcoded_dimensions_operation,
     capture_state_operation,
+    create_placement_binder_operation,
+    create_placement_datum_operation,
     edge_axis_operation,
     face_normal_operation,
     find_edges_operation,
     find_faces_operation,
     geometric_diff_operation,
+    get_dependency_graph_operation,
+    inspect_geometry_operation,
+    match_subshape_operation,
     placement_audit_operation,
     preview_attachment_operation,
     relink_references_operation,
+    run_transaction_operation,
+    validate_movement_follow_operation,
 )
 
 # Snapshot — I7 in-process document copies (P12)
@@ -262,6 +270,14 @@ __all__ = [
     "relink_references_operation",
     "capture_state_operation",
     "geometric_diff_operation",
+    "create_placement_binder_operation",
+    "create_placement_datum_operation",
+    "run_transaction_operation",
+    "validate_movement_follow_operation",
+    "audit_hardcoded_dimensions_operation",
+    "inspect_geometry_operation",
+    "get_dependency_graph_operation",
+    "match_subshape_operation",
     # Snapshot
     "snapshot_operation",
     "restore_operation",

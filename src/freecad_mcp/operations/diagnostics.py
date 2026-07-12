@@ -11,9 +11,21 @@ import json
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, text_response
-from ..template_resources import render_template_text
-from .p7_assembly import _doc_preamble, _run_json_code
+from ..responses import ToolResponse, text_response, tool_ok
+from ..template_resources import render_template_lines, render_template_text
+from .p7_assembly import _doc_preamble, _run_json_code, _shared_helpers
+
+
+def _response_text(resp: ToolResponse) -> str:
+    return "".join(
+        item.text for item in resp.content if getattr(item, "type", "") == "text"
+    )
+
+
+def _diag_preamble(doc_name: str) -> list[str]:
+    return _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
+        "diagnostics/body_subpath_helpers.py.txt"
+    )
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -44,6 +56,7 @@ def preview_attachment_operation(
         "\n".join(code),
         "Failed to preview attachment",
         screenshot=False,
+        document=doc_name,
     )
 
 
@@ -82,6 +95,7 @@ def _find_subshapes_operation(
         "\n".join(code),
         f"Failed to find {kind_singular.lower()}s",
         screenshot=False,
+        document=doc_name,
     )
 
 
@@ -157,7 +171,7 @@ def _subshape_pose_operation(
     )]
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
-        "Failed to inspect subshape", screenshot=False,
+        "Failed to inspect subshape", screenshot=False, document=doc_name,
     )
 
 
@@ -212,7 +226,7 @@ def placement_audit_operation(
     )]
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
-        "Failed to audit placements", screenshot=False,
+        "Failed to audit placements", screenshot=False, document=doc_name,
     )
 
 
@@ -234,7 +248,7 @@ def relink_references_operation(
     )]
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
-        "Failed to relink references", screenshot=False,
+        "Failed to relink references", screenshot=False, document=doc_name,
     )
 
 
@@ -255,7 +269,7 @@ def capture_state_operation(
     )]
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
-        "Failed to capture state", screenshot=False,
+        "Failed to capture state", screenshot=False, document=doc_name,
     )
 
 
@@ -322,11 +336,209 @@ def geometric_diff_operation(
     )]
     resp = _run_json_code(
         freecad, True, "\n".join(code),
-        "Failed to capture state for diff", screenshot=False,
+        "Failed to capture state for diff", screenshot=False, document=doc_name,
     )
-    text = "".join(item.text for item in resp if hasattr(item, "text"))
+    text = _response_text(resp)
     try:
         current = json.loads(text)
     except Exception:
-        return text_response("Failed to capture current state for diff: " + text)
-    return text_response(json.dumps(_diff_states(before, current)))
+        return tool_ok("Failed to capture current state for diff: " + text)
+    return tool_ok(json.dumps(_diff_states(before, current)))
+
+
+def create_placement_binder_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    owner_body: str,
+    name: str,
+    source: str,
+    relative: bool = True,
+    bind_mode: str = "Synchronized",
+) -> ToolResponse:
+    code = _diag_preamble(doc_name) + [render_template_text(
+        "diagnostics/create_placement_binder.py.txt",
+        owner_body=repr(owner_body),
+        binder_name=repr(name),
+        source=repr(source),
+        relative=repr(relative),
+        bind_mode=repr(bind_mode),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed to create placement-aware binder",
+        screenshot=True,
+        document=doc_name,
+        read_only=False,
+    )
+
+
+def create_placement_datum_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    owner_body: str,
+    name: str,
+    source: str,
+    relative: bool = True,
+    offset: list[float] | None = None,
+) -> ToolResponse:
+    code = _diag_preamble(doc_name) + [render_template_text(
+        "diagnostics/create_placement_datum.py.txt",
+        owner_body=repr(owner_body),
+        datum_name=repr(name),
+        source=repr(source),
+        relative=repr(relative),
+        offset=repr(offset or [0, 0, 0]),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed to create placement-aware datum",
+        screenshot=True,
+        document=doc_name,
+        read_only=False,
+    )
+
+
+def run_transaction_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    label: str,
+    code: str,
+    dry_run: bool = False,
+    commit_on_success: bool = True,
+) -> ToolResponse:
+    preamble = _doc_preamble(doc_name)
+    body = render_template_text(
+        "diagnostics/run_transaction.py.txt",
+        label=repr(label),
+        code=repr(code),
+        dry_run=repr(dry_run),
+        commit_on_success=repr(commit_on_success),
+    )
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(preamble) + "\n" + body,
+        "Failed to run transaction",
+        screenshot=True,
+        document=doc_name,
+        read_only=False,
+    )
+
+
+def validate_movement_follow_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    source: str,
+    dependents: list[str],
+    translation: list[float],
+    axis: list[float],
+    angle_deg: float,
+    restore: bool = True,
+    tolerance: float = 1e-7,
+) -> ToolResponse:
+    code = _diag_preamble(doc_name) + [render_template_text(
+        "diagnostics/validate_movement_follow.py.txt",
+        source=repr(source),
+        dependents=repr(dependents),
+        translation=repr(translation),
+        axis=repr(axis),
+        angle_deg=repr(angle_deg),
+        restore=repr(restore),
+        tolerance=repr(tolerance),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed movement-follow validation",
+        screenshot=False,
+        document=doc_name,
+        read_only=False,
+    )
+
+
+def audit_hardcoded_dimensions_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    body_name: str,
+    flag_aliases: bool = True,
+) -> ToolResponse:
+    code = _doc_preamble(doc_name) + [render_template_text(
+        "diagnostics/audit_hardcoded_dimensions.py.txt",
+        body_name=repr(body_name),
+        flag_aliases=repr(flag_aliases),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed hard-coded dimension audit",
+        screenshot=False,
+        document=doc_name,
+    )
+
+
+def inspect_geometry_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    object_name: str,
+    subshape: str | None = None,
+    activate: bool = False,
+    restore_active_document: bool = True,
+) -> ToolResponse:
+    code = _diag_preamble(doc_name) + [render_template_text(
+        "diagnostics/inspect_geometry.py.txt",
+        object_name=repr(object_name),
+        subshape=repr(subshape),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed geometry inspection",
+        screenshot=False,
+        document=doc_name,
+        read_only=True,
+    )
+
+
+def get_dependency_graph_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    root: str,
+) -> ToolResponse:
+    code = _doc_preamble(doc_name) + [render_template_text(
+        "diagnostics/get_dependency_graph.py.txt",
+        root=repr(root),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed to build dependency graph",
+        screenshot=False,
+        document=doc_name,
+    )
+
+
+def match_subshape_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    source_object: str,
+    source_subshape: str,
+    target_object: str,
+    limit: int = 10,
+    tolerance: float = 1.0,
+) -> ToolResponse:
+    code = _diag_preamble(doc_name) + [render_template_text(
+        "diagnostics/match_subshape.py.txt",
+        source_object=repr(source_object),
+        source_subshape=repr(source_subshape),
+        target_object=repr(target_object),
+        limit=repr(limit),
+        tolerance=repr(tolerance),
+    )]
+    return _run_json_code(
+        freecad, only_text_feedback, "\n".join(code),
+        "Failed subshape matching",
+        screenshot=False,
+        document=doc_name,
+    )

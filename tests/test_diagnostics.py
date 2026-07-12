@@ -63,7 +63,8 @@ def _code(conn) -> str:
 
 
 def _text(response) -> str:
-    return " ".join(item.text for item in response if isinstance(item, TextContent))
+    content = response.content if hasattr(response, "content") else response
+    return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
 class TestPreviewAttachment:
@@ -580,7 +581,8 @@ class TestP10GetViewFallback:
         conn.get_active_screenshot.return_value = "BASE64PNG"
         conn.execute_code.return_value = {"success": True, "message": "", "recompute_errors": []}
         resp = get_view_operation(conn, "Isometric")
-        assert any(isinstance(item, ImageContent) for item in resp)
+        content = resp.content if hasattr(resp, "content") else resp
+        assert any(isinstance(item, ImageContent) for item in content)
 
     def test_falls_back_to_structured_state_when_no_screenshot(self):
         conn = MagicMock()

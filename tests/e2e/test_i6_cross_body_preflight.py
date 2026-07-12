@@ -11,13 +11,13 @@ Part = pytest.importorskip("Part")
 Sketcher = pytest.importorskip("Sketcher")
 
 from freecad_mcp.operations.p7_assembly import create_datum_plane_operation  # noqa: E402
-from tests.e2e._helpers import find_face, make_padded_circle  # noqa: E402
+from tests.e2e._helpers import find_face, make_padded_circle, tool_response_text  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 
 
 def _text(response) -> str:
-    return "".join(item.text for item in response if hasattr(item, "text"))
+    return tool_response_text(response)
 
 
 def test_cross_body_datum_creation_warns(freecad_session):

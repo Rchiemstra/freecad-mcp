@@ -2,6 +2,7 @@ import logging
 import xmlrpc.client
 from typing import Any
 
+from .execute_options import ExecuteOptions
 from .template_resources import read_template_text
 
 
@@ -39,8 +40,13 @@ class FreeCADConnection:
     def insert_part_from_library(self, relative_path: str) -> dict[str, Any]:
         return self.server.insert_part_from_library(relative_path)
 
-    def execute_code(self, code: str) -> dict[str, Any]:
-        return self.server.execute_code(code)
+    def execute_code(
+        self,
+        code: str,
+        options: dict[str, Any] | ExecuteOptions | None = None,
+    ) -> dict[str, Any]:
+        opts = options.to_dict() if isinstance(options, ExecuteOptions) else (options or {})
+        return self.server.execute_code(code, opts)
 
     def get_active_screenshot(
         self,

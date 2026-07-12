@@ -20,11 +20,13 @@ from freecad_mcp.operations.p7_assembly import (  # noqa: E402
     solve_assembly_operation,
 )
 
+from tests.e2e._helpers import tool_response_text  # noqa: E402
+
 pytestmark = pytest.mark.e2e
 
 
 def _payload(response) -> dict:
-    text = "".join(item.text for item in response if hasattr(item, "text"))
+    text = tool_response_text(response)
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
     return json.loads(text.splitlines()[0])

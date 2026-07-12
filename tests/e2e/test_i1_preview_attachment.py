@@ -17,13 +17,13 @@ Part = pytest.importorskip("Part")
 Sketcher = pytest.importorskip("Sketcher")
 
 from freecad_mcp.operations.diagnostics import preview_attachment_operation
-from tests.e2e._helpers import find_face, make_padded_circle
+from tests.e2e._helpers import find_face, make_padded_circle, tool_response_text
 
 pytestmark = pytest.mark.e2e
 
 
 def _payload(response) -> dict:
-    text = "".join(item.text for item in response if hasattr(item, "text"))
+    text = tool_response_text(response)
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
     return json.loads(text.splitlines()[-1])

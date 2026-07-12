@@ -8,7 +8,8 @@ import logging
 from typing import Any
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, add_screenshot_if_available, text_response
+from ..responses import ToolResponse, add_screenshot_if_available, text_response, tool_fail, tool_ok
+from ..execute_options import ExecuteOptions
 from ..template_resources import render_template_lines, render_template_text
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -59,24 +60,36 @@ def _run_json_code(
     fail_prefix: str,
     *,
     screenshot: bool = False,
+    document: str | None = None,
+    read_only: bool = False,
 ) -> ToolResponse:
     try:
-        res = freecad.execute_code(code)
+        opts = ExecuteOptions(
+            document=document,
+            recompute="none" if read_only else "target",
+            recompute_documents=[document] if document and not read_only else None,
+            read_only=read_only,
+            restore_active_document=True,
+            capture_view=screenshot,
+        )
+        res = freecad.execute_code(code, opts)
         image = freecad.get_active_screenshot() if screenshot else None
         if res.get("success"):
             output = _extract_execute_output(res.get("message", ""))
             output, preflight = _extract_preflight(output)
             errors = res.get("recompute_errors", [])
             if errors and output.endswith("}"):
-                # Keep the response JSON-first without parsing possibly large payloads.
                 output += "\n" + str({"recompute_errors": errors})
             if preflight:
                 output = output + "\n" + preflight
-            return add_screenshot_if_available(text_response(output), image, only_text_feedback)
-        return text_response(f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}")
+            return add_screenshot_if_available(tool_ok(output), image, only_text_feedback)
+        return tool_fail(
+            f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}",
+            structured=res.get("structured") if isinstance(res.get("structured"), dict) else None,
+        )
     except Exception as exc:
         logger.error("%s: %s", fail_prefix, exc)
-        return text_response(f"{fail_prefix}: {exc}")
+        return tool_fail(f"{fail_prefix}: {exc}")
 
 
 def _validate_if_exists(if_exists: str) -> ToolResponse | None:
@@ -122,6 +135,8 @@ def create_assembly_operation(
         "\n".join(lines),
         "Failed to create assembly",
         screenshot=True,
+        document=doc_name,
+        read_only=False,
     )
 
 
@@ -147,6 +162,7 @@ def create_assembly_grounded_joint_operation(
         "\n".join(lines),
         "Failed to create grounded assembly joint",
         screenshot=True,
+        document=doc_name,
     )
 
 
@@ -194,6 +210,7 @@ def create_assembly_joint_operation(
         "\n".join(lines),
         "Failed to create assembly joint",
         screenshot=True,
+        document=doc_name,
     )
 
 
@@ -214,7 +231,7 @@ def get_document_tree_operation(
         include_properties=repr(include_properties),
         selected_nodes=repr(selected_nodes),
     )
-    return _run_json_code(freecad, True, "\n".join(lines), "Failed to get document tree")
+    return _run_json_code(freecad, True, "\n".join(lines), "Failed to get document tree", document=doc_name, read_only=True)
 
 
 def create_part_container_operation(
@@ -240,6 +257,7 @@ def create_part_container_operation(
         "\n".join(lines),
         "Failed to create part container",
         screenshot=True,
+        document=doc_name,
     )
 
 
@@ -257,7 +275,7 @@ def move_object_operation(
         target_container=repr(target_container),
         remove_from_old_parent=repr(remove_from_old_parent),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to move object", screenshot=True)
+    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to move object", screenshot=True, document=doc_name)
 
 
 def create_subshape_binder_operation(
@@ -290,7 +308,7 @@ def create_subshape_binder_operation(
     lines = _doc_preamble(doc_name) + _shared_helpers() + binder_code.strip().splitlines() + render_template_lines(
         "diagnostics/cross_body_preflight.py.txt", obj_name=repr(binder_name),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create subshape binder", screenshot=True)
+    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create subshape binder", screenshot=True, document=doc_name)
 
 
 def create_datum_plane_operation(
@@ -324,7 +342,7 @@ def create_datum_plane_operation(
     ) + render_template_lines(
         "diagnostics/cross_body_preflight.py.txt", obj_name=repr(plane_name),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create datum plane", screenshot=True)
+    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create datum plane", screenshot=True, document=doc_name)
 
 
 def solve_assembly_operation(
@@ -345,7 +363,7 @@ def solve_assembly_operation(
     )
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(lines),
-        "Failed to solve assembly", screenshot=True,
+        "Failed to solve assembly", screenshot=True, document=doc_name,
     )
 
 
@@ -364,7 +382,7 @@ def get_sketch_geometry_operation(
         include_external=repr(include_external),
         global_coords=repr(global_coords),
     )
-    return _run_json_code(freecad, True, "\n".join(lines), "Failed to get sketch geometry")
+    return _run_json_code(freecad, True, "\n".join(lines), "Failed to get sketch geometry", document=doc_name, read_only=True)
 
 
 def sketch_add_external_projection_operation(
@@ -385,7 +403,7 @@ def sketch_add_external_projection_operation(
         projection_mode=repr(projection_mode),
         defining=repr(defining),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to add external projection", screenshot=True)
+    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to add external projection", screenshot=True, document=doc_name)
 
 
 def build_path_wire_operation(
@@ -409,7 +427,7 @@ def build_path_wire_operation(
         container=repr(container),
         if_exists=repr(if_exists),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to build path wire", screenshot=True)
+    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to build path wire", screenshot=True, document=doc_name)
 
 
 def sweep_pipe_operation(
@@ -438,4 +456,4 @@ def sweep_pipe_operation(
         if_exists=repr(if_exists),
     )
     lines = _doc_preamble(doc_name) + _shared_helpers() + sweep_code.strip().splitlines()
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to sweep pipe", screenshot=True)
+    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to sweep pipe", screenshot=True, document=doc_name)

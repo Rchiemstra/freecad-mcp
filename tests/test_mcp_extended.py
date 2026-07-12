@@ -48,11 +48,13 @@ from mcp.types import ImageContent, TextContent
 # ---------------------------------------------------------------------------
 
 def _text(response):
-    return " ".join(item.text for item in response if isinstance(item, TextContent))
+    content = response.content if hasattr(response, "content") else response
+    return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
 def _has_image(response):
-    return any(isinstance(item, ImageContent) for item in response)
+    content = response.content if hasattr(response, "content") else response
+    return any(isinstance(item, ImageContent) for item in content)
 
 
 def _ok_conn(output="done", recompute_errors=None):
@@ -95,7 +97,7 @@ class TestGetViewOperation:
         conn.get_active_screenshot.return_value = "base64data"
         result = get_view_operation(conn, "Isometric")
         assert _has_image(result)
-        assert any(isinstance(i, TextContent) for i in result)
+        assert any(isinstance(i, TextContent) for i in (result.content if hasattr(result, "content") else result))
 
     def test_text_only_when_no_screenshot(self):
         conn = MagicMock()

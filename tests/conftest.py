@@ -82,11 +82,13 @@ def _fail_conn(error: str = "oops"):
 # ---------------------------------------------------------------------------
 
 def _text(response) -> str:
-    return " ".join(item.text for item in response if isinstance(item, TextContent))
+    content = response.content if hasattr(response, "content") else response
+    return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
 def _has_image(response) -> bool:
-    return any(isinstance(item, ImageContent) for item in response)
+    content = response.content if hasattr(response, "content") else response
+    return any(isinstance(item, ImageContent) for item in content)
 
 
 def _code(conn) -> str:
@@ -246,7 +248,8 @@ def assert_parallel(a, b, *, angle_tol: float = 1e-3) -> None:
 
 def parse_json_response(response) -> dict:
     """Parse the JSON payload out of an MCP tool response (TextContent)."""
-    text = " ".join(item.text for item in response if isinstance(item, TextContent))
+    content = response.content if hasattr(response, "content") else response
+    text = " ".join(item.text for item in content if isinstance(item, TextContent))
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
     return json.loads(text.splitlines()[-1])
