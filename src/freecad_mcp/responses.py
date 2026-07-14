@@ -73,6 +73,10 @@ def from_execute_result(
     if res.get("success"):
         output = res.get("message", "")
         msg = f"{success_prefix}\n{output}".strip() if output else success_prefix
+        # Clients render structuredContent in preference to the text block, so the
+        # executed code's stdout has to travel in structured too or it is never seen.
+        if output and isinstance(structured, dict) and "output" not in structured:
+            structured = {"output": output, **structured}
         response = tool_ok(msg, structured=structured)
         if capture_view:
             return add_screenshot_if_available(response, screenshot, only_text_feedback)

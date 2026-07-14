@@ -186,12 +186,21 @@ rpc_response_queue = queue.Queue()
 
 
 def process_gui_tasks():
-    while not rpc_request_queue.empty():
-        task = rpc_request_queue.get()
-        res = task()
-        if res is not None:
-            rpc_response_queue.put(res)
-    QtCore.QTimer.singleShot(500, process_gui_tasks)
+    # A task that raises must not kill the timer chain: if this function exits
+    # without re-arming, no queued RPC task ever runs again and every GUI-bound
+    # call times out until FreeCAD restarts.
+    try:
+        while not rpc_request_queue.empty():
+            task = rpc_request_queue.get()
+            try:
+                res = task()
+            except Exception as e:
+                FreeCAD.Console.PrintError(f"RPC task failed: {e}\n")
+                res = f"RPC task raised {type(e).__name__}: {e}"
+            if res is not None:
+                rpc_response_queue.put(res)
+    finally:
+        QtCore.QTimer.singleShot(500, process_gui_tasks)
 
 
 @dataclass
@@ -427,13 +436,23 @@ class FreeCADRPC:
 
                 return _wrapped
 
+            # App.Document's save methods are C++ descriptors, so on some FreeCAD builds
+            # they cannot be reassigned. Where the hook won't install, read_only degrades
+            # to best-effort rather than failing the whole call; report which docs are
+            # unguarded so the caller isn't misled into thinking saves are blocked.
+            read_only_unguarded: list[str] = []
             if read_only:
-                for doc in FreeCAD.listDocuments().values():
+                for doc_name, doc in FreeCAD.listDocuments().items():
                     for attr in ("save", "saveAs", "saveCopy"):
                         if hasattr(doc, attr):
                             original = getattr(doc, attr)
+                            try:
+                                setattr(doc, attr, _block_save(original))
+                            except Exception:
+                                if doc_name not in read_only_unguarded:
+                                    read_only_unguarded.append(doc_name)
+                                continue
                             saved_hooks.append((doc, attr, original))
-                            setattr(doc, attr, _block_save(original))
 
             tb_info = None
             ok = False
@@ -513,6 +532,8 @@ class FreeCADRPC:
                 "file_path": getattr(target_doc_obj, "FileName", "") if target_doc_obj else "",
                 **classified,
             }
+            if read_only_unguarded:
+                session["read_only_unguarded_documents"] = read_only_unguarded
             if ok:
                 return {"ok": True, "session": session, "stdout": output_buffer.getvalue()}
             return {
@@ -537,7 +558,7 @@ class FreeCADRPC:
             ):
                 for item in session.get(key, []):
                     flat_errors.append({
-                        "doc": item.get("document", target_doc if target_doc else "?"),
+                        "doc": item.get("document") or options.get("document") or "?",
                         "name": item.get("object", "?"),
                         "state": item.get("state", []),
                     })

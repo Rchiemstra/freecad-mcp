@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import ImageContent, TextContent
+from mcp.types import CallToolResult
 
 from .freecad_client import FreeCADConnection
 from .operations import (
@@ -187,7 +187,7 @@ def get_freecad_connection() -> FreeCADConnection:
 
 
 @mcp.tool()
-def create_document(ctx: Context, name: str) -> list[TextContent]:
+def create_document(ctx: Context, name: str) -> CallToolResult:
     """Create a new document in FreeCAD.
 
     Args:
@@ -215,7 +215,7 @@ def create_object(
     obj_name: str,
     analysis_name: str | None = None,
     obj_properties: dict[str, Any] = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a new object in FreeCAD.
     Object type is starts with "Part::" or "Draft::" or "PartDesign::" or "Fem::".
 
@@ -345,7 +345,7 @@ def create_object(
 @mcp.tool()
 def edit_object(
     ctx: Context, doc_name: str, obj_name: str, obj_properties: dict[str, Any]
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Edit an object in FreeCAD.
     This tool is used when the `create_object` tool cannot handle the object creation.
 
@@ -373,7 +373,7 @@ def delete_object(
     obj_name: str,
     recursive: bool = False,
     force: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Delete an object without silently orphaning its dependents (I5 / P6).
 
     FreeCAD's delete deliberately does not remove an object's dependents, leaving
@@ -414,7 +414,7 @@ def execute_code(
     restore_active_document: bool = True,
     activate_document: bool = False,
     capture_view: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Execute arbitrary Python code in FreeCAD.
 
     Args:
@@ -451,7 +451,7 @@ def get_view(
     width: int | None = None,
     height: int | None = None,
     focus_object: str | None = None,
-) -> list[ImageContent | TextContent]:
+) -> CallToolResult:
     """Get a screenshot of the active view.
 
     Args:
@@ -477,7 +477,7 @@ def get_view(
 
 
 @mcp.tool()
-def insert_part_from_library(ctx: Context, relative_path: str) -> list[TextContent | ImageContent]:
+def insert_part_from_library(ctx: Context, relative_path: str) -> CallToolResult:
     """Insert a part from the parts library addon.
 
     Args:
@@ -494,7 +494,7 @@ def insert_part_from_library(ctx: Context, relative_path: str) -> list[TextConte
 
 
 @mcp.tool()
-def get_objects(ctx: Context, doc_name: str) -> list[TextContent | ImageContent]:
+def get_objects(ctx: Context, doc_name: str) -> CallToolResult:
     """Get all objects in a document.
     You can use this tool to get the objects in a document to see what you can check or edit.
 
@@ -508,7 +508,7 @@ def get_objects(ctx: Context, doc_name: str) -> list[TextContent | ImageContent]
 
 
 @mcp.tool()
-def get_object(ctx: Context, doc_name: str, obj_name: str) -> list[TextContent | ImageContent]:
+def get_object(ctx: Context, doc_name: str, obj_name: str) -> CallToolResult:
     """Get an object from a document.
     You can use this tool to get the properties of an object to see what you can check or edit.
 
@@ -528,14 +528,14 @@ def get_object(ctx: Context, doc_name: str, obj_name: str) -> list[TextContent |
 
 
 @mcp.tool()
-def get_parts_list(ctx: Context) -> list[TextContent]:
+def get_parts_list(ctx: Context) -> CallToolResult:
     """Get the list of parts in the parts library addon.
     """
     return get_parts_list_operation(get_freecad_connection())
 
 
 @mcp.tool()
-def list_documents(ctx: Context) -> list[TextContent]:
+def list_documents(ctx: Context) -> CallToolResult:
     """Get the list of open documents in FreeCAD.
 
     Returns:
@@ -551,7 +551,7 @@ def sketch_create(
     sketch_name: str,
     body_name: str | None = None,
     attach_to: str | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a new Sketcher sketch in FreeCAD.
 
     Args:
@@ -602,7 +602,7 @@ def sketch_add_geometry(
     doc_name: str,
     sketch_name: str,
     geometry: list[dict[str, Any]],
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add geometry elements to an existing Sketcher sketch.
 
     Each element in `geometry` is a dict with a "type" key. Supported types:
@@ -654,7 +654,7 @@ def sketch_add_constraint(
     doc_name: str,
     sketch_name: str,
     constraints: list[dict[str, Any]],
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add constraints to an existing Sketcher sketch.
 
     Each constraint is a dict with a "type" key. Geometry indices refer to the
@@ -727,7 +727,7 @@ def sketch_add_line(
     x2: float,
     y2: float,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a line segment to a sketch.
 
     All coordinates are in the sketch's local 2-D plane (mm).
@@ -759,7 +759,7 @@ def sketch_add_circle(
     cy: float,
     radius: float,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a full circle to a sketch.
 
     Args:
@@ -790,7 +790,7 @@ def sketch_add_arc(
     start_angle: float,
     end_angle: float,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a circular arc to a sketch.
 
     Angles are in degrees, measured counter-clockwise from the positive X axis.
@@ -824,7 +824,7 @@ def sketch_add_rectangle(
     x2: float,
     y2: float,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add an axis-aligned rectangle to a sketch (4 connected line segments).
 
     Returns the 4 geometry indices in order: bottom, right, top, left.
@@ -856,7 +856,7 @@ def sketch_constrain_coincident(
     pos1: int,
     geo2: int,
     pos2: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain two sketch points to be coincident (share the same position).
 
     Point positions: 1 = start/first endpoint, 2 = end/second endpoint,
@@ -886,7 +886,7 @@ def sketch_constrain_horizontal(
     doc_name: str,
     sketch_name: str,
     geo: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain a line to be horizontal.
 
     Args:
@@ -909,7 +909,7 @@ def sketch_constrain_vertical(
     doc_name: str,
     sketch_name: str,
     geo: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain a line to be vertical.
 
     Args:
@@ -934,7 +934,7 @@ def sketch_constrain_distance(
     geo: int,
     value: float,
     pos: int | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a distance (length) constraint to a line or between two points.
 
     For a line, omit `pos` to constrain its full length.
@@ -964,7 +964,7 @@ def sketch_constrain_radius(
     sketch_name: str,
     geo: int,
     value: float,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain the radius of a circle or arc.
 
     Args:
@@ -989,7 +989,7 @@ def sketch_constrain_equal(
     sketch_name: str,
     geo1: int,
     geo2: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain two geometry elements to have equal length or radius.
 
     Args:
@@ -1014,7 +1014,7 @@ def sketch_constrain_parallel(
     sketch_name: str,
     geo1: int,
     geo2: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain two lines to be parallel.
 
     Args:
@@ -1039,7 +1039,7 @@ def sketch_constrain_perpendicular(
     sketch_name: str,
     geo1: int,
     geo2: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain two lines to be perpendicular (90°).
 
     Args:
@@ -1064,7 +1064,7 @@ def sketch_constrain_tangent(
     sketch_name: str,
     geo1: int,
     geo2: int,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Constrain two curves (or a curve and a line) to be tangent.
 
     Args:
@@ -1092,7 +1092,7 @@ def pad_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Extrude (pad) a closed sketch profile into a 3-D solid (PartDesign::Pad).
 
     The sketch must be closed and fully contained in a PartDesign Body for the
@@ -1140,7 +1140,7 @@ def pocket_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Cut (pocket) a closed sketch profile into an existing solid (PartDesign::Pocket).
 
     The sketch must be closed and must lie on or inside the existing solid. If no
@@ -1189,7 +1189,7 @@ def linear_pattern_feature(
     direction: str = "X_Axis",
     body_name: str | None = None,
     reversed_dir: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Repeat an existing PartDesign feature along a straight direction.
 
     Use this after creating a sketch-based feature such as a Pad or Pocket.
@@ -1240,7 +1240,7 @@ def polar_pattern_feature(
     axis: str = "Z_Axis",
     body_name: str | None = None,
     reversed_dir: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Repeat an existing PartDesign feature around an axis.
 
     Use this for circular hole patterns or radial repeats of sketch-based Pads
@@ -1288,7 +1288,7 @@ def mirror_feature(
     mirror_name: str,
     plane: str = "YZ_Plane",
     body_name: str | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Mirror an existing PartDesign feature across a plane.
 
     Use this after creating a sketch-based feature such as a Pad or Pocket.
@@ -1338,7 +1338,7 @@ def create_spur_gear(
     body_name: str | None = None,
     sketch_name: str | None = None,
     tooth_profile: str = "involute",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a spur gear from a Sketcher tooth profile and Pad.
 
     This tool generates the selected tooth profile in a Sketcher sketch, adds
@@ -1402,7 +1402,7 @@ def create_spur_gear(
 
 
 @mcp.tool()
-def recompute_document(ctx: Context, doc_name: str) -> list[TextContent]:
+def recompute_document(ctx: Context, doc_name: str) -> CallToolResult:
     """Force FreeCAD to recompute all objects in a document.
 
     Useful after a sequence of property edits that did not trigger an automatic
@@ -1418,7 +1418,7 @@ def recompute_document(ctx: Context, doc_name: str) -> list[TextContent]:
 
 
 @mcp.tool()
-def undo(ctx: Context, doc_name: str) -> list[TextContent]:
+def undo(ctx: Context, doc_name: str) -> CallToolResult:
     """Undo the last operation in a FreeCAD document.
 
     Args:
@@ -1431,7 +1431,7 @@ def undo(ctx: Context, doc_name: str) -> list[TextContent]:
 
 
 @mcp.tool()
-def redo(ctx: Context, doc_name: str) -> list[TextContent]:
+def redo(ctx: Context, doc_name: str) -> CallToolResult:
     """Redo the previously undone operation in a FreeCAD document.
 
     Args:
@@ -1444,7 +1444,7 @@ def redo(ctx: Context, doc_name: str) -> list[TextContent]:
 
 
 @mcp.tool()
-def get_recompute_log(ctx: Context, doc_name: str) -> list[TextContent]:
+def get_recompute_log(ctx: Context, doc_name: str) -> CallToolResult:
     """Return the recompute state of every object in a document.
 
     Use this after a failed pad/pocket/pattern to find out which object is
@@ -1470,7 +1470,7 @@ def get_recompute_log(ctx: Context, doc_name: str) -> list[TextContent]:
 @mcp.tool()
 def get_sketch_diagnostics(
     ctx: Context, doc_name: str, sketch_name: str
-) -> list[TextContent]:
+) -> CallToolResult:
     """Return solver diagnostics for a Sketcher sketch.
 
     Call this before pad_feature to verify the sketch is fully constrained and
@@ -1504,7 +1504,7 @@ def get_sketch_diagnostics(
 
 
 @mcp.tool()
-def close_document(ctx: Context, doc_name: str) -> list[TextContent]:
+def close_document(ctx: Context, doc_name: str) -> CallToolResult:
     """Close an open FreeCAD document and free its memory.
 
     Use this for session hygiene when a document is no longer needed.
@@ -1536,7 +1536,7 @@ def sketch_add_polyline(
     points: list[dict[str, float]],
     closed: bool = False,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a polyline (connected line segments) to a sketch.
 
     Args:
@@ -1567,7 +1567,7 @@ def sketch_add_bspline(
     multiplicities: list[int] | None = None,
     periodic: bool = False,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a B-spline defined by control points (poles) to a sketch.
 
     Args:
@@ -1600,7 +1600,7 @@ def sketch_add_bspline_through_points(
     degree: int = 3,
     periodic: bool = False,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a B-spline that interpolates (passes through) a set of points.
 
     Args:
@@ -1627,7 +1627,7 @@ def sketch_add_bezier(
     sketch_name: str,
     poles: list[dict[str, float]],
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a Bezier curve defined by control poles to a sketch.
 
     Args:
@@ -1657,7 +1657,7 @@ def sketch_add_ellipse(
     minor_radius: float,
     angle: float = 0.0,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a full ellipse to a sketch.
 
     Args:
@@ -1692,7 +1692,7 @@ def sketch_add_arc_of_ellipse(
     end_angle: float,
     angle: float = 0.0,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add an arc of an ellipse to a sketch.
 
     Args:
@@ -1728,7 +1728,7 @@ def sketch_add_slot(
     y2: float,
     width: float,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a slot (oblong) shape to a sketch.
 
     The slot is defined by its two end-cap centres (x1,y1) and (x2,y2) and
@@ -1764,7 +1764,7 @@ def sketch_add_regular_polygon(
     sides: int,
     angle: float = 0.0,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a regular polygon to a sketch.
 
     Args:
@@ -1797,7 +1797,7 @@ def sketch_add_parametric_curve(
     t_end: float,
     samples: int = 100,
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a parametric curve to a sketch by sampling Python expressions.
 
     The expressions ``x_expr`` and ``y_expr`` are evaluated as Python
@@ -1842,7 +1842,7 @@ def sketch_import_points(
     sketch_name: str,
     points: list[dict[str, float]],
     construction: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Import a list of 2-D points as individual point geometry elements.
 
     Args:
@@ -1867,7 +1867,7 @@ def sketch_toggle_construction(
     sketch_name: str,
     geo_indices: list[int],
     construction: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Toggle one or more sketch geometry elements between normal and construction mode.
 
     Args:
@@ -1897,7 +1897,7 @@ def sketch_trim(
     geo_index: int,
     point_x: float,
     point_y: float,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Trim a sketch curve at the given point (nearest intersection).
 
     Args:
@@ -1924,7 +1924,7 @@ def sketch_extend(
     geo_index: int,
     increment: float,
     end_point: int = 2,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Extend a sketch curve by a given increment.
 
     Args:
@@ -1951,7 +1951,7 @@ def sketch_split(
     geo_index: int,
     point_x: float,
     point_y: float,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Split a sketch curve into two pieces at the given point.
 
     Args:
@@ -1978,7 +1978,7 @@ def sketch_fillet(
     geo1: int,
     geo2: int,
     radius: float,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a fillet arc between two sketch curves.
 
     Args:
@@ -2005,7 +2005,7 @@ def sketch_symmetry(
     geo_indices: list[int],
     symmetry_geo: int,
     copy: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Apply symmetry to a set of sketch elements about a symmetry axis.
 
     Args:
@@ -2039,7 +2039,7 @@ def revolve_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Revolve a closed sketch profile around an axis (PartDesign::Revolution).
 
     Args:
@@ -2070,7 +2070,7 @@ def loft_feature(
     body_name: str | None = None,
     ruled: bool = False,
     closed: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Loft through two or more sketch sections (PartDesign::AdditiveLoft).
 
     Args:
@@ -2099,7 +2099,7 @@ def sweep_feature(
     sweep_name: str,
     body_name: str | None = None,
     frenet: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Sweep a profile sketch along a path sketch (PartDesign::AdditivePipe).
 
     Args:
@@ -2131,7 +2131,7 @@ def helical_sweep_feature(
     body_name: str | None = None,
     left_handed: bool = False,
     reversed_dir: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Sweep a profile along a helix (PartDesign::AdditiveHelix).
 
     Use this to create springs, screw threads, worm gear blanks, etc.
@@ -2166,7 +2166,7 @@ def fillet_feature(
     radius: float,
     edge_refs: list[str] | None = None,
     body_name: str | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a fillet to edges of an existing solid (PartDesign::Fillet).
 
     Args:
@@ -2196,7 +2196,7 @@ def chamfer_feature(
     size: float,
     edge_refs: list[str] | None = None,
     body_name: str | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add a chamfer to edges of an existing solid (PartDesign::Chamfer).
 
     Args:
@@ -2224,7 +2224,7 @@ def boolean_union(
     shape1: str,
     shape2: str,
     result_name: str,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Compute the Boolean union (fuse) of two shapes (Part::Fuse).
 
     Args:
@@ -2249,7 +2249,7 @@ def boolean_difference(
     shape1: str,
     shape2: str,
     result_name: str,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Subtract shape2 from shape1 (Part::Cut).
 
     Args:
@@ -2274,7 +2274,7 @@ def boolean_intersection(
     shape1: str,
     shape2: str,
     result_name: str,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Compute the Boolean intersection (common) of two shapes (Part::Common).
 
     Args:
@@ -2311,7 +2311,7 @@ def create_involute_gear(
     samples_per_flank: int = 12,
     body_name: str | None = None,
     sketch_name: str | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create an involute spur gear using the correct mathematical involute profile.
 
     The tooth flanks follow the true involute of the base circle:
@@ -2367,7 +2367,7 @@ def create_helical_gear(
     backlash: float = 0.0,
     samples_per_flank: int = 12,
     body_name: str | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a helical gear (involute profile + AdditiveHelix twist).
 
     Args:
@@ -2404,7 +2404,7 @@ def compute_gear_geometry(
     clearance: float = 0.0,
     backlash: float = 0.0,
     helix_angle: float = 0.0,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Compute standard gear geometry parameters without creating geometry.
 
     Returns pitch diameter, base diameter, addendum, dedendum, circular pitch,
@@ -2436,7 +2436,7 @@ def check_gear_pair(
     module2: float,
     pressure_angle: float = 20.0,
     center_distance: float | None = None,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Verify that two gears form a valid meshing pair.
 
     Checks module compatibility, computes gear ratio and theoretical centre
@@ -2469,7 +2469,7 @@ def measure_distance(
     doc_name: str,
     shape1_ref: str,
     shape2_ref: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Measure the minimum distance between two shapes.
 
     Args:
@@ -2489,7 +2489,7 @@ def measure_angle(
     doc_name: str,
     edge1_ref: str,
     edge2_ref: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Measure the angle between two edges or objects.
 
     Refs can be ``"ObjectName"`` or ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``).
@@ -2510,7 +2510,7 @@ def measure_area(
     ctx: Context,
     doc_name: str,
     obj_name: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Measure the total surface area of a shape.
 
     Args:
@@ -2528,7 +2528,7 @@ def measure_volume(
     ctx: Context,
     doc_name: str,
     obj_name: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Measure the volume of a solid shape.
 
     Args:
@@ -2546,7 +2546,7 @@ def bounding_box(
     ctx: Context,
     doc_name: str,
     obj_name: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Return the axis-aligned bounding box of a shape.
 
     Args:
@@ -2564,7 +2564,7 @@ def center_of_mass(
     ctx: Context,
     doc_name: str,
     obj_name: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Compute the centre of mass of a solid shape.
 
     Args:
@@ -2582,7 +2582,7 @@ def validate_geometry(
     ctx: Context,
     doc_name: str,
     obj_name: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Validate the geometry of a shape and return diagnostic information.
 
     Checks whether the shape is null, valid, closed, and reports face/edge/vertex
@@ -2606,7 +2606,7 @@ def translate(
     dx: float,
     dy: float,
     dz: float,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Translate (move) an object by a displacement vector.
 
     Args:
@@ -2637,7 +2637,7 @@ def rotate(
     center_x: float = 0.0,
     center_y: float = 0.0,
     center_z: float = 0.0,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Rotate an object around a specified axis.
 
     Args:
@@ -2669,7 +2669,7 @@ def scale(
     sx: float,
     sy: float,
     sz: float,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Scale an object non-uniformly along the three axes.
 
     Note: scaling a PartDesign solid converts it to a dumb Part::Feature.
@@ -2701,7 +2701,7 @@ def export_step(
     doc_name: str,
     file_path: str,
     obj_names: list[str] | None = None,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Export shapes to a STEP file.
 
     Args:
@@ -2721,7 +2721,7 @@ def import_step(
     ctx: Context,
     doc_name: str,
     file_path: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Import a STEP file into an existing FreeCAD document.
 
     Args:
@@ -2741,7 +2741,7 @@ def export_stl(
     file_path: str,
     obj_names: list[str] | None = None,
     mesh_deviation: float = 0.1,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Export shapes to an STL file (tessellated mesh).
 
     Args:
@@ -2762,7 +2762,7 @@ def export_brep(
     doc_name: str,
     obj_name: str,
     file_path: str,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Export a shape to a BREP file (OpenCASCADE native format).
 
     BREP preserves exact geometry and is lossless for round-tripping.
@@ -2784,7 +2784,7 @@ def import_brep(
     doc_name: str,
     file_path: str,
     obj_name: str = "BRepImport",
-) -> list[TextContent]:
+) -> CallToolResult:
     """Import a BREP file into an existing FreeCAD document.
 
     Args:
@@ -2807,7 +2807,7 @@ def set_color(
     g: float,
     b: float,
     transparency: float = 0.0,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Set the display colour and transparency of an object.
 
     Args:
@@ -2840,7 +2840,7 @@ def get_document_tree(
     include: list[str] | None = None,
     include_properties: list[str] | None = None,
     selected_nodes: list[str] | None = None,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Return a compact document/container tree.
 
     Args:
@@ -2873,7 +2873,7 @@ def create_assembly(
     create_joint_group: bool = True,
     recompute: bool = False,
     if_exists: Literal["error", "skip", "replace"] = "error",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a built-in Assembly workbench assembly object."""
     return create_assembly_operation(
         get_freecad_connection(),
@@ -2894,7 +2894,7 @@ def create_assembly_grounded_joint(
     component_name: str,
     label: str | None = None,
     recompute: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Ground an assembly component through the headless Assembly API."""
     return create_assembly_grounded_joint_operation(
         get_freecad_connection(),
@@ -2938,7 +2938,7 @@ def create_assembly_joint(
     presolve: bool = True,
     recompute: bool = True,
     properties: dict[str, Any] | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a built-in Assembly joint from two component subelement references."""
     return create_assembly_joint_operation(
         get_freecad_connection(),
@@ -2967,7 +2967,7 @@ def create_part_container(
     part_name: str,
     parent_container: str | None = None,
     if_exists: Literal["error", "skip", "replace"] = "error",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create an App::Part assembly container."""
     return create_part_container_operation(
         get_freecad_connection(),
@@ -2986,7 +2986,7 @@ def move_object(
     obj_name: str,
     target_container: str,
     remove_from_old_parent: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Move an object into a PartDesign Body or App::Part container."""
     return move_object_operation(
         get_freecad_connection(),
@@ -3010,7 +3010,7 @@ def create_subshape_binder(
     relative: bool = False,
     sync_placement: bool = True,
     if_exists: Literal["error", "skip", "replace"] = "error",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a PartDesign SubShapeBinder with placement validation."""
     return create_subshape_binder_operation(
         get_freecad_connection(),
@@ -3046,7 +3046,7 @@ def create_datum_plane(
     offset_along_normal: list[float] | None = None,
     map_mode: str = "FlatFace",
     if_exists: Literal["error", "skip", "replace"] = "error",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a PartDesign datum plane for assembly reference workflows.
 
     Recipes (avoid the silent P1/P3 traps):
@@ -3086,7 +3086,7 @@ def get_sketch_geometry(
     include_constraints: bool = True,
     include_external: bool = True,
     global_coords: bool = True,
-) -> list[TextContent]:
+) -> CallToolResult:
     """Return sketch geometry endpoints, construction flags, constraints, and external refs."""
     return get_sketch_geometry_operation(
         get_freecad_connection(),
@@ -3106,7 +3106,7 @@ def sketch_add_external_projection(
     source_ref: str,
     projection_mode: Literal["auto", "edge", "face", "point"] = "auto",
     defining: bool = False,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Add external geometry to a sketch with assembly-aware preflight checks."""
     return sketch_add_external_projection_operation(
         get_freecad_connection(),
@@ -3128,7 +3128,7 @@ def build_path_wire(
     tolerance_mm: float = 0.5,
     container: str | None = None,
     if_exists: Literal["error", "skip", "replace"] = "error",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Build a Part wire from sketch geometry and optional bridge segments."""
     return build_path_wire_operation(
         get_freecad_connection(),
@@ -3153,7 +3153,7 @@ def sweep_pipe(
     color: list[float] | None = None,
     container: str | None = None,
     if_exists: Literal["error", "skip", "replace"] = "error",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Sweep a circular solid pipe along a wire path."""
     return sweep_pipe_operation(
         get_freecad_connection(),
@@ -3172,7 +3172,7 @@ def sweep_pipe(
 @mcp.tool()
 def preview_attachment(
     ctx: Context, doc_name: str, datum_name: str
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Preview an existing datum's attachment — a read-only P1 diagnostic.
 
     Reports the support reference, the support face/edge global centre and
@@ -3210,7 +3210,7 @@ def find_faces(
     tol: float = 1e-3,
     center_tol: float = 1.0,
     limit: int = 10,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Find faces of an object by geometry — removes face-index fragility (I4).
 
     Returns a ranked JSON list of faces matching the criteria, each with its
@@ -3259,7 +3259,7 @@ def find_edges(
     tol: float = 1e-3,
     center_tol: float = 1.0,
     limit: int = 10,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Find edges of an object by geometry — removes edge-index fragility (I4).
 
     Returns a ranked JSON list of edges matching the criteria, each with its
@@ -3299,7 +3299,7 @@ def find_edges(
 @mcp.tool()
 def face_normal(
     ctx: Context, doc_name: str, object_name: str, face: str
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Return the global normal (and centre) of a face (M6 / P8 guard).
 
     Derives the vector from the face geometry via ``normalAt`` rotated by the
@@ -3323,7 +3323,7 @@ def face_normal(
 @mcp.tool()
 def edge_axis(
     ctx: Context, doc_name: str, object_name: str, edge: str
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Return the global axis/direction (and centre) of an edge (M6 / P8 guard).
 
     Derives the vector from the curve geometry rotated by the object's global
@@ -3347,7 +3347,7 @@ def edge_axis(
 @mcp.tool()
 def placement_audit(
     ctx: Context, doc_name: str
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Audit placements per Body/Part (M3).
 
     Lists each Body/Part's ``Placement``, ``getGlobalPlacement()`` base, and the
@@ -3375,7 +3375,7 @@ def create_placement_binder(
     source: str,
     relative: bool = True,
     bind_mode: str = "Synchronized",
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a SubShapeBinder using a body subpath with placement diagnostics (M6).
 
     ``source`` should be a body subpath such as ``MG996RHornRef.HornHubPad.Face3``.
@@ -3403,7 +3403,7 @@ def create_placement_datum(
     source: str,
     relative: bool = True,
     offset: list[float] | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Create a datum plane from a body subpath with local/global diagnostics (M6)."""
     return create_placement_datum_operation(
         get_freecad_connection(),
@@ -3425,7 +3425,7 @@ def run_transaction(
     code: str,
     dry_run: bool = False,
     commit_on_success: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Run code inside ``openTransaction`` with automatic rollback on failure (M5)."""
     return run_transaction_operation(
         get_freecad_connection(),
@@ -3449,7 +3449,7 @@ def validate_movement_follow(
     angle_deg: float,
     restore: bool = True,
     tolerance: float = 1e-7,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Validate that dependents follow a source body under an arbitrary rigid transform (M7)."""
     return validate_movement_follow_operation(
         get_freecad_connection(),
@@ -3471,7 +3471,7 @@ def audit_hardcoded_dimensions(
     doc_name: str,
     body_name: str,
     flag_aliases: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Report driving dimensions in a body that lack expressions (M8)."""
     return audit_hardcoded_dimensions_operation(
         get_freecad_connection(),
@@ -3490,7 +3490,7 @@ def inspect_geometry(
     subshape: str | None = None,
     activate: bool = False,
     restore_active_document: bool = True,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Normalized local/global geometry inspection for any object type (M10/M11)."""
     return inspect_geometry_operation(
         get_freecad_connection(),
@@ -3508,7 +3508,7 @@ def get_dependency_graph(
     ctx: Context,
     doc_name: str,
     root: str,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Property-annotated dependency graph from a root object (M13)."""
     return get_dependency_graph_operation(
         get_freecad_connection(),
@@ -3527,7 +3527,7 @@ def match_subshape(
     target_object: str,
     limit: int = 10,
     tolerance: float = 1.0,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Rank target subshapes by semantic similarity to a source subshape (M14)."""
     return match_subshape_operation(
         get_freecad_connection(),
@@ -3544,7 +3544,7 @@ def match_subshape(
 @mcp.tool()
 def relink_references(
     ctx: Context, doc_name: str, from_obj: str, to_obj: str
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Re-point every reference to ``from_obj`` so it points to ``to_obj`` (M5).
 
     Scans all link-type properties (AttachmentSupport, Support, Profile, Base,
@@ -3569,7 +3569,7 @@ def relink_references(
 @mcp.tool()
 def capture_state(
     ctx: Context, doc_name: str, object_names: list[str] | None = None
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Capture a compact geometric state for a set of objects (I10 / P10).
 
     Records each object's placement, bounding box and face/edge counts. Pass the
@@ -3594,7 +3594,7 @@ def geometric_diff(
     doc_name: str,
     before: dict,
     object_names: list[str] | None = None,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Structured geometric diff between a captured ``before`` state and now (I10).
 
     The P10 text-only fallback: returns JSON
@@ -3616,7 +3616,7 @@ def geometric_diff(
 
 
 @mcp.tool()
-def snapshot(ctx: Context, doc_name: str) -> list[TextContent | ImageContent]:
+def snapshot(ctx: Context, doc_name: str) -> CallToolResult:
     """Snapshot the current document into a ring buffer of the last 5 states (I7).
 
     Cheap, in-process document copy so a risky step can be undone with one
@@ -3635,7 +3635,7 @@ def snapshot(ctx: Context, doc_name: str) -> list[TextContent | ImageContent]:
 @mcp.tool()
 def restore(
     ctx: Context, doc_name: str, snapshot_id: str | None = None
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Restore a snapshot, replacing the current document in place (I7).
 
     If ``snapshot_id`` is omitted, the most recent snapshot is restored. The
@@ -3658,7 +3658,7 @@ def restore(
 @mcp.tool()
 def solve_assembly(
     ctx: Context, doc_name: str, assembly_name: str
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Re-solve an Assembly after editing a joint or a referenced face (I9 / P9).
 
     Tries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a
@@ -3705,7 +3705,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--only-text-feedback", action="store_true", help="Only return text feedback")
-    parser.add_argument("--host", type=_validate_host, default="localhost", help="Host address of the FreeCAD RPC server to connect to (default: localhost)")
+    # The addon's RPC server binds IPv4 only, but "localhost" resolves to ::1 first on
+    # Windows, costing ~2s per call to fail over to IPv4. Dial IPv4 directly.
+    parser.add_argument("--host", type=_validate_host, default="127.0.0.1", help="Host address of the FreeCAD RPC server to connect to (default: 127.0.0.1)")
     args = parser.parse_args()
     state.only_text_feedback = args.only_text_feedback
     state.rpc_host = args.host
