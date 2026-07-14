@@ -155,7 +155,7 @@ class LiveFreeCADConnection:
 
     # -- FreeCADConnection-compatible API ----------------------------------
 
-    def execute_code(self, code: str):
+    def execute_code(self, code: str, options=None):
         buffer = io.StringIO()
         try:
             with contextlib.redirect_stdout(buffer):
