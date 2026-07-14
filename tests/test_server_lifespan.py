@@ -31,7 +31,7 @@ class ServerLifespanTest(unittest.TestCase):
             result = server.get_freecad_connection()
 
         self.assertIs(result, connection)
-        factory.assert_called_once_with(host="localhost", port=9875)
+        factory.assert_called_once_with(host="127.0.0.1", port=9875)
         connection.ping.assert_called_once_with()
 
     def test_shutdown_disconnects_existing_connection(self):
