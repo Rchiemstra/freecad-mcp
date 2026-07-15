@@ -14,6 +14,7 @@ from .operations import (
     create_object_operation,
     delete_object_operation,
     edit_object_operation,
+    execute_code_async_operation,
     execute_code_operation,
     get_object_operation,
     get_objects_operation,
@@ -135,15 +136,18 @@ from .operations import (
     # Snapshot — I7 in-process document copies (P12)
     restore_operation,
     snapshot_operation,
+    reload_document_operation,
+    run_fem_analysis_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_state import ServerState
 
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("FreeCADMCPserver")
+logger.setLevel(logging.INFO)
 
 state = ServerState()
 
@@ -316,7 +320,9 @@ def create_object(
         ```
 
         If you want to create a FEM mesh, you can use the following data.
-        The `Part` property is required.
+        The `Shape` property is required (legacy `Part` is also accepted).
+        On FreeCAD 1.x the size limits are `CharacteristicLengthMax/Min`;
+        the legacy `ElementSizeMax/Min` keys are also accepted.
         ```json
         {
             "doc_name": "MyFEMMesh",
@@ -324,10 +330,9 @@ def create_object(
             "obj_type": "Fem::FemMeshGmsh",
             "analysis_name": "MyFEMAnalysis",
             "obj_properties": {
-                "Part": "MyObject",
-                "ElementSizeMax": 10,
-                "ElementSizeMin": 0.1,
-                "MeshAlgorithm": 2
+                "Shape": "MyObject",
+                "CharacteristicLengthMax": 10,
+                "CharacteristicLengthMin": 0.1
             }
         }
         ```
@@ -402,6 +407,45 @@ def delete_object(
         recursive=recursive,
         force=force,
     )
+
+
+@mcp.tool()
+def execute_code_async(ctx: Context, code: str) -> list[TextContent]:
+    """Execute Python code in FreeCAD without waiting for completion.
+
+    Use this ONLY for long-running background computations that do NOT touch the
+    FreeCAD GUI or mutate the FreeCAD document tree directly.
+
+    This tool runs the submitted code in a background thread and returns
+    immediately. Because it does not run on FreeCAD's main GUI thread, the code
+    must NOT call FreeCADGui APIs, manipulate the active view or selection, create
+    or edit document objects, change object properties, call doc.recompute(), or
+    save documents.
+
+    For code that touches FreeCAD documents, document objects, FreeCADGui, the
+    active view, selection, recompute, or save operations, use execute_code instead.
+    execute_code runs on the FreeCAD GUI thread and is the safe default for normal
+    FreeCAD automation.
+
+    Use execute_code_async only for background-safe work such as long-running
+    pure OCCT geometry calculations (e.g. fuse/cut/loft on already-fetched shapes)
+    or other CPU-bound computations that do not interact with the document or GUI.
+
+    Typical usage pattern:
+    1. Fetch shapes into local variables first (via execute_code on the GUI thread).
+    2. Store intermediate results in a module-level Python variable (not in the
+       FreeCAD document) so execute_code can read them later.
+    3. Run the heavy computation via execute_code_async.
+    4. After the expected computation time has elapsed, apply results to the
+       document via execute_code (which runs on the GUI thread).
+
+    Args:
+        code: Background-safe Python code to execute.
+
+    Returns:
+        A message confirming that background execution has started.
+    """
+    return execute_code_async_operation(get_freecad_connection(), code)
 
 
 @mcp.tool()
@@ -557,6 +601,35 @@ def get_parts_list(ctx: Context) -> CallToolResult:
     """Get the list of parts in the parts library addon.
     """
     return get_parts_list_operation(get_freecad_connection())
+
+
+@mcp.tool()
+def reload_document(ctx: Context, doc_name: str) -> list[TextContent]:
+    """Close and re-open a document to pick up external file changes.
+
+    Use this AFTER the document's .FCStd file has been modified by
+    something outside of FreeCAD's GUI process — for example, a
+    headless `freecadcmd` script that edited and saved the file. The
+    open GUI document is otherwise unaware of on-disk changes; this
+    tool closes the stale in-memory copy and reopens the file from
+    disk so the GUI shows current geometry.
+
+    Args:
+        doc_name: The name of the open document to reload. Must match
+            the name shown by ``list_documents``.
+
+    Returns:
+        A message confirming the document was reloaded, or describing
+        the failure (document not loaded, no associated file, etc).
+
+    Examples:
+        ```json
+        {
+            "doc_name": "chassis"
+        }
+        ```
+    """
+    return reload_document_operation(get_freecad_connection(), doc_name)
 
 
 @mcp.tool()
@@ -3699,6 +3772,48 @@ def solve_assembly(
         state.only_text_feedback,
         doc_name,
         assembly_name,
+    )
+
+
+@mcp.tool()
+def run_fem_analysis(
+    ctx: Context,
+    doc_name: str,
+    analysis_name: str,
+    timeout: int = 600,
+) -> list[TextContent | ImageContent]:
+    """Run the CalculiX solver on an existing Fem::FemAnalysis container and return summary results.
+
+    Prerequisites in the document:
+    - A Part-derived solid (e.g. Part::Box, PartDesign::Body) acting as the geometry.
+    - A Fem::AnalysisPython container created via `create_object`.
+    - A Fem::MaterialCommon assigned to the geometry, added to the analysis.
+    - A Fem::FemMeshGmsh referencing the geometry, added to the analysis (the
+      mesh is generated automatically when created via `create_object`).
+    - At least one Fem::ConstraintFixed and one Fem::ConstraintForce (or
+      ConstraintPressure) bound to faces of the geometry, added to the analysis.
+
+    A SolverCcxTools is auto-created if the analysis has none.
+
+    The solver runs synchronously on the FreeCAD GUI thread and blocks all
+    other RPC calls for its duration; do not fan out parallel requests.
+
+    Returns max von Mises stress (MPa), max/min displacement (mm), node count,
+    and the working directory CalculiX wrote to. On failure, returns the
+    prerequisite-check or solver error along with the working directory for
+    triage.
+
+    Args:
+        doc_name: Name of the FreeCAD document.
+        analysis_name: Name of the Fem::AnalysisPython object.
+        timeout: Seconds to wait for the solver (default 600).
+    """
+    return run_fem_analysis_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        analysis_name,
+        timeout,
     )
 
 

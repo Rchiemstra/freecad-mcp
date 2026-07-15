@@ -11,9 +11,34 @@ logger = logging.getLogger("FreeCADMCPserver")
 _SCREENSHOT_SUPPORT_CHECK = read_template_text("freecad_client/screenshot_support_check.py.txt")
 
 
+class _TimeoutTransport(xmlrpc.client.Transport):
+    """XML-RPC transport with a configurable socket timeout.
+
+    The default Transport has no timeout, so a frozen FreeCAD GUI thread
+    causes the MCP client to hang indefinitely (observed: 4+ minute waits).
+    """
+    def __init__(self, timeout: float = 30, **kwargs):
+        super().__init__(**kwargs)
+        self._timeout = timeout
+
+    def make_connection(self, host):
+        conn = super().make_connection(host)
+        conn.timeout = self._timeout
+        return conn
+
+
 class FreeCADConnection:
-    def __init__(self, host: str = "localhost", port: int = 9875):
-        self.server = xmlrpc.client.ServerProxy(f"http://{host}:{port}", allow_none=True)
+    def __init__(self, host: str = "localhost", port: int = 9875, timeout: float = 150):
+        self._uri = f"http://{host}:{port}"
+        self._timeout = timeout
+        self.server = self._make_proxy(timeout)
+
+    def _make_proxy(self, timeout: float) -> xmlrpc.client.ServerProxy:
+        return xmlrpc.client.ServerProxy(
+            self._uri,
+            allow_none=True,
+            transport=_TimeoutTransport(timeout=timeout),
+        )
 
     def disconnect(self) -> None:
         # Transport.close() clears cached HTTP connections if one was opened.
@@ -37,6 +62,10 @@ class FreeCADConnection:
     def delete_object(self, doc_name: str, obj_name: str) -> dict[str, Any]:
         return self.server.delete_object(doc_name, obj_name)
 
+
+    def reload_document(self, doc_name: str) -> dict[str, Any]:
+        return self.server.reload_document(doc_name)
+
     def insert_part_from_library(self, relative_path: str) -> dict[str, Any]:
         return self.server.insert_part_from_library(relative_path)
 
@@ -54,6 +83,9 @@ class FreeCADConnection:
     def cancel_worker_job(self, job_id: str) -> dict[str, Any]:
         return self.server.cancel_worker_job(job_id)
 
+    def execute_code_async(self, code: str) -> dict[str, Any]:
+        return self.server.execute_code_async(code)
+
     def get_active_screenshot(
         self,
         view_name: str | None = "Isometric",
@@ -62,11 +94,6 @@ class FreeCADConnection:
         focus_object: str | None = None,
     ) -> str | None:
         try:
-            result = self.server.execute_code(_SCREENSHOT_SUPPORT_CHECK)
-            if not result.get("success", False) or "Current view does not support screenshots" in result.get("message", ""):
-                logger.info("Screenshot unavailable in current view (likely Spreadsheet or TechDraw view)")
-                return None
-
             return self.server.get_active_screenshot(view_name, width, height, focus_object)
         except Exception as e:
             logger.error(f"Error getting screenshot: {e}")
@@ -107,3 +134,11 @@ class FreeCADConnection:
 
     def redo(self, doc_name: str) -> dict[str, Any]:
         return self.server.redo(doc_name)
+
+    def run_fem_analysis(self, doc_name: str, analysis_name: str, timeout: int = 600) -> dict[str, Any]:
+        # The solver blocks the RPC response for up to `timeout` seconds, so the
+        # socket must outlast it. The default 150 s transport timeout would abort
+        # any solve longer than that even though the addon is still working.
+        # Use a dedicated proxy whose socket timeout exceeds the solver timeout.
+        proxy = self._make_proxy(max(self._timeout, timeout + 30))
+        return proxy.run_fem_analysis(doc_name, analysis_name, timeout)

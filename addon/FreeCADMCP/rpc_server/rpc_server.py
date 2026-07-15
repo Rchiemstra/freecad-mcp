@@ -32,6 +32,7 @@ from .parts_library import (
 from .serialize import serialize_object
 from .snapshot_service import create_primary_snapshot_gui
 from .worker_manager import WorkerManager, WorkerRuntime
+from .fem_executor import run_fem_analysis as _run_fem_analysis
 
 rpc_server_thread = None
 rpc_server_instance = None
@@ -822,6 +823,59 @@ class FreeCADRPC:
         res = self._dispatch_gui(lambda: list(FreeCAD.listDocuments().keys()))
         return res if isinstance(res, list) else []
 
+    def reload_document(self, doc_name: str) -> dict[str, Any]:
+        res = self._dispatch_gui(lambda: self._reload_document_gui(doc_name))
+        if res is True:
+            return {"success": True, "document_name": doc_name}
+        return {"success": False, "error": str(res)}
+
+    def run_fem_analysis(self, doc_name: str, analysis_name: str, timeout: int = 600) -> dict[str, Any]:
+        """Run the CalculiX solver on an existing Fem::FemAnalysis and return summary results."""
+        try:
+            timeout_s = int(timeout)
+        except (TypeError, ValueError):
+            return {"success": False, "error": f"invalid timeout: {timeout!r}"}
+        res = self._dispatch_gui(
+            lambda: self._run_fem_analysis_gui(doc_name, analysis_name),
+            timeout=timeout_s,
+        )
+        if isinstance(res, dict):
+            return res
+        return {"success": False, "error": str(res)}
+
+    def execute_code_async(self, code: str) -> dict[str, Any]:
+        """Start code execution in a background thread and return immediately.
+
+        Use for long-running OCCT operations (fuse/cut/loft) that would otherwise
+        exceed the MCP timeout. The caller should poll a document object for
+        completion status (e.g. check SessionState.Label via get_object).
+        """
+        def _set_status(msg):
+            self._dispatch_gui(lambda: FreeCADGui.getMainWindow().statusBar().showMessage(msg))
+
+        def _clear_status():
+            self._dispatch_gui(lambda: FreeCADGui.getMainWindow().statusBar().clearMessage())
+
+        def worker() -> None:
+            # NOTE: we do NOT redirect sys.stdout here. contextlib.redirect_stdout
+            # swaps stdout process-wide, not per-thread, so it would race with the
+            # GUI thread and other concurrent work. Background code should report
+            # via FreeCAD.Console (which is thread-safe) instead.
+            try:
+                exec(code, globals())
+                FreeCAD.Console.PrintMessage("Async code execution completed.\n")
+            except Exception as e:
+                import traceback as _tb
+                FreeCAD.Console.PrintError(
+                    f"Async code error: {e}\n{_tb.format_exc()}"
+                )
+            finally:
+                _clear_status()
+
+        _set_status("MCP: running background task…")
+        threading.Thread(target=worker, daemon=True).start()
+        return {"success": True, "message": "Code execution started in background."}
+
     def get_parts_list(self):
         return get_parts_list()
 
@@ -1160,6 +1214,31 @@ class FreeCADRPC:
             return True
         except Exception as e:
             return str(e)
+
+    def _reload_document_gui(self, doc_name: str):
+        if doc_name not in FreeCAD.listDocuments():
+            return f"Document '{doc_name}' is not loaded."
+        doc = FreeCAD.getDocument(doc_name)
+        file_path = doc.FileName
+        if not file_path:
+            return (
+                f"Document '{doc_name}' has no file on disk "
+                "(unsaved scratch document); nothing to reload from."
+            )
+        if not os.path.exists(file_path):
+            return f"File for '{doc_name}' not found at {file_path!r}."
+        # Close, then reopen from the same file. Reopen preserves the
+        # original document name when the file was previously saved
+        # under that name.
+        FreeCAD.closeDocument(doc_name)
+        FreeCAD.openDocument(file_path)
+        FreeCAD.Console.PrintMessage(
+            f"Document '{doc_name}' reloaded from '{file_path}' via RPC.\n"
+        )
+        return True
+
+    def _run_fem_analysis_gui(self, doc_name: str, analysis_name: str):
+        return _run_fem_analysis(doc_name, analysis_name)
 
     def _save_active_screenshot(self, save_path: str, view_name: str | None = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None):
         try:

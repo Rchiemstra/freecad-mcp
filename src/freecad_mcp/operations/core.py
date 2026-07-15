@@ -75,12 +75,11 @@ def create_object_operation(
             "Analysis": analysis_name,
         }
         res = freecad.create_object(doc_name, obj_data)
-        screenshot = freecad.get_active_screenshot()
-
         if res["success"]:
             response = tool_ok(f"Object '{res['object_name']}' created successfully")
         else:
             response = tool_fail(f"Failed to create object: {res['error']}")
+        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to create object: {str(e)}")
@@ -96,12 +95,11 @@ def edit_object_operation(
 ) -> ToolResponse:
     try:
         res = freecad.edit_object(doc_name, obj_name, {"Properties": obj_properties})
-        screenshot = freecad.get_active_screenshot()
-
         if res["success"]:
             response = tool_ok(f"Object '{res['object_name']}' edited successfully")
         else:
             response = tool_fail(f"Failed to edit object: {res['error']}")
+        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to edit object: {str(e)}")
@@ -217,6 +215,25 @@ def execute_code_operation(
         return tool_fail(f"Failed to execute code: {str(e)}")
 
 
+def execute_code_async_operation(
+    freecad: FreeCADConnection,
+    code: str,
+) -> ToolResponse:
+    try:
+        res = freecad.execute_code_async(code)
+        if res["success"]:
+            return text_response(
+                "Code execution started in background.\n"
+                "Use get_object to poll a document object for completion "
+                "(e.g. check SessionState.Label). "
+                "FreeCAD's Report View will show output when done."
+            )
+        return text_response(f"Failed to start async execution: {res.get('error', 'unknown')}")
+    except Exception as e:
+        logger.error(f"Failed to start async code execution: {str(e)}")
+        return text_response(f"Failed to start async code execution: {str(e)}")
+
+
 def get_view_operation(
     freecad: FreeCADConnection,
     view_name: str,
@@ -265,12 +282,11 @@ def insert_part_from_library_operation(
 ) -> ToolResponse:
     try:
         res = freecad.insert_part_from_library(relative_path)
-        screenshot = freecad.get_active_screenshot()
-
         if res["success"]:
             response = tool_ok(f"Part inserted from library: {res['message']}")
         else:
             response = tool_fail(f"Failed to insert part from library: {res['error']}")
+        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to insert part from library: {str(e)}")
@@ -283,8 +299,8 @@ def get_objects_operation(
     doc_name: str,
 ) -> ToolResponse:
     try:
-        screenshot = freecad.get_active_screenshot()
         response = json_response(freecad.get_objects(doc_name))
+        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to get objects: {str(e)}")
@@ -298,8 +314,8 @@ def get_object_operation(
     obj_name: str,
 ) -> ToolResponse:
     try:
-        screenshot = freecad.get_active_screenshot()
         response = json_response(freecad.get_object(doc_name, obj_name))
+        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to get object: {str(e)}")
@@ -307,7 +323,11 @@ def get_object_operation(
 
 
 def get_parts_list_operation(freecad: FreeCADConnection) -> ToolResponse:
-    parts = freecad.get_parts_list()
+    try:
+        parts = freecad.get_parts_list()
+    except Exception as e:
+        logger.error(f"Failed to get parts list: {str(e)}")
+        return text_response(f"Failed to get parts list: {str(e)}")
     if parts:
         return json_response(parts)
     return text_response("No parts found in the parts library. You must add parts_library addon.")
@@ -317,6 +337,7 @@ def list_documents_operation(freecad: FreeCADConnection) -> ToolResponse:
     return json_response(freecad.list_documents())
 
 
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Code-generation helpers shared by all sketch / PartDesign / document ops.
 # All sketch tools run through execute_code so they work with the original
@@ -1003,3 +1024,54 @@ def close_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolR
     code = render_template_text("core/close_document.py.txt", doc_name=repr(doc_name))
     return _run_code(freecad, True, code,
                      f"Document '{doc_name}' closed", "Failed to close document")
+
+
+def run_fem_analysis_operation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    doc_name: str,
+    analysis_name: str,
+    timeout: int = 600,
+) -> ToolResponse:
+    try:
+        res = freecad.run_fem_analysis(doc_name, analysis_name, timeout)
+        if res.get("success"):
+            def fmt(v, unit):
+                return f"{v:.4g} {unit}" if isinstance(v, (int, float)) else f"unavailable ({unit})"
+            screenshot = freecad.get_active_screenshot() if not only_text_feedback else None
+            response = json_response({
+                "summary": (
+                    f"FEM analysis '{analysis_name}' solved. "
+                    f"max von Mises = {fmt(res.get('max_von_mises_MPa'), 'MPa')}, "
+                    f"max displacement = {fmt(res.get('max_displacement_mm'), 'mm')} "
+                    f"({res.get('node_count')} nodes)."
+                ),
+                **res,
+            })
+            return add_screenshot_if_available(response, screenshot, only_text_feedback)
+        return json_response({
+            "summary": f"FEM analysis '{analysis_name}' failed: {res.get('error')}",
+            **res,
+        })
+    except Exception as e:
+        logger.error(f"Failed to run FEM analysis: {str(e)}")
+        return text_response(f"Failed to run FEM analysis: {str(e)}")
+
+
+def reload_document_operation(
+    freecad: FreeCADConnection,
+    doc_name: str,
+) -> ToolResponse:
+    """Close and re-open a document so the GUI picks up external file
+    changes (e.g. headless edits via `freecadcmd`).
+    """
+    try:
+        res = freecad.reload_document(doc_name)
+        if res.get("success"):
+            return text_response(
+                f"Document '{res['document_name']}' reloaded from disk."
+            )
+        return text_response(f"Failed to reload document: {res.get('error')}")
+    except Exception as e:
+        logger.error(f"Failed to reload document: {str(e)}")
+        return text_response(f"Failed to reload document: {str(e)}")

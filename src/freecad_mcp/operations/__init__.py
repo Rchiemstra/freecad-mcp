@@ -4,6 +4,7 @@ from .core import (
     create_object_operation,
     delete_object_operation,
     edit_object_operation,
+    execute_code_async_operation,
     execute_code_operation,
     get_object_operation,
     get_objects_operation,
@@ -38,6 +39,8 @@ from .core import (
     recompute_document_operation,
     undo_operation,
     redo_operation,
+    reload_document_operation,
+    run_fem_analysis_operation,
 )
 
 # P1 — Sketch curves
@@ -161,6 +164,7 @@ __all__ = [
     "create_object_operation",
     "delete_object_operation",
     "edit_object_operation",
+    "execute_code_async_operation",
     "execute_code_operation",
     "get_object_operation",
     "get_objects_operation",
@@ -281,4 +285,6 @@ __all__ = [
     # Snapshot
     "snapshot_operation",
     "restore_operation",
+    "reload_document_operation",
+    "run_fem_analysis_operation",
 ]

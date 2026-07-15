@@ -180,7 +180,7 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `create_document`, `list_documents`, `close_document`
 * `get_objects`, `get_object`, `create_object`, `edit_object`
 * `delete_object` — deletes without silently orphaning dependents (P6): `recursive=True` removes dependents first, `force=True` deletes only the object and reports the orphans left, otherwise it refuses and lists them.
-* `execute_code`, `recompute_document`, `undo`, `redo`
+* `execute_code`, `execute_code_async`, `recompute_document`, `undo`, `redo`, `reload_document`
 * `get_recompute_log` — per-object recompute state (read-only).
 
 ### Sketching
@@ -218,6 +218,9 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `create_part_container`, `create_subshape_binder`, `create_datum_plane`, `move_object`
 * `get_document_tree`, `sketch_add_external_projection`
 * `create_assembly_joint` warns when a referenced component's body has cross-body datums attached (M4 / P5 guardrail).
+
+### FEM Analysis
+* `run_fem_analysis` — runs the CalculiX solver on an existing `Fem::FemAnalysis` and returns summary results (max von Mises stress, max displacement, node count, working directory). Auto-creates a `SolverCcxTools` if the analysis has none. See [`examples/cantilever_fem.py`](examples/cantilever_fem.py) for an end-to-end usage example.
 
 ### Diagnostics (read-only guards for the silent FreeCAD behaviours in `doc/mcp-feedback-status.md`)
 * `preview_attachment` — inspect a datum's attachment and the cross-body placement-drop risk (P1).
