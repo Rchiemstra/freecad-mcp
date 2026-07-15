@@ -337,7 +337,6 @@ def list_documents_operation(freecad: FreeCADConnection) -> ToolResponse:
     return json_response(freecad.list_documents())
 
 
-<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Code-generation helpers shared by all sketch / PartDesign / document ops.
 # All sketch tools run through execute_code so they work with the original

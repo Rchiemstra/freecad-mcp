@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, ImageContent, TextContent
 
 from .freecad_client import FreeCADConnection
 from .responses import json_response, tool_fail

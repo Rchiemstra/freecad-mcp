@@ -11,7 +11,6 @@ def configure_parts_library_path(user_app_data_dir: str) -> None:
     """Cache the FreeCAD-specific path while startup owns the GUI thread."""
     global _parts_lib_path
     _parts_lib_path = os.path.join(user_app_data_dir, "Mod", "parts_library")
-    get_parts_list.cache_clear()
 
 
 def _get_parts_library_path() -> str:
