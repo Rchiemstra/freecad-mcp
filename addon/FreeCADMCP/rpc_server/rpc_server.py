@@ -29,6 +29,7 @@ from .parts_library import (
     get_parts_list,
     insert_part_from_library,
 )
+from .reference_repair import inspect_references_gui, repair_references_gui
 from .serialize import serialize_object
 from .snapshot_service import create_primary_snapshot_gui
 from .worker_manager import WorkerManager, WorkerRuntime
@@ -424,6 +425,46 @@ class FreeCADRPC:
             return {"success": True, "object_name": obj.name}
         else:
             return {"success": False, "error": res}
+
+    def inspect_references(
+        self,
+        doc_name: str,
+        object_names: list[str] | None = None,
+        only_invalid: bool = False,
+        validate: bool = False,
+    ) -> dict[str, Any]:
+        """Inspect link properties without serializing shapes or recomputing."""
+        res = self._dispatch_gui(
+            lambda: inspect_references_gui(
+                doc_name,
+                object_names,
+                only_invalid=bool(only_invalid),
+                validate=bool(validate),
+            )
+        )
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def repair_references(
+        self,
+        doc_name: str,
+        repairs: list[dict[str, Any]],
+        recompute: bool = False,
+        validate: bool = False,
+    ) -> dict[str, Any]:
+        """Atomically rewrite link properties, deferring recompute by default."""
+        res = self._dispatch_gui(
+            lambda: repair_references_gui(
+                doc_name,
+                repairs,
+                recompute=bool(recompute),
+                validate=bool(validate),
+            )
+        )
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "repair_committed": False, "error": str(res)}
 
     def delete_object(self, doc_name: str, obj_name: str):
         res = self._dispatch_gui(lambda: self._delete_object_gui(doc_name, obj_name))

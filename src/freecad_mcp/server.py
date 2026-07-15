@@ -18,6 +18,7 @@ from .operations import (
     execute_code_operation,
     get_object_operation,
     get_objects_operation,
+    inspect_references_operation,
     get_parts_list_operation,
     get_recompute_log_operation,
     get_sketch_diagnostics_operation,
@@ -49,6 +50,7 @@ from .operations import (
     recompute_document_operation,
     undo_operation,
     redo_operation,
+    repair_references_operation,
     # P1 — Sketch curves
     sketch_add_polyline_operation,
     sketch_add_bspline_operation,
@@ -369,6 +371,93 @@ def edit_object(
         doc_name,
         obj_name,
         obj_properties,
+    )
+
+
+@mcp.tool()
+def inspect_references(
+    ctx: Context,
+    doc_name: str,
+    object_names: list[str] | None = None,
+    only_invalid: bool = False,
+    validate: bool = False,
+) -> CallToolResult:
+    """Inspect link/subelement properties without evaluating their owner shapes.
+
+    This is the recovery-safe alternative to ``get_object`` for a document that
+    contains stale ``EdgeNNN``, ``FaceNNN``, or ``VertexNNN`` references. It
+    scans link properties such as ``Support``, ``AttachmentSupport``, and a
+    sketch's ordered ``ExternalGeometry`` list. It never recomputes the document.
+
+    Args:
+        doc_name: Open FreeCAD document name.
+        object_names: Optional owner objects to inspect; omit to scan the document.
+        only_invalid: Return only properties containing invalid subelements.
+        validate: Resolve referenced subelements on their target shapes. Leave
+            false for circularly broken documents; validity is then reported as
+            unevaluated instead of reading ``Shape``.
+
+    Returns:
+        Structured link properties, preserving target and subelement order.
+    """
+    return inspect_references_operation(
+        get_freecad_connection(),
+        doc_name,
+        object_names,
+        only_invalid=only_invalid,
+        validate=validate,
+    )
+
+
+@mcp.tool()
+def repair_references(
+    ctx: Context,
+    doc_name: str,
+    repairs: list[dict[str, Any]],
+    recompute: bool = False,
+    validate: bool = False,
+) -> CallToolResult:
+    """Atomically replace broken link/subelement properties without recomputing.
+
+    Use this when stale external geometry prevents normal MCP write/evaluate
+    calls. Each repair replaces one complete link property. Keeping the same
+    reference-list order preserves Sketcher external-geometry indices.
+
+    Example ``repairs`` value::
+
+        [{
+          "object": "ServoEdgeBinder",
+          "property": "Support",
+          "references": [{
+            "document": "Model",
+            "object": "ServoBody",
+            "subelements": ["Edge42"]
+          }]
+        }]
+
+    Batch every known broken property into one call. The batch is preflighted
+    and applied in a FreeCAD transaction. Recompute defaults to false so all
+    circularly broken links can be repaired before dependent geometry evaluates.
+    This tool does not save the document.
+
+    Args:
+        doc_name: Open FreeCAD document containing the owner objects.
+        repairs: Complete replacement references for each owner property.
+        recompute: Recompute once after committing the entire batch.
+        validate: Confirm proposed subelements exist before writing. This reads
+            target shapes, so leave false for the circular-recovery path and
+            validate with an explicit recompute after the complete batch.
+
+    Returns:
+        Applied properties, commit state, deferred/attempted recompute state,
+        and any invalid links remaining on the repaired owner objects.
+    """
+    return repair_references_operation(
+        get_freecad_connection(),
+        doc_name,
+        repairs,
+        recompute=recompute,
+        validate=validate,
     )
 
 

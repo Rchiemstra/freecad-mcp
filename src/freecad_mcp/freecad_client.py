@@ -59,6 +59,26 @@ class FreeCADConnection:
     def edit_object(self, doc_name: str, obj_name: str, obj_data: dict[str, Any]) -> dict[str, Any]:
         return self.server.edit_object(doc_name, obj_name, obj_data)
 
+    def inspect_references(
+        self,
+        doc_name: str,
+        object_names: list[str] | None = None,
+        only_invalid: bool = False,
+        validate: bool = False,
+    ) -> dict[str, Any]:
+        return self.server.inspect_references(
+            doc_name, object_names, only_invalid, validate
+        )
+
+    def repair_references(
+        self,
+        doc_name: str,
+        repairs: list[dict[str, Any]],
+        recompute: bool = False,
+        validate: bool = False,
+    ) -> dict[str, Any]:
+        return self.server.repair_references(doc_name, repairs, recompute, validate)
+
     def delete_object(self, doc_name: str, obj_name: str) -> dict[str, Any]:
         return self.server.delete_object(doc_name, obj_name)
 

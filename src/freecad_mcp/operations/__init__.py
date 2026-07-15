@@ -8,6 +8,7 @@ from .core import (
     execute_code_operation,
     get_object_operation,
     get_objects_operation,
+    inspect_references_operation,
     get_parts_list_operation,
     get_recompute_log_operation,
     get_sketch_diagnostics_operation,
@@ -39,6 +40,7 @@ from .core import (
     recompute_document_operation,
     undo_operation,
     redo_operation,
+    repair_references_operation,
     reload_document_operation,
     run_fem_analysis_operation,
 )
@@ -168,6 +170,7 @@ __all__ = [
     "execute_code_operation",
     "get_object_operation",
     "get_objects_operation",
+    "inspect_references_operation",
     "get_parts_list_operation",
     "get_recompute_log_operation",
     "get_sketch_diagnostics_operation",
@@ -199,6 +202,7 @@ __all__ = [
     "recompute_document_operation",
     "undo_operation",
     "redo_operation",
+    "repair_references_operation",
     # P1
     "sketch_add_polyline_operation",
     "sketch_add_bspline_operation",
