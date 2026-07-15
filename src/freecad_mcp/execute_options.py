@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 
 RecomputeMode = Literal["none", "target", "all"]
+ExecutionMode = Literal["gui", "worker", "auto"]
 
 
 @dataclass
@@ -17,6 +18,8 @@ class ExecuteOptions:
     restore_active_document: bool = True
     activate_document: bool = False
     capture_view: bool = False
+    execution_mode: ExecutionMode = "auto"
+    timeout_seconds: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -27,6 +30,8 @@ class ExecuteOptions:
             "restore_active_document": self.restore_active_document,
             "activate_document": self.activate_document,
             "capture_view": self.capture_view,
+            "execution_mode": self.execution_mode,
+            "timeout_seconds": self.timeout_seconds,
         }
 
     @classmethod
@@ -42,6 +47,8 @@ class ExecuteOptions:
             restore_active_document=bool(data.get("restore_active_document", True)),
             activate_document=bool(data.get("activate_document", False)),
             capture_view=bool(data.get("capture_view", False)),
+            execution_mode=data.get("execution_mode", "auto"),
+            timeout_seconds=data.get("timeout_seconds"),
         )
 
 

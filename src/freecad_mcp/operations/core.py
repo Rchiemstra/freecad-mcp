@@ -176,6 +176,8 @@ def execute_code_operation(
     restore_active_document: bool = True,
     activate_document: bool = False,
     capture_view: bool = False,
+    execution_mode: str = "auto",
+    timeout_seconds: float | None = None,
 ) -> ToolResponse:
     opts = ExecuteOptions(
         document=document,
@@ -185,6 +187,8 @@ def execute_code_operation(
         restore_active_document=restore_active_document,
         activate_document=activate_document,
         capture_view=capture_view,
+        execution_mode=execution_mode,  # type: ignore[arg-type]
+        timeout_seconds=timeout_seconds,
     )
     try:
         res = freecad.execute_code(code, opts)
@@ -329,6 +333,8 @@ def _run_code(
     document: str | None = None,
     recompute: str = "target",
     capture_view: bool = True,
+    read_only: bool = False,
+    execution_mode: str = "auto",
 ) -> ToolResponse:
     """Execute generated Python code in FreeCAD and return a formatted response."""
     try:
@@ -340,6 +346,8 @@ def _run_code(
             recompute=recompute,  # type: ignore[arg-type]
             recompute_documents=[document] if document and recompute == "target" else None,
             capture_view=capture_view,
+            read_only=read_only,
+            execution_mode=execution_mode,  # type: ignore[arg-type]
         )
         res = freecad.execute_code(full_code, opts)
         screenshot = freecad.get_active_screenshot() if capture_view else None

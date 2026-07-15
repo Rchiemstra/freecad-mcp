@@ -30,7 +30,8 @@ RUN mamba create -y -n freecad -c freecad/label/dev -c conda-forge \
 
 # Make the conda env the default for subsequent RUN/ENTRYPOINT.
 ENV PATH=/opt/conda/envs/freecad/bin:$PATH \
-    FREECAD_HOME=/opt/conda/envs/freecad
+    FREECAD_HOME=/opt/conda/envs/freecad \
+    PYTHONPATH=/opt/conda/envs/freecad/lib
 
 # Working directory for the package source.
 WORKDIR /workspace
@@ -46,7 +47,9 @@ RUN pip install --no-cache-dir -e ".[dev]"
 
 # Sanity gate: fail the build early if FreeCADCmd or the Python modules are
 # unavailable. This catches a broken conda-forge FreeCAD build immediately.
-RUN FreeCADCmd --version || FreeCAD --version
+RUN (command -v FreeCADCmd >/dev/null && FreeCADCmd --version) \
+    || (command -v freecadcmd >/dev/null && freecadcmd --version) \
+    || FreeCAD --version
 RUN python -c "import FreeCAD, Part, Sketcher; print('FreeCAD', FreeCAD.Version())"
 
 # Default: run the full suite. Override with `pytest -m unit` for the fast

@@ -5,7 +5,7 @@ import ObjectsFem
 import contextlib
 import ipaddress
 import json
-import queue
+import logging
 import re
 import base64
 import io
@@ -14,18 +14,32 @@ import sys
 import tempfile
 import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
+from xmlrpc.client import Fault, dumps as xmlrpc_dumps, loads as xmlrpc_loads
 from xmlrpc.server import SimpleXMLRPCServer
 
 from PySide import QtCore, QtWidgets
 
-from .execution_safety import find_gui_blocking_risk
-from .parts_library import get_parts_list, insert_part_from_library
+from .execution_safety import RequestClass, classify_execute_code, find_gui_blocking_risk
+from .gui_dispatcher import GuiDispatchError, GuiDispatcher
+from .parts_library import (
+    configure_parts_library_path,
+    get_parts_list,
+    insert_part_from_library,
+)
 from .serialize import serialize_object
+from .snapshot_service import create_primary_snapshot_gui
+from .worker_manager import WorkerManager, WorkerRuntime
 
 rpc_server_thread = None
 rpc_server_instance = None
+gui_dispatcher = None
+worker_manager = None
+snapshot_coordinator = threading.Lock()
+shutdown_requested = threading.Event()
+logger = logging.getLogger("FreeCADMCP.rpc_server")
 
 
 # --- Settings persistence ---
@@ -36,6 +50,8 @@ _DEFAULT_SETTINGS = {
     "remote_enabled": False,
     "allowed_ips": "127.0.0.1",
     "auto_start_rpc": False,
+    "freecadcmd_path": "",
+    "allow_remote_execute_code": False,
 }
 
 
@@ -115,11 +131,89 @@ def _set_extrusion_symmetric(feature, value):
 # --- IP-filtered XML-RPC server ---
 
 class FilteredXMLRPCServer(SimpleXMLRPCServer):
-    """XML-RPC server that filters connections by allowed IP addresses/subnets."""
+    """IP-filtered server with separate bounded general/control capacity."""
+
+    CONTROL_METHODS = frozenset({
+        "ping",
+        "get_worker_status",
+        "cancel_worker_job",
+        "shutdown_rpc_server",
+    })
 
     def __init__(self, addr, allowed_ips_str="127.0.0.1", **kwargs):
         self._allowed_networks = _parse_allowed_ips(allowed_ips_str)
+        self._handler_slots = threading.BoundedSemaphore(5)
+        self._general_slots = threading.BoundedSemaphore(3)
+        self._control_slots = threading.BoundedSemaphore(2)
+        self._handler_executor = ThreadPoolExecutor(
+            max_workers=5, thread_name_prefix="FreeCADMCP-RPC"
+        )
+        self._accepting_requests = True
+        self._accepting_lock = threading.Lock()
         super().__init__(addr, **kwargs)
+
+    def process_request(self, request, client_address):
+        with self._accepting_lock:
+            admitted = self._accepting_requests and self._handler_slots.acquire(False)
+        if not admitted:
+            self.shutdown_request(request)
+            return
+        try:
+            self._handler_executor.submit(
+                self._process_request_in_pool, request, client_address
+            )
+        except Exception:
+            self._handler_slots.release()
+            self.shutdown_request(request)
+            raise
+
+    def _process_request_in_pool(self, request, client_address):
+        try:
+            self.finish_request(request, client_address)
+        except Exception:
+            self.handle_error(request, client_address)
+        finally:
+            self.shutdown_request(request)
+            self._handler_slots.release()
+
+    def _marshaled_dispatch(self, data, dispatch_method=None, path=None):
+        """Route parsed XML-RPC methods through independent bounded slots."""
+        try:
+            _params, method = xmlrpc_loads(data)
+        except Exception:
+            return super()._marshaled_dispatch(data, dispatch_method, path)
+        control = method in self.CONTROL_METHODS
+        slots = self._control_slots if control else self._general_slots
+        with self._accepting_lock:
+            accepting = self._accepting_requests
+        if not accepting:
+            return xmlrpc_dumps(
+                Fault(503, "server_stopping"),
+                methodresponse=True,
+                allow_none=self.allow_none,
+                encoding=self.encoding,
+            ).encode(self.encoding, "xmlcharrefreplace")
+        if not slots.acquire(blocking=False):
+            lane = "control" if control else "general"
+            return xmlrpc_dumps(
+                Fault(503, f"server_busy: {lane} request capacity is full"),
+                methodresponse=True,
+                allow_none=self.allow_none,
+                encoding=self.encoding,
+            ).encode(self.encoding, "xmlcharrefreplace")
+        try:
+            return super()._marshaled_dispatch(data, dispatch_method, path)
+        finally:
+            slots.release()
+
+    def begin_shutdown(self):
+        with self._accepting_lock:
+            self._accepting_requests = False
+
+    def server_close(self):
+        self.begin_shutdown()
+        super().server_close()
+        self._handler_executor.shutdown(wait=False, cancel_futures=False)
 
     def verify_request(self, request, client_address):
         client_ip = client_address[0]
@@ -130,9 +224,7 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
                     return True
         except ValueError:
             pass
-        FreeCAD.Console.PrintWarning(
-            f"MCP RPC: Rejected connection from {client_ip}\n"
-        )
+        logger.warning("MCP RPC: rejected connection from %s", client_ip)
         return False
 
 
@@ -178,31 +270,8 @@ def _parse_allowed_ips(allowed_ips_str):
     """Parse a comma-separated string of IPs/subnets into a list of ip_network objects."""
     valid, errors = validate_allowed_ips(allowed_ips_str)
     for msg in errors:
-        FreeCAD.Console.PrintWarning(f"MCP RPC: {msg}, skipping\n")
+        logger.warning("MCP RPC: %s, skipping", msg)
     return [ipaddress.ip_network(entry, strict=False) for entry in valid]
-
-# GUI task queue
-rpc_request_queue = queue.Queue()
-rpc_response_queue = queue.Queue()
-
-
-def process_gui_tasks():
-    # A task that raises must not kill the timer chain: if this function exits
-    # without re-arming, no queued RPC task ever runs again and every GUI-bound
-    # call times out until FreeCAD restarts.
-    try:
-        while not rpc_request_queue.empty():
-            task = rpc_request_queue.get()
-            try:
-                res = task()
-            except Exception as e:
-                FreeCAD.Console.PrintError(f"RPC task failed: {e}\n")
-                res = f"RPC task raised {type(e).__name__}: {e}"
-            if res is not None:
-                rpc_response_queue.put(res)
-    finally:
-        QtCore.QTimer.singleShot(500, process_gui_tasks)
-
 
 @dataclass
 class Object:
@@ -295,20 +364,37 @@ class FreeCADRPC:
     TIMEOUT = 30
     EXECUTE_TIMEOUT = 120
 
-    def _get_res(self, timeout=None):
-        """Get result from GUI queue; returns an error string on timeout."""
+    def __init__(self, allow_execute_code: bool = True):
+        self.allow_execute_code = allow_execute_code
+
+    def _dispatch_gui(self, task, timeout=None):
+        """Run *task* on the GUI thread and preserve legacy string errors."""
+        dispatcher = gui_dispatcher
+        if dispatcher is None:
+            return "RPC GUI dispatcher is not initialized"
         t = timeout if timeout is not None else self.TIMEOUT
         try:
-            return rpc_response_queue.get(timeout=t)
-        except queue.Empty:
-            return f"Timed out after {t}s waiting for FreeCAD GUI response"
+            return dispatcher.submit(task, t)
+        except GuiDispatchError as exc:
+            logger.error("RPC GUI dispatch failed: %s", exc)
+            return str(exc)
+
+    def _dispatch_snapshot_gui(self, task):
+        """Snapshot saveCopy has no safe hard timeout; wait outside Qt."""
+        dispatcher = gui_dispatcher
+        if dispatcher is None:
+            return "RPC GUI dispatcher is not initialized"
+        try:
+            return dispatcher.submit(task, None)
+        except GuiDispatchError as exc:
+            logger.error("RPC snapshot dispatch failed: %s", exc)
+            return str(exc)
 
     def ping(self):
         return True
 
     def create_document(self, name="New_Document"):
-        rpc_request_queue.put(lambda: self._create_document_gui(name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._create_document_gui(name))
         if res is True:
             return {"success": True, "document_name": name}
         else:
@@ -321,8 +407,7 @@ class FreeCADRPC:
             analysis=obj_data.get("Analysis", None),
             properties=obj_data.get("Properties", {}),
         )
-        rpc_request_queue.put(lambda: self._create_object_gui(doc_name, obj))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._create_object_gui(doc_name, obj))
         if res is True:
             return {"success": True, "object_name": obj.name}
         else:
@@ -333,16 +418,14 @@ class FreeCADRPC:
             name=obj_name,
             properties=properties.get("Properties", {}),
         )
-        rpc_request_queue.put(lambda: self._edit_object_gui(doc_name, obj))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._edit_object_gui(doc_name, obj))
         if res is True:
             return {"success": True, "object_name": obj.name}
         else:
             return {"success": False, "error": res}
 
     def delete_object(self, doc_name: str, obj_name: str):
-        rpc_request_queue.put(lambda: self._delete_object_gui(doc_name, obj_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._delete_object_gui(doc_name, obj_name))
         if res is True:
             return {"success": True, "object_name": obj_name}
         else:
@@ -403,7 +486,40 @@ class FreeCADRPC:
         }
 
     def execute_code(self, code: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not self.allow_execute_code:
+            return {
+                "success": False,
+                "is_error": True,
+                "error_code": "remote_execute_code_disabled",
+                "error": "Arbitrary execute_code is disabled while remote RPC is enabled",
+            }
         options = options or {}
+        execution_mode = options.get("execution_mode", "auto")
+        if execution_mode not in ("gui", "worker", "auto"):
+            return {
+                "success": False,
+                "is_error": True,
+                "error_code": "invalid_execution_mode",
+                "error": f"Unsupported execution_mode: {execution_mode!r}",
+            }
+        classification = classify_execute_code(
+            code, read_only=bool(options.get("read_only", False))
+        )
+        use_worker = execution_mode == "worker" or (
+            execution_mode == "auto"
+            and bool(options.get("read_only", False))
+            and classification in (RequestClass.WORKER_ANALYSIS, RequestClass.UNKNOWN)
+        )
+        if use_worker:
+            if not bool(options.get("read_only", False)):
+                return {
+                    "success": False,
+                    "is_error": True,
+                    "error_code": "invalid_execution_mode",
+                    "error": "execution_mode='worker' requires read_only=True",
+                }
+            return self._execute_code_worker(code, options)
+
         risk = find_gui_blocking_risk(
             code,
             read_only=bool(options.get("read_only", False)),
@@ -562,8 +678,7 @@ class FreeCADRPC:
                 "stdout": output_buffer.getvalue(),
             }
 
-        rpc_request_queue.put(task)
-        res = self._get_res(self.EXECUTE_TIMEOUT)
+        res = self._dispatch_gui(task, self.EXECUTE_TIMEOUT)
         if isinstance(res, str):
             return {"success": False, "error": res, "is_error": True}
         if res.get("ok"):
@@ -598,34 +713,114 @@ class FreeCADRPC:
             "is_error": True,
         }
 
+    def _execute_code_worker(self, code: str, options: dict[str, Any]) -> dict[str, Any]:
+        manager = worker_manager
+        if manager is None:
+            return {
+                "success": False,
+                "is_error": True,
+                "error_code": "worker_unavailable",
+                "error": "FreeCADCmd worker manager is not initialized",
+            }
+        try:
+            workspace = manager.create_workspace()
+        except Exception as exc:
+            return {
+                "success": False,
+                "is_error": True,
+                "error_code": "worker_unavailable",
+                "error": str(exc),
+            }
+
+        snapshot = None
+        with snapshot_coordinator:
+            for attempt in range(2):
+                snapshot = self._dispatch_snapshot_gui(
+                    lambda: create_primary_snapshot_gui(
+                        options.get("document"), str(workspace)
+                    )
+                )
+                if not isinstance(snapshot, dict):
+                    break
+                if snapshot.get("error_code") != "snapshot_state_changed" or attempt == 1:
+                    break
+        if not isinstance(snapshot, dict) or not snapshot.get("ok"):
+            import shutil
+
+            shutil.rmtree(workspace, ignore_errors=True)
+            if isinstance(snapshot, dict):
+                return {
+                    "success": False,
+                    "is_error": True,
+                    "error_code": snapshot.get("error_code", "snapshot_failed"),
+                    "error": snapshot.get("error", "Snapshot creation failed"),
+                }
+            return {
+                "success": False,
+                "is_error": True,
+                "error_code": "snapshot_failed",
+                "error": str(snapshot),
+            }
+        return manager.execute(code, options, snapshot, workspace)
+
+    def get_worker_status(self) -> dict[str, Any]:
+        manager = worker_manager
+        if manager is None:
+            return {
+                "available": False,
+                "busy": False,
+                "queue_depth": 0,
+                "last_error": "Worker manager is not initialized",
+            }
+        return manager.status()
+
+    def cancel_worker_job(self, job_id: str) -> dict[str, Any]:
+        manager = worker_manager
+        if manager is None:
+            return {
+                "success": False,
+                "error_code": "worker_unavailable",
+                "error": "Worker manager is not initialized",
+            }
+        return manager.cancel(job_id)
+
+    def shutdown_rpc_server(self) -> dict[str, Any]:
+        """Admit shutdown through the reserved control lane and respond first."""
+        if shutdown_requested.is_set():
+            return {"success": True, "state": "already_stopping"}
+        shutdown_requested.set()
+        timer = threading.Timer(0.05, stop_rpc_server)
+        timer.name = "FreeCADMCP-RPC-Shutdown"
+        timer.daemon = True
+        timer.start()
+        return {"success": True, "state": "stopping"}
+
     def get_objects(self, doc_name):
         # Must run in the GUI thread: serialize_object accesses ViewObject
         # and other GUI-backed properties that FreeCAD guards against
         # access from background threads.
-        rpc_request_queue.put(lambda: self._get_objects_gui(doc_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._get_objects_gui(doc_name))
         if isinstance(res, list):
             return res
         return []
 
     def get_object(self, doc_name, obj_name):
-        rpc_request_queue.put(lambda: self._get_object_gui(doc_name, obj_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._get_object_gui(doc_name, obj_name))
         # False sentinel means "not found"; timeout string → None
         if res is False or isinstance(res, str):
             return None
         return res
 
     def insert_part_from_library(self, relative_path):
-        rpc_request_queue.put(lambda: self._insert_part_from_library(relative_path))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._insert_part_from_library(relative_path))
         if res is True:
             return {"success": True, "message": "Part inserted from library."}
         else:
             return {"success": False, "error": res}
 
     def list_documents(self):
-        return list(FreeCAD.listDocuments().keys())
+        res = self._dispatch_gui(lambda: list(FreeCAD.listDocuments().keys()))
+        return res if isinstance(res, list) else []
 
     def get_parts_list(self):
         return get_parts_list()
@@ -652,20 +847,18 @@ class FreeCADRPC:
                 FreeCAD.Console.PrintError(f"Error checking view capabilities: {e}\n")
                 return False
                 
-        rpc_request_queue.put(check_view_supports_screenshots)
-        supports_screenshots = self._get_res()
+        supports_screenshots = self._dispatch_gui(check_view_supports_screenshots)
 
         if not supports_screenshots:
-            FreeCAD.Console.PrintWarning("Current view does not support screenshots\n")
+            logger.warning("Current view does not support screenshots")
             return None
 
         # If view supports screenshots, proceed with capture
         fd, tmp_path = tempfile.mkstemp(suffix=".png")
         os.close(fd)
-        rpc_request_queue.put(
+        res = self._dispatch_gui(
             lambda: self._save_active_screenshot(tmp_path, view_name, width, height, focus_object)
         )
-        res = self._get_res()
         if res is True:
             try:
                 with open(tmp_path, "rb") as image_file:
@@ -678,67 +871,63 @@ class FreeCADRPC:
         else:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-            FreeCAD.Console.PrintWarning(f"Failed to capture screenshot: {res}\n")
+            logger.warning("Failed to capture screenshot: %s", res)
             return None
 
     def sketch_create(self, doc_name: str, sketch_name: str, body_name: str | None = None, attach_to: str | None = None) -> dict:
-        rpc_request_queue.put(lambda: self._sketch_create_gui(doc_name, sketch_name, body_name, attach_to))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._sketch_create_gui(doc_name, sketch_name, body_name, attach_to))
         if res is True:
             return {"success": True, "sketch_name": sketch_name}
         return {"success": False, "error": res}
 
     def sketch_add_geometry(self, doc_name: str, sketch_name: str, geometry: list) -> dict:
-        rpc_request_queue.put(lambda: self._sketch_add_geometry_gui(doc_name, sketch_name, geometry))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._sketch_add_geometry_gui(doc_name, sketch_name, geometry))
         if isinstance(res, list):
             return {"success": True, "indices": res}
         return {"success": False, "error": res}
 
     def sketch_add_constraint(self, doc_name: str, sketch_name: str, constraints: list) -> dict:
-        rpc_request_queue.put(lambda: self._sketch_add_constraint_gui(doc_name, sketch_name, constraints))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._sketch_add_constraint_gui(doc_name, sketch_name, constraints))
         if res is True:
             return {"success": True}
         return {"success": False, "error": res}
 
     def pad_feature(self, doc_name: str, sketch_name: str, pad_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict:
-        rpc_request_queue.put(lambda: self._pad_feature_gui(doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._pad_feature_gui(doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir))
         if res is True:
             return {"success": True, "pad_name": pad_name}
         return {"success": False, "error": res}
 
     def pocket_feature(self, doc_name: str, sketch_name: str, pocket_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict:
-        rpc_request_queue.put(lambda: self._pocket_feature_gui(doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._pocket_feature_gui(doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir))
         if res is True:
             return {"success": True, "pocket_name": pocket_name}
         return {"success": False, "error": res}
 
     def recompute_document(self, doc_name: str) -> dict:
-        rpc_request_queue.put(lambda: self._recompute_document_gui(doc_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._recompute_document_gui(doc_name))
         if res is True:
             return {"success": True}
         return {"success": False, "error": res}
 
     def undo(self, doc_name: str) -> dict:
-        rpc_request_queue.put(lambda: self._undo_gui(doc_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._undo_gui(doc_name))
         if res is True:
             return {"success": True}
         return {"success": False, "error": res}
 
     def redo(self, doc_name: str) -> dict:
-        rpc_request_queue.put(lambda: self._redo_gui(doc_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._redo_gui(doc_name))
         if res is True:
             return {"success": True}
         return {"success": False, "error": res}
 
     def get_recompute_log(self, doc_name: str) -> list:
         """Return recompute state for every object in a document (read-only)."""
+        res = self._dispatch_gui(lambda: self._get_recompute_log_gui(doc_name))
+        return res if isinstance(res, list) else [{"error": res}]
+
+    def _get_recompute_log_gui(self, doc_name: str) -> list:
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
             return [{"error": f"Document '{doc_name}' not found"}]
@@ -759,6 +948,12 @@ class FreeCADRPC:
 
     def get_sketch_diagnostics(self, doc_name: str, sketch_name: str) -> dict:
         """Return solver diagnostics for a Sketcher sketch (read-only)."""
+        res = self._dispatch_gui(
+            lambda: self._get_sketch_diagnostics_gui(doc_name, sketch_name)
+        )
+        return res if isinstance(res, dict) else {"error": res}
+
+    def _get_sketch_diagnostics_gui(self, doc_name: str, sketch_name: str) -> dict:
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
             return {"error": f"Document '{doc_name}' not found"}
@@ -785,8 +980,7 @@ class FreeCADRPC:
         return info
 
     def close_document(self, doc_name: str) -> dict:
-        rpc_request_queue.put(lambda: self._close_document_gui(doc_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._close_document_gui(doc_name))
         if res is True:
             return {"success": True}
         return {"success": False, "error": res}
@@ -795,8 +989,7 @@ class FreeCADRPC:
         """I7 — save the current document into a ring buffer of the last 5
         snapshots kept on the FreeCAD module (shared with the execute_code
         snapshot tool). Returns {ok, snapshot_id, doc, count}."""
-        rpc_request_queue.put(lambda: self._snapshot_gui(doc_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._snapshot_gui(doc_name))
         if isinstance(res, dict):
             return res
         return {"ok": False, "error": res}
@@ -805,8 +998,7 @@ class FreeCADRPC:
         """I7 — restore a snapshot in place (closes the current doc and reopens
         the snapshot file). Latest snapshot when snapshot_id is None. Shares the
         FreeCAD._mcp_snapshots ring buffer with the execute_code restore tool."""
-        rpc_request_queue.put(lambda: self._restore_gui(doc_name, snapshot_id))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._restore_gui(doc_name, snapshot_id))
         if isinstance(res, dict):
             return res
         return {"ok": False, "error": res}
@@ -814,8 +1006,7 @@ class FreeCADRPC:
     def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
         """I9 — re-solve an Assembly via the real internal solver. Tries
         assembly.solve() (C++), then JointObject.solveIfAllowed, then recompute."""
-        rpc_request_queue.put(lambda: self._solve_assembly_gui(doc_name, assembly_name))
-        res = self._get_res()
+        res = self._dispatch_gui(lambda: self._solve_assembly_gui(doc_name, assembly_name))
         if isinstance(res, dict):
             return res
         return {"ok": False, "error": res}
@@ -846,7 +1037,7 @@ class FreeCADRPC:
                     return serialize_object(obj)
                 except Exception as e:
                     return {"Name": obj_name, "error": str(e)}
-        return False  # sentinel: not None so process_gui_tasks queues it
+        return False
 
     def _create_document_gui(self, name):
         doc = FreeCAD.newDocument(name)
@@ -1435,14 +1626,39 @@ class FreeCADRPC:
 
 
 def start_rpc_server(port=9875):
-    global rpc_server_thread, rpc_server_instance
+    global rpc_server_thread, rpc_server_instance, gui_dispatcher, worker_manager
 
     if rpc_server_instance:
         return "RPC Server already running."
+    shutdown_requested.clear()
+
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        return "RPC Server could not start: no Qt application is running."
+    if QtCore.QThread.currentThread() != app.thread():
+        return "RPC Server must be started from FreeCAD's GUI thread."
+    try:
+        parent = FreeCADGui.getMainWindow()
+    except Exception:
+        parent = None
+    gui_dispatcher = GuiDispatcher(parent)
 
     settings = load_settings()
+    configure_parts_library_path(FreeCAD.getUserAppDataDir())
     remote_enabled = settings.get("remote_enabled", False)
     allowed_ips = settings.get("allowed_ips", "127.0.0.1")
+    version = tuple(str(part) for part in FreeCAD.Version()[:4])
+    while len(version) < 4:
+        version += ("",)
+    worker_manager = WorkerManager(
+        WorkerRuntime(
+            gui_executable=sys.executable,
+            freecad_home=FreeCAD.getHomePath(),
+            gui_version=version,
+            configured_path=settings.get("freecadcmd_path", ""),
+        ),
+        os.path.dirname(__file__),
+    )
 
     if remote_enabled:
         host = "0.0.0.0"
@@ -1452,18 +1668,23 @@ def start_rpc_server(port=9875):
     rpc_server_instance = FilteredXMLRPCServer(
         (host, port), allowed_ips_str=allowed_ips, allow_none=True, logRequests=False
     )
-    rpc_server_instance.register_instance(FreeCADRPC())
+    rpc_server_instance.register_instance(
+        FreeCADRPC(
+            allow_execute_code=(
+                not remote_enabled
+                or bool(settings.get("allow_remote_execute_code", False))
+            )
+        )
+    )
 
     def server_loop():
-        FreeCAD.Console.PrintMessage(f"RPC Server started at {host}:{port}\n")
+        logger.info("RPC Server started at %s:%s", host, port)
         if remote_enabled:
-            FreeCAD.Console.PrintMessage(f"Remote connections enabled. Allowed IPs: {allowed_ips}\n")
+            logger.info("Remote connections enabled. Allowed IPs: %s", allowed_ips)
         rpc_server_instance.serve_forever()
 
     rpc_server_thread = threading.Thread(target=server_loop, daemon=True)
     rpc_server_thread.start()
-
-    QtCore.QTimer.singleShot(500, process_gui_tasks)
 
     msg = f"RPC Server started at {host}:{port}."
     if remote_enabled:
@@ -1472,15 +1693,41 @@ def start_rpc_server(port=9875):
 
 
 def stop_rpc_server():
-    global rpc_server_instance, rpc_server_thread
+    global rpc_server_instance, rpc_server_thread, gui_dispatcher, worker_manager
 
     if rpc_server_instance:
-        rpc_server_instance.shutdown()
-        rpc_server_thread.join()
+        server = rpc_server_instance
+        thread = rpc_server_thread
+        if gui_dispatcher is not None:
+            gui_dispatcher.stop_accepting()
+
+        completed = threading.Event()
+
+        def _shutdown():
+            try:
+                server.begin_shutdown()
+                if worker_manager is not None:
+                    worker_manager.stop(timeout=4.0)
+                server.shutdown()
+                server.server_close()
+                if thread is not None:
+                    thread.join(timeout=2.0)
+            finally:
+                completed.set()
+
+        threading.Thread(target=_shutdown, daemon=True).start()
+        completed.wait(timeout=2.5)
         rpc_server_instance = None
         rpc_server_thread = None
-        FreeCAD.Console.PrintMessage("RPC Server stopped.\n")
-        return "RPC Server stopped."
+        dispatcher = gui_dispatcher
+        gui_dispatcher = None
+        worker_manager = None
+        if dispatcher is not None:
+            dispatcher.deleteLater()
+        logger.info("RPC Server stopped")
+        if completed.is_set():
+            return "RPC Server stopped."
+        return "RPC Server shutdown is continuing in the background."
 
     return "RPC Server was not running."
 

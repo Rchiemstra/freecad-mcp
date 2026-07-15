@@ -6,6 +6,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import CallToolResult
 
 from .freecad_client import FreeCADConnection
+from .responses import json_response, tool_fail
 from .operations import (
     # Core
     close_document_operation,
@@ -414,6 +415,8 @@ def execute_code(
     restore_active_document: bool = True,
     activate_document: bool = False,
     capture_view: bool = False,
+    execution_mode: Literal["gui", "worker", "auto"] = "auto",
+    timeout_seconds: float | None = None,
 ) -> CallToolResult:
     """Execute arbitrary Python code in FreeCAD.
 
@@ -426,6 +429,8 @@ def execute_code(
         restore_active_document: Restore the active document after execution.
         activate_document: Activate ``document`` before running code.
         capture_view: Include a viewport screenshot (default false).
+        execution_mode: Conservative ``auto`` (default), explicit ``gui``, or isolated ``worker``.
+        timeout_seconds: Hard worker timeout from 1 to 900 seconds.
 
     Returns:
         Execution output with structured session/recompute metadata, or an error with traceback.
@@ -441,7 +446,27 @@ def execute_code(
         restore_active_document=restore_active_document,
         activate_document=activate_document,
         capture_view=capture_view,
+        execution_mode=execution_mode,
+        timeout_seconds=timeout_seconds,
     )
+
+
+@mcp.tool()
+def get_worker_status(ctx: Context) -> CallToolResult:
+    """Report isolated FreeCADCmd availability and active/pending worker jobs."""
+    try:
+        return json_response(get_freecad_connection().get_worker_status())
+    except Exception as exc:
+        return tool_fail(f"Failed to get worker status: {exc}")
+
+
+@mcp.tool()
+def cancel_worker_job(ctx: Context, job_id: str) -> CallToolResult:
+    """Cancel a pending worker job or terminate the active worker process tree."""
+    try:
+        return json_response(get_freecad_connection().cancel_worker_job(job_id))
+    except Exception as exc:
+        return tool_fail(f"Failed to cancel worker job: {exc}")
 
 
 @mcp.tool()

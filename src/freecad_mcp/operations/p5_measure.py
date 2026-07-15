@@ -13,6 +13,28 @@ from .core import _run_code
 logger = logging.getLogger("FreeCADMCPserver")
 
 
+def _run_read_analysis(
+    freecad: FreeCADConnection,
+    doc_name: str,
+    code: str,
+    success_msg: str,
+    fail_prefix: str,
+) -> ToolResponse:
+    """Geometry measurements run explicitly in the isolated snapshot worker."""
+    return _run_code(
+        freecad,
+        True,
+        code,
+        success_msg,
+        fail_prefix,
+        document=doc_name,
+        recompute="none",
+        capture_view=False,
+        read_only=True,
+        execution_mode="worker",
+    )
+
+
 def _doc_sk_preamble(doc_name: str) -> list[str]:
     return render_template_lines(
         "p5_measure/doc_preamble.py.txt",
@@ -36,9 +58,9 @@ def measure_distance_operation(
         shape1_ref=repr(shape1_ref),
         shape2_ref=repr(shape2_ref),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Distance between '{shape1_ref}' and '{shape2_ref}'",
-                     "Failed to measure distance")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Distance between '{shape1_ref}' and '{shape2_ref}'",
+                              "Failed to measure distance")
 
 
 # ---------------------------------------------------------------------------
@@ -56,9 +78,9 @@ def measure_angle_operation(
         edge1_ref=repr(edge1_ref),
         edge2_ref=repr(edge2_ref),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Angle between '{edge1_ref}' and '{edge2_ref}'",
-                     "Failed to measure angle")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Angle between '{edge1_ref}' and '{edge2_ref}'",
+                              "Failed to measure angle")
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +96,8 @@ def measure_area_operation(
         "p5_measure/measure_area.py.txt",
         obj_name=repr(obj_name),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Surface area of '{obj_name}'", "Failed to measure area")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Surface area of '{obj_name}'", "Failed to measure area")
 
 
 # ---------------------------------------------------------------------------
@@ -91,8 +113,8 @@ def measure_volume_operation(
         "p5_measure/measure_volume.py.txt",
         obj_name=repr(obj_name),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Volume of '{obj_name}'", "Failed to measure volume")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Volume of '{obj_name}'", "Failed to measure volume")
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +128,8 @@ def bounding_box_operation(
 ) -> ToolResponse:
     code = render_template_text("p5_measure/bounding_box.py.txt", obj_name=repr(obj_name))
     lines = _doc_sk_preamble(doc_name) + code.strip().splitlines()
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Bounding box of '{obj_name}'", "Failed to get bounding box")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Bounding box of '{obj_name}'", "Failed to get bounding box")
 
 
 # ---------------------------------------------------------------------------
@@ -123,8 +145,8 @@ def center_of_mass_operation(
         "p5_measure/center_of_mass.py.txt",
         obj_name=repr(obj_name),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Centre of mass of '{obj_name}'", "Failed to get centre of mass")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Centre of mass of '{obj_name}'", "Failed to get centre of mass")
 
 
 # ---------------------------------------------------------------------------
@@ -140,8 +162,8 @@ def validate_geometry_operation(
         "p5_measure/validate_geometry.py.txt",
         obj_name=repr(obj_name),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Geometry validation of '{obj_name}'", "Failed to validate geometry")
+    return _run_read_analysis(freecad, doc_name, "\n".join(lines),
+                              f"Geometry validation of '{obj_name}'", "Failed to validate geometry")
 
 
 # ---------------------------------------------------------------------------

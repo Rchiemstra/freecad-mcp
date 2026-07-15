@@ -48,6 +48,12 @@ class FreeCADConnection:
         opts = options.to_dict() if isinstance(options, ExecuteOptions) else (options or {})
         return self.server.execute_code(code, opts)
 
+    def get_worker_status(self) -> dict[str, Any]:
+        return self.server.get_worker_status()
+
+    def cancel_worker_job(self, job_id: str) -> dict[str, Any]:
+        return self.server.cancel_worker_job(job_id)
+
     def get_active_screenshot(
         self,
         view_name: str | None = "Isometric",

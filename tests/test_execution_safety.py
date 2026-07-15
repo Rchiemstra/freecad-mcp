@@ -20,6 +20,8 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 find_gui_blocking_risk = _MODULE.find_gui_blocking_risk
+classify_execute_code = _MODULE.classify_execute_code
+RequestClass = _MODULE.RequestClass
 
 
 HANGING_SYMMETRY_AUDIT = r'''
@@ -56,3 +58,44 @@ def test_modeling_payload_is_not_blocked_by_read_only_guard():
 
 def test_syntax_errors_are_left_for_execute_code_reporting():
     assert find_gui_blocking_risk("if :", read_only=True) is None
+
+
+def test_mutating_declaration_stays_on_gui_thread():
+    assert classify_execute_code("doc.addObject('Part::Feature', 'Box')", read_only=False) == (
+        RequestClass.GUI_MUTATION
+    )
+
+
+def test_allowlisted_lightweight_read_stays_on_gui_thread():
+    code = "import FreeCAD\ndoc = FreeCAD.getDocument('Model')\nprint(len(doc.Objects))"
+    assert classify_execute_code(code, read_only=True) == RequestClass.GUI_LIGHTWEIGHT_READ
+
+
+def test_known_expensive_analysis_routes_to_worker():
+    assert classify_execute_code("print(shape.distToShape(other)[0])", read_only=True) == (
+        RequestClass.WORKER_ANALYSIS
+    )
+
+
+def test_expensive_method_alias_routes_to_worker():
+    code = "operation = shape.cut\nprint(operation(other).Volume)"
+    assert classify_execute_code(code, read_only=True) == RequestClass.WORKER_ANALYSIS
+
+
+def test_dynamic_method_lookup_fails_safe_to_worker():
+    code = "operation = getattr(shape, method_name)\nprint(operation(other))"
+    assert classify_execute_code(code, read_only=True) == RequestClass.UNKNOWN
+
+
+def test_imported_helper_fails_safe_to_worker():
+    code = "from custom_analysis import inspect_shape\nprint(inspect_shape(shape))"
+    assert classify_execute_code(code, read_only=True) == RequestClass.UNKNOWN
+
+
+def test_unknown_import_and_syntax_fail_safe_to_worker():
+    assert classify_execute_code("import numpy", read_only=True) == RequestClass.UNKNOWN
+    assert classify_execute_code("if :", read_only=True) == RequestClass.UNKNOWN
+
+
+def test_attribute_write_declared_read_only_fails_safe_to_worker():
+    assert classify_execute_code("obj.Label = 'changed'", read_only=True) == RequestClass.UNKNOWN
