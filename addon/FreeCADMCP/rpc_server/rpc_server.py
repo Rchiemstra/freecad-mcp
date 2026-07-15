@@ -20,6 +20,7 @@ from xmlrpc.server import SimpleXMLRPCServer
 
 from PySide import QtCore, QtWidgets
 
+from .execution_safety import find_gui_blocking_risk
 from .parts_library import get_parts_list, insert_part_from_library
 from .serialize import serialize_object
 
@@ -403,6 +404,23 @@ class FreeCADRPC:
 
     def execute_code(self, code: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
         options = options or {}
+        risk = find_gui_blocking_risk(
+            code,
+            read_only=bool(options.get("read_only", False)),
+        )
+        if risk is not None:
+            return {
+                "success": False,
+                "is_error": True,
+                "blocked": "gui_thread_boolean_audit",
+                "error": (
+                    "Blocked before execution: "
+                    f"{risk.reason} ({risk.boolean_calls} boolean calls, "
+                    f"{risk.transform_calls} transform calls). Use distToShape or "
+                    "sampled point-to-shape distances, or run the boolean audit in "
+                    "an isolated FreeCADCmd process."
+                ),
+            }
 
         def task():
             output_buffer = io.StringIO()
