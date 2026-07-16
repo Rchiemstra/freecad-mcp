@@ -239,6 +239,18 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `get_view` — returns an `ImageContent` screenshot when available; otherwise a compact geometric state of the focus object (P10 / I10 fallback).
 * `insert_part_from_library`, `get_parts_list`
 
+## Git sidecar integration (optional)
+
+When `generate_git_sidecar_after_save` is `true` in `freecad_mcp_settings.json`, the MCP add-on invokes the standalone `freecad-git` tool after a successful `.FCStd` save. Sidecar generation is opt-in, non-fatal to the save, and does not duplicate serialization logic.
+
+```json
+{
+  "generate_git_sidecar_after_save": true
+}
+```
+
+Requires `freecad-git` to be installed (`pip install -e tools/freecad_git` from the parent FreeCAD repository).
+
 ## Contributors
 
 <a href="https://github.com/neka-nat/freecad-mcp/graphs/contributors">

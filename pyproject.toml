@@ -1,6 +1,6 @@
 [project]
 name = "freecad-mcp"
-version = "0.1.19"
+version = "0.1.20"
 description = "Add your description here"
 readme = "README.md"
 authors = [
@@ -21,6 +21,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-xdist>=3.5",
     "pytest-cov>=5.0",
+    "pyside6>=6.5",
 ]
 
 [project.scripts]
