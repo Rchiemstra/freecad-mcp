@@ -38,6 +38,7 @@ and `tests/e2e/test_mx_helpers.py`, run headlessly via Docker
 * **I7** `snapshot`/`restore` + RPC methods.
 * **I9** `solve_assembly` MCP tool + RPC method.
 * **I10** Structured geometric diff (`capture_state`/`geometric_diff`).
+* **I11** Per-request GUI response queues + `check_rpc_sync` nonce probe prevent and detect stale responses after an RPC timeout.
 * **M2** Recipes in `create_datum_plane`/`sketch_create` docstrings.
 * **M3** `placement_audit`.
 * **M4** Joint↔PartDesign cross-body warning.

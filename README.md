@@ -223,6 +223,7 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `run_fem_analysis` — runs the CalculiX solver on an existing `Fem::FemAnalysis` and returns summary results (max von Mises stress, max displacement, node count, working directory). Auto-creates a `SolverCcxTools` if the analysis has none. See [`examples/cantilever_fem.py`](examples/cantilever_fem.py) for an end-to-end usage example.
 
 ### Diagnostics (read-only guards for the silent FreeCAD behaviours in `doc/mcp-feedback-status.md`)
+* `check_rpc_sync` — round-trip a unique nonce through the GUI queue. Run it after an `execute_code` timeout or before trusting follow-up model checks; a timeout or nonce mismatch means work should stop until the RPC queue is healthy.
 * `preview_attachment` — inspect a datum's attachment and the cross-body placement-drop risk (P1).
 * `find_faces`, `find_edges` — locate sub-shapes by geometry (type / normal / centre / radius), removing face/edge-index fragility.
 * `face_normal`, `edge_axis` — global normal/axis of a single sub-shape, avoiding the Direction-vs-Axis trap (P8).

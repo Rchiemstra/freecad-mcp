@@ -39,6 +39,13 @@ class GuiBlockingRisk:
     reason: str
 
 
+@dataclass(frozen=True)
+class GuiGeometryLoopRisk:
+    expensive_calls: int
+    loops: int
+    reason: str
+
+
 def classify_execute_code(code: str, *, read_only: bool) -> RequestClass:
     """Conservatively classify arbitrary code; unknown reads fail safe to worker."""
     if not read_only:
@@ -115,6 +122,46 @@ def find_gui_blocking_risk(code: str, *, read_only: bool) -> GuiBlockingRisk | N
             reason=(
                 "read-only code combines transformed geometry with repeated OCC "
                 "booleans; this is non-interruptible and can freeze FreeCAD's UI"
+            ),
+        )
+    return None
+
+
+def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
+    """Detect expensive OCCT operations repeated by Python control flow.
+
+    An RPC timeout cannot interrupt a Python/OCCT call that is already running
+    on Qt's GUI thread. Default-mode payloads with geometry operations inside
+    loops must therefore be made explicitly read-only (so auto mode routes them
+    to the isolated worker) or explicitly forced to GUI for a true mutation.
+    """
+    try:
+        tree = ast.parse(code, mode="exec")
+    except SyntaxError:
+        return None
+
+    expensive_calls = sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _EXPENSIVE_METHODS
+    )
+    loops = sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(
+            node,
+            (ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp),
+        )
+    )
+    if expensive_calls and loops:
+        return GuiGeometryLoopRisk(
+            expensive_calls=expensive_calls,
+            loops=loops,
+            reason=(
+                "code combines Python iteration with non-interruptible OCCT "
+                "geometry operations and may freeze FreeCAD's GUI thread"
             ),
         )
     return None

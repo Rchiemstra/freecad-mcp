@@ -1,4 +1,6 @@
 import logging
+import json
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, Literal
 
@@ -191,6 +193,31 @@ def get_freecad_connection() -> FreeCADConnection:
                 "Failed to connect to FreeCAD. Make sure the FreeCAD addon is running."
             )
     return state.freecad_connection
+
+
+@mcp.tool()
+def check_rpc_sync(ctx: Context) -> CallToolResult:
+    """Verify that the next FreeCAD GUI response belongs to this exact call.
+
+    A unique nonce is round-tripped through FreeCAD's GUI task queue. Use this
+    after an execute timeout or before relying on model inspection results. A
+    timeout or nonce mismatch means the queue is not safe for further work.
+    """
+    nonce = uuid.uuid4().hex
+    result = get_freecad_connection().check_rpc_sync(nonce)
+    if result.get("success") and result.get("nonce") == nonce:
+        return json_response({"ok": True, "synchronized": True, "nonce": nonce})
+    details = {
+        "ok": False,
+        "synchronized": False,
+        "expected_nonce": nonce,
+        "rpc_result": result,
+    }
+    return tool_fail(
+        "FreeCAD GUI-RPC synchronization check failed.\n"
+        + json.dumps(details, ensure_ascii=False, indent=2, default=str),
+        structured=details,
+    )
 
 
 @mcp.tool()

@@ -20,8 +20,12 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 find_gui_blocking_risk = _MODULE.find_gui_blocking_risk
+find_gui_geometry_loop_risk = _MODULE.find_gui_geometry_loop_risk
 classify_execute_code = _MODULE.classify_execute_code
 RequestClass = _MODULE.RequestClass
+SWEEP45_1_CODE = (
+    Path(__file__).resolve().parent / "fixtures" / "sweep45_1_payload.py.txt"
+).read_text(encoding="utf-8")
 
 
 HANGING_SYMMETRY_AUDIT = r'''
@@ -54,6 +58,17 @@ def test_allows_single_boolean_in_read_only_code():
 
 def test_modeling_payload_is_not_blocked_by_read_only_guard():
     assert find_gui_blocking_risk(HANGING_SYMMETRY_AUDIT, read_only=False) is None
+
+
+def test_detects_expensive_geometry_inside_sweep_loop():
+    risk = find_gui_geometry_loop_risk(SWEEP45_1_CODE)
+    assert risk is not None
+    assert risk.expensive_calls == 4
+    assert risk.loops == 12
+
+
+def test_does_not_flag_single_expensive_geometry_call_without_iteration():
+    assert find_gui_geometry_loop_risk("print(a.distToShape(b)[0])") is None
 
 
 def test_syntax_errors_are_left_for_execute_code_reporting():

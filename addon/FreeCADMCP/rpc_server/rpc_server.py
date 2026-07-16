@@ -22,7 +22,12 @@ from xmlrpc.server import SimpleXMLRPCServer
 
 from PySide import QtCore, QtWidgets
 
-from .execution_safety import RequestClass, classify_execute_code, find_gui_blocking_risk
+from .execution_safety import (
+    RequestClass,
+    classify_execute_code,
+    find_gui_blocking_risk,
+    find_gui_geometry_loop_risk,
+)
 from .gui_dispatcher import GuiDispatchError, GuiDispatcher
 from .parts_library import (
     configure_parts_library_path,
@@ -395,6 +400,17 @@ class FreeCADRPC:
     def ping(self):
         return True
 
+    def check_rpc_sync(self, nonce):
+        """Round-trip a nonce through the GUI queue to prove call correlation."""
+        res = self._dispatch_gui(lambda: {"nonce": nonce})
+        if not isinstance(res, dict) or res.get("nonce") != nonce:
+            return {
+                "success": False,
+                "expected_nonce": nonce,
+                "received": res,
+            }
+        return {"success": True, "nonce": nonce}
+
     def create_document(self, name="New_Document"):
         res = self._dispatch_gui(lambda: self._create_document_gui(name))
         if res is True:
@@ -561,6 +577,26 @@ class FreeCADRPC:
                     "error": "execution_mode='worker' requires read_only=True",
                 }
             return self._execute_code_worker(code, options)
+
+        loop_risk = find_gui_geometry_loop_risk(code)
+        if (
+            loop_risk is not None
+            and execution_mode == "auto"
+            and not bool(options.get("read_only", False))
+        ):
+            return {
+                "success": False,
+                "is_error": True,
+                "blocked": "gui_thread_geometry_loop",
+                "error": (
+                    "Blocked before execution: "
+                    f"{loop_risk.reason} ({loop_risk.expensive_calls} expensive "
+                    f"geometry call sites, {loop_risk.loops} loops). For analysis, "
+                    "set read_only=true and execution_mode='worker' with a hard "
+                    "timeout. For an intentional document mutation, split the work "
+                    "into bounded chunks or explicitly set execution_mode='gui'."
+                ),
+            }
 
         risk = find_gui_blocking_risk(
             code,
