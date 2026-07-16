@@ -59,3 +59,15 @@ def _auto_start_mcp():
 from PySide import QtCore
 
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
+
+
+def _register_git_sidecar_observer():
+    try:
+        from git_sidecar import register_observer
+
+        register_observer()
+    except Exception as e:
+        FreeCAD.Console.PrintWarning(f"[MCP] Git sidecar observer not registered: {e}\n")
+
+
+QtCore.QTimer.singleShot(0, _register_git_sidecar_observer)
