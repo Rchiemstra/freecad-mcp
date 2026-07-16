@@ -16,6 +16,8 @@ importable the live fixtures skip automatically.
 """
 from __future__ import annotations
 
+from tests.helpers import runtime_bootstrap  # noqa: F401  - install PySide/FreeCADGui stubs
+
 import contextlib
 import io
 import json
