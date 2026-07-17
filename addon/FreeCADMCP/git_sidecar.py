@@ -53,7 +53,22 @@ def _is_eligible_target(filename: str) -> bool:
 
 def _find_freecad_git() -> list[str]:
     """Build command to invoke freecad-git."""
-    return [sys.executable, "-m", "freecad_git.cli", "export"]
+    if sys.platform == "win32":
+        python = Path(sys.prefix) / "python.exe"
+    else:
+        python = Path(sys.prefix) / "bin" / "python"
+
+    # Embedded FreeCAD reports FreeCAD.exe as sys.executable. Prefer the real
+    # interpreter from the same environment so Python's ``-m`` option works.
+    executable = str(python) if python.is_file() else sys.executable
+    return [executable, "-m", "freecad_git.cli", "export"]
+
+
+def _subprocess_creation_flags() -> int:
+    """Suppress the transient Python console window on Windows."""
+    if sys.platform == "win32":
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return 0
 
 
 def export_sidecar_after_save(filename: str) -> dict[str, Any]:
@@ -73,7 +88,13 @@ def export_sidecar_after_save(filename: str) -> dict[str, Any]:
     sidecar = f"{filename}.git.json"
     try:
         cmd = _find_freecad_git() + [filename]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            creationflags=_subprocess_creation_flags(),
+        )
         if proc.returncode != 0:
             return {
                 "ok": False,
