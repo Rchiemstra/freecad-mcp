@@ -578,12 +578,39 @@ class FreeCADRPC:
                 }
             return self._execute_code_worker(code, options)
 
+        if options.get("timeout_seconds") is not None:
+            return {
+                "success": False,
+                "is_error": True,
+                "error_code": "gui_timeout_not_supported",
+                "error": (
+                    "timeout_seconds is a hard worker timeout and cannot safely "
+                    "stop code running on FreeCAD's GUI thread. Use read_only=true "
+                    "with execution_mode='auto' or 'worker', or remove "
+                    "timeout_seconds for bounded GUI work."
+                ),
+            }
+
         loop_risk = find_gui_geometry_loop_risk(code)
-        if (
-            loop_risk is not None
-            and execution_mode == "auto"
-            and not bool(options.get("read_only", False))
+        read_only = bool(options.get("read_only", False))
+        block_unmarked_mutation = execution_mode == "auto" and not read_only
+        block_forced_gui_analysis = execution_mode == "gui" and read_only
+        if loop_risk is not None and (
+            block_unmarked_mutation or block_forced_gui_analysis
         ):
+            if block_forced_gui_analysis:
+                guidance = (
+                    "Read-only geometry loops cannot be forced onto the GUI thread. "
+                    "Use execution_mode='auto' or 'worker' so the analysis runs in "
+                    "an isolated FreeCADCmd process with a hard timeout."
+                )
+            else:
+                guidance = (
+                    "For analysis, set read_only=true and execution_mode='worker' "
+                    "with a hard timeout. For an intentional document mutation, "
+                    "split the work into bounded chunks or explicitly set "
+                    "execution_mode='gui'."
+                )
             return {
                 "success": False,
                 "is_error": True,
@@ -591,10 +618,7 @@ class FreeCADRPC:
                 "error": (
                     "Blocked before execution: "
                     f"{loop_risk.reason} ({loop_risk.expensive_calls} expensive "
-                    f"geometry call sites, {loop_risk.loops} loops). For analysis, "
-                    "set read_only=true and execution_mode='worker' with a hard "
-                    "timeout. For an intentional document mutation, split the work "
-                    "into bounded chunks or explicitly set execution_mode='gui'."
+                    f"geometry call sites, {loop_risk.loops} loops). {guidance}"
                 ),
             }
 

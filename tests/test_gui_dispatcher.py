@@ -13,6 +13,7 @@ if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 from addon.FreeCADMCP.rpc_server.gui_dispatcher import (
+    GuiBusyAfterTimeout,
     GuiDispatcher,
     GuiTaskError,
 )
@@ -244,3 +245,55 @@ def test_timeout_after_start_keeps_late_result_on_original_request():
     thread.join(timeout=0.2)
     assert late_executed == ["late"]
     assert second == ["second"]
+
+
+def test_running_timeout_rejects_new_work_until_original_request_finishes():
+    _app()
+    dispatcher = GuiDispatcher()
+    started = threading.Event()
+    release = threading.Event()
+    first_errors = []
+
+    def slow_task():
+        started.set()
+        release.wait(1.0)
+        return "late"
+
+    def submit_first():
+        try:
+            dispatcher.submit(slow_task, 0.02)
+        except Exception as exc:
+            first_errors.append(exc)
+
+    first = threading.Thread(target=submit_first)
+    first.start()
+    deadline = time.monotonic() + 1.0
+    while dispatcher.pending_count != 1 and time.monotonic() < deadline:
+        time.sleep(0.001)
+
+    drain = threading.Thread(target=dispatcher._drain_one)
+    drain.start()
+    assert started.wait(0.2)
+    first.join(timeout=0.2)
+
+    assert len(first_errors) == 1
+    assert "execution continues in FreeCAD" in str(first_errors[0])
+
+    second_errors = []
+
+    def submit_second():
+        try:
+            dispatcher.submit(lambda: "must not run", 1.0)
+        except Exception as exc:
+            second_errors.append(exc)
+
+    second = threading.Thread(target=submit_second)
+    second.start()
+    second.join(timeout=0.2)
+    assert len(second_errors) == 1
+    assert isinstance(second_errors[0], GuiBusyAfterTimeout)
+    assert "new GUI work is rejected" in str(second_errors[0])
+
+    release.set()
+    drain.join(timeout=0.2)
+    assert dispatcher.submit(lambda: "recovered", 0.01) == "recovered"

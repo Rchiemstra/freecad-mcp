@@ -87,3 +87,26 @@ def test_marked_sweep45_1_auto_routes_to_worker(monkeypatch):
     assert result["execution"]["mode"] == "worker"
     assert routed["code"] == SWEEP45_1_CODE
     assert routed["options"]["timeout_seconds"] == 120
+
+
+def test_read_only_geometry_sweep_cannot_be_forced_onto_gui(monkeypatch):
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+    result = rpc_server.FreeCADRPC().execute_code(
+        SWEEP45_1_CODE,
+        {"read_only": True, "execution_mode": "gui"},
+    )
+    assert result["success"] is False
+    assert result["blocked"] == "gui_thread_geometry_loop"
+    assert "cannot be forced onto the GUI thread" in result["error"]
+    assert "execution_mode='auto' or 'worker'" in result["error"]
+
+
+def test_worker_timeout_is_rejected_for_gui_execution(monkeypatch):
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+    result = rpc_server.FreeCADRPC().execute_code(
+        "print('bounded GUI work')",
+        {"execution_mode": "gui", "timeout_seconds": 240},
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "gui_timeout_not_supported"
+    assert "cannot safely stop code running on FreeCAD's GUI thread" in result["error"]

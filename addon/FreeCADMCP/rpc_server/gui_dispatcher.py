@@ -20,6 +20,10 @@ class GuiDispatchTimeout(GuiDispatchError):
     """The GUI did not complete a request before its caller timed out."""
 
 
+class GuiBusyAfterTimeout(GuiDispatchError):
+    """A timed-out request is still occupying FreeCAD's GUI thread."""
+
+
 class GuiTaskError(GuiDispatchError):
     """A callable raised while executing on the GUI thread."""
 
@@ -57,6 +61,18 @@ class GuiRequest:
             self.completion.set()
             return True
 
+    def mark_timed_out_if_running(self) -> bool:
+        with self._state_lock:
+            if self.state != "running":
+                return False
+            self.state = "timed_out_running"
+            return True
+
+    @property
+    def completed(self) -> bool:
+        with self._state_lock:
+            return self.state == "completed"
+
     def complete(self, outcome: GuiOutcome) -> None:
         with self._state_lock:
             self.outcome = outcome
@@ -75,6 +91,7 @@ class GuiDispatcher(QtCore.QObject):
         self._queue_lock = threading.Lock()
         self._signal_pending = False
         self._accepting = True
+        self._timed_out_request: GuiRequest | None = None
         try:
             queued = QtCore.Qt.ConnectionType.QueuedConnection
         except AttributeError:
@@ -111,6 +128,15 @@ class GuiDispatcher(QtCore.QObject):
         with self._queue_lock:
             if not self._accepting:
                 raise GuiDispatchError("RPC GUI dispatcher is stopping")
+            timed_out = self._timed_out_request
+            if timed_out is not None and timed_out.completed:
+                self._timed_out_request = None
+                timed_out = None
+            if timed_out is not None:
+                raise GuiBusyAfterTimeout(
+                    "FreeCAD GUI is still executing a request that timed out; "
+                    "new GUI work is rejected until it finishes"
+                )
             self._requests.append(request)
             should_emit = not self._signal_pending
             if should_emit:
@@ -126,7 +152,27 @@ class GuiDispatcher(QtCore.QObject):
             completed = request.completion.wait(timeout)
         if not completed:
             pending_cancelled = request.cancel_if_pending()
-            suffix = " before execution" if pending_cancelled else " while executing"
+            if pending_cancelled:
+                suffix = " before execution"
+            elif request.mark_timed_out_if_running():
+                with self._queue_lock:
+                    self._timed_out_request = request
+                    pending = list(self._requests)
+                    self._requests.clear()
+                for pending_request in pending:
+                    pending_request.cancel_if_pending()
+                suffix = (
+                    " while executing; execution continues in FreeCAD and may "
+                    "keep the GUI unresponsive. New GUI work is rejected until "
+                    "the request finishes"
+                )
+            else:
+                # Completion won the race with the timeout. Return its outcome
+                # instead of incorrectly quarantining an idle dispatcher.
+                request.completion.wait()
+                return self._unwrap(
+                    request.outcome or GuiOutcome(False, error="Missing GUI outcome")
+                )
             raise GuiDispatchTimeout(
                 f"Timed out after {timeout}s waiting for FreeCAD GUI response{suffix}"
             )
@@ -145,6 +191,8 @@ class GuiDispatcher(QtCore.QObject):
 
         # Exactly one bounded unit of work is performed per queued callback.
         with self._queue_lock:
+            if self._timed_out_request is request:
+                self._timed_out_request = None
             has_more = bool(self._requests)
             if not has_more:
                 self._signal_pending = False
