@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from unittest.mock import MagicMock
 
 import FreeCADGui
 from PySide import QtCore
@@ -12,6 +13,7 @@ from PySide import QtCore
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
+from addon.FreeCADMCP.rpc_server import gui_dispatcher as gui_dispatcher_module
 from addon.FreeCADMCP.rpc_server.gui_dispatcher import (
     GuiBusyAfterTimeout,
     GuiDispatcher,
@@ -21,6 +23,46 @@ from addon.FreeCADMCP.rpc_server.gui_dispatcher import (
 
 def _app():
     return QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
+
+
+class _FakeQApp:
+    """Plain stand-in for QApplication.instance() (not a MagicMock).
+
+    MagicMock apps are ignored by the busy guard so stubbed PySide never
+    looks permanently busy; busy-path tests must use a real object.
+    """
+
+    def __init__(self, *, mouse=None, popup=None, modal=None):
+        no_button = getattr(QtCore.Qt, "NoButton", 0)
+        self._mouse = mouse if mouse is not None else no_button
+        self._popup = popup
+        self._modal = modal
+
+    def mouseButtons(self):
+        return self._mouse
+
+    def activePopupWidget(self):
+        return self._popup
+
+    def activeModalWidget(self):
+        return self._modal
+
+
+def _fake_qapp(*, mouse=None, popup=None, modal=None):
+    return _FakeQApp(mouse=mouse, popup=popup, modal=modal)
+
+
+def _queue_one(dispatcher, value="task"):
+    """Submit one request from a worker thread and wait until it is queued."""
+    result = []
+    thread = threading.Thread(
+        target=lambda: result.append(dispatcher.submit(lambda: value, 2.0))
+    )
+    thread.start()
+    deadline = time.monotonic() + 1.0
+    while dispatcher.pending_count < 1 and time.monotonic() < deadline:
+        time.sleep(0.001)
+    return thread, result
 
 
 def test_gui_thread_self_dispatch_executes_directly_without_deadlock():
@@ -297,3 +339,129 @@ def test_running_timeout_rejects_new_work_until_original_request_finishes():
     release.set()
     drain.join(timeout=0.2)
     assert dispatcher.submit(lambda: "recovered", 0.01) == "recovered"
+
+
+def test_drain_defers_while_mouse_button_held(monkeypatch):
+    """Regression: GUI work must not run during 3D-view mouse drag."""
+    _app()
+    dispatcher = GuiDispatcher()
+    executed = []
+    rescheduled = []
+
+    left = getattr(QtCore.Qt, "LeftButton", 1)
+    fake_app = _fake_qapp(mouse=left)
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: fake_app),
+    )
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtCore.QTimer,
+        "singleShot",
+        staticmethod(lambda _ms, slot: rescheduled.append(slot)),
+    )
+
+    thread, result = _queue_one(dispatcher, value="should-wait")
+    assert dispatcher.pending_count == 1
+
+    dispatcher._drain_one()
+
+    assert executed == []
+    assert dispatcher.pending_count == 1
+    assert len(rescheduled) == 1
+    assert thread.is_alive()
+
+    # Clear the drag and drain again — request must complete.
+    fake_app._mouse = getattr(QtCore.Qt, "NoButton", 0)
+    dispatcher._drain_one()
+    thread.join(timeout=0.5)
+    assert result == ["should-wait"]
+    assert dispatcher.pending_count == 0
+
+
+def test_drain_defers_while_popup_or_modal_is_active(monkeypatch):
+    _app()
+    dispatcher = GuiDispatcher()
+    rescheduled = []
+    fake_app = _fake_qapp(popup=object())
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: fake_app),
+    )
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtCore.QTimer,
+        "singleShot",
+        staticmethod(lambda _ms, slot: rescheduled.append(slot)),
+    )
+
+    thread, result = _queue_one(dispatcher, value="popup-blocked")
+    dispatcher._drain_one()
+    assert dispatcher.pending_count == 1
+    assert rescheduled
+
+    fake_app._popup = None
+    fake_app._modal = object()
+    rescheduled.clear()
+    dispatcher._drain_one()
+    assert dispatcher.pending_count == 1
+    assert rescheduled
+
+    fake_app._modal = None
+    dispatcher._drain_one()
+    thread.join(timeout=0.5)
+    assert result == ["popup-blocked"]
+
+
+def test_drain_runs_immediately_when_no_mouse_popup_or_modal(monkeypatch):
+    _app()
+    dispatcher = GuiDispatcher()
+    fake_app = _fake_qapp()
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: fake_app),
+    )
+    single_shot = MagicMock()
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtCore.QTimer,
+        "singleShot",
+        single_shot,
+    )
+
+    thread, result = _queue_one(dispatcher, value="now")
+    dispatcher._drain_one()
+    thread.join(timeout=0.5)
+    assert result == ["now"]
+    single_shot.assert_not_called()
+
+
+def test_deferred_drag_request_is_not_lost_across_multiple_busy_drains(monkeypatch):
+    """Repeated busy drains must keep the same pending request (no drop / dup)."""
+    _app()
+    dispatcher = GuiDispatcher()
+    wakes = []
+    left = getattr(QtCore.Qt, "LeftButton", 1)
+    fake_app = _fake_qapp(mouse=left)
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: fake_app),
+    )
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtCore.QTimer,
+        "singleShot",
+        staticmethod(lambda _ms, slot: wakes.append(slot)),
+    )
+
+    thread, result = _queue_one(dispatcher, value="once")
+    for _ in range(5):
+        dispatcher._drain_one()
+        assert dispatcher.pending_count == 1
+    assert len(wakes) == 5
+
+    fake_app._mouse = getattr(QtCore.Qt, "NoButton", 0)
+    dispatcher._drain_one()
+    thread.join(timeout=0.5)
+    assert result == ["once"]
+    assert dispatcher.pending_count == 0

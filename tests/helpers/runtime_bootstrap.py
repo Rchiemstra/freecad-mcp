@@ -87,7 +87,9 @@ def ensure_pyside_shim() -> None:
 
     # Headless CI images often lack libGL; rpc_server only needs QtWidgets at runtime.
     qt_widgets = types.ModuleType("PySide.QtWidgets")
-    qt_widgets.QApplication = MagicMock()
+    qapp = MagicMock()
+    qapp.instance = MagicMock(return_value=None)
+    qt_widgets.QApplication = qapp
     qt_widgets.QInputDialog = MagicMock()
     qt_widgets.QLineEdit = MagicMock()
     qt_widgets.QMessageBox = MagicMock()

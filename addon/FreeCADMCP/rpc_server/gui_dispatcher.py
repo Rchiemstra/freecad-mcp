@@ -9,7 +9,51 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from PySide import QtCore
+from PySide import QtCore, QtWidgets
+
+
+def _is_unittest_mock(value: Any) -> bool:
+    return type(value).__module__.startswith("unittest.mock")
+
+
+def _mouse_buttons_held(app: Any) -> bool:
+    """True only for a real Qt mouse-button bitfield with buttons down."""
+    try:
+        buttons = app.mouseButtons()
+    except Exception:
+        return False
+    if _is_unittest_mock(buttons):
+        return False
+    try:
+        return int(buttons) != int(QtCore.Qt.NoButton)
+    except (TypeError, ValueError):
+        return buttons != QtCore.Qt.NoButton
+
+
+def _blocking_overlay_active(app: Any) -> bool:
+    for getter_name in ("activePopupWidget", "activeModalWidget"):
+        getter = getattr(app, getter_name, None)
+        if getter is None:
+            continue
+        try:
+            widget = getter()
+        except Exception:
+            continue
+        if widget is None or _is_unittest_mock(widget):
+            continue
+        return True
+    return False
+
+
+def _gui_busy_for_3d_navigation() -> bool:
+    """Skip GUI dispatch while the user is interacting with the 3D view / dialogs."""
+    app = QtWidgets.QApplication.instance()
+    if app is None or _is_unittest_mock(app):
+        return False
+    try:
+        return _mouse_buttons_held(app) or _blocking_overlay_active(app)
+    except Exception:
+        return False
 
 
 class GuiDispatchError(RuntimeError):
@@ -185,6 +229,17 @@ class GuiDispatcher(QtCore.QObject):
                 self._signal_pending = False
                 return
             request = self._requests.popleft()
+
+        # Do not mutate the document/viewer while the user is mid-drag in the
+        # 3D view. The legacy gui_dispatch path had this guard; without it,
+        # RPC work (recompute/selection/updateGui) races Coin navigation and
+        # surfaces as AccessViolation / lost live redraw on every mouse move.
+        if _gui_busy_for_3d_navigation():
+            with self._queue_lock:
+                self._requests.appendleft(request)
+                self._signal_pending = True
+            QtCore.QTimer.singleShot(50, self.wake_requested.emit)
+            return
 
         if request.mark_running():
             request.complete(self._execute_request(request))
