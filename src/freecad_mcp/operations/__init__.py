@@ -163,6 +163,19 @@ from .diagnostics import (
     validate_movement_follow_operation,
 )
 
+# Interactive GUI — tree / selection / section / dual-doc / pocket+helix diagnose
+from .interactive import (
+    activate_document_operation,
+    compare_documents_operation,
+    diagnose_helix_operation,
+    diagnose_pocket_operation,
+    get_selection_operation,
+    open_document_operation,
+    select_subshapes_operation,
+    set_section_view_operation,
+    set_tree_expanded_operation,
+)
+
 # Snapshot — I7 in-process document copies (P12)
 from .snapshot import (
     restore_operation,
@@ -319,6 +332,16 @@ __all__ = [
     "inspect_geometry_operation",
     "get_dependency_graph_operation",
     "match_subshape_operation",
+    # Interactive GUI
+    "open_document_operation",
+    "activate_document_operation",
+    "set_tree_expanded_operation",
+    "select_subshapes_operation",
+    "get_selection_operation",
+    "set_section_view_operation",
+    "diagnose_pocket_operation",
+    "diagnose_helix_operation",
+    "compare_documents_operation",
     # Snapshot
     "snapshot_operation",
     "restore_operation",

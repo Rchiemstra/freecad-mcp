@@ -226,6 +226,43 @@ class FreeCADConnection:
     def list_documents(self) -> list[str]:
         return self.server.list_documents()
 
+    def open_document(self, path: str) -> dict[str, Any]:
+        return self.server.open_document(path)
+
+    def activate_document(self, doc_name: str) -> dict[str, Any]:
+        return self.server.activate_document(doc_name)
+
+    def set_tree_expanded(
+        self,
+        doc_name: str,
+        object_names: list[str] | None = None,
+        mode: str = "expand",
+    ) -> dict[str, Any]:
+        return self.server.set_tree_expanded(doc_name, object_names, mode)
+
+    def select_subshapes(
+        self,
+        doc_name: str,
+        selections: list | None = None,
+        clear: bool = True,
+    ) -> dict[str, Any]:
+        return self.server.select_subshapes(doc_name, selections, clear)
+
+    def get_selection(self) -> dict[str, Any]:
+        return self.server.get_selection()
+
+    def set_section_view(
+        self,
+        enabled: bool | None = None,
+        placement: dict[str, Any] | None = None,
+        base: list[float] | None = None,
+        normal: list[float] | None = None,
+        no_manip: bool = True,
+    ) -> dict[str, Any]:
+        return self.server.set_section_view(
+            enabled, placement, base, normal, no_manip
+        )
+
     def sketch_create(self, doc_name: str, sketch_name: str, body_name: str | None = None, attach_to: str | None = None) -> dict[str, Any]:
         return self.server.sketch_create(doc_name, sketch_name, body_name, attach_to)
 

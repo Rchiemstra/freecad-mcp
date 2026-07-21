@@ -64,6 +64,7 @@ _DEFAULT_SETTINGS = {
     "remote_enabled": False,
     "allowed_ips": "127.0.0.1",
     "auto_start_rpc": False,
+    "rpc_port": 9875,
     "freecadcmd_path": "",
     "allow_remote_execute_code": False,
 }
@@ -939,6 +940,83 @@ class FreeCADRPC:
         if res is True:
             return {"success": True, "document_name": doc_name}
         return {"success": False, "error": str(res)}
+
+    def open_document(self, path: str) -> dict[str, Any]:
+        from .gui_tools import open_document as _open_document
+
+        res = self._dispatch_gui(lambda: _open_document(path))
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def activate_document(self, doc_name: str) -> dict[str, Any]:
+        from .gui_tools import activate_document as _activate_document
+
+        res = self._dispatch_gui(lambda: _activate_document(doc_name))
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def set_tree_expanded(
+        self,
+        doc_name: str,
+        object_names: list | None = None,
+        mode: str = "expand",
+    ) -> dict[str, Any]:
+        from .gui_tools import set_tree_expanded as _set_tree_expanded
+
+        res = self._dispatch_gui(
+            lambda: _set_tree_expanded(doc_name, object_names, mode)
+        )
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def select_subshapes(
+        self,
+        doc_name: str,
+        selections: list | None = None,
+        clear: bool = True,
+    ) -> dict[str, Any]:
+        from .gui_tools import select_subshapes as _select_subshapes
+
+        res = self._dispatch_gui(
+            lambda: _select_subshapes(doc_name, selections or [], clear)
+        )
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def get_selection(self) -> dict[str, Any]:
+        from .gui_tools import get_selection as _get_selection
+
+        res = self._dispatch_gui(_get_selection)
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def set_section_view(
+        self,
+        enabled: bool | None = None,
+        placement: dict | None = None,
+        base: list | None = None,
+        normal: list | None = None,
+        no_manip: bool = True,
+    ) -> dict[str, Any]:
+        from .gui_tools import set_section_view as _set_section_view
+
+        res = self._dispatch_gui(
+            lambda: _set_section_view(
+                enabled,
+                placement=placement,
+                base=base,
+                normal=normal,
+                no_manip=no_manip,
+            )
+        )
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
 
     def run_fem_analysis(self, doc_name: str, analysis_name: str, timeout: int = 600) -> dict[str, Any]:
         """Run the CalculiX solver on an existing Fem::FemAnalysis and return summary results."""
@@ -2482,7 +2560,7 @@ class FreeCADRPC:
             return {"ok": False, "error": str(e)}
 
 
-def start_rpc_server(port=9875):
+def start_rpc_server(port=None):
     global rpc_server_thread, rpc_server_instance, gui_dispatcher, worker_manager
 
     if rpc_server_instance:
@@ -2501,6 +2579,11 @@ def start_rpc_server(port=9875):
     gui_dispatcher = GuiDispatcher(parent)
 
     settings = load_settings()
+    if port is None:
+        try:
+            port = int(settings.get("rpc_port", 9875))
+        except (TypeError, ValueError):
+            port = 9875
     configure_parts_library_path(FreeCAD.getUserAppDataDir())
     remote_enabled = settings.get("remote_enabled", False)
     allowed_ips = settings.get("allowed_ips", "127.0.0.1")

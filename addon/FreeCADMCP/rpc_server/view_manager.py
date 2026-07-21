@@ -73,6 +73,13 @@ def _resolve_screenshot_size(
 
 
 def apply_view_orientation(view: Any, view_name: str) -> None:
+    aliases = {
+        "Rear": "Back",
+        "Side": "Right",
+        "SideRight": "Right",
+        "SideLeft": "Left",
+    }
+    view_name = aliases.get(str(view_name), str(view_name))
     method_name = _VIEW_DISPATCH.get(view_name)
     if method_name is None:
         raise ValueError(f"Invalid view name: {view_name}")

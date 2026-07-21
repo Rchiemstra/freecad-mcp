@@ -23,6 +23,11 @@ def _repo_root() -> Path:
 
 
 def _run_inprocess(extra_argv: list[str]) -> int:
+    root = _repo_root()
+    src = root / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+
     from freecad_mcp.server import main
 
     sys.argv = ["freecad-mcp", *extra_argv]
@@ -99,6 +104,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the FreeCAD MCP server")
     parser.add_argument("--only-text-feedback", action="store_true")
     parser.add_argument("--host", default="localhost")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="FreeCAD RPC port (default: FREECAD_MCP_PORT or 9875)",
+    )
     args, unknown = parser.parse_known_args()
 
     extra: list[str] = []
@@ -106,6 +117,10 @@ def main() -> int:
         extra.append("--only-text-feedback")
     if args.host:
         extra.extend(["--host", args.host])
+    if args.port is not None:
+        extra.extend(["--port", str(args.port)])
+    elif os.environ.get("FREECAD_MCP_PORT"):
+        extra.extend(["--port", os.environ["FREECAD_MCP_PORT"]])
     extra.extend(unknown)
 
     if os.environ.get("FREECAD_MCP_DEBUG", "0") == "1":

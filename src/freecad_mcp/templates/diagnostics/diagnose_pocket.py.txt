@@ -1,0 +1,143 @@
+# Diagnose a PartDesign Pocket: support/profile, direction, reversed, length,
+# and resulting geometry. Read-only JSON.
+import json as _json
+
+_name = $pocket_name
+_obj = _doc.getObject(_name)
+if _obj is None:
+    raise RuntimeError('Pocket not found: ' + _name)
+
+_props = set(getattr(_obj, 'PropertiesList', []))
+
+
+def _safe(attr, default=None):
+    try:
+        return getattr(_obj, attr)
+    except Exception:
+        return default
+
+
+def _vec(v):
+    if v is None:
+        return None
+    try:
+        return {'x': float(v.x), 'y': float(v.y), 'z': float(v.z)}
+    except Exception:
+        return None
+
+
+def _link_ref(val):
+    if val is None:
+        return None
+    try:
+        if isinstance(val, (list, tuple)) and val:
+            first = val[0]
+            if isinstance(first, (list, tuple)) and first:
+                obj, subs = first[0], (first[1] if len(first) > 1 else [])
+                return {
+                    'object': getattr(obj, 'Name', str(obj)),
+                    'subs': list(subs) if subs else [],
+                }
+            obj = first
+            return {'object': getattr(obj, 'Name', str(obj)), 'subs': []}
+        return {'object': getattr(val, 'Name', str(val)), 'subs': []}
+    except Exception:
+        return {'raw': str(val)}
+
+
+_profile = _safe('Profile')
+_support = None
+for _cand in ('Support', 'AttachmentSupport', 'BaseFeature'):
+    if _cand in _props:
+        _support = _link_ref(_safe(_cand))
+        if _support:
+            break
+
+_direction = _vec(_safe('Direction') or _safe('ExtrusionDirection'))
+_reversed = bool(_safe('Reversed', False))
+_length = None
+try:
+    _length = float(_safe('Length'))
+except Exception:
+    _length = _safe('Length')
+
+_type = str(_safe('Type') or _safe('SideType') or '')
+_symmetric = None
+if 'Symmetric' in _props:
+    _symmetric = bool(_safe('Symmetric'))
+elif 'Midplane' in _props:
+    _symmetric = bool(_safe('Midplane'))
+elif 'SideType' in _props:
+    _symmetric = str(_safe('SideType')) in ('Two sides', 'Symmetric')
+
+_shape = _safe('Shape')
+_null = True
+_volume = None
+_bbox = None
+_face_count = None
+if _shape is not None:
+    try:
+        _null = bool(_shape.isNull())
+    except Exception:
+        _null = True
+    if not _null:
+        try:
+            _volume = float(_shape.Volume)
+        except Exception:
+            _volume = None
+        try:
+            _bb = _shape.BoundBox
+            _bbox = {
+                'xmin': float(_bb.XMin), 'ymin': float(_bb.YMin), 'zmin': float(_bb.ZMin),
+                'xmax': float(_bb.XMax), 'ymax': float(_bb.YMax), 'zmax': float(_bb.ZMax),
+            }
+        except Exception:
+            _bbox = None
+        try:
+            _face_count = len(_shape.Faces)
+        except Exception:
+            _face_count = None
+
+_sketch_normal = None
+_align = None
+try:
+    _prof = _profile
+    _sk = None
+    if isinstance(_prof, (list, tuple)) and _prof:
+        _sk = _prof[0] if not isinstance(_prof[0], (list, tuple)) else _prof[0][0]
+    elif _prof is not None:
+        _sk = _prof
+    if _sk is not None and hasattr(_sk, 'Placement'):
+        _sketch_normal = _vec(_sk.Placement.Rotation.multVec(FreeCAD.Vector(0, 0, 1)))
+        if _direction and _sketch_normal:
+            _dot = (
+                _direction['x'] * _sketch_normal['x']
+                + _direction['y'] * _sketch_normal['y']
+                + _direction['z'] * _sketch_normal['z']
+            )
+            _align = {
+                'dot': _dot,
+                'parallel': abs(_dot) > 0.99,
+                'anti_parallel': _dot < -0.99,
+            }
+except Exception:
+    pass
+
+print(_json.dumps({
+    'ok': True,
+    'pocket': _name,
+    'type_id': getattr(_obj, 'TypeId', ''),
+    'profile': _link_ref(_profile),
+    'support': _support,
+    'direction': _direction,
+    'reversed': _reversed,
+    'length': _length,
+    'type': _type,
+    'symmetric': _symmetric,
+    'shape_null': _null,
+    'volume': _volume,
+    'bbox': _bbox,
+    'face_count': _face_count,
+    'sketch_normal': _sketch_normal,
+    'direction_vs_sketch': _align,
+}))

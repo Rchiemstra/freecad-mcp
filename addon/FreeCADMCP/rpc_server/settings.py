@@ -12,6 +12,9 @@ _DEFAULT_SETTINGS = {
     "remote_enabled": False,
     "allowed_ips": "127.0.0.1",
     "auto_start_rpc": False,
+    "rpc_port": 9875,
+    "freecadcmd_path": "",
+    "allow_remote_execute_code": False,
 }
 
 

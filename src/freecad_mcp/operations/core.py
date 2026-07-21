@@ -299,6 +299,9 @@ def get_view_operation(
     focus_objects: list[str] | None = None,
     yaw_deg: float | None = None,
 ) -> ToolResponse:
+    from .interactive import normalize_view_name
+
+    view_name = normalize_view_name(view_name)
     screenshot = freecad.get_active_screenshot(
         view_name,
         width,

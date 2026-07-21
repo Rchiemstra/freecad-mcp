@@ -486,6 +486,17 @@ def inspect_geometry_operation(
     activate: bool = False,
     restore_active_document: bool = True,
 ) -> ToolResponse:
+    if activate:
+        try:
+            freecad.activate_document(doc_name)
+        except Exception as exc:
+            logger.warning("inspect_geometry activate_document failed: %s", exc)
+        try:
+            selection = [f"{object_name}:{subshape}"] if subshape else [object_name]
+            freecad.select_subshapes(doc_name, selection, clear=True)
+        except Exception as exc:
+            logger.warning("inspect_geometry select_subshapes failed: %s", exc)
+
     code = _diag_preamble(doc_name) + [render_template_text(
         "diagnostics/inspect_geometry.py.txt",
         object_name=repr(object_name),

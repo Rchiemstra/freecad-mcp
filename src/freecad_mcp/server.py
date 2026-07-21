@@ -143,6 +143,16 @@ from .operations import (
     inspect_geometry_operation,
     get_dependency_graph_operation,
     match_subshape_operation,
+    # Interactive GUI
+    open_document_operation,
+    activate_document_operation,
+    set_tree_expanded_operation,
+    select_subshapes_operation,
+    get_selection_operation,
+    set_section_view_operation,
+    diagnose_pocket_operation,
+    diagnose_helix_operation,
+    compare_documents_operation,
     # Snapshot — I7 in-process document copies (P12)
     restore_operation,
     snapshot_operation,
@@ -205,7 +215,9 @@ mcp = FastMCP(
 def get_freecad_connection() -> FreeCADConnection:
     """Get or create a persistent FreeCAD connection"""
     if state.freecad_connection is None:
-        state.freecad_connection = FreeCADConnection(host=state.rpc_host, port=9875)
+        state.freecad_connection = FreeCADConnection(
+            host=state.rpc_host, port=state.rpc_port
+        )
         if not state.freecad_connection.ping():
             logger.error("Failed to ping FreeCAD")
             state.freecad_connection = None
@@ -664,7 +676,7 @@ def cancel_worker_job(ctx: Context, job_id: str) -> CallToolResult:
 @mcp.tool()
 def get_view(
     ctx: Context,
-    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric"],
+    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric", "Rear", "Side", "SideRight", "SideLeft"],
     width: int | None = None,
     height: int | None = None,
     focus_object: str | None = None,
@@ -674,17 +686,9 @@ def get_view(
     """Get a screenshot of the active view.
 
     Args:
-        view_name: The name of the view to get the screenshot of.
-        The following views are available:
-        - "Isometric"
-        - "Front"
-        - "Top"
-        - "Right"
-        - "Back"
-        - "Left"
-        - "Bottom"
-        - "Dimetric"
-        - "Trimetric"
+        view_name: Standard view preset. Aliases: Rear→Back, Side/SideRight→Right, SideLeft→Left.
+        Available: Isometric, Front, Top, Right, Back, Left, Bottom, Dimetric, Trimetric
+        (plus Rear, Side, SideRight, SideLeft aliases).
         width: The width of the screenshot in pixels. If not specified, uses the viewport width.
         height: The height of the screenshot in pixels. If not specified, uses the viewport height.
         focus_object: Optional single object name to frame. Comma-separated names are also accepted.
@@ -928,6 +932,137 @@ def list_documents(ctx: Context) -> CallToolResult:
         A list of document names.
     """
     return list_documents_operation(get_freecad_connection())
+
+
+@mcp.tool()
+def open_document(ctx: Context, path: str) -> CallToolResult:
+    """Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.
+
+    Use this to load V7 and V8 into the same FreeCAD session for comparison.
+    """
+    return open_document_operation(get_freecad_connection(), path)
+
+
+@mcp.tool()
+def activate_document(ctx: Context, doc_name: str) -> CallToolResult:
+    """Make an already-open document the active GUI document."""
+    return activate_document_operation(get_freecad_connection(), doc_name)
+
+
+@mcp.tool()
+def set_tree_expanded(
+    ctx: Context,
+    doc_name: str,
+    object_names: list[str] | None = None,
+    mode: Literal["expand", "collapse", "expand_document", "collapse_document"] = "expand",
+) -> CallToolResult:
+    """Expand or collapse model-tree items in the FreeCAD GUI.
+
+    Selects ``object_names`` then runs Std_TreeExpand / Std_TreeCollapse.
+    Modes ``expand_document`` / ``collapse_document`` operate on the whole tree.
+    """
+    return set_tree_expanded_operation(
+        get_freecad_connection(), doc_name, object_names, mode
+    )
+
+
+@mcp.tool()
+def select_subshapes(
+    ctx: Context,
+    doc_name: str,
+    selections: list[Any],
+    clear: bool = True,
+) -> CallToolResult:
+    """Select GUI-visible objects or sub-shapes (FaceN/EdgeN/VertexN).
+
+    Each selection may be ``\"Box\"``, ``\"Box:Face1\"``, or
+    ``{\"object\": \"Box\", \"sub\": \"Face1\"}``. Prefer ``find_faces`` to
+    discover indices, then this tool to highlight them in the GUI.
+    """
+    return select_subshapes_operation(
+        get_freecad_connection(), doc_name, selections, clear
+    )
+
+
+@mcp.tool()
+def get_selection(ctx: Context) -> CallToolResult:
+    """Return the current FreeCADGui selection (document/object/sub)."""
+    return get_selection_operation(get_freecad_connection())
+
+
+@mcp.tool()
+def set_section_view(
+    ctx: Context,
+    enabled: bool | None = None,
+    base: list[float] | None = None,
+    normal: list[float] | None = None,
+    placement: dict[str, Any] | None = None,
+    no_manip: bool = True,
+) -> CallToolResult:
+    """Enable, disable, or query the active view clipping (section) plane.
+
+    Pass ``enabled=True/False`` to toggle. Optionally set plane ``base`` +
+    ``normal`` (or a full ``placement`` dict). Omit args to query status.
+    """
+    return set_section_view_operation(
+        get_freecad_connection(),
+        enabled=enabled,
+        placement=placement,
+        base=base,
+        normal=normal,
+        no_manip=no_manip,
+    )
+
+
+@mcp.tool()
+def diagnose_pocket(
+    ctx: Context,
+    doc_name: str,
+    pocket_name: str,
+) -> CallToolResult:
+    """Diagnose a PartDesign Pocket: support/profile, direction, reversed, length, geometry."""
+    return diagnose_pocket_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        pocket_name,
+    )
+
+
+@mcp.tool()
+def diagnose_helix(
+    ctx: Context,
+    doc_name: str,
+    helix_name: str,
+) -> CallToolResult:
+    """Diagnose a helix/helical-sweep: axis, placement, profile, handedness, pitch/height, result."""
+    return diagnose_helix_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        helix_name,
+    )
+
+
+@mcp.tool()
+def compare_documents(
+    ctx: Context,
+    doc_a: str,
+    doc_b: str,
+    object_pairs: list[Any] | None = None,
+) -> CallToolResult:
+    """Compare two open documents (e.g. V7 vs V8) via paired geometric state diffs.
+
+    ``object_pairs`` optional list of ``{\"a\": \"Body\", \"b\": \"Body\"}`` or
+    ``[\"BodyV7\", \"BodyV8\"]``. When omitted, compares all objects by name.
+    """
+    return compare_documents_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_a,
+        doc_b,
+        object_pairs=object_pairs,
+    )
 
 
 @mcp.tool()
@@ -4465,15 +4600,30 @@ def _validate_host(value: str) -> str:
 def main():
     """Run the MCP server"""
     import argparse
+    import os
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--only-text-feedback", action="store_true", help="Only return text feedback")
     # The addon's RPC server binds IPv4 only, but "localhost" resolves to ::1 first on
     # Windows, costing ~2s per call to fail over to IPv4. Dial IPv4 directly.
     parser.add_argument("--host", type=_validate_host, default="127.0.0.1", help="Host address of the FreeCAD RPC server to connect to (default: 127.0.0.1)")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="RPC port of the FreeCAD addon (default: FREECAD_MCP_PORT or 9875)",
+    )
     args = parser.parse_args()
     state.only_text_feedback = args.only_text_feedback
     state.rpc_host = args.host
+    if args.port is not None:
+        state.rpc_port = int(args.port)
+    else:
+        env_port = os.environ.get("FREECAD_MCP_PORT")
+        if env_port:
+            state.rpc_port = int(env_port)
     logger.info(f"Only text feedback: {state.only_text_feedback}")
-    logger.info(f"Connecting to FreeCAD RPC server at: {state.rpc_host}")
+    logger.info(
+        f"Connecting to FreeCAD RPC server at: {state.rpc_host}:{state.rpc_port}"
+    )
     mcp.run()
