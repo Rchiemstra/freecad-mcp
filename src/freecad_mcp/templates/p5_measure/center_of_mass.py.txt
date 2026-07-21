@@ -1,6 +1,6 @@
 _obj = _doc.getObject($obj_name)
-if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object not found')
-_shape = _obj.Shape
+if not _obj: raise RuntimeError('Object not found')
+_shape, _meta = _resolve_global_shape(_obj)
 if hasattr(_shape, 'CenterOfMass') and _shape.Solids:
     _com = _shape.CenterOfMass
 elif getattr(_shape, 'Solids', None):
@@ -16,4 +16,4 @@ elif getattr(_shape, 'Solids', None):
     _com = FreeCAD.Vector(_weighted.x / _total_vol, _weighted.y / _total_vol, _weighted.z / _total_vol)
 else:
     _com = _shape.CenterOfMass
-print(json.dumps({'x':round(_com.x,6),'y':round(_com.y,6),'z':round(_com.z,6),'unit':'mm','method':'solid' if _shape.Solids else 'shape'}))
+print(json.dumps({'x':round(_com.x,6),'y':round(_com.y,6),'z':round(_com.z,6),'unit':'mm','method':'solid' if _shape.Solids else 'shape','frame':'world',**_meta}))

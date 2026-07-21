@@ -14,8 +14,33 @@ from addon.FreeCADMCP.rpc_server.worker_protocol import (
     CappedTextWriter,
     ProtocolError,
     reject_detectable_gui_usage,
+    validate_subelement_reference,
 )
 from addon.FreeCADMCP.rpc_server import snapshot_service
+
+
+class _RaisingShape:
+    def getElement(self, name):
+        raise ValueError(f"Invalid shape name {name}")
+
+
+class _EmptyShape:
+    Faces = ()
+    Edges = ()
+    Vertexes = ()
+
+    def getElement(self, name):
+        raise ValueError(f"Invalid shape name {name}")
+
+
+class _NamedElementShape:
+    def __init__(self, elements):
+        self._elements = elements
+
+    def getElement(self, name):
+        if name not in self._elements:
+            raise ValueError(f"Invalid shape name {name}")
+        return self._elements[name]
 
 
 def test_stdout_is_capped_while_writing():
@@ -60,3 +85,55 @@ def test_selection_state_includes_selected_subelements(monkeypatch):
     assert snapshot_service._selection_state() == [
         ("Model", "Box", ("Face1", "Edge2"))
     ]
+
+
+@pytest.mark.parametrize("name", ["H_Axis", "V_Axis", "RootPoint"])
+def test_validate_subelement_accepts_sketcher_semantic_names(name):
+    edge = SimpleNamespace(isNull=lambda: False)
+    target = SimpleNamespace(
+        Name="BoltProfileSketch",
+        Shape=_RaisingShape(),
+        getSubObject=lambda requested: edge if requested == name else None,
+    )
+    validate_subelement_reference(target, name)
+
+
+def test_validate_subelement_rejects_unknown_semantic_name():
+    target = SimpleNamespace(
+        Name="BoltProfileSketch",
+        Shape=_EmptyShape(),
+        getSubObject=lambda _name: None,
+    )
+    with pytest.raises(ProtocolError, match="DoesNotExist"):
+        validate_subelement_reference(target, "DoesNotExist")
+
+
+@pytest.mark.parametrize("name", ["../x", "a/b", "a\\b", "bad\nname", "", ".."])
+def test_validate_subelement_rejects_unsafe_names(name):
+    def _boom(_requested):
+        raise AssertionError("resolvers must not run for unsafe names")
+
+    target = SimpleNamespace(
+        Name="Sketch",
+        Shape=SimpleNamespace(getElement=_boom),
+        getSubObject=_boom,
+    )
+    with pytest.raises(ProtocolError, match="does not exist"):
+        validate_subelement_reference(target, name)
+
+
+@pytest.mark.parametrize("name", ["Face999", "Edge999", "Vertex999"])
+def test_validate_subelement_rejects_out_of_range_indexed_names(name):
+    target = SimpleNamespace(Name="Box", Shape=_EmptyShape())
+    with pytest.raises(ProtocolError, match="does not exist"):
+        validate_subelement_reference(target, name)
+
+
+def test_validate_subelement_falls_back_to_shape_get_element():
+    edge = SimpleNamespace(isNull=lambda: False)
+    target = SimpleNamespace(
+        Name="Box",
+        Shape=_NamedElementShape({"CustomEdge": edge}),
+        getSubObject=lambda _name: None,
+    )
+    validate_subelement_reference(target, "CustomEdge")

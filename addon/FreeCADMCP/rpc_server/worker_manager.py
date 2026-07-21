@@ -42,6 +42,16 @@ from .worker_protocol import (
 _VERSION_RE = re.compile(
     r"FreeCAD\s+(\d+)\.(\d+)\.(\d+)(?:[^\r\n]*?Revision:\s*([^\r\n]+))?"
 )
+VERSION_PROBE_TIMEOUT_SECONDS = 15
+
+
+def _console_message(text: str) -> None:
+    try:
+        import FreeCAD
+
+        FreeCAD.Console.PrintMessage(text if text.endswith("\n") else text + "\n")
+    except Exception:
+        pass
 
 
 class WorkerVersionMismatch(RuntimeError):
@@ -186,7 +196,7 @@ class WorkerManager:
             [str(candidate), "--version"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=VERSION_PROBE_TIMEOUT_SECONDS,
             check=False,
             **popen_platform_options(),
         )
@@ -218,6 +228,7 @@ class WorkerManager:
                 require_compatible_builds(expected, actual)
                 self._executable = candidate.resolve()
                 self._executable_version = actual
+                self._last_error = None
                 return self._executable
             except WorkerVersionMismatch as exc:
                 message = f"{candidate}: {exc}"
@@ -364,6 +375,13 @@ class WorkerManager:
                 return self._error(
                     "worker_cancelled", "Worker job was cancelled", job_id=job_id
                 )
+            try:
+                _console_message(
+                    f"FreeCADMCP: worker ACTIVE job={job_id} "
+                    f"(timeout={timeout:g}s, snapshot={snapshot.get('primary_document')})"
+                )
+            except Exception:
+                pass
             with log_path.open("wb") as log:
                 process = subprocess.Popen(
                     command,
@@ -449,7 +467,7 @@ class WorkerManager:
                     )
                 except Exception as exc:
                     return self._error("resource_limit_exceeded", str(exc), job_id=job_id)
-                return {
+                payload = {
                     "success": True,
                     "message": "Python code execution completed.\nOutput: " + result.get("stdout", ""),
                     "recompute_errors": [],
@@ -459,6 +477,18 @@ class WorkerManager:
                     "artifacts": artifacts,
                     "stdout_truncated": bool(result.get("stdout_truncated")),
                 }
+                if snapshot.get("link_warnings"):
+                    payload["link_warnings"] = snapshot["link_warnings"]
+                    if isinstance(payload["structured"], dict):
+                        payload["structured"] = {
+                            **payload["structured"],
+                            "link_warnings": snapshot["link_warnings"],
+                        }
+                _console_message(
+                    f"FreeCADMCP: worker IDLE job={job_id} "
+                    f"ok duration={execution['duration_ms']:.0f}ms"
+                )
+                return payload
             error = result.get("error") or {}
             if error.get("type") == "ExternalLinkUnresolved":
                 error_code = "external_link_unresolved"
@@ -470,6 +500,10 @@ class WorkerManager:
                 error_code = "unsupported_worker_gui"
             else:
                 error_code = "worker_execution_error"
+            _console_message(
+                f"FreeCADMCP: worker IDLE job={job_id} "
+                f"failed error_code={error_code}"
+            )
             return {
                 "success": False,
                 "is_error": True,
@@ -535,11 +569,19 @@ class WorkerManager:
                 for job_id, invocation in self._invocations.items()
                 if invocation is not self._active_invocation and not invocation.cancelled
             ]
+        busy = self._active_process is not None
+        if not available:
+            state = "unavailable"
+        elif busy:
+            state = "busy"
+        else:
+            state = "idle"
         return {
             "available": available,
+            "state": state,
             "version": version,
             "executable": executable_name,
-            "busy": self._active_process is not None,
+            "busy": busy,
             "active_job_id": active_job_id,
             "queue_depth": len(pending_job_ids),
             "pending_job_ids": pending_job_ids,

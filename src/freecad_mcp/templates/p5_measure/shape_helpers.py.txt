@@ -1,0 +1,61 @@
+def _linked_target(_obj):
+    _linked = getattr(_obj, 'LinkedObject', None)
+    if isinstance(_linked, tuple):
+        _linked = _linked[0] if _linked else None
+    return _linked
+
+
+def _shape_has_topology(_shape):
+    if _shape is None:
+        return False
+    try:
+        if _shape.isNull():
+            return False
+    except Exception:
+        return False
+    return bool(getattr(_shape, 'Faces', None) or getattr(_shape, 'Edges', None) or getattr(_shape, 'Vertexes', None))
+
+
+def _raw_shape(_obj):
+    """Local Shape for *obj*, following App::Link when the link Shape is unusable."""
+    if _obj is None:
+        return None, None
+    _shape = getattr(_obj, 'Shape', None)
+    if _shape_has_topology(_shape):
+        return _shape, _obj
+    _linked = _linked_target(_obj)
+    if _linked is not None and _linked is not _obj:
+        return _raw_shape(_linked)
+    return None, None
+
+
+def _resolve_global_shape(_obj):
+    """World-frame shape using getGlobalPlacement once (no Placement double-count).
+
+    Returns ``(shape, meta)`` where *shape* is already in world coordinates.
+    For App::Link with a null/broken proxy Shape, topology is taken from
+    LinkedObject while the Link's getGlobalPlacement() is applied.
+    """
+    if _obj is None:
+        raise RuntimeError('Object not found')
+    _shape, _source = _raw_shape(_obj)
+    if _shape is None or _source is None:
+        raise RuntimeError(
+            'No usable Shape on %r (broken Link, stale refs, or missing solid)'
+            % getattr(_obj, 'Name', _obj)
+        )
+    _gp = _obj.getGlobalPlacement()
+    _out = _shape.copy()
+    _out.transformShape(_gp.toMatrix())
+    _meta = {
+        'object': getattr(_obj, 'Name', None),
+        'type_id': getattr(_obj, 'TypeId', None),
+        'shape_source': getattr(_source, 'Name', None),
+        'used_linked_object': _source is not _obj,
+        'global_placement': {
+            'base': [round(_gp.Base.x, 6), round(_gp.Base.y, 6), round(_gp.Base.z, 6)],
+            'rotation_axis': [round(_gp.Rotation.Axis.x, 6), round(_gp.Rotation.Axis.y, 6), round(_gp.Rotation.Axis.z, 6)],
+            'rotation_angle_deg': round(_gp.Rotation.Angle * 180.0 / math.pi, 6),
+        },
+    }
+    return _out, _meta

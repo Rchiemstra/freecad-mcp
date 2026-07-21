@@ -1,0 +1,28 @@
+_obj = _doc.getObject($obj_name)
+if not _obj: raise RuntimeError('Object not found')
+_shape, _meta = _resolve_global_shape(_obj)
+_bb = _shape.BoundBox
+_vol = float(getattr(_shape, 'Volume', 0.0) or 0.0)
+_area = float(getattr(_shape, 'Area', 0.0) or 0.0)
+_com = None
+try:
+    _c = _shape.CenterOfMass
+    _com = [round(_c.x, 6), round(_c.y, 6), round(_c.z, 6)]
+except Exception:
+    _com = None
+print(json.dumps({
+'ok': True,
+'frame': 'world',
+'volume_mm3': round(_vol, 6),
+'area_mm2': round(_area, 6),
+'center_of_mass': _com,
+'bbox': {
+'xmin': round(_bb.XMin, 6), 'ymin': round(_bb.YMin, 6), 'zmin': round(_bb.ZMin, 6),
+'xmax': round(_bb.XMax, 6), 'ymax': round(_bb.YMax, 6), 'zmax': round(_bb.ZMax, 6),
+'dx': round(_bb.XLength, 6), 'dy': round(_bb.YLength, 6), 'dz': round(_bb.ZLength, 6),
+'diagonal': round(_bb.DiagonalLength, 6),
+},
+'solids': len(getattr(_shape, 'Solids', []) or []),
+'faces': len(getattr(_shape, 'Faces', []) or []),
+'edges': len(getattr(_shape, 'Edges', []) or []),
+**_meta}))

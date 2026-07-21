@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 RecomputeMode = Literal["none", "target", "all"]
 ExecutionMode = Literal["gui", "worker", "auto"]
+LinkPolicy = Literal["strict", "warn"]
 
 
 @dataclass
@@ -20,6 +21,7 @@ class ExecuteOptions:
     capture_view: bool = False
     execution_mode: ExecutionMode = "auto"
     timeout_seconds: float | None = None
+    link_policy: LinkPolicy = "strict"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,6 +34,7 @@ class ExecuteOptions:
             "capture_view": self.capture_view,
             "execution_mode": self.execution_mode,
             "timeout_seconds": self.timeout_seconds,
+            "link_policy": self.link_policy,
         }
 
     @classmethod
@@ -49,6 +52,7 @@ class ExecuteOptions:
             capture_view=bool(data.get("capture_view", False)),
             execution_mode=data.get("execution_mode", "auto"),
             timeout_seconds=data.get("timeout_seconds"),
+            link_policy=data.get("link_policy", "strict"),
         )
 
 

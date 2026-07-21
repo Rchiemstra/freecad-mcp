@@ -37,6 +37,13 @@ from .parts_library import (
 from .reference_repair import inspect_references_gui, repair_references_gui
 from .serialize import serialize_object
 from .snapshot_service import create_primary_snapshot_gui
+from .view_manager import (
+    animate_object_placement,
+    build_orbit_frames,
+    refresh_active_view,
+    save_active_screenshot,
+    save_view_sequence,
+)
 from .worker_manager import WorkerManager, WorkerRuntime
 from .fem_executor import run_fem_analysis as _run_fem_analysis
 
@@ -803,6 +810,7 @@ class FreeCADRPC:
                 "recompute_errors": flat_errors,
                 "session": session,
                 "structured": session,
+                "execution": {"mode": "gui"},
             }
         tb = res.get("traceback")
         return {
@@ -839,7 +847,9 @@ class FreeCADRPC:
             for attempt in range(2):
                 snapshot = self._dispatch_snapshot_gui(
                     lambda: create_primary_snapshot_gui(
-                        options.get("document"), str(workspace)
+                        options.get("document"),
+                        str(workspace),
+                        link_policy=str(options.get("link_policy") or "strict"),
                     )
                 )
                 if not isinstance(snapshot, dict):
@@ -980,7 +990,15 @@ class FreeCADRPC:
     def get_parts_list(self):
         return get_parts_list()
 
-    def get_active_screenshot(self, view_name: str | None = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None) -> str:
+    def get_active_screenshot(
+        self,
+        view_name: str | None = "Isometric",
+        width: int | None = None,
+        height: int | None = None,
+        focus_object: str | None = None,
+        focus_objects: list[str] | None = None,
+        yaw_deg: float | None = None,
+    ) -> str:
         """Get a screenshot of the active view.
         
         Returns a base64-encoded string of the screenshot or None if a screenshot
@@ -1012,7 +1030,15 @@ class FreeCADRPC:
         fd, tmp_path = tempfile.mkstemp(suffix=".png")
         os.close(fd)
         res = self._dispatch_gui(
-            lambda: self._save_active_screenshot(tmp_path, view_name, width, height, focus_object)
+            lambda: save_active_screenshot(
+                tmp_path,
+                view_name or "Isometric",
+                width,
+                height,
+                focus_object=focus_object,
+                focus_objects=focus_objects,
+                yaw_deg=yaw_deg,
+            )
         )
         if res is True:
             try:
@@ -1028,6 +1054,219 @@ class FreeCADRPC:
                 os.remove(tmp_path)
             logger.warning("Failed to capture screenshot: %s", res)
             return None
+
+    def capture_view_sequence(
+        self,
+        frames: list[dict[str, Any]] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        orbit: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Capture multiple framed screenshots and return base64 PNG payloads."""
+        def _run() -> dict[str, Any]:
+            work_frames: list[dict[str, Any]] = []
+            if orbit:
+                work_frames.extend(
+                    build_orbit_frames(
+                        focus_objects=orbit.get("focus_objects"),
+                        focus_object=orbit.get("focus_object"),
+                        steps=int(orbit.get("steps") or 8),
+                        view_name=str(orbit.get("view_name") or "Isometric"),
+                        elevation_yaw_start_deg=float(orbit.get("yaw_start_deg") or 0.0),
+                    )
+                )
+            if frames:
+                work_frames.extend(frames)
+            if not work_frames:
+                return {"ok": False, "error": "Provide frames and/or orbit", "frames": []}
+
+            tmp_dir = tempfile.mkdtemp(prefix="mcp_view_seq_")
+            prepared = []
+            for index, frame in enumerate(work_frames):
+                item = dict(frame)
+                item["path"] = os.path.join(tmp_dir, f"frame_{index:03d}.png")
+                prepared.append(item)
+            results = save_view_sequence(prepared, width=width, height=height)
+            encoded_frames = []
+            for item in results:
+                payload = {
+                    "index": item["index"],
+                    "ok": item["ok"],
+                    "label": item.get("label"),
+                    "view_name": item.get("view_name"),
+                    "focus_objects": item.get("focus_objects") or [],
+                    "yaw_deg": item.get("yaw_deg"),
+                    "error": item.get("error"),
+                    "image_base64": None,
+                }
+                path = item.get("path")
+                if item.get("ok") and path and os.path.exists(path):
+                    with open(path, "rb") as handle:
+                        payload["image_base64"] = base64.b64encode(handle.read()).decode("utf-8")
+                encoded_frames.append(payload)
+            for name in os.listdir(tmp_dir):
+                try:
+                    os.remove(os.path.join(tmp_dir, name))
+                except OSError:
+                    pass
+            try:
+                os.rmdir(tmp_dir)
+            except OSError:
+                pass
+            ok_count = sum(1 for frame in encoded_frames if frame["ok"] and frame["image_base64"])
+            return {
+                "ok": ok_count > 0,
+                "frame_count": len(encoded_frames),
+                "ok_count": ok_count,
+                "frames": encoded_frames,
+            }
+
+        try:
+            return self._dispatch_gui(_run)
+        except Exception as exc:
+            logger.exception("capture_view_sequence failed")
+            return {"ok": False, "error": str(exc), "frames": []}
+
+    def capture_view_sequence_to_disk(
+        self,
+        frames: list[dict[str, Any]] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        orbit: dict[str, Any] | None = None,
+        frame_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Capture frames to a directory and return PNG paths (for ffmpeg)."""
+        def _run() -> dict[str, Any]:
+            work_frames: list[dict[str, Any]] = []
+            if orbit:
+                work_frames.extend(
+                    build_orbit_frames(
+                        focus_objects=orbit.get("focus_objects"),
+                        focus_object=orbit.get("focus_object"),
+                        steps=int(orbit.get("steps") or 8),
+                        view_name=str(orbit.get("view_name") or "Isometric"),
+                        elevation_yaw_start_deg=float(orbit.get("yaw_start_deg") or 0.0),
+                    )
+                )
+            if frames:
+                work_frames.extend(frames)
+            if not work_frames:
+                return {"ok": False, "error": "Provide frames and/or orbit", "frame_paths": []}
+            out_dir = frame_dir or tempfile.mkdtemp(prefix="mcp_view_disk_")
+            os.makedirs(out_dir, exist_ok=True)
+            prepared = []
+            for index, frame in enumerate(work_frames):
+                item = dict(frame)
+                item["path"] = os.path.join(out_dir, f"frame_{index:03d}.png")
+                prepared.append(item)
+            results = save_view_sequence(prepared, width=width, height=height)
+            paths = [item["path"] for item in results if item.get("ok")]
+            return {
+                "ok": bool(paths),
+                "frame_dir": out_dir,
+                "frame_count": len(results),
+                "ok_count": len(paths),
+                "frame_paths": paths,
+                "frames": results,
+            }
+
+        try:
+            return self._dispatch_gui(_run)
+        except Exception as exc:
+            logger.exception("capture_view_sequence_to_disk failed")
+            return {"ok": False, "error": str(exc), "frame_paths": []}
+
+    def refresh_view(
+        self,
+        focus_objects: list[str] | None = None,
+        focus_object: str | None = None,
+        touch_objects: list[str] | None = None,
+        fit: bool = False,
+        capture: bool = False,
+        view_name: str = "Isometric",
+        width: int | None = None,
+        height: int | None = None,
+    ) -> dict[str, Any]:
+        def _run() -> dict[str, Any]:
+            result = refresh_active_view(
+                focus_object=focus_object,
+                focus_objects=focus_objects,
+                touch_objects=touch_objects,
+                fit=fit,
+            )
+            if not result.get("ok"):
+                return result
+            if capture:
+                fd, tmp_path = tempfile.mkstemp(suffix=".png")
+                os.close(fd)
+                status = save_active_screenshot(
+                    tmp_path,
+                    view_name=view_name,
+                    width=width,
+                    height=height,
+                    focus_object=focus_object,
+                    focus_objects=focus_objects,
+                )
+                if status is True:
+                    with open(tmp_path, "rb") as handle:
+                        result["image_base64"] = base64.b64encode(handle.read()).decode("utf-8")
+                else:
+                    result["capture_error"] = str(status)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            return result
+
+        try:
+            return self._dispatch_gui(_run)
+        except Exception as exc:
+            logger.exception("refresh_view failed")
+            return {"ok": False, "error": str(exc)}
+
+    def animate_placement(
+        self,
+        doc_name: str,
+        obj_name: str,
+        keyframes: list[dict[str, Any]] | None = None,
+        path_object: str | None = None,
+        sample_count: int = 12,
+        view_name: str = "Isometric",
+        focus_objects: list[str] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        encode_video: bool = False,
+        fps: float = 8.0,
+        output_path: str | None = None,
+    ) -> dict[str, Any]:
+        def _run() -> dict[str, Any]:
+            result = animate_object_placement(
+                doc_name,
+                obj_name,
+                keyframes=keyframes,
+                path_object=path_object,
+                sample_count=sample_count,
+                view_name=view_name,
+                focus_objects=focus_objects,
+                width=width,
+                height=height,
+            )
+            if not result.get("ok"):
+                return result
+            encoded_frames = []
+            for frame in result.get("frames", []):
+                payload = dict(frame)
+                path = frame.get("path")
+                if frame.get("ok") and path and os.path.exists(path):
+                    with open(path, "rb") as handle:
+                        payload["image_base64"] = base64.b64encode(handle.read()).decode("utf-8")
+                encoded_frames.append(payload)
+            result["frames"] = encoded_frames
+            return result
+
+        try:
+            return self._dispatch_gui(_run)
+        except Exception as exc:
+            logger.exception("animate_placement failed")
+            return {"ok": False, "error": str(exc)}
 
     def sketch_create(self, doc_name: str, sketch_name: str, body_name: str | None = None, attach_to: str | None = None) -> dict:
         res = self._dispatch_gui(lambda: self._sketch_create_gui(doc_name, sketch_name, body_name, attach_to))
@@ -1341,55 +1580,25 @@ class FreeCADRPC:
     def _run_fem_analysis_gui(self, doc_name: str, analysis_name: str):
         return _run_fem_analysis(doc_name, analysis_name)
 
-    def _save_active_screenshot(self, save_path: str, view_name: str | None = "Isometric", width: int | None = None, height: int | None = None, focus_object: str | None = None):
-        try:
-            view = FreeCADGui.ActiveDocument.ActiveView
-            # Check if the view supports screenshots
-            if not hasattr(view, 'saveImage'):
-                return "Current view does not support screenshots"
-                
-            if view_name is not None:
-                if view_name == "Isometric":
-                    view.viewIsometric()
-                elif view_name == "Front":
-                    view.viewFront()
-                elif view_name == "Top":
-                    view.viewTop()
-                elif view_name == "Right":
-                    view.viewRight()
-                elif view_name == "Back":
-                    view.viewBack()
-                elif view_name == "Left":
-                    view.viewLeft()
-                elif view_name == "Bottom":
-                    view.viewBottom()
-                elif view_name == "Dimetric":
-                    view.viewDimetric()
-                elif view_name == "Trimetric":
-                    view.viewTrimetric()
-                else:
-                    raise ValueError(f"Invalid view name: {view_name}")
-
-            # Focus on specific object or fit all
-            if focus_object:
-                doc = FreeCAD.ActiveDocument
-                obj = doc.getObject(focus_object) if doc else None
-                if obj:
-                    FreeCADGui.Selection.clearSelection()
-                    FreeCADGui.Selection.addSelection(obj)
-                    FreeCADGui.SendMsgToActiveView("ViewSelection")
-                else:
-                    view.fitAll()
-            elif view_name is not None:
-                view.fitAll()
-            FreeCADGui.updateGui()
-            if width is not None and height is not None:
-                view.saveImage(save_path, width, height)
-            else:
-                view.saveImage(save_path)
-            return True
-        except Exception as e:
-            return str(e)
+    def _save_active_screenshot(
+        self,
+        save_path: str,
+        view_name: str | None = "Isometric",
+        width: int | None = None,
+        height: int | None = None,
+        focus_object: str | None = None,
+        focus_objects: list[str] | None = None,
+        yaw_deg: float | None = None,
+    ):
+        return save_active_screenshot(
+            save_path,
+            view_name or "Isometric",
+            width,
+            height,
+            focus_object=focus_object,
+            focus_objects=focus_objects,
+            yaw_deg=yaw_deg,
+        )
 
 
     def _sketch_create_gui(self, doc_name, sketch_name, body_name, attach_to):

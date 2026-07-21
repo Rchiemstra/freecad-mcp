@@ -25,6 +25,10 @@ from .operations import (
     get_recompute_log_operation,
     get_sketch_diagnostics_operation,
     get_view_operation,
+    save_view_sequence_operation,
+    encode_view_video_operation,
+    animate_placement_operation,
+    refresh_view_operation,
     insert_part_from_library_operation,
     list_documents_operation,
     sketch_create_operation,
@@ -93,6 +97,8 @@ from .operations import (
     measure_area_operation,
     measure_volume_operation,
     bounding_box_operation,
+    get_global_shape_operation,
+    common_volume_along_path_operation,
     center_of_mass_operation,
     validate_geometry_operation,
     translate_operation,
@@ -577,6 +583,7 @@ def execute_code(
     capture_view: bool = False,
     execution_mode: Literal["gui", "worker", "auto"] = "auto",
     timeout_seconds: float | None = None,
+    link_policy: Literal["strict", "warn"] = "strict",
 ) -> CallToolResult:
     """Execute arbitrary Python code in FreeCAD.
 
@@ -591,6 +598,9 @@ def execute_code(
         capture_view: Include a viewport screenshot (default false).
         execution_mode: Conservative ``auto`` (default), explicit ``gui``, or isolated ``worker``.
         timeout_seconds: Hard worker timeout from 1 to 900 seconds.
+        link_policy: Worker snapshot policy for broken joint/link refs. ``strict``
+            fails the snapshot; ``warn`` continues and returns ``link_warnings``.
+            Only meaningful with ``execution_mode="worker"``.
 
     Returns:
         Execution output with structured session/recompute metadata, or an error with traceback.
@@ -608,12 +618,20 @@ def execute_code(
         capture_view=capture_view,
         execution_mode=execution_mode,
         timeout_seconds=timeout_seconds,
+        link_policy=link_policy,
     )
 
 
 @mcp.tool()
 def get_worker_status(ctx: Context) -> CallToolResult:
-    """Report isolated FreeCADCmd availability and active/pending worker jobs."""
+    """Report isolated FreeCADCmd availability and whether a worker job is active.
+
+    Returns JSON with:
+    - ``state``: ``idle`` | ``busy`` | ``unavailable``
+    - ``busy``: true while a FreeCADCmd job is running
+    - ``active_job_id`` / ``pending_job_ids`` / ``queue_depth``
+    - ``available``, ``version``, ``executable``, ``last_error``
+    """
     try:
         return json_response(get_freecad_connection().get_worker_status())
     except Exception as exc:
@@ -636,6 +654,8 @@ def get_view(
     width: int | None = None,
     height: int | None = None,
     focus_object: str | None = None,
+    focus_objects: list[str] | None = None,
+    yaw_deg: float | None = None,
 ) -> CallToolResult:
     """Get a screenshot of the active view.
 
@@ -653,12 +673,150 @@ def get_view(
         - "Trimetric"
         width: The width of the screenshot in pixels. If not specified, uses the viewport width.
         height: The height of the screenshot in pixels. If not specified, uses the viewport height.
-        focus_object: The name of the object to focus on. If not specified, fits all objects in the view.
+        focus_object: Optional single object name to frame. Comma-separated names are also accepted.
+        focus_objects: Optional list of object names to frame together (preferred for stations/assemblies).
+        yaw_deg: Optional extra camera yaw in degrees after framing.
 
     Returns:
         A screenshot of the active view.
     """
-    return get_view_operation(get_freecad_connection(), view_name, width, height, focus_object)
+    return get_view_operation(
+        get_freecad_connection(),
+        view_name,
+        width,
+        height,
+        focus_object=focus_object,
+        focus_objects=focus_objects,
+        yaw_deg=yaw_deg,
+    )
+
+
+@mcp.tool()
+def save_view_sequence(
+    ctx: Context,
+    frames: list[dict[str, Any]] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    orbit: dict[str, Any] | None = None,
+) -> CallToolResult:
+    """Capture multiple framed screenshots for motion/station review.
+
+    Provide ``frames`` and/or ``orbit``.
+
+    Frame dict fields:
+    - ``view_name`` (default ``Isometric``)
+    - ``focus_object`` / ``focus_objects``
+    - ``yaw_deg``
+    - ``label``
+
+    Orbit dict fields:
+    - ``focus_object`` / ``focus_objects``
+    - ``steps`` (default 8)
+    - ``view_name`` (default ``Isometric``)
+    - ``yaw_start_deg`` (default 0)
+
+    Returns text metadata plus one PNG image per successful frame.
+    """
+    return save_view_sequence_operation(
+        get_freecad_connection(),
+        frames=frames,
+        width=width,
+        height=height,
+        orbit=orbit,
+        only_text_feedback=state.only_text_feedback,
+    )
+
+
+@mcp.tool()
+def encode_view_video(
+    ctx: Context,
+    frames: list[dict[str, Any]] | None = None,
+    orbit: dict[str, Any] | None = None,
+    frame_paths: list[str] | None = None,
+    output_path: str | None = None,
+    fps: float = 8.0,
+    width: int | None = None,
+    height: int | None = None,
+) -> CallToolResult:
+    """Encode a view sequence to MP4 using system ffmpeg (not a git submodule).
+
+    Provide existing ``frame_paths`` and/or capture via ``frames``/``orbit``
+    (same shape as ``save_view_sequence``). Resolves ffmpeg from
+    ``FREECAD_MCP_FFMPEG`` or PATH.
+    """
+    return encode_view_video_operation(
+        get_freecad_connection(),
+        frames=frames,
+        orbit=orbit,
+        frame_paths=frame_paths,
+        output_path=output_path,
+        fps=fps,
+        width=width,
+        height=height,
+        only_text_feedback=state.only_text_feedback,
+    )
+
+
+@mcp.tool()
+def refresh_view(
+    ctx: Context,
+    focus_objects: list[str] | None = None,
+    focus_object: str | None = None,
+    touch_objects: list[str] | None = None,
+    fit: bool = False,
+    capture: bool = False,
+    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric"] = "Isometric",
+) -> CallToolResult:
+    """Force a GUI redraw after Link/shape edits; optionally touch Placement and frame."""
+    return refresh_view_operation(
+        get_freecad_connection(),
+        focus_objects=focus_objects,
+        focus_object=focus_object,
+        touch_objects=touch_objects,
+        fit=fit,
+        capture=capture,
+        view_name=view_name,
+        only_text_feedback=state.only_text_feedback,
+    )
+
+
+@mcp.tool()
+def animate_placement(
+    ctx: Context,
+    doc_name: str,
+    obj_name: str,
+    keyframes: list[dict[str, Any]] | None = None,
+    path_object: str | None = None,
+    sample_count: int = 12,
+    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric"] = "Isometric",
+    focus_objects: list[str] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    encode_video: bool = False,
+    fps: float = 8.0,
+    output_path: str | None = None,
+) -> CallToolResult:
+    """Animate an object's Placement along keyframes or a path wire, capture frames, restore.
+
+    Prefer this over Shape edits for App::Link visibility. Optionally encodes MP4
+    via system ffmpeg when ``encode_video=True``.
+    """
+    return animate_placement_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        obj_name,
+        keyframes=keyframes,
+        path_object=path_object,
+        sample_count=sample_count,
+        view_name=view_name,
+        focus_objects=focus_objects,
+        width=width,
+        height=height,
+        encode_video=encode_video,
+        fps=fps,
+        output_path=output_path,
+    )
 
 
 @mcp.tool()
@@ -2761,16 +2919,87 @@ def bounding_box(
     doc_name: str,
     obj_name: str,
 ) -> CallToolResult:
-    """Return the axis-aligned bounding box of a shape.
+    """Return the world-frame axis-aligned bounding box of a shape.
+
+    Link-safe: follows ``App::Link`` to the linked solid when needed and applies
+    ``getGlobalPlacement()`` once (no Placement double-counting).
 
     Args:
         doc_name: Document containing the object.
-        obj_name: Name of the shape object.
+        obj_name: Name of the shape object or Link.
 
     Returns:
-        JSON with xmin/ymin/zmin/xmax/ymax/zmax and dx/dy/dz dimensions.
+        JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, and shape-source metadata.
     """
     return bounding_box_operation(get_freecad_connection(), doc_name, obj_name)
+
+
+@mcp.tool()
+def get_global_shape(
+    ctx: Context,
+    doc_name: str,
+    obj_name: str,
+) -> CallToolResult:
+    """Resolve a world-frame shape summary for solids and App::Link objects.
+
+    Use this when you need bbox/volume/COM without baking Placement twice.
+    Follows broken/null Link proxy shapes to ``LinkedObject`` when possible.
+
+    Args:
+        doc_name: Document containing the object.
+        obj_name: Object or Link name.
+
+    Returns:
+        JSON with frame=world metrics, bbox, volume, COM, and placement metadata.
+    """
+    return get_global_shape_operation(get_freecad_connection(), doc_name, obj_name)
+
+
+@mcp.tool()
+def common_volume_along_path(
+    ctx: Context,
+    doc_name: str,
+    moving_object: str,
+    obstacle_objects: list[str],
+    path_object: str | None = None,
+    sample_count: int = 12,
+    samples: list[dict[str, Any]] | None = None,
+    volume_threshold_mm3: float = 1e-6,
+    stop_on_first_hit: bool = False,
+) -> CallToolResult:
+    """Sweep a moving solid along a path and report common volumes with obstacles.
+
+    Provide either:
+    - ``path_object`` + ``sample_count`` to sample a wire/edge path, or
+    - ``samples`` as ``[{x,y,z, yaw_deg?}, ...]`` world positions for the moving
+      object's global placement origin.
+
+    Runs read-only in the isolated worker.
+
+    Args:
+        doc_name: Document containing the objects.
+        moving_object: Object/Link that moves along the path.
+        obstacle_objects: Objects/Links to intersect against.
+        path_object: Optional wire/edge object to sample.
+        sample_count: Samples along ``path_object`` (ignored when ``samples`` is set).
+        samples: Explicit world-space sample points.
+        volume_threshold_mm3: Minimum common volume counted as a collision.
+        stop_on_first_hit: Stop sampling after the first colliding sample.
+
+    Returns:
+        JSON with per-sample common volumes and collision flags.
+    """
+    return common_volume_along_path_operation(
+        get_freecad_connection(),
+        doc_name,
+        moving_object,
+        obstacle_objects,
+        path_object=path_object,
+        sample_count=sample_count,
+        samples=samples,
+        volume_threshold_mm3=volume_threshold_mm3,
+        stop_on_first_hit=stop_on_first_hit,
+    )
 
 
 @mcp.tool()

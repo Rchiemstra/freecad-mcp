@@ -180,7 +180,7 @@ class TestBoundingBox:
     def test_boundbox_attribute_read(self):
         conn = _ok_conn()
         bounding_box_operation(conn, "Doc", "Box1")
-        assert_code_contains(_code(conn), "BoundBox")
+        assert_code_contains(_code(conn), "_resolve_global_shape", "BoundBox")
 
     def test_json_has_expected_keys(self):
         conn = _ok_conn()
@@ -188,6 +188,79 @@ class TestBoundingBox:
         code = _code(conn)
         for key in ("xmin", "ymin", "zmin", "xmax", "ymax", "zmax", "dx", "dy", "dz"):
             assert_code_contains(code, f"'{key}'")
+
+    def test_link_safe_world_frame(self):
+        conn = _ok_conn()
+        bounding_box_operation(conn, "Doc", "Link1")
+        code = _code(conn)
+        assert_code_contains(code, "_resolve_global_shape", "LinkedObject", "getGlobalPlacement", "'frame':'world'")
+
+
+# ---------------------------------------------------------------------------
+# P5-5b  get_global_shape
+# ---------------------------------------------------------------------------
+
+class TestGetGlobalShape:
+    def test_success(self):
+        from freecad_mcp.operations.p5_measure import get_global_shape_operation
+        resp = get_global_shape_operation(_ok_conn(), "Doc", "Obj1")
+        assert _text(resp)
+
+    def test_compiles(self):
+        from freecad_mcp.operations.p5_measure import get_global_shape_operation
+        conn = _ok_conn()
+        get_global_shape_operation(conn, "Doc", "Box1")
+        assert_code_compiles(_code(conn))
+
+    def test_uses_global_helper(self):
+        from freecad_mcp.operations.p5_measure import get_global_shape_operation
+        conn = _ok_conn()
+        get_global_shape_operation(conn, "Doc", "Link1")
+        assert_code_contains(_code(conn), "_resolve_global_shape", "bbox", "volume_mm3")
+
+
+# ---------------------------------------------------------------------------
+# P5-5c  common_volume_along_path
+# ---------------------------------------------------------------------------
+
+class TestCommonVolumeAlongPath:
+    def test_success_with_samples(self):
+        from freecad_mcp.operations.p5_measure import common_volume_along_path_operation
+        resp = common_volume_along_path_operation(
+            _ok_conn(),
+            "Doc",
+            "Mover",
+            ["Wall"],
+            samples=[{"x": 0, "y": 0, "z": 0}, {"x": 10, "y": 0, "z": 0}],
+        )
+        assert _text(resp)
+
+    def test_requires_path_or_samples(self):
+        from freecad_mcp.operations.p5_measure import common_volume_along_path_operation
+        resp = common_volume_along_path_operation(_ok_conn(), "Doc", "Mover", ["Wall"])
+        assert "samples" in _text(resp) or "path_object" in _text(resp)
+
+    def test_compiles_path_object(self):
+        from freecad_mcp.operations.p5_measure import common_volume_along_path_operation
+        conn = _ok_conn()
+        common_volume_along_path_operation(
+            conn, "Doc", "Mover", ["Wall", "Block"], path_object="Rail", sample_count=5
+        )
+        code = _code(conn)
+        assert_code_compiles(code)
+        assert_code_contains(code, "_resolve_global_shape", ".common(", "discretize", "common_volume_mm3")
+
+    def test_runs_in_worker(self):
+        from freecad_mcp.operations.p5_measure import common_volume_along_path_operation
+        conn = _ok_conn()
+        common_volume_along_path_operation(
+            conn, "Doc", "Mover", ["Wall"], samples=[{"x": 1, "y": 2, "z": 3}]
+        )
+        opts = conn.execute_code.call_args[0][1]
+        if hasattr(opts, "to_dict"):
+            opts = opts.to_dict()
+        assert opts["execution_mode"] == "worker"
+        assert opts["read_only"] is True
 
 
 # ---------------------------------------------------------------------------

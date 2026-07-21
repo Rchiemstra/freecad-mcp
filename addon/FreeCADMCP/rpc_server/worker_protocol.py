@@ -34,16 +34,71 @@ class UnsupportedWorkerGuiError(ProtocolError):
 _SUBELEMENT_RE = re.compile(r"^(Face|Edge|Vertex)([1-9][0-9]*)$")
 
 
+def _is_null_subobject(value: Any) -> bool:
+    if value is None:
+        return True
+    is_null = getattr(value, "isNull", None)
+    if callable(is_null):
+        try:
+            return bool(is_null())
+        except Exception:
+            return False
+    return False
+
+
+def _subelement_name_is_safe(name: str) -> bool:
+    """Reject empty or path-like names; allow semantic identifiers such as H_Axis."""
+    if not name or name in {".", ".."}:
+        return False
+    if any(ord(ch) < 32 for ch in name):
+        return False
+    if "/" in name or "\\" in name:
+        return False
+    if ".." in name:
+        return False
+    return True
+
+
+def _resolve_via_get_subobject(target: Any, name: str) -> Any | None:
+    getter = getattr(target, "getSubObject", None)
+    if not callable(getter):
+        return None
+    try:
+        resolved = getter(name)
+    except Exception:
+        return None
+    if _is_null_subobject(resolved):
+        return None
+    return resolved
+
+
+def _resolve_via_shape_element(shape: Any, name: str) -> Any | None:
+    getter = getattr(shape, "getElement", None)
+    if not callable(getter):
+        return None
+    try:
+        resolved = getter(name)
+    except Exception:
+        return None
+    if _is_null_subobject(resolved):
+        return None
+    return resolved
+
+
 def validate_subelement_reference(target: Any, subelement: str) -> None:
-    """Resolve a shape subelement by stable name and reject nonexistent indices."""
+    """Resolve a shape or semantic subelement and reject nonexistent references.
+
+    Indexed ``FaceN``/``EdgeN``/``VertexN`` names are validated against shape
+    collections. Other safe names (for example Sketcher ``H_Axis``) are resolved
+    via ``target.getSubObject``, with ``Shape.getElement`` as a fallback.
+    """
     name = str(subelement)
+    owner = getattr(target, "Name", "<unknown>")
     shape = getattr(target, "Shape", None)
-    if shape is None:
-        raise ProtocolError(
-            f"{getattr(target, 'Name', '<unknown>')}.{name} has no target shape"
-        )
     match = _SUBELEMENT_RE.fullmatch(name)
     if match:
+        if shape is None:
+            raise ProtocolError(f"{owner}.{name} has no target shape")
         collection_name = {
             "Face": "Faces",
             "Edge": "Edges",
@@ -52,20 +107,17 @@ def validate_subelement_reference(target: Any, subelement: str) -> None:
         collection = getattr(shape, collection_name, None)
         index = int(match.group(2))
         if collection is None or index > len(collection):
-            raise ProtocolError(
-                f"{getattr(target, 'Name', '<unknown>')}.{name} does not exist"
-            )
+            raise ProtocolError(f"{owner}.{name} does not exist")
         return
-    try:
-        resolved = shape.getElement(name)
-    except Exception as exc:
-        raise ProtocolError(
-            f"{getattr(target, 'Name', '<unknown>')}.{name} does not exist"
-        ) from exc
-    if resolved is None or bool(getattr(resolved, "isNull", lambda: False)()):
-        raise ProtocolError(
-            f"{getattr(target, 'Name', '<unknown>')}.{name} does not exist"
-        )
+    if not _subelement_name_is_safe(name):
+        raise ProtocolError(f"{owner}.{name} does not exist")
+    if _resolve_via_get_subobject(target, name) is not None:
+        return
+    if shape is not None and _resolve_via_shape_element(shape, name) is not None:
+        return
+    if shape is None and not callable(getattr(target, "getSubObject", None)):
+        raise ProtocolError(f"{owner}.{name} has no target shape")
+    raise ProtocolError(f"{owner}.{name} does not exist")
 
 
 class CappedTextWriter:

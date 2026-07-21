@@ -230,6 +230,7 @@ def execute_code_operation(
     capture_view: bool = False,
     execution_mode: str = "auto",
     timeout_seconds: float | None = None,
+    link_policy: str = "strict",
 ) -> ToolResponse:
     opts = ExecuteOptions(
         document=document,
@@ -241,6 +242,7 @@ def execute_code_operation(
         capture_view=capture_view,
         execution_mode=execution_mode,  # type: ignore[arg-type]
         timeout_seconds=timeout_seconds,
+        link_policy=link_policy,  # type: ignore[arg-type]
     )
     try:
         res = freecad.execute_code(code, opts)
@@ -294,18 +296,39 @@ def get_view_operation(
     width: int | None = None,
     height: int | None = None,
     focus_object: str | None = None,
+    focus_objects: list[str] | None = None,
+    yaw_deg: float | None = None,
 ) -> ToolResponse:
-    screenshot = freecad.get_active_screenshot(view_name, width, height, focus_object)
+    screenshot = freecad.get_active_screenshot(
+        view_name,
+        width,
+        height,
+        focus_object=focus_object,
+        focus_objects=focus_objects,
+        yaw_deg=yaw_deg,
+    )
     if screenshot is not None:
-        label = f"View: {view_name}" + (f" | focus: {focus_object}" if focus_object else "")
+        focus_bits = []
+        if focus_object:
+            focus_bits.append(focus_object)
+        if focus_objects:
+            focus_bits.extend(focus_objects)
+        label = f"View: {view_name}"
+        if focus_bits:
+            label += " | focus: " + ", ".join(focus_bits)
+        if yaw_deg is not None:
+            label += f" | yaw: {yaw_deg:g}°"
         return tool_ok(label, screenshot=screenshot)
     # P10 / I10 fallback: no viewable image (headless / TechDraw / Spreadsheet).
     # Return a compact geometric state of the focus object (or all objects) as a
     # text-only stand-in so the agent still gets something to reason about.
     try:
+        focus_for_fallback = focus_object
+        if not focus_for_fallback and focus_objects:
+            focus_for_fallback = focus_objects[0]
         code = "\n".join(render_template_lines(
             "diagnostics/active_state.py.txt",
-            focus_object=repr(focus_object),
+            focus_object=repr(focus_for_fallback),
         ))
         res = freecad.execute_code(
             code,
@@ -327,6 +350,56 @@ def get_view_operation(
     except Exception as e:
         logger.error(f"get_view fallback failed: {e}")
     return tool_fail("Cannot get screenshot in the current view type (such as TechDraw or Spreadsheet)")
+
+
+def save_view_sequence_operation(
+    freecad: FreeCADConnection,
+    frames: list[dict] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    orbit: dict | None = None,
+    only_text_feedback: bool = False,
+) -> ToolResponse:
+    """Capture a multi-frame view sequence (manual frames and/or yaw orbit)."""
+    result = freecad.capture_view_sequence(
+        frames=frames,
+        width=width,
+        height=height,
+        orbit=orbit,
+    )
+    if not result.get("ok"):
+        return tool_fail(
+            f"Failed to capture view sequence: {result.get('error', 'unknown error')}",
+            structured=result if isinstance(result, dict) else None,
+        )
+    images = [
+        frame.get("image_base64")
+        for frame in result.get("frames", [])
+        if frame.get("ok") and frame.get("image_base64")
+    ]
+    summary = {
+        "ok": True,
+        "frame_count": result.get("frame_count"),
+        "ok_count": result.get("ok_count"),
+        "frames": [
+            {
+                "index": frame.get("index"),
+                "ok": frame.get("ok"),
+                "label": frame.get("label"),
+                "view_name": frame.get("view_name"),
+                "focus_objects": frame.get("focus_objects"),
+                "yaw_deg": frame.get("yaw_deg"),
+                "error": frame.get("error"),
+            }
+            for frame in result.get("frames", [])
+        ],
+    }
+    return tool_ok(
+        f"Captured {result.get('ok_count', 0)}/{result.get('frame_count', 0)} view frames",
+        screenshots=None if only_text_feedback else images,
+        only_text_feedback=only_text_feedback,
+        structured=summary,
+    )
 
 
 def insert_part_from_library_operation(

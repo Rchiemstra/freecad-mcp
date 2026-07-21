@@ -115,12 +115,104 @@ class FreeCADConnection:
         width: int | None = None,
         height: int | None = None,
         focus_object: str | None = None,
+        focus_objects: list[str] | None = None,
+        yaw_deg: float | None = None,
     ) -> str | None:
         try:
-            return self.server.get_active_screenshot(view_name, width, height, focus_object)
+            return self.server.get_active_screenshot(
+                view_name,
+                width,
+                height,
+                focus_object,
+                focus_objects,
+                yaw_deg,
+            )
         except Exception as e:
             logger.error(f"Error getting screenshot: {e}")
             return None
+
+    def capture_view_sequence(
+        self,
+        frames: list[dict[str, Any]] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        orbit: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return self.server.capture_view_sequence(frames, width, height, orbit)
+        except Exception as e:
+            logger.error(f"Error capturing view sequence: {e}")
+            return {"ok": False, "error": str(e), "frames": []}
+
+    def capture_view_sequence_to_disk(
+        self,
+        frames: list[dict[str, Any]] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        orbit: dict[str, Any] | None = None,
+        frame_dir: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return self.server.capture_view_sequence_to_disk(
+                frames, width, height, orbit, frame_dir
+            )
+        except Exception as e:
+            logger.error(f"Error capturing view sequence to disk: {e}")
+            return {"ok": False, "error": str(e), "frame_paths": []}
+
+    def refresh_view(
+        self,
+        focus_objects: list[str] | None = None,
+        focus_object: str | None = None,
+        touch_objects: list[str] | None = None,
+        fit: bool = False,
+        capture: bool = False,
+        view_name: str = "Isometric",
+        width: int | None = None,
+        height: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return self.server.refresh_view(
+                focus_objects,
+                focus_object,
+                touch_objects,
+                fit,
+                capture,
+                view_name,
+                width,
+                height,
+            )
+        except Exception as e:
+            logger.error(f"Error refreshing view: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def animate_placement(
+        self,
+        doc_name: str,
+        obj_name: str,
+        keyframes: list[dict[str, Any]] | None = None,
+        path_object: str | None = None,
+        sample_count: int = 12,
+        view_name: str = "Isometric",
+        focus_objects: list[str] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return self.server.animate_placement(
+                doc_name,
+                obj_name,
+                keyframes,
+                path_object,
+                sample_count,
+                view_name,
+                focus_objects,
+                width,
+                height,
+            )
+        except Exception as e:
+            logger.error(f"Error animating placement: {e}")
+            return {"ok": False, "error": str(e)}
 
     def get_objects(self, doc_name: str) -> list[dict[str, Any]]:
         return self.server.get_objects(doc_name)

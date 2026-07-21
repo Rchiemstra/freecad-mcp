@@ -13,6 +13,7 @@ from .core import (
     get_recompute_log_operation,
     get_sketch_diagnostics_operation,
     get_view_operation,
+    save_view_sequence_operation,
     insert_part_from_library_operation,
     list_documents_operation,
     sketch_create_operation,
@@ -98,6 +99,8 @@ from .p5_measure import (
     measure_area_operation,
     measure_volume_operation,
     bounding_box_operation,
+    get_global_shape_operation,
+    common_volume_along_path_operation,
     center_of_mass_operation,
     validate_geometry_operation,
     translate_operation,
@@ -130,6 +133,13 @@ from .p7_assembly import (
     sketch_add_external_projection_operation,
     solve_assembly_operation,
     sweep_pipe_operation,
+)
+
+# Video / placement animation / view refresh
+from .video_anim import (
+    animate_placement_operation,
+    encode_view_video_operation,
+    refresh_view_operation,
 )
 
 # Diagnostics — read-only P1/P8/P10 guards
@@ -175,6 +185,10 @@ __all__ = [
     "get_recompute_log_operation",
     "get_sketch_diagnostics_operation",
     "get_view_operation",
+    "save_view_sequence_operation",
+    "encode_view_video_operation",
+    "animate_placement_operation",
+    "refresh_view_operation",
     "insert_part_from_library_operation",
     "list_documents_operation",
     "sketch_create_operation",
@@ -243,6 +257,8 @@ __all__ = [
     "measure_area_operation",
     "measure_volume_operation",
     "bounding_box_operation",
+    "get_global_shape_operation",
+    "common_volume_along_path_operation",
     "center_of_mass_operation",
     "validate_geometry_operation",
     "translate_operation",

@@ -1,0 +1,121 @@
+_moving_name = $moving_object
+_obstacle_names = $obstacle_objects
+_path_object = $path_object
+_sample_count = int($sample_count)
+_samples = $samples
+_volume_threshold = float($volume_threshold_mm3)
+_stop_on_hit = bool($stop_on_first_hit)
+
+_moving_obj = _doc.getObject(_moving_name)
+if not _moving_obj:
+    raise RuntimeError('Moving object not found: ' + str(_moving_name))
+_moving_shape, _moving_meta = _resolve_global_shape(_moving_obj)
+_origin = FreeCAD.Vector(_moving_meta['global_placement']['base'])
+
+_obstacles = []
+for _name in _obstacle_names:
+    _o = _doc.getObject(_name)
+    if not _o:
+        raise RuntimeError('Obstacle object not found: ' + str(_name))
+    _oshape, _ometa = _resolve_global_shape(_o)
+    _obstacles.append((_name, _oshape, _ometa))
+
+_positions = []
+if _samples:
+    for _i, _sample in enumerate(_samples):
+        if not isinstance(_sample, dict):
+            raise RuntimeError('Each sample must be a dict with x/y/z')
+        _positions.append({
+            'index': _i,
+            'parameter': float(_sample.get('parameter', _i)),
+            'x': float(_sample['x']),
+            'y': float(_sample['y']),
+            'z': float(_sample['z']),
+            'yaw_deg': float(_sample['yaw_deg']) if 'yaw_deg' in _sample else None,
+        })
+elif _path_object:
+    _path_obj = _doc.getObject(_path_object)
+    if not _path_obj:
+        raise RuntimeError('Path object not found: ' + str(_path_object))
+    _path_shape, _ = _resolve_global_shape(_path_obj)
+    _edges = list(getattr(_path_shape, 'Edges', []) or [])
+    if not _edges:
+        raise RuntimeError('Path object has no edges: ' + str(_path_object))
+    try:
+        _wire = Part.Wire(_edges)
+    except Exception:
+        _wire = _edges[0]
+    if _sample_count < 2:
+        raise RuntimeError('sample_count must be >= 2 when sampling a path')
+    try:
+        _pts = list(_wire.discretize(Number=_sample_count))
+    except Exception:
+        _pts = []
+        _length = float(getattr(_wire, 'Length', 0.0) or 0.0)
+        for _i in range(_sample_count):
+            _u = 0.0 if _sample_count == 1 else (_i / float(_sample_count - 1))
+            if hasattr(_wire, 'valueAt') and _length > 0:
+                _pts.append(_wire.valueAt(_u * _length))
+            else:
+                _pts.append(_edges[0].valueAt(_edges[0].FirstParameter + _u * (_edges[0].LastParameter - _edges[0].FirstParameter)))
+    for _i, _pt in enumerate(_pts):
+        _u = 0.0 if len(_pts) == 1 else (_i / float(len(_pts) - 1))
+        _positions.append({
+            'index': _i,
+            'parameter': round(_u, 6),
+            'x': float(_pt.x),
+            'y': float(_pt.y),
+            'z': float(_pt.z),
+            'yaw_deg': None,
+        })
+else:
+    raise RuntimeError('Provide samples or path_object')
+
+_results = []
+_max_volume = 0.0
+_any_hit = False
+for _pos in _positions:
+    _target = FreeCAD.Vector(_pos['x'], _pos['y'], _pos['z'])
+    _delta = _target.sub(_origin)
+    _probe = _moving_shape.copy()
+    _probe.translate(_delta)
+    if _pos['yaw_deg'] is not None:
+        _probe.rotate(_target, FreeCAD.Vector(0, 0, 1), float(_pos['yaw_deg']))
+    _common_volume = 0.0
+    _hits = []
+    for _oname, _oshape, _ometa in _obstacles:
+        try:
+            _common = _probe.common(_oshape)
+            _vol = float(getattr(_common, 'Volume', 0.0) or 0.0)
+        except Exception as _exc:
+            _hits.append({'object': _oname, 'error': str(_exc), 'volume_mm3': None})
+            continue
+        if _vol > 0.0:
+            _hits.append({'object': _oname, 'volume_mm3': round(_vol, 6)})
+            _common_volume += _vol
+    _colliding = _common_volume >= _volume_threshold
+    if _colliding:
+        _any_hit = True
+    if _common_volume > _max_volume:
+        _max_volume = _common_volume
+    _results.append({
+        'index': _pos['index'],
+        'parameter': _pos['parameter'],
+        'position': [round(_pos['x'], 6), round(_pos['y'], 6), round(_pos['z'], 6)],
+        'common_volume_mm3': round(_common_volume, 6),
+        'colliding': _colliding,
+        'hits': _hits,
+    })
+    if _stop_on_hit and _colliding:
+        break
+
+print(json.dumps({
+    'ok': True,
+    'moving_object': _moving_meta,
+    'obstacles': [m for _, _, m in _obstacles],
+    'sample_count': len(_results),
+    'volume_threshold_mm3': _volume_threshold,
+    'max_common_volume_mm3': round(_max_volume, 6),
+    'any_collision': _any_hit,
+    'samples': _results,
+}))

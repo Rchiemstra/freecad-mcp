@@ -112,6 +112,69 @@ class TestGetViewOperation:
         t = _text(get_view_operation(conn, "Top", focus_object="Box"))
         assert "Top" in t and "Box" in t
 
+    def test_multi_object_focus_passed_through(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = "data"
+        result = get_view_operation(
+            conn,
+            "Isometric",
+            focus_objects=["StationA", "StationB"],
+            yaw_deg=45,
+        )
+        assert _has_image(result)
+        conn.get_active_screenshot.assert_called_once()
+        kwargs = conn.get_active_screenshot.call_args.kwargs
+        assert kwargs["focus_objects"] == ["StationA", "StationB"]
+        assert kwargs["yaw_deg"] == 45
+        assert "StationA" in _text(result) and "45" in _text(result)
+
+
+class TestSaveViewSequenceOperation:
+    def test_returns_multiple_images(self):
+        from freecad_mcp.operations.core import save_view_sequence_operation
+
+        conn = MagicMock()
+        conn.capture_view_sequence.return_value = {
+            "ok": True,
+            "frame_count": 2,
+            "ok_count": 2,
+            "frames": [
+                {
+                    "index": 0,
+                    "ok": True,
+                    "label": "orbit_00",
+                    "view_name": "Isometric",
+                    "focus_objects": ["Box"],
+                    "yaw_deg": 0,
+                    "image_base64": "img0",
+                },
+                {
+                    "index": 1,
+                    "ok": True,
+                    "label": "orbit_01",
+                    "view_name": "Isometric",
+                    "focus_objects": ["Box"],
+                    "yaw_deg": 180,
+                    "image_base64": "img1",
+                },
+            ],
+        }
+        result = save_view_sequence_operation(conn, orbit={"focus_objects": ["Box"], "steps": 2})
+        images = [
+            item for item in (result.content if hasattr(result, "content") else result)
+            if isinstance(item, ImageContent)
+        ]
+        assert len(images) == 2
+        assert result.structuredContent["ok_count"] == 2
+
+    def test_failure(self):
+        from freecad_mcp.operations.core import save_view_sequence_operation
+
+        conn = MagicMock()
+        conn.capture_view_sequence.return_value = {"ok": False, "error": "no view", "frames": []}
+        result = save_view_sequence_operation(conn, frames=[{"view_name": "Front"}])
+        assert "no view" in _text(result) or "Failed" in _text(result)
+
 
 # ---------------------------------------------------------------------------
 # get_objects_operation

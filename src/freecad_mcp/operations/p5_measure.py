@@ -40,7 +40,7 @@ def _doc_sk_preamble(doc_name: str) -> list[str]:
         "p5_measure/doc_preamble.py.txt",
         doc_name=repr(doc_name),
         doc_missing=repr(f"Document {doc_name!r} not found"),
-    )
+    ) + render_template_lines("p5_measure/shape_helpers.py.txt")
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +130,71 @@ def bounding_box_operation(
     lines = _doc_sk_preamble(doc_name) + code.strip().splitlines()
     return _run_read_analysis(freecad, doc_name, "\n".join(lines),
                               f"Bounding box of '{obj_name}'", "Failed to get bounding box")
+
+
+# ---------------------------------------------------------------------------
+# P5-5b  get_global_shape
+# ---------------------------------------------------------------------------
+
+def get_global_shape_operation(
+    freecad: FreeCADConnection,
+    doc_name: str,
+    obj_name: str,
+) -> ToolResponse:
+    """Return world-frame shape metrics without Placement double-counting."""
+    lines = _doc_sk_preamble(doc_name) + render_template_lines(
+        "p5_measure/get_global_shape.py.txt",
+        obj_name=repr(obj_name),
+    )
+    return _run_read_analysis(
+        freecad,
+        doc_name,
+        "\n".join(lines),
+        f"Global shape of '{obj_name}'",
+        "Failed to resolve global shape",
+    )
+
+
+# ---------------------------------------------------------------------------
+# P5-5c  common_volume_along_path
+# ---------------------------------------------------------------------------
+
+def common_volume_along_path_operation(
+    freecad: FreeCADConnection,
+    doc_name: str,
+    moving_object: str,
+    obstacle_objects: list[str],
+    *,
+    path_object: str | None = None,
+    sample_count: int = 12,
+    samples: list[dict] | None = None,
+    volume_threshold_mm3: float = 1e-6,
+    stop_on_first_hit: bool = False,
+) -> ToolResponse:
+    """Sweep a moving solid along a path and report common volumes with obstacles."""
+    if not obstacle_objects:
+        from ..responses import tool_fail
+        return tool_fail("obstacle_objects must contain at least one object name")
+    if not samples and not path_object:
+        from ..responses import tool_fail
+        return tool_fail("Provide samples (list of {x,y,z}) or path_object")
+    lines = _doc_sk_preamble(doc_name) + render_template_lines(
+        "p5_measure/common_volume_along_path.py.txt",
+        moving_object=repr(moving_object),
+        obstacle_objects=repr(list(obstacle_objects)),
+        path_object=repr(path_object),
+        sample_count=repr(int(sample_count)),
+        samples=repr(samples),
+        volume_threshold_mm3=repr(float(volume_threshold_mm3)),
+        stop_on_first_hit=repr(bool(stop_on_first_hit)),
+    )
+    return _run_read_analysis(
+        freecad,
+        doc_name,
+        "\n".join(lines),
+        f"Common-volume path sweep of '{moving_object}'",
+        "Failed common-volume path sweep",
+    )
 
 
 # ---------------------------------------------------------------------------

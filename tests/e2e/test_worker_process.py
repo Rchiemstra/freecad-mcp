@@ -259,6 +259,96 @@ def test_invalid_linksub_subelements_are_rejected(tmp_path, subelement):
 
 
 @pytest.mark.e2e
+def test_link_policy_warn_allows_invalid_subelement_snapshot(tmp_path):
+    doc = _document("WarnInvalidFace")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face999"])
+    doc.recompute()
+    try:
+        strict = create_snapshot_bundle_gui(doc.Name, str(tmp_path / "strict"))
+        assert strict["ok"] is False
+        warned = create_snapshot_bundle_gui(
+            doc.Name, str(tmp_path / "warn"), link_policy="warn"
+        )
+        assert warned["ok"] is True, warned
+        assert warned.get("link_policy") == "warn"
+        assert any("Face999" in item for item in warned.get("link_warnings", []))
+        # Invalid LinkSub omitted from expected_links so worker validation can proceed.
+        assert all(
+            "Face999" not in link.get("subelements", [])
+            for link in warned.get("expected_links", [])
+        )
+    finally:
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_animate_placement_restores_original(tmp_path):
+    from addon.FreeCADMCP.rpc_server.view_manager import animate_object_placement
+
+    doc = _document("AnimPlacement")
+    box = doc.Box
+    original = FreeCAD.Placement(box.Placement)
+    try:
+        result = animate_object_placement(
+            doc.Name,
+            box.Name,
+            keyframes=[
+                {"x": 10.0, "y": 0.0, "z": 0.0},
+                {"x": 20.0, "y": 0.0, "z": 0.0},
+            ],
+            frame_dir=str(tmp_path / "anim"),
+            focus_objects=[box.Name],
+        )
+        assert result["ok"] is True, result
+        assert result["restored"] is True
+        assert box.Placement.Base.distanceToPoint(original.Base) < 1e-6
+        assert result["frame_count"] == 2
+    finally:
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("subelement", ["H_Axis", "V_Axis", "RootPoint"])
+def test_sketcher_semantic_subelements_survive_snapshot_and_worker(subelement):
+    Part = pytest.importorskip("Part")
+    doc = FreeCAD.newDocument("SketchSemantic" + subelement)
+    body = doc.addObject("PartDesign::Body", "Body")
+    sketch = body.newObject("Sketcher::SketchObject", "BoltProfileSketch")
+    sketch.addGeometry(
+        Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(10, 0, 0)),
+        False,
+    )
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "ReferenceAxis")
+    holder.ReferenceAxis = (sketch, [subelement])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        resolved = sketch.getSubObject(subelement)
+        assert resolved is not None
+        assert not resolved.isNull()
+        workspace = manager.create_workspace()
+        snapshot = create_snapshot_bundle_gui(doc.Name, str(workspace))
+        assert snapshot["ok"] is True, snapshot
+        result = manager.execute(
+            "d=FreeCAD.getDocument('SketchSemantic"
+            + subelement
+            + "'); "
+            "print(list(d.Holder.ReferenceAxis[1]))",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot,
+            workspace,
+        )
+        assert result["success"] is True, result
+        assert subelement in result["message"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
 def test_linksublist_valid_face_edge_vertex_survive_exact_name_aliases():
     doc = _document("ValidSubelementList")
     holder = doc.addObject("App::FeaturePython", "Holder")

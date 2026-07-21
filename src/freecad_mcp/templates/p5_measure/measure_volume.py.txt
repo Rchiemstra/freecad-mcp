@@ -1,4 +1,5 @@
 _obj = _doc.getObject($obj_name)
-if not _obj or not hasattr(_obj, 'Shape'): raise RuntimeError('Object with Shape not found')
-_vol = _obj.Shape.Volume
-print(json.dumps({'volume_mm3': round(_vol,6), 'volume_cm3': round(_vol/1000.0,6), 'unit': 'mm³'}))
+if not _obj: raise RuntimeError('Object with Shape not found')
+_shape, _meta = _resolve_global_shape(_obj)
+_vol = float(_shape.Volume)
+print(json.dumps({'volume_mm3': round(_vol,6), 'volume_cm3': round(_vol/1000.0,6), 'unit': 'mm³', 'frame':'world', **_meta}))

@@ -209,8 +209,24 @@ def _dependency_closure(primary) -> list[Any]:
     return list(by_name.values())
 
 
-def create_snapshot_bundle_gui(document_name: str | None, workspace: str) -> dict[str, Any]:
-    """Save a primary document and its open dependency closure on the GUI thread."""
+def create_snapshot_bundle_gui(
+    document_name: str | None,
+    workspace: str,
+    link_policy: str = "strict",
+) -> dict[str, Any]:
+    """Save a primary document and its open dependency closure on the GUI thread.
+
+    ``link_policy``:
+    - ``strict`` (default): fail on broken links / invalid subelements.
+    - ``warn``: continue, omit bad refs from ``expected_links``, and return
+      ``link_warnings`` so the worker can still run read-only analysis.
+    """
+    if link_policy not in {"strict", "warn"}:
+        return {
+            "ok": False,
+            "error_code": "invalid_link_policy",
+            "error": f"Unsupported link_policy: {link_policy!r}",
+        }
     doc = FreeCAD.getDocument(document_name) if document_name else FreeCAD.ActiveDocument
     if doc is None:
         return {"ok": False, "error_code": "snapshot_failed", "error": "Document not found"}
@@ -224,18 +240,41 @@ def create_snapshot_bundle_gui(document_name: str | None, workspace: str) -> dic
                 "error": f"Unsafe internal document name: {dependency.Name!r}",
             }
     links, broken, invalid_subelements = _collect_link_manifest(documents)
-    if broken:
-        return {
-            "ok": False,
-            "error_code": "external_link_unresolved",
-            "error": "Broken or unopened links: " + ", ".join(broken),
-        }
-    if invalid_subelements:
-        return {
-            "ok": False,
-            "error_code": "external_subelement_unresolved",
-            "error": "Nonexistent linked subelements: " + ", ".join(invalid_subelements),
-        }
+    link_warnings: list[str] = []
+    if broken or invalid_subelements:
+        if link_policy == "strict":
+            if broken:
+                return {
+                    "ok": False,
+                    "error_code": "external_link_unresolved",
+                    "error": "Broken or unopened links: " + ", ".join(broken),
+                }
+            return {
+                "ok": False,
+                "error_code": "external_subelement_unresolved",
+                "error": "Nonexistent linked subelements: " + ", ".join(invalid_subelements),
+            }
+        for item in broken:
+            link_warnings.append(f"broken_link:{item}")
+        for item in invalid_subelements:
+            link_warnings.append(f"invalid_subelement:{item}")
+        invalid_set = set(invalid_subelements)
+        filtered_links = []
+        for link in links:
+            subs = list(link.get("subelements") or [])
+            kept = [
+                sub
+                for sub in subs
+                if f"{link['target_document']}.{link['target_object']}.{sub}"
+                not in invalid_set
+            ]
+            if subs and not kept:
+                # Entire LinkSub was invalid — omit from expected_links.
+                continue
+            entry = dict(link)
+            entry["subelements"] = kept
+            filtered_links.append(entry)
+        links = filtered_links
 
     root = Path(workspace)
     snapshots = root / "snapshots"
@@ -292,7 +331,7 @@ def create_snapshot_bundle_gui(document_name: str | None, workspace: str) -> dic
             "error": "Document state changed while creating the snapshot",
         }
 
-    return {
+    result = {
         "ok": True,
         "primary_document": doc.Name,
         "snapshot_duration_ms": duration_ms,
@@ -300,13 +339,21 @@ def create_snapshot_bundle_gui(document_name: str | None, workspace: str) -> dic
         "selection": selection_before,
         "documents": entries,
         "expected_links": links,
+        "link_policy": link_policy,
         "state_indicators_best_effort": True,
     }
+    if link_warnings:
+        result["link_warnings"] = link_warnings
+    return result
 
 
-def create_primary_snapshot_gui(document_name: str | None, workspace: str) -> dict[str, Any]:
+def create_primary_snapshot_gui(
+    document_name: str | None,
+    workspace: str,
+    link_policy: str = "strict",
+) -> dict[str, Any]:
     """Compatibility name retained while Phase 3 now includes dependencies."""
-    return create_snapshot_bundle_gui(document_name, workspace)
+    return create_snapshot_bundle_gui(document_name, workspace, link_policy=link_policy)
 
 
 def materialize_load_aliases(snapshot: dict[str, Any]) -> None:

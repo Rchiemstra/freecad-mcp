@@ -22,12 +22,18 @@ def tool_ok(
     message: str,
     *,
     screenshot: str | None = None,
+    screenshots: list[str] | None = None,
     only_text_feedback: bool = False,
     structured: dict[str, Any] | None = None,
 ) -> ToolResponse:
     content: list[TextContent | ImageContent] = [_text_item(message)]
-    if screenshot and not only_text_feedback:
-        content.append(ImageContent(type="image", data=screenshot, mimeType="image/png"))
+    if not only_text_feedback:
+        images = list(screenshots or [])
+        if screenshot:
+            images.insert(0, screenshot)
+        for image in images:
+            if image:
+                content.append(ImageContent(type="image", data=image, mimeType="image/png"))
     return CallToolResult(content=content, structuredContent=structured, isError=False)
 
 
@@ -59,6 +65,31 @@ def add_screenshot_if_available(
     )
 
 
+def _format_execution_banner(res: dict[str, Any]) -> str:
+    """Human-readable line showing whether GUI or worker ran the code."""
+    execution = res.get("execution")
+    if not isinstance(execution, dict):
+        return ""
+    mode = execution.get("mode") or "unknown"
+    if mode == "worker":
+        parts = ["[execution: worker"]
+        job_id = execution.get("job_id")
+        if job_id:
+            parts.append(f"job={job_id}")
+        duration = execution.get("duration_ms")
+        if isinstance(duration, (int, float)):
+            parts.append(f"{duration:.0f}ms")
+        snap = execution.get("snapshot_duration_ms")
+        if isinstance(snap, (int, float)) and snap > 0:
+            parts.append(f"snapshot={snap:.0f}ms")
+        if res.get("link_warnings"):
+            parts.append(f"link_warnings={len(res['link_warnings'])}")
+        return " ".join(parts) + "]"
+    if mode == "gui":
+        return "[execution: gui]"
+    return f"[execution: {mode}]"
+
+
 def from_execute_result(
     res: dict[str, Any],
     *,
@@ -70,14 +101,24 @@ def from_execute_result(
 ) -> ToolResponse:
     """Build a CallToolResult from a FreeCAD RPC execute_code response."""
     structured = res.get("structured")
+    banner = _format_execution_banner(res)
     if res.get("success"):
         output = res.get("message", "")
-        msg = f"{success_prefix}\n{output}".strip() if output else success_prefix
+        prefix = f"{success_prefix}\n{banner}".strip() if banner else success_prefix
+        msg = f"{prefix}\n{output}".strip() if output else prefix
         # Clients render structuredContent in preference to the text block, so the
         # executed code's stdout has to travel in structured too or it is never seen.
-        if output and isinstance(structured, dict) and "output" not in structured:
-            structured = {"output": output, **structured}
-        response = tool_ok(msg, structured=structured)
+        if not isinstance(structured, dict):
+            structured = {}
+        else:
+            structured = dict(structured)
+        if output and "output" not in structured:
+            structured["output"] = output
+        if isinstance(res.get("execution"), dict):
+            structured["execution"] = res["execution"]
+        if res.get("link_warnings"):
+            structured["link_warnings"] = res["link_warnings"]
+        response = tool_ok(msg, structured=structured or None)
         if capture_view:
             return add_screenshot_if_available(response, screenshot, only_text_feedback)
         return response
@@ -86,6 +127,11 @@ def from_execute_result(
     if structured is None and isinstance(res.get("traceback"), dict):
         structured = res["traceback"]
     body = f"{fail_prefix}: {err}"
+    if banner:
+        body = f"{banner}\n{body}"
     if structured:
         body += "\n" + json.dumps(structured, ensure_ascii=False, indent=2, default=str)
-    return tool_fail(body, structured=structured if isinstance(structured, dict) else None)
+    fail_structured = structured if isinstance(structured, dict) else None
+    if isinstance(res.get("execution"), dict):
+        fail_structured = {**(fail_structured or {}), "execution": res["execution"]}
+    return tool_fail(body, structured=fail_structured)

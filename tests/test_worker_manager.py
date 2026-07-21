@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from types import SimpleNamespace
 
 import pytest
 import FreeCADGui
@@ -16,6 +17,7 @@ from addon.FreeCADMCP.rpc_server import worker_manager as manager_module
 from addon.FreeCADMCP.rpc_server.rpc_server import FreeCADRPC, _DEFAULT_SETTINGS
 from addon.FreeCADMCP.rpc_server import parts_library
 from addon.FreeCADMCP.rpc_server.worker_manager import (
+    VERSION_PROBE_TIMEOUT_SECONDS,
     WorkerManager,
     WorkerRuntime,
     WorkerVersionMismatch,
@@ -69,6 +71,59 @@ def test_configured_executable_from_different_build_is_rejected(tmp_path, monkey
     try:
         with pytest.raises(WorkerVersionMismatch):
             manager.discover_executable()
+    finally:
+        manager.stop()
+
+
+def test_version_probe_timeout_has_operational_headroom():
+    assert VERSION_PROBE_TIMEOUT_SECONDS == 15
+
+
+def test_probe_version_passes_configured_timeout(tmp_path, monkeypatch):
+    executable = tmp_path / "FreeCADCmd"
+    executable.write_text("probe", encoding="utf-8")
+    manager = WorkerManager(
+        _runtime(("1", "2", "3", "")),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=tmp_path / "workers",
+    )
+    seen = {}
+
+    def _fake_run(*_args, **kwargs):
+        seen["timeout"] = kwargs.get("timeout")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="FreeCAD 1.2.3 Revision: ",
+            stderr="",
+        )
+
+    monkeypatch.setattr(manager_module.subprocess, "run", _fake_run)
+    try:
+        assert manager._probe_version(executable)[:3] == ("1", "2", "3")
+        assert seen["timeout"] == VERSION_PROBE_TIMEOUT_SECONDS
+    finally:
+        manager.stop()
+
+
+def test_successful_discovery_clears_stale_last_error(tmp_path, monkeypatch):
+    executable = tmp_path / "FreeCADCmd"
+    executable.write_text("probe", encoding="utf-8")
+    manager = WorkerManager(
+        _runtime(("1", "2", "3", "")),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=tmp_path / "workers",
+    )
+    manager._last_error = f"{executable}: --version timed out after 5 seconds"
+    monkeypatch.setattr(manager, "_candidate_paths", lambda: [executable])
+    monkeypatch.setattr(
+        manager, "_probe_version", lambda _path: ("1", "2", "3", "")
+    )
+    try:
+        discovered = manager.discover_executable()
+        assert discovered == executable.resolve()
+        status = manager.status()
+        assert status["available"] is True
+        assert status["last_error"] is None
     finally:
         manager.stop()
 
