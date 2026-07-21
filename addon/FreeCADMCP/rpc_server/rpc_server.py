@@ -67,6 +67,10 @@ _DEFAULT_SETTINGS = {
     "rpc_port": 9875,
     "freecadcmd_path": "",
     "allow_remote_execute_code": False,
+    # Stable identity for this addon instance/profile. Empty on the default
+    # profile; the isolated-profile setup writes a unique value so a client can
+    # verify it reached the intended instance (see get_instance_info).
+    "instance_id": "",
 }
 
 
@@ -407,6 +411,28 @@ class FreeCADRPC:
 
     def ping(self):
         return True
+
+    def get_instance_info(self):
+        """Report this addon instance's identity (lightweight, no GUI dispatch).
+
+        Lets a client confirm it reached the intended FreeCAD when several
+        isolated instances listen on nearby ports. ``instance_id`` comes from the
+        per-profile settings (empty on the default profile)."""
+        try:
+            settings = load_settings()
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        try:
+            profile_path = FreeCAD.getUserAppDataDir()
+        except Exception:
+            profile_path = None
+        return {
+            "ok": True,
+            "instance_id": settings.get("instance_id", "") or "",
+            "pid": os.getpid(),
+            "port": settings.get("rpc_port", 9875),
+            "profile_path": profile_path,
+        }
 
     def check_rpc_sync(self, nonce):
         """Round-trip a nonce through the GUI queue to prove call correlation."""
@@ -991,6 +1017,22 @@ class FreeCADRPC:
         from .gui_tools import get_selection as _get_selection
 
         res = self._dispatch_gui(_get_selection)
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def get_gui_state(self) -> dict[str, Any]:
+        from .gui_tools import get_gui_state as _get_gui_state
+
+        res = self._dispatch_gui(_get_gui_state)
+        if isinstance(res, dict):
+            return res
+        return {"ok": False, "error": str(res)}
+
+    def recompute_and_wait(self, doc_name: str) -> dict[str, Any]:
+        from .gui_tools import recompute_and_wait as _recompute_and_wait
+
+        res = self._dispatch_gui(lambda: _recompute_and_wait(doc_name))
         if isinstance(res, dict):
             return res
         return {"ok": False, "error": str(res)}
@@ -2348,6 +2390,8 @@ class FreeCADRPC:
             if not sketch:
                 return f"Sketch '{sketch_name}' not found."
 
+            if body_name and not doc.getObject(body_name):
+                return f"Body '{body_name}' not found."
             body = doc.getObject(body_name) if body_name else None
             if not body:
                 for obj in doc.Objects:
@@ -2355,15 +2399,19 @@ class FreeCADRPC:
                         body = obj
                         break
 
-            if body:
-                pad = body.newObject("PartDesign::Pad", pad_name)
-            else:
-                pad = doc.addObject("PartDesign::Pad", pad_name)
+            # Strict PartDesign: never fall back to a loose document-level feature.
+            if body is None or body.TypeId != "PartDesign::Body":
+                return (
+                    f"No PartDesign::Body found to own pad '{pad_name}'. Sketch "
+                    f"'{sketch_name}' is not inside a Body; create a Body first."
+                )
+            pad = body.newObject("PartDesign::Pad", pad_name)
 
             pad.Profile = (sketch, [""])
             pad.Length = length
             _set_extrusion_symmetric(pad, symmetric)
             _set_feature_bool(pad, ("Reversed",), reversed_dir)
+            body.Tip = pad
             sketch.Visibility = False
             doc.recompute()
             FreeCAD.Console.PrintMessage(f"Pad '{pad_name}' created in '{doc_name}'.\n")
@@ -2380,6 +2428,8 @@ class FreeCADRPC:
             if not sketch:
                 return f"Sketch '{sketch_name}' not found."
 
+            if body_name and not doc.getObject(body_name):
+                return f"Body '{body_name}' not found."
             body = doc.getObject(body_name) if body_name else None
             if not body:
                 for obj in doc.Objects:
@@ -2387,15 +2437,19 @@ class FreeCADRPC:
                         body = obj
                         break
 
-            if body:
-                pocket = body.newObject("PartDesign::Pocket", pocket_name)
-            else:
-                pocket = doc.addObject("PartDesign::Pocket", pocket_name)
+            # Strict PartDesign: never fall back to a loose document-level feature.
+            if body is None or body.TypeId != "PartDesign::Body":
+                return (
+                    f"No PartDesign::Body found to own pocket '{pocket_name}'. Sketch "
+                    f"'{sketch_name}' is not inside a Body; create a Body first."
+                )
+            pocket = body.newObject("PartDesign::Pocket", pocket_name)
 
             pocket.Profile = (sketch, [""])
             pocket.Length = length
             _set_extrusion_symmetric(pocket, symmetric)
             _set_feature_bool(pocket, ("Reversed",), reversed_dir)
+            body.Tip = pocket
             sketch.Visibility = False
             doc.recompute()
             FreeCAD.Console.PrintMessage(f"Pocket '{pocket_name}' created in '{doc_name}'.\n")

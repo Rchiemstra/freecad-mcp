@@ -16,6 +16,9 @@ from ..responses import (
 )
 from ..execute_options import ExecuteOptions, merge_execute_options
 from ..template_resources import read_template_lines, render_template_lines, render_template_text
+# _run_json_code lives in p7_assembly (which does not import core, so this is
+# cycle-free); reused here so pad/pocket return a structured JSON workflow result.
+from .p7_assembly import _run_json_code
 
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -546,6 +549,21 @@ def _build_assertion_code(
     )
 
 
+def _indented_build_assertion(feature_name: str, sketch_name: str) -> str:
+    """Render the I2 build assertion pre-indented by 4 spaces.
+
+    The pad/pocket templates inject this via a ``$verification`` placeholder that
+    sits inside the feature-build ``try`` block, so the assertion runs *inside*
+    the transaction (a failed direction/shape check aborts and leaves no partial
+    feature). ``string.Template`` does not auto-indent multi-line substitutions,
+    so every line is prefixed here; the placeholder itself is at column 0.
+    """
+    return "\n".join(
+        "    " + line
+        for line in _build_assertion_code(feature_name, sketch_name, check_direction=True)
+    )
+
+
 def _geom_line(code: str, geom: dict) -> str:
     """Return a Python expression that adds one geometry element to _sk."""
     t = geom.get("type", "").lower()
@@ -763,21 +781,30 @@ def pad_feature_operation(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> ToolResponse:
     lines = render_template_lines(
         "core/pad_feature.py.txt",
         doc_name=repr(doc_name),
         sketch_name=repr(sketch_name),
         body_name=repr(body_name),
+        strict=repr(bool(strict)),
         pad_name=repr(pad_name),
         length=repr(length),
         extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
         symmetric=repr(symmetric),
         reversed_dir=repr(reversed_dir),
-    ) + _build_assertion_code(pad_name, sketch_name, check_direction=True)
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Pad '{pad_name}' created", "Failed to create pad")
+        verification=_indented_build_assertion(pad_name, sketch_name),
+    )
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to create pad",
+        screenshot=not only_text_feedback,
+        document=doc_name,
+    )
 
 
 def pocket_feature_operation(
@@ -790,21 +817,30 @@ def pocket_feature_operation(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> ToolResponse:
     lines = render_template_lines(
         "core/pocket_feature.py.txt",
         doc_name=repr(doc_name),
         sketch_name=repr(sketch_name),
         body_name=repr(body_name),
+        strict=repr(bool(strict)),
         pocket_name=repr(pocket_name),
         length=repr(length),
         extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
         symmetric=repr(symmetric),
         reversed_dir=repr(reversed_dir),
-    ) + _build_assertion_code(pocket_name, sketch_name, check_direction=True)
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Pocket '{pocket_name}' created", "Failed to create pocket")
+        verification=_indented_build_assertion(pocket_name, sketch_name),
+    )
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to create pocket",
+        screenshot=not only_text_feedback,
+        document=doc_name,
+    )
 
 
 def linear_pattern_feature_operation(

@@ -149,6 +149,8 @@ from .operations import (
     set_tree_expanded_operation,
     select_subshapes_operation,
     get_selection_operation,
+    get_gui_state_operation,
+    recompute_and_wait_operation,
     set_section_view_operation,
     diagnose_pocket_operation,
     diagnose_helix_operation,
@@ -215,15 +217,21 @@ mcp = FastMCP(
 def get_freecad_connection() -> FreeCADConnection:
     """Get or create a persistent FreeCAD connection"""
     if state.freecad_connection is None:
-        state.freecad_connection = FreeCADConnection(
-            host=state.rpc_host, port=state.rpc_port
+        conn = FreeCADConnection(
+            host=state.rpc_host,
+            port=state.rpc_port,
+            expected_instance_id=state.instance_id,
         )
-        if not state.freecad_connection.ping():
+        if not conn.ping():
             logger.error("Failed to ping FreeCAD")
-            state.freecad_connection = None
             raise Exception(
                 "Failed to connect to FreeCAD. Make sure the FreeCAD addon is running."
             )
+        # When an instance id was configured, refuse to proceed unless the addon
+        # on this port reports the same identity (isolated-instance safety).
+        if state.instance_id:
+            conn.verify_instance()
+        state.freecad_connection = conn
     return state.freecad_connection
 
 
@@ -284,6 +292,13 @@ def create_object(
 ) -> CallToolResult:
     """Create a new object in FreeCAD.
     Object type is starts with "Part::" or "Draft::" or "PartDesign::" or "Fem::".
+
+    NOTE: For mechanical parts the default workflow is a parametric PartDesign feature
+    history (body_create -> sketch_create/sketch_attach -> constraints ->
+    get_sketch_diagnostics -> pad_feature/pocket_feature), not generic primitives. Use
+    this tool for reference/non-parametric geometry, imported assets, temporary validation
+    solids, or when a specific primitive is explicitly requested. See the
+    asset_creation_strategy prompt.
 
     Args:
         doc_name: The name of the document to create the object in.
@@ -991,6 +1006,32 @@ def get_selection(ctx: Context) -> CallToolResult:
 
 
 @mcp.tool()
+def get_gui_state(ctx: Context) -> CallToolResult:
+    """Report the active GUI context (read-only).
+
+    Returns JSON with the active document, active PartDesign Body, active
+    workbench, the object currently in edit-mode, and the current selection.
+    Use it to orient before editing -- e.g. confirm the right Body is active
+    before adding a sketch/feature, or check whether a Sketch is open for edit.
+    """
+    return get_gui_state_operation(get_freecad_connection())
+
+
+@mcp.tool()
+def recompute_and_wait(ctx: Context, doc_name: str) -> CallToolResult:
+    """Recompute a document and block until the GUI is idle, then report state.
+
+    An explicit recompute-complete + GUI-idle barrier: runs the recompute on the
+    GUI thread, drains queued Qt events, and returns per-object recompute state
+    (errors, still-Touched objects, whether the document settled). Run it after a
+    batch of edits, or after an execute_code that may have left async work, before
+    trusting follow-up model checks. Complements ``check_rpc_sync`` (which only
+    proves the RPC queue is live, not that a recompute finished).
+    """
+    return recompute_and_wait_operation(get_freecad_connection(), doc_name)
+
+
+@mcp.tool()
 def set_section_view(
     ctx: Context,
     enabled: bool | None = None,
@@ -1627,12 +1668,18 @@ def pad_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> CallToolResult:
     """Extrude (pad) a closed sketch profile into a 3-D solid (PartDesign::Pad).
 
-    The sketch must be closed and fully contained in a PartDesign Body for the
-    result to be a valid solid. If no `body_name` is given the tool attempts to
-    find the Body that owns the sketch automatically.
+    Strict PartDesign: the Pad is always created inside a PartDesign Body. If
+    `body_name` is given it must resolve; otherwise the Body that owns the sketch
+    is auto-detected. If no owning Body can be found the tool FAILS -- it never
+    falls back to a loose, non-parametric feature in the document. Before building,
+    the sketch is checked for conflicting/malformed constraints and a closed
+    profile; after building, Body membership, Body.Tip, and a non-null solid are
+    verified. The whole build is wrapped in a transaction, so a failed check leaves
+    no partial feature behind.
 
     Args:
         doc_name: The document containing the sketch and body.
@@ -1642,9 +1689,13 @@ def pad_feature(
         body_name: Optional explicit PartDesign Body name.
         symmetric: If true, extrude equally in both directions (length/2 each).
         reversed_dir: If true, reverse the extrusion direction.
+        strict: If true, require an explicit `body_name` (owning-Body auto-detect
+            is disabled). Recommended for a deterministic PartDesign history.
 
     Returns:
-        A message indicating success or failure and an isometric screenshot.
+        A structured JSON workflow result (document, body, sketch, feature,
+        attachment, tip, solid_count, state, bbox, diagnostics) plus an isometric
+        screenshot, or a clear failure.
 
     Examples:
         Pad "Sketch" by 15 mm inside "Body":
@@ -1662,6 +1713,7 @@ def pad_feature(
         body_name,
         symmetric,
         reversed_dir,
+        strict,
     )
 
 
@@ -1675,12 +1727,18 @@ def pocket_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> CallToolResult:
     """Cut (pocket) a closed sketch profile into an existing solid (PartDesign::Pocket).
 
-    The sketch must be closed and must lie on or inside the existing solid. If no
-    `body_name` is given the tool attempts to find the Body that owns the sketch
-    automatically.
+    Strict PartDesign: the Pocket is always created inside a PartDesign Body. If
+    `body_name` is given it must resolve; otherwise the Body that owns the sketch
+    is auto-detected. If no owning Body can be found the tool FAILS -- it never
+    falls back to a loose feature in the document. Before building, the sketch is
+    checked for conflicting/malformed constraints and a closed profile; after
+    building, Body membership, Body.Tip, and a non-null solid are verified. The
+    whole build is wrapped in a transaction, so a failed check leaves no partial
+    feature behind.
 
     Args:
         doc_name: The document containing the sketch and body.
@@ -1690,9 +1748,13 @@ def pocket_feature(
         body_name: Optional explicit PartDesign Body name.
         symmetric: If true, cut equally in both directions.
         reversed_dir: If true, reverse the cut direction.
+        strict: If true, require an explicit `body_name` (owning-Body auto-detect
+            is disabled). Recommended for a deterministic PartDesign history.
 
     Returns:
-        A message indicating success or failure and an isometric screenshot.
+        A structured JSON workflow result (document, body, sketch, feature,
+        attachment, tip, solid_count, state, bbox, diagnostics) plus an isometric
+        screenshot, or a clear failure.
 
     Examples:
         Pocket "HoleSketch" by 5 mm:
@@ -1710,6 +1772,7 @@ def pocket_feature(
         body_name,
         symmetric,
         reversed_dir,
+        strict,
     )
 
 
@@ -4613,6 +4676,16 @@ def main():
         default=None,
         help="RPC port of the FreeCAD addon (default: FREECAD_MCP_PORT or 9875)",
     )
+    parser.add_argument(
+        "--instance-id",
+        type=str,
+        default=None,
+        help=(
+            "Expected FreeCAD instance id (default: FREECAD_MCP_INSTANCE_ID). When "
+            "set, the client verifies the addon on --port reports the same id "
+            "before driving it -- use it to pin an isolated parallel instance."
+        ),
+    )
     args = parser.parse_args()
     state.only_text_feedback = args.only_text_feedback
     state.rpc_host = args.host
@@ -4622,8 +4695,10 @@ def main():
         env_port = os.environ.get("FREECAD_MCP_PORT")
         if env_port:
             state.rpc_port = int(env_port)
+    state.instance_id = args.instance_id or os.environ.get("FREECAD_MCP_INSTANCE_ID") or None
     logger.info(f"Only text feedback: {state.only_text_feedback}")
     logger.info(
         f"Connecting to FreeCAD RPC server at: {state.rpc_host}:{state.rpc_port}"
+        + (f" (instance {state.instance_id})" if state.instance_id else "")
     )
     mcp.run()

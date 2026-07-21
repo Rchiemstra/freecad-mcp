@@ -15,6 +15,9 @@ _DEFAULT_SETTINGS = {
     "rpc_port": 9875,
     "freecadcmd_path": "",
     "allow_remote_execute_code": False,
+    # Stable per-profile identity; empty on the default profile. The isolated
+    # setup writes a unique value that a client can pin via --instance-id.
+    "instance_id": "",
 }
 
 

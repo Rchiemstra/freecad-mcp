@@ -176,6 +176,14 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 
 ## Tools
 
+> **Default modelling workflow.** For mechanical parts, build a real PartDesign feature
+> history — `body_create` → `sketch_create`/`sketch_attach` → geometry → constraints →
+> `get_sketch_diagnostics` → `pad_feature`/`pocket_feature` (pass `body_name`) →
+> `recompute_document` → verify. The parts library and `create_object` primitives
+> (`Part::Box`/`Cylinder`/`Cut`/`Fuse`) are for reference/non-parametric geometry, imported
+> assets, temporary validation solids, or an explicitly requested primitive — not the
+> default. See the `asset_creation_strategy` prompt.
+
 ### Documents & objects
 * `create_document`, `list_documents`, `close_document`
 * `get_objects`, `get_object`, `create_object`, `edit_object`

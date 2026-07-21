@@ -158,12 +158,17 @@ class TestI2SilentBuildAssertion:
 
 
 class TestI3RecomputeLog:
-    """I3 — every mutating tool appends a compact recompute log so P6 orphans
-    (children left Invalid/Error after a delete/edit) surface immediately."""
+    """I3 — mutating _run_code tools append a compact recompute log so P6 orphans
+    (children left Invalid/Error after a delete/edit) surface immediately.
 
-    def test_pad_generated_code_includes_recompute_log_snippet(self):
+    NOTE: pad/pocket moved to the structured-JSON path (_run_json_code) and no
+    longer append this snippet; they surface recompute errors via the addon's
+    recompute_errors channel (see TestPadPocketHardening). Loft still uses
+    _run_code and exercises the generic I3 mechanism here."""
+
+    def test_generated_code_includes_recompute_log_snippet(self):
         conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
+        loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
         code = _code(conn)
         assert_code_compiles(code)
         assert_code_contains(code, "__RECOMPUTE_LOG__", "State", "Clean")
@@ -172,7 +177,7 @@ class TestI3RecomputeLog:
         out = ('__RECOMPUTE_LOG__'
                '[{"name":"Orphan","state":"Invalid","valid":false}]')
         conn = _ok_conn(out)
-        resp = pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
+        resp = loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
         text = _text(resp)
         assert "Recompute log (non-clean)" in text
         assert "Orphan" in text
@@ -181,7 +186,7 @@ class TestI3RecomputeLog:
 
     def test_quiet_when_all_clean(self):
         conn = _ok_conn("__RECOMPUTE_LOG__[]")
-        resp = pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
+        resp = loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
         assert "Recompute log" not in _text(resp)
 
     def test_no_sentinel_falls_back_to_recompute_errors(self):
@@ -191,9 +196,73 @@ class TestI3RecomputeLog:
             "message": "Python code execution scheduled. \nOutput: done",
             "recompute_errors": [{"name": "Bad", "doc": "Doc", "state": "Error"}],
         }
-        resp = pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
+        resp = loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
         assert "Recompute errors detected" in _text(resp)
         assert "Bad" in _text(resp)
+
+
+class TestPadPocketHardening:
+    """Pad/Pocket strict PartDesign hardening: no document-level fallback, opt-in
+    strict body_name, pre-build sketch-diagnostics gate, transaction wrap, and
+    Body-membership/Tip verification, returned as a structured JSON result."""
+
+    def test_pad_has_no_document_level_fallback(self):
+        conn = _ok_conn()
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        code = _code(conn)
+        assert_code_compiles(code)
+        assert "_doc.addObject('PartDesign::Pad'" not in code
+        assert '_doc.addObject("PartDesign::Pad"' not in code
+        assert "No PartDesign::Body found" in code
+
+    def test_pocket_has_no_document_level_fallback(self):
+        conn = _ok_conn()
+        pocket_feature_operation(conn, True, "Doc", "Sketch", "MyPocket", 3.0)
+        code = _code(conn)
+        assert_code_compiles(code)
+        assert "_doc.addObject('PartDesign::Pocket'" not in code
+        assert "No PartDesign::Body found" in code
+
+    def test_build_wrapped_in_transaction(self):
+        conn = _ok_conn()
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        assert_code_contains(
+            _code(conn), "openTransaction", "commitTransaction", "abortTransaction"
+        )
+
+    def test_runs_sketch_diagnostics_gate(self):
+        conn = _ok_conn()
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        assert_code_contains(
+            _code(conn), "ConflictingConstraints", "MalformedConstraints", "isClosed"
+        )
+
+    def test_verifies_body_membership_and_tip(self):
+        conn = _ok_conn()
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        assert_code_contains(
+            _code(conn), "_body.Group", "_body.Tip", "is not a member of Body"
+        )
+
+    def test_strict_requires_explicit_body_name(self):
+        conn = _ok_conn()
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0, strict=True)
+        code = _code(conn)
+        assert "_strict = True" in code
+        assert "strict PartDesign mode requires an explicit body_name" in code
+
+    def test_non_strict_autodetects_owning_body(self):
+        conn = _ok_conn()
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        code = _code(conn)
+        assert "_strict = False" in code
+        assert "'PartDesign::Body'" in code and "_o.Group" in code
+
+    def test_returns_structured_payload(self):
+        conn = _ok_conn('{"ok": true, "feature": "MyPad", "body": "Body", "tip": "MyPad"}')
+        resp = pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        assert not resp.isError
+        assert '"feature": "MyPad"' in _text(resp)
 
 
 class TestI4FindSubshapes:

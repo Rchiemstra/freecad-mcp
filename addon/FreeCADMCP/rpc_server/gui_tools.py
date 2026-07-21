@@ -282,3 +282,107 @@ def activate_document(doc_name: str) -> dict[str, Any]:
         return {"ok": False, "error": f"Activated App doc but GUI failed: {exc}"}
     _flush_gui_events()
     return {"ok": True, "document": doc.Name, "label": doc.Label}
+
+
+def get_gui_state() -> dict[str, Any]:
+    """Read-only snapshot of the active GUI context.
+
+    Reports the active document, active PartDesign Body, active workbench, the
+    object currently in edit-mode, and the current selection. Every probe is
+    guarded so a headless or partially-initialised GUI degrades to ``None``
+    rather than raising.
+    """
+    state: dict[str, Any] = {"ok": True}
+
+    try:
+        app_doc = FreeCAD.ActiveDocument
+        state["active_document"] = app_doc.Name if app_doc else None
+        state["active_document_label"] = app_doc.Label if app_doc else None
+    except Exception as exc:
+        state["active_document"] = None
+        state["active_document_error"] = str(exc)
+
+    try:
+        wb = FreeCADGui.activeWorkbench()
+        state["active_workbench"] = (
+            wb.name() if hasattr(wb, "name") else type(wb).__name__
+        )
+    except Exception as exc:
+        state["active_workbench"] = None
+        state["active_workbench_error"] = str(exc)
+
+    try:
+        gui_doc = FreeCADGui.ActiveDocument
+        if gui_doc is not None:
+            in_edit = gui_doc.getInEdit()
+            edit_obj = getattr(in_edit, "Object", None) if in_edit is not None else None
+            state["edit_mode_object"] = getattr(edit_obj, "Name", None)
+            try:
+                view = gui_doc.activeView()
+            except Exception:
+                view = None
+            active_body = None
+            if view is not None and hasattr(view, "getActiveObject"):
+                active_body = view.getActiveObject("pdbody")
+            state["active_body"] = getattr(active_body, "Name", None)
+        else:
+            state["edit_mode_object"] = None
+            state["active_body"] = None
+    except Exception as exc:
+        state["active_body"] = None
+        state["edit_mode_object"] = None
+        state["edit_mode_error"] = str(exc)
+
+    try:
+        sel = get_selection()
+        state["selection"] = sel.get("selection", [])
+        state["selection_count"] = sel.get("count", 0)
+    except Exception as exc:
+        state["selection"] = []
+        state["selection_error"] = str(exc)
+
+    return state
+
+
+def recompute_and_wait(doc_name: str) -> dict[str, Any]:
+    """Recompute a document and block until the GUI is idle again.
+
+    Runs ``doc.recompute()`` on the GUI thread, drains the queued Qt events so
+    the tree/3D view reflect the result, then reports per-object recompute state.
+    An explicit recompute-complete + GUI-idle barrier: after this returns a
+    follow-up model check sees a settled document, complementing the
+    ``check_rpc_sync`` nonce probe (which only proves the queue is live).
+    """
+    doc = FreeCAD.getDocument(doc_name)
+    if doc is None:
+        return {"ok": False, "error": f"Document not found: {doc_name}"}
+
+    touched = doc.recompute()
+    _flush_gui_events()
+
+    objects: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    pending: list[str] = []
+    for obj in doc.Objects:
+        st = list(getattr(obj, "State", []))
+        try:
+            valid = bool(obj.isValid())
+        except Exception:
+            valid = True
+        entry = {"name": obj.Name, "state": st, "valid": valid}
+        objects.append(entry)
+        if (not valid) or any(s in ("Invalid", "Error", "Erroneous") for s in st):
+            errors.append(entry)
+        if "Touched" in st:
+            pending.append(obj.Name)
+
+    return {
+        "ok": not errors,
+        "document": doc.Name,
+        "recomputed_count": int(touched) if isinstance(touched, int) else None,
+        "objects": objects,
+        "errors": errors,
+        "pending_recompute": pending,
+        "settled": not pending,
+        "idle": True,
+    }

@@ -1,20 +1,98 @@
-import FreeCAD
+import FreeCAD, json
 _doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError('Document not found')
 _sk = _doc.getObject($sketch_name)
 if not _sk: raise RuntimeError('Sketch not found')
+# --- Body resolution: strict PartDesign, no document-level fallback ---
 _body_name = $body_name
+_strict = $strict
 _body = _doc.getObject(_body_name) if _body_name else None
-if _body_name and not _body: raise RuntimeError('Body not found')
+if _body_name and not _body:
+    raise RuntimeError('Body not found: ' + repr(_body_name))
+if _strict and not _body_name:
+    raise RuntimeError('strict PartDesign mode requires an explicit body_name for pad ' + $pad_name)
 if not _body:
     for _o in _doc.Objects:
-        if _o.TypeId == 'PartDesign::Body' and _sk in _o.Group: _body = _o; break
-_pad = _body.newObject('PartDesign::Pad', $pad_name) if _body else _doc.addObject('PartDesign::Pad', $pad_name)
-_pad.Profile = (_sk, [''])
-_pad.Length = $length
+        if _o.TypeId == 'PartDesign::Body' and _sk in _o.Group:
+            _body = _o
+            break
+if _body is None or _body.TypeId != 'PartDesign::Body':
+    raise RuntimeError(
+        'No PartDesign::Body found to own pad ' + $pad_name + '. Sketch ' + $sketch_name
+        + ' is not inside a Body. Create a Body (body_create) and put the sketch in it -- '
+        + 'a Pad is never created loose in the document.'
+    )
+# --- Pre-feature sketch diagnostics gate (P4) ---
+_diag = {
+    'conflicting': list(getattr(_sk, 'ConflictingConstraints', [])),
+    'redundant': list(getattr(_sk, 'RedundantConstraints', [])),
+    'malformed': list(getattr(_sk, 'MalformedConstraints', [])),
+    'solver_message': getattr(_sk, 'SolverMessage', None),
+    'is_closed': None,
+}
+try:
+    _sksh = _sk.Shape
+    if _sksh and not _sksh.isNull():
+        _diag['is_closed'] = _sksh.isClosed()
+except Exception:
+    pass
+if _diag['conflicting']:
+    raise RuntimeError('Sketch ' + $sketch_name + ' has conflicting constraints ' + str(_diag['conflicting']) + '; run get_sketch_diagnostics and fix before padding.')
+if _diag['malformed']:
+    raise RuntimeError('Sketch ' + $sketch_name + ' has malformed constraints ' + str(_diag['malformed']) + '; run get_sketch_diagnostics and fix before padding.')
+if _diag['is_closed'] is False:
+    raise RuntimeError('Sketch ' + $sketch_name + ' profile is not a closed wire; a Pad needs a closed profile. Run get_sketch_diagnostics and close the profile.')
 $extrusion_helpers
 $bool_helpers
-_set_extrusion_symmetric(_pad, $symmetric)
-_set_feature_bool(_pad, ('Reversed',), $reversed_dir)
-_sk.Visibility = False
-_doc.recompute()
-print('pad_name=' + _pad.Name)
+# --- Atomic feature build: a failed check aborts and leaves no partial feature ---
+_doc.openTransaction('Pad ' + $pad_name)
+try:
+    _pad = _body.newObject('PartDesign::Pad', $pad_name)
+    _pad.Profile = (_sk, [''])
+    _pad.Length = $length
+    _set_extrusion_symmetric(_pad, $symmetric)
+    _set_feature_bool(_pad, ('Reversed',), $reversed_dir)
+    _body.Tip = _pad
+    _sk.Visibility = False
+    _doc.recompute()
+$verification
+    # --- Post-build verification: Body membership + Tip + state ---
+    if _pad not in _body.Group:
+        raise RuntimeError('Pad ' + _pad.Name + ' is not a member of Body ' + _body.Name + ' after creation.')
+    if getattr(_body, 'Tip', None) is not _pad:
+        raise RuntimeError('Body ' + _body.Name + ' Tip did not advance to ' + _pad.Name + '.')
+    _st = list(getattr(_pad, 'State', []))
+    if any(_s in ('Invalid', 'Error', 'Erroneous') for _s in _st):
+        raise RuntimeError('Pad ' + _pad.Name + ' is in state ' + str(_st) + ' after recompute.')
+    _doc.commitTransaction()
+except Exception:
+    _doc.abortTransaction()
+    try:
+        _doc.recompute()
+    except Exception:
+        pass
+    raise
+# Feature committed and validated; assemble the report defensively so a
+# reporting glitch never rolls back a good feature.
+_shp = getattr(_pad, 'Shape', None)
+_has_shape = bool(_shp) and not _shp.isNull()
+_solids = len(_shp.Solids) if _has_shape else 0
+_bb = _shp.BoundBox if _has_shape else None
+try:
+    _support = [getattr(_s[0], 'Name', str(_s[0])) for _s in (getattr(_sk, 'AttachmentSupport', None) or [])]
+except Exception:
+    _support = []
+_result = {
+    'ok': True,
+    'document': _doc.Name,
+    'body': _body.Name,
+    'sketch': _sk.Name,
+    'feature': _pad.Name,
+    'attachment': {'support': _support, 'map_mode': getattr(_sk, 'MapMode', None)},
+    'tip': getattr(getattr(_body, 'Tip', None), 'Name', None),
+    'solid_count': _solids,
+    'state': _st,
+    'bbox': ([_bb.XMin, _bb.YMin, _bb.ZMin, _bb.XMax, _bb.YMax, _bb.ZMax] if _bb else None),
+    'diagnostics': _diag,
+}
+print(json.dumps(_result))

@@ -9,6 +9,7 @@ untouched.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -18,6 +19,16 @@ from pathlib import Path
 
 ISOLATED_PORT = 9876
 PROFILE_NAME = ".freecad-mcp-isolated"
+
+
+def default_instance_id(port: int) -> str:
+    """Deterministic id shared by the profile and Cursor setup scripts.
+
+    Both scripts derive the same value from the port, so a client pinned with
+    ``--instance-id`` verifies it reached the isolated instance without the two
+    scripts having to share state. Override with ``--instance-id`` on both.
+    """
+    return f"freecad-isolated-{port}"
 
 
 def _repo_root() -> Path:
@@ -86,6 +97,20 @@ def _junction(src: Path, dst: Path) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--port", type=int, default=ISOLATED_PORT,
+        help=f"RPC port for the isolated addon (default: {ISOLATED_PORT})",
+    )
+    parser.add_argument(
+        "--instance-id", default=None,
+        help="Instance id to write into the isolated settings "
+             "(default: freecad-isolated-<port>). Must match the client's --instance-id.",
+    )
+    args = parser.parse_args()
+    port = int(args.port)
+    instance_id = args.instance_id or default_instance_id(port)
+
     repo = _repo_root()
     mcp_root = _freecad_mcp_root()
     addon_src = mcp_root / "addon" / "FreeCADMCP"
@@ -107,9 +132,10 @@ def main() -> int:
         "remote_enabled": False,
         "allowed_ips": "127.0.0.1",
         "auto_start_rpc": True,
-        "rpc_port": ISOLATED_PORT,
+        "rpc_port": port,
         "freecadcmd_path": str(repo / "build" / "release" / "bin" / "FreeCADCmd.exe"),
         "allow_remote_execute_code": False,
+        "instance_id": instance_id,
     }
     settings_path = profile / "freecad_mcp_settings.json"
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
@@ -120,7 +146,8 @@ def main() -> int:
         "addon": str(addon_dst),
         "addon_source": str(addon_src),
         "settings": str(settings_path),
-        "rpc_port": ISOLATED_PORT,
+        "rpc_port": port,
+        "instance_id": instance_id,
         "freecad_exe": str(repo / "build" / "release" / "bin" / "FreeCAD.exe"),
     }
     print("Isolated FreeCAD MCP profile ready:")

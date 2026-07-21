@@ -27,10 +27,21 @@ class _TimeoutTransport(xmlrpc.client.Transport):
         return conn
 
 
+class InstanceMismatchError(RuntimeError):
+    """Raised when the FreeCAD addon on a port is not the expected instance."""
+
+
 class FreeCADConnection:
-    def __init__(self, host: str = "localhost", port: int = 9875, timeout: float = 150):
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 9875,
+        timeout: float = 150,
+        expected_instance_id: str | None = None,
+    ):
         self._uri = f"http://{host}:{port}"
         self._timeout = timeout
+        self._expected_instance_id = expected_instance_id
         self.server = self._make_proxy(timeout)
 
     def _make_proxy(self, timeout: float) -> xmlrpc.client.ServerProxy:
@@ -52,6 +63,30 @@ class FreeCADConnection:
 
     def check_rpc_sync(self, nonce: str) -> dict[str, Any]:
         return self.server.check_rpc_sync(nonce)
+
+    def get_instance_info(self) -> dict[str, Any]:
+        """Identity of the FreeCAD addon answering on this port."""
+        return self.server.get_instance_info()
+
+    def verify_instance(self) -> dict[str, Any]:
+        """Confirm the addon on this port is the expected instance.
+
+        No-op (returns the reported info) when no ``expected_instance_id`` was
+        configured. Raises ``InstanceMismatchError`` when the id differs, so a
+        client configured for an isolated instance never silently drives the
+        wrong FreeCAD when several addons listen on nearby ports.
+        """
+        info = self.get_instance_info()
+        if not self._expected_instance_id:
+            return info
+        actual = (info or {}).get("instance_id")
+        if actual != self._expected_instance_id:
+            raise InstanceMismatchError(
+                f"Expected FreeCAD instance '{self._expected_instance_id}' on "
+                f"{self._uri} but the addon reported '{actual}'. Refusing to "
+                "drive the wrong instance."
+            )
+        return info
 
     def create_document(self, name: str) -> dict[str, Any]:
         return self.server.create_document(name)
@@ -250,6 +285,12 @@ class FreeCADConnection:
 
     def get_selection(self) -> dict[str, Any]:
         return self.server.get_selection()
+
+    def get_gui_state(self) -> dict[str, Any]:
+        return self.server.get_gui_state()
+
+    def recompute_and_wait(self, doc_name: str) -> dict[str, Any]:
+        return self.server.recompute_and_wait(doc_name)
 
     def set_section_view(
         self,

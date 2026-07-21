@@ -6,6 +6,7 @@ Aborts if the existing ``freecad`` entry would be modified.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -19,6 +20,11 @@ ISOLATED_PORT = 9876
 PROTECTED_KEY = "freecad"
 
 
+def default_instance_id(port: int) -> str:
+    """Match setup_isolated_profile.default_instance_id (kept in sync by formula)."""
+    return f"freecad-isolated-{port}"
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
@@ -27,7 +33,9 @@ def _freecad_mcp_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _isolated_entry(python_exe: str, runner: Path, src_dir: Path) -> dict:
+def _isolated_entry(
+    python_exe: str, runner: Path, src_dir: Path, port: int, instance_id: str
+) -> dict:
     return {
         "type": "stdio",
         "command": python_exe,
@@ -36,11 +44,14 @@ def _isolated_entry(python_exe: str, runner: Path, src_dir: Path) -> dict:
             "--host",
             "127.0.0.1",
             "--port",
-            str(ISOLATED_PORT),
+            str(port),
+            "--instance-id",
+            instance_id,
         ],
         "env": {
             "PYTHONUNBUFFERED": "1",
-            "FREECAD_MCP_PORT": str(ISOLATED_PORT),
+            "FREECAD_MCP_PORT": str(port),
+            "FREECAD_MCP_INSTANCE_ID": instance_id,
             "PYTHONPATH": str(src_dir).replace("\\", "/"),
         },
     }
@@ -87,6 +98,20 @@ def merge_isolated(path: Path, entry: dict) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--port", type=int, default=ISOLATED_PORT,
+        help=f"RPC port the isolated addon listens on (default: {ISOLATED_PORT})",
+    )
+    parser.add_argument(
+        "--instance-id", default=None,
+        help="Instance id the client pins (default: freecad-isolated-<port>). "
+             "Must match setup_isolated_profile.",
+    )
+    args = parser.parse_args()
+    port = int(args.port)
+    instance_id = args.instance_id or default_instance_id(port)
+
     repo = _repo_root()
     mcp_root = _freecad_mcp_root()
     runner = mcp_root / "scripts" / "run_freecad_mcp.py"
@@ -97,7 +122,9 @@ def main() -> int:
     venv_py = mcp_root / ".venv" / "Scripts" / "python.exe"
     python_exe = str(venv_py) if venv_py.is_file() else sys.executable
 
-    entry = _isolated_entry(python_exe.replace("\\", "/"), runner, mcp_root / "src")
+    entry = _isolated_entry(
+        python_exe.replace("\\", "/"), runner, mcp_root / "src", port, instance_id
+    )
     config_path = repo / ".cursor" / "mcp.json"
     merge_isolated(config_path, entry)
 
@@ -105,6 +132,7 @@ def main() -> int:
     print(f"  added/updated key: {ISOLATED_KEY}")
     print(f"  command: {entry['command']}")
     print(f"  args: {entry['args']}")
+    print(f"  instance_id: {instance_id}")
     print(f"  protected key '{PROTECTED_KEY}' left unchanged")
     return 0
 

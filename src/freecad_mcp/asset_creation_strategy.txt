@@ -1,26 +1,75 @@
 Asset Creation Strategy for FreeCAD MCP
 
-When creating content in FreeCAD, always follow these steps:
+The default way to model a mechanical part in FreeCAD is a real PartDesign feature
+history: a Body that owns a Sketch, the Sketch attached to a plane or face, constrained
+2D geometry, and a Pad/Pocket (or other PartDesign feature) built from that Sketch inside
+the same Body. Prefer this parametric workflow for every part you create. Do NOT reach for
+the parts library or generic primitives first -- those are exceptions (see the end).
 
-0. Before starting any task, always use get_objects() to confirm the current state of the document.
+Follow these steps in order:
 
-1. Utilize the parts library:
-   - Check available parts using get_parts_list().
-   - If the required part exists in the library, use insert_part_from_library() to insert it into your document.
+0. Confirm the current state. Always call get_objects() before starting so you know which
+   documents, bodies, sketches, and features already exist.
 
-2. If the appropriate asset is not available in the parts library:
-   - Create basic shapes (e.g., cubes, cylinders, spheres) using create_object().
-   - Adjust and define detailed properties of the shapes as necessary using edit_object().
+1. Create or select the document (create_document, or an already-open document).
 
-3. Always assign clear and descriptive names to objects when adding them to the document.
+2. Create a Body. Use body_create(doc_name, body_name) to add a PartDesign::Body. Every
+   sketch and feature below lives inside this Body.
 
-4. Explicitly set the position, scale, and rotation properties of created or inserted objects using edit_object() to ensure proper spatial relationships.
+3. Create the Sketch inside that Body. Call sketch_create(doc_name, sketch_name,
+   body_name=<the Body>, attach_to=<plane or face>) so the Sketch is owned by the Body.
 
-5. After editing an object, always verify that the set properties have been correctly applied by using get_object().
+4. Attach the Sketch. Attach to an origin plane ("XY_Plane" / "XZ_Plane" / "YZ_Plane"), a
+   datum plane, or an intentionally selected face ("Object:Face1"). Use sketch_attach if
+   you need to (re)attach after creation. Do not leave a sketch loose in the document.
 
-6. If detailed customization or specialized operations are necessary, use execute_code() to run custom Python scripts.
+5. Add geometry. Build the 2D profile with sketch_add_line / sketch_add_circle /
+   sketch_add_arc / sketch_add_rectangle / sketch_add_polyline / sketch_add_geometry, etc.
+   The profile that will be padded/pocketed must form a closed wire.
 
-Only revert to basic creation methods in the following cases:
-- When the required asset is not available in the parts library.
-- When a basic shape is explicitly requested.
-- When creating complex shapes requires custom scripting.
+6. Add constraints. Fully constrain the profile with sketch_constrain_* (coincident,
+   horizontal, vertical, distance, radius, equal, parallel, perpendicular, tangent) and
+   dimensional constraints. Give dimensional constraints stable names where supported.
+
+7. Run sketch diagnostics. Call get_sketch_diagnostics(doc_name, sketch_name) and confirm
+   the Sketch is well-constrained: closed profile, no conflicting, redundant, or malformed
+   constraints, and a clean solver message. Fix problems before building a feature.
+
+8. Create the feature inside the same Body. Use pad_feature / pocket_feature (or
+   revolve_feature / loft_feature / sweep_feature / helical_sweep_feature) and pass
+   body_name=<the Body>. Passing body_name is strongly preferred; a Pad/Pocket with no
+   resolvable Body now fails instead of creating loose, non-parametric geometry.
+
+9. Recompute and verify. Call recompute_document, then confirm from the structured result
+   (and get_object / diagnostics if needed):
+   - the feature has a non-null solid Shape (solid_count >= 1);
+   - the Sketch belongs to the expected Body;
+   - the Body Tip is the newly created feature;
+   - the document tree order is correct;
+   - no object is Invalid or in Error;
+   - the feature is in the expected position and direction.
+
+10. Continue the history. Add the next Sketch attached to the preceding feature's face or
+    to a datum plane, and repeat steps 3-9. Build the part up feature by feature.
+
+Naming and placement:
+- Assign clear, descriptive names to bodies, sketches, and features.
+- Establish spatial relationships through sketch attachment, datum planes/lines, and
+  sketch constraints -- not by editing a solid's raw Placement/scale after the fact.
+
+Use basic (non-PartDesign) creation ONLY in these cases:
+- Reference geometry or scaffolding that is not part of the parametric model.
+- Imported or intentionally non-parametric assets.
+- A temporary solid used only to validate something, then discarded.
+- When the user explicitly asks for a basic shape or a specific primitive.
+
+In those cases:
+- Check the parts library with get_parts_list() and, if a suitable part exists, insert it
+  with insert_part_from_library().
+- Otherwise create a primitive with create_object() (e.g. Part::Box, Part::Cylinder) and
+  adjust it with edit_object(); verify with get_object().
+- Use execute_code() only for custom scripting that the atomic tools cannot express.
+
+Do NOT use generic Part::Box, Part::Cylinder, Part::Cut, or Part::Fuse as the default
+mechanical modelling workflow. They are for the exceptions above, not for parts that should
+have a parametric feature history.

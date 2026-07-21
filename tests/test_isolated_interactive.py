@@ -17,9 +17,11 @@ from freecad_mcp.operations.interactive import (
     compare_documents_operation,
     diagnose_helix_operation,
     diagnose_pocket_operation,
+    get_gui_state_operation,
     get_selection_operation,
     normalize_view_name,
     open_document_operation,
+    recompute_and_wait_operation,
     select_subshapes_operation,
     set_section_view_operation,
     set_tree_expanded_operation,
@@ -75,22 +77,81 @@ class TestPortPlumbing:
         monkeypatch.setattr(server.state, "rpc_host", "127.0.0.1")
         monkeypatch.setattr(server.state, "rpc_port", 9876)
 
+        monkeypatch.setattr(server.state, "instance_id", None)
         created = {}
 
         class FakeConn:
-            def __init__(self, host, port):
+            def __init__(self, host, port, expected_instance_id=None):
                 created["host"] = host
                 created["port"] = port
+                created["expected_instance_id"] = expected_instance_id
 
             def ping(self):
                 return True
 
         monkeypatch.setattr(server, "FreeCADConnection", FakeConn)
         conn = server.get_freecad_connection()
-        assert created == {"host": "127.0.0.1", "port": 9876}
+        assert created == {
+            "host": "127.0.0.1",
+            "port": 9876,
+            "expected_instance_id": None,
+        }
         assert conn is server.state.freecad_connection
         # cleanup
         server.state.freecad_connection = None
+
+    def test_get_freecad_connection_verifies_instance_when_pinned(self, monkeypatch):
+        import freecad_mcp.server as server
+
+        monkeypatch.setattr(server.state, "freecad_connection", None)
+        monkeypatch.setattr(server.state, "rpc_host", "127.0.0.1")
+        monkeypatch.setattr(server.state, "rpc_port", 9876)
+        monkeypatch.setattr(server.state, "instance_id", "freecad-isolated-9876")
+
+        calls = {"verify": 0}
+
+        class FakeConn:
+            def __init__(self, host, port, expected_instance_id=None):
+                self.expected_instance_id = expected_instance_id
+
+            def ping(self):
+                return True
+
+            def verify_instance(self):
+                calls["verify"] += 1
+                return {"ok": True, "instance_id": self.expected_instance_id}
+
+        monkeypatch.setattr(server, "FreeCADConnection", FakeConn)
+        server.get_freecad_connection()
+        assert calls["verify"] == 1
+        server.state.freecad_connection = None
+
+    def test_verify_instance_raises_on_mismatch(self):
+        from freecad_mcp.freecad_client import (
+            FreeCADConnection,
+            InstanceMismatchError,
+        )
+
+        conn = object.__new__(FreeCADConnection)
+        conn._expected_instance_id = "freecad-isolated-9876"
+        conn.server = MagicMock()
+        conn.server.get_instance_info.return_value = {
+            "ok": True,
+            "instance_id": "some-other-instance",
+        }
+        conn._uri = "http://127.0.0.1:9876"
+        with pytest.raises(InstanceMismatchError):
+            conn.verify_instance()
+
+    def test_verify_instance_noop_without_expected_id(self):
+        from freecad_mcp.freecad_client import FreeCADConnection
+
+        conn = object.__new__(FreeCADConnection)
+        conn._expected_instance_id = None
+        conn.server = MagicMock()
+        conn.server.get_instance_info.return_value = {"ok": True, "instance_id": "x"}
+        # No expected id -> returns info without raising.
+        assert conn.verify_instance()["instance_id"] == "x"
 
     def test_run_freecad_mcp_forwards_port(self, monkeypatch):
         runner = _load_script("run_freecad_mcp.py")
@@ -129,14 +190,28 @@ class TestPortPlumbing:
 
         runner = Path(__file__).resolve().parents[1] / "scripts" / "run_freecad_mcp.py"
         src = Path(__file__).resolve().parents[1] / "src"
-        entry = setup._isolated_entry("python", runner, src)
+        instance_id = setup.default_instance_id(9876)
+        entry = setup._isolated_entry("python", runner, src, 9876, instance_id)
         setup.merge_isolated(config, entry)
 
         data = json.loads(config.read_text(encoding="utf-8"))
+        iso = data["mcpServers"]["freecad-isolated"]
         assert data["mcpServers"]["freecad"] == original["mcpServers"]["freecad"]
         assert "freecad-isolated" in data["mcpServers"]
-        assert "9876" in data["mcpServers"]["freecad-isolated"]["args"]
-        assert data["mcpServers"]["freecad-isolated"]["env"]["FREECAD_MCP_PORT"] == "9876"
+        assert "9876" in iso["args"]
+        assert iso["env"]["FREECAD_MCP_PORT"] == "9876"
+        # Instance-id handshake is plumbed through both args and env.
+        assert "--instance-id" in iso["args"]
+        assert instance_id in iso["args"]
+        assert iso["env"]["FREECAD_MCP_INSTANCE_ID"] == instance_id
+
+    def test_isolated_scripts_agree_on_instance_id(self):
+        cursor = _load_script("setup_cursor_mcp_isolated.py")
+        profile = _load_script("setup_isolated_profile.py")
+        # Both scripts derive the same id from the port so a pinned client and the
+        # isolated addon match without the scripts sharing state.
+        assert cursor.default_instance_id(9876) == profile.default_instance_id(9876)
+        assert cursor.default_instance_id(9880) == "freecad-isolated-9880"
 
     def test_setup_isolated_profile_refuses_appdata(self, tmp_path, monkeypatch):
         setup = _load_script("setup_isolated_profile.py")
@@ -225,6 +300,45 @@ class TestInteractiveRpcOps:
         conn = MagicMock()
         conn.get_selection.return_value = {"ok": True, "selection": [], "count": 0}
         assert json.loads(_text(get_selection_operation(conn)))["count"] == 0
+
+    def test_get_gui_state_calls_rpc(self):
+        conn = MagicMock()
+        conn.get_gui_state.return_value = {
+            "ok": True,
+            "active_document": "Part",
+            "active_body": "Body",
+            "active_workbench": "PartDesignWorkbench",
+            "edit_mode_object": None,
+            "selection": [],
+            "selection_count": 0,
+        }
+        payload = json.loads(_text(get_gui_state_operation(conn)))
+        assert payload["active_body"] == "Body"
+        assert payload["active_workbench"] == "PartDesignWorkbench"
+        conn.get_gui_state.assert_called_once_with()
+
+    def test_recompute_and_wait_calls_rpc(self):
+        conn = MagicMock()
+        conn.recompute_and_wait.return_value = {
+            "ok": True,
+            "document": "Part",
+            "recomputed_count": 3,
+            "errors": [],
+            "pending_recompute": [],
+            "settled": True,
+        }
+        payload = json.loads(_text(recompute_and_wait_operation(conn, "Part")))
+        assert payload["settled"] is True and payload["recomputed_count"] == 3
+        conn.recompute_and_wait.assert_called_once_with("Part")
+
+    def test_recompute_and_wait_failure_surfaces(self):
+        conn = MagicMock()
+        conn.recompute_and_wait.return_value = {
+            "ok": False,
+            "error": "Document not found: Nope",
+        }
+        resp = recompute_and_wait_operation(conn, "Nope")
+        assert resp.isError and "Document not found" in _text(resp)
 
     def test_set_section_view_calls_rpc(self):
         conn = MagicMock()

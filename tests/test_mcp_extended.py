@@ -331,9 +331,11 @@ class TestSketchAddConstraintOperation:
 
 class TestPadFeatureOperation:
     def test_success(self):
-        conn = _ok_conn("pad_name=Pad")
+        # pad/pocket now return a structured JSON workflow result.
+        conn = _ok_conn('{"ok": true, "feature": "Pad", "body": "Body", "tip": "Pad", "solid_count": 1}')
         result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 15.0)
-        assert "Pad" in _text(result) and "created" in _text(result)
+        assert not result.isError
+        assert '"feature": "Pad"' in _text(result)
 
     def test_params_in_code(self):
         conn = _ok_conn()
@@ -375,9 +377,11 @@ class TestPadFeatureOperation:
 
 class TestPocketFeatureOperation:
     def test_success(self):
-        conn = _ok_conn("pocket_name=Pocket")
+        # pad/pocket now return a structured JSON workflow result.
+        conn = _ok_conn('{"ok": true, "feature": "Pocket", "body": "Body", "tip": "Pocket", "solid_count": 1}')
         result = pocket_feature_operation(conn, True, "Doc", "Sk", "Pocket", 5.0)
-        assert "Pocket" in _text(result) and "created" in _text(result)
+        assert not result.isError
+        assert '"feature": "Pocket"' in _text(result)
 
     def test_does_not_assign_symmetric_property_directly(self):
         conn = _ok_conn()
@@ -730,7 +734,9 @@ class TestRecomputeErrorsInResponse:
             {"name": "Pad", "doc": "Part", "state": ["Invalid"], "label": "Pad"},
             {"name": "Pocket", "doc": "Part", "state": ["Error"], "label": "Pocket"},
         ]
-        conn = _ok_conn("ran ok", recompute_errors=errs)
+        # pad returns a JSON payload (ends with "}"), so _run_json_code appends the
+        # addon-classified recompute_errors after it.
+        conn = _ok_conn('{"ok": true, "feature": "Pad"}', recompute_errors=errs)
         result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 10.0)
         t = _text(result)
         assert "Pad" in t and "Pocket" in t

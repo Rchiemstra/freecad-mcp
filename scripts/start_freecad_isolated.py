@@ -11,6 +11,7 @@ waits on :9875). Does not touch the existing default MCP session.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -25,6 +26,17 @@ ISOLATED_PORT = 9876
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
+
+
+def _profile_rpc_port(profile: Path) -> int:
+    """Read rpc_port from the isolated profile settings (stays in sync with
+    whatever setup_isolated_profile.py wrote); falls back to ISOLATED_PORT."""
+    settings_path = profile / "freecad_mcp_settings.json"
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        return int(data.get("rpc_port", ISOLATED_PORT))
+    except Exception:
+        return ISOLATED_PORT
 
 
 def _load_parent_start_freecad():
@@ -59,6 +71,8 @@ def main() -> int:
     for required in (profile / "Mod", profile / "temp"):
         required.mkdir(parents=True, exist_ok=True)
 
+    isolated_port = _profile_rpc_port(profile)
+
     helper = _load_parent_start_freecad()
     cmd, cwd, env = helper._launch_details(freecad, sys.argv[1:])
 
@@ -72,7 +86,7 @@ def main() -> int:
     print(f"  exe:     {freecad}")
     print(f"  cmd:     {cmd}")
     print(f"  profile: {profile}")
-    print(f"  RPC:     127.0.0.1:{ISOLATED_PORT}")
+    print(f"  RPC:     127.0.0.1:{isolated_port}")
     print("  (existing default MCP :9875 left untouched)")
 
     creationflags = 0
@@ -91,7 +105,7 @@ def main() -> int:
     # Wait briefly for isolated RPC (do not dial :9875).
     deadline = time.time() + 60
     proxy = xmlrpc.client.ServerProxy(
-        f"http://127.0.0.1:{ISOLATED_PORT}", allow_none=True
+        f"http://127.0.0.1:{isolated_port}", allow_none=True
     )
     while time.time() < deadline:
         if process.poll() is not None:
@@ -102,14 +116,14 @@ def main() -> int:
             return process.returncode or 1
         try:
             if proxy.ping():
-                print(f"Isolated MCP RPC ready on 127.0.0.1:{ISOLATED_PORT}")
+                print(f"Isolated MCP RPC ready on 127.0.0.1:{isolated_port}")
                 return 0
         except Exception:
             pass
         time.sleep(0.5)
 
     print(
-        f"WARNING: FreeCAD started but RPC on :{ISOLATED_PORT} not ready yet. "
+        f"WARNING: FreeCAD started but RPC on :{isolated_port} not ready yet. "
         "Switch to MCP Addon workbench and Start RPC Server if needed.",
         file=sys.stderr,
     )

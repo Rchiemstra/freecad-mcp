@@ -75,6 +75,22 @@ def get_selection_operation(freecad: FreeCADConnection) -> ToolResponse:
     return tool_fail(json.dumps(result))
 
 
+def get_gui_state_operation(freecad: FreeCADConnection) -> ToolResponse:
+    result = freecad.get_gui_state()
+    if result.get("ok"):
+        return tool_ok(json.dumps(result))
+    return tool_fail(json.dumps(result))
+
+
+def recompute_and_wait_operation(
+    freecad: FreeCADConnection, doc_name: str
+) -> ToolResponse:
+    result = freecad.recompute_and_wait(doc_name)
+    if result.get("ok"):
+        return tool_ok(json.dumps(result))
+    return tool_fail(json.dumps(result))
+
+
 def set_section_view_operation(
     freecad: FreeCADConnection,
     enabled: bool | None = None,
