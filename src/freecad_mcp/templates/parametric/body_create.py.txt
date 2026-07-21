@@ -1,0 +1,9 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_existing = _doc.getObject($body_name)
+if _existing:
+    raise RuntimeError('Object already exists: ' + $body_name)
+_body = _doc.addObject('PartDesign::Body', $body_name)
+_doc.recompute()
+print(json.dumps({'ok': True, 'body': _body.Name, 'label': getattr(_body, 'Label', _body.Name)}))

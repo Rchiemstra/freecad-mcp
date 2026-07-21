@@ -1,0 +1,39 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_obj = _doc.getObject($object_name)
+if not _obj: raise RuntimeError('Object not found: ' + $object_name)
+_prop = $prop_path
+_expr = $expression
+try:
+    _obj.setExpression(_prop, _expr)
+except Exception as _e:
+    print(json.dumps({
+        'ok': False,
+        'error': 'expression_error',
+        'object': _obj.Name,
+        'prop_path': _prop,
+        'expression': _expr,
+        'message': str(_e),
+        'type': type(_e).__name__,
+    }))
+    raise RuntimeError('Failed to set expression on ' + _obj.Name + '.' + _prop + ': ' + str(_e))
+_doc.recompute()
+_bound = None
+try:
+    _bound = str(_obj.getExpression(_prop)) if hasattr(_obj, 'getExpression') else None
+except Exception:
+    _bound = None
+_state = list(getattr(_obj, 'State', []))
+_invalid = any(s in ('Invalid', 'Error') for s in _state)
+print(json.dumps({
+    'ok': not _invalid,
+    'object': _obj.Name,
+    'prop_path': _prop,
+    'expression': _expr,
+    'bound': _bound,
+    'state': _state,
+    'valid': not _invalid,
+}))
+if _invalid:
+    raise RuntimeError('Expression set but object is Invalid/Error: ' + _obj.Name + ' state=' + str(_state))

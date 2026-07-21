@@ -1,0 +1,61 @@
+import FreeCAD, Sketcher, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found: ' + $sketch_name)
+_name = $constraint_name
+_index = $constraint_index
+_value = $value
+_idx = None
+if _name is not None:
+    for _i, _c in enumerate(getattr(_sk, 'Constraints', []) or []):
+        if getattr(_c, 'Name', '') == _name:
+            _idx = _i
+            break
+    if _idx is None:
+        raise RuntimeError('Constraint name not found: ' + str(_name))
+elif _index is not None:
+    _idx = int(_index)
+else:
+    raise RuntimeError('Provide constraint name or index')
+_cons = _sk.Constraints
+if _idx < 0 or _idx >= len(_cons):
+    raise RuntimeError('Constraint index out of range: ' + str(_idx))
+_before = None
+try:
+    _before = float(_sk.getDatum(_idx))
+except Exception:
+    try:
+        _before = float(getattr(_cons[_idx], 'Value', None))
+    except Exception:
+        _before = None
+if _value is not None:
+    try:
+        _sk.setDatum(_idx, float(_value))
+    except Exception as _e:
+        print(json.dumps({
+            'ok': False,
+            'error': 'constraint_edit_error',
+            'sketch': _sk.Name,
+            'index': _idx,
+            'name': getattr(_cons[_idx], 'Name', ''),
+            'message': str(_e),
+        }))
+        raise RuntimeError('Failed to edit constraint: ' + str(_e))
+_doc.recompute()
+_after = None
+try:
+    _after = float(_sk.getDatum(_idx))
+except Exception:
+    try:
+        _after = float(getattr(_sk.Constraints[_idx], 'Value', None))
+    except Exception:
+        _after = None
+print(json.dumps({
+    'ok': True,
+    'sketch': _sk.Name,
+    'index': _idx,
+    'name': getattr(_sk.Constraints[_idx], 'Name', ''),
+    'before': _before,
+    'after': _after,
+}))

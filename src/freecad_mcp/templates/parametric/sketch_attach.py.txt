@@ -1,0 +1,61 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_sk = _doc.getObject($sketch_name)
+if not _sk: raise RuntimeError('Sketch not found: ' + $sketch_name)
+_support = $support
+_attached = None
+if isinstance(_support, str):
+    if _support in ('XY_Plane', 'XZ_Plane', 'YZ_Plane'):
+        _plane = None
+        # Prefer body origin when sketch is inside a Body
+        _body = None
+        for _obj in _doc.Objects:
+            if getattr(_obj, 'TypeId', '') == 'PartDesign::Body' and _sk in getattr(_obj, 'Group', []):
+                _body = _obj
+                break
+        _origins = []
+        if _body is not None and getattr(_body, 'Origin', None) is not None:
+            _origins.append(_body.Origin)
+        for _o in _doc.Objects:
+            if getattr(_o, 'TypeId', '') == 'App::Origin' and _o not in _origins:
+                _origins.append(_o)
+        for _origin in _origins:
+            for _f in getattr(_origin, 'OriginFeatures', []) or []:
+                if getattr(_f, 'Label', '') == _support or getattr(_f, 'Name', '') == _support:
+                    _plane = _f
+                    break
+            if _plane is None and hasattr(_origin, _support):
+                _plane = getattr(_origin, _support)
+            if _plane is not None:
+                break
+        if _plane is None:
+            raise RuntimeError('Origin plane not found: ' + _support)
+        _sk.AttachmentSupport = [(_plane, '')]
+        _sk.MapMode = 'FlatFace'
+        _attached = {'object': _plane.Name, 'subname': '', 'kind': 'origin_plane', 'plane': _support}
+    elif ':' in _support:
+        _obj_name, _sub = _support.split(':', 1)
+        _ref = _doc.getObject(_obj_name)
+        if not _ref:
+            raise RuntimeError('Support object not found: ' + _obj_name)
+        _sk.AttachmentSupport = [(_ref, _sub)]
+        _sk.MapMode = 'FlatFace'
+        _attached = {'object': _ref.Name, 'subname': _sub, 'kind': 'face_ref'}
+    else:
+        raise RuntimeError('Unsupported support string: ' + _support)
+elif isinstance(_support, dict):
+    _obj_name = _support.get('object') or _support.get('object_name')
+    _sub = _support.get('subname') or _support.get('sub') or ''
+    if not _obj_name:
+        raise RuntimeError('support dict requires object')
+    _ref = _doc.getObject(_obj_name)
+    if not _ref:
+        raise RuntimeError('Support object not found: ' + _obj_name)
+    _sk.AttachmentSupport = [(_ref, _sub)]
+    _sk.MapMode = 'FlatFace'
+    _attached = {'object': _ref.Name, 'subname': _sub, 'kind': 'dict_ref'}
+else:
+    raise RuntimeError('support must be str or dict')
+_doc.recompute()
+print(json.dumps({'ok': True, 'sketch': _sk.Name, 'attached': _attached}))

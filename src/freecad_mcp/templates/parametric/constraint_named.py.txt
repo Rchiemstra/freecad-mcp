@@ -1,0 +1,2 @@
+_idx = _sk.addConstraint(Sketcher.Constraint($args))
+_sk.renameConstraint(_idx, $constraint_name)

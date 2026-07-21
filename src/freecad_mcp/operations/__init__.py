@@ -169,6 +169,23 @@ from .snapshot import (
     snapshot_operation,
 )
 
+# Parametric — Spreadsheet / expressions / Body / named constraints
+from .parametric import (
+    body_create_operation,
+    body_set_tip_operation,
+    clear_expression_operation,
+    diagnose_parametric_operation,
+    list_expressions_operation,
+    set_expression_operation,
+    sketch_attach_operation,
+    sketch_edit_constraint_operation,
+    spreadsheet_create_operation,
+    spreadsheet_get_cells_operation,
+    spreadsheet_list_aliases_operation,
+    spreadsheet_set_alias_operation,
+    spreadsheet_set_cells_operation,
+)
+
 __all__ = [
     # Core
     "close_document_operation",
@@ -307,4 +324,18 @@ __all__ = [
     "restore_operation",
     "reload_document_operation",
     "run_fem_analysis_operation",
+    # Parametric
+    "spreadsheet_create_operation",
+    "spreadsheet_set_cells_operation",
+    "spreadsheet_get_cells_operation",
+    "spreadsheet_set_alias_operation",
+    "spreadsheet_list_aliases_operation",
+    "set_expression_operation",
+    "clear_expression_operation",
+    "list_expressions_operation",
+    "body_create_operation",
+    "body_set_tip_operation",
+    "sketch_attach_operation",
+    "sketch_edit_constraint_operation",
+    "diagnose_parametric_operation",
 ]

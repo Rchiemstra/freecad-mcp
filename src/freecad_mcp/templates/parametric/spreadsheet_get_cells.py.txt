@@ -1,0 +1,38 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_sheet = _doc.getObject($sheet_name)
+if not _sheet: raise RuntimeError('Spreadsheet not found: ' + $sheet_name)
+_addrs = $addresses
+_out = []
+for _item in _addrs:
+    _addr = _item
+    _alias = None
+    if isinstance(_item, dict):
+        _addr = _item.get('address') or _item.get('addr')
+        _alias = _item.get('alias')
+        if not _addr and _alias:
+            try:
+                _addr = _sheet.getCellFromAlias(_alias)
+            except Exception as _e:
+                _out.append({'alias': _alias, 'error': str(_e)})
+                continue
+    if not _addr:
+        _out.append({'error': 'missing address', 'item': _item})
+        continue
+    _addr = str(_addr)
+    _row = {'address': _addr}
+    try:
+        _row['alias'] = _sheet.getAlias(_addr) if hasattr(_sheet, 'getAlias') else None
+    except Exception:
+        _row['alias'] = None
+    try:
+        _row['contents'] = _sheet.getContents(_addr)
+    except Exception as _e:
+        _row['contents_error'] = str(_e)
+    try:
+        _row['value'] = _sheet.get(_addr)
+    except Exception as _e:
+        _row['value_error'] = str(_e)
+    _out.append(_row)
+print(json.dumps({'ok': True, 'sheet': _sheet.Name, 'cells': _out}))

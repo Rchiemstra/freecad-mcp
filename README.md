@@ -181,7 +181,15 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `get_objects`, `get_object`, `create_object`, `edit_object`
 * `delete_object` — deletes without silently orphaning dependents (P6): `recursive=True` removes dependents first, `force=True` deletes only the object and reports the orphans left, otherwise it refuses and lists them.
 * `execute_code`, `execute_code_async`, `recompute_document`, `undo`, `redo`, `reload_document`
-* `get_recompute_log` — per-object recompute state (read-only).
+* `get_recompute_log` — per-object recompute state (read-only); includes expression bindings when present.
+
+### Parametric (Spreadsheet + expressions)
+* `spreadsheet_create`, `spreadsheet_set_cells`, `spreadsheet_get_cells`, `spreadsheet_set_alias`, `spreadsheet_list_aliases`
+* `set_expression`, `clear_expression`, `list_expressions` — bind props like `Constraints[i]` / `Length` to `<<Sheet>>.Alias`
+* `body_create`, `body_set_tip`, `sketch_attach` — Body → Sketch on `XY_Plane` → Pad/Pocket recipe
+* `sketch_edit_constraint` — edit dimensional constraints by stable `name` (preferred) or index
+* `diagnose_parametric` — invalid objects, expression issues, sketch constraint summaries
+* `sketch_constrain_distance` / `sketch_constrain_radius` / `sketch_add_constraint` accept optional `name` for stable identity after trim/fillet
 
 ### Sketching
 * `sketch_create`, `sketch_add_geometry`, `sketch_add_constraint`
@@ -251,6 +259,16 @@ When `generate_git_sidecar_after_save` is `true` in `freecad_mcp_settings.json`,
 ```
 
 Requires `freecad-git` to be installed (`pip install -e tools/freecad_git` from the parent FreeCAD repository).
+
+## Testing (Docker only)
+
+Run the suite via Docker Compose from this directory — do not rely on host `pytest` for sign-off (e2e needs FreeCADCmd):
+
+```bash
+docker compose run --rm unit   # mock-based ops / template generation
+docker compose run --rm e2e    # live FreeCADCmd parametric + regression tests
+docker compose run --rm core   # FreeCAD core C++ repro markers
+```
 
 ## Contributors
 

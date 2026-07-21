@@ -1,0 +1,9 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_existing = _doc.getObject($sheet_name)
+if _existing:
+    raise RuntimeError('Object already exists: ' + $sheet_name)
+_sheet = _doc.addObject('Spreadsheet::Sheet', $sheet_name)
+_doc.recompute()
+print(json.dumps({'ok': True, 'sheet': _sheet.Name, 'label': getattr(_sheet, 'Label', _sheet.Name)}))

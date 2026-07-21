@@ -1,0 +1,82 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_object_name = $object_name
+_targets = [_doc.getObject(_object_name)] if _object_name else list(_doc.Objects)
+_targets = [t for t in _targets if t is not None]
+if _object_name and not _targets:
+    raise RuntimeError('Object not found: ' + _object_name)
+_invalid = []
+_expression_issues = []
+_sketches = []
+for _obj in _targets:
+    _state = list(getattr(_obj, 'State', []))
+    _is_bad = any(s in ('Invalid', 'Error') for s in _state)
+    if _is_bad:
+        _invalid.append({
+            'name': _obj.Name,
+            'label': getattr(_obj, 'Label', _obj.Name),
+            'type': getattr(_obj, 'TypeId', ''),
+            'state': _state,
+        })
+    _engine = getattr(_obj, 'ExpressionEngine', None) or []
+    for _item in _engine:
+        try:
+            _prop = str(_item[0]) if isinstance(_item, (list, tuple)) and len(_item) >= 1 else '?'
+            _expr = str(_item[1]) if isinstance(_item, (list, tuple)) and len(_item) >= 2 else str(_item)
+        except Exception as _e:
+            _expression_issues.append({'object': _obj.Name, 'error': str(_e)})
+            continue
+        # Probe whether the expression still resolves
+        try:
+            _bound = _obj.getExpression(_prop) if hasattr(_obj, 'getExpression') else None
+            if _bound is None and _expr:
+                _expression_issues.append({
+                    'object': _obj.Name,
+                    'prop': _prop,
+                    'expression': _expr,
+                    'issue': 'missing_binding',
+                })
+        except Exception as _e:
+            _expression_issues.append({
+                'object': _obj.Name,
+                'prop': _prop,
+                'expression': _expr,
+                'issue': 'expression_error',
+                'message': str(_e),
+                'type': type(_e).__name__,
+            })
+    if getattr(_obj, 'TypeId', '') == 'Sketcher::SketchObject':
+        _diag = {
+            'name': _obj.Name,
+            'geometry_count': len(getattr(_obj, 'Geometry', []) or []),
+            'constraint_count': len(getattr(_obj, 'Constraints', []) or []),
+            'state': _state,
+            'conflicting': list(getattr(_obj, 'ConflictingConstraints', []) or []),
+            'redundant': list(getattr(_obj, 'RedundantConstraints', []) or []),
+            'malformed': list(getattr(_obj, 'MalformedConstraints', []) or []),
+        }
+        try:
+            _diag['dof'] = int(getattr(_obj, 'FullyConstrained', None) is False)  # placeholder
+        except Exception:
+            pass
+        # Prefer solver status attributes when present
+        for _attr in ('ConstraintCount', 'GeometryCount'):
+            if hasattr(_obj, _attr):
+                _diag[_attr.lower()] = getattr(_obj, _attr)
+        try:
+            # Some FreeCAD builds expose solve() side effects via LastSolverStatus
+            if hasattr(_obj, 'getLastHasConflicts'):
+                _diag['has_conflicts'] = bool(_obj.getLastHasConflicts())
+        except Exception:
+            pass
+        _sketches.append(_diag)
+_result = {
+    'ok': len(_invalid) == 0 and len(_expression_issues) == 0,
+    'document': _doc.Name,
+    'object': _object_name,
+    'invalid_objects': _invalid,
+    'expression_issues': _expression_issues,
+    'sketches': _sketches,
+}
+print(json.dumps(_result))

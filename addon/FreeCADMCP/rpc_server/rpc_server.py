@@ -1321,6 +1321,67 @@ class FreeCADRPC:
         res = self._dispatch_gui(lambda: self._get_recompute_log_gui(doc_name))
         return res if isinstance(res, list) else [{"error": res}]
 
+    def spreadsheet_create(self, doc_name: str, sheet_name: str) -> dict:
+        res = self._dispatch_gui(lambda: self._spreadsheet_create_gui(doc_name, sheet_name))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def spreadsheet_set_cells(self, doc_name: str, sheet_name: str, cells: list) -> dict:
+        res = self._dispatch_gui(lambda: self._spreadsheet_set_cells_gui(doc_name, sheet_name, cells))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def spreadsheet_get_cells(self, doc_name: str, sheet_name: str, addresses: list) -> dict:
+        res = self._dispatch_gui(lambda: self._spreadsheet_get_cells_gui(doc_name, sheet_name, addresses))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def spreadsheet_set_alias(self, doc_name: str, sheet_name: str, address: str, alias: str) -> dict:
+        res = self._dispatch_gui(lambda: self._spreadsheet_set_alias_gui(doc_name, sheet_name, address, alias))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def spreadsheet_list_aliases(self, doc_name: str, sheet_name: str) -> dict:
+        res = self._dispatch_gui(lambda: self._spreadsheet_list_aliases_gui(doc_name, sheet_name))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def set_expression(self, doc_name: str, object_name: str, prop_path: str, expression: str) -> dict:
+        res = self._dispatch_gui(lambda: self._set_expression_gui(doc_name, object_name, prop_path, expression))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def clear_expression(self, doc_name: str, object_name: str, prop_path: str) -> dict:
+        res = self._dispatch_gui(lambda: self._clear_expression_gui(doc_name, object_name, prop_path))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def list_expressions(self, doc_name: str, object_name: str) -> dict:
+        res = self._dispatch_gui(lambda: self._list_expressions_gui(doc_name, object_name))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def body_create(self, doc_name: str, body_name: str) -> dict:
+        res = self._dispatch_gui(lambda: self._body_create_gui(doc_name, body_name))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def body_set_tip(self, doc_name: str, body_name: str, feature_name: str) -> dict:
+        res = self._dispatch_gui(lambda: self._body_set_tip_gui(doc_name, body_name, feature_name))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def sketch_attach(self, doc_name: str, sketch_name: str, support) -> dict:
+        res = self._dispatch_gui(lambda: self._sketch_attach_gui(doc_name, sketch_name, support))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def sketch_edit_constraint(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        value=None,
+        name=None,
+        index=None,
+    ) -> dict:
+        res = self._dispatch_gui(
+            lambda: self._sketch_edit_constraint_gui(doc_name, sketch_name, value, name, index)
+        )
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
+    def diagnose_parametric(self, doc_name: str, object_name=None) -> dict:
+        res = self._dispatch_gui(lambda: self._diagnose_parametric_gui(doc_name, object_name))
+        return res if isinstance(res, dict) else {"success": False, "error": res}
+
     def _get_recompute_log_gui(self, doc_name: str) -> list:
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
@@ -1329,13 +1390,30 @@ class FreeCADRPC:
         for obj in doc.Objects:
             try:
                 st = list(getattr(obj, "State", []))
-                results.append({
+                exprs = []
+                for item in getattr(obj, "ExpressionEngine", None) or []:
+                    try:
+                        if isinstance(item, (list, tuple)) and len(item) >= 2:
+                            exprs.append({"prop": str(item[0]), "expression": str(item[1])})
+                        else:
+                            exprs.append({"raw": str(item)})
+                    except Exception as ee:
+                        exprs.append({"error": str(ee)})
+                entry = {
                     "name": obj.Name,
                     "label": getattr(obj, "Label", obj.Name),
                     "type_id": getattr(obj, "TypeId", ""),
                     "state": st,
                     "valid": not any(s in ("Invalid", "Error") for s in st),
-                })
+                    "expression_count": len(exprs),
+                }
+                if exprs:
+                    entry["expressions"] = exprs
+                if any(s in ("Invalid", "Error") for s in st) and exprs:
+                    entry["expression_hint"] = (
+                        "object invalid with bound expressions; check diagnose_parametric"
+                    )
+                results.append(entry)
             except Exception as e:
                 results.append({"name": getattr(obj, "Name", "?"), "error": str(e)})
         return results
@@ -1739,57 +1817,447 @@ class FreeCADRPC:
 
             for c in constraints:
                 t = c.get("type", "")
+                name = c.get("name")
+                idx = None
                 if t == "Coincident":
-                    sketch.addConstraint(Sketcher.Constraint("Coincident", c["geo1"], c["pos1"], c["geo2"], c["pos2"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Coincident", c["geo1"], c["pos1"], c["geo2"], c["pos2"]))
                 elif t == "Horizontal":
-                    sketch.addConstraint(Sketcher.Constraint("Horizontal", c["geo"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Horizontal", c["geo"]))
                 elif t == "Vertical":
-                    sketch.addConstraint(Sketcher.Constraint("Vertical", c["geo"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Vertical", c["geo"]))
                 elif t == "Distance":
                     if "geo2" in c:
-                        sketch.addConstraint(Sketcher.Constraint("Distance", c["geo1"], c.get("pos1", 0), c["geo2"], c.get("pos2", 0), c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("Distance", c["geo1"], c.get("pos1", 0), c["geo2"], c.get("pos2", 0), c["value"]))
                     elif "pos" in c:
-                        sketch.addConstraint(Sketcher.Constraint("Distance", c["geo"], c["pos"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("Distance", c["geo"], c["pos"], c["value"]))
                     else:
-                        sketch.addConstraint(Sketcher.Constraint("Distance", c["geo"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("Distance", c["geo"], c["value"]))
                 elif t == "DistanceX":
                     if "pos" in c:
-                        sketch.addConstraint(Sketcher.Constraint("DistanceX", c["geo"], c["pos"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("DistanceX", c["geo"], c["pos"], c["value"]))
                     else:
-                        sketch.addConstraint(Sketcher.Constraint("DistanceX", c["geo"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("DistanceX", c["geo"], c["value"]))
                 elif t == "DistanceY":
                     if "pos" in c:
-                        sketch.addConstraint(Sketcher.Constraint("DistanceY", c["geo"], c["pos"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("DistanceY", c["geo"], c["pos"], c["value"]))
                     else:
-                        sketch.addConstraint(Sketcher.Constraint("DistanceY", c["geo"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("DistanceY", c["geo"], c["value"]))
                 elif t == "Radius":
-                    sketch.addConstraint(Sketcher.Constraint("Radius", c["geo"], c["value"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Radius", c["geo"], c["value"]))
                 elif t == "Diameter":
-                    sketch.addConstraint(Sketcher.Constraint("Diameter", c["geo"], c["value"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Diameter", c["geo"], c["value"]))
                 elif t == "Angle":
                     if "geo2" in c:
-                        sketch.addConstraint(Sketcher.Constraint("Angle", c["geo1"], c.get("pos1", 0), c["geo2"], c.get("pos2", 0), c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("Angle", c["geo1"], c.get("pos1", 0), c["geo2"], c.get("pos2", 0), c["value"]))
                     else:
-                        sketch.addConstraint(Sketcher.Constraint("Angle", c["geo"], c["value"]))
+                        idx = sketch.addConstraint(Sketcher.Constraint("Angle", c["geo"], c["value"]))
                 elif t == "Parallel":
-                    sketch.addConstraint(Sketcher.Constraint("Parallel", c["geo1"], c["geo2"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Parallel", c["geo1"], c["geo2"]))
                 elif t == "Perpendicular":
-                    sketch.addConstraint(Sketcher.Constraint("Perpendicular", c["geo1"], c["geo2"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Perpendicular", c["geo1"], c["geo2"]))
                 elif t == "Equal":
-                    sketch.addConstraint(Sketcher.Constraint("Equal", c["geo1"], c["geo2"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Equal", c["geo1"], c["geo2"]))
                 elif t == "Symmetric":
-                    sketch.addConstraint(Sketcher.Constraint("Symmetric", c["geo1"], c["pos1"], c["geo2"], c["pos2"], c["geo3"], c.get("pos3", 0)))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Symmetric", c["geo1"], c["pos1"], c["geo2"], c["pos2"], c["geo3"], c.get("pos3", 0)))
                 elif t == "PointOnObject":
-                    sketch.addConstraint(Sketcher.Constraint("PointOnObject", c["geo1"], c["pos1"], c["geo2"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("PointOnObject", c["geo1"], c["pos1"], c["geo2"]))
                 elif t == "Tangent":
-                    sketch.addConstraint(Sketcher.Constraint("Tangent", c["geo1"], c["geo2"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Tangent", c["geo1"], c["geo2"]))
                 elif t == "Block":
-                    sketch.addConstraint(Sketcher.Constraint("Block", c["geo"]))
+                    idx = sketch.addConstraint(Sketcher.Constraint("Block", c["geo"]))
                 else:
                     return f"Unknown constraint type: '{t}'"
+                if name and idx is not None:
+                    try:
+                        sketch.renameConstraint(idx, str(name))
+                    except Exception:
+                        pass
 
             doc.recompute()
             return True
+        except Exception as e:
+            return str(e)
+
+    def _spreadsheet_create_gui(self, doc_name, sheet_name):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            if doc.getObject(sheet_name):
+                return f"Object already exists: {sheet_name}"
+            sheet = doc.addObject("Spreadsheet::Sheet", sheet_name)
+            doc.recompute()
+            return {"success": True, "sheet": sheet.Name}
+        except Exception as e:
+            return str(e)
+
+    def _spreadsheet_set_cells_gui(self, doc_name, sheet_name, cells):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            sheet = doc.getObject(sheet_name)
+            if not sheet:
+                return f"Spreadsheet '{sheet_name}' not found."
+            updated = []
+            for cell in cells or []:
+                addr = cell.get("address") or cell.get("addr")
+                alias = cell.get("alias")
+                if not addr and alias:
+                    try:
+                        addr = sheet.getCellFromAlias(alias)
+                    except Exception:
+                        addr = None
+                if not addr:
+                    return f"Cell requires address or resolvable alias: {cell!r}"
+                if "value" in cell:
+                    sheet.set(str(addr), str(cell["value"]))
+                if alias and cell.get("address"):
+                    sheet.setAlias(str(addr), str(alias))
+                elif cell.get("set_alias"):
+                    sheet.setAlias(str(addr), str(cell["set_alias"]))
+                updated.append({"address": str(addr), "alias": alias})
+            doc.recompute()
+            return {"success": True, "sheet": sheet.Name, "updated": updated}
+        except Exception as e:
+            return str(e)
+
+    def _spreadsheet_get_cells_gui(self, doc_name, sheet_name, addresses):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            sheet = doc.getObject(sheet_name)
+            if not sheet:
+                return f"Spreadsheet '{sheet_name}' not found."
+            out = []
+            for item in addresses or []:
+                addr = item
+                alias = None
+                if isinstance(item, dict):
+                    addr = item.get("address") or item.get("addr")
+                    alias = item.get("alias")
+                    if not addr and alias:
+                        addr = sheet.getCellFromAlias(alias)
+                row = {"address": str(addr)}
+                try:
+                    row["alias"] = sheet.getAlias(str(addr))
+                except Exception:
+                    row["alias"] = None
+                try:
+                    row["contents"] = sheet.getContents(str(addr))
+                except Exception as e:
+                    row["contents_error"] = str(e)
+                try:
+                    row["value"] = sheet.get(str(addr))
+                except Exception as e:
+                    row["value_error"] = str(e)
+                out.append(row)
+            return {"success": True, "sheet": sheet.Name, "cells": out}
+        except Exception as e:
+            return str(e)
+
+    def _spreadsheet_set_alias_gui(self, doc_name, sheet_name, address, alias):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            sheet = doc.getObject(sheet_name)
+            if not sheet:
+                return f"Spreadsheet '{sheet_name}' not found."
+            sheet.setAlias(str(address), str(alias))
+            doc.recompute()
+            return {"success": True, "sheet": sheet.Name, "address": address, "alias": alias}
+        except Exception as e:
+            return str(e)
+
+    def _spreadsheet_list_aliases_gui(self, doc_name, sheet_name):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            sheet = doc.getObject(sheet_name)
+            if not sheet:
+                return f"Spreadsheet '{sheet_name}' not found."
+            aliases = {}
+            addrs = []
+            if hasattr(sheet, "getNonEmptyCells"):
+                try:
+                    addrs = list(sheet.getNonEmptyCells())
+                except Exception:
+                    addrs = []
+            if not addrs:
+                for col in range(1, 27):
+                    for row in range(1, 101):
+                        addrs.append(chr(64 + col) + str(row))
+            for addr in addrs:
+                try:
+                    alias = sheet.getAlias(str(addr))
+                except Exception:
+                    alias = None
+                if alias:
+                    aliases[str(alias)] = str(addr)
+            return {"success": True, "sheet": sheet.Name, "aliases": aliases}
+        except Exception as e:
+            return str(e)
+
+    def _set_expression_gui(self, doc_name, object_name, prop_path, expression):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            obj = doc.getObject(object_name)
+            if not obj:
+                return f"Object '{object_name}' not found."
+            try:
+                obj.setExpression(prop_path, expression)
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": "expression_error",
+                    "object": object_name,
+                    "prop_path": prop_path,
+                    "expression": expression,
+                    "message": str(e),
+                }
+            doc.recompute()
+            state = list(getattr(obj, "State", []))
+            invalid = any(s in ("Invalid", "Error") for s in state)
+            return {
+                "success": not invalid,
+                "object": obj.Name,
+                "prop_path": prop_path,
+                "expression": expression,
+                "state": state,
+                "valid": not invalid,
+            }
+        except Exception as e:
+            return str(e)
+
+    def _clear_expression_gui(self, doc_name, object_name, prop_path):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            obj = doc.getObject(object_name)
+            if not obj:
+                return f"Object '{object_name}' not found."
+            if hasattr(obj, "clearExpression"):
+                obj.clearExpression(prop_path)
+            else:
+                obj.setExpression(prop_path, None)
+            doc.recompute()
+            return {"success": True, "object": obj.Name, "prop_path": prop_path}
+        except Exception as e:
+            return str(e)
+
+    def _list_expressions_gui(self, doc_name, object_name):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            obj = doc.getObject(object_name)
+            if not obj:
+                return f"Object '{object_name}' not found."
+            exprs = []
+            for item in getattr(obj, "ExpressionEngine", None) or []:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    exprs.append({"prop": str(item[0]), "expression": str(item[1])})
+                else:
+                    exprs.append({"raw": str(item)})
+            return {"success": True, "object": obj.Name, "expressions": exprs, "count": len(exprs)}
+        except Exception as e:
+            return str(e)
+
+    def _body_create_gui(self, doc_name, body_name):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            if doc.getObject(body_name):
+                return f"Object already exists: {body_name}"
+            body = doc.addObject("PartDesign::Body", body_name)
+            doc.recompute()
+            return {"success": True, "body": body.Name}
+        except Exception as e:
+            return str(e)
+
+    def _body_set_tip_gui(self, doc_name, body_name, feature_name):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            body = doc.getObject(body_name)
+            if not body:
+                return f"Body '{body_name}' not found."
+            feat = doc.getObject(feature_name)
+            if not feat:
+                return f"Feature '{feature_name}' not found."
+            body.Tip = feat
+            doc.recompute()
+            tip = getattr(body, "Tip", None)
+            return {"success": True, "body": body.Name, "tip": getattr(tip, "Name", None)}
+        except Exception as e:
+            return str(e)
+
+    def _sketch_attach_gui(self, doc_name, sketch_name, support):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            sketch = doc.getObject(sketch_name)
+            if not sketch:
+                return f"Sketch '{sketch_name}' not found."
+            attached = None
+            if isinstance(support, str):
+                if support in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
+                    plane = None
+                    body = None
+                    for obj in doc.Objects:
+                        if getattr(obj, "TypeId", "") == "PartDesign::Body" and sketch in getattr(obj, "Group", []):
+                            body = obj
+                            break
+                    origins = []
+                    if body is not None and getattr(body, "Origin", None) is not None:
+                        origins.append(body.Origin)
+                    for o in doc.Objects:
+                        if getattr(o, "TypeId", "") == "App::Origin" and o not in origins:
+                            origins.append(o)
+                    for origin in origins:
+                        for feat in getattr(origin, "OriginFeatures", []) or []:
+                            if getattr(feat, "Label", "") == support or getattr(feat, "Name", "") == support:
+                                plane = feat
+                                break
+                        if plane is None and hasattr(origin, support):
+                            plane = getattr(origin, support)
+                        if plane is not None:
+                            break
+                    if plane is None:
+                        return f"Origin plane not found: {support}"
+                    sketch.AttachmentSupport = [(plane, "")]
+                    sketch.MapMode = "FlatFace"
+                    attached = {"object": plane.Name, "subname": "", "kind": "origin_plane", "plane": support}
+                elif ":" in support:
+                    obj_name, sub = support.split(":", 1)
+                    ref = doc.getObject(obj_name)
+                    if not ref:
+                        return f"Support object not found: {obj_name}"
+                    sketch.AttachmentSupport = [(ref, sub)]
+                    sketch.MapMode = "FlatFace"
+                    attached = {"object": ref.Name, "subname": sub, "kind": "face_ref"}
+                else:
+                    return f"Unsupported support string: {support}"
+            elif isinstance(support, dict):
+                obj_name = support.get("object") or support.get("object_name")
+                sub = support.get("subname") or support.get("sub") or ""
+                ref = doc.getObject(obj_name)
+                if not ref:
+                    return f"Support object not found: {obj_name}"
+                sketch.AttachmentSupport = [(ref, sub)]
+                sketch.MapMode = "FlatFace"
+                attached = {"object": ref.Name, "subname": sub, "kind": "dict_ref"}
+            else:
+                return "support must be str or dict"
+            doc.recompute()
+            return {"success": True, "sketch": sketch.Name, "attached": attached}
+        except Exception as e:
+            return str(e)
+
+    def _sketch_edit_constraint_gui(self, doc_name, sketch_name, value, name, index):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            sketch = doc.getObject(sketch_name)
+            if not sketch:
+                return f"Sketch '{sketch_name}' not found."
+            idx = None
+            if name is not None:
+                for i, c in enumerate(getattr(sketch, "Constraints", []) or []):
+                    if getattr(c, "Name", "") == name:
+                        idx = i
+                        break
+                if idx is None:
+                    return f"Constraint name not found: {name}"
+            elif index is not None:
+                idx = int(index)
+            else:
+                return "Provide constraint name or index"
+            if value is not None:
+                sketch.setDatum(idx, float(value))
+            doc.recompute()
+            after = None
+            try:
+                after = float(sketch.getDatum(idx))
+            except Exception:
+                after = None
+            return {
+                "success": True,
+                "sketch": sketch.Name,
+                "index": idx,
+                "name": getattr(sketch.Constraints[idx], "Name", ""),
+                "after": after,
+            }
+        except Exception as e:
+            return str(e)
+
+    def _diagnose_parametric_gui(self, doc_name, object_name=None):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return f"Document '{doc_name}' not found."
+            targets = [doc.getObject(object_name)] if object_name else list(doc.Objects)
+            targets = [t for t in targets if t is not None]
+            if object_name and not targets:
+                return f"Object '{object_name}' not found."
+            invalid = []
+            expression_issues = []
+            sketches = []
+            for obj in targets:
+                state = list(getattr(obj, "State", []))
+                if any(s in ("Invalid", "Error") for s in state):
+                    invalid.append({
+                        "name": obj.Name,
+                        "label": getattr(obj, "Label", obj.Name),
+                        "type": getattr(obj, "TypeId", ""),
+                        "state": state,
+                    })
+                for item in getattr(obj, "ExpressionEngine", None) or []:
+                    try:
+                        prop = str(item[0]) if isinstance(item, (list, tuple)) and len(item) >= 1 else "?"
+                        expr = str(item[1]) if isinstance(item, (list, tuple)) and len(item) >= 2 else str(item)
+                        bound = obj.getExpression(prop) if hasattr(obj, "getExpression") else None
+                        if bound is None and expr:
+                            expression_issues.append({
+                                "object": obj.Name,
+                                "prop": prop,
+                                "expression": expr,
+                                "issue": "missing_binding",
+                            })
+                    except Exception as e:
+                        expression_issues.append({
+                            "object": obj.Name,
+                            "issue": "expression_error",
+                            "message": str(e),
+                        })
+                if getattr(obj, "TypeId", "") == "Sketcher::SketchObject":
+                    sketches.append({
+                        "name": obj.Name,
+                        "geometry_count": len(getattr(obj, "Geometry", []) or []),
+                        "constraint_count": len(getattr(obj, "Constraints", []) or []),
+                        "state": state,
+                        "conflicting": list(getattr(obj, "ConflictingConstraints", []) or []),
+                        "redundant": list(getattr(obj, "RedundantConstraints", []) or []),
+                        "malformed": list(getattr(obj, "MalformedConstraints", []) or []),
+                    })
+            return {
+                "success": len(invalid) == 0 and len(expression_issues) == 0,
+                "document": doc.Name,
+                "object": object_name,
+                "invalid_objects": invalid,
+                "expression_issues": expression_issues,
+                "sketches": sketches,
+            }
         except Exception as e:
             return str(e)
 

@@ -1,0 +1,11 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_body = _doc.getObject($body_name)
+if not _body: raise RuntimeError('Body not found: ' + $body_name)
+_feat = _doc.getObject($feature_name)
+if not _feat: raise RuntimeError('Feature not found: ' + $feature_name)
+_body.Tip = _feat
+_doc.recompute()
+_tip_name = getattr(getattr(_body, 'Tip', None), 'Name', None)
+print(json.dumps({'ok': True, 'body': _body.Name, 'tip': _tip_name, 'feature': _feat.Name}))

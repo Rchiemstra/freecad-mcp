@@ -5,7 +5,29 @@ _results = []
 for _o in _doc.Objects:
     try:
         _st = list(getattr(_o, 'State', []))
-        _results.append({'name': _o.Name, 'label': getattr(_o, 'Label', _o.Name), 'type': getattr(_o, 'TypeId', ''), 'state': _st, 'valid': not any(s in ('Invalid','Error') for s in _st)})
+        _exprs = []
+        _engine = getattr(_o, 'ExpressionEngine', None) or []
+        for _item in _engine:
+            try:
+                if isinstance(_item, (list, tuple)) and len(_item) >= 2:
+                    _exprs.append({'prop': str(_item[0]), 'expression': str(_item[1])})
+                else:
+                    _exprs.append({'raw': str(_item)})
+            except Exception as _ee:
+                _exprs.append({'error': str(_ee)})
+        _entry = {
+            'name': _o.Name,
+            'label': getattr(_o, 'Label', _o.Name),
+            'type': getattr(_o, 'TypeId', ''),
+            'state': _st,
+            'valid': not any(s in ('Invalid','Error') for s in _st),
+            'expression_count': len(_exprs),
+        }
+        if _exprs:
+            _entry['expressions'] = _exprs
+        if any(s in ('Invalid', 'Error') for s in _st) and _exprs:
+            _entry['expression_hint'] = 'object invalid with bound expressions; check diagnose_parametric'
+        _results.append(_entry)
     except Exception as _e:
         _results.append({'name': getattr(_o, 'Name', '?'), 'error': str(_e)})
 print(json.dumps({'total': len(_doc.Objects), 'objects': _results}))

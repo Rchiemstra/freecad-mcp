@@ -1,0 +1,17 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_obj = _doc.getObject($object_name)
+if not _obj: raise RuntimeError('Object not found: ' + $object_name)
+_exprs = []
+_engine = getattr(_obj, 'ExpressionEngine', None)
+if _engine:
+    for _item in _engine:
+        try:
+            if isinstance(_item, (list, tuple)) and len(_item) >= 2:
+                _exprs.append({'prop': str(_item[0]), 'expression': str(_item[1])})
+            else:
+                _exprs.append({'raw': str(_item)})
+        except Exception as _e:
+            _exprs.append({'error': str(_e)})
+print(json.dumps({'ok': True, 'object': _obj.Name, 'expressions': _exprs, 'count': len(_exprs)}))

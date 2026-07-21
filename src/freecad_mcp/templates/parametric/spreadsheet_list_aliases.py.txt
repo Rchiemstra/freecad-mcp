@@ -1,0 +1,30 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_sheet = _doc.getObject($sheet_name)
+if not _sheet: raise RuntimeError('Spreadsheet not found: ' + $sheet_name)
+_aliases = {}
+_addrs = []
+if hasattr(_sheet, 'getNonEmptyCells'):
+    try:
+        _addrs = list(_sheet.getNonEmptyCells())
+    except Exception:
+        _addrs = []
+if not _addrs and hasattr(_sheet, 'getCells'):
+    try:
+        _addrs = list(_sheet.getCells('*'))
+    except Exception:
+        _addrs = []
+if not _addrs:
+    # Fallback: scan a reasonable used range A1:Z100
+    for _col in range(1, 27):
+        for _row in range(1, 101):
+            _addrs.append(chr(64 + _col) + str(_row))
+for _addr in _addrs:
+    try:
+        _alias = _sheet.getAlias(str(_addr)) if hasattr(_sheet, 'getAlias') else None
+    except Exception:
+        _alias = None
+    if _alias:
+        _aliases[str(_alias)] = str(_addr)
+print(json.dumps({'ok': True, 'sheet': _sheet.Name, 'aliases': _aliases}))

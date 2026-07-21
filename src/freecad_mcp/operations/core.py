@@ -602,49 +602,65 @@ def _geom_line(code: str, geom: dict) -> str:
     return f"raise ValueError('Unknown geometry type: {t!r}')"
 
 
-def _constraint_stmt(args: str) -> str:
+def _constraint_stmt(args: str, name: str | None = None) -> str:
+    if name:
+        return render_template_text(
+            "parametric/constraint_named.py.txt",
+            args=args,
+            constraint_name=repr(name),
+        ).strip()
     return render_template_text("core/constraint.py.txt", args=args).strip()
 
 
 def _constraint_line(c: dict) -> str:
     """Return a Python expression that adds one Sketcher constraint to _sk."""
     t = c.get("type", "")
+    name = c.get("name")
     if t == "Coincident":
-        return _constraint_stmt(f"'Coincident',{c['geo1']},{c['pos1']},{c['geo2']},{c['pos2']}")
+        return _constraint_stmt(f"'Coincident',{c['geo1']},{c['pos1']},{c['geo2']},{c['pos2']}", name)
     if t == "Horizontal":
-        return _constraint_stmt(f"'Horizontal',{c['geo']}")
+        return _constraint_stmt(f"'Horizontal',{c['geo']}", name)
     if t == "Vertical":
-        return _constraint_stmt(f"'Vertical',{c['geo']}")
+        return _constraint_stmt(f"'Vertical',{c['geo']}", name)
     if t == "Distance":
         if "geo2" in c:
-            return _constraint_stmt(f"'Distance',{c['geo1']},{c.get('pos1',0)},{c['geo2']},{c.get('pos2',0)},{c['value']}")
+            return _constraint_stmt(
+                f"'Distance',{c['geo1']},{c.get('pos1',0)},{c['geo2']},{c.get('pos2',0)},{c['value']}",
+                name,
+            )
         if "pos" in c:
-            return _constraint_stmt(f"'Distance',{c['geo']},{c['pos']},{c['value']}")
-        return _constraint_stmt(f"'Distance',{c['geo']},{c['value']}")
+            return _constraint_stmt(f"'Distance',{c['geo']},{c['pos']},{c['value']}", name)
+        return _constraint_stmt(f"'Distance',{c['geo']},{c['value']}", name)
     if t == "DistanceX":
         if "pos" in c:
-            return _constraint_stmt(f"'DistanceX',{c['geo']},{c['pos']},{c['value']}")
-        return _constraint_stmt(f"'DistanceX',{c['geo']},{c['value']}")
+            return _constraint_stmt(f"'DistanceX',{c['geo']},{c['pos']},{c['value']}", name)
+        return _constraint_stmt(f"'DistanceX',{c['geo']},{c['value']}", name)
     if t == "DistanceY":
         if "pos" in c:
-            return _constraint_stmt(f"'DistanceY',{c['geo']},{c['pos']},{c['value']}")
-        return _constraint_stmt(f"'DistanceY',{c['geo']},{c['value']}")
+            return _constraint_stmt(f"'DistanceY',{c['geo']},{c['pos']},{c['value']}", name)
+        return _constraint_stmt(f"'DistanceY',{c['geo']},{c['value']}", name)
     if t == "Radius":
-        return _constraint_stmt(f"'Radius',{c['geo']},{c['value']}")
+        return _constraint_stmt(f"'Radius',{c['geo']},{c['value']}", name)
     if t == "Diameter":
-        return _constraint_stmt(f"'Diameter',{c['geo']},{c['value']}")
+        return _constraint_stmt(f"'Diameter',{c['geo']},{c['value']}", name)
     if t == "Angle":
         if "geo2" in c:
-            return _constraint_stmt(f"'Angle',{c['geo1']},{c.get('pos1',0)},{c['geo2']},{c.get('pos2',0)},{c['value']}")
-        return _constraint_stmt(f"'Angle',{c['geo']},{c['value']}")
+            return _constraint_stmt(
+                f"'Angle',{c['geo1']},{c.get('pos1',0)},{c['geo2']},{c.get('pos2',0)},{c['value']}",
+                name,
+            )
+        return _constraint_stmt(f"'Angle',{c['geo']},{c['value']}", name)
     if t in ("Parallel", "Perpendicular", "Equal", "Tangent"):
-        return _constraint_stmt(f"{t!r},{c['geo1']},{c['geo2']}")
+        return _constraint_stmt(f"{t!r},{c['geo1']},{c['geo2']}", name)
     if t == "PointOnObject":
-        return _constraint_stmt(f"'PointOnObject',{c['geo1']},{c['pos1']},{c['geo2']}")
+        return _constraint_stmt(f"'PointOnObject',{c['geo1']},{c['pos1']},{c['geo2']}", name)
     if t == "Symmetric":
-        return _constraint_stmt(f"'Symmetric',{c['geo1']},{c['pos1']},{c['geo2']},{c['pos2']},{c['geo3']},{c.get('pos3',0)}")
+        return _constraint_stmt(
+            f"'Symmetric',{c['geo1']},{c['pos1']},{c['geo2']},{c['pos2']},{c['geo3']},{c.get('pos3',0)}",
+            name,
+        )
     if t == "Block":
-        return _constraint_stmt(f"'Block',{c['geo']}")
+        return _constraint_stmt(f"'Block',{c['geo']}", name)
     return f"raise ValueError('Unknown constraint type: {t!r}')"
 
 
@@ -1075,19 +1091,25 @@ def sketch_constrain_distance_operation(
     freecad: FreeCADConnection, only_text_feedback: bool,
     doc_name: str, sketch_name: str,
     geo: int, value: float, pos: int | None = None,
+    name: str | None = None,
 ) -> ToolResponse:
     c: dict = {"type": "Distance", "geo": geo, "value": value}
     if pos is not None:
         c["pos"] = pos
+    if name:
+        c["name"] = name
     return _run_constraint(freecad, only_text_feedback, doc_name, sketch_name, c)
 
 
 def sketch_constrain_radius_operation(
     freecad: FreeCADConnection, only_text_feedback: bool,
     doc_name: str, sketch_name: str, geo: int, value: float,
+    name: str | None = None,
 ) -> ToolResponse:
-    return _run_constraint(freecad, only_text_feedback, doc_name, sketch_name,
-                           {"type": "Radius", "geo": geo, "value": value})
+    c: dict = {"type": "Radius", "geo": geo, "value": value}
+    if name:
+        c["name"] = name
+    return _run_constraint(freecad, only_text_feedback, doc_name, sketch_name, c)
 
 
 def sketch_constrain_equal_operation(

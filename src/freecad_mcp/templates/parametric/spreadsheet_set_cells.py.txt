@@ -1,0 +1,26 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_sheet = _doc.getObject($sheet_name)
+if not _sheet: raise RuntimeError('Spreadsheet not found: ' + $sheet_name)
+_cells = $cells
+_updated = []
+for _cell in _cells:
+    _addr = _cell.get('address') or _cell.get('addr')
+    _alias = _cell.get('alias')
+    if not _addr and _alias:
+        try:
+            _addr = _sheet.getCellFromAlias(_alias)
+        except Exception:
+            _addr = None
+    if not _addr:
+        raise RuntimeError('Cell requires address or resolvable alias: ' + repr(_cell))
+    if 'value' in _cell:
+        _sheet.set(str(_addr), str(_cell['value']))
+    if _alias and _cell.get('address'):
+        _sheet.setAlias(str(_addr), str(_alias))
+    elif _cell.get('set_alias'):
+        _sheet.setAlias(str(_addr), str(_cell['set_alias']))
+    _updated.append({'address': str(_addr), 'alias': _alias or (_sheet.getAlias(str(_addr)) if hasattr(_sheet, 'getAlias') else None)})
+_doc.recompute()
+print(json.dumps({'ok': True, 'sheet': _sheet.Name, 'updated': _updated}))

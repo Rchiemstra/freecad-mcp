@@ -241,6 +241,52 @@ class FreeCADConnection:
     def pocket_feature(self, doc_name: str, sketch_name: str, pocket_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict[str, Any]:
         return self.server.pocket_feature(doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir)
 
+    def spreadsheet_create(self, doc_name: str, sheet_name: str) -> dict[str, Any]:
+        return self.server.spreadsheet_create(doc_name, sheet_name)
+
+    def spreadsheet_set_cells(self, doc_name: str, sheet_name: str, cells: list) -> dict[str, Any]:
+        return self.server.spreadsheet_set_cells(doc_name, sheet_name, cells)
+
+    def spreadsheet_get_cells(self, doc_name: str, sheet_name: str, addresses: list) -> dict[str, Any]:
+        return self.server.spreadsheet_get_cells(doc_name, sheet_name, addresses)
+
+    def spreadsheet_set_alias(self, doc_name: str, sheet_name: str, address: str, alias: str) -> dict[str, Any]:
+        return self.server.spreadsheet_set_alias(doc_name, sheet_name, address, alias)
+
+    def spreadsheet_list_aliases(self, doc_name: str, sheet_name: str) -> dict[str, Any]:
+        return self.server.spreadsheet_list_aliases(doc_name, sheet_name)
+
+    def set_expression(self, doc_name: str, object_name: str, prop_path: str, expression: str) -> dict[str, Any]:
+        return self.server.set_expression(doc_name, object_name, prop_path, expression)
+
+    def clear_expression(self, doc_name: str, object_name: str, prop_path: str) -> dict[str, Any]:
+        return self.server.clear_expression(doc_name, object_name, prop_path)
+
+    def list_expressions(self, doc_name: str, object_name: str) -> dict[str, Any]:
+        return self.server.list_expressions(doc_name, object_name)
+
+    def body_create(self, doc_name: str, body_name: str) -> dict[str, Any]:
+        return self.server.body_create(doc_name, body_name)
+
+    def body_set_tip(self, doc_name: str, body_name: str, feature_name: str) -> dict[str, Any]:
+        return self.server.body_set_tip(doc_name, body_name, feature_name)
+
+    def sketch_attach(self, doc_name: str, sketch_name: str, support) -> dict[str, Any]:
+        return self.server.sketch_attach(doc_name, sketch_name, support)
+
+    def sketch_edit_constraint(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        value: float | None = None,
+        name: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        return self.server.sketch_edit_constraint(doc_name, sketch_name, value, name, index)
+
+    def diagnose_parametric(self, doc_name: str, object_name: str | None = None) -> dict[str, Any]:
+        return self.server.diagnose_parametric(doc_name, object_name)
+
     def recompute_document(self, doc_name: str) -> dict[str, Any]:
         return self.server.recompute_document(doc_name)
 

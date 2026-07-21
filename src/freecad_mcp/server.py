@@ -148,6 +148,20 @@ from .operations import (
     snapshot_operation,
     reload_document_operation,
     run_fem_analysis_operation,
+    # Parametric — Spreadsheet / expressions / Body / named constraints
+    spreadsheet_create_operation,
+    spreadsheet_set_cells_operation,
+    spreadsheet_get_cells_operation,
+    spreadsheet_set_alias_operation,
+    spreadsheet_list_aliases_operation,
+    set_expression_operation,
+    clear_expression_operation,
+    list_expressions_operation,
+    body_create_operation,
+    body_set_tip_operation,
+    sketch_attach_operation,
+    sketch_edit_constraint_operation,
+    diagnose_parametric_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_state import ServerState
@@ -1054,6 +1068,10 @@ def sketch_add_constraint(
     | Symmetric | geo1, pos1, geo2, pos2, geo3 |
     | Block | geo |
 
+    Optional key on any dimensional constraint: ``name`` — stable identity for
+    later ``sketch_edit_constraint`` / expression binding (prefer over geo index
+    after trim/fillet).
+
     Args:
         doc_name: The document containing the sketch.
         sketch_name: Name of the target sketch.
@@ -1306,6 +1324,7 @@ def sketch_constrain_distance(
     geo: int,
     value: float,
     pos: int | None = None,
+    name: str | None = None,
 ) -> CallToolResult:
     """Add a distance (length) constraint to a line or between two points.
 
@@ -1313,19 +1332,23 @@ def sketch_constrain_distance(
     To constrain the distance from a specific point to the origin, provide
     `pos` (1 = start point, 2 = end point).
 
+    Prefer `name` over geo index for later edits (geo indices shift after
+    trim/fillet). Use `sketch_edit_constraint(name=...)` to change the value.
+
     Args:
         doc_name: Document containing the sketch.
         sketch_name: Name of the target sketch.
         geo: Index of the geometry element.
         value: Required distance in mm.
         pos: Optional point position (1 or 2) for point-to-origin distance.
+        name: Optional stable constraint name (recommended for parametric edits).
 
     Returns:
         Success message and a screenshot.
     """
     return sketch_constrain_distance_operation(
         get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo, value, pos,
+        doc_name, sketch_name, geo, value, pos, name,
     )
 
 
@@ -1336,21 +1359,26 @@ def sketch_constrain_radius(
     sketch_name: str,
     geo: int,
     value: float,
+    name: str | None = None,
 ) -> CallToolResult:
     """Constrain the radius of a circle or arc.
+
+    Prefer `name` over geo index for later edits. Bind live values with
+    `set_expression` on `Constraints[i]` or edit via `sketch_edit_constraint`.
 
     Args:
         doc_name: Document containing the sketch.
         sketch_name: Name of the target sketch.
         geo: Index of the circle or arc geometry element.
         value: Required radius in mm.
+        name: Optional stable constraint name (recommended for parametric edits).
 
     Returns:
         Success message and a screenshot.
     """
     return sketch_constrain_radius_operation(
         get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo, value,
+        doc_name, sketch_name, geo, value, name,
     )
 
 
@@ -1837,6 +1865,256 @@ def get_recompute_log(ctx: Context, doc_name: str) -> CallToolResult:
         ```
     """
     return get_recompute_log_operation(get_freecad_connection(), doc_name)
+
+
+@mcp.tool()
+def spreadsheet_create(
+    ctx: Context,
+    doc_name: str,
+    sheet_name: str,
+) -> CallToolResult:
+    """Create a Spreadsheet::Sheet for parametric dimensions.
+
+    Recipe: create sheet → set cells/aliases → bind sketch constraints and
+    Pad/Pocket Length via ``set_expression`` using ``<<Sheet>>.Alias``.
+
+    Args:
+        doc_name: Document to create the sheet in.
+        sheet_name: Name for the new spreadsheet object (e.g. ``Dims``).
+    """
+    return spreadsheet_create_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name, sheet_name
+    )
+
+
+@mcp.tool()
+def spreadsheet_set_cells(
+    ctx: Context,
+    doc_name: str,
+    sheet_name: str,
+    cells: list[dict[str, Any]],
+) -> CallToolResult:
+    """Set spreadsheet cell values (and optional aliases) in batch.
+
+    Each cell dict accepts:
+    - ``address`` (e.g. ``A1``) and/or ``alias`` to resolve an existing alias
+    - ``value`` — number or formula string
+    - ``alias`` with ``address`` — also sets the alias on that address
+    - ``set_alias`` — set alias when addressing by address alone
+
+    Args:
+        doc_name: Document containing the sheet.
+        sheet_name: Spreadsheet object name.
+        cells: List of cell update dicts.
+    """
+    return spreadsheet_set_cells_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name, sheet_name, cells
+    )
+
+
+@mcp.tool()
+def spreadsheet_get_cells(
+    ctx: Context,
+    doc_name: str,
+    sheet_name: str,
+    addresses: list[Any],
+) -> CallToolResult:
+    """Read spreadsheet cell contents and evaluated values.
+
+    ``addresses`` entries may be address strings (``A1``) or dicts with
+    ``address`` / ``alias``.
+    """
+    return spreadsheet_get_cells_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sheet_name,
+        addresses,
+    )
+
+
+@mcp.tool()
+def spreadsheet_set_alias(
+    ctx: Context,
+    doc_name: str,
+    sheet_name: str,
+    address: str,
+    alias: str,
+) -> CallToolResult:
+    """Set a spreadsheet cell alias (e.g. A1 → Wall)."""
+    return spreadsheet_set_alias_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sheet_name,
+        address,
+        alias,
+    )
+
+
+@mcp.tool()
+def spreadsheet_list_aliases(
+    ctx: Context,
+    doc_name: str,
+    sheet_name: str,
+) -> CallToolResult:
+    """List all aliases on a spreadsheet as ``{alias: address}``."""
+    return spreadsheet_list_aliases_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name, sheet_name
+    )
+
+
+@mcp.tool()
+def set_expression(
+    ctx: Context,
+    doc_name: str,
+    object_name: str,
+    prop_path: str,
+    expression: str,
+) -> CallToolResult:
+    """Bind a FreeCAD expression to an object property.
+
+    Common ``prop_path`` values:
+    - Sketch dimensional constraints: ``Constraints[3]``
+    - Pad/Pocket: ``Length``, ``Length2``
+
+    Expression examples: ``<<Dims>>.Wall``, ``<<Dims>>.PadH``.
+
+    Returns structured JSON; on parse/bind failure returns an error (not a
+    silent Invalid object).
+    """
+    return set_expression_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        prop_path,
+        expression,
+    )
+
+
+@mcp.tool()
+def clear_expression(
+    ctx: Context,
+    doc_name: str,
+    object_name: str,
+    prop_path: str,
+) -> CallToolResult:
+    """Clear an expression binding on an object property."""
+    return clear_expression_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        object_name,
+        prop_path,
+    )
+
+
+@mcp.tool()
+def list_expressions(
+    ctx: Context,
+    doc_name: str,
+    object_name: str,
+) -> CallToolResult:
+    """List ExpressionEngine bindings on an object."""
+    return list_expressions_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name, object_name
+    )
+
+
+@mcp.tool()
+def body_create(
+    ctx: Context,
+    doc_name: str,
+    body_name: str,
+) -> CallToolResult:
+    """Create a PartDesign::Body.
+
+    Recommended pattern: Body → Sketch on XY_Plane → Pad → Pocket.
+    """
+    return body_create_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name, body_name
+    )
+
+
+@mcp.tool()
+def body_set_tip(
+    ctx: Context,
+    doc_name: str,
+    body_name: str,
+    feature_name: str,
+) -> CallToolResult:
+    """Set a Body's Tip to a feature (keeps the PartDesign history tip correct)."""
+    return body_set_tip_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        body_name,
+        feature_name,
+    )
+
+
+@mcp.tool()
+def sketch_attach(
+    ctx: Context,
+    doc_name: str,
+    sketch_name: str,
+    support: Any,
+) -> CallToolResult:
+    """Attach a sketch to an origin plane or face support.
+
+    ``support`` may be:
+    - ``\"XY_Plane\"`` / ``\"XZ_Plane\"`` / ``\"YZ_Plane\"``
+    - ``\"ObjectName:FaceN\"``
+    - ``{\"object\": \"Obj\", \"subname\": \"Face1\"}``
+    """
+    return sketch_attach_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        support,
+    )
+
+
+@mcp.tool()
+def sketch_edit_constraint(
+    ctx: Context,
+    doc_name: str,
+    sketch_name: str,
+    value: float | None = None,
+    name: str | None = None,
+    index: int | None = None,
+) -> CallToolResult:
+    """Edit a dimensional constraint by stable ``name`` (preferred) or index.
+
+    After trim/fillet, geo indices shift — always prefer ``name``.
+    """
+    return sketch_edit_constraint_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        value=value,
+        name=name,
+        index=index,
+    )
+
+
+@mcp.tool()
+def diagnose_parametric(
+    ctx: Context,
+    doc_name: str,
+    object_name: str | None = None,
+) -> CallToolResult:
+    """Diagnose parametric / expression / sketch issues.
+
+    Reports invalid objects, expression bind issues, and sketch constraint
+    conflict/redundant/malformed summaries. Scope to one object or the whole doc.
+    """
+    return diagnose_parametric_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name, object_name
+    )
 
 
 @mcp.tool()

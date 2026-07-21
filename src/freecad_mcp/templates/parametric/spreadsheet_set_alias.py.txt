@@ -1,0 +1,8 @@
+import FreeCAD, json
+_doc = FreeCAD.getDocument($doc_name)
+if not _doc: raise RuntimeError($doc_missing)
+_sheet = _doc.getObject($sheet_name)
+if not _sheet: raise RuntimeError('Spreadsheet not found: ' + $sheet_name)
+_sheet.setAlias($address, $alias)
+_doc.recompute()
+print(json.dumps({'ok': True, 'sheet': _sheet.Name, 'address': $address, 'alias': $alias}))
