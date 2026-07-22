@@ -201,6 +201,16 @@ from .parametric import (
     spreadsheet_set_cells_operation,
 )
 
+# Document lock / lease
+from .locking import (
+    acquire_document_lock_operation,
+    force_release_stale_lock_operation,
+    get_document_lock_operation,
+    heartbeat_document_lock_operation,
+    list_document_locks_operation,
+    release_document_lock_operation,
+)
+
 __all__ = [
     # Core
     "close_document_operation",
@@ -365,4 +375,11 @@ __all__ = [
     "sketch_attach_operation",
     "sketch_edit_constraint_operation",
     "diagnose_parametric_operation",
+    # Document lock
+    "acquire_document_lock_operation",
+    "get_document_lock_operation",
+    "list_document_locks_operation",
+    "heartbeat_document_lock_operation",
+    "release_document_lock_operation",
+    "force_release_stale_lock_operation",
 ]

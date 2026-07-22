@@ -71,3 +71,15 @@ def _register_git_sidecar_observer():
 
 
 QtCore.QTimer.singleShot(0, _register_git_sidecar_observer)
+
+
+def _register_document_lock():
+    try:
+        from document_lock import register_lock_feature
+
+        register_lock_feature()
+    except Exception as e:
+        FreeCAD.Console.PrintWarning(f"[MCP] Document lock feature not registered: {e}\n")
+
+
+QtCore.QTimer.singleShot(0, _register_document_lock)

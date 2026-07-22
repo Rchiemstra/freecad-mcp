@@ -174,6 +174,13 @@ from .operations import (
     sketch_attach_operation,
     sketch_edit_constraint_operation,
     diagnose_parametric_operation,
+    # Document lock
+    acquire_document_lock_operation,
+    get_document_lock_operation,
+    list_document_locks_operation,
+    heartbeat_document_lock_operation,
+    release_document_lock_operation,
+    force_release_stale_lock_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_state import ServerState
@@ -187,19 +194,59 @@ logger.setLevel(logging.INFO)
 
 state = ServerState()
 
+_LEASE_HEARTBEAT_INTERVAL_S = 30.0
+
+
+async def _lease_heartbeat_loop() -> None:
+    """Renew every held lease while this MCP process owns it."""
+    import asyncio
+
+    while True:
+        await asyncio.sleep(_LEASE_HEARTBEAT_INTERVAL_S)
+        if not state.lease_tokens or state.freecad_connection is None:
+            continue
+        conn = state.freecad_connection
+        for doc_key, token in list(state.lease_tokens.items()):
+            try:
+                conn.set_active_lease_token(token)
+                result = conn.heartbeat_document_lock(doc_key, token)
+                if not result.get("success"):
+                    logger.warning(
+                        "Lease heartbeat failed for %s: %s",
+                        doc_key,
+                        result.get("error") or result.get("error_code"),
+                    )
+            except Exception as exc:
+                logger.warning("Lease heartbeat error for %s: %s", doc_key, exc)
+
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+    import asyncio
+
+    heartbeat_task = None
     try:
         logger.info("FreeCADMCP server starting up")
+        logger.info(
+            "MCP lease identity: %s (pid=%s)",
+            state.mcp_instance_id,
+            state.mcp_pid,
+        )
         # Do not connect to FreeCAD here: probing the RPC server can block for a
         # couple of seconds, which delays the MCP `initialize` handshake long
         # enough that clients with a short init timeout (e.g. the interactive
         # Cursor agent panel) mark the server as failed. The connection is
         # established lazily on first tool use via get_freecad_connection().
         logger.info("FreeCAD connection deferred until first tool use")
+        heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
         yield {}
     finally:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
         if state.freecad_connection:
             logger.info("Disconnecting from FreeCAD on shutdown")
             state.freecad_connection.disconnect()
@@ -221,6 +268,10 @@ def get_freecad_connection() -> FreeCADConnection:
             host=state.rpc_host,
             port=state.rpc_port,
             expected_instance_id=state.instance_id,
+            mcp_instance_id=state.mcp_instance_id,
+            mcp_client=state.mcp_client_label,
+            mcp_pid=state.mcp_pid or None,
+            mcp_host=state.mcp_host or None,
         )
         if not conn.ping():
             logger.error("Failed to ping FreeCAD")
@@ -257,6 +308,108 @@ def check_rpc_sync(ctx: Context) -> CallToolResult:
         "FreeCAD GUI-RPC synchronization check failed.\n"
         + json.dumps(details, ensure_ascii=False, indent=2, default=str),
         structured=details,
+    )
+
+
+@mcp.tool()
+def acquire_document_lock(
+    ctx: Context,
+    doc_name: str = "",
+    file_path: str = "",
+    session_id: str = "",
+    task_description: str = "",
+) -> CallToolResult:
+    """Acquire an exclusive renewable write lease for a FreeCAD document.
+
+    Required when document_lock_enforcement is enabled on the FreeCAD addon.
+    Pass an explicit doc_name, file_path, or session_id — never relies on
+    ActiveDocument. Returns a lease token stored for subsequent mutations.
+    """
+    return acquire_document_lock_operation(
+        get_freecad_connection(),
+        doc_name=doc_name,
+        file_path=file_path,
+        session_id=session_id,
+        task_description=task_description,
+        client=state.mcp_client_label,
+        store_token=state.lease_tokens,
+    )
+
+
+@mcp.tool()
+def get_document_lock(
+    ctx: Context,
+    doc_name: str = "",
+    file_path: str = "",
+    session_id: str = "",
+) -> CallToolResult:
+    """Return the current lease record and state for a document."""
+    return get_document_lock_operation(
+        get_freecad_connection(),
+        doc_name=doc_name,
+        file_path=file_path,
+        session_id=session_id,
+    )
+
+
+@mcp.tool()
+def list_document_locks(ctx: Context) -> CallToolResult:
+    """List active document leases known to this FreeCAD instance."""
+    return list_document_locks_operation(get_freecad_connection())
+
+
+@mcp.tool()
+def heartbeat_document_lock(
+    ctx: Context,
+    doc_key: str,
+    token: str = "",
+    current_operation: str = "",
+    state_name: str = "",
+    document_dirty: bool | None = None,
+) -> CallToolResult:
+    """Renew a held document lease heartbeat and optionally update operation/state."""
+    tok = token or state.lease_tokens.get(doc_key, "")
+    if not tok:
+        return tool_fail(
+            "No lease token provided and none stored for this doc_key. "
+            "Pass token= from acquire_document_lock."
+        )
+    return heartbeat_document_lock_operation(
+        get_freecad_connection(),
+        doc_key=doc_key,
+        token=tok,
+        current_operation=current_operation,
+        state=state_name,
+        document_dirty=document_dirty,
+    )
+
+
+@mcp.tool()
+def release_document_lock(
+    ctx: Context,
+    doc_key: str,
+    token: str = "",
+) -> CallToolResult:
+    """Cleanly release a document lease (removes sidecar + registry entry)."""
+    tok = token or state.lease_tokens.get(doc_key, "")
+    if not tok:
+        return tool_fail(
+            "No lease token provided and none stored for this doc_key."
+        )
+    return release_document_lock_operation(
+        get_freecad_connection(),
+        doc_key=doc_key,
+        token=tok,
+        store_token=state.lease_tokens,
+    )
+
+
+@mcp.tool()
+def force_release_stale_lock(ctx: Context, doc_key: str) -> CallToolResult:
+    """Force-release a stale lock only after verifying the owning pid is dead."""
+    return force_release_stale_lock_operation(
+        get_freecad_connection(),
+        doc_key=doc_key,
     )
 
 
@@ -4696,9 +4849,23 @@ def main():
         if env_port:
             state.rpc_port = int(env_port)
     state.instance_id = args.instance_id or os.environ.get("FREECAD_MCP_INSTANCE_ID") or None
+    # MCP-process lease identity (distinct from the FreeCAD addon instance_id)
+    import socket
+
+    state.mcp_instance_id = str(uuid.uuid4())
+    state.mcp_client_label = os.environ.get("FREECAD_MCP_CLIENT", "freecad-mcp")
+    state.mcp_pid = os.getpid()
+    try:
+        state.mcp_host = socket.gethostname()
+    except Exception:
+        state.mcp_host = "localhost"
     logger.info(f"Only text feedback: {state.only_text_feedback}")
     logger.info(
         f"Connecting to FreeCAD RPC server at: {state.rpc_host}:{state.rpc_port}"
         + (f" (instance {state.instance_id})" if state.instance_id else "")
+    )
+    logger.info(
+        f"MCP lease identity: {state.mcp_instance_id} "
+        f"(client={state.mcp_client_label}, pid={state.mcp_pid}, host={state.mcp_host})"
     )
     mcp.run()

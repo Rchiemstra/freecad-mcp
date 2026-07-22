@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 from xmlrpc.client import Fault, dumps as xmlrpc_dumps, loads as xmlrpc_loads
-from xmlrpc.server import SimpleXMLRPCServer
+from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
 
 from PySide import QtCore, QtWidgets
 
@@ -71,6 +71,9 @@ _DEFAULT_SETTINGS = {
     # profile; the isolated-profile setup writes a unique value so a client can
     # verify it reached the intended instance (see get_instance_info).
     "instance_id": "",
+    # Per-document agent write leases (default off — production untouched).
+    "enable_document_lock": False,
+    "document_lock_enforcement": False,
 }
 
 
@@ -147,6 +150,54 @@ def _set_extrusion_symmetric(feature, value):
     return None
 
 
+# --- Request identity (MCP instance headers → thread-local) ---
+
+def _import_document_lock():
+    """Import document_lock under FreeCAD (addon on path) or unit-test package path."""
+    try:
+        import document_lock as mod
+        return mod
+    except ImportError:
+        from addon.FreeCADMCP import document_lock as mod
+        return mod
+
+
+class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):
+    """Capture MCP identity / lease headers into document_lock thread-local."""
+
+    def do_POST(self):
+        try:
+            document_lock = _import_document_lock()
+            headers = self.headers
+            pid_raw = headers.get("X-MCP-Pid")
+            port_raw = headers.get("X-MCP-Rpc-Port")
+            try:
+                pid = int(pid_raw) if pid_raw not in (None, "") else None
+            except (TypeError, ValueError):
+                pid = None
+            try:
+                rpc_port = int(port_raw) if port_raw not in (None, "") else None
+            except (TypeError, ValueError):
+                rpc_port = None
+            document_lock.set_request_identity(
+                instance_id=headers.get("X-MCP-Instance-Id") or None,
+                client=headers.get("X-MCP-Client") or None,
+                pid=pid,
+                host=headers.get("X-MCP-Host") or None,
+                lease_token=headers.get("X-MCP-Lease-Token") or None,
+                rpc_port=rpc_port,
+            )
+        except Exception:
+            pass
+        try:
+            return super().do_POST()
+        finally:
+            try:
+                _import_document_lock().clear_request_identity()
+            except Exception:
+                pass
+
+
 # --- IP-filtered XML-RPC server ---
 
 class FilteredXMLRPCServer(SimpleXMLRPCServer):
@@ -169,6 +220,7 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
         )
         self._accepting_requests = True
         self._accepting_lock = threading.Lock()
+        kwargs.setdefault("requestHandler", McpIdentityRequestHandler)
         super().__init__(addr, **kwargs)
 
     def process_request(self, request, client_address):
@@ -386,6 +438,197 @@ class FreeCADRPC:
     def __init__(self, allow_execute_code: bool = True):
         self.allow_execute_code = allow_execute_code
 
+    def _dispatch(self, method, params):
+        """XML-RPC chokepoint: enforce document leases when configured.
+
+        When ``document_lock_enforcement`` is off, behaviour is identical to
+        the default SimpleXMLRPCDispatcher instance dispatch.
+        """
+        try:
+            dl = _import_document_lock()
+            VerbKind = dl.VerbKind
+            annotate_read_result = dl.annotate_read_result
+            begin_agent_mutation = dl.begin_agent_mutation
+            check_mutation_allowed = dl.check_mutation_allowed
+            classify_verb = dl.classify_verb
+            end_agent_mutation = dl.end_agent_mutation
+            extract_referenced_documents_from_code = dl.extract_referenced_documents_from_code
+            is_enforcement_enabled = dl.is_enforcement_enabled
+            resolve_doc_key = dl.resolve_doc_key
+        except ImportError:
+            func = getattr(self, method, None)
+            if func is None or method.startswith("_"):
+                raise Exception(f'method "{method}" is not supported')
+            return func(*params)
+
+        kind, extractor = classify_verb(method)
+        enforce = is_enforcement_enabled()
+
+        # Resolve callable first (also validates method exists)
+        func = getattr(self, method, None)
+        if func is None or method.startswith("_"):
+            raise Exception(f'method "{method}" is not supported')
+
+        if not enforce:
+            return func(*params)
+
+        # --- Enforcement path ---
+        doc_name = None
+        try:
+            doc_name = extractor(params if isinstance(params, tuple) else tuple(params))
+        except Exception:
+            doc_name = None
+
+        # execute_code / async: explicit document + multi-doc guards
+        if method == "execute_code":
+            options = params[1] if len(params) > 1 and isinstance(params[1], dict) else {}
+            read_only = bool(options.get("read_only", False))
+            code = params[0] if params else ""
+            if not read_only:
+                if not options.get("document"):
+                    return {
+                        "success": False,
+                        "error_code": "document_not_locked",
+                        "error": (
+                            "execute_code mutations require options.document "
+                            "(explicit document identity) and an owned lease. "
+                            "Call acquire_document_lock first."
+                        ),
+                    }
+                primary = options["document"]
+                additional = list(options.get("additional_documents") or [])
+                referenced = extract_referenced_documents_from_code(code)
+                declared = {primary, *additional}
+                undeclared = referenced - declared
+                if undeclared:
+                    return {
+                        "success": False,
+                        "error_code": "multi_document_undeclared",
+                        "error": (
+                            "execute_code references documents not declared in "
+                            f"options.document / additional_documents: {sorted(undeclared)}. "
+                            "Declare and lock every affected document."
+                        ),
+                        "undeclared": sorted(undeclared),
+                    }
+                for name in declared:
+                    try:
+                        key = resolve_doc_key(doc_name=name)
+                    except Exception as exc:
+                        return {
+                            "success": False,
+                            "error_code": "document_not_locked",
+                            "error": f"Cannot resolve document {name!r}: {exc}",
+                        }
+                    allowed = check_mutation_allowed(key)
+                    if not allowed.get("success"):
+                        return allowed
+                # Run with agent-mutating flags set for all declared docs
+                keys = []
+                for name in declared:
+                    try:
+                        keys.append(resolve_doc_key(doc_name=name))
+                    except Exception:
+                        pass
+                for key in keys:
+                    begin_agent_mutation(key)
+                # Also flag by doc name for observer matching
+                for name in declared:
+                    begin_agent_mutation(name)
+                try:
+                    return func(*params)
+                finally:
+                    for key in keys:
+                        end_agent_mutation(key)
+                    for name in declared:
+                        end_agent_mutation(name)
+
+            # read_only: annotate if another instance owns the target
+            result = func(*params)
+            if options.get("document"):
+                try:
+                    key = resolve_doc_key(doc_name=options["document"])
+                    return annotate_read_result(result, key)
+                except Exception:
+                    return result
+            return result
+
+        if method == "execute_code_async":
+            return {
+                "success": False,
+                "error_code": "document_not_locked",
+                "error": (
+                    "execute_code_async is blocked while document lock enforcement "
+                    "is enabled (no explicit document / lease). Use execute_code "
+                    "with options.document and an owned lease instead."
+                ),
+            }
+
+        if method == "create_document":
+            # Creating a brand-new document does not require a prior lease.
+            return func(*params)
+
+        if kind == VerbKind.LIFECYCLE:
+            return func(*params)
+
+        if kind == VerbKind.READ_ONLY:
+            result = func(*params)
+            if doc_name:
+                try:
+                    key = resolve_doc_key(doc_name=doc_name)
+                    return annotate_read_result(result, key)
+                except Exception:
+                    return result
+            return result
+
+        # MUTATING
+        if not doc_name:
+            return {
+                "success": False,
+                "error_code": "document_not_locked",
+                "error": (
+                    f"{method} requires an explicit document identity and an owned "
+                    "lease while document lock enforcement is enabled. "
+                    "Call acquire_document_lock first."
+                ),
+            }
+        try:
+            doc_key = resolve_doc_key(doc_name=doc_name)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error_code": "document_not_locked",
+                "error": f"Cannot resolve document {doc_name!r}: {exc}",
+            }
+        allowed = check_mutation_allowed(doc_key)
+        if not allowed.get("success"):
+            return allowed
+
+        begin_agent_mutation(doc_key)
+        begin_agent_mutation(doc_name)
+        try:
+            result = func(*params)
+            # Keep lock on failure; mark LOCKED_ERROR when structured failure
+            if isinstance(result, dict) and (
+                result.get("success") is False or result.get("ok") is False
+            ):
+                try:
+                    dl = _import_document_lock()
+                    lease = dl.get_lease(doc_key)
+                    if lease is not None:
+                        dl.heartbeat_lease(
+                            doc_key,
+                            lease.token,
+                            state=dl.LeaseState.LOCKED_ERROR.value,
+                            current_operation=f"error:{method}",
+                        )
+                except Exception:
+                    pass
+            return result
+        finally:
+            end_agent_mutation(doc_key)
+            end_agent_mutation(doc_name)
+
     def _dispatch_gui(self, task, timeout=None):
         """Run *task* on the GUI thread and preserve legacy string errors."""
         dispatcher = gui_dispatcher
@@ -411,6 +654,228 @@ class FreeCADRPC:
 
     def ping(self):
         return True
+
+    # --- Document lock verbs -------------------------------------------------
+
+    def acquire_document_lock(
+        self,
+        doc_name: str = "",
+        file_path: str = "",
+        session_id: str = "",
+        task_description: str = "",
+        client: str = "",
+    ) -> dict[str, Any]:
+        """Acquire an exclusive renewable write lease for a document."""
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false in freecad_mcp_settings.json",
+            }
+        identity = dl.get_request_identity()
+        instance_id = identity.get("instance_id") or ""
+        if not instance_id:
+            return {
+                "success": False,
+                "error_code": "missing_instance_id",
+                "error": "X-MCP-Instance-Id header is required to acquire a lock",
+            }
+        if not (doc_name or file_path or session_id):
+            return {
+                "success": False,
+                "error_code": "document_identity_required",
+                "error": (
+                    "Provide an explicit doc_name, file_path, or session_id "
+                    "(never implicitly locks ActiveDocument)"
+                ),
+            }
+
+        def task():
+            name = doc_name
+            dirty = False
+            if name:
+                doc = FreeCAD.getDocument(name)
+                if doc is None:
+                    return {
+                        "success": False,
+                        "error_code": "document_not_found",
+                        "error": f"Document {name!r} not found",
+                    }
+                dirty = bool(getattr(doc, "Modified", False))
+                fname = getattr(doc, "FileName", None) or ""
+                path = file_path or (fname if fname else "")
+            else:
+                path = file_path
+                name = doc_name or ""
+            key = dl.resolve_doc_key(
+                doc_name=name or None,
+                file_path=path or None,
+                session_id=session_id or None,
+            )
+            result = dl.acquire_lease(
+                doc_key=key,
+                doc_name=name or key,
+                instance_id=instance_id,
+                client=client or identity.get("client") or "",
+                pid=int(identity.get("pid") or 0),
+                host=identity.get("host") or "",
+                task_description=task_description or "",
+                rpc_port=identity.get("rpc_port"),
+                document_dirty=dirty,
+            )
+            if result.get("success"):
+                try:
+                    from lock_indicator import refresh_lock_indicator
+
+                    refresh_lock_indicator()
+                except Exception:
+                    pass
+            return result
+
+        return self._dispatch_gui(task)
+
+    def get_document_lock(
+        self,
+        doc_name: str = "",
+        file_path: str = "",
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false",
+            }
+        if not (doc_name or file_path or session_id):
+            return {
+                "success": False,
+                "error_code": "document_identity_required",
+                "error": "Provide doc_name, file_path, or session_id",
+            }
+        try:
+            key = dl.resolve_doc_key(
+                doc_name=doc_name or None,
+                file_path=file_path or None,
+                session_id=session_id or None,
+            )
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+        lease = dl.get_lease(key)
+        if lease is None:
+            return {"success": True, "locked": False, "doc_key": key, "lease": None}
+        return {"success": True, "locked": True, "doc_key": key, "lease": lease.to_dict()}
+
+    def list_document_locks(self) -> dict[str, Any]:
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false",
+            }
+
+        def task():
+            registry = [r.to_dict() for r in dl.list_leases()]
+            paths = []
+            for doc in FreeCAD.listDocuments().values():
+                fname = getattr(doc, "FileName", None) or ""
+                if fname:
+                    paths.append(fname)
+            discovered = [r.to_dict() for r in dl.discover_sidecar_leases(paths)]
+            return {
+                "success": True,
+                "leases": registry,
+                "sidecars": discovered,
+            }
+
+        return self._dispatch_gui(task)
+
+    def heartbeat_document_lock(
+        self,
+        doc_key: str,
+        token: str,
+        current_operation: str = "",
+        state: str = "",
+        document_dirty: bool | None = None,
+    ) -> dict[str, Any]:
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false",
+            }
+        result = dl.heartbeat_lease(
+            doc_key,
+            token,
+            current_operation=current_operation or None,
+            state=state or None,
+            document_dirty=document_dirty,
+        )
+        if result.get("success"):
+            try:
+                from lock_indicator import refresh_lock_indicator
+
+                refresh_lock_indicator()
+            except Exception:
+                pass
+        return result
+
+    def release_document_lock(self, doc_key: str, token: str) -> dict[str, Any]:
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false",
+            }
+        result = dl.release_lease(doc_key, token)
+        if result.get("success"):
+            try:
+                from lock_indicator import refresh_lock_indicator
+
+                refresh_lock_indicator()
+            except Exception:
+                pass
+        return result
+
+    def force_release_stale_lock(self, doc_key: str) -> dict[str, Any]:
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false",
+            }
+        result = dl.force_release_stale_lock(doc_key)
+        if result.get("success"):
+            try:
+                from lock_indicator import refresh_lock_indicator
+
+                refresh_lock_indicator()
+            except Exception:
+                pass
+        return result
 
     def get_instance_info(self):
         """Report this addon instance's identity (lightweight, no GUI dispatch).

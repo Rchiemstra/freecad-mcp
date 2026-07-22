@@ -18,6 +18,9 @@ _DEFAULT_SETTINGS = {
     # Stable per-profile identity; empty on the default profile. The isolated
     # setup writes a unique value that a client can pin via --instance-id.
     "instance_id": "",
+    # Per-document agent write leases (default off — production untouched).
+    "enable_document_lock": False,
+    "document_lock_enforcement": False,
 }
 
 

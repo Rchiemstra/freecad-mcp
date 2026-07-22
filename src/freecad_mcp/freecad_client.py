@@ -12,19 +12,32 @@ _SCREENSHOT_SUPPORT_CHECK = read_template_text("freecad_client/screenshot_suppor
 
 
 class _TimeoutTransport(xmlrpc.client.Transport):
-    """XML-RPC transport with a configurable socket timeout.
+    """XML-RPC transport with a configurable socket timeout and MCP headers.
 
     The default Transport has no timeout, so a frozen FreeCAD GUI thread
     causes the MCP client to hang indefinitely (observed: 4+ minute waits).
+
+    Mutable ``extra_headers`` are injected on every request so the addon can
+    identify the MCP instance and validate document lease tokens without
+    changing every verb signature.
     """
+
     def __init__(self, timeout: float = 30, **kwargs):
         super().__init__(**kwargs)
         self._timeout = timeout
+        # list of (header_name, value); mutated in place by FreeCADConnection
+        self.extra_headers: list[tuple[str, str]] = []
 
     def make_connection(self, host):
         conn = super().make_connection(host)
         conn.timeout = self._timeout
         return conn
+
+    def send_headers(self, connection, headers):
+        if self.extra_headers:
+            # Prefer our identity headers; append after the stock ones
+            headers = list(headers) + list(self.extra_headers)
+        return super().send_headers(connection, headers)
 
 
 class InstanceMismatchError(RuntimeError):
@@ -38,17 +51,72 @@ class FreeCADConnection:
         port: int = 9875,
         timeout: float = 150,
         expected_instance_id: str | None = None,
+        mcp_instance_id: str | None = None,
+        mcp_client: str | None = None,
+        mcp_pid: int | None = None,
+        mcp_host: str | None = None,
     ):
         self._uri = f"http://{host}:{port}"
         self._timeout = timeout
         self._expected_instance_id = expected_instance_id
+        self._mcp_instance_id = mcp_instance_id
+        self._mcp_client = mcp_client
+        self._mcp_pid = mcp_pid
+        self._mcp_host = mcp_host
+        self._rpc_port = port
+        self._active_lease_token: str | None = None
+        self._transport = _TimeoutTransport(timeout=timeout)
+        self._refresh_headers()
         self.server = self._make_proxy(timeout)
 
+    def _refresh_headers(self) -> None:
+        headers: list[tuple[str, str]] = []
+        if self._mcp_instance_id:
+            headers.append(("X-MCP-Instance-Id", str(self._mcp_instance_id)))
+        if self._mcp_client:
+            headers.append(("X-MCP-Client", str(self._mcp_client)))
+        if self._mcp_pid:
+            headers.append(("X-MCP-Pid", str(self._mcp_pid)))
+        if self._mcp_host:
+            headers.append(("X-MCP-Host", str(self._mcp_host)))
+        headers.append(("X-MCP-Rpc-Port", str(self._rpc_port)))
+        if self._active_lease_token:
+            headers.append(("X-MCP-Lease-Token", str(self._active_lease_token)))
+        self._transport.extra_headers = headers
+
+    def set_identity(
+        self,
+        *,
+        instance_id: str | None = None,
+        client: str | None = None,
+        pid: int | None = None,
+        host: str | None = None,
+    ) -> None:
+        if instance_id is not None:
+            self._mcp_instance_id = instance_id
+        if client is not None:
+            self._mcp_client = client
+        if pid is not None:
+            self._mcp_pid = pid
+        if host is not None:
+            self._mcp_host = host
+        self._refresh_headers()
+
+    def set_active_lease_token(self, token: str | None) -> None:
+        self._active_lease_token = token
+        self._refresh_headers()
+
     def _make_proxy(self, timeout: float) -> xmlrpc.client.ServerProxy:
+        # Reuse the same transport so identity headers stay attached.
+        if timeout == self._timeout:
+            transport = self._transport
+        else:
+            transport = _TimeoutTransport(timeout=timeout)
+            transport.extra_headers = list(self._transport.extra_headers)
         return xmlrpc.client.ServerProxy(
             self._uri,
             allow_none=True,
-            transport=_TimeoutTransport(timeout=timeout),
+            transport=transport,
         )
 
     def disconnect(self) -> None:
@@ -381,3 +449,46 @@ class FreeCADConnection:
         # Use a dedicated proxy whose socket timeout exceeds the solver timeout.
         proxy = self._make_proxy(max(self._timeout, timeout + 30))
         return proxy.run_fem_analysis(doc_name, analysis_name, timeout)
+
+    # --- Document lock / lease -----------------------------------------------
+
+    def acquire_document_lock(
+        self,
+        doc_name: str = "",
+        file_path: str = "",
+        session_id: str = "",
+        task_description: str = "",
+        client: str = "",
+    ) -> dict[str, Any]:
+        return self.server.acquire_document_lock(
+            doc_name, file_path, session_id, task_description, client
+        )
+
+    def get_document_lock(
+        self,
+        doc_name: str = "",
+        file_path: str = "",
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        return self.server.get_document_lock(doc_name, file_path, session_id)
+
+    def list_document_locks(self) -> dict[str, Any]:
+        return self.server.list_document_locks()
+
+    def heartbeat_document_lock(
+        self,
+        doc_key: str,
+        token: str,
+        current_operation: str = "",
+        state: str = "",
+        document_dirty: bool | None = None,
+    ) -> dict[str, Any]:
+        return self.server.heartbeat_document_lock(
+            doc_key, token, current_operation, state, document_dirty
+        )
+
+    def release_document_lock(self, doc_key: str, token: str) -> dict[str, Any]:
+        return self.server.release_document_lock(doc_key, token)
+
+    def force_release_stale_lock(self, doc_key: str) -> dict[str, Any]:
+        return self.server.force_release_stale_lock(doc_key)

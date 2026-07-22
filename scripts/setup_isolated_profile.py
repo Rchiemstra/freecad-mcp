@@ -136,6 +136,8 @@ def main() -> int:
         "freecadcmd_path": str(repo / "build" / "release" / "bin" / "FreeCADCmd.exe"),
         "allow_remote_execute_code": False,
         "instance_id": instance_id,
+        "enable_document_lock": True,
+        "document_lock_enforcement": True,
     }
     settings_path = profile / "freecad_mcp_settings.json"
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")

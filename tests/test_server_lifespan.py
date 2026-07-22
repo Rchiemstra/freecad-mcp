@@ -32,7 +32,13 @@ class ServerLifespanTest(unittest.TestCase):
 
         self.assertIs(result, connection)
         factory.assert_called_once_with(
-            host="127.0.0.1", port=9875, expected_instance_id=None
+            host="127.0.0.1",
+            port=9875,
+            expected_instance_id=None,
+            mcp_instance_id=server.state.mcp_instance_id,
+            mcp_client=server.state.mcp_client_label,
+            mcp_pid=server.state.mcp_pid or None,
+            mcp_host=server.state.mcp_host or None,
         )
         connection.ping.assert_called_once_with()
 
