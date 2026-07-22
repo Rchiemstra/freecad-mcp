@@ -22,22 +22,26 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
+# freecad-ci-deps omits Coin/Pivy; Woodpecker installs them via ensure-coin3d.sh.
+# Install in a cached layer before copying sources so rebuilds stay fast.
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends libcoin-dev python3-pivy \
+    && rm -rf /var/lib/apt/lists/* \
+    && test -f /usr/include/Inventor/So.h \
+    && python3 -c "import pivy" \
+    && test -f /usr/lib/x86_64-linux-gnu/cmake/Coin/CoinConfig.cmake
+
 WORKDIR /src
 COPY . /src/FreeCAD
 
-# Match Woodpecker debug configure: system Coin/Pivy, not bundled Coin+SWIG.
-COPY ci/woodpecker/ensure-coin3d.sh /tmp/ensure-coin3d.sh
-RUN chmod +x /tmp/ensure-coin3d.sh \
-    && . /tmp/ensure-coin3d.sh \
-    && test -n "$COIN_CMAKE_ARGS" \
-    && cd /src/FreeCAD \
+RUN cd /src/FreeCAD \
     && cmake --preset debug -G Ninja \
         -DCMAKE_C_COMPILER=/usr/bin/gcc \
         -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
         -DCMAKE_INSTALL_PREFIX=/opt/freecad-mutation-authority \
         -DBUILD_TEST=ON \
         -DENABLE_DEVELOPER_TESTS=ON \
-        ${COIN_CMAKE_ARGS} \
+        -DCoin_DIR=/usr/lib/x86_64-linux-gnu/cmake/Coin \
     && cmake --build /src/FreeCAD/build/debug -j"$(nproc)" \
     && cmake --install /src/FreeCAD/build/debug \
     && test -x /opt/freecad-mutation-authority/bin/FreeCADCmd \
@@ -63,6 +67,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PIP_BREAK_SYSTEM_PACKAGES=1
+
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends libcoin-dev python3-pivy \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=freecad-build /opt/freecad-mutation-authority /opt/freecad-mutation-authority
 
