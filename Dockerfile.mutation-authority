@@ -14,7 +14,8 @@
 
 ARG FREECAD_DEPS_IMAGE=127.0.0.1:5001/freecad-ci-deps:24.04
 
-FROM ${FREECAD_DEPS_IMAGE} AS freecad-build
+# Shared Coin/Pivy layer (Ubuntu ships cmake under Coin-<ver>/).
+FROM ${FREECAD_DEPS_IMAGE} AS coin-base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -22,15 +23,24 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-# freecad-ci-deps omits Coin/Pivy; install system packages and use them
-# (FREECAD_USE_EXTERNAL_COIN_PIVY) so we never hit bundled Pivy SWIG failures.
-# Ubuntu ships cmake files under cmake/Coin-<version>/, not cmake/Coin/.
-RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends libcoin-dev python3-pivy \
-    && rm -rf /var/lib/apt/lists/* \
-    && test -f /usr/include/Inventor/So.h \
-    && python3 -c "import pivy" \
-    && test -f /usr/lib/x86_64-linux-gnu/cmake/Coin-4.0.2/coin-config.cmake
+RUN set -eu; \
+    ok=0; \
+    for attempt in 1 2 3 4 5; do \
+      echo "apt attempt $${attempt}"; \
+      if apt-get update -qq \
+         && apt-get install -y --no-install-recommends libcoin-dev python3-pivy; then \
+        ok=1; \
+        break; \
+      fi; \
+      sleep $$((attempt * 5)); \
+    done; \
+    test "$$ok" = "1"; \
+    rm -rf /var/lib/apt/lists/*; \
+    test -f /usr/include/Inventor/So.h; \
+    python3 -c "import pivy"; \
+    test -f /usr/lib/x86_64-linux-gnu/cmake/Coin-4.0.2/coin-config.cmake
+
+FROM coin-base AS freecad-build
 
 WORKDIR /src
 COPY . /src/FreeCAD
@@ -53,26 +63,17 @@ RUN cd /src/FreeCAD \
         /opt/freecad-mutation-authority/bin/App_tests_run \
     && test -x /opt/freecad-mutation-authority/bin/App_tests_run
 
-# Runtime uses the same deps ABI as freecad-build, plus the patched install.
-FROM ${FREECAD_DEPS_IMAGE} AS coupling-runtime
+# Runtime reuses coin-base (no second apt) + patched FreeCAD install.
+FROM coin-base AS coupling-runtime
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    FREECAD_TEST=1 \
+ENV FREECAD_TEST=1 \
     MUTATION_AUTHORITY_COUPLING=1 \
     MUTATION_AUTHORITY_REQUIRE_CORE=1 \
     FREECAD_HOME=/opt/freecad-mutation-authority \
     PATH=/opt/freecad-mutation-authority/bin:/usr/local/bin:$PATH \
     PYTHONPATH=/opt/freecad-mutation-authority/lib:/workspace \
     LD_LIBRARY_PATH=/opt/freecad-mutation-authority/lib \
-    LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8 \
     PIP_BREAK_SYSTEM_PACKAGES=1
-
-RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends libcoin-dev python3-pivy \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=freecad-build /opt/freecad-mutation-authority /opt/freecad-mutation-authority
 
