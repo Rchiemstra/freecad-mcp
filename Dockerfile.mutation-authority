@@ -26,13 +26,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN set -eu; \
     ok=0; \
     for attempt in 1 2 3 4 5; do \
-      echo "apt attempt $${attempt}"; \
+      echo "apt attempt $$attempt"; \
       if apt-get update -qq \
          && apt-get install -y --no-install-recommends libcoin-dev python3-pivy; then \
         ok=1; \
         break; \
       fi; \
-      sleep $$((attempt * 5)); \
+      echo "apt failed on attempt $$attempt; retrying"; \
+      sleep 10; \
     done; \
     test "$$ok" = "1"; \
     rm -rf /var/lib/apt/lists/*; \
