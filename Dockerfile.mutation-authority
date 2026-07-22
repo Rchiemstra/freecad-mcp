@@ -25,21 +25,26 @@ ENV DEBIAN_FRONTEND=noninteractive \
 WORKDIR /src
 COPY . /src/FreeCAD
 
-WORKDIR /src/FreeCAD/build
-RUN cmake -G Ninja \
-        -DCMAKE_BUILD_TYPE=Debug \
+# Match Woodpecker debug configure: system Coin/Pivy, not bundled Coin+SWIG.
+COPY ci/woodpecker/ensure-coin3d.sh /tmp/ensure-coin3d.sh
+RUN chmod +x /tmp/ensure-coin3d.sh \
+    && . /tmp/ensure-coin3d.sh \
+    && test -n "$COIN_CMAKE_ARGS" \
+    && cd /src/FreeCAD \
+    && cmake --preset debug -G Ninja \
+        -DCMAKE_C_COMPILER=/usr/bin/gcc \
+        -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
         -DCMAKE_INSTALL_PREFIX=/opt/freecad-mutation-authority \
-        -DBUILD_QT6=ON \
-        -DBUILD_GUI=ON \
         -DBUILD_TEST=ON \
-        -DFREECAD_USE_EXTERNAL_SMESH=OFF \
-        /src/FreeCAD \
-    && ninja -j"$(nproc)" \
-    && ninja install \
+        -DENABLE_DEVELOPER_TESTS=ON \
+        ${COIN_CMAKE_ARGS} \
+    && cmake --build /src/FreeCAD/build/debug -j"$(nproc)" \
+    && cmake --install /src/FreeCAD/build/debug \
     && test -x /opt/freecad-mutation-authority/bin/FreeCADCmd \
     && mkdir -p /opt/freecad-mutation-authority/bin \
-    && (cp -a /src/FreeCAD/build/tests/App_tests_run /opt/freecad-mutation-authority/bin/App_tests_run \
-        || cp -a /src/FreeCAD/build/bin/App_tests_run /opt/freecad-mutation-authority/bin/App_tests_run) \
+    && test -x /src/FreeCAD/build/debug/tests/App_tests_run \
+    && cp -a /src/FreeCAD/build/debug/tests/App_tests_run \
+        /opt/freecad-mutation-authority/bin/App_tests_run \
     && test -x /opt/freecad-mutation-authority/bin/App_tests_run
 
 # Runtime uses the same deps ABI as freecad-build, plus the patched install.
