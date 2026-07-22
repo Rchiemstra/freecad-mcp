@@ -149,3 +149,41 @@ def test_worker_timeout_is_rejected_for_gui_execution(monkeypatch):
     assert result["success"] is False
     assert result["error_code"] == "gui_timeout_not_supported"
     assert "cannot safely stop code running on FreeCAD's GUI thread" in result["error"]
+
+
+def test_forced_gui_geometry_mutation_is_blocked(monkeypatch):
+    """The exact 2026-07-22 freeze: gui + read_only=false + geometry loop.
+
+    Previously this bypassed the guard (neither auto-mutation nor
+    forced-analysis) and was dispatched to the GUI thread, hanging FreeCAD.
+    It must now be blocked before the queue and point at the worker / opt-in.
+    """
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+    result = rpc_server.FreeCADRPC().execute_code(
+        SWEEP45_1_CODE,
+        {"execution_mode": "gui"},
+    )
+    assert result["success"] is False
+    assert result["blocked"] == "gui_thread_geometry_loop"
+    assert "read_only=true" in result["error"]
+    assert "execution_mode='worker'" in result["error"]
+    assert "allow_gui_geometry_loop=true" in result["error"]
+
+
+def test_forced_gui_geometry_mutation_optin_reaches_gui(monkeypatch):
+    """The explicit escape hatch lets a genuine live mutation run on the GUI."""
+    rpc = rpc_server.FreeCADRPC()
+    dispatched = {}
+
+    def fake_dispatch_gui(task, timeout):
+        dispatched["called"] = True
+        dispatched["timeout"] = timeout
+        return {"ok": True, "session": {}, "stdout": ""}
+
+    monkeypatch.setattr(rpc, "_dispatch_gui", fake_dispatch_gui)
+    result = rpc.execute_code(
+        SWEEP45_1_CODE,
+        {"execution_mode": "gui", "allow_gui_geometry_loop": True},
+    )
+    assert result["success"] is True
+    assert dispatched.get("called") is True

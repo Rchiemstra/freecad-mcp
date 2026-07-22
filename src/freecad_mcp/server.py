@@ -1190,8 +1190,22 @@ def execute_code(
     execution_mode: Literal["gui", "worker", "auto"] = "auto",
     timeout_seconds: float | None = None,
     link_policy: Literal["strict", "warn"] = "strict",
+    allow_gui_geometry_loop: bool = False,
 ) -> CallToolResult:
     """Execute arbitrary Python code in FreeCAD.
+
+    CHOOSING A MODE — expensive geometry loops must not run on the GUI thread.
+    Any iteration (for/while/comprehension) containing an expensive OCCT call
+    (``distToShape``/``common``/``cut``/``fuse``/``section``/``removeSplitter``/
+    ``isValid``/``check``) MUST use ``read_only=true`` + ``execution_mode="worker"``
+    + ``timeout_seconds``. Such loops are non-interruptible on the GUI thread and
+    will freeze FreeCAD (a timeout cannot stop them). They are blocked in ``gui``
+    mode unless you pass ``allow_gui_geometry_loop=true``, which is reserved for a
+    genuine, bounded live-document mutation that cannot run against a worker
+    snapshot. Split large sweeps into small batches, and after a GUI timeout do
+    not resubmit GUI work until a liveness check (e.g. ``get_worker_status``)
+    passes. ``read_only=true`` may temporarily rotate/recompute geometry in the
+    worker snapshot; it only forbids modifying the live GUI documents.
 
     Args:
         code: The Python code to execute.
@@ -1211,6 +1225,10 @@ def execute_code(
         link_policy: Worker snapshot policy for broken joint/link refs. ``strict``
             fails the snapshot; ``warn`` continues and returns ``link_warnings``.
             Only meaningful with ``execution_mode="worker"``.
+        allow_gui_geometry_loop: Last-resort opt-in to run an expensive-geometry
+            loop on the GUI thread (``execution_mode="gui"``, ``read_only=false``)
+            for a genuine, bounded live-document mutation. Default false; prefer
+            read-only worker mode for any analysis.
 
     Returns:
         Execution output with structured session/recompute metadata, or an error with traceback.
@@ -1230,6 +1248,7 @@ def execute_code(
         execution_mode=execution_mode,
         timeout_seconds=timeout_seconds,
         link_policy=link_policy,
+        allow_gui_geometry_loop=allow_gui_geometry_loop,
     )
 
 

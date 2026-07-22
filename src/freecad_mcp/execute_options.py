@@ -26,6 +26,11 @@ class ExecuteOptions:
     execution_mode: ExecutionMode = "auto"
     timeout_seconds: float | None = None
     link_policy: LinkPolicy = "strict"
+    # Explicit, deliberate opt-in to run an expensive-geometry loop on the GUI
+    # thread (execution_mode='gui', read_only=false).  Reserved for a genuine,
+    # bounded live-document mutation; without it such loops are blocked because
+    # they are non-interruptible and can freeze FreeCAD's UI.
+    allow_gui_geometry_loop: bool = False
     # Set only by repository operation wrappers.  The public arbitrary-code
     # MCP tool deliberately does not expose this capability marker.
     generated_operation: bool = False
@@ -44,6 +49,7 @@ class ExecuteOptions:
             "execution_mode": self.execution_mode,
             "timeout_seconds": self.timeout_seconds,
             "link_policy": self.link_policy,
+            "allow_gui_geometry_loop": self.allow_gui_geometry_loop,
             "generated_operation": self.generated_operation,
             "operation_id": self.operation_id,
         }
@@ -66,6 +72,7 @@ class ExecuteOptions:
             execution_mode=data.get("execution_mode", "auto"),
             timeout_seconds=data.get("timeout_seconds"),
             link_policy=data.get("link_policy", "strict"),
+            allow_gui_geometry_loop=bool(data.get("allow_gui_geometry_loop", False)),
             generated_operation=bool(data.get("generated_operation", False)),
             operation_id=data.get("operation_id"),
         )

@@ -5145,10 +5145,21 @@ class FreeCADRPC:
 
         loop_risk = find_gui_geometry_loop_risk(code)
         read_only = bool(options.get("read_only", False))
+        allow_gui_loop = bool(options.get("allow_gui_geometry_loop", False))
         block_unmarked_mutation = execution_mode == "auto" and not read_only
         block_forced_gui_analysis = execution_mode == "gui" and read_only
+        # An expensive-geometry loop explicitly forced onto the GUI thread
+        # (execution_mode='gui', read_only=false) is non-interruptible and froze
+        # FreeCAD in the past.  It is now blocked unless the caller opts in with an
+        # explicit allow_gui_geometry_loop=true, which is reserved for a genuine,
+        # bounded live-document mutation that cannot run against a worker snapshot.
+        block_forced_gui_loop = (
+            execution_mode == "gui" and not read_only and not allow_gui_loop
+        )
         if loop_risk is not None and (
-            block_unmarked_mutation or block_forced_gui_analysis
+            block_unmarked_mutation
+            or block_forced_gui_analysis
+            or block_forced_gui_loop
         ):
             if block_forced_gui_analysis:
                 guidance = (
@@ -5156,12 +5167,20 @@ class FreeCADRPC:
                     "Use execution_mode='auto' or 'worker' so the analysis runs in "
                     "an isolated FreeCADCmd process with a hard timeout."
                 )
+            elif block_forced_gui_loop:
+                guidance = (
+                    "An expensive-geometry loop on the GUI thread cannot be "
+                    "interrupted and will freeze FreeCAD. For analysis, set "
+                    "read_only=true and execution_mode='worker' with a hard timeout. "
+                    "Only for a genuine bounded live-document mutation, pass "
+                    "allow_gui_geometry_loop=true and split the work into small chunks."
+                )
             else:
                 guidance = (
                     "For analysis, set read_only=true and execution_mode='worker' "
-                    "with a hard timeout. For an intentional document mutation, "
-                    "split the work into bounded chunks or explicitly set "
-                    "execution_mode='gui'."
+                    "with a hard timeout. For an intentional document mutation, split "
+                    "the work into bounded chunks and explicitly set "
+                    "execution_mode='gui' with allow_gui_geometry_loop=true."
                 )
             return {
                 "success": False,

@@ -269,6 +269,7 @@ def execute_code_operation(
     execution_mode: str = "auto",
     timeout_seconds: float | None = None,
     link_policy: str = "strict",
+    allow_gui_geometry_loop: bool = False,
 ) -> ToolResponse:
     opts = ExecuteOptions(
         document=document,
@@ -282,6 +283,7 @@ def execute_code_operation(
         execution_mode=execution_mode,  # type: ignore[arg-type]
         timeout_seconds=timeout_seconds,
         link_policy=link_policy,  # type: ignore[arg-type]
+        allow_gui_geometry_loop=allow_gui_geometry_loop,
     )
     try:
         res = freecad.execute_code(code, opts)
