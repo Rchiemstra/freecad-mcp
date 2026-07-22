@@ -14,8 +14,9 @@
 
 ARG FREECAD_DEPS_IMAGE=127.0.0.1:5001/freecad-ci-deps:24.04
 
-# Shared Coin/Pivy layer (Ubuntu ships cmake under Coin-<ver>/).
-FROM ${FREECAD_DEPS_IMAGE} AS coin-base
+# Shared FreeCAD build/runtime base. Coin and Pivy are built from the FreeCAD
+# submodules, matching the default FreeCAD configuration and CI build.
+FROM ${FREECAD_DEPS_IMAGE} AS freecad-base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -23,38 +24,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-RUN set -eu; \
-    ok=0; \
-    for attempt in 1 2 3 4 5; do \
-      echo "apt attempt $$attempt"; \
-      if apt-get update -qq \
-         && apt-get install -y --no-install-recommends libcoin-dev python3-pivy; then \
-        ok=1; \
-        break; \
-      fi; \
-      echo "apt failed on attempt $$attempt; retrying"; \
-      sleep 10; \
-    done; \
-    test "$$ok" = "1"; \
-    rm -rf /var/lib/apt/lists/*; \
-    test -f /usr/include/Inventor/So.h; \
-    python3 -c "import pivy"; \
-    test -f /usr/lib/x86_64-linux-gnu/cmake/Coin-4.0.2/coin-config.cmake
-
-FROM coin-base AS freecad-build
+FROM freecad-base AS freecad-build
 
 WORKDIR /src
 COPY . /src/FreeCAD
 
-RUN cd /src/FreeCAD \
+RUN test -f /src/FreeCAD/src/3rdParty/coin/CMakeLists.txt \
+    && test -f /src/FreeCAD/src/3rdParty/pivy/CMakeLists.txt \
+    && cd /src/FreeCAD \
     && cmake --preset debug -G Ninja \
         -DCMAKE_C_COMPILER=/usr/bin/gcc \
         -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
         -DCMAKE_INSTALL_PREFIX=/opt/freecad-mutation-authority \
         -DBUILD_TEST=ON \
         -DENABLE_DEVELOPER_TESTS=ON \
-        -DFREECAD_USE_EXTERNAL_COIN_PIVY=ON \
-        -DCoin_DIR=/usr/lib/x86_64-linux-gnu/cmake/Coin-4.0.2 \
+        -DFREECAD_USE_EXTERNAL_COIN_PIVY=OFF \
     && cmake --build /src/FreeCAD/build/debug -j"$(nproc)" \
     && cmake --install /src/FreeCAD/build/debug \
     && test -x /opt/freecad-mutation-authority/bin/FreeCADCmd \
@@ -64,8 +48,8 @@ RUN cd /src/FreeCAD \
         /opt/freecad-mutation-authority/bin/App_tests_run \
     && test -x /opt/freecad-mutation-authority/bin/App_tests_run
 
-# Runtime reuses coin-base (no second apt) + patched FreeCAD install.
-FROM coin-base AS coupling-runtime
+# Runtime uses the same dependency ABI as the build plus the patched install.
+FROM freecad-base AS coupling-runtime
 
 ENV FREECAD_TEST=1 \
     MUTATION_AUTHORITY_COUPLING=1 \
