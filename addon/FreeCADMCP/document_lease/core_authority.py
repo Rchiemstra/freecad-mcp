@@ -32,6 +32,7 @@ LIVE_MUTATION_KINDS: tuple[str, ...] = (
     "TransactionAbort",
     "ImportExport",
     "BulkCopy",
+    "StructuralProperty",
 )
 
 SAVE_MUTATION_KINDS: tuple[str, ...] = (
@@ -268,3 +269,48 @@ def capability_context_or_null(
     if doc is None or not callable(getattr(doc, "openMutationCapability", None)):
         return nullcontext(None)
     return open_mutation_capability(doc, generation=generation, kinds=kinds)
+
+
+def sync_gui_lease_takeover(document: Any) -> bool:
+    """Rotate/fence the MCP lease for a GUI Take Over without bumping core.
+
+    Core ``DocumentMutationAuthority.takeover`` is applied by the C++ dialog
+    after this returns successfully, so lease and core cannot split.
+    """
+
+    doc = resolve_document(document)
+    if doc is None:
+        return False
+    try:
+        from document_lease.observer import get_runtime_service
+    except ImportError:
+        try:
+            from addon.FreeCADMCP.document_lease.observer import (  # type: ignore
+                get_runtime_service,
+            )
+        except ImportError:
+            # Addon present without observer helpers: allow core-only takeover.
+            return True
+    try:
+        service = get_runtime_service()
+        if service is None:
+            return True
+        identities = getattr(service, "identity_service", None)
+        if identities is None:
+            return True
+        try:
+            identity = identities.register_document(doc)
+        except Exception:
+            identity = identities.resolve(
+                {"document_name": str(getattr(doc, "Name", "") or "")}
+            )
+        dirty = bool(getattr(doc, "Modified", False))
+        service.takeover(
+            identity.session_uuid,
+            dirty=dirty,
+            reason="GUI mutation takeover dialog",
+        )
+        return True
+    except Exception:
+        logger.warning("sync_gui_lease_takeover failed", exc_info=True)
+        return False

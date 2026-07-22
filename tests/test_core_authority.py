@@ -101,6 +101,13 @@ def test_kinds_for_rpc_method():
     assert "AddObject" in core_authority.kinds_for_rpc_method(
         "create_object", "live_mutation"
     )
+    assert "StructuralProperty" in core_authority.LIVE_MUTATION_KINDS
+
+
+def test_sync_gui_lease_takeover_without_service_returns_true():
+    doc = _FakeDoc()
+    # No FreeCADMCP runtime service in unit tests → soft success.
+    assert core_authority.sync_gui_lease_takeover(doc) is True
 
 
 def test_sync_owner_from_lease_record_and_takeover():
