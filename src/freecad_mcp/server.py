@@ -1196,16 +1196,18 @@ def execute_code(
 
     CHOOSING A MODE — expensive geometry loops must not run on the GUI thread.
     Any iteration (for/while/comprehension) containing an expensive OCCT call
-    (``distToShape``/``common``/``cut``/``fuse``/``section``/``removeSplitter``/
-    ``isValid``/``check``) MUST use ``read_only=true`` + ``execution_mode="worker"``
+    (``distToShape``/``isInside``/``common``/``cut``/``fuse``/``section``/
+    ``removeSplitter``/``isValid``/``check``) MUST use ``read_only=true`` +
+    ``execution_mode="worker"``
     + ``timeout_seconds``. Such loops are non-interruptible on the GUI thread and
     will freeze FreeCAD (a timeout cannot stop them). They are blocked in ``gui``
     mode unless you pass ``allow_gui_geometry_loop=true``, which is reserved for a
     genuine, bounded live-document mutation that cannot run against a worker
-    snapshot. Split large sweeps into small batches, and after a GUI timeout do
-    not resubmit GUI work until a liveness check (e.g. ``get_worker_status``)
-    passes. ``read_only=true`` may temporarily rotate/recompute geometry in the
-    worker snapshot; it only forbids modifying the live GUI documents.
+    snapshot. ``isInside`` sampling loops are worker-only and cannot use that
+    override. Split large sweeps into small batches, and after a GUI timeout do not
+    resubmit GUI work until a liveness check (e.g. ``get_worker_status``) passes.
+    ``read_only=true`` may temporarily rotate/recompute geometry in the worker
+    snapshot; it only forbids modifying the live GUI documents.
 
     Args:
         code: The Python code to execute.

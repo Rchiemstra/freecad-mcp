@@ -9,9 +9,11 @@ from enum import Enum
 
 _BOOLEAN_METHODS = frozenset({"cut", "common", "fuse", "multiCut", "multiFuse"})
 _GEOMETRY_TRANSFORM_METHODS = frozenset({"mirror", "transformGeometry"})
+_WORKER_ONLY_LOOP_METHODS = frozenset({"isInside"})
 _EXPENSIVE_METHODS = frozenset({
     "cut", "common", "fuse", "multiCut", "multiFuse", "section",
-    "distToShape", "isValid", "check", "checkGeometry", "removeSplitter",
+    "distToShape", "isInside", "isValid", "check", "checkGeometry",
+    "removeSplitter",
 })
 _LIGHTWEIGHT_CALLS = frozenset({
     "print", "len", "getattr", "hasattr", "sorted", "list", "tuple", "dict",
@@ -42,6 +44,7 @@ class GuiBlockingRisk:
 @dataclass(frozen=True)
 class GuiGeometryLoopRisk:
     expensive_calls: int
+    worker_only_calls: int
     loops: int
     reason: str
 
@@ -140,12 +143,16 @@ def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
     except SyntaxError:
         return None
 
-    expensive_calls = sum(
-        1
+    called_methods = [
+        node.func.attr
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr in _EXPENSIVE_METHODS
+    ]
+    expensive_calls = len(called_methods)
+    worker_only_calls = sum(
+        method in _WORKER_ONLY_LOOP_METHODS for method in called_methods
     )
     loops = sum(
         1
@@ -158,6 +165,7 @@ def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
     if expensive_calls and loops:
         return GuiGeometryLoopRisk(
             expensive_calls=expensive_calls,
+            worker_only_calls=worker_only_calls,
             loops=loops,
             reason=(
                 "code combines Python iteration with non-interruptible OCCT "

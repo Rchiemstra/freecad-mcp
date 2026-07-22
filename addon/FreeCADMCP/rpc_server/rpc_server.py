@@ -5156,12 +5156,25 @@ class FreeCADRPC:
         block_forced_gui_loop = (
             execution_mode == "gui" and not read_only and not allow_gui_loop
         )
+        # Point-in-solid sampling cannot be a necessary live-document mutation.
+        # Keep it on the isolated worker even when a caller supplies the GUI
+        # escape hatch intended for bounded modelling operations.
+        block_worker_only_loop = (
+            loop_risk is not None and loop_risk.worker_only_calls > 0
+        )
         if loop_risk is not None and (
             block_unmarked_mutation
             or block_forced_gui_analysis
             or block_forced_gui_loop
+            or block_worker_only_loop
         ):
-            if block_forced_gui_analysis:
+            if block_worker_only_loop:
+                guidance = (
+                    "Worker-only geometry loops cannot use the GUI override. "
+                    "Set read_only=true and execution_mode='worker' with a hard "
+                    "timeout so they run in an isolated FreeCADCmd process."
+                )
+            elif block_forced_gui_analysis:
                 guidance = (
                     "Read-only geometry loops cannot be forced onto the GUI thread. "
                     "Use execution_mode='auto' or 'worker' so the analysis runs in "

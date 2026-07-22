@@ -75,10 +75,11 @@ mechanical modelling workflow. They are for the exceptions above, not for parts 
 have a parametric feature history.
 
 Heavy geometry analysis and long loops (collision, distance, boolean sweeps):
-- When execute_code() runs an expensive OCCT operation (distToShape, common, cut, fuse,
-  section, removeSplitter, isValid, check) inside a loop, it MUST run with read_only=true,
-  execution_mode="worker", and a timeout_seconds. Such loops cannot be interrupted on
-  FreeCAD's GUI thread and will freeze the UI; the server now blocks them in gui mode.
+- When execute_code() runs an expensive OCCT operation (distToShape, isInside, common,
+  cut, fuse, section, removeSplitter, isValid, check) inside a loop, it MUST run with
+  read_only=true, execution_mode="worker", and a timeout_seconds. Such loops cannot be
+  interrupted on FreeCAD's GUI thread and will freeze the UI; the server now blocks them
+  in gui mode. isInside sampling loops are worker-only and cannot use the GUI override.
 - read_only=true still lets the code rotate/recompute geometry in the isolated FreeCADCmd
   worker snapshot -- it only forbids modifying the live GUI documents. Use it for analysis.
 - Split large sweeps into small, bounded batches. After a GUI timeout, do not resubmit GUI

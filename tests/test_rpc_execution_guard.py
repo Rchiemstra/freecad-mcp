@@ -25,6 +25,13 @@ SWEEP45_1_CODE = (
     Path(__file__).resolve().parent / "fixtures" / "sweep45_1_payload.py.txt"
 ).read_text(encoding="utf-8")
 
+ISINSIDE_GRID_CODE = r'''
+for radius in radii:
+    for index in range(720):
+        point = points[radius, index]
+        samples.append(shape.isInside(point, 1e-4, True))
+'''
+
 
 class _DispatcherMustNotBeUsed:
     def submit(self, *_args, **_kwargs):
@@ -77,6 +84,27 @@ def test_unmarked_geometry_sweep_is_blocked_before_gui_queue(monkeypatch):
     assert result["blocked"] == "gui_thread_geometry_loop"
     assert "read_only=true" in result["error"]
     assert "execution_mode='worker'" in result["error"]
+
+
+def test_isinside_grid_is_blocked_before_gui_queue(monkeypatch):
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+    result = rpc_server.FreeCADRPC().execute_code(ISINSIDE_GRID_CODE)
+    assert result["success"] is False
+    assert result["blocked"] == "gui_thread_geometry_loop"
+    assert "Worker-only geometry loops" in result["error"]
+    assert "execution_mode='worker'" in result["error"]
+
+
+def test_isinside_grid_cannot_use_gui_override(monkeypatch):
+    """The escape hatch must not admit the read-only gear sampling incident."""
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+    result = rpc_server.FreeCADRPC().execute_code(
+        ISINSIDE_GRID_CODE,
+        {"execution_mode": "gui", "allow_gui_geometry_loop": True},
+    )
+    assert result["success"] is False
+    assert result["blocked"] == "gui_thread_geometry_loop"
+    assert "cannot use the GUI override" in result["error"]
 
 
 def test_marked_sweep45_1_auto_routes_to_worker(monkeypatch):

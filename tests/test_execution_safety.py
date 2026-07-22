@@ -38,6 +38,13 @@ ghm = gh.transformGeometry(matrix)
 dif2 = ghm.cut(gm).Volume + gm.cut(ghm).Volume
 '''
 
+ISINSIDE_GRID_AUDIT = r'''
+for radius in radii:
+    for index in range(720):
+        point = points[radius, index]
+        samples.append(shape.isInside(point, 1e-4, True))
+'''
+
 
 def test_blocks_repeated_booleans_on_transformed_shapes_in_read_only_code():
     risk = find_gui_blocking_risk(HANGING_SYMMETRY_AUDIT, read_only=True)
@@ -67,6 +74,14 @@ def test_detects_expensive_geometry_inside_sweep_loop():
     assert risk.loops == 12
 
 
+def test_detects_isinside_sampling_loop_as_worker_only():
+    risk = find_gui_geometry_loop_risk(ISINSIDE_GRID_AUDIT)
+    assert risk is not None
+    assert risk.expensive_calls == 1
+    assert risk.worker_only_calls == 1
+    assert risk.loops == 2
+
+
 def test_does_not_flag_single_expensive_geometry_call_without_iteration():
     assert find_gui_geometry_loop_risk("print(a.distToShape(b)[0])") is None
 
@@ -90,6 +105,12 @@ def test_known_expensive_analysis_routes_to_worker():
     assert classify_execute_code("print(shape.distToShape(other)[0])", read_only=True) == (
         RequestClass.WORKER_ANALYSIS
     )
+
+
+def test_isinside_analysis_routes_to_worker():
+    assert classify_execute_code(
+        "print(shape.isInside(point, 1e-4, True))", read_only=True
+    ) == RequestClass.WORKER_ANALYSIS
 
 
 def test_expensive_method_alias_routes_to_worker():
