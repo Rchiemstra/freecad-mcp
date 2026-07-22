@@ -457,3 +457,34 @@ def test_notification_queue_failure_does_not_deliver_synchronously(tmp_path):
 
     assert service.current["state"] == "USER_INTERVENED"
     assert delivered == []
+
+
+def test_register_live_document_recovery_skips_name_resolve_mismatch():
+    """Registration failure must not resolve-by-name into a foreign proxy."""
+
+    from addon.FreeCADMCP.document_lease.identity import (
+        DocumentIdentityService,
+        DuplicateDocumentError,
+    )
+
+    identities = DocumentIdentityService()
+    first = FakeDocument("Model", filename=r"C:\tmp\Model.FCStd")
+    second = FakeDocument("Model", filename=r"C:\tmp\Model.FCStd")
+    identities.register_document(first)
+
+    class _Service:
+        identity_service = identities
+
+        def get(self, _session):
+            return None
+
+    # Same name, different proxy object → register raises; recovery must skip
+    # quietly instead of inspect-mismatch warning spam.
+    with pytest.raises(DuplicateDocumentError):
+        identities.register_document(second)
+
+    identity, imported = observer_mod.register_live_document_recovery(
+        _Service(), second
+    )
+    assert identity is None
+    assert imported is None

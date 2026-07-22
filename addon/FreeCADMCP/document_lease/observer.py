@@ -245,16 +245,44 @@ def register_live_document_recovery(
     if identities is None:
         raise RuntimeError("document identity service is unavailable")
     try:
-        identity = identities.register_document(document)
-    except Exception:
-        identity = identities.resolve(
-            {"document_name": str(getattr(document, "Name", "") or "")}
+        from document_lease.identity import (
+            DocumentIdentityError,
+            IdentityMismatchError,
         )
+    except ImportError:
+        from addon.FreeCADMCP.document_lease.identity import (  # type: ignore
+            DocumentIdentityError,
+            IdentityMismatchError,
+        )
+    try:
+        identity = identities.register_document(document)
+    except DocumentIdentityError:
+        # Do not resolve-by-name here.  A same-name entry can belong to a
+        # different live proxy (reload/recreate), and inspect would then raise
+        # IdentityMismatchError while recovery is only optional discovery.
+        logger.debug(
+            "live document registration failed; skip recovery import",
+            exc_info=True,
+        )
+        return None, None
+    except Exception:
+        logger.debug(
+            "live document registration failed; skip recovery import",
+            exc_info=True,
+        )
+        return None, None
     # This second, non-mutating inspection is the evidence passed to the
     # recovery service; a stale/replaced proxy or unexpected path fails here.
-    live_identity = identities.inspect_registered_document(
-        identity.session_uuid, document
-    )
+    try:
+        live_identity = identities.inspect_registered_document(
+            identity.session_uuid, document
+        )
+    except IdentityMismatchError:
+        logger.debug(
+            "registered live proxy mismatch; skip recovery import",
+            exc_info=True,
+        )
+        return None, None
     if not live_identity.canonical_path:
         return live_identity, None
     sidecar = Path(f"{live_identity.canonical_path}.freecad-mcp.lock")
