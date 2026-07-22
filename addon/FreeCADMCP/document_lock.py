@@ -541,6 +541,10 @@ def is_agent_mutating(doc_key: str, *, request_id: str | None = None) -> bool:
     addon session UUID must be declared by the guarded request rather than
     inferred here.  Supplying ``request_id`` additionally requires an exact
     active-request match.
+
+    On FreeCAD builds with DocumentMutationAuthority, RPC mutations also open an
+    in-process core capability; this attribution marker remains the observer
+    bridge so agent-scoped edits are not mistaken for user intervention.
     """
 
     key = str(doc_key or "").strip()

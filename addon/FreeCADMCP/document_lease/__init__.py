@@ -69,4 +69,10 @@ from .sidecar import (  # noqa: F401 - public package re-exports
     validate_sidecar_payload,
 )
 
+# Soft bridge to FreeCAD core mutation authority (optional import for callers).
+try:
+    from . import core_authority as core_authority  # noqa: F401
+except Exception:  # pragma: no cover - keep package importable without FreeCAD
+    core_authority = None  # type: ignore
+
 __all__ = [name for name in globals() if not name.startswith("_")]

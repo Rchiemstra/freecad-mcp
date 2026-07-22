@@ -2377,34 +2377,61 @@ class FreeCADRPC:
                                 "A declared document closed before mutation execution"
                             )
                         spec = captured["method_spec"]
-                        with GuiMutationTransaction(
-                            documents,
-                            f"MCP: {operation}",
-                            enabled=spec.transaction,
-                        ) as transaction:
-                            if inflight is not None:
-                                inflight.token.checkpoint("gui_mutation_invocation")
-                            result = original_task()
-                            failed = isinstance(result, dict) and (
-                                result.get("success") is False
-                                or result.get("ok") is False
+                        try:
+                            from document_lease import core_authority
+
+                            generations = {
+                                name: int(getattr(credential, "generation", 0) or 0)
+                                for name, credential, _state in credentials
+                            }
+                            kind_names = core_authority.kinds_for_rpc_method(
+                                captured["method"],
+                                getattr(spec.kind, "value", str(spec.kind)),
                             )
-                            if failed:
-                                transaction.abort()
-                            elif spec.recompute:
+                            capability_cm = (
+                                core_authority.open_documents_mutation_capability(
+                                    documents,
+                                    generations=generations,
+                                    kinds=kind_names,
+                                )
+                            )
+                        except Exception:
+                            from contextlib import nullcontext
+
+                            capability_cm = nullcontext([])
+
+                        with capability_cm:
+                            with GuiMutationTransaction(
+                                documents,
+                                f"MCP: {operation}",
+                                enabled=spec.transaction,
+                            ) as transaction:
                                 if inflight is not None:
-                                    inflight.token.checkpoint("gui_recompute")
-                                for _name, credential, _state in credentials:
-                                    document_lease_service.begin_recompute(credential)
-                                for document in documents:
-                                    document.recompute()
-                            if not failed and spec.validator is not None:
-                                validations = [
-                                    spec.validator(document) for document in documents
-                                ]
-                                if isinstance(result, dict):
-                                    result = dict(result)
-                                    result["lease_postflight"] = validations
+                                    inflight.token.checkpoint("gui_mutation_invocation")
+                                result = original_task()
+                                failed = isinstance(result, dict) and (
+                                    result.get("success") is False
+                                    or result.get("ok") is False
+                                )
+                                if failed:
+                                    transaction.abort()
+                                elif spec.recompute:
+                                    if inflight is not None:
+                                        inflight.token.checkpoint("gui_recompute")
+                                    for _name, credential, _state in credentials:
+                                        document_lease_service.begin_recompute(
+                                            credential
+                                        )
+                                    for document in documents:
+                                        document.recompute()
+                                if not failed and spec.validator is not None:
+                                    validations = [
+                                        spec.validator(document)
+                                        for document in documents
+                                    ]
+                                    if isinstance(result, dict):
+                                        result = dict(result)
+                                        result["lease_postflight"] = validations
                         for name, credential, _state in credentials:
                             document = FreeCAD.getDocument(name)
                             dirty = (
@@ -3678,6 +3705,16 @@ class FreeCADRPC:
                     baseline_validated=bool(original_identity.canonical_path),
                     snapshot_id=snapshot_id,
                 )
+                try:
+                    from document_lease import core_authority
+
+                    core_authority.sync_owner_from_lease_record(
+                        document, grant.record
+                    )
+                except Exception:
+                    FreeCAD.Console.PrintWarning(
+                        "[MCP] core mutation owner sync failed after acquire\n"
+                    )
                 return {
                     "success": True,
                     **grant.to_dict(),
@@ -4292,14 +4329,31 @@ class FreeCADRPC:
                     )
                 if inflight is not None:
                     inflight.token.begin_mutation("save_invocation")
-                if mode == "save":
-                    invocation = save_service.invoke_save_gui(
-                        document, phase["preflight"]
+                try:
+                    from document_lease import core_authority
+
+                    save_kinds = core_authority.kinds_for_rpc_method(
+                        "save_document_as" if mode == "save_as" else "save_document",
+                        "save",
                     )
-                else:
-                    invocation = save_service.invoke_save_as_gui(
-                        document, phase["preflight"]
+                    capability_cm = core_authority.open_mutation_capability(
+                        document,
+                        generation=int(getattr(credential, "generation", 0) or 0),
+                        kinds=save_kinds,
                     )
+                except Exception:
+                    from contextlib import nullcontext
+
+                    capability_cm = nullcontext(None)
+                with capability_cm:
+                    if mode == "save":
+                        invocation = save_service.invoke_save_gui(
+                            document, phase["preflight"]
+                        )
+                    else:
+                        invocation = save_service.invoke_save_as_gui(
+                            document, phase["preflight"]
+                        )
                 phase["invocation"] = invocation
                 if inflight is not None:
                     inflight.token.checkpoint("save_invocation_complete")
@@ -4630,6 +4684,14 @@ class FreeCADRPC:
                     terminal = document_lease_service.release_clean(
                         credential, validation=evidence
                     )
+                    try:
+                        from document_lease import core_authority
+
+                        core_authority.sync_clear_from_release(document)
+                    except Exception:
+                        FreeCAD.Console.PrintWarning(
+                            "[MCP] core mutation owner clear failed after release\n"
+                        )
                     _discard_terminal_snapshot(terminal)
                     return {"success": True, "lease": terminal}
                 except Exception as exc:
@@ -4834,6 +4896,16 @@ class FreeCADRPC:
                         baseline_validated=False,
                         snapshot_id=snapshot_id,
                     )
+                    try:
+                        from document_lease import core_authority
+
+                        core_authority.sync_owner_from_lease_record(
+                            document, grant.record
+                        )
+                    except Exception:
+                        FreeCAD.Console.PrintWarning(
+                            "[MCP] core mutation owner sync failed after create\n"
+                        )
                     return {
                         "success": True,
                         "document_name": name,

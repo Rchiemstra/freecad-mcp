@@ -11,6 +11,10 @@ not provide a universal mutation veto.  Consequently this module's job is to
 fence the previous owner immediately: ``DocumentLeaseService.takeover`` bumps
 the generation, rotates away from the old token digest, persists
 ``USER_INTERVENED``, and intentionally leaves the sidecar in place.
+
+When FreeCAD core DocumentMutationAuthority is active (patched FreeCAD),
+unscoped mutations are denied before execution.  This observer remains as an
+audit/UI fallback and as the sole fence on stock FreeCAD builds.
 """
 
 from __future__ import annotations
@@ -438,6 +442,14 @@ class LeaseObserver:
                     dirty=dirty,
                     reason=reason,
                 )
+                try:
+                    from document_lease import core_authority
+
+                    core_authority.bump_takeover(document)
+                except Exception:
+                    logger.debug(
+                        "core mutation takeover sync failed", exc_info=True
+                    )
                 self._notify(
                     kind=kind,
                     identity=identity,
