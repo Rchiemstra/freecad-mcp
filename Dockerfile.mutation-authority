@@ -1,34 +1,26 @@
-# Mutation-authority coupling image (patched FreeCAD only).
+# Mutation-authority coupling image (patched FreeCAD from freecad-build).
 #
 # Build context: FreeCAD repository root.
 #
 #   docker build \
 #     -f tools/mcp/freecad-mcp/Dockerfile.mutation-authority \
-#     -t freecad-ma-coupling-isolated \
+#     --build-arg FREECAD_DEPS_IMAGE=127.0.0.1:5001/freecad-ci-deps:24.04 \
+#     -t freecad-ma-coupling-isolated-pr27 \
 #     .
-#
-#   docker run --rm --name freecad-ma-coupling-run \
-#     freecad-ma-coupling-isolated
 #
 # Soft-compat (stock Conda FreeCAD) is a separate explicit target:
 #   docker build -f tools/mcp/freecad-mcp/Dockerfile.mutation-authority \
 #     --target soft-compat -t freecad-ma-softcompat-isolated .
 
-FROM ubuntu:24.04 AS freecad-build
+ARG FREECAD_DEPS_IMAGE=127.0.0.1:5001/freecad-ci-deps:24.04
+
+FROM ${FREECAD_DEPS_IMAGE} AS freecad-build
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git ca-certificates \
-        python3 python3-dev python3-pip python3-venv \
-        libboost-all-dev libocct-dev libcoin-dev libeigen3-dev \
-        libqt6opengl6-dev qt6-base-dev qt6-svg-dev qt6-tools-dev \
-        libxerces-c-dev libspdlog-dev libfmt-dev libyaml-cpp-dev \
-        libzipios++-dev swig xvfb \
-        libglu1-mesa-dev libx11-dev libxi-dev libxmu-dev \
-    && rm -rf /var/lib/apt/lists/*
+    PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
 WORKDIR /src
 COPY . /src/FreeCAD
@@ -50,7 +42,8 @@ RUN cmake -G Ninja \
         || cp -a /src/FreeCAD/build/bin/App_tests_run /opt/freecad-mutation-authority/bin/App_tests_run) \
     && test -x /opt/freecad-mutation-authority/bin/App_tests_run
 
-FROM ubuntu:24.04 AS coupling-runtime
+# Runtime uses the same deps ABI as freecad-build, plus the patched install.
+FROM ${FREECAD_DEPS_IMAGE} AS coupling-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -60,19 +53,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MUTATION_AUTHORITY_REQUIRE_CORE=1 \
     FREECAD_HOME=/opt/freecad-mutation-authority \
     PATH=/opt/freecad-mutation-authority/bin:/usr/local/bin:$PATH \
-    PYTHONPATH=/opt/freecad-mutation-authority/lib:/opt/freecad-mutation-authority/lib/python3.12/site-packages \
-    LD_LIBRARY_PATH=/opt/freecad-mutation-authority/lib
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-venv xvfb \
-        libboost-system1.83.0 libboost-filesystem1.83.0 libboost-program-options1.83.0 \
-        libboost-regex1.83.0 libboost-thread1.83.0 libboost-date-time1.83.0 \
-        libocct-foundation-7.6 libocct-modeling-data-7.6 libocct-modeling-algorithms-7.6 \
-        libocct-data-exchange-7.6 libcoin80t64 libqt6core6 libqt6gui6 libqt6widgets6 \
-        libqt6opengl6 libqt6xml6 libqt6network6 libqt6svg6 libxerces-c3.2 \
-        libspdlog1.12 libfmt9 libyaml-cpp0.8 libzipios++0v5 \
-        libglu1-mesa libx11-6 libxi6 libxmu6 \
-    && rm -rf /var/lib/apt/lists/*
+    PYTHONPATH=/opt/freecad-mutation-authority/lib:/workspace \
+    LD_LIBRARY_PATH=/opt/freecad-mutation-authority/lib \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PIP_BREAK_SYSTEM_PACKAGES=1
 
 COPY --from=freecad-build /opt/freecad-mutation-authority /opt/freecad-mutation-authority
 
@@ -83,7 +68,7 @@ COPY tools/mcp/freecad-mcp/addon ./addon
 COPY tools/mcp/freecad-mcp/scripts ./scripts
 COPY tools/mcp/freecad-mcp/tests ./tests
 
-RUN pip3 install --no-cache-dir --break-system-packages -e ".[dev]" \
+RUN pip3 install --no-cache-dir -e ".[dev]" \
     && test "$(command -v FreeCADCmd)" = "/opt/freecad-mutation-authority/bin/FreeCADCmd" \
     && FreeCADCmd --version \
     && python3 -c "import FreeCAD, os; p=FreeCAD.__file__; print(p); assert p.startswith('/opt/freecad-mutation-authority'), p; d=FreeCAD.newDocument('Probe'); assert hasattr(d,'openMutationCapability'); FreeCAD.closeDocument(d.Name)"
