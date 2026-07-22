@@ -140,6 +140,7 @@ from .video_anim import (
     animate_placement_operation,
     encode_view_video_operation,
     refresh_view_operation,
+    repair_view_placements_operation,
 )
 
 # Diagnostics — read-only P1/P8/P10 guards
@@ -209,6 +210,7 @@ from .locking import (
     heartbeat_document_lock_operation,
     list_document_locks_operation,
     release_document_lock_operation,
+    update_document_lock_operation,
 )
 
 __all__ = [
@@ -231,6 +233,7 @@ __all__ = [
     "encode_view_video_operation",
     "animate_placement_operation",
     "refresh_view_operation",
+    "repair_view_placements_operation",
     "insert_part_from_library_operation",
     "list_documents_operation",
     "sketch_create_operation",
@@ -381,5 +384,6 @@ __all__ = [
     "list_document_locks_operation",
     "heartbeat_document_lock_operation",
     "release_document_lock_operation",
+    "update_document_lock_operation",
     "force_release_stale_lock_operation",
 ]

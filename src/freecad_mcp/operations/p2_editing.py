@@ -42,7 +42,8 @@ def sketch_trim_operation(
         message=repr(f"trimmed geometry {geo_index}"),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Trim applied to geometry {geo_index}", "Failed to trim")
+                     f"Trim applied to geometry {geo_index}", "Failed to trim",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +67,8 @@ def sketch_extend_operation(
         message=repr(f"extended geometry {geo_index}"),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Extend applied to geometry {geo_index}", "Failed to extend")
+                     f"Extend applied to geometry {geo_index}", "Failed to extend",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +92,8 @@ def sketch_split_operation(
         message=repr(f"split geometry {geo_index}"),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Split applied to geometry {geo_index}", "Failed to split")
+                     f"Split applied to geometry {geo_index}", "Failed to split",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +120,7 @@ def sketch_fillet_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Fillet (r={radius}) added between {geo1} and {geo2}",
-                     "Failed to add fillet")
+                     "Failed to add fillet", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +144,8 @@ def sketch_offset_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Offset applied to {geo_indices}", "Failed to apply offset")
+                     f"Offset applied to {geo_indices}", "Failed to apply offset",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -164,4 +168,4 @@ def sketch_symmetry_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Symmetry applied to {geo_indices} about geometry {symmetry_geo}",
-                     "Failed to apply symmetry")
+                     "Failed to apply symmetry", document=doc_name)

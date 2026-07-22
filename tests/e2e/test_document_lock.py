@@ -89,7 +89,6 @@ def test_lease_acquire_mutate_save_as_release(tmp_path):
         session_key,
         token,
         current_operation="Box:Length",
-        document_dirty=True,
     )
     assert hb["success"] is True
     assert hb["lease"]["current_operation"] == "Box:Length"
@@ -101,7 +100,8 @@ def test_lease_acquire_mutate_save_as_release(tmp_path):
     dest_key = str(dest.resolve())
     migrated = migrate_lease_key(session_key, dest_key, doc_name=doc.Name)
     assert migrated["success"] is True
-    assert migrated["lease"]["token"] == token
+    assert "token" not in migrated["lease"]
+    assert token not in sidecar_path_for(dest_key).read_text(encoding="utf-8")
     assert migrated["lease"]["doc_key"] == dest_key
     assert sidecar_path_for(dest_key).is_file()
     # Old session key unlocked; new path locked

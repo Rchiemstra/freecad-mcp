@@ -13,6 +13,11 @@ import FreeCAD
 
 from .worker_protocol import validate_subelement_reference
 
+try:
+    from document_state import document_modified_state
+except ImportError:
+    from addon.FreeCADMCP.document_state import document_modified_state
+
 
 def _is_link_property(prop_type: str) -> bool:
     return "PropertyLink" in prop_type or "PropertyXLink" in prop_type
@@ -316,5 +321,5 @@ def repair_references_gui(
         "recompute": recompute_status,
         "remaining_invalid_repaired_properties": remaining_invalid,
         "validation_performed": validate,
-        "modified": bool(getattr(doc, "Modified", False)),
+        "modified": document_modified_state(doc),
     }

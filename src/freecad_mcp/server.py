@@ -1,13 +1,26 @@
 import logging
 import json
+import os
+import random
+import re
+import threading
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import CallToolResult, ImageContent, TextContent
 
 from .freecad_client import FreeCADConnection
+from .rpc_auth import (
+    RpcAuthError,
+    build_handshake_request_from_manifest,
+    load_instance_manifest,
+    load_profile_secret,
+    make_mcp_runtime_identity,
+    verify_handshake_response_from_manifest,
+)
 from .responses import json_response, tool_fail
 from .operations import (
     # Core
@@ -29,6 +42,7 @@ from .operations import (
     encode_view_video_operation,
     animate_placement_operation,
     refresh_view_operation,
+    repair_view_placements_operation,
     insert_part_from_library_operation,
     list_documents_operation,
     sketch_create_operation,
@@ -74,7 +88,6 @@ from .operations import (
     sketch_extend_operation,
     sketch_split_operation,
     sketch_fillet_operation,
-    sketch_offset_operation,
     sketch_symmetry_operation,
     # P3 — 3-D features
     revolve_feature_operation,
@@ -180,6 +193,7 @@ from .operations import (
     list_document_locks_operation,
     heartbeat_document_lock_operation,
     release_document_lock_operation,
+    update_document_lock_operation,
     force_release_stale_lock_operation,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
@@ -193,8 +207,135 @@ logger = logging.getLogger("FreeCADMCPserver")
 logger.setLevel(logging.INFO)
 
 state = ServerState()
+_connection_lock = threading.RLock()
 
-_LEASE_HEARTBEAT_INTERVAL_S = 30.0
+_LEASE_HEARTBEAT_INTERVAL_S = 10.0
+_DIAGNOSTIC_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+
+
+def _safe_diagnostic_code(value: Any, fallback: str) -> str:
+    candidate = str(value or "")
+    return candidate if _DIAGNOSTIC_CODE_RE.fullmatch(candidate) else fallback
+
+
+def _session_needs_refresh(*, margin_seconds: float = 60.0) -> bool:
+    value = state.rpc_session_expires_at
+    if not value:
+        return True
+    try:
+        expires = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return True
+    return expires <= datetime.now(timezone.utc) + timedelta(seconds=margin_seconds)
+
+
+def _path_identity(value: str) -> str:
+    return os.path.normcase(os.path.realpath(os.path.abspath(value)))
+
+
+def _manifest_for_authentication() -> Any:
+    """Reload runtime facts from the launcher's fixed manifest path.
+
+    Runtime identity fields are expected to change after a launcher-authorized
+    FreeCAD restart.  Profile identity/path, RPC endpoint, authentication-file
+    path, schema, and creation identity are immutable for this MCP process.
+    """
+
+    baseline = state.instance_manifest
+    if baseline is None:
+        return None
+    configured_path = state.instance_manifest_path
+    if not configured_path:
+        # Compatibility for embedded/unit callers which supplied an already
+        # validated manifest object rather than an isolated launcher path.
+        return baseline
+    configured_identity = state.instance_manifest_path_identity
+    if configured_identity and _path_identity(configured_path) != configured_identity:
+        raise RpcAuthError(
+            "INSTANCE_MANIFEST_PATH_CHANGED",
+            "Isolated instance manifest path changed during session refresh",
+        )
+    candidate = load_instance_manifest(configured_path)
+    immutable_mismatch = (
+        candidate.schema_version != baseline.schema_version
+        or candidate.profile_instance_id != baseline.profile_instance_id
+        or candidate.rpc_host != baseline.rpc_host
+        or candidate.rpc_port != baseline.rpc_port
+        or _path_identity(candidate.profile_path)
+        != _path_identity(baseline.profile_path)
+        or _path_identity(candidate.auth_secret_file)
+        != _path_identity(baseline.auth_secret_file)
+        or candidate.expected_profile_path_fingerprint
+        != baseline.expected_profile_path_fingerprint
+        or candidate.created_at != baseline.created_at
+        or candidate.rpc_host != state.rpc_host
+        or candidate.rpc_port != state.rpc_port
+        or candidate.profile_instance_id != state.instance_id
+        or (
+            state.auth_file is not None
+            and _path_identity(candidate.auth_secret_file)
+            != _path_identity(state.auth_file)
+        )
+    )
+    if immutable_mismatch:
+        raise RpcAuthError(
+            "INSTANCE_MANIFEST_IMMUTABLE_MISMATCH",
+            "Isolated instance manifest changed immutable profile configuration",
+        )
+    candidate.require_complete_runtime()
+    return candidate
+
+
+def _authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> None:
+    """Refresh the short-lived RPC session without disturbing held leases."""
+    if state.instance_manifest is None or (not force and not _session_needs_refresh()):
+        return
+    manifest = _manifest_for_authentication()
+    secret_path = state.auth_file or manifest.auth_secret_file
+    secret = load_profile_secret(secret_path)
+    try:
+        mcp_identity = make_mcp_runtime_identity(
+            runtime_id=state.mcp_instance_id,
+            pid=state.mcp_pid,
+            process_started_at=state.mcp_process_started_at,
+            hostname=state.mcp_host,
+            client_build_id="freecad-mcp-0.1.20",
+        )
+        request = build_handshake_request_from_manifest(
+            secret=secret,
+            mcp=mcp_identity,
+            manifest=manifest,
+        )
+        response = conn.invoke_rpc("handshake_v2", request, control=True)
+        verified = verify_handshake_response_from_manifest(
+            response,
+            secret=secret,
+            expected_client_nonce=request["client_nonce"],
+            manifest=manifest,
+        )
+        # Commit the launcher-authorized runtime only after its HMAC response
+        # proves every refreshed identity field.
+        state.instance_manifest = manifest
+        state.lease_manager.mark_connected(verified.session_token)
+        state.rpc_session_id = verified.session_id
+        state.rpc_session_expires_at = verified.session_expires_at
+        state.authenticated_manifest = verified.manifest
+        conn.configure_lease_routing(
+            state.lease_manager,
+            lambda name: state.document_sessions.get(name),
+        )
+        conn.configure_session_refresher(
+            lambda: _refresh_authenticated_connection(conn)
+        )
+    finally:
+        secret = b""
+
+
+def _refresh_authenticated_connection(conn: FreeCADConnection) -> None:
+    with _connection_lock:
+        _authenticate_connection(conn, force=True)
 
 
 async def _lease_heartbeat_loop() -> None:
@@ -202,22 +343,66 @@ async def _lease_heartbeat_loop() -> None:
     import asyncio
 
     while True:
-        await asyncio.sleep(_LEASE_HEARTBEAT_INTERVAL_S)
-        if not state.lease_tokens or state.freecad_connection is None:
-            continue
-        conn = state.freecad_connection
-        for doc_key, token in list(state.lease_tokens.items()):
-            try:
-                conn.set_active_lease_token(token)
-                result = conn.heartbeat_document_lock(doc_key, token)
-                if not result.get("success"):
-                    logger.warning(
-                        "Lease heartbeat failed for %s: %s",
-                        doc_key,
-                        result.get("error") or result.get("error_code"),
-                    )
-            except Exception as exc:
-                logger.warning("Lease heartbeat error for %s: %s", doc_key, exc)
+        await asyncio.sleep(_LEASE_HEARTBEAT_INTERVAL_S * random.uniform(0.8, 1.2))
+        await _lease_heartbeat_once()
+
+
+async def _lease_heartbeat_once() -> bool:
+    """Run one atomic, redacted renewal attempt for focused testing/recovery."""
+    import asyncio
+
+    if (
+        not state.lease_manager.credentials_snapshot()
+        or state.freecad_connection is None
+        or not state.lease_manager.connected
+    ):
+        return False
+    conn = state.freecad_connection
+    try:
+        with _connection_lock:
+            _authenticate_connection(conn)
+        payload, context = state.lease_manager.build_heartbeat_request()
+        response = await asyncio.to_thread(
+            conn.heartbeat_document_locks_batch, payload, context
+        )
+        if not isinstance(response, dict):
+            logger.warning("Lease heartbeat returned a malformed response")
+            return False
+        result = response.get("result", response)
+        if isinstance(result, dict):
+            state.lease_manager.apply_heartbeat_response(result)
+        successful = bool(
+            response.get(
+                "ok",
+                result.get("success", False) if isinstance(result, dict) else False,
+            )
+        )
+        if not successful:
+            error = response.get("error")
+            error_code = (
+                error.get("code")
+                if isinstance(error, dict)
+                else result.get("error_code")
+                if isinstance(result, dict)
+                else None
+            )
+            logger.warning(
+                "Lease heartbeat batch failed (code=%s)",
+                _safe_diagnostic_code(error_code, "UNKNOWN_HEARTBEAT_ERROR"),
+            )
+        return successful
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        # Never interpolate remote exception text: an XML-RPC peer can place
+        # credentials in fault messages. The class/code is enough for routine
+        # heartbeat diagnostics and leaves raw tokens out of logs.
+        error_code = getattr(exc, "code", type(exc).__name__)
+        logger.warning(
+            "Lease heartbeat batch error (code=%s)",
+            _safe_diagnostic_code(error_code, "HEARTBEAT_EXCEPTION"),
+        )
+        return False
 
 
 @asynccontextmanager
@@ -241,16 +426,43 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
         yield {}
     finally:
+        # Fence session refresh and new credential storage before cancelling
+        # background work. A late handshake or acquisition result cannot revive
+        # the manager while the transports are closing.
+        state.lease_manager.close("MCP server shutdown")
         if heartbeat_task is not None:
             heartbeat_task.cancel()
             try:
                 await heartbeat_task
             except asyncio.CancelledError:
                 pass
-        if state.freecad_connection:
-            logger.info("Disconnecting from FreeCAD on shutdown")
-            state.freecad_connection.disconnect()
+            except Exception as exc:
+                logger.warning(
+                    "Lease heartbeat shutdown error (code=%s)",
+                    _safe_diagnostic_code(
+                        getattr(exc, "code", type(exc).__name__),
+                        "HEARTBEAT_SHUTDOWN_EXCEPTION",
+                    ),
+                )
+        try:
+            if state.freecad_connection:
+                logger.info("Disconnecting from FreeCAD on shutdown")
+                state.freecad_connection.disconnect()
+        except Exception as exc:
+            logger.warning(
+                "FreeCAD disconnect error during shutdown (code=%s)",
+                _safe_diagnostic_code(
+                    getattr(exc, "code", type(exc).__name__),
+                    "DISCONNECT_EXCEPTION",
+                ),
+            )
+        finally:
             state.freecad_connection = None
+            state.lease_tokens.clear()
+            state.document_sessions.clear()
+            state.rpc_session_id = None
+            state.rpc_session_expires_at = None
+            state.authenticated_manifest = None
         logger.info("FreeCADMCP server shut down")
 
 
@@ -263,7 +475,11 @@ mcp = FastMCP(
 
 def get_freecad_connection() -> FreeCADConnection:
     """Get or create a persistent FreeCAD connection"""
-    if state.freecad_connection is None:
+    with _connection_lock:
+        if state.freecad_connection is not None:
+            _authenticate_connection(state.freecad_connection)
+            return state.freecad_connection
+
         conn = FreeCADConnection(
             host=state.rpc_host,
             port=state.rpc_port,
@@ -273,17 +489,26 @@ def get_freecad_connection() -> FreeCADConnection:
             mcp_pid=state.mcp_pid or None,
             mcp_host=state.mcp_host or None,
         )
-        if not conn.ping():
-            logger.error("Failed to ping FreeCAD")
-            raise Exception(
-                "Failed to connect to FreeCAD. Make sure the FreeCAD addon is running."
+        try:
+            if not conn.ping():
+                logger.error("Failed to ping FreeCAD")
+                raise Exception(
+                    "Failed to connect to FreeCAD. Make sure the FreeCAD addon is running."
+                )
+            # When an instance id was configured, refuse to proceed unless the addon
+            # on this port reports the same identity (isolated-instance safety).
+            if state.instance_id:
+                conn.verify_instance()
+            if state.instance_manifest is not None:
+                _authenticate_connection(conn, force=True)
+        except Exception:
+            state.lease_manager.mark_disconnected(
+                "FreeCAD connection initialization failed"
             )
-        # When an instance id was configured, refuse to proceed unless the addon
-        # on this port reports the same identity (isolated-instance safety).
-        if state.instance_id:
-            conn.verify_instance()
+            conn.disconnect()
+            raise
         state.freecad_connection = conn
-    return state.freecad_connection
+        return conn
 
 
 @mcp.tool()
@@ -318,12 +543,20 @@ def acquire_document_lock(
     file_path: str = "",
     session_id: str = "",
     task_description: str = "",
+    selector: dict[str, str] | None = None,
+    agent_id: str = "",
+    hash_policy: Literal["sha256"] = "sha256",
 ) -> CallToolResult:
     """Acquire an exclusive renewable write lease for a FreeCAD document.
 
-    Required when document_lock_enforcement is enabled on the FreeCAD addon.
-    Pass an explicit doc_name, file_path, or session_id — never relies on
-    ActiveDocument. Returns a lease token stored for subsequent mutations.
+    Prefer ``selector`` with an addon-issued ``document_session_uuid`` plus
+    optional name/path assertions. All supplied selector fields must resolve to
+    the same open document; ActiveDocument is never used. The one-time private
+    credential is retained by this MCP process for later calls.
+
+    ``doc_name``, ``file_path``, and ``session_id`` are deprecated protocol-v1
+    compatibility aliases for off/observe profiles. Enforce mode requires the
+    authenticated protocol-v2 selector path.
     """
     return acquire_document_lock_operation(
         get_freecad_connection(),
@@ -332,6 +565,11 @@ def acquire_document_lock(
         session_id=session_id,
         task_description=task_description,
         client=state.mcp_client_label,
+        selector=selector,
+        agent_id=agent_id,
+        hash_policy=hash_policy,
+        lease_manager=state.lease_manager,
+        document_sessions=state.document_sessions,
         store_token=state.lease_tokens,
     )
 
@@ -342,23 +580,32 @@ def get_document_lock(
     doc_name: str = "",
     file_path: str = "",
     session_id: str = "",
+    selector: dict[str, str] | None = None,
 ) -> CallToolResult:
-    """Return the current lease record and state for a document."""
+    """Return redacted effective local/foreign lease state for one document.
+
+    Prefer ``selector``. The legacy identity arguments remain temporarily for
+    off/observe migration compatibility. Status never includes the bearer token
+    or its fingerprint; malformed or conflicting sidecars report locked/unknown.
+    """
     return get_document_lock_operation(
         get_freecad_connection(),
         doc_name=doc_name,
         file_path=file_path,
         session_id=session_id,
+        selector=selector,
     )
 
 
 @mcp.tool()
 def list_document_locks(ctx: Context) -> CallToolResult:
-    """List active document leases known to this FreeCAD instance."""
+    """List redacted local, foreign, stale, error, and dirty-recovery records.
+
+    The response contains no bearer tokens or token fingerprints.
+    """
     return list_document_locks_operation(get_freecad_connection())
 
 
-@mcp.tool()
 def heartbeat_document_lock(
     ctx: Context,
     doc_key: str,
@@ -367,7 +614,7 @@ def heartbeat_document_lock(
     state_name: str = "",
     document_dirty: bool | None = None,
 ) -> CallToolResult:
-    """Renew a held document lease heartbeat and optionally update operation/state."""
+    """Deprecated v1 helper; v2 heartbeats are automatic and not MCP-exposed."""
     tok = token or state.lease_tokens.get(doc_key, "")
     if not tok:
         return tool_fail(
@@ -385,17 +632,68 @@ def heartbeat_document_lock(
 
 
 @mcp.tool()
+def update_document_lock(
+    ctx: Context,
+    selector: dict[str, str],
+    task_description: str = "",
+    progress_detail: str = "",
+) -> CallToolResult:
+    """Update bounded task/progress metadata without changing authority.
+
+    State, heartbeat, dirty status, errors, and mutation revisions remain
+    server-owned and cannot be supplied through this tool.
+    """
+    return update_document_lock_operation(
+        get_freecad_connection(),
+        selector=selector,
+        task_description=task_description,
+        progress_detail=progress_detail,
+    )
+
+
+@mcp.tool()
 def release_document_lock(
     ctx: Context,
-    doc_key: str,
+    selector: dict[str, str] | None = None,
+    disposition: Literal["saved", "restored"] = "saved",
+    doc_key: str = "",
     token: str = "",
 ) -> CallToolResult:
-    """Cleanly release a document lease (removes sidecar + registry entry)."""
+    """CAS-release only a clean, verified saved/restored document lease.
+
+    Prefer ``selector``; its credential is selected from private MCP memory.
+    ``doc_key`` and ``token`` are deprecated protocol-v1 compatibility fields
+    for off/observe migration only and are rejected for enforce-mode mutation.
+    Agents cannot use this tool for dirty abandonment.
+    """
+    if selector and state.lease_manager.connected:
+        session_uuid = selector.get("document_session_uuid") or ""
+        if not session_uuid and selector.get("document_name"):
+            session_uuid = state.document_sessions.get(selector["document_name"], "")
+        if not session_uuid and selector.get("canonical_path"):
+            credential = state.lease_manager.get(
+                canonical_path=selector["canonical_path"]
+            )
+            session_uuid = (
+                credential.document_session_uuid if credential is not None else ""
+            )
+        if not session_uuid:
+            return tool_fail("Selector does not identify a credential held by this MCP")
+        credential = state.lease_manager.require(document_session_uuid=session_uuid)
+        normalized_selector = dict(selector)
+        normalized_selector["document_session_uuid"] = session_uuid
+        return release_document_lock_operation(
+            get_freecad_connection(),
+            doc_key="",
+            token="",
+            selector=normalized_selector,
+            disposition=disposition,
+            lease_manager=state.lease_manager,
+            document_sessions=state.document_sessions,
+        )
     tok = token or state.lease_tokens.get(doc_key, "")
     if not tok:
-        return tool_fail(
-            "No lease token provided and none stored for this doc_key."
-        )
+        return tool_fail("No lease token provided and none stored for this doc_key.")
     return release_document_lock_operation(
         get_freecad_connection(),
         doc_key=doc_key,
@@ -404,9 +702,112 @@ def release_document_lock(
     )
 
 
+def _lifecycle_tool_result(result: dict[str, Any]) -> CallToolResult:
+    if result.get("success"):
+        return json_response(result)
+    return tool_fail(
+        f"[{result.get('error_code', 'document_lifecycle_error')}] "
+        f"{result.get('error', 'Document lifecycle operation failed')}",
+        structured=result,
+    )
+
+
+def _apply_save_aliases(result: dict[str, Any]) -> None:
+    aliases = result.get("aliases") or {}
+    session_uuid = str(aliases.get("document_session_uuid") or "")
+    new_path = str(aliases.get("canonical_path") or "")
+    old_path = str(aliases.get("previous_path") or "")
+    if not session_uuid or not new_path:
+        return
+    if old_path and old_path != new_path:
+        state.lease_manager.migrate_alias(
+            old_path,
+            new_path,
+            document_session_uuid=session_uuid,
+        )
+    elif new_path not in state.lease_manager.aliases_for(session_uuid):
+        state.lease_manager.add_alias(session_uuid, new_path)
+
+
 @mcp.tool()
+def save_document(
+    ctx: Context,
+    selector: dict[str, str],
+    validation_profile: str = "default",
+) -> CallToolResult:
+    """Compare, save, hash, reopen-verify, and retain the renewable lease."""
+    result = get_freecad_connection().save_document(
+        selector, validation_profile=validation_profile
+    )
+    if result.get("success"):
+        _apply_save_aliases(result)
+    return _lifecycle_tool_result(result)
+
+
+@mcp.tool()
+def save_document_as(
+    ctx: Context,
+    selector: dict[str, str],
+    destination: str,
+    overwrite: bool = False,
+    expected_destination_sha256: str = "",
+    validation_profile: str = "default",
+) -> CallToolResult:
+    """Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases."""
+    result = get_freecad_connection().save_document_as(
+        selector,
+        destination,
+        overwrite=overwrite,
+        expected_destination_sha256=expected_destination_sha256,
+        validation_profile=validation_profile,
+    )
+    if result.get("success"):
+        _apply_save_aliases(result)
+    return _lifecycle_tool_result(result)
+
+
+@mcp.tool()
+def finalize_document_edit(
+    ctx: Context,
+    selector: dict[str, str],
+    save_mode: Literal["save", "save_as", "first_save"] = "save",
+    destination: str = "",
+    overwrite: bool = False,
+    expected_destination_sha256: str = "",
+    validation_profile: str = "default",
+) -> CallToolResult:
+    """Validate, Save/Save As, reopen-verify, then CAS-release the lease.
+
+    Any validation, save, or sidecar-removal failure retains a visible locked
+    error/recovery record instead of presenting a clean release.
+    """
+    result = get_freecad_connection().finalize_document_edit(
+        selector,
+        save_mode=save_mode,
+        destination=destination,
+        overwrite=overwrite,
+        expected_destination_sha256=expected_destination_sha256,
+        validation_profile=validation_profile,
+    )
+    if result.get("success"):
+        _apply_save_aliases(result)
+        session_uuid = str(
+            (result.get("aliases") or {}).get("document_session_uuid")
+            or selector.get("document_session_uuid")
+            or state.document_sessions.get(selector.get("document_name", ""), "")
+        )
+        if session_uuid:
+            state.lease_manager.revoke(
+                session_uuid, reason="verified finalization completed"
+            )
+            for name, value in list(state.document_sessions.items()):
+                if value == session_uuid:
+                    state.document_sessions.pop(name, None)
+    return _lifecycle_tool_result(result)
+
+
 def force_release_stale_lock(ctx: Context, doc_key: str) -> CallToolResult:
-    """Force-release a stale lock only after verifying the owning pid is dead."""
+    """Deprecated local-only recovery helper; intentionally not MCP-exposed."""
     return force_release_stale_lock_operation(
         get_freecad_connection(),
         doc_key=doc_key,
@@ -431,7 +832,12 @@ def create_document(ctx: Context, name: str) -> CallToolResult:
         }
         ```
     """
-    return create_document_operation(get_freecad_connection(), name)
+    return create_document_operation(
+        get_freecad_connection(),
+        name,
+        lease_manager=state.lease_manager,
+        document_sessions=state.document_sessions,
+    )
 
 
 @mcp.tool()
@@ -727,9 +1133,13 @@ def delete_object(
 
 @mcp.tool()
 def execute_code_async(ctx: Context, code: str) -> list[TextContent]:
-    """Execute Python code in FreeCAD without waiting for completion.
+    """Deprecated legacy background execution; blocked in lease enforcement.
 
-    Use this ONLY for long-running background computations that do NOT touch the
+    This compatibility tool is unavailable in ``enforce`` mode because it has
+    no explicit document scope or GUI-thread lease revalidation. Use snapshot
+    worker analysis for read-only work and typed leased mutations to apply a
+    result. In off/observe compatibility mode, use this ONLY for long-running
+    background computations that do NOT touch the
     FreeCAD GUI or mutate the FreeCAD document tree directly.
 
     This tool runs the submitted code in a background thread and returns
@@ -739,9 +1149,10 @@ def execute_code_async(ctx: Context, code: str) -> list[TextContent]:
     save documents.
 
     For code that touches FreeCAD documents, document objects, FreeCADGui, the
-    active view, selection, recompute, or save operations, use execute_code instead.
-    execute_code runs on the FreeCAD GUI thread and is the safe default for normal
-    FreeCAD automation.
+    active view, selection, or document objects, use typed RPC tools. Public
+    ``execute_code(read_only=True)`` runs only in an isolated snapshot worker;
+    live mutating execution is a separately enabled compatibility path and is
+    disabled by default in lease enforcement mode.
 
     Use execute_code_async only for background-safe work such as long-running
     pure OCCT geometry calculations (e.g. fuse/cut/loft on already-fetched shapes)
@@ -771,6 +1182,7 @@ def execute_code(
     document: str | None = None,
     recompute: str = "none",
     recompute_documents: list[str] | None = None,
+    affected_documents: list[str] | None = None,
     read_only: bool = False,
     restore_active_document: bool = True,
     activate_document: bool = False,
@@ -786,11 +1198,15 @@ def execute_code(
         document: Target document name for scoped recompute/error reporting.
         recompute: ``none`` (default for inspection), ``target``, or ``all``.
         recompute_documents: Explicit document list to recompute when recompute is ``target``.
-        read_only: When true, blocks ``save``/``saveAs`` on open documents.
+        affected_documents: Complete declared write scope for mutating code.
+        read_only: Run only against an immutable FreeCADCmd snapshot. This never
+            executes arbitrary code against a live GUI document in any lease mode.
         restore_active_document: Restore the active document after execution.
         activate_document: Activate ``document`` before running code.
         capture_view: Include a viewport screenshot (default false).
-        execution_mode: Conservative ``auto`` (default), explicit ``gui``, or isolated ``worker``.
+        execution_mode: Conservative ``auto`` (default), explicit ``gui``, or
+            isolated ``worker``. ``read_only=True`` always selects the worker,
+            even if ``gui`` is requested.
         timeout_seconds: Hard worker timeout from 1 to 900 seconds.
         link_policy: Worker snapshot policy for broken joint/link refs. ``strict``
             fails the snapshot; ``warn`` continues and returns ``link_warnings``.
@@ -806,6 +1222,7 @@ def execute_code(
         document=document,
         recompute=recompute,
         recompute_documents=recompute_documents,
+        affected_documents=affected_documents,
         read_only=read_only,
         restore_active_document=restore_active_document,
         activate_document=activate_document,
@@ -844,7 +1261,21 @@ def cancel_worker_job(ctx: Context, job_id: str) -> CallToolResult:
 @mcp.tool()
 def get_view(
     ctx: Context,
-    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric", "Rear", "Side", "SideRight", "SideLeft"],
+    view_name: Literal[
+        "Isometric",
+        "Front",
+        "Top",
+        "Right",
+        "Back",
+        "Left",
+        "Bottom",
+        "Dimetric",
+        "Trimetric",
+        "Rear",
+        "Side",
+        "SideRight",
+        "SideLeft",
+    ],
     width: int | None = None,
     height: int | None = None,
     focus_object: str | None = None,
@@ -951,9 +1382,24 @@ def refresh_view(
     touch_objects: list[str] | None = None,
     fit: bool = False,
     capture: bool = False,
-    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric"] = "Isometric",
+    view_name: Literal[
+        "Isometric",
+        "Front",
+        "Top",
+        "Right",
+        "Back",
+        "Left",
+        "Bottom",
+        "Dimetric",
+        "Trimetric",
+    ] = "Isometric",
 ) -> CallToolResult:
     """Force a GUI redraw after Link/shape edits; optionally touch Placement and frame."""
+    if touch_objects:
+        return tool_fail(
+            "refresh_view is visual-only. Use repair_view_placements with an "
+            "explicit leased document to touch Placement."
+        )
     return refresh_view_operation(
         get_freecad_connection(),
         focus_objects=focus_objects,
@@ -967,6 +1413,22 @@ def refresh_view(
 
 
 @mcp.tool()
+def repair_view_placements(
+    ctx: Context,
+    doc_name: str,
+    touch_objects: list[str],
+    fit: bool = False,
+) -> CallToolResult:
+    """Reassign selected Placement values under the document's active lease."""
+    return repair_view_placements_operation(
+        get_freecad_connection(),
+        doc_name=doc_name,
+        touch_objects=touch_objects,
+        fit=fit,
+    )
+
+
+@mcp.tool()
 def animate_placement(
     ctx: Context,
     doc_name: str,
@@ -974,7 +1436,17 @@ def animate_placement(
     keyframes: list[dict[str, Any]] | None = None,
     path_object: str | None = None,
     sample_count: int = 12,
-    view_name: Literal["Isometric", "Front", "Top", "Right", "Back", "Left", "Bottom", "Dimetric", "Trimetric"] = "Isometric",
+    view_name: Literal[
+        "Isometric",
+        "Front",
+        "Top",
+        "Right",
+        "Back",
+        "Left",
+        "Bottom",
+        "Dimetric",
+        "Trimetric",
+    ] = "Isometric",
     focus_objects: list[str] | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -1006,10 +1478,13 @@ def animate_placement(
 
 
 @mcp.tool()
-def insert_part_from_library(ctx: Context, relative_path: str) -> CallToolResult:
-    """Insert a part from the parts library addon.
+def insert_part_from_library(
+    ctx: Context, doc_name: str, relative_path: str
+) -> CallToolResult:
+    """Insert a part from the parts library into an explicit leased document.
 
     Args:
+        doc_name: Target FreeCAD document name.
         relative_path: The relative path of the part to insert.
 
     Returns:
@@ -1018,6 +1493,7 @@ def insert_part_from_library(ctx: Context, relative_path: str) -> CallToolResult
     return insert_part_from_library_operation(
         get_freecad_connection(),
         state.only_text_feedback,
+        doc_name,
         relative_path,
     )
 
@@ -1033,7 +1509,9 @@ def get_objects(ctx: Context, doc_name: str) -> CallToolResult:
     Returns:
         A list of objects in the document and a screenshot of the document.
     """
-    return get_objects_operation(get_freecad_connection(), state.only_text_feedback, doc_name)
+    return get_objects_operation(
+        get_freecad_connection(), state.only_text_feedback, doc_name
+    )
 
 
 @mcp.tool()
@@ -1058,8 +1536,7 @@ def get_object(ctx: Context, doc_name: str, obj_name: str) -> CallToolResult:
 
 @mcp.tool()
 def get_parts_list(ctx: Context) -> CallToolResult:
-    """Get the list of parts in the parts library addon.
-    """
+    """Get the list of parts in the parts library addon."""
     return get_parts_list_operation(get_freecad_connection())
 
 
@@ -1122,7 +1599,9 @@ def set_tree_expanded(
     ctx: Context,
     doc_name: str,
     object_names: list[str] | None = None,
-    mode: Literal["expand", "collapse", "expand_document", "collapse_document"] = "expand",
+    mode: Literal[
+        "expand", "collapse", "expand_document", "collapse_document"
+    ] = "expand",
 ) -> CallToolResult:
     """Expand or collapse model-tree items in the FreeCAD GUI.
 
@@ -1464,8 +1943,15 @@ def sketch_add_line(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_line_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, x1, y1, x2, y2, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        x1,
+        y1,
+        x2,
+        y2,
+        construction,
     )
 
 
@@ -1493,8 +1979,14 @@ def sketch_add_circle(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_circle_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, cx, cy, radius, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        cx,
+        cy,
+        radius,
+        construction,
     )
 
 
@@ -1528,8 +2020,16 @@ def sketch_add_arc(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_arc_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, cx, cy, radius, start_angle, end_angle, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        cx,
+        cy,
+        radius,
+        start_angle,
+        end_angle,
+        construction,
     )
 
 
@@ -1561,8 +2061,15 @@ def sketch_add_rectangle(
         Success message with the 4 assigned geometry indices and a screenshot.
     """
     return sketch_add_rectangle_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, x1, y1, x2, y2, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        x1,
+        y1,
+        x2,
+        y2,
+        construction,
     )
 
 
@@ -1594,8 +2101,14 @@ def sketch_constrain_coincident(
         Success message and a screenshot.
     """
     return sketch_constrain_coincident_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo1, pos1, geo2, pos2,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo1,
+        pos1,
+        geo2,
+        pos2,
     )
 
 
@@ -1617,8 +2130,11 @@ def sketch_constrain_horizontal(
         Success message and a screenshot.
     """
     return sketch_constrain_horizontal_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo,
     )
 
 
@@ -1640,8 +2156,11 @@ def sketch_constrain_vertical(
         Success message and a screenshot.
     """
     return sketch_constrain_vertical_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo,
     )
 
 
@@ -1676,8 +2195,14 @@ def sketch_constrain_distance(
         Success message and a screenshot.
     """
     return sketch_constrain_distance_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo, value, pos, name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo,
+        value,
+        pos,
+        name,
     )
 
 
@@ -1706,8 +2231,13 @@ def sketch_constrain_radius(
         Success message and a screenshot.
     """
     return sketch_constrain_radius_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo, value, name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo,
+        value,
+        name,
     )
 
 
@@ -1731,8 +2261,12 @@ def sketch_constrain_equal(
         Success message and a screenshot.
     """
     return sketch_constrain_equal_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo1, geo2,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo1,
+        geo2,
     )
 
 
@@ -1756,8 +2290,12 @@ def sketch_constrain_parallel(
         Success message and a screenshot.
     """
     return sketch_constrain_parallel_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo1, geo2,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo1,
+        geo2,
     )
 
 
@@ -1781,8 +2319,12 @@ def sketch_constrain_perpendicular(
         Success message and a screenshot.
     """
     return sketch_constrain_perpendicular_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo1, geo2,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo1,
+        geo2,
     )
 
 
@@ -1806,8 +2348,12 @@ def sketch_constrain_tangent(
         Success message and a screenshot.
     """
     return sketch_constrain_tangent_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo1, geo2,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo1,
+        geo2,
     )
 
 
@@ -2509,7 +3055,8 @@ def close_document(ctx: Context, doc_name: str) -> CallToolResult:
     """Close an open FreeCAD document and free its memory.
 
     Use this for session hygiene when a document is no longer needed.
-    Unsaved changes will be lost — save first with execute_code if needed.
+    Unsaved changes will be lost. Under a document lease, use
+    ``finalize_document_edit`` for verified save and release before closing.
 
     Args:
         doc_name: The document to close.
@@ -2528,6 +3075,7 @@ def close_document(ctx: Context, doc_name: str) -> CallToolResult:
 # =============================================================================
 # P1 — Sketch curves
 # =============================================================================
+
 
 @mcp.tool()
 def sketch_add_polyline(
@@ -2551,8 +3099,13 @@ def sketch_add_polyline(
         Success message with assigned geometry indices and a screenshot.
     """
     return sketch_add_polyline_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, points, closed, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        points,
+        closed,
+        construction,
     )
 
 
@@ -2586,9 +3139,17 @@ def sketch_add_bspline(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_bspline_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, poles, degree, weights, knots, multiplicities,
-        periodic, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        poles,
+        degree,
+        weights,
+        knots,
+        multiplicities,
+        periodic,
+        construction,
     )
 
 
@@ -2616,8 +3177,14 @@ def sketch_add_bspline_through_points(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_bspline_through_points_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, points, degree, periodic, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        points,
+        degree,
+        periodic,
+        construction,
     )
 
 
@@ -2642,8 +3209,12 @@ def sketch_add_bezier(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_bezier_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, poles, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        poles,
+        construction,
     )
 
 
@@ -2675,8 +3246,16 @@ def sketch_add_ellipse(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_ellipse_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, cx, cy, major_radius, minor_radius, angle, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        cx,
+        cy,
+        major_radius,
+        minor_radius,
+        angle,
+        construction,
     )
 
 
@@ -2712,9 +3291,18 @@ def sketch_add_arc_of_ellipse(
         Success message with the assigned geometry index and a screenshot.
     """
     return sketch_add_arc_of_ellipse_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, cx, cy, major_radius, minor_radius,
-        start_angle, end_angle, angle, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        cx,
+        cy,
+        major_radius,
+        minor_radius,
+        start_angle,
+        end_angle,
+        angle,
+        construction,
     )
 
 
@@ -2749,8 +3337,16 @@ def sketch_add_slot(
         Success message with 4 geometry indices (2 lines + 2 arcs).
     """
     return sketch_add_slot_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, x1, y1, x2, y2, width, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        x1,
+        y1,
+        x2,
+        y2,
+        width,
+        construction,
     )
 
 
@@ -2782,8 +3378,16 @@ def sketch_add_regular_polygon(
         Success message with the assigned geometry indices and a screenshot.
     """
     return sketch_add_regular_polygon_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, cx, cy, radius, sides, angle, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        cx,
+        cy,
+        radius,
+        sides,
+        angle,
+        construction,
     )
 
 
@@ -2831,8 +3435,16 @@ def sketch_add_parametric_curve(
         ```
     """
     return sketch_add_parametric_curve_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, x_expr, y_expr, t_start, t_end, samples, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        x_expr,
+        y_expr,
+        t_start,
+        t_end,
+        samples,
+        construction,
     )
 
 
@@ -2856,8 +3468,12 @@ def sketch_import_points(
         Success message with the assigned geometry indices.
     """
     return sketch_import_points_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, points, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        points,
+        construction,
     )
 
 
@@ -2881,14 +3497,19 @@ def sketch_toggle_construction(
         Success message and a screenshot.
     """
     return sketch_toggle_construction_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo_indices, construction,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo_indices,
+        construction,
     )
 
 
 # =============================================================================
 # P2 — Sketch editing
 # =============================================================================
+
 
 @mcp.tool()
 def sketch_trim(
@@ -2912,8 +3533,13 @@ def sketch_trim(
         Success message and a screenshot.
     """
     return sketch_trim_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo_index, point_x, point_y,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo_index,
+        point_x,
+        point_y,
     )
 
 
@@ -2939,8 +3565,13 @@ def sketch_extend(
         Success message and a screenshot.
     """
     return sketch_extend_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo_index, increment, end_point,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo_index,
+        increment,
+        end_point,
     )
 
 
@@ -2966,8 +3597,13 @@ def sketch_split(
         Success message and a screenshot.
     """
     return sketch_split_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo_index, point_x, point_y,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo_index,
+        point_x,
+        point_y,
     )
 
 
@@ -2993,8 +3629,13 @@ def sketch_fillet(
         Success message and a screenshot.
     """
     return sketch_fillet_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo1, geo2, radius,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo1,
+        geo2,
+        radius,
     )
 
 
@@ -3020,14 +3661,20 @@ def sketch_symmetry(
         Success message and a screenshot.
     """
     return sketch_symmetry_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, geo_indices, symmetry_geo, copy,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geo_indices,
+        symmetry_geo,
+        copy,
     )
 
 
 # =============================================================================
 # P3 — 3-D features
 # =============================================================================
+
 
 @mcp.tool()
 def revolve_feature(
@@ -3057,8 +3704,16 @@ def revolve_feature(
         Success message and an isometric screenshot.
     """
     return revolve_feature_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_name, revolve_name, angle, axis, body_name, symmetric, reversed_dir,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        revolve_name,
+        angle,
+        axis,
+        body_name,
+        symmetric,
+        reversed_dir,
     )
 
 
@@ -3086,8 +3741,14 @@ def loft_feature(
         Success message and an isometric screenshot.
     """
     return loft_feature_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, sketch_names, loft_name, body_name, ruled, closed,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_names,
+        loft_name,
+        body_name,
+        ruled,
+        closed,
     )
 
 
@@ -3115,8 +3776,14 @@ def sweep_feature(
         Success message and an isometric screenshot.
     """
     return sweep_feature_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, profile_sketch, path_sketch, sweep_name, body_name, frenet,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        profile_sketch,
+        path_sketch,
+        sweep_name,
+        body_name,
+        frenet,
     )
 
 
@@ -3152,9 +3819,17 @@ def helical_sweep_feature(
         Success message and an isometric screenshot.
     """
     return helical_sweep_feature_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, profile_sketch, helix_name, pitch, height, radius,
-        body_name, left_handed, reversed_dir,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        profile_sketch,
+        helix_name,
+        pitch,
+        height,
+        radius,
+        body_name,
+        left_handed,
+        reversed_dir,
     )
 
 
@@ -3183,8 +3858,14 @@ def fillet_feature(
         Success message and an isometric screenshot.
     """
     return fillet_feature_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, base_feature, fillet_name, radius, edge_refs, body_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        base_feature,
+        fillet_name,
+        radius,
+        edge_refs,
+        body_name,
     )
 
 
@@ -3213,8 +3894,14 @@ def chamfer_feature(
         Success message and an isometric screenshot.
     """
     return chamfer_feature_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, base_feature, chamfer_name, size, edge_refs, body_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        base_feature,
+        chamfer_name,
+        size,
+        edge_refs,
+        body_name,
     )
 
 
@@ -3238,8 +3925,12 @@ def boolean_union(
         Success message and an isometric screenshot.
     """
     return boolean_union_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, shape1, shape2, result_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        shape1,
+        shape2,
+        result_name,
     )
 
 
@@ -3263,8 +3954,12 @@ def boolean_difference(
         Success message and an isometric screenshot.
     """
     return boolean_difference_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, shape1, shape2, result_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        shape1,
+        shape2,
+        result_name,
     )
 
 
@@ -3288,14 +3983,19 @@ def boolean_intersection(
         Success message and an isometric screenshot.
     """
     return boolean_intersection_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, shape1, shape2, result_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        shape1,
+        shape2,
+        result_name,
     )
 
 
 # =============================================================================
 # P4 — Gear library
 # =============================================================================
+
 
 @mcp.tool()
 def create_involute_gear(
@@ -3346,10 +4046,20 @@ def create_involute_gear(
         ```
     """
     return create_involute_gear_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, gear_name, teeth, module, width,
-        pressure_angle, bore_diameter, clearance, backlash, samples_per_flank,
-        body_name, sketch_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        gear_name,
+        teeth,
+        module,
+        width,
+        pressure_angle,
+        bore_diameter,
+        clearance,
+        backlash,
+        samples_per_flank,
+        body_name,
+        sketch_name,
     )
 
 
@@ -3389,10 +4099,20 @@ def create_helical_gear(
         Success message with gear metadata and an isometric screenshot.
     """
     return create_helical_gear_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, gear_name, teeth, module, width,
-        helix_angle, pressure_angle, bore_diameter, clearance, backlash,
-        samples_per_flank, body_name,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        gear_name,
+        teeth,
+        module,
+        width,
+        helix_angle,
+        pressure_angle,
+        bore_diameter,
+        clearance,
+        backlash,
+        samples_per_flank,
+        body_name,
     )
 
 
@@ -3423,8 +4143,14 @@ def compute_gear_geometry(
         JSON with all standard gear parameters.
     """
     return compute_gear_geometry_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        teeth, module, pressure_angle, clearance, backlash, helix_angle,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        teeth,
+        module,
+        pressure_angle,
+        clearance,
+        backlash,
+        helix_angle,
     )
 
 
@@ -3455,14 +4181,21 @@ def check_gear_pair(
         JSON with ``meshes`` (bool), ``gear_ratio``, ``theoretical_cd_mm``, and notes.
     """
     return check_gear_pair_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        teeth1, module1, teeth2, module2, pressure_angle, center_distance,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        teeth1,
+        module1,
+        teeth2,
+        module2,
+        pressure_angle,
+        center_distance,
     )
 
 
 # =============================================================================
 # P5 — Measurement & transforms
 # =============================================================================
+
 
 @mcp.tool()
 def measure_distance(
@@ -3481,7 +4214,9 @@ def measure_distance(
     Returns:
         JSON with ``distance`` in mm.
     """
-    return measure_distance_operation(get_freecad_connection(), doc_name, shape1_ref, shape2_ref)
+    return measure_distance_operation(
+        get_freecad_connection(), doc_name, shape1_ref, shape2_ref
+    )
 
 
 @mcp.tool()
@@ -3503,7 +4238,9 @@ def measure_angle(
     Returns:
         JSON with ``angle_deg`` in degrees.
     """
-    return measure_angle_operation(get_freecad_connection(), doc_name, edge1_ref, edge2_ref)
+    return measure_angle_operation(
+        get_freecad_connection(), doc_name, edge1_ref, edge2_ref
+    )
 
 
 @mcp.tool()
@@ -3692,8 +4429,13 @@ def translate(
         Success message and a screenshot.
     """
     return translate_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, obj_name, dx, dy, dz,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        obj_name,
+        dx,
+        dy,
+        dz,
     )
 
 
@@ -3727,9 +4469,17 @@ def rotate(
         Success message and a screenshot.
     """
     return rotate_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, obj_name, axis_x, axis_y, axis_z, angle_deg,
-        center_x, center_y, center_z,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        obj_name,
+        axis_x,
+        axis_y,
+        axis_z,
+        angle_deg,
+        center_x,
+        center_y,
+        center_z,
     )
 
 
@@ -3758,14 +4508,20 @@ def scale(
         Success message and a screenshot.
     """
     return scale_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, obj_name, sx, sy, sz,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        obj_name,
+        sx,
+        sy,
+        sz,
     )
 
 
 # =============================================================================
 # P6 — Import / export
 # =============================================================================
+
 
 @mcp.tool()
 def export_step(
@@ -3785,7 +4541,9 @@ def export_step(
     Returns:
         JSON with the count of exported objects and the file path.
     """
-    return export_step_operation(get_freecad_connection(), doc_name, file_path, obj_names)
+    return export_step_operation(
+        get_freecad_connection(), doc_name, file_path, obj_names
+    )
 
 
 @mcp.tool()
@@ -3825,7 +4583,9 @@ def export_stl(
     Returns:
         JSON with the count of exported objects, facet count, and file path.
     """
-    return export_stl_operation(get_freecad_connection(), doc_name, file_path, obj_names, mesh_deviation)
+    return export_stl_operation(
+        get_freecad_connection(), doc_name, file_path, obj_names, mesh_deviation
+    )
 
 
 @mcp.tool()
@@ -3847,7 +4607,9 @@ def export_brep(
     Returns:
         JSON confirming success and the file path.
     """
-    return export_brep_operation(get_freecad_connection(), doc_name, obj_name, file_path)
+    return export_brep_operation(
+        get_freecad_connection(), doc_name, obj_name, file_path
+    )
 
 
 @mcp.tool()
@@ -3867,7 +4629,9 @@ def import_brep(
     Returns:
         JSON confirming success and the object name.
     """
-    return import_brep_operation(get_freecad_connection(), doc_name, file_path, obj_name)
+    return import_brep_operation(
+        get_freecad_connection(), doc_name, file_path, obj_name
+    )
 
 
 @mcp.tool()
@@ -3894,14 +4658,21 @@ def set_color(
         Success message and a screenshot.
     """
     return set_color_operation(
-        get_freecad_connection(), state.only_text_feedback,
-        doc_name, obj_name, r, g, b, transparency,
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        obj_name,
+        r,
+        g,
+        b,
+        transparency,
     )
 
 
 # =============================================================================
 # P7 — Assembly references, sketch geometry, path wires
 # =============================================================================
+
 
 @mcp.tool()
 def get_document_tree(
@@ -4242,9 +5013,7 @@ def sweep_pipe(
 
 
 @mcp.tool()
-def preview_attachment(
-    ctx: Context, doc_name: str, datum_name: str
-) -> CallToolResult:
+def preview_attachment(ctx: Context, doc_name: str, datum_name: str) -> CallToolResult:
     """Preview an existing datum's attachment — a read-only P1 diagnostic.
 
     Reports the support reference, the support face/edge global centre and
@@ -4417,9 +5186,7 @@ def edge_axis(
 
 
 @mcp.tool()
-def placement_audit(
-    ctx: Context, doc_name: str
-) -> CallToolResult:
+def placement_audit(ctx: Context, doc_name: str) -> CallToolResult:
     """Audit placements per Body/Part (M3).
 
     Lists each Body/Part's ``Placement``, ``getGlobalPlacement()`` base, and the
@@ -4498,7 +5265,19 @@ def run_transaction(
     dry_run: bool = False,
     commit_on_success: bool = True,
 ) -> CallToolResult:
-    """Run code inside ``openTransaction`` with automatic rollback on failure (M5)."""
+    """Run code inside ``openTransaction`` with automatic rollback on failure (M5).
+
+    Authenticated lease mode rejects this legacy nested-code helper because
+    its inner ``exec`` cannot be independently scoped by the addon's mutation
+    guard. Use typed modelling tools, or the explicitly enabled unsafe
+    ``execute_code`` route with ``affected_documents``.
+    """
+    if state.lease_manager.connected:
+        return tool_fail(
+            "run_transaction is disabled in authenticated lease mode because "
+            "nested arbitrary code cannot be proven to stay within its declared "
+            "document scope"
+        )
     return run_transaction_operation(
         get_freecad_connection(),
         state.only_text_feedback,
@@ -4728,9 +5507,7 @@ def restore(
 
 
 @mcp.tool()
-def solve_assembly(
-    ctx: Context, doc_name: str, assembly_name: str
-) -> CallToolResult:
+def solve_assembly(ctx: Context, doc_name: str, assembly_name: str) -> CallToolResult:
     """Re-solve an Assembly after editing a joint or a referenced face (I9 / P9).
 
     Tries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a
@@ -4819,15 +5596,32 @@ def main():
     import os
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only-text-feedback", action="store_true", help="Only return text feedback")
+    parser.add_argument(
+        "--only-text-feedback", action="store_true", help="Only return text feedback"
+    )
     # The addon's RPC server binds IPv4 only, but "localhost" resolves to ::1 first on
     # Windows, costing ~2s per call to fail over to IPv4. Dial IPv4 directly.
-    parser.add_argument("--host", type=_validate_host, default="127.0.0.1", help="Host address of the FreeCAD RPC server to connect to (default: 127.0.0.1)")
     parser.add_argument(
+        "--rpc-host",
+        "--host",
+        dest="rpc_host",
+        type=_validate_host,
+        default=None,
+        help=(
+            "Host address of the FreeCAD RPC server. --host is a deprecated alias "
+            "(default: manifest, FREECAD_MCP_RPC_HOST, or 127.0.0.1)"
+        ),
+    )
+    parser.add_argument(
+        "--rpc-port",
         "--port",
+        dest="rpc_port",
         type=int,
         default=None,
-        help="RPC port of the FreeCAD addon (default: FREECAD_MCP_PORT or 9875)",
+        help=(
+            "RPC port of the FreeCAD addon. --port is a deprecated alias "
+            "(default: manifest, FREECAD_MCP_PORT, or 9875)"
+        ),
     )
     parser.add_argument(
         "--instance-id",
@@ -4839,26 +5633,82 @@ def main():
             "before driving it -- use it to pin an isolated parallel instance."
         ),
     )
+    parser.add_argument(
+        "--instance-manifest",
+        default=None,
+        help=(
+            "Isolated instance-manifest.json (default: FREECAD_MCP_INSTANCE_MANIFEST)"
+        ),
+    )
+    parser.add_argument(
+        "--auth-file",
+        default=None,
+        help=(
+            "Profile authentication secret path (default: manifest or "
+            "FREECAD_MCP_AUTH_FILE); secret contents are never accepted on CLI"
+        ),
+    )
     args = parser.parse_args()
     state.only_text_feedback = args.only_text_feedback
-    state.rpc_host = args.host
-    if args.port is not None:
-        state.rpc_port = int(args.port)
+    manifest_path = args.instance_manifest or os.environ.get(
+        "FREECAD_MCP_INSTANCE_MANIFEST"
+    )
+    state.instance_manifest_path = (
+        os.path.realpath(os.path.abspath(manifest_path)) if manifest_path else None
+    )
+    state.instance_manifest_path_identity = (
+        _path_identity(state.instance_manifest_path)
+        if state.instance_manifest_path
+        else None
+    )
+    state.instance_manifest = (
+        load_instance_manifest(state.instance_manifest_path)
+        if state.instance_manifest_path
+        else None
+    )
+    env_host = os.environ.get("FREECAD_MCP_RPC_HOST")
+    env_port = os.environ.get("FREECAD_MCP_PORT")
+    requested_host = args.rpc_host or env_host
+    requested_port = (
+        args.rpc_port
+        if args.rpc_port is not None
+        else (int(env_port) if env_port else None)
+    )
+    requested_instance = args.instance_id or os.environ.get("FREECAD_MCP_INSTANCE_ID")
+    requested_auth = args.auth_file or os.environ.get("FREECAD_MCP_AUTH_FILE")
+    if state.instance_manifest is not None:
+        manifest = state.instance_manifest
+        if requested_host and requested_host != manifest.rpc_host:
+            parser.error("--rpc-host does not match the instance manifest")
+        if requested_port is not None and requested_port != manifest.rpc_port:
+            parser.error("--rpc-port does not match the instance manifest")
+        if requested_instance and requested_instance != manifest.profile_instance_id:
+            parser.error("--instance-id does not match the instance manifest")
+        if requested_auth and os.path.realpath(requested_auth) != os.path.realpath(
+            manifest.auth_secret_file
+        ):
+            parser.error("--auth-file does not match the instance manifest")
+        state.rpc_host = manifest.rpc_host
+        state.rpc_port = manifest.rpc_port
+        state.instance_id = manifest.profile_instance_id
+        state.auth_file = manifest.auth_secret_file
     else:
-        env_port = os.environ.get("FREECAD_MCP_PORT")
-        if env_port:
-            state.rpc_port = int(env_port)
-    state.instance_id = args.instance_id or os.environ.get("FREECAD_MCP_INSTANCE_ID") or None
+        if requested_auth:
+            parser.error(
+                "--auth-file requires --instance-manifest so the authenticated "
+                "handshake can verify the exact launched PID/runtime/build"
+            )
+        state.rpc_host = requested_host or "127.0.0.1"
+        state.rpc_port = requested_port or 9875
+        state.instance_id = requested_instance or None
+        state.auth_file = requested_auth or None
     # MCP-process lease identity (distinct from the FreeCAD addon instance_id)
-    import socket
-
-    state.mcp_instance_id = str(uuid.uuid4())
     state.mcp_client_label = os.environ.get("FREECAD_MCP_CLIENT", "freecad-mcp")
-    state.mcp_pid = os.getpid()
-    try:
-        state.mcp_host = socket.gethostname()
-    except Exception:
-        state.mcp_host = "localhost"
+    mcp_identity = make_mcp_runtime_identity(client_build_id="freecad-mcp-0.1.20")
+    state.mcp_instance_id = mcp_identity.runtime_id
+    state.mcp_pid = mcp_identity.pid
+    state.mcp_host = mcp_identity.hostname
+    state.mcp_process_started_at = mcp_identity.process_started_at
     logger.info(f"Only text feedback: {state.only_text_feedback}")
     logger.info(
         f"Connecting to FreeCAD RPC server at: {state.rpc_host}:{state.rpc_port}"

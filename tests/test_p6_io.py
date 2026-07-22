@@ -44,6 +44,16 @@ def _text(response) -> str:
     return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
+def _assert_snapshot_export(conn: MagicMock) -> None:
+    options = conn.execute_code.call_args.args[1]
+    assert options.document == "Doc"
+    assert options.affected_documents is None
+    assert options.read_only is True
+    assert options.recompute == "none"
+    assert options.capture_view is False
+    assert options.execution_mode == "worker"
+
+
 # ---------------------------------------------------------------------------
 # P6-1  export_step
 # ---------------------------------------------------------------------------
@@ -82,6 +92,11 @@ class TestExportStep:
         export_step_operation(conn, "Doc", "/tmp/out.step", obj_names=["Pad", "Fillet"])
         code = _code(conn)
         assert_code_contains(code, "Pad", "Fillet")
+
+    def test_reads_snapshot_without_live_document_lease(self):
+        conn = _ok_conn()
+        export_step_operation(conn, "Doc", "/tmp/out.step")
+        _assert_snapshot_export(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +163,11 @@ class TestExportStl:
         export_stl_operation(conn, "Doc", "/tmp/out.stl", obj_names=["Pad1"])
         assert_code_contains(_code(conn), "Pad1")
 
+    def test_reads_snapshot_without_live_document_lease(self):
+        conn = _ok_conn()
+        export_stl_operation(conn, "Doc", "/tmp/out.stl")
+        _assert_snapshot_export(conn)
+
 
 # ---------------------------------------------------------------------------
 # P6-4  export_brep
@@ -172,6 +192,11 @@ class TestExportBrep:
         conn = _ok_conn()
         export_brep_operation(conn, "Doc", "Obj1", "/data/shape.brep")
         assert_code_contains(_code(conn), "/data/shape.brep")
+
+    def test_reads_snapshot_without_live_document_lease(self):
+        conn = _ok_conn()
+        export_brep_operation(conn, "Doc", "Obj1", "/tmp/out.brep")
+        _assert_snapshot_export(conn)
 
 
 # ---------------------------------------------------------------------------

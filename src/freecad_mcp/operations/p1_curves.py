@@ -55,7 +55,8 @@ def sketch_add_polyline_operation(
         segment_lines="\n".join(segment_lines),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Polyline added to '{sketch_name}'", "Failed to add polyline")
+                     f"Polyline added to '{sketch_name}'", "Failed to add polyline",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +96,8 @@ def sketch_add_bspline_operation(
         construction=c,
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"BSpline added to '{sketch_name}'", "Failed to add BSpline")
+                     f"BSpline added to '{sketch_name}'", "Failed to add BSpline",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +125,7 @@ def sketch_add_bspline_through_points_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Interpolating BSpline added to '{sketch_name}'",
-                     "Failed to add interpolating BSpline")
+                     "Failed to add interpolating BSpline", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +148,8 @@ def sketch_add_bezier_operation(
         construction=c,
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Bezier curve added to '{sketch_name}'", "Failed to add Bezier curve")
+                     f"Bezier curve added to '{sketch_name}'", "Failed to add Bezier curve",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +178,8 @@ def sketch_add_ellipse_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Ellipse added to '{sketch_name}'", "Failed to add ellipse")
+                     f"Ellipse added to '{sketch_name}'", "Failed to add ellipse",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +212,8 @@ def sketch_add_arc_of_ellipse_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Arc of ellipse added to '{sketch_name}'", "Failed to add arc of ellipse")
+                     f"Arc of ellipse added to '{sketch_name}'", "Failed to add arc of ellipse",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +242,8 @@ def sketch_add_slot_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Slot added to '{sketch_name}'", "Failed to add slot")
+                     f"Slot added to '{sketch_name}'", "Failed to add slot",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +276,7 @@ def sketch_add_regular_polygon_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Regular polygon ({sides} sides) added to '{sketch_name}'",
-                     "Failed to add regular polygon")
+                     "Failed to add regular polygon", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +312,7 @@ def sketch_add_parametric_curve_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Parametric curve added to '{sketch_name}'",
-                     "Failed to add parametric curve")
+                     "Failed to add parametric curve", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +335,7 @@ def sketch_import_points_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"{len(points)} point(s) imported to '{sketch_name}'",
-                     "Failed to import points")
+                     "Failed to import points", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -351,4 +357,4 @@ def sketch_toggle_construction_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Construction mode set on {geo_indices} in '{sketch_name}'",
-                     "Failed to toggle construction")
+                     "Failed to toggle construction", document=doc_name)

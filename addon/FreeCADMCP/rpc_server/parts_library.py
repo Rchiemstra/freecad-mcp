@@ -20,19 +20,26 @@ def _get_parts_library_path() -> str:
     )
 
 
-def insert_part_from_library(relative_path):
+def insert_part_from_library(document_name, relative_path):
     parts_lib_path = _get_parts_library_path()
     part_path = os.path.join(parts_lib_path, relative_path)
 
     if not os.path.exists(part_path):
         raise FileNotFoundError(f"Not found: {part_path}")
 
-    # mergeProject inserts into the active document; create one if none is open
-    # so we fail with a clear path instead of an AttributeError on None.
-    if FreeCADGui.ActiveDocument is None:
-        FreeCAD.newDocument()
-
-    FreeCADGui.ActiveDocument.mergeProject(part_path)
+    document = FreeCAD.getDocument(document_name)
+    if document is None:
+        raise ValueError(f"Document {document_name!r} is not open")
+    previous = FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
+    try:
+        FreeCAD.setActiveDocument(document_name)
+        gui_document = FreeCADGui.getDocument(document_name)
+        if gui_document is None:
+            raise ValueError(f"GUI document {document_name!r} is unavailable")
+        gui_document.mergeProject(part_path)
+    finally:
+        if previous and previous in FreeCAD.listDocuments():
+            FreeCAD.setActiveDocument(previous)
 
 
 def get_parts_list() -> list[str]:

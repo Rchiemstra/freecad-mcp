@@ -14,11 +14,9 @@ def install():
     """Expose headless Assembly helpers when the runtime Assembly module lacks them."""
     import Assembly
 
-    if hasattr(Assembly, "createJoint"):
-        return
-
     for name in __all__:
-        setattr(Assembly, name, globals()[name])
+        if not hasattr(Assembly, name):
+            setattr(Assembly, name, globals()[name])
 
 
 def createAssembly(doc=None, name="Assembly", *, createJointGroup=True, recompute=False):
@@ -324,4 +322,3 @@ __all__ = [
     "makeJointReference",
     "referenceFromSelection",
 ]
-

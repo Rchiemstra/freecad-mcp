@@ -260,20 +260,11 @@ def refresh_active_view(
     *,
     focus_object: str | None = None,
     focus_objects: Sequence[str] | None = None,
-    touch_objects: Sequence[str] | None = None,
     fit: bool = False,
 ) -> dict[str, Any]:
-    """Force a GUI redraw; optionally touch Placement and reframe."""
+    """Force a strictly visual GUI redraw and optional camera reframe."""
     try:
         view = FreeCADGui.ActiveDocument.ActiveView
-        doc = FreeCAD.ActiveDocument
-        touched = []
-        for name in touch_objects or []:
-            obj = doc.getObject(name) if doc else None
-            if obj is None or not hasattr(obj, "Placement"):
-                continue
-            obj.Placement = obj.Placement
-            touched.append(name)
         FreeCADGui.updateGui()
         _flush_gui_events()
         focus_names = _normalize_focus_names(focus_object, focus_objects)
@@ -287,10 +278,36 @@ def refresh_active_view(
             _flush_gui_events()
         return {
             "ok": True,
-            "touched": touched,
+            "touched": [],
             "focus_objects": focus_names,
             "framed": framed or bool(fit),
         }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def repair_placements_and_refresh(
+    document_name: str,
+    touch_objects: Sequence[str],
+    *,
+    fit: bool = False,
+) -> dict[str, Any]:
+    """Leased model mutation that reassigns Placement before refreshing."""
+
+    try:
+        doc = FreeCAD.getDocument(document_name)
+        if doc is None:
+            return {"ok": False, "error": f"Document {document_name!r} not found"}
+        touched = []
+        for name in touch_objects:
+            obj = doc.getObject(name)
+            if obj is None or not hasattr(obj, "Placement"):
+                continue
+            obj.Placement = obj.Placement
+            touched.append(name)
+        result = refresh_active_view(fit=fit)
+        result["touched"] = touched
+        return result
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -386,7 +403,7 @@ def animate_object_placement(
             if sample["yaw_deg"] is not None:
                 rot = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), float(sample["yaw_deg"]))
             obj.Placement = FreeCAD.Placement(base, rot)
-            refresh_active_view(focus_objects=focus_names, touch_objects=[obj_name], fit=True)
+            refresh_active_view(focus_objects=focus_names, fit=True)
             path = os.path.join(out_dir, f"frame_{sample['index']:03d}.png")
             status = save_active_screenshot(
                 path,
@@ -407,7 +424,7 @@ def animate_object_placement(
     finally:
         try:
             obj.Placement = original
-            refresh_active_view(touch_objects=[obj_name])
+            refresh_active_view()
             restored = True
         except Exception:
             restored = False

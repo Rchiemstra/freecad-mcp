@@ -33,13 +33,11 @@ exclude = ["assets", "results"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --import-mode=importlib"
 # Put the package root on sys.path so `from tests.helpers...` resolves during
-# collection. Without this, pytest's prepend import mode inserts only the test
-# file's dir (tests/), not the package root, so `import tests` fails -- and
-# since pytest imports every module during collection (regardless of -m), that
-# aborts the whole run even for `-m unit`. `tests` has no __init__.py, so it is
-# imported as a namespace package from the root added here.
+# collection. Importlib mode also keeps same-named root/e2e modules distinct
+# when FreeCAD is installed and both files are collectible. `tests` has no
+# __init__.py, so it is imported as a namespace package from this root.
 pythonpath = ["."]
 markers = [
     "unit: mock-based tests that do not require a FreeCAD install (fast, run anywhere)",

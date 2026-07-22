@@ -2,6 +2,11 @@
 
 This document records the repository-specific architecture implemented in six ordered phases. The phases are autonomous validation checkpoints, not user approval gates.
 
+For live-document ownership, authenticated mutation fencing, and verified save
+finalization, see [Document leases](document-leases.md). Workers remain
+snapshot-only: they may inspect or reopen-validate an immutable FCStd artifact,
+but they never mutate or merge changes into a leased GUI document.
+
 ## 1. Verified repository findings
 
 The original MCP path was `FreeCADConnection` → serialized `SimpleXMLRPCServer` → global request queue → 500 ms `QTimer` polling → GUI thread → global response queue. `addon/FreeCADMCP/rpc_server/rpc_server.py::FreeCADRPC.execute_code` ran arbitrary Python in the live GUI process, and `_get_res` used an uncorrelated global result queue. Several reads (`list_documents`, `get_recompute_log`, and `get_sketch_diagnostics`) accessed live FreeCAD state from the XML-RPC thread. `execution_safety.py::find_gui_blocking_risk` already rejected the known transformed-shape boolean audit.
@@ -31,7 +36,14 @@ The server derived from serialized `SimpleXMLRPCServer`, so a waiting worker cal
 
 ## 4. Final architectural decisions
 
-`execution_safety.py::RequestClass` defines `GUI_MUTATION`, `GUI_LIGHTWEIGHT_READ`, `WORKER_ANALYSIS`, and `UNKNOWN`. Known mutations use the GUI. Only allowlisted lightweight reads use the GUI. Known expensive read-only analyses and unknown read-only scripts use the worker. Unknown mutating code stays in the GUI and remains subject to existing safety checks. Explicit `execution_mode="worker"` is the reliable route for custom geometry analysis; conservative `auto` is the public default.
+`execution_safety.py::RequestClass` still describes the historical routing and is
+used to diagnose unsafe mutating payloads. Under the document-lease design,
+however, public arbitrary code with `read_only=true` always runs in a snapshot
+FreeCADCmd worker—even when the caller requests `execution_mode="gui"` and even
+when lease mode is off or observe. Information that genuinely requires the live
+GUI is exposed through dedicated typed read methods. Workers never apply changes
+to a leased live document; applying a worker-produced artifact is a separately
+authenticated, leased GUI mutation.
 
 `GuiDispatcher` owns per-request completion and correlation. It uses a queued Qt signal and executes one bounded request per callback. Queued and GUI-thread self-dispatch both call the same `_execute_request`, giving identical result and exception semantics without self-deadlock.
 
@@ -148,7 +160,9 @@ Artifacts are staged privately, containment/size validated, promoted to manager 
 2. Explicit worker mode, one direct worker, primary snapshots, JSON protocol, timeout/tree kill, crash recovery, and one verified `.py` launcher.
 3. Dependency bundles, cycles, exact-name aliases, unsaved dependencies, links/subelements, and state-change retry.
 4. Structured BREP/STEP artifacts, quotas, ownership, expiry, and cleanup.
-5. Conservative automatic routing with a lightweight allowlist, unknown read-only worker default, explicit dedicated analysis routing, and retained GUI safety checks.
+5. Snapshot-worker routing for every public arbitrary read-only payload, explicit
+   typed GUI reads, and retained GUI safety checks for the separately enabled
+   unsafe mutating-code compatibility path.
 6. Five bounded XML-RPC handlers split into three general and two reserved control slots, one active/three pending workers, IDs, status, cancellation, admission control, and bounded shutdown.
 
 An implementation agent executes all phases autonomously, runs tests after each phase, fixes regressions before continuing, does not weaken tests, does not silently skip a phase, and does not pause for routine confirmation. It stops only for a genuine repository blocker, unsafe operation, missing required external dependency, or contradiction not resolvable by inspection, and reports deviations with evidence.

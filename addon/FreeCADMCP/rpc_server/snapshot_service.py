@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -14,8 +16,201 @@ import FreeCADGui
 
 from .worker_protocol import ProtocolError, validate_subelement_reference
 
+try:
+    from document_state import document_modified_state, mark_document_modified
+except ImportError:
+    from addon.FreeCADMCP.document_state import (
+        document_modified_state,
+        mark_document_modified,
+    )
+
+try:
+    from document_lease.sidecar import (
+        _harden_directory_permissions,
+        _harden_permissions,
+    )
+except ImportError:
+    from addon.FreeCADMCP.document_lease.sidecar import (
+        _harden_directory_permissions,
+        _harden_permissions,
+    )
+
 
 _SAFE_DOCUMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_RECOVERY_DIRECTORY = "FreeCADMCPRecovery"
+
+
+class SnapshotRestoreError(RuntimeError):
+    """A lease-preserving restore could not be proven safe."""
+
+    code = "LEASE_SNAPSHOT_RESTORE_FAILED"
+
+
+def _recovery_root() -> Path:
+    root = Path(FreeCAD.getUserAppDataDir()) / _RECOVERY_DIRECTORY
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _harden_directory_permissions(root, strict=True)
+    return root
+
+
+def recovery_snapshot_path(snapshot_id: str) -> Path:
+    """Resolve an opaque snapshot ID without accepting caller-supplied paths."""
+    normalized = str(uuid.UUID(str(snapshot_id)))
+    return _recovery_root() / f"{normalized}.FCStd"
+
+
+def create_lease_baseline_snapshot_gui(document) -> str:
+    """Persist an owner-only recovery saveCopy and return only its opaque ID."""
+    snapshot_id = str(uuid.uuid4())
+    target = recovery_snapshot_path(snapshot_id)
+    if os.path.lexists(target):
+        raise RuntimeError("recovery snapshot identifier collision")
+    temporary = target.with_suffix(".FCStd.tmp")
+    if os.path.lexists(temporary):
+        raise RuntimeError("recovery snapshot temporary path already exists")
+    try:
+        document.saveCopy(str(temporary))
+        _harden_permissions(temporary, strict=True)
+        with temporary.open("r+b") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+        _harden_permissions(target, strict=True)
+    except Exception:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        raise
+    return snapshot_id
+
+
+def discard_lease_baseline_snapshot(snapshot_id: str) -> None:
+    target = recovery_snapshot_path(snapshot_id)
+    try:
+        target.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _validated_snapshot_file(path: str | os.PathLike[str]) -> Path:
+    target = Path(path)
+    try:
+        info = target.lstat()
+    except OSError as exc:
+        raise SnapshotRestoreError(f"snapshot file is unavailable: {exc}") from exc
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    file_attributes = int(getattr(info, "st_file_attributes", 0) or 0)
+    if target.is_symlink() or file_attributes & reparse_flag:
+        raise SnapshotRestoreError("snapshot file must not be a symlink or reparse point")
+    if not stat.S_ISREG(info.st_mode):
+        raise SnapshotRestoreError("snapshot path must be a regular file")
+    if info.st_size < 22:
+        raise SnapshotRestoreError("snapshot file is too small to be an FCStd archive")
+    return target.resolve(strict=True)
+
+
+def _same_path(left: str, right: str) -> bool:
+    return os.path.normcase(os.path.realpath(left)) == os.path.normcase(
+        os.path.realpath(right)
+    )
+
+
+def _force_document_dirty(document: Any) -> None:
+    """Make restored in-memory state explicitly require save verification."""
+
+    if document_modified_state(document) is True:
+        return
+    if mark_document_modified(document):
+        return
+    try:
+        original_comment = str(getattr(document, "Comment", ""))
+        document.Comment = original_comment + "\u2060"
+        document.Comment = original_comment
+    except Exception as exc:
+        raise SnapshotRestoreError(
+            "restored document could not be marked dirty"
+        ) from exc
+    if document_modified_state(document) is not True:
+        raise SnapshotRestoreError(
+            "restored document did not report Gui::Document.Modified=true"
+        )
+
+
+def restore_snapshot_in_place_gui(
+    document: Any,
+    snapshot_path: str | os.PathLike[str],
+    *,
+    expected_document_name: str,
+    expected_source_path: str | None,
+    validator=None,
+) -> dict[str, Any]:
+    """Restore through ``Document.load`` while retaining the live proxy.
+
+    Closing and reopening a leased document creates an unlocked identity gap.
+    FreeCAD's in-place ``load`` clears/restores the same C++ Document instead.
+    It temporarily points ``FileName`` at the snapshot, so the authoritative
+    source path is restored before this function returns, even on failure.
+    """
+
+    target = _validated_snapshot_file(snapshot_path)
+    original_name = str(getattr(document, "Name", "") or "")
+    original_path = str(getattr(document, "FileName", "") or "")
+    if original_name != str(expected_document_name):
+        raise SnapshotRestoreError("live document name changed before restore")
+    if expected_source_path is None:
+        if original_path:
+            raise SnapshotRestoreError("unsaved lease unexpectedly has a file path")
+    elif not original_path or not _same_path(original_path, expected_source_path):
+        raise SnapshotRestoreError("live document source path changed before restore")
+    if bool(getattr(document, "HasPendingTransaction", False)) or bool(
+        getattr(document, "Transacting", False)
+    ):
+        raise SnapshotRestoreError(
+            "document has an active transaction and cannot be restored safely"
+        )
+
+    load_error: Exception | None = None
+    try:
+        document.load(str(target))
+    except Exception as exc:
+        load_error = exc
+    try:
+        # FileName is a transient document property.  Restoring it does not
+        # write the source file; the restored state remains dirty until the
+        # typed save/finalize lifecycle verifies it.
+        document.FileName = original_path
+    except Exception as exc:
+        raise SnapshotRestoreError(
+            "snapshot load changed FileName and the source path could not be restored"
+        ) from exc
+    if load_error is not None:
+        raise SnapshotRestoreError(f"FreeCAD could not load the snapshot: {load_error}") from load_error
+    if str(getattr(document, "Name", "") or "") != original_name:
+        raise SnapshotRestoreError("snapshot restore changed the document name")
+    restored_path = str(getattr(document, "FileName", "") or "")
+    if original_path:
+        if not restored_path or not _same_path(restored_path, original_path):
+            raise SnapshotRestoreError("snapshot restore changed the source path")
+    elif restored_path:
+        raise SnapshotRestoreError("snapshot restore changed an unsaved document path")
+    if bool(getattr(document, "Partial", False)):
+        raise SnapshotRestoreError("FreeCAD reported a partial snapshot restore")
+
+    recompute = getattr(document, "recompute", None)
+    if callable(recompute):
+        recompute()
+    validation = validator(document) if validator is not None else {"ok": True}
+    if isinstance(validation, dict) and validation.get("ok") is False:
+        raise SnapshotRestoreError("snapshot post-restore validation failed")
+    _force_document_dirty(document)
+    return {
+        "ok": True,
+        "document_name": original_name,
+        "source_path": original_path or None,
+        "dirty": True,
+        "validation": validation,
+    }
 
 
 def _is_link_property(prop_type: str) -> bool:
@@ -49,7 +244,7 @@ def _document_state(doc) -> dict[str, Any]:
         "document_uid": str(getattr(doc, "Uid", "")),
         "document_id": str(getattr(doc, "Id", "")),
         "original_filename": getattr(doc, "FileName", ""),
-        "modified": bool(getattr(doc, "Modified", False)),
+        "modified": document_modified_state(doc),
         "object_count": len(getattr(doc, "Objects", [])),
         "dependencies": dependencies,
         "has_pending_transaction": bool(getattr(doc, "HasPendingTransaction", False)),

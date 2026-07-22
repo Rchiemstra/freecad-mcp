@@ -147,6 +147,10 @@ class LiveFreeCADConnection:
     def __init__(self, doc_name: str):
         if FreeCAD is None:  # pragma: no cover - guard
             raise RuntimeError("FreeCAD is not importable in this interpreter")
+        # Mirror addon/FreeCADMCP/Init.py for direct in-process operation tests.
+        from freecad_mcp.assembly_api_bootstrap import install
+
+        install()
         self.doc = FreeCAD.newDocument(doc_name)
         self._globals = {
             "FreeCAD": FreeCAD,
@@ -169,6 +173,39 @@ class LiveFreeCADConnection:
             }
         except Exception as err:  # surface the failure to the test
             return {"success": False, "error": f"{type(err).__name__}: {err}"}
+
+    def invoke_rpc(self, method: str, *args, **kwargs):
+        """Route typed lifecycle calls through the addon's real GUI helpers.
+
+        The live fixture intentionally avoids XML-RPC transport overhead, but
+        must still track the production ``FreeCADConnection`` interface as
+        operations move away from generated Python.
+        """
+        if kwargs:
+            raise TypeError(
+                "LiveFreeCADConnection.invoke_rpc accepts positional RPC args"
+            )
+        import FreeCADGui
+
+        if not hasattr(FreeCADGui, "addCommand"):
+            FreeCADGui.addCommand = lambda *_args, **_kwargs: None
+        from addon.FreeCADMCP.rpc_server.rpc_server import FreeCADRPC
+
+        handlers = {
+            "snapshot": FreeCADRPC._snapshot_gui,
+            "restore": FreeCADRPC._restore_gui,
+        }
+        try:
+            handler = handlers[method]
+        except KeyError as exc:
+            raise AttributeError(f"Unsupported live fixture RPC method: {method}") from exc
+        result = handler(self, *args)
+        if method == "restore" and isinstance(result, dict) and result.get("ok"):
+            rebound = FreeCAD.getDocument(str(result.get("new_doc") or self.doc.Name))
+            if rebound is not None:
+                self.doc = rebound
+                self._globals["doc"] = rebound
+        return result
 
     def get_active_screenshot(self, *args, **kwargs):
         # Screenshots require the GUI; unavailable in FreeCADCmd headless.

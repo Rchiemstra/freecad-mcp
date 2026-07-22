@@ -11,6 +11,7 @@ sidecars are written, and callers should treat this module as inert.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import sys
@@ -18,15 +19,54 @@ import tempfile
 import threading
 import time
 import uuid
+import secrets
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 
 
+# FreeCAD adds this addon directory directly to ``sys.path`` and imports this
+# file as ``document_lock``.  Package-aware callers (including the test suite)
+# import the same file as ``addon.FreeCADMCP.document_lock``.  Without an early
+# alias Python executes the file twice, producing two lease registries, two
+# settings functions, and two request-identity thread locals.  Whichever name
+# loads first owns the single module object; publishing both names here makes
+# every later import resolve to that same object in either environment.
+_CANONICAL_MODULE_NAME = "addon.FreeCADMCP.document_lock"
+_FREECAD_MODULE_NAME = "document_lock"
+_MODULE_ALIASES = (_CANONICAL_MODULE_NAME, _FREECAD_MODULE_NAME)
+
+
+def _install_module_aliases() -> None:
+    current = sys.modules.get(__name__)
+    if current is None:  # pragma: no cover - import machinery always sets it
+        return
+
+    # The normal path has no existing peer.  The existing-module branch makes
+    # reloads and unusual concurrent embedding setups converge conservatively
+    # on the module object that was published first.
+    owner = next(
+        (
+            module
+            for alias in _MODULE_ALIASES
+            if (module := sys.modules.get(alias)) is not None
+            and module is not current
+        ),
+        current,
+    )
+    for alias in _MODULE_ALIASES:
+        sys.modules[alias] = owner
+
+
+_install_module_aliases()
+
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
+
+_runtime_lease_mode: str | None = None
 
 def _settings_path() -> Path:
     try:
@@ -40,22 +80,69 @@ def _settings_path() -> Path:
 def _read_settings() -> dict[str, Any]:
     path = _settings_path()
     if not path.is_file():
-        return {}
+        # A genuinely new ordinary profile follows the central settings
+        # default and starts in observe mode.  An existing empty JSON object
+        # remains the legacy explicit-off policy during migration.
+        return {
+            "document_lease_mode": "observe",
+            "enable_document_lock": True,
+            "document_lock_enforcement": False,
+        }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict):
+            return data
     except (OSError, json.JSONDecodeError):
-        return {}
+        pass
+    # Missing/corrupt policy must never turn a previously protected runtime
+    # into a direct-call listener.  The central settings reader uses the same
+    # fail-closed mode and prevents server startup until the file is repaired.
+    return {
+        "document_lease_mode": "enforce",
+        "enable_document_lock": True,
+        "document_lock_enforcement": True,
+        "_configuration_error": "invalid document lease settings",
+    }
+
+
+def configure_runtime_lease_mode(mode: str) -> None:
+    """Latch one validated mode for the lifetime of the lease runtime.
+
+    Settings are intentionally not a per-request authorization input.  A mode
+    change is admitted only by ``initialize_document_lease_runtime``, which
+    first proves that no active/recovery records would be weakened.
+    """
+
+    normalized = str(mode or "")
+    if normalized not in {"off", "observe", "enforce"}:
+        raise ValueError("document lease mode must be off, observe, or enforce")
+    global _runtime_lease_mode
+    _runtime_lease_mode = normalized
+
+
+def get_runtime_lease_mode() -> str | None:
+    return _runtime_lease_mode
 
 
 def is_enabled() -> bool:
     """True when document lock infrastructure (observer/GUI/sidecars) is on."""
-    return bool(_read_settings().get("enable_document_lock", False))
+    if _runtime_lease_mode is not None:
+        return _runtime_lease_mode != "off"
+    data = _read_settings()
+    mode = data.get("document_lease_mode")
+    if mode in {"off", "observe", "enforce"}:
+        return mode != "off"
+    return bool(data.get("enable_document_lock", False))
 
 
 def is_enforcement_enabled() -> bool:
     """True when mutating RPC verbs must present a valid owned lease."""
+    if _runtime_lease_mode is not None:
+        return _runtime_lease_mode == "enforce"
     data = _read_settings()
+    mode = data.get("document_lease_mode")
+    if mode in {"off", "observe", "enforce"}:
+        return mode == "enforce"
     return bool(data.get("document_lock_enforcement", False)) and bool(
         data.get("enable_document_lock", False)
     )
@@ -94,20 +181,25 @@ SIDECAR_SUFFIX = ".freecad-mcp.lock"
 
 
 class LeaseState(str, Enum):
+    ACQUIRING = "ACQUIRING"
+    LOCKED_IDLE = "LOCKED_IDLE"
     LOCKED_EDITING = "LOCKED_EDITING"
     LOCKED_RECOMPUTING = "LOCKED_RECOMPUTING"
     LOCKED_SAVING = "LOCKED_SAVING"
     LOCKED_ERROR = "LOCKED_ERROR"
     USER_INTERVENED = "USER_INTERVENED"
+    CANCELLING = "CANCELLING"
+    RELEASING = "RELEASING"
     UNLOCKED_SAVED = "UNLOCKED_SAVED"
     UNLOCKED_DIRTY = "UNLOCKED_DIRTY"
+    STALE = "STALE"
 
 
 @dataclass
 class LeaseRecord:
     doc_key: str
     doc_name: str
-    token: str
+    token: str = field(repr=False)
     instance_id: str
     client: str
     pid: int
@@ -120,25 +212,207 @@ class LeaseRecord:
     last_save_time: float | None = None
     baseline_mtime: float | None = None
     baseline_hash: str | None = None
-    state: str = LeaseState.LOCKED_EDITING.value
+    state: str = LeaseState.LOCKED_IDLE.value
     rpc_port: int | None = None
+    lease_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    generation: int = 1
+    state_revision: int = 1
+    record_revision: int = 1
+    heartbeat_sequence: int = 0
+    last_mutation_revision: int = 0
+    last_verified_save_revision: int = 0
+    user_intervened: bool = False
+    request_id: str | None = None
+    error_info: dict[str, Any] | None = None
+    document_session_uuid: str = ""
+    token_fingerprint: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload.pop("token", None)
+        payload.pop("token_fingerprint", None)
+        return payload
+
+    def to_sidecar_dict(self) -> dict[str, Any]:
+        payload = self.to_dict()
+        digest = self.token_fingerprint or hashlib.sha256(
+            self.token.encode("utf-8")
+        ).hexdigest()
+        payload["token_fingerprint"] = f"sha256:{digest.removeprefix('sha256:')}"
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LeaseRecord":
         known = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
-        return cls(**{k: v for k, v in data.items() if k in known})
+        values = {k: v for k, v in data.items() if k in known}
+        raw_token = str(values.get("token") or "")
+        fingerprint = str(values.get("token_fingerprint") or "")
+        if raw_token and not fingerprint:
+            fingerprint = "sha256:" + hashlib.sha256(
+                raw_token.encode("utf-8")
+            ).hexdigest()
+        # A sidecar is public coordination metadata, never credential custody.
+        values["token"] = ""
+        values["token_fingerprint"] = fingerprint
+        return cls(**values)
 
 
 # ---------------------------------------------------------------------------
-# Thread-local request identity + agent-mutating flag
+# Thread-local request identity + GUI request mutation attribution
 # ---------------------------------------------------------------------------
 
 _request_ctx = threading.local()
-_agent_mutating: set[str] = set()
-_agent_mutating_lock = threading.Lock()
+
+
+@dataclass
+class _AgentMutationState:
+    """Attribution owned by exactly one executing thread.
+
+    FreeCAD document observers are called synchronously on the thread that is
+    changing the live document.  Keeping this state thread-local therefore
+    prevents an XML-RPC worker (or another GUI callback) from making unrelated
+    changes look agent-authored.  Version-2 callers use one exact document-key
+    set for the whole request.  The per-key counters exist solely for the
+    compatibility facade used by version-1 integrations.
+    """
+
+    request_id: str = ""
+    document_keys: frozenset[str] = frozenset()
+    depth: int = 0
+    violation: str = ""
+    legacy_counts: dict[str, int] = field(default_factory=dict)
+
+
+_agent_mutation_ctx = threading.local()
+
+
+def _mutation_state(*, create: bool = False) -> _AgentMutationState | None:
+    state = getattr(_agent_mutation_ctx, "state", None)
+    if state is None and create:
+        state = _AgentMutationState()
+        _agent_mutation_ctx.state = state
+    return state
+
+
+def _normalized_mutation_keys(document_keys) -> frozenset[str]:
+    if isinstance(document_keys, str):
+        document_keys = (document_keys,)
+    try:
+        normalized_values = set()
+        for value in document_keys:
+            if value is None:
+                continue
+            normalized = str(value).strip()
+            if normalized:
+                normalized_values.add(normalized)
+        normalized = frozenset(normalized_values)
+    except TypeError as exc:
+        raise ValueError("document mutation scope must be iterable") from exc
+    if not normalized:
+        raise ValueError("document mutation scope must not be empty")
+    return normalized
+
+
+def begin_agent_mutation_scope(request_id: str, document_keys) -> bool:
+    """Begin an exact, request-scoped GUI mutation attribution context.
+
+    Safe nesting is allowed only for the same non-empty request ID and the
+    same exact set of declared document keys.  A different request, a changed
+    scope, or mixing this API with the legacy marker poisons attribution until
+    the outermost scope exits, so observers fail closed instead of accepting a
+    re-entrant or undeclared mutation.
+    """
+
+    normalized_request_id = str(request_id or "").strip()
+    if not normalized_request_id:
+        raise ValueError("agent mutation request_id must not be empty")
+    normalized_keys = _normalized_mutation_keys(document_keys)
+    state = _mutation_state(create=True)
+    assert state is not None
+    if state.legacy_counts:
+        state.violation = "request-scoped mutation nested inside legacy attribution"
+    if state.depth == 0:
+        state.request_id = normalized_request_id
+        state.document_keys = normalized_keys
+        state.violation = state.violation or ""
+    elif (
+        state.request_id != normalized_request_id
+        or state.document_keys != normalized_keys
+    ):
+        state.violation = "nested mutation request or document scope mismatch"
+    state.depth += 1
+    return not state.violation
+
+
+def end_agent_mutation_scope(request_id: str, document_keys) -> bool:
+    """End one reference to an exact GUI mutation scope.
+
+    Mismatched teardown is itself fail-closed.  It does not expose a still
+    active outer request as valid attribution, but the state is cleared when
+    the outermost reference has unwound so a bad request cannot poison later
+    independent GUI work.
+    """
+
+    normalized_request_id = str(request_id or "").strip()
+    normalized_keys = _normalized_mutation_keys(document_keys)
+    state = _mutation_state()
+    if state is None or state.depth <= 0:
+        return False
+    if (
+        state.request_id != normalized_request_id
+        or state.document_keys != normalized_keys
+    ):
+        state.violation = "mutation scope teardown mismatch"
+    state.depth -= 1
+    valid = not state.violation
+    if state.depth == 0:
+        state.request_id = ""
+        state.document_keys = frozenset()
+        state.violation = ""
+        if not state.legacy_counts:
+            try:
+                delattr(_agent_mutation_ctx, "state")
+            except AttributeError:
+                pass
+    return valid
+
+
+def get_agent_mutation_context() -> dict[str, Any]:
+    """Return a token-free snapshot of the current thread's attribution."""
+
+    state = _mutation_state()
+    if state is None:
+        return {
+            "active": False,
+            "request_id": None,
+            "document_keys": (),
+            "depth": 0,
+            "valid": False,
+            "violation": None,
+            "thread_id": threading.get_ident(),
+            "legacy": False,
+        }
+    strict_active = state.depth > 0
+    legacy_active = bool(state.legacy_counts)
+    return {
+        "active": strict_active or legacy_active,
+        "request_id": state.request_id if strict_active else None,
+        "document_keys": tuple(
+            sorted(
+                state.document_keys
+                if strict_active
+                else state.legacy_counts.keys()
+            )
+        ),
+        "depth": state.depth if strict_active else sum(state.legacy_counts.values()),
+        "valid": bool(
+            (strict_active and not state.violation and not legacy_active)
+            or (legacy_active and not strict_active)
+        ),
+        "violation": state.violation or None,
+        "thread_id": threading.get_ident(),
+        "legacy": legacy_active and not strict_active,
+    }
 
 
 def set_request_identity(
@@ -149,6 +423,15 @@ def set_request_identity(
     host: str | None = None,
     lease_token: str | None = None,
     rpc_port: int | None = None,
+    request_id: str | None = None,
+    rpc_session_token: str | None = None,
+    lease_id: str | None = None,
+    lease_generation: int | None = None,
+    document_session_uuid: str | None = None,
+    lease_credentials: list[dict[str, Any]] | None = None,
+    mcp_process_started_at: str | None = None,
+    agent_id: str | None = None,
+    authenticated_session_id: str | None = None,
 ) -> None:
     _request_ctx.instance_id = instance_id
     _request_ctx.client = client
@@ -156,10 +439,35 @@ def set_request_identity(
     _request_ctx.host = host
     _request_ctx.lease_token = lease_token
     _request_ctx.rpc_port = rpc_port
+    _request_ctx.request_id = request_id
+    _request_ctx.rpc_session_token = rpc_session_token
+    _request_ctx.lease_id = lease_id
+    _request_ctx.lease_generation = lease_generation
+    _request_ctx.document_session_uuid = document_session_uuid
+    _request_ctx.lease_credentials = list(lease_credentials or [])
+    _request_ctx.mcp_process_started_at = mcp_process_started_at
+    _request_ctx.agent_id = agent_id
+    _request_ctx.authenticated_session_id = authenticated_session_id
 
 
 def clear_request_identity() -> None:
-    for attr in ("instance_id", "client", "pid", "host", "lease_token", "rpc_port"):
+    for attr in (
+        "instance_id",
+        "client",
+        "pid",
+        "host",
+        "lease_token",
+        "rpc_port",
+        "request_id",
+        "rpc_session_token",
+        "lease_id",
+        "lease_generation",
+        "document_session_uuid",
+        "lease_credentials",
+        "mcp_process_started_at",
+        "agent_id",
+        "authenticated_session_id",
+    ):
         if hasattr(_request_ctx, attr):
             delattr(_request_ctx, attr)
 
@@ -172,22 +480,85 @@ def get_request_identity() -> dict[str, Any]:
         "host": getattr(_request_ctx, "host", None),
         "lease_token": getattr(_request_ctx, "lease_token", None),
         "rpc_port": getattr(_request_ctx, "rpc_port", None),
+        "request_id": getattr(_request_ctx, "request_id", None),
+        "rpc_session_token": getattr(_request_ctx, "rpc_session_token", None),
+        "lease_id": getattr(_request_ctx, "lease_id", None),
+        "lease_generation": getattr(_request_ctx, "lease_generation", None),
+        "document_session_uuid": getattr(
+            _request_ctx, "document_session_uuid", None
+        ),
+        "lease_credentials": list(
+            getattr(_request_ctx, "lease_credentials", []) or []
+        ),
+        "mcp_process_started_at": getattr(
+            _request_ctx, "mcp_process_started_at", None
+        ),
+        "agent_id": getattr(_request_ctx, "agent_id", None),
+        "authenticated_session_id": getattr(
+            _request_ctx, "authenticated_session_id", None
+        ),
     }
 
 
 def begin_agent_mutation(doc_key: str) -> None:
-    with _agent_mutating_lock:
-        _agent_mutating.add(doc_key)
+    """Compatibility facade for legacy per-key mutation markers.
+
+    Version-2 GUI mutation paths must use :func:`begin_agent_mutation_scope`
+    so a real request ID and its complete declared scope are inseparable.
+    """
+
+    key = str(doc_key or "").strip()
+    if not key:
+        return
+    state = _mutation_state(create=True)
+    assert state is not None
+    if state.depth:
+        state.violation = "legacy attribution nested inside request-scoped mutation"
+    state.legacy_counts[key] = state.legacy_counts.get(key, 0) + 1
 
 
 def end_agent_mutation(doc_key: str) -> None:
-    with _agent_mutating_lock:
-        _agent_mutating.discard(doc_key)
+    key = str(doc_key or "").strip()
+    state = _mutation_state()
+    if state is None or not key:
+        return
+    count = state.legacy_counts.get(key, 0)
+    if count <= 1:
+        state.legacy_counts.pop(key, None)
+    else:
+        state.legacy_counts[key] = count - 1
+    if not state.legacy_counts and state.depth == 0:
+        try:
+            delattr(_agent_mutation_ctx, "state")
+        except AttributeError:
+            pass
 
 
-def is_agent_mutating(doc_key: str) -> bool:
-    with _agent_mutating_lock:
-        return doc_key in _agent_mutating
+def is_agent_mutating(doc_key: str, *, request_id: str | None = None) -> bool:
+    """Return whether *doc_key* matches the current thread's valid context.
+
+    Matching is deliberately exact.  Path aliases, document names, and the
+    addon session UUID must be declared by the guarded request rather than
+    inferred here.  Supplying ``request_id`` additionally requires an exact
+    active-request match.
+    """
+
+    key = str(doc_key or "").strip()
+    if not key:
+        return False
+    state = _mutation_state()
+    if state is None:
+        return False
+    if state.depth:
+        if state.violation or state.legacy_counts:
+            return False
+        if request_id is not None and state.request_id != str(request_id).strip():
+            return False
+        return key in state.document_keys
+    if request_id is not None:
+        # Legacy markers have no authenticated request identity.
+        return False
+    return state.legacy_counts.get(key, 0) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +618,96 @@ def _read_sidecar(path: Path) -> dict[str, Any] | None:
         return data if isinstance(data, dict) else None
     except (OSError, json.JSONDecodeError):
         return None
+
+
+_SENSITIVE_SIDECAR_FIELDS = frozenset(
+    {
+        "auth_secret",
+        "auth_token",
+        "bearer_token",
+        "client_proof",
+        "hmac",
+        "lease_token",
+        "password",
+        "private_key",
+        "profile_secret",
+        "proof",
+        "rpc_session_token",
+        "secret",
+        "secret_fingerprint",
+        "server_proof",
+        "session_token",
+        "signature",
+        "token",
+        "token_digest",
+        "token_fingerprint",
+    }
+)
+
+
+def _is_sensitive_sidecar_field(key: Any) -> bool:
+    normalized = str(key).strip().lower().replace("-", "_")
+    return normalized in _SENSITIVE_SIDECAR_FIELDS or normalized.endswith(
+        ("_password", "_proof", "_secret", "_signature", "_token")
+    )
+
+
+def _collect_sidecar_secrets(value: Any, secrets_out: set[str]) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if _is_sensitive_sidecar_field(key):
+                _collect_secret_strings(child, secrets_out)
+                continue
+            _collect_sidecar_secrets(child, secrets_out)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _collect_sidecar_secrets(child, secrets_out)
+
+
+def _collect_secret_strings(value: Any, secrets_out: set[str]) -> None:
+    if isinstance(value, str):
+        if value:
+            secrets_out.add(value)
+        return
+    if isinstance(value, dict):
+        for child in value.values():
+            _collect_secret_strings(child, secrets_out)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _collect_secret_strings(child, secrets_out)
+
+
+def _redact_sidecar_diagnostic(value: Any, secrets: set[str]) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: (
+                "<redacted>"
+                if _is_sensitive_sidecar_field(key)
+                else _redact_sidecar_diagnostic(child, secrets)
+            )
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sidecar_diagnostic(child, secrets) for child in value]
+    if isinstance(value, tuple):
+        return [_redact_sidecar_diagnostic(child, secrets) for child in value]
+    if isinstance(value, str):
+        safe = value
+        for secret in secrets:
+            safe = safe.replace(secret, "[REDACTED]")
+        return safe
+    return value
+
+
+def _public_sidecar_payload(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(data, dict):
+        return None
+    try:
+        return LeaseRecord.from_dict(data).to_dict()
+    except Exception:
+        secrets_found: set[str] = set()
+        _collect_sidecar_secrets(data, secrets_found)
+        return _redact_sidecar_diagnostic(data, secrets_found)
 
 
 def _remove_sidecar(path: Path) -> None:
@@ -336,12 +797,14 @@ _pending_saves: dict[str, str] = {}
 
 def reset_registry_for_tests() -> None:
     """Clear in-memory state (unit tests only)."""
+    global _runtime_lease_mode
     with _registry_lock:
         _registry.clear()
         _session_ids.clear()
         _pending_saves.clear()
-    with _agent_mutating_lock:
-        _agent_mutating.clear()
+    _runtime_lease_mode = None
+    if hasattr(_agent_mutation_ctx, "state"):
+        delattr(_agent_mutation_ctx, "state")
     clear_request_identity()
 
 
@@ -452,7 +915,7 @@ def acquire_lease(
             }
         baseline_mtime, baseline_hash = file_baseline(doc_key)
 
-    token = uuid.uuid4().hex
+    token = secrets.token_urlsafe(32)
     now = time.time()
     record = LeaseRecord(
         doc_key=doc_key,
@@ -469,16 +932,32 @@ def acquire_lease(
         document_dirty=bool(document_dirty),
         baseline_mtime=baseline_mtime,
         baseline_hash=baseline_hash,
-        state=LeaseState.LOCKED_EDITING.value,
+        state=LeaseState.LOCKED_IDLE.value,
         rpc_port=rpc_port,
+        document_session_uuid=(ensure_session_id(doc_name) if doc_name else str(uuid.uuid4())),
     )
 
     with _registry_lock:
         existing = _registry.get(doc_key)
         if existing and not _is_stale(existing, now=now):
             if existing.instance_id == instance_id:
+                if existing.state in {
+                    LeaseState.USER_INTERVENED.value,
+                    LeaseState.UNLOCKED_DIRTY.value,
+                    LeaseState.STALE.value,
+                }:
+                    return {
+                        "success": False,
+                        "error_code": "local_recovery_required",
+                        "error": (
+                            f"Lease is in {existing.state}; the previous agent may "
+                            "not automatically reacquire it"
+                        ),
+                        "lease": existing.to_dict(),
+                    }
                 # Same instance re-acquires: refresh token + heartbeat in place
                 existing.token = token
+                existing.token_fingerprint = ""
                 existing.last_heartbeat = now
                 existing.client = client or existing.client
                 existing.pid = int(pid or existing.pid)
@@ -487,12 +966,13 @@ def acquire_lease(
                     existing.task_description = task_description
                 existing.document_dirty = bool(document_dirty)
                 payload = existing.to_dict()
+                sidecar_payload = existing.to_sidecar_dict()
                 if is_path_key:
                     side = sidecar_path_for(doc_key)
                     if side.is_file():
-                        _write_json_atomic(side, payload)
+                        _write_json_atomic(side, sidecar_payload)
                     else:
-                        _create_sidecar_exclusive(side, payload)
+                        _create_sidecar_exclusive(side, sidecar_payload)
                 return {"success": True, "token": token, "lease": payload, "renewed": True}
             return {
                 "success": False,
@@ -523,31 +1003,26 @@ def acquire_lease(
                             ),
                             "lease": side_rec.to_dict(),
                         }
-                # Stale sidecar: remove before exclusive create
+                # Staleness is never permission to delete or overwrite.
                 if side_rec is None or _is_stale(side_rec, now=now):
-                    # Only auto-clear if owner pid is dead (or unknown)
-                    if side_rec is None or not pid_alive(side_rec.pid):
-                        _remove_sidecar(side)
-                    else:
-                        return {
-                            "success": False,
-                            "error_code": "document_locked_by_other",
-                            "error": (
-                                "Sidecar lock heartbeat expired but owning pid "
-                                f"{side_rec.pid} is still alive; use force_release_stale_lock "
-                                "only after confirming the owner is gone"
-                            ),
-                            "lease": side_rec.to_dict(),
-                        }
+                    return {
+                        "success": False,
+                        "error_code": "stale_lock_recovery_required",
+                        "error": (
+                            "A stale or unknown sidecar remains authoritative until "
+                            "a confirmed local recovery action resolves it"
+                        ),
+                        "lease": side_rec.to_dict() if side_rec else None,
+                    }
 
-            if not _create_sidecar_exclusive(side, record.to_dict()):
+            if not _create_sidecar_exclusive(side, record.to_sidecar_dict()):
                 # Race: another process created it first
                 raced = _read_sidecar(side)
                 return {
                     "success": False,
                     "error_code": "document_locked_by_other",
                     "error": "Failed to create exclusive sidecar (lost race)",
-                    "lease": raced,
+                    "lease": _public_sidecar_payload(raced),
                 }
 
         _registry[doc_key] = record
@@ -575,7 +1050,7 @@ def heartbeat_lease(
                 "error_code": "document_not_locked",
                 "error": "No active lease for this document",
             }
-        if record.token != token:
+        if not token or not hmac.compare_digest(str(record.token), str(token)):
             return {
                 "success": False,
                 "error_code": "invalid_lease_token",
@@ -585,18 +1060,187 @@ def heartbeat_lease(
         record.last_heartbeat = time.time()
         if current_operation is not None:
             record.current_operation = current_operation
-        if state is not None:
-            record.state = state
-        if document_dirty is not None:
-            record.document_dirty = bool(document_dirty)
+        if state is not None and state != record.state:
+            return {
+                "success": False,
+                "error_code": "state_owned_by_server",
+                "error": "Heartbeat cannot change the lease state",
+                "lease": record.to_dict(),
+            }
+        if document_dirty is not None and bool(document_dirty) != record.document_dirty:
+            return {
+                "success": False,
+                "error_code": "dirty_state_owned_by_server",
+                "error": "Heartbeat cannot change authoritative document dirty state",
+                "lease": record.to_dict(),
+            }
+        record.heartbeat_sequence += 1
+        record.record_revision += 1
         payload = record.to_dict()
+        sidecar_payload = record.to_sidecar_dict()
 
     is_path_key = os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd")
     if is_path_key:
         side = sidecar_path_for(doc_key)
         if side.is_file():
-            _write_json_atomic(side, payload)
+            _write_json_atomic(side, sidecar_payload)
     return {"success": True, "lease": payload}
+
+
+_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    LeaseState.ACQUIRING.value: {
+        LeaseState.LOCKED_IDLE.value,
+        LeaseState.LOCKED_ERROR.value,
+    },
+    LeaseState.LOCKED_IDLE.value: {
+        LeaseState.LOCKED_EDITING.value,
+        LeaseState.LOCKED_RECOMPUTING.value,
+        LeaseState.LOCKED_SAVING.value,
+        LeaseState.LOCKED_ERROR.value,
+        LeaseState.USER_INTERVENED.value,
+        LeaseState.CANCELLING.value,
+        LeaseState.RELEASING.value,
+        LeaseState.STALE.value,
+    },
+    LeaseState.LOCKED_EDITING.value: {
+        LeaseState.LOCKED_IDLE.value,
+        LeaseState.LOCKED_RECOMPUTING.value,
+        LeaseState.LOCKED_ERROR.value,
+        LeaseState.USER_INTERVENED.value,
+        LeaseState.CANCELLING.value,
+        LeaseState.STALE.value,
+    },
+    LeaseState.LOCKED_RECOMPUTING.value: {
+        LeaseState.LOCKED_IDLE.value,
+        LeaseState.LOCKED_ERROR.value,
+        LeaseState.USER_INTERVENED.value,
+        LeaseState.CANCELLING.value,
+        LeaseState.STALE.value,
+    },
+    LeaseState.LOCKED_SAVING.value: {
+        LeaseState.LOCKED_IDLE.value,
+        LeaseState.LOCKED_ERROR.value,
+        LeaseState.USER_INTERVENED.value,
+        LeaseState.STALE.value,
+    },
+    LeaseState.LOCKED_ERROR.value: {
+        LeaseState.LOCKED_EDITING.value,
+        LeaseState.LOCKED_SAVING.value,
+        LeaseState.USER_INTERVENED.value,
+        LeaseState.CANCELLING.value,
+        LeaseState.UNLOCKED_DIRTY.value,
+        LeaseState.STALE.value,
+    },
+    LeaseState.CANCELLING.value: {
+        LeaseState.LOCKED_IDLE.value,
+        LeaseState.LOCKED_ERROR.value,
+        LeaseState.USER_INTERVENED.value,
+    },
+    LeaseState.RELEASING.value: {
+        LeaseState.UNLOCKED_SAVED.value,
+        LeaseState.LOCKED_ERROR.value,
+    },
+    LeaseState.STALE.value: {
+        LeaseState.LOCKED_IDLE.value,
+        LeaseState.USER_INTERVENED.value,
+        LeaseState.UNLOCKED_DIRTY.value,
+    },
+    LeaseState.USER_INTERVENED.value: {LeaseState.UNLOCKED_DIRTY.value},
+    LeaseState.UNLOCKED_DIRTY.value: {LeaseState.ACQUIRING.value},
+    LeaseState.UNLOCKED_SAVED.value: {LeaseState.ACQUIRING.value},
+}
+
+
+def transition_lease(
+    doc_key: str,
+    token: str,
+    new_state: str,
+    *,
+    current_operation: str | None = None,
+    document_dirty: bool | None = None,
+    request_id: str | None = None,
+    error: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Commit a server-owned state transition and persist it immediately."""
+    if new_state not in {state.value for state in LeaseState}:
+        return {
+            "success": False,
+            "error_code": "invalid_lease_state",
+            "error": f"Unknown lease state: {new_state}",
+        }
+    with _registry_lock:
+        record = _registry.get(doc_key)
+        if record is None:
+            return {
+                "success": False,
+                "error_code": "document_not_locked",
+                "error": "No active lease for this document",
+            }
+        if not token or not hmac.compare_digest(str(record.token), str(token)):
+            return {
+                "success": False,
+                "error_code": "invalid_lease_token",
+                "error": "Lease token does not match",
+                "lease": record.to_dict(),
+            }
+        if new_state != record.state and new_state not in _ALLOWED_TRANSITIONS.get(
+            record.state, set()
+        ):
+            return {
+                "success": False,
+                "error_code": "forbidden_lease_transition",
+                "error": f"Transition {record.state} -> {new_state} is forbidden",
+                "lease": record.to_dict(),
+            }
+        previous = record.state
+        record.state = new_state
+        record.state_revision += 1
+        record.record_revision += 1
+        record.last_heartbeat = time.time()
+        record.request_id = request_id
+        if current_operation is not None:
+            record.current_operation = current_operation
+        if document_dirty is not None:
+            dirty = bool(document_dirty)
+            if dirty and not record.document_dirty:
+                record.last_mutation_revision += 1
+            record.document_dirty = dirty
+        record.error_info = error
+        if new_state == LeaseState.USER_INTERVENED.value:
+            record.user_intervened = True
+        payload = record.to_dict()
+        sidecar_payload = record.to_sidecar_dict()
+
+    if os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd"):
+        side = sidecar_path_for(doc_key)
+        if not side.is_file():
+            return {
+                "success": False,
+                "error_code": "sidecar_missing",
+                "error": "Saved-document sidecar is missing; writes remain blocked",
+                "lease": payload,
+            }
+        try:
+            _write_json_atomic(side, sidecar_payload)
+        except OSError as exc:
+            with _registry_lock:
+                if doc_key in _registry:
+                    _registry[doc_key].state = LeaseState.LOCKED_ERROR.value
+                    _registry[doc_key].error_info = {
+                        "code": "sidecar_write_failed",
+                        "message": str(exc),
+                    }
+            return {
+                "success": False,
+                "error_code": "sidecar_write_failed",
+                "error": str(exc),
+                "lease": payload,
+            }
+    return {
+        "success": True,
+        "previous_state": previous,
+        "lease": payload,
+    }
 
 
 def release_lease(doc_key: str, token: str) -> dict[str, Any]:
@@ -608,19 +1252,97 @@ def release_lease(doc_key: str, token: str) -> dict[str, Any]:
                 "error_code": "document_not_locked",
                 "error": "No active lease for this document",
             }
-        if record.token != token:
+        if not token or not hmac.compare_digest(str(record.token), str(token)):
             return {
                 "success": False,
                 "error_code": "invalid_lease_token",
                 "error": "Lease token does not match",
                 "lease": record.to_dict(),
             }
-        del _registry[doc_key]
+        if record.state != LeaseState.LOCKED_IDLE.value:
+            return {
+                "success": False,
+                "error_code": "lease_not_releasable",
+                "error": f"Cannot cleanly release a lease in {record.state}",
+                "lease": record.to_dict(),
+            }
+        if record.document_dirty:
+            return {
+                "success": False,
+                "error_code": "document_dirty",
+                "error": "Dirty documents must be saved/verified or restored before release",
+                "lease": record.to_dict(),
+            }
+        if record.last_verified_save_revision < record.last_mutation_revision:
+            return {
+                "success": False,
+                "error_code": "save_not_verified",
+                "error": "The verified save predates the last mutation",
+                "lease": record.to_dict(),
+            }
+        record.state = LeaseState.RELEASING.value
+        record.state_revision += 1
+        record.record_revision += 1
 
     is_path_key = os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd")
     if is_path_key:
-        _remove_sidecar(sidecar_path_for(doc_key))
-    return {"success": True, "released": doc_key}
+        side = sidecar_path_for(doc_key)
+        persisted = _read_sidecar(side)
+        if not persisted:
+            with _registry_lock:
+                record.state = LeaseState.LOCKED_ERROR.value
+                record.error_info = {
+                    "code": "sidecar_missing",
+                    "message": "Sidecar disappeared during release",
+                }
+            return {
+                "success": False,
+                "error_code": "sidecar_missing",
+                "error": "Sidecar disappeared during release; ownership remains fenced",
+                "lease": record.to_dict(),
+            }
+        if (
+            persisted.get("lease_id") != record.lease_id
+            or int(persisted.get("generation", 0)) != record.generation
+            or not hmac.compare_digest(
+                str(persisted.get("token_fingerprint", "")),
+                str(record.to_sidecar_dict()["token_fingerprint"]),
+            )
+        ):
+            with _registry_lock:
+                record.state = LeaseState.LOCKED_ERROR.value
+                record.error_info = {
+                    "code": "sidecar_replaced",
+                    "message": "Sidecar ownership changed during release",
+                }
+            return {
+                "success": False,
+                "error_code": "sidecar_replaced",
+                "error": "Sidecar ownership changed during release",
+                "lease": record.to_dict(),
+            }
+        try:
+            side.unlink()
+        except OSError as exc:
+            with _registry_lock:
+                record.state = LeaseState.LOCKED_ERROR.value
+                record.error_info = {
+                    "code": "sidecar_remove_failed",
+                    "message": str(exc),
+                }
+            return {
+                "success": False,
+                "error_code": "sidecar_remove_failed",
+                "error": str(exc),
+                "lease": record.to_dict(),
+            }
+    with _registry_lock:
+        _registry.pop(doc_key, None)
+    return {
+        "success": True,
+        "released": doc_key,
+        "terminal_state": LeaseState.UNLOCKED_SAVED.value,
+    }
 
 
 def force_release_stale_lock(doc_key: str) -> dict[str, Any]:
@@ -700,7 +1422,7 @@ def migrate_lease_key(old_key: str, new_key: str, *, doc_name: str | None = None
         # Create destination sidecar first (no unlocked interval)
         migrated = LeaseRecord(
             **{
-                **record.to_dict(),
+                **asdict(record),
                 "doc_key": new_key,
                 "doc_name": doc_name or record.doc_name,
                 "state": LeaseState.LOCKED_SAVING.value,
@@ -711,12 +1433,21 @@ def migrate_lease_key(old_key: str, new_key: str, *, doc_name: str | None = None
         migrated.baseline_mtime = mtime
         migrated.baseline_hash = digest
         migrated.last_save_time = time.time()
-        migrated.state = LeaseState.LOCKED_EDITING.value
+        # ``migrate_lease_key`` is invoked only after the save observer has
+        # verified the destination.  Publish that completed save as idle and
+        # clean so the compatibility lifecycle can finalize normally.
+        migrated.state = LeaseState.LOCKED_IDLE.value
+        migrated.document_dirty = False
+        migrated.last_verified_save_revision = migrated.last_mutation_revision
 
         side_new = sidecar_path_for(new_key)
+        expected_fingerprint = record.to_sidecar_dict()["token_fingerprint"]
         if side_new.is_file():
             existing = _read_sidecar(side_new)
-            if existing and existing.get("token") != record.token:
+            if existing and not hmac.compare_digest(
+                str(existing.get("token_fingerprint") or ""),
+                expected_fingerprint,
+            ):
                 other = LeaseRecord.from_dict(existing) if existing else None
                 if other and not _is_stale(other) and pid_alive(other.pid):
                     return {
@@ -725,20 +1456,30 @@ def migrate_lease_key(old_key: str, new_key: str, *, doc_name: str | None = None
                         "error": "Destination path already locked by another instance",
                         "lease": other.to_dict(),
                     }
-                if other is None or not pid_alive(other.pid):
-                    _remove_sidecar(side_new)
+                return {
+                    "success": False,
+                    "error_code": "stale_lock_recovery_required",
+                    "error": (
+                        "Destination sidecar requires confirmed local recovery; "
+                        "Save As did not alter it"
+                    ),
+                    "lease": other.to_dict() if other else None,
+                }
 
-        if not _create_sidecar_exclusive(side_new, migrated.to_dict()):
+        if not _create_sidecar_exclusive(side_new, migrated.to_sidecar_dict()):
             # If we own a pre-created destination (Save As held it), overwrite
             existing = _read_sidecar(side_new)
-            if existing and existing.get("token") == record.token:
-                _write_json_atomic(side_new, migrated.to_dict())
+            if existing and hmac.compare_digest(
+                str(existing.get("token_fingerprint") or ""),
+                expected_fingerprint,
+            ):
+                _write_json_atomic(side_new, migrated.to_sidecar_dict())
             else:
                 return {
                     "success": False,
                     "error_code": "document_locked_by_other",
                     "error": "Could not create destination sidecar",
-                    "lease": existing,
+                    "lease": _public_sidecar_payload(existing),
                 }
 
         _registry[new_key] = migrated
@@ -760,18 +1501,31 @@ def mark_user_intervened(doc_key: str) -> LeaseRecord | None:
         if record is None:
             return None
         record.state = LeaseState.USER_INTERVENED.value
+        record.generation += 1
+        # Rotate to an unreturned value.  The old agent can neither mutate nor
+        # heartbeat this generation and must not automatically reacquire.
+        record.token = secrets.token_urlsafe(32)
+        record.token_fingerprint = ""
+        record.state_revision += 1
+        record.record_revision += 1
+        record.user_intervened = True
         record.current_operation = "user_intervened"
-        payload = record.to_dict()
+        sidecar_payload = record.to_sidecar_dict()
     if os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd"):
         side = sidecar_path_for(doc_key)
         if side.is_file():
-            _write_json_atomic(side, payload)
+            _write_json_atomic(side, sidecar_payload)
     return record
 
 
-def check_mutation_allowed(doc_key: str) -> dict[str, Any]:
-    """Enforce ownership for a mutation on doc_key using request identity/token."""
-    identity = get_request_identity()
+def check_mutation_allowed(
+    doc_key: str,
+    *,
+    identity: dict[str, Any] | None = None,
+    allowed_states: set[str] | None = None,
+) -> dict[str, Any]:
+    """Enforce exact owner, document, generation, and token authorization."""
+    identity = dict(identity or get_request_identity())
     instance_id = identity.get("instance_id")
     token = identity.get("lease_token")
 
@@ -802,8 +1556,17 @@ def check_mutation_allowed(doc_key: str) -> dict[str, Any]:
             "error_code": "user_intervened",
             "error": (
                 "A user edited this document while the agent held the lease. "
-                "Stop and re-acquire deliberately after coordinating with the user."
+                "The revoked agent may not automatically reacquire it."
             ),
+            "lease": record.to_dict(),
+        }
+
+    permitted = allowed_states or {LeaseState.LOCKED_IDLE.value}
+    if record.state not in permitted:
+        return {
+            "success": False,
+            "error_code": "lease_state_blocks_mutation",
+            "error": f"Lease state {record.state} does not permit this mutation",
             "lease": record.to_dict(),
         }
 
@@ -818,14 +1581,89 @@ def check_mutation_allowed(doc_key: str) -> dict[str, Any]:
             "lease": record.to_dict(),
         }
 
-    if token and token != record.token:
+    credentials = identity.get("lease_credentials") or []
+    if credentials:
+        matched = next(
+            (
+                item
+                for item in credentials
+                if isinstance(item, dict)
+                and (
+                    item.get("lease_id") == record.lease_id
+                    or (
+                        record.document_session_uuid
+                        and item.get("document_session_uuid")
+                        == record.document_session_uuid
+                    )
+                )
+            ),
+            None,
+        )
+        if matched is None:
+            return {
+                "success": False,
+                "error_code": "lease_credential_missing",
+                "error": "Request has no credential for this document",
+                "lease": record.to_dict(),
+            }
+        if matched.get("lease_id") != record.lease_id:
+            return {
+                "success": False,
+                "error_code": "lease_id_mismatch",
+                "error": "Lease identifier does not match the active lease",
+                "lease": record.to_dict(),
+            }
+        if int(matched.get("generation", 0)) != record.generation:
+            return {
+                "success": False,
+                "error_code": "lease_generation_mismatch",
+                "error": "Lease generation has been fenced",
+                "lease": record.to_dict(),
+            }
+        token = matched.get("token")
+    else:
+        if identity.get("lease_id") and identity.get("lease_id") != record.lease_id:
+            return {
+                "success": False,
+                "error_code": "lease_id_mismatch",
+                "error": "Lease identifier does not match the active lease",
+                "lease": record.to_dict(),
+            }
+        generation = identity.get("lease_generation")
+        if generation is not None and int(generation) != record.generation:
+            return {
+                "success": False,
+                "error_code": "lease_generation_mismatch",
+                "error": "Lease generation has been fenced",
+                "lease": record.to_dict(),
+            }
+        session_uuid = identity.get("document_session_uuid")
+        if (
+            session_uuid
+            and record.document_session_uuid
+            and session_uuid != record.document_session_uuid
+        ):
+            return {
+                "success": False,
+                "error_code": "document_session_mismatch",
+                "error": "Document session identity does not match",
+                "lease": record.to_dict(),
+            }
+
+    if not token:
+        return {
+            "success": False,
+            "error_code": "missing_lease_token",
+            "error": "Every mutation must present the active lease token",
+            "lease": record.to_dict(),
+        }
+    if not hmac.compare_digest(str(token), str(record.token)):
         return {
             "success": False,
             "error_code": "invalid_lease_token",
             "error": "Presented lease token does not match the active lease",
             "lease": record.to_dict(),
         }
-
     return {"success": True, "lease": record.to_dict()}
 
 
@@ -894,6 +1732,13 @@ def _none_doc(_params: tuple) -> str | None:
 VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] = {
     # Lifecycle / control
     "ping": (VerbKind.LIFECYCLE, _none_doc),
+    "handshake_v2": (VerbKind.LIFECYCLE, _none_doc),
+    "invoke_v2": (VerbKind.LIFECYCLE, _none_doc),
+    "invoke_v2_control": (VerbKind.LIFECYCLE, _none_doc),
+    "lease_heartbeat_batch": (VerbKind.LIFECYCLE, _none_doc),
+    "lease_reconcile": (VerbKind.LIFECYCLE, _none_doc),
+    "get_request_status": (VerbKind.LIFECYCLE, _none_doc),
+    "cancel_request": (VerbKind.LIFECYCLE, _none_doc),
     "get_instance_info": (VerbKind.LIFECYCLE, _none_doc),
     "check_rpc_sync": (VerbKind.LIFECYCLE, _none_doc),
     "get_worker_status": (VerbKind.LIFECYCLE, _none_doc),
@@ -904,7 +1749,11 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "get_document_lock": (VerbKind.LIFECYCLE, _none_doc),
     "list_document_locks": (VerbKind.LIFECYCLE, _none_doc),
     "heartbeat_document_lock": (VerbKind.LIFECYCLE, _none_doc),
+    "update_document_lock": (VerbKind.LIFECYCLE, _none_doc),
     "release_document_lock": (VerbKind.LIFECYCLE, _none_doc),
+    "save_document": (VerbKind.LIFECYCLE, _none_doc),
+    "save_document_as": (VerbKind.LIFECYCLE, _none_doc),
+    "finalize_document_edit": (VerbKind.LIFECYCLE, _none_doc),
     "force_release_stale_lock": (VerbKind.LIFECYCLE, _none_doc),
     # Document open/create (create needs no prior lease; open is read of file)
     "create_document": (VerbKind.MUTATING, _none_doc),  # no prior doc; gated specially
@@ -918,7 +1767,7 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "edit_object": (VerbKind.MUTATING, _params0_doc),
     "delete_object": (VerbKind.MUTATING, _params0_doc),
     "repair_references": (VerbKind.MUTATING, _params0_doc),
-    "insert_part_from_library": (VerbKind.MUTATING, _none_doc),
+    "insert_part_from_library": (VerbKind.MUTATING, _params0_doc),
     "recompute_document": (VerbKind.MUTATING, _params0_doc),
     "recompute_and_wait": (VerbKind.MUTATING, _params0_doc),
     "undo": (VerbKind.MUTATING, _params0_doc),
@@ -942,6 +1791,7 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "body_create": (VerbKind.MUTATING, _params0_doc),
     "body_set_tip": (VerbKind.MUTATING, _params0_doc),
     "animate_placement": (VerbKind.MUTATING, _params0_doc),
+    "repair_view_placements": (VerbKind.MUTATING, _params0_doc),
     "execute_code": (VerbKind.MUTATING, _options_document),
     "execute_code_async": (VerbKind.MUTATING, _none_doc),
     # Read-only
@@ -998,6 +1848,104 @@ def extract_referenced_documents_from_code(code: str) -> set[str]:
             ):
                 names.add(node.args[0].value)
     return names
+
+
+def validate_unsafe_execute_scope(
+    code: str, declared_documents: set[str]
+) -> dict[str, Any]:
+    """Conservatively validate explicitly enabled public live Python.
+
+    This is scope validation, not a Python sandbox.  Code that can obscure
+    document discovery is rejected because the GUI guard cannot prove that its
+    declared credential set is complete.  Repository-generated operations are
+    separately audited and do not use this public unsafe path.
+    """
+    import ast
+
+    violations: list[str] = []
+    referenced: set[str] = set()
+    try:
+        tree = ast.parse(code, mode="exec")
+    except SyntaxError as exc:
+        return {
+            "ok": False,
+            "referenced_documents": [],
+            "violations": [f"syntax_error:{exc.lineno or 0}"],
+        }
+
+    obscuring_calls = {
+        "__import__",
+        "compile",
+        "delattr",
+        "eval",
+        "exec",
+        "getattr",
+        "globals",
+        "locals",
+        "setattr",
+        "vars",
+    }
+    document_lifecycle_calls = {
+        "closeDocument",
+        "newDocument",
+        "open",
+        "openDocument",
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            violations.append(f"imports_not_allowed:{getattr(node, 'lineno', 0)}")
+            continue
+        if isinstance(node, ast.Attribute) and node.attr == "ActiveDocument":
+            violations.append(
+                f"active_document_not_allowed:{getattr(node, 'lineno', 0)}"
+            )
+            continue
+        if isinstance(node, ast.Name) and node.id == "ActiveDocument":
+            violations.append(
+                f"active_document_not_allowed:{getattr(node, 'lineno', 0)}"
+            )
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        call_name = (
+            func.id
+            if isinstance(func, ast.Name)
+            else func.attr
+            if isinstance(func, ast.Attribute)
+            else ""
+        )
+        if call_name in obscuring_calls:
+            violations.append(
+                f"dynamic_code_or_lookup_not_allowed:{call_name}:"
+                f"{getattr(node, 'lineno', 0)}"
+            )
+        if call_name in document_lifecycle_calls:
+            violations.append(
+                f"document_lifecycle_not_allowed:{call_name}:"
+                f"{getattr(node, 'lineno', 0)}"
+            )
+        if call_name != "getDocument":
+            continue
+        if (
+            not node.args
+            or not isinstance(node.args[0], ast.Constant)
+            or not isinstance(node.args[0].value, str)
+        ):
+            violations.append(
+                f"dynamic_document_lookup_not_allowed:{getattr(node, 'lineno', 0)}"
+            )
+            continue
+        referenced.add(node.args[0].value)
+
+    undeclared = sorted(referenced - set(declared_documents))
+    if undeclared:
+        violations.append("undeclared_documents:" + ",".join(undeclared))
+    return {
+        "ok": not violations,
+        "referenced_documents": sorted(referenced),
+        "violations": sorted(set(violations)),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1069,7 +2017,7 @@ class DocumentLockObserver:
         # Pre-create destination sidecar with same token (no unlocked gap)
         side = sidecar_path_for(dest)
         if not side.is_file():
-            pre = dict(record.to_dict())
+            pre = dict(record.to_sidecar_dict())
             pre["doc_key"] = dest
             pre["state"] = LeaseState.LOCKED_SAVING.value
             pre["last_heartbeat"] = time.time()
@@ -1110,10 +2058,10 @@ class DocumentLockObserver:
             with _registry_lock:
                 token = _registry[dest].token if dest in _registry else ""
             if token:
-                heartbeat_lease(
+                transition_lease(
                     dest,
                     token,
-                    state=LeaseState.LOCKED_EDITING.value,
+                    LeaseState.LOCKED_IDLE.value,
                     current_operation="",
                     document_dirty=False,
                 )

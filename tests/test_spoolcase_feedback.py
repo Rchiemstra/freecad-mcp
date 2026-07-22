@@ -37,6 +37,61 @@ class TestDebugLog:
         assert "secret model path" not in text
         assert "A" * 100 not in text
 
+    def test_recursively_redacts_credentials_and_message_echoes(self):
+        lease_token = "lease-token-must-not-reach-debug-log"
+        session_token = "session-token-must-not-reach-debug-log"
+        fingerprint = "sha256:fingerprint-must-not-reach-debug-log"
+        wrapped_secret = "wrapped-secret-must-not-reach-debug-log"
+        payload = {
+            "credential": {
+                "lease_id": "useful-lease-id",
+                "token": lease_token,
+            },
+            "session_token": session_token,
+            "token_fingerprint": fingerprint,
+            "auth_secret": {"current": wrapped_secret},
+            "nested": {
+                "message": (
+                    f"failed with {lease_token}, {session_token}, {fingerprint}, "
+                    f"and {wrapped_secret}"
+                ),
+                "safe": "useful diagnostic",
+            },
+        }
+
+        safe = redact_payload(payload)
+        rendered = json.dumps(safe, sort_keys=True)
+
+        assert lease_token not in rendered
+        assert session_token not in rendered
+        assert fingerprint not in rendered
+        assert wrapped_secret not in rendered
+        assert safe["credential"]["lease_id"] == "useful-lease-id"
+        assert safe["nested"]["safe"] == "useful diagnostic"
+        assert "[REDACTED]" in safe["nested"]["message"]
+
+    def test_log_event_redacts_supplied_secret_from_error_and_message(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("FREECAD_MCP_DEBUG", "1")
+        log_file = tmp_path / "mcp_debug.log"
+        secret = "out-of-band-secret-must-not-reach-debug-log"
+
+        log_event(
+            "test",
+            payload={"message": f"payload echoed {secret}", "safe": "kept"},
+            error=f"transport echoed {secret}",
+            secrets=(secret,),
+            path=log_file,
+        )
+
+        rendered = log_file.read_text(encoding="utf-8")
+        entry = json.loads(rendered)
+        assert secret not in rendered
+        assert entry["error"] == "transport echoed [REDACTED]"
+        assert entry["payload"]["message"] == "payload echoed [REDACTED]"
+        assert entry["payload"]["safe"] == "kept"
+
     def test_log_rotation(self, monkeypatch, tmp_path):
         monkeypatch.setenv("FREECAD_MCP_DEBUG", "1")
         monkeypatch.setenv("FREECAD_MCP_DEBUG_MAX_BYTES", "200")

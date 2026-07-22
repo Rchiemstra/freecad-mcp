@@ -254,7 +254,7 @@ def translate_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Object '{obj_name}' translated by ({dx},{dy},{dz})",
-                     "Failed to translate")
+                     "Failed to translate", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +287,7 @@ def rotate_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Object '{obj_name}' rotated {angle_deg}° about axis",
-                     "Failed to rotate")
+                     "Failed to rotate", document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -312,4 +312,4 @@ def scale_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Object '{obj_name}' scaled by ({sx},{sy},{sz})",
-                     "Failed to scale")
+                     "Failed to scale", document=doc_name)

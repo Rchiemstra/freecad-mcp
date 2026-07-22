@@ -26,7 +26,13 @@ else:
         except Exception: pass
     _add_to_container(_container, _binder)
     _doc.recompute()
-    _src_bb = _global_boundbox(_src)
+    _src_compare_shape = getattr(_src, 'Shape', None)
+    if _subs:
+        _selected_shapes = [_subshape(_src, _sub) for _sub in _subs]
+        _selected_shapes = [_shape for _shape in _selected_shapes if _shape is not None]
+        if len(_selected_shapes) == 1: _src_compare_shape = _selected_shapes[0]
+        elif _selected_shapes: _src_compare_shape = Part.makeCompound(_selected_shapes)
+    _src_bb = _global_boundbox(_src, _src_compare_shape)
     _binder_bb = _global_boundbox(_binder)
     _delta = _bbox_delta(_src_bb, _binder_bb)
     _warning = None

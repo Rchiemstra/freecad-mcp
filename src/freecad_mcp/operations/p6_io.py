@@ -36,8 +36,18 @@ def export_step_operation(
         file_path=repr(file_path),
         obj_names=repr(obj_names) if obj_names else "None",
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Exported STEP to '{file_path}'", "Failed to export STEP")
+    return _run_code(
+        freecad,
+        True,
+        "\n".join(lines),
+        f"Exported STEP to '{file_path}'",
+        "Failed to export STEP",
+        document=doc_name,
+        recompute="none",
+        capture_view=False,
+        read_only=True,
+        execution_mode="worker",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +64,8 @@ def import_step_operation(
         file_path=repr(file_path),
     )
     return _run_code(freecad, True, "\n".join(lines),
-                     f"Imported STEP from '{file_path}'", "Failed to import STEP")
+                     f"Imported STEP from '{file_path}'", "Failed to import STEP",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +85,18 @@ def export_stl_operation(
         obj_names=repr(obj_names) if obj_names else "None",
         mesh_deviation=repr(mesh_deviation),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Exported STL to '{file_path}'", "Failed to export STL")
+    return _run_code(
+        freecad,
+        True,
+        "\n".join(lines),
+        f"Exported STL to '{file_path}'",
+        "Failed to export STL",
+        document=doc_name,
+        recompute="none",
+        capture_view=False,
+        read_only=True,
+        execution_mode="worker",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -93,8 +114,18 @@ def export_brep_operation(
         obj_name=repr(obj_name),
         file_path=repr(file_path),
     )
-    return _run_code(freecad, True, "\n".join(lines),
-                     f"Exported BREP to '{file_path}'", "Failed to export BREP")
+    return _run_code(
+        freecad,
+        True,
+        "\n".join(lines),
+        f"Exported BREP to '{file_path}'",
+        "Failed to export BREP",
+        document=doc_name,
+        recompute="none",
+        capture_view=False,
+        read_only=True,
+        execution_mode="worker",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +144,8 @@ def import_brep_operation(
         obj_name=repr(obj_name),
     )
     return _run_code(freecad, True, "\n".join(lines),
-                     f"Imported BREP from '{file_path}'", "Failed to import BREP")
+                     f"Imported BREP from '{file_path}'", "Failed to import BREP",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -139,4 +171,5 @@ def set_color_operation(
         transparency=repr(transparency),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Color applied to '{obj_name}'", "Failed to set color")
+                     f"Color applied to '{obj_name}'", "Failed to set color",
+                     document=doc_name)

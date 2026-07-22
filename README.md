@@ -76,6 +76,89 @@ The setting is saved to `freecad_mcp_settings.json` and persists across sessions
 
 You can disable it at any time by unchecking **Auto-Start Server** in the same menu.
 
+## Per-document agent leases and isolated development
+
+FreeCAD MCP supports renewable per-document write leases. In `enforce` mode,
+each cooperative mutation must belong to the authenticated MCP runtime, name an
+explicit live document, carry that document's unguessable lease credential,
+and pass authorization again on FreeCAD's GUI thread. Ownership, current
+operation, heartbeat age, dirty state, and recovery errors remain visible in
+FreeCAD between MCP calls.
+
+The addon setting `document_lease_mode` has three compatibility levels:
+
+- `off` preserves an existing profile whose two legacy lock booleans were
+  both false. Recognized active v2 foreign sidecars still block writes.
+- `observe` is the default for a newly created ordinary profile. It displays
+  lease state and warnings without requiring legacy callers to acquire a
+  lease.
+- `enforce` requires a UUID profile identity, an owner-only authentication
+  secret, protocol v2, and exact lease credentials for every mutation.
+
+Existing settings are migrated explicitly: both legacy booleans true becomes
+`enforce`, lock enabled without enforcement becomes `observe`, and all other
+legacy combinations remain `off`. Malformed or unknown policy values prevent
+the RPC server from starting instead of silently selecting a weaker mode.
+
+Task descriptions stay in the addon's process-local status registry by
+default; schema-v2 sidecars write an empty `task_summary`. Administrators who
+accept the metadata exposure may set `persist_task_summary_in_sidecar=true`;
+only a sanitized, single-line summary of at most 256 characters is then
+persisted. Raw lease tokens and token fingerprints are never exposed through
+public status.
+
+A normal agent workflow acquires once, performs typed modelling calls against
+the returned document session, then uses typed finalization instead of raw
+Python save code:
+
+```text
+acquire_document_lock({document_name: "Bracket"}, "Body → Sketch → Pad", agent_id)
+create_object(PartDesign::Body) / sketch_create / sketch_add_constraint / pad_feature
+finalize_document_edit(
+  {document_session_uuid: "<acquired session UUID>"},
+  save_mode="save",
+  validation_profile="default"
+)
+```
+
+The MCP process keeps the one-time token in memory, renews it automatically,
+and attaches the exact credential to each scoped mutation. A failed mutation
+or save retains the lease in a visible error state for retry or local recovery;
+it is never reported as a clean release.
+
+For development beside an existing FreeCAD/MCP session, create the private
+manifest-driven instance:
+
+```powershell
+python scripts/setup_isolated_profile.py
+python scripts/setup_cursor_mcp_isolated.py
+python scripts/start_freecad_isolated.py
+```
+
+These scripts add or update only Cursor's `freecad-isolated` entry. They do not
+modify, connect to, stop, or reuse the existing `freecad` entry or default
+`:9875` listener. The private profile uses a persistent random identity, a
+separate owner-only 256-bit authentication secret, RPC port 9876, and
+`document_lease_mode=enforce`. The launcher accepts readiness only after the
+profile-secret-authenticated v2 handshake proves the exact launched PID,
+profile, runtime UUID, endpoint, protocol, process start, version, and build—not
+merely a successful `ping` or an unauthenticated status response.
+
+> **Security boundary:** leases prevent accidental cooperative MCP conflicts;
+> they are not a FreeCAD or Python sandbox. Python console code, macros,
+> third-party C++ commands, or a malicious process running as the same OS user
+> can bypass pre-mutation checks. Unexpected changes are detected and fence the
+> agent, but absolute in-process immutability requires a FreeCAD core API. Keep
+> RPC on loopback or use an encrypted tunnel/TLS proxy for remote access.
+
+Documentation:
+
+- [Lease lifecycle and GUI behavior](doc/document-leases.md)
+- [Sidecar schema v2](doc/document-lease-sidecar-v2.md)
+- [Isolated instance setup and manifest](doc/isolated-instance.md)
+- [Crash and stale-lock recovery](doc/lease-recovery.md)
+- [Security model and limitations](doc/lease-security.md)
+
 ## Setting up Claude Desktop
 
 Pre-installation of the [uvx](https://docs.astral.sh/uv/guides/tools/) is required.
@@ -139,11 +222,19 @@ git clone https://github.com/neka-nat/freecad-mcp.git
 
 ## Remote Connections
 
-By default the RPC server does not accept remote connections and listens on `localhost`. To control FreeCAD from another machine on your network:
+By default the RPC server does not accept remote connections and listens on
+loopback. HMAC authenticates protocol-v2 messages but does not encrypt session
+or lease credentials. In `enforce` mode, a plain non-loopback bind is rejected
+by default. Keep FreeCAD bound to loopback and expose it through an SSH tunnel
+or TLS proxy.
+
+The legacy direct-network workflow below is available only for `off`/`observe`
+profiles (or an administrator's explicit unsafe transport override). It should
+be used only on a trusted, isolated network:
 
 ### 1. Enable remote connections in FreeCAD
 
-In the **FreeCAD MCP** toolbar:
+In the **FreeCAD MCP** toolbar for an `off`/`observe` profile:
 
 1. Check **Remote Connections** — the RPC server will bind to `0.0.0.0` (all interfaces) on the next restart. For security reasons, it only accepts connections from the IP addresses or CIDR subnets specified in the **Allowed IPs** field. By default this is `127.0.0.1`.
 2. Click **Configure Allowed IPs** and enter a comma-separated list of IP addresses or CIDR subnets that are allowed to connect, e.g.:
@@ -156,7 +247,8 @@ In the **FreeCAD MCP** toolbar:
 
 ### 2. Point the MCP server at the remote host
 
-Pass the `--host` flag with the IP address or hostname of the machine running FreeCAD:
+Pass the canonical `--rpc-host` option with the IP address or hostname of the
+machine running FreeCAD (`--host` remains a deprecated alias):
 
 ```json
 {
@@ -165,7 +257,7 @@ Pass the `--host` flag with the IP address or hostname of the machine running Fr
       "command": "uvx",
       "args": [
         "freecad-mcp",
-        "--host", "192.168.1.100"
+        "--rpc-host", "192.168.1.100"
       ]
     }
   }

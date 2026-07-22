@@ -79,10 +79,14 @@ class GuiOutcome:
     error: str | None = None
 
 
-@dataclass
+@dataclass(eq=False)
 class GuiRequest:
     callable: Callable[[], Any]
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    session_id: str | None = None
+    on_complete: Callable[[str, GuiOutcome], None] | None = field(
+        default=None, repr=False
+    )
     completion: threading.Event = field(default_factory=threading.Event)
     outcome: GuiOutcome | None = None
     state: str = "pending"
@@ -96,14 +100,32 @@ class GuiRequest:
             self.state = "running"
             return True
 
-    def cancel_if_pending(self) -> bool:
+    def cancel_if_pending(self, before_wake: Callable[[], None] | None = None) -> bool:
+        callback = None
+        outcome = None
         with self._state_lock:
             if self.state != "pending":
                 return False
             self.state = "cancelled"
             self.outcome = GuiOutcome(False, error="GUI request cancelled before execution")
-            self.completion.set()
-            return True
+            outcome = self.outcome
+            callback = self.on_complete
+        if callback is not None:
+            try:
+                callback(self.request_id, outcome)
+            except Exception:
+                pass
+        if before_wake is not None:
+            before_wake()
+        # The waiting handler must never observe completion before attribution,
+        # cancellation resolution, and late-result journaling have finished.
+        self.completion.set()
+        return True
+
+    @property
+    def state_snapshot(self) -> str:
+        with self._state_lock:
+            return self.state
 
     def mark_timed_out_if_running(self) -> bool:
         with self._state_lock:
@@ -117,11 +139,25 @@ class GuiRequest:
         with self._state_lock:
             return self.state == "completed"
 
-    def complete(self, outcome: GuiOutcome) -> None:
+    def complete(
+        self,
+        outcome: GuiOutcome,
+        before_wake: Callable[[], None] | None = None,
+    ) -> None:
+        callback = None
         with self._state_lock:
             self.outcome = outcome
             self.state = "completed"
-            self.completion.set()
+            callback = self.on_complete
+        if callback is not None:
+            try:
+                callback(self.request_id, outcome)
+            except Exception:
+                # Completion reporting must never destabilize the GUI queue.
+                pass
+        if before_wake is not None:
+            before_wake()
+        self.completion.set()
 
 
 class GuiDispatcher(QtCore.QObject):
@@ -136,6 +172,7 @@ class GuiDispatcher(QtCore.QObject):
         self._signal_pending = False
         self._accepting = True
         self._timed_out_request: GuiRequest | None = None
+        self._requests_by_owner: dict[tuple[str, str], GuiRequest] = {}
         try:
             queued = QtCore.Qt.ConnectionType.QueuedConnection
         except AttributeError:
@@ -159,8 +196,21 @@ class GuiDispatcher(QtCore.QObject):
             return outcome.value
         raise GuiTaskError(outcome.error or "Unknown GUI task error")
 
-    def submit(self, callable_: Callable[[], Any], timeout: float | None) -> Any:
-        request = GuiRequest(callable_)
+    def submit(
+        self,
+        callable_: Callable[[], Any],
+        timeout: float | None,
+        *,
+        request_id: str | None = None,
+        session_id: str | None = None,
+        on_complete: Callable[[str, GuiOutcome], None] | None = None,
+    ) -> Any:
+        request = GuiRequest(
+            callable_,
+            request_id=request_id or str(uuid.uuid4()),
+            session_id=session_id,
+            on_complete=on_complete,
+        )
 
         # start_rpc_server and some trusted internal callers already run on the
         # GUI thread. Waiting on our own event loop here would deadlock.
@@ -181,6 +231,20 @@ class GuiDispatcher(QtCore.QObject):
                     "FreeCAD GUI is still executing a request that timed out; "
                     "new GUI work is rejected until it finishes"
                 )
+            if request.session_id:
+                key = (request.session_id, request.request_id)
+                existing = self._requests_by_owner.get(key)
+                if existing is not None and existing.state_snapshot in {
+                    "completed",
+                    "cancelled",
+                }:
+                    self._requests_by_owner.pop(key, None)
+                    existing = None
+                if existing is not None:
+                    raise GuiDispatchError(
+                        "authenticated request already has queued GUI work"
+                    )
+                self._requests_by_owner[key] = request
             self._requests.append(request)
             should_emit = not self._signal_pending
             if should_emit:
@@ -195,7 +259,15 @@ class GuiDispatcher(QtCore.QObject):
         else:
             completed = request.completion.wait(timeout)
         if not completed:
-            pending_cancelled = request.cancel_if_pending()
+            def forget_cancelled_request() -> None:
+                with self._queue_lock:
+                    try:
+                        self._requests.remove(request)
+                    except ValueError:
+                        pass
+                    self._forget_request_locked(request)
+
+            pending_cancelled = request.cancel_if_pending(forget_cancelled_request)
             if pending_cancelled:
                 suffix = " before execution"
             elif request.mark_timed_out_if_running():
@@ -204,7 +276,11 @@ class GuiDispatcher(QtCore.QObject):
                     pending = list(self._requests)
                     self._requests.clear()
                 for pending_request in pending:
-                    pending_request.cancel_if_pending()
+                    def forget_pending(item=pending_request) -> None:
+                        with self._queue_lock:
+                            self._forget_request_locked(item)
+
+                    pending_request.cancel_if_pending(forget_pending)
                 suffix = (
                     " while executing; execution continues in FreeCAD and may "
                     "keep the GUI unresponsive. New GUI work is rejected until "
@@ -221,6 +297,42 @@ class GuiDispatcher(QtCore.QObject):
                 f"Timed out after {timeout}s waiting for FreeCAD GUI response{suffix}"
             )
         return self._unwrap(request.outcome or GuiOutcome(False, error="Missing GUI outcome"))
+
+    def _forget_request_locked(self, request: GuiRequest) -> None:
+        if request.session_id:
+            key = (request.session_id, request.request_id)
+            if self._requests_by_owner.get(key) is request:
+                self._requests_by_owner.pop(key, None)
+
+    def cancel_request(self, session_id: str, request_id: str) -> str:
+        """Cancel only GUI work owned by the exact authenticated request key.
+
+        Pending work is removed atomically from the queue.  Running work is
+        never claimed to be stopped; its cooperative request token must carry
+        cancellation through actual completion.
+        """
+
+        key = (str(session_id), str(request_id))
+        with self._queue_lock:
+            request = self._requests_by_owner.get(key)
+            if request is None:
+                return "not_queued"
+            def forget_pending() -> None:
+                try:
+                    self._requests.remove(request)
+                except ValueError:
+                    pass
+                self._forget_request_locked(request)
+
+            if request.cancel_if_pending(forget_pending):
+                if not self._requests:
+                    self._signal_pending = False
+                return "cancelled_pending"
+            state = request.state_snapshot
+            if state in {"running", "timed_out_running"}:
+                return "running"
+            self._forget_request_locked(request)
+            return "completed"
 
     @QtCore.Slot()
     def _drain_one(self) -> None:
@@ -242,12 +354,20 @@ class GuiDispatcher(QtCore.QObject):
             return
 
         if request.mark_running():
-            request.complete(self._execute_request(request))
+            def forget_before_wake() -> None:
+                with self._queue_lock:
+                    self._forget_request_locked(request)
+
+            request.complete(
+                self._execute_request(request),
+                before_wake=forget_before_wake,
+            )
 
         # Exactly one bounded unit of work is performed per queued callback.
         with self._queue_lock:
             if self._timed_out_request is request:
                 self._timed_out_request = None
+            self._forget_request_locked(request)
             has_more = bool(self._requests)
             if not has_more:
                 self._signal_pending = False
@@ -261,7 +381,11 @@ class GuiDispatcher(QtCore.QObject):
             self._requests.clear()
             self._signal_pending = False
         for request in pending:
-            request.cancel_if_pending()
+            def forget_stopped(item=request) -> None:
+                with self._queue_lock:
+                    self._forget_request_locked(item)
+
+            request.cancel_if_pending(forget_stopped)
 
     @property
     def pending_count(self) -> int:

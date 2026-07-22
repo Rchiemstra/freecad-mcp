@@ -114,6 +114,22 @@ def refresh_view_operation(
     return response
 
 
+def repair_view_placements_operation(
+    freecad: FreeCADConnection,
+    *,
+    doc_name: str,
+    touch_objects: list[str],
+    fit: bool = False,
+) -> ToolResponse:
+    result = freecad.repair_view_placements(doc_name, touch_objects, fit)
+    if not result.get("ok"):
+        return tool_fail(
+            f"Failed to repair placements: {result.get('error', 'unknown')}",
+            structured=result,
+        )
+    return tool_ok("Placements repaired and view refreshed", structured=result)
+
+
 def animate_placement_operation(
     freecad: FreeCADConnection,
     only_text_feedback: bool,

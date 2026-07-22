@@ -826,25 +826,33 @@ class TestGetSketchDiagnosticsOperation:
 # ---------------------------------------------------------------------------
 
 class TestCloseDocumentOperation:
-    def test_calls_execute_code(self):
+    def test_calls_typed_close_rpc(self):
         conn = _ok_conn()
+        conn.invoke_rpc.return_value = {"success": True}
         close_document_operation(conn, "Part")
-        conn.execute_code.assert_called_once()
+        conn.invoke_rpc.assert_called_once_with("close_document", "Part")
+        conn.execute_code.assert_not_called()
 
-    def test_doc_name_in_code(self):
+    def test_doc_name_is_explicit_rpc_scope(self):
         conn = _ok_conn()
+        conn.invoke_rpc.return_value = {"success": True}
         close_document_operation(conn, "MyDoc")
-        assert "'MyDoc'" in _code(conn)
+        conn.invoke_rpc.assert_called_once_with("close_document", "MyDoc")
 
-    def test_code_calls_closeDocument(self):
+    def test_does_not_embed_close_document_code(self):
         conn = _ok_conn()
+        conn.invoke_rpc.return_value = {"success": True}
         close_document_operation(conn, "Part")
-        assert "closeDocument" in _code(conn)
+        conn.execute_code.assert_not_called()
 
     def test_success_message(self):
-        result = close_document_operation(_ok_conn("Document closed"), "Part")
+        conn = _ok_conn()
+        conn.invoke_rpc.return_value = {"success": True}
+        result = close_document_operation(conn, "Part")
         assert "closed" in _text(result)
 
     def test_failure_reported(self):
-        result = close_document_operation(_fail_conn("not found"), "Part")
+        conn = _ok_conn()
+        conn.invoke_rpc.return_value = {"success": False, "error": "not found"}
+        result = close_document_operation(conn, "Part")
         assert "Failed" in _text(result)

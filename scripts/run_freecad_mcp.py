@@ -50,7 +50,10 @@ def _run_instrumented(extra_argv: list[str]) -> int:
     env = os.environ.copy()
     env.setdefault("FREECAD_MCP_DEBUG", "1")
 
-    cmd = [sys.executable, "-m", "freecad_mcp.server", *extra_argv]
+    # freecad_mcp.server exposes a project entry point but intentionally has no
+    # ``python -m`` guard. Invoke main explicitly so debug mode actually starts
+    # the server instead of importing the module and exiting successfully.
+    cmd = _instrumented_command(extra_argv)
     log_event("wrapper", method="start", payload={"cmd": cmd, "pid": os.getpid()})
 
     child = subprocess.Popen(
@@ -100,27 +103,64 @@ def _run_instrumented(extra_argv: list[str]) -> int:
     return rc
 
 
+def _instrumented_command(extra_argv: list[str]) -> list[str]:
+    return [
+        sys.executable,
+        "-c",
+        "from freecad_mcp.server import main; main()",
+        *extra_argv,
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the FreeCAD MCP server")
     parser.add_argument("--only-text-feedback", action="store_true")
-    parser.add_argument("--host", default="localhost")
     parser.add_argument(
+        "--rpc-host",
+        "--host",
+        dest="rpc_host",
+        default=None,
+        help=(
+            "FreeCAD RPC host (default: FREECAD_MCP_RPC_HOST or 127.0.0.1). "
+            "--host is retained as a compatibility alias."
+        ),
+    )
+    parser.add_argument(
+        "--rpc-port",
         "--port",
+        dest="rpc_port",
         type=int,
         default=None,
-        help="FreeCAD RPC port (default: FREECAD_MCP_PORT or 9875)",
+        help=(
+            "FreeCAD RPC port (default: FREECAD_MCP_PORT or 9875). "
+            "--port is retained as a compatibility alias."
+        ),
     )
+    parser.add_argument("--instance-id", default=None)
+    parser.add_argument("--instance-manifest", default=None)
+    parser.add_argument("--auth-file", default=None)
     args, unknown = parser.parse_known_args()
 
     extra: list[str] = []
     if args.only_text_feedback:
         extra.append("--only-text-feedback")
-    if args.host:
-        extra.extend(["--host", args.host])
-    if args.port is not None:
-        extra.extend(["--port", str(args.port)])
+    rpc_host = args.rpc_host or os.environ.get("FREECAD_MCP_RPC_HOST") or "127.0.0.1"
+    extra.extend(["--rpc-host", rpc_host])
+    if args.rpc_port is not None:
+        extra.extend(["--rpc-port", str(args.rpc_port)])
     elif os.environ.get("FREECAD_MCP_PORT"):
-        extra.extend(["--port", os.environ["FREECAD_MCP_PORT"]])
+        extra.extend(["--rpc-port", os.environ["FREECAD_MCP_PORT"]])
+    instance_id = args.instance_id or os.environ.get("FREECAD_MCP_INSTANCE_ID")
+    instance_manifest = args.instance_manifest or os.environ.get(
+        "FREECAD_MCP_INSTANCE_MANIFEST"
+    )
+    auth_file = args.auth_file or os.environ.get("FREECAD_MCP_AUTH_FILE")
+    if instance_id:
+        extra.extend(["--instance-id", instance_id])
+    if instance_manifest:
+        extra.extend(["--instance-manifest", instance_manifest])
+    if auth_file:
+        extra.extend(["--auth-file", auth_file])
     extra.extend(unknown)
 
     if os.environ.get("FREECAD_MCP_DEBUG", "0") == "1":

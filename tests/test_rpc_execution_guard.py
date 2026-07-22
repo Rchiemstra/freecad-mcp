@@ -31,14 +31,24 @@ class _DispatcherMustNotBeUsed:
         raise AssertionError("risky payload was dispatched to FreeCAD's GUI thread")
 
 
-def test_transformed_symmetric_difference_is_blocked_before_gui_queue(monkeypatch):
+def test_transformed_symmetric_difference_forced_gui_routes_to_worker(monkeypatch):
+    rpc = rpc_server.FreeCADRPC()
+    routed = {}
+
+    def worker(code, options):
+        routed["code"] = code
+        routed["options"] = options
+        return {"success": True, "execution": {"mode": "worker"}}
+
+    monkeypatch.setattr(rpc, "_execute_code_worker", worker)
     monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
-    result = rpc_server.FreeCADRPC().execute_code(
+    result = rpc.execute_code(
         HANGING_SYMMETRY_CODE, {"read_only": True, "execution_mode": "gui"}
     )
-    assert result["success"] is False
-    assert result["blocked"] == "gui_thread_boolean_audit"
-    assert "Blocked before execution" in result["error"]
+    assert result["success"] is True
+    assert result["execution"]["mode"] == "worker"
+    assert routed["code"] == HANGING_SYMMETRY_CODE
+    assert routed["options"]["execution_mode"] == "gui"
 
 
 def test_transformed_symmetric_difference_auto_routes_to_worker(monkeypatch):
@@ -90,15 +100,44 @@ def test_marked_sweep45_1_auto_routes_to_worker(monkeypatch):
 
 
 def test_read_only_geometry_sweep_cannot_be_forced_onto_gui(monkeypatch):
+    rpc = rpc_server.FreeCADRPC()
+    routed = {}
+
+    def worker(code, options):
+        routed["code"] = code
+        routed["options"] = options
+        return {"success": True, "execution": {"mode": "worker"}}
+
+    monkeypatch.setattr(rpc, "_execute_code_worker", worker)
     monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
-    result = rpc_server.FreeCADRPC().execute_code(
+    result = rpc.execute_code(
         SWEEP45_1_CODE,
         {"read_only": True, "execution_mode": "gui"},
     )
-    assert result["success"] is False
-    assert result["blocked"] == "gui_thread_geometry_loop"
-    assert "cannot be forced onto the GUI thread" in result["error"]
-    assert "execution_mode='auto' or 'worker'" in result["error"]
+    assert result["success"] is True
+    assert result["execution"]["mode"] == "worker"
+    assert routed["code"] == SWEEP45_1_CODE
+    assert routed["options"]["execution_mode"] == "gui"
+
+
+def test_lightweight_read_only_code_forced_gui_still_routes_to_worker(monkeypatch):
+    rpc = rpc_server.FreeCADRPC()
+    routed = {}
+
+    def worker(code, options):
+        routed["code"] = code
+        routed["options"] = options
+        return {"success": True, "execution": {"mode": "worker"}}
+
+    monkeypatch.setattr(rpc, "_execute_code_worker", worker)
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+    result = rpc.execute_code(
+        "print(FreeCAD.ActiveDocument.Name)",
+        {"read_only": True, "execution_mode": "gui"},
+    )
+    assert result["success"] is True
+    assert result["execution"]["mode"] == "worker"
+    assert routed["options"]["read_only"] is True
 
 
 def test_worker_timeout_is_rejected_for_gui_execution(monkeypatch):

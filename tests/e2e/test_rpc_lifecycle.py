@@ -18,7 +18,13 @@ if not hasattr(FreeCADGui, "addCommand"):
 from addon.FreeCADMCP.rpc_server import rpc_server
 
 
-pytestmark = pytest.mark.e2e
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.skipif(
+        getattr(FreeCAD, "__mcp_test_stub__", False),
+        reason="requires a real FreeCAD runtime",
+    ),
+]
 
 
 def _app():

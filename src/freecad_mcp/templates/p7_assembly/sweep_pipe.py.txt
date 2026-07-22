@@ -23,6 +23,25 @@ else:
     _profile = Part.Wire([_profile_edge])
     _frenet = str(_profile_mode).lower() in ('frenet', 'true', '1', 'yes')
     _solid = _wire.makePipeShell([_profile], True, _frenet)
+    _sweep_strategy = 'continuous'
+    _expected_volume = math.pi * (float(_diameter) / 2.0) ** 2 * float(_wire.Length)
+    # OCC can report a valid but truncated solid when a C0 polyline contains
+    # sharp corners. Detect the characteristic volume loss and build/fuse one
+    # exact edge sweep per segment. This retains a single valid connected
+    # solid while avoiding a silent one-segment result.
+    if _expected_volume > 0 and float(_solid.Volume) < _expected_volume * 0.5:
+        _edge_solids = []
+        for _edge in _wire.Edges:
+            _edge_start = _edge.Vertexes[0].Point
+            _edge_tangent = _edge.tangentAt(_edge.FirstParameter)
+            _edge_profile = Part.Wire([Part.makeCircle(float(_diameter) / 2.0, _edge_start, _edge_tangent)])
+            _edge_solids.append(Part.Wire([_edge]).makePipeShell([_edge_profile], True, _frenet))
+        if _edge_solids:
+            _fused = _edge_solids[0]
+            for _edge_solid in _edge_solids[1:]: _fused = _fused.fuse(_edge_solid)
+            if not _fused.isNull() and float(_fused.Volume) > float(_solid.Volume):
+                _solid = _fused
+                _sweep_strategy = 'edgewise_fused'
     _obj = _doc.addObject('Part::Feature', _solid_name)
     _obj.Shape = _solid
     if _color:
@@ -43,4 +62,4 @@ else:
             pass
     _min_radius = min(_radii) if _radii else None
     _ok, _check_errors = _safe_check(_obj.Shape)
-    print(json.dumps({'ok': True, 'solid_name': _obj.Name, 'path_wire': _path_obj.Name, 'diameter_mm': round(float(_diameter), 6), 'length_mm': round(float(_wire.Length), 6), 'volume_mm3': round(float(_obj.Shape.Volume), 6), 'min_bend_radius_mm': None if _min_radius is None else round(_min_radius, 6), 'check_ok': _ok, 'check_errors': _check_errors}))
+    print(json.dumps({'ok': True, 'solid_name': _obj.Name, 'path_wire': _path_obj.Name, 'diameter_mm': round(float(_diameter), 6), 'length_mm': round(float(_wire.Length), 6), 'volume_mm3': round(float(_obj.Shape.Volume), 6), 'sweep_strategy': _sweep_strategy, 'min_bend_radius_mm': None if _min_radius is None else round(_min_radius, 6), 'check_ok': _ok, 'check_errors': _check_errors}))

@@ -81,21 +81,27 @@ class TestPortPlumbing:
         created = {}
 
         class FakeConn:
-            def __init__(self, host, port, expected_instance_id=None):
+            def __init__(
+                self,
+                host,
+                port,
+                expected_instance_id=None,
+                **identity,
+            ):
                 created["host"] = host
                 created["port"] = port
                 created["expected_instance_id"] = expected_instance_id
+                created.update(identity)
 
             def ping(self):
                 return True
 
         monkeypatch.setattr(server, "FreeCADConnection", FakeConn)
         conn = server.get_freecad_connection()
-        assert created == {
-            "host": "127.0.0.1",
-            "port": 9876,
-            "expected_instance_id": None,
-        }
+        assert created["host"] == "127.0.0.1"
+        assert created["port"] == 9876
+        assert created["expected_instance_id"] is None
+        assert created["mcp_instance_id"] == server.state.mcp_instance_id
         assert conn is server.state.freecad_connection
         # cleanup
         server.state.freecad_connection = None
@@ -111,7 +117,13 @@ class TestPortPlumbing:
         calls = {"verify": 0}
 
         class FakeConn:
-            def __init__(self, host, port, expected_instance_id=None):
+            def __init__(
+                self,
+                host,
+                port,
+                expected_instance_id=None,
+                **identity,
+            ):
                 self.expected_instance_id = expected_instance_id
 
             def ping(self):
@@ -169,8 +181,10 @@ class TestPortPlumbing:
             ["run_freecad_mcp.py", "--host", "127.0.0.1", "--port", "9876"],
         )
         assert runner.main() == 0
-        assert "--port" in captured["extra"]
+        assert "--rpc-host" in captured["extra"]
+        assert "--rpc-port" in captured["extra"]
         assert "9876" in captured["extra"]
+        assert "-m" not in runner._instrumented_command([])
 
     def test_setup_cursor_mcp_isolated_preserves_freecad(self, tmp_path, monkeypatch):
         setup = _load_script("setup_cursor_mcp_isolated.py")
@@ -188,10 +202,38 @@ class TestPortPlumbing:
             setup, "_freecad_mcp_root", lambda: Path(__file__).resolve().parents[1]
         )
 
+        profile = tmp_path / ".freecad-mcp-isolated"
+        profile.mkdir()
+        secret = profile / "freecad_mcp_auth.secret"
+        secret.write_bytes(b"x" * 32)
+        manifest_path = profile / "instance-manifest.json"
+        manifest = {
+            "schema_version": 1,
+            "rpc_host": "127.0.0.1",
+            "rpc_port": 9876,
+            "profile_instance_id": "freecad-isolated-random-id",
+            "profile_path": str(profile),
+            "auth_secret_file": str(secret),
+            "expected_freecad_pid": None,
+            "expected_freecad_process_started_at": None,
+            "expected_addon_runtime_id": None,
+            "expected_boot_id": None,
+            "expected_protocol_version": None,
+            "expected_protocol_features": None,
+            "expected_addon_version": None,
+            "expected_addon_build_id": None,
+            "expected_freecad_version": None,
+            "expected_freecad_revision": None,
+            "expected_profile_path_fingerprint": None,
+            "created_at": "2026-01-01T00:00:00Z",
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
         runner = Path(__file__).resolve().parents[1] / "scripts" / "run_freecad_mcp.py"
         src = Path(__file__).resolve().parents[1] / "src"
-        instance_id = setup.default_instance_id(9876)
-        entry = setup._isolated_entry("python", runner, src, 9876, instance_id)
+        entry = setup._isolated_entry(
+            "python", runner, src, manifest_path, setup.load_instance_manifest(manifest_path)
+        )
         setup.merge_isolated(config, entry)
 
         data = json.loads(config.read_text(encoding="utf-8"))
@@ -200,18 +242,33 @@ class TestPortPlumbing:
         assert "freecad-isolated" in data["mcpServers"]
         assert "9876" in iso["args"]
         assert iso["env"]["FREECAD_MCP_PORT"] == "9876"
-        # Instance-id handshake is plumbed through both args and env.
+        # Identity, manifest and secret path are plumbed without secret bytes.
         assert "--instance-id" in iso["args"]
-        assert instance_id in iso["args"]
-        assert iso["env"]["FREECAD_MCP_INSTANCE_ID"] == instance_id
+        assert manifest["profile_instance_id"] in iso["args"]
+        assert iso["env"]["FREECAD_MCP_INSTANCE_ID"] == manifest["profile_instance_id"]
+        assert "--instance-manifest" in iso["args"]
+        assert "--auth-file" in iso["args"]
+        assert (b"x" * 32).decode() not in json.dumps(iso)
 
-    def test_isolated_scripts_agree_on_instance_id(self):
+    def test_isolated_scripts_share_manifest_instead_of_port_identity(self, tmp_path):
         cursor = _load_script("setup_cursor_mcp_isolated.py")
         profile = _load_script("setup_isolated_profile.py")
-        # Both scripts derive the same id from the port so a pinned client and the
-        # isolated addon match without the scripts sharing state.
-        assert cursor.default_instance_id(9876) == profile.default_instance_id(9876)
-        assert cursor.default_instance_id(9880) == "freecad-isolated-9880"
+        profile_dir = tmp_path / ".freecad-mcp-isolated"
+        profile_dir.mkdir()
+        secret = profile_dir / profile.SECRET_FILENAME
+        secret.write_bytes(b"s" * 32)
+        manifest = profile._build_manifest(
+            profile=profile_dir,
+            profile_id="freecad-isolated-12345678",
+            secret_path=secret,
+            rpc_port=9880,
+            existing=None,
+        )
+        manifest_path = profile_dir / profile.MANIFEST_FILENAME
+        profile._atomic_write_json(manifest_path, manifest)
+        loaded = cursor.load_instance_manifest(manifest_path)
+        assert loaded["profile_instance_id"] == "freecad-isolated-12345678"
+        assert loaded["rpc_port"] == 9880
 
     def test_setup_isolated_profile_refuses_appdata(self, tmp_path, monkeypatch):
         setup = _load_script("setup_isolated_profile.py")

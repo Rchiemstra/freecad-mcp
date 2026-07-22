@@ -1,9 +1,8 @@
-"""
-Diagnostics operations — read-only tools that surface the silent FreeCAD
-behaviours called out in doc/mcp-feedback.md (P1 cross-body placement drop,
-P8 axis/normal confusion, face/edge indexing fragility).
+"""Inspection, validation, repair, and recovery-oriented operations.
 
-These do not mutate the document.
+Inspection tools are explicitly dispatched as snapshot-worker reads. Repair,
+transaction, placement-validation, and creation helpers remain live document
+mutations and therefore require a document lease.
 """
 from __future__ import annotations
 
@@ -57,6 +56,7 @@ def preview_attachment_operation(
         "Failed to preview attachment",
         screenshot=False,
         document=doc_name,
+        read_only=True,
     )
 
 
@@ -96,6 +96,7 @@ def _find_subshapes_operation(
         f"Failed to find {kind_singular.lower()}s",
         screenshot=False,
         document=doc_name,
+        read_only=True,
     )
 
 
@@ -172,6 +173,7 @@ def _subshape_pose_operation(
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
         "Failed to inspect subshape", screenshot=False, document=doc_name,
+        read_only=True,
     )
 
 
@@ -227,6 +229,7 @@ def placement_audit_operation(
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
         "Failed to audit placements", screenshot=False, document=doc_name,
+        read_only=True,
     )
 
 
@@ -270,6 +273,7 @@ def capture_state_operation(
     return _run_json_code(
         freecad, only_text_feedback, "\n".join(code),
         "Failed to capture state", screenshot=False, document=doc_name,
+        read_only=True,
     )
 
 
@@ -337,6 +341,7 @@ def geometric_diff_operation(
     resp = _run_json_code(
         freecad, True, "\n".join(code),
         "Failed to capture state for diff", screenshot=False, document=doc_name,
+        read_only=True,
     )
     text = _response_text(resp)
     try:
@@ -474,6 +479,7 @@ def audit_hardcoded_dimensions_operation(
         "Failed hard-coded dimension audit",
         screenshot=False,
         document=doc_name,
+        read_only=True,
     )
 
 
@@ -526,6 +532,7 @@ def get_dependency_graph_operation(
         "Failed to build dependency graph",
         screenshot=False,
         document=doc_name,
+        read_only=True,
     )
 
 
@@ -552,4 +559,5 @@ def match_subshape_operation(
         "Failed subshape matching",
         screenshot=False,
         document=doc_name,
+        read_only=True,
     )

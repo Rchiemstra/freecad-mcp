@@ -99,7 +99,8 @@ def create_involute_gear_operation(
         + _gear_footer_code(gear_name, bore_diameter)
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Involute gear '{gear_name}' created", "Failed to create involute gear")
+                     f"Involute gear '{gear_name}' created", "Failed to create involute gear",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +142,8 @@ def create_helical_gear_operation(
         )
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Helical gear '{gear_name}' created", "Failed to create helical gear")
+                     f"Helical gear '{gear_name}' created", "Failed to create helical gear",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------

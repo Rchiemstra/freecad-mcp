@@ -49,7 +49,8 @@ def revolve_feature_operation(
         reversed_dir=repr(reversed_dir),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Revolution '{revolve_name}' created", "Failed to create revolution")
+                     f"Revolution '{revolve_name}' created", "Failed to create revolution",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +79,8 @@ def loft_feature_operation(
         closed=repr(closed),
     ) + _build_assertion_code(loft_name, sketch_names[0], check_direction=False)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Loft '{loft_name}' created", "Failed to create loft")
+                     f"Loft '{loft_name}' created", "Failed to create loft",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +106,8 @@ def sweep_feature_operation(
         frenet=repr(frenet),
     ) + _build_assertion_code(sweep_name, profile_sketch, check_direction=False)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Sweep '{sweep_name}' created", "Failed to create sweep")
+                     f"Sweep '{sweep_name}' created", "Failed to create sweep",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +139,8 @@ def helical_sweep_feature_operation(
         reversed_dir=repr(reversed_dir),
     ) + _build_assertion_code(helix_name, profile_sketch, check_direction=False)
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Helical sweep '{helix_name}' created", "Failed to create helical sweep")
+                     f"Helical sweep '{helix_name}' created", "Failed to create helical sweep",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +169,8 @@ def fillet_feature_operation(
         edge_refs=repr(edge_refs or []),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Fillet '{fillet_name}' (r={radius}) created", "Failed to create fillet")
+                     f"Fillet '{fillet_name}' (r={radius}) created", "Failed to create fillet",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +199,8 @@ def chamfer_feature_operation(
         edge_refs=repr(edge_refs or []),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Chamfer '{chamfer_name}' (s={size}) created", "Failed to create chamfer")
+                     f"Chamfer '{chamfer_name}' (s={size}) created", "Failed to create chamfer",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +227,7 @@ def _boolean_operation(
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Boolean {bool_type} '{result_name}' created",
-                     f"Failed to create boolean {bool_type}")
+                     f"Failed to create boolean {bool_type}", document=doc_name)
 
 
 def boolean_union_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name):

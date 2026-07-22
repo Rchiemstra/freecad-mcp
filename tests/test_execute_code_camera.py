@@ -19,8 +19,17 @@ class FakeFreeCAD:
         width=None,
         height=None,
         focus_object=None,
+        focus_objects=None,
+        yaw_deg=None,
     ):
-        self.screenshot_request = (view_name, width, height, focus_object)
+        self.screenshot_request = (
+            view_name,
+            width,
+            height,
+            focus_object,
+            focus_objects,
+            yaw_deg,
+        )
         return "encoded-image"
 
 
@@ -34,8 +43,17 @@ class FakeRpcServer:
             "message": "Current view supports screenshots: Gui::View3DInventor",
         }
 
-    def get_active_screenshot(self, view_name, width, height, focus_object):
-        self.screenshot_request = (view_name, width, height, focus_object)
+    def get_active_screenshot(
+        self, view_name, width, height, focus_object, focus_objects, yaw_deg
+    ):
+        self.screenshot_request = (
+            view_name,
+            width,
+            height,
+            focus_object,
+            focus_objects,
+            yaw_deg,
+        )
         return "encoded-image"
 
 
@@ -48,7 +66,9 @@ class ExecuteCodeCameraTest(unittest.TestCase):
         )
 
         self.assertEqual(freecad.executed_code, "print('hello')")
-        self.assertEqual(freecad.screenshot_request, (None, None, None, None))
+        self.assertEqual(
+            freecad.screenshot_request, (None, None, None, None, None, None)
+        )
 
     def test_client_forwards_none_view_name_to_rpc(self):
         rpc_server = FakeRpcServer()
@@ -58,4 +78,6 @@ class ExecuteCodeCameraTest(unittest.TestCase):
         screenshot = connection.get_active_screenshot(view_name=None)
 
         self.assertEqual(screenshot, "encoded-image")
-        self.assertEqual(rpc_server.screenshot_request, (None, None, None, None))
+        self.assertEqual(
+            rpc_server.screenshot_request, (None, None, None, None, None, None)
+        )

@@ -2,8 +2,6 @@ import json
 import logging
 from typing import Any
 
-from mcp.types import ImageContent
-
 from ..freecad_client import FreeCADConnection
 from ..responses import (
     ToolResponse,
@@ -14,7 +12,7 @@ from ..responses import (
     tool_fail,
     tool_ok,
 )
-from ..execute_options import ExecuteOptions, merge_execute_options
+from ..execute_options import ExecuteOptions
 from ..template_resources import read_template_lines, render_template_lines, render_template_text
 # _run_json_code lives in p7_assembly (which does not import core, so this is
 # cycle-free); reused here so pad/pocket return a structured JSON workflow result.
@@ -50,10 +48,36 @@ def _format_recompute_log(output: str) -> str:
     return "Recompute log (non-clean): " + ", ".join(parts)
 
 
-def create_document_operation(freecad: FreeCADConnection, name: str) -> ToolResponse:
+def create_document_operation(
+    freecad: FreeCADConnection,
+    name: str,
+    *,
+    lease_manager=None,
+    document_sessions: dict[str, str] | None = None,
+) -> ToolResponse:
     try:
         res = freecad.create_document(name)
         if res["success"]:
+            credential_data = res.get("credential") or {}
+            if credential_data and lease_manager is not None:
+                from ..lease_manager import LeaseCredential
+
+                credential = LeaseCredential(
+                    lease_id=str(credential_data["lease_id"]),
+                    document_session_uuid=str(
+                        credential_data["document_session_uuid"]
+                    ),
+                    generation=int(credential_data["generation"]),
+                    token=str(credential_data["token"]),
+                )
+                lease_manager.store(credential)
+                if document_sessions is not None:
+                    document_sessions[res["document_name"]] = (
+                        credential.document_session_uuid
+                    )
+                return tool_ok(
+                    f"Document '{res['document_name']}' created and leased successfully"
+                )
             return tool_ok(f"Document '{res['document_name']}' created successfully")
         return tool_fail(f"Failed to create document: {res['error']}")
     except Exception as e:
@@ -193,7 +217,17 @@ def delete_object_operation(
             )
             + render_template_lines("diagnostics/recompute_log.py.txt")
         )
-        res = freecad.execute_code(code)
+        res = freecad.execute_code(
+            code,
+            ExecuteOptions(
+                document=doc_name,
+                affected_documents=[doc_name],
+                recompute="target",
+                recompute_documents=[doc_name],
+                generated_operation=True,
+                operation_id="delete_object",
+            ),
+        )
         screenshot = freecad.get_active_screenshot()
         if res["success"]:
             output = res.get("message", "")
@@ -227,6 +261,7 @@ def execute_code_operation(
     document: str | None = None,
     recompute: str = "none",
     recompute_documents: list[str] | None = None,
+    affected_documents: list[str] | None = None,
     read_only: bool = False,
     restore_active_document: bool = True,
     activate_document: bool = False,
@@ -239,6 +274,7 @@ def execute_code_operation(
         document=document,
         recompute=recompute,  # type: ignore[arg-type]
         recompute_documents=recompute_documents,
+        affected_documents=affected_documents,
         read_only=read_only,
         restore_active_document=restore_active_document,
         activate_document=activate_document,
@@ -411,10 +447,11 @@ def save_view_sequence_operation(
 def insert_part_from_library_operation(
     freecad: FreeCADConnection,
     only_text_feedback: bool,
+    doc_name: str,
     relative_path: str,
 ) -> ToolResponse:
     try:
-        res = freecad.insert_part_from_library(relative_path)
+        res = freecad.insert_part_from_library(doc_name, relative_path)
         if res["success"]:
             response = tool_ok(f"Part inserted from library: {res['message']}")
         else:
@@ -491,16 +528,24 @@ def _run_code(
 ) -> ToolResponse:
     """Execute generated Python code in FreeCAD and return a formatted response."""
     try:
+        effective_recompute = "none" if read_only else recompute
         full_code = code + "\n" + "\n".join(
             render_template_lines("diagnostics/recompute_log.py.txt")
         )
         opts = ExecuteOptions(
             document=document,
-            recompute=recompute,  # type: ignore[arg-type]
-            recompute_documents=[document] if document and recompute == "target" else None,
+            affected_documents=[document] if document and not read_only else None,
+            recompute=effective_recompute,  # type: ignore[arg-type]
+            recompute_documents=(
+                [document] if document and effective_recompute == "target" else None
+            ),
             capture_view=capture_view,
             read_only=read_only,
-            execution_mode=execution_mode,  # type: ignore[arg-type]
+            execution_mode=(
+                "worker" if read_only and execution_mode == "auto" else execution_mode
+            ),  # type: ignore[arg-type]
+            generated_operation=True,
+            operation_id=success_msg,
         )
         res = freecad.execute_code(full_code, opts)
         screenshot = freecad.get_active_screenshot() if capture_view else None
@@ -733,7 +778,8 @@ def sketch_create_operation(
         attachment_code=attachment_code,
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Sketch '{sketch_name}' created", "Failed to create sketch")
+                     f"Sketch '{sketch_name}' created", "Failed to create sketch",
+                     document=doc_name)
 
 
 def sketch_add_geometry_operation(
@@ -750,7 +796,8 @@ def sketch_add_geometry_operation(
         geometry_lines="\n".join(_geom_line("", geom) for geom in geometry),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Geometry added to '{sketch_name}'", "Failed to add geometry")
+                     f"Geometry added to '{sketch_name}'", "Failed to add geometry",
+                     document=doc_name)
 
 
 def sketch_add_constraint_operation(
@@ -768,7 +815,8 @@ def sketch_add_constraint_operation(
         message=repr(f"{len(constraints)} constraint(s) added"),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Constraints added to '{sketch_name}'", "Failed to add constraints")
+                     f"Constraints added to '{sketch_name}'", "Failed to add constraints",
+                     document=doc_name)
 
 
 def pad_feature_operation(
@@ -870,7 +918,8 @@ def linear_pattern_feature_operation(
         reversed_dir=repr(reversed_dir),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Linear pattern '{pattern_name}' created", "Failed to create linear pattern")
+                     f"Linear pattern '{pattern_name}' created", "Failed to create linear pattern",
+                     document=doc_name)
 
 
 def polar_pattern_feature_operation(
@@ -900,7 +949,8 @@ def polar_pattern_feature_operation(
         reversed_dir=repr(reversed_dir),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Polar pattern '{pattern_name}' created", "Failed to create polar pattern")
+                     f"Polar pattern '{pattern_name}' created", "Failed to create polar pattern",
+                     document=doc_name)
 
 
 def mirror_feature_operation(
@@ -923,7 +973,8 @@ def mirror_feature_operation(
         plane=repr(plane),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Mirror feature '{mirror_name}' created", "Failed to create mirror feature")
+                     f"Mirror feature '{mirror_name}' created", "Failed to create mirror feature",
+                     document=doc_name)
 
 
 def create_spur_gear_operation(
@@ -963,7 +1014,8 @@ def create_spur_gear_operation(
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Spur gear '{gear_name}' sketch and pad created", "Failed to create spur gear")
+                     f"Spur gear '{gear_name}' sketch and pad created", "Failed to create spur gear",
+                     document=doc_name)
 
 
 def recompute_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
@@ -974,7 +1026,8 @@ def recompute_document_operation(freecad: FreeCADConnection, doc_name: str) -> T
         message=repr("recomputed"),
     )
     return _run_code(freecad, True, code,
-                     f"Document '{doc_name}' recomputed", "Failed to recompute")
+                     f"Document '{doc_name}' recomputed", "Failed to recompute",
+                     document=doc_name)
 
 
 def undo_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
@@ -985,7 +1038,8 @@ def undo_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
         message=repr("undo done"),
     )
     return _run_code(freecad, True, code,
-                     f"Undo performed on '{doc_name}'", "Failed to undo")
+                     f"Undo performed on '{doc_name}'", "Failed to undo",
+                     document=doc_name)
 
 
 def redo_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
@@ -996,7 +1050,8 @@ def redo_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
         message=repr("redo done"),
     )
     return _run_code(freecad, True, code,
-                     f"Redo performed on '{doc_name}'", "Failed to redo")
+                     f"Redo performed on '{doc_name}'", "Failed to redo",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -1020,7 +1075,8 @@ def sketch_add_line_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Line added to '{sketch_name}'", "Failed to add line")
+                     f"Line added to '{sketch_name}'", "Failed to add line",
+                     document=doc_name)
 
 
 def sketch_add_circle_operation(
@@ -1039,7 +1095,8 @@ def sketch_add_circle_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Circle added to '{sketch_name}'", "Failed to add circle")
+                     f"Circle added to '{sketch_name}'", "Failed to add circle",
+                     document=doc_name)
 
 
 def sketch_add_arc_operation(
@@ -1061,7 +1118,8 @@ def sketch_add_arc_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Arc added to '{sketch_name}'", "Failed to add arc")
+                     f"Arc added to '{sketch_name}'", "Failed to add arc",
+                     document=doc_name)
 
 
 def sketch_add_rectangle_operation(
@@ -1081,7 +1139,8 @@ def sketch_add_rectangle_operation(
         construction=repr(construction),
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Rectangle added to '{sketch_name}'", "Failed to add rectangle")
+                     f"Rectangle added to '{sketch_name}'", "Failed to add rectangle",
+                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------
@@ -1098,7 +1157,7 @@ def _run_constraint(freecad, only_text_feedback, doc_name, sketch_name, c_dict):
     )
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"{c_dict['type']} constraint added to '{sketch_name}'",
-                     "Failed to add constraint")
+                     "Failed to add constraint", document=doc_name)
 
 
 def sketch_constrain_coincident_operation(
@@ -1190,7 +1249,9 @@ def sketch_constrain_tangent_operation(
 def get_recompute_log_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
     code = render_template_text("core/get_recompute_log.py.txt", doc_name=repr(doc_name))
     return _run_code(freecad, True, code,
-                     f"Recompute log for '{doc_name}'", "Failed to get recompute log")
+                     f"Recompute log for '{doc_name}'", "Failed to get recompute log",
+                     document=doc_name, recompute="none", capture_view=False,
+                     read_only=True, execution_mode="worker")
 
 
 def get_sketch_diagnostics_operation(
@@ -1204,13 +1265,32 @@ def get_sketch_diagnostics_operation(
         sketch_name=repr(sketch_name),
     )
     return _run_code(freecad, True, code,
-                     f"Sketch diagnostics for '{sketch_name}'", "Failed to get sketch diagnostics")
+                     f"Sketch diagnostics for '{sketch_name}'", "Failed to get sketch diagnostics",
+                     document=doc_name, recompute="none", capture_view=False,
+                     read_only=True, execution_mode="worker")
 
 
 def close_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
-    code = render_template_text("core/close_document.py.txt", doc_name=repr(doc_name))
-    return _run_code(freecad, True, code,
-                     f"Document '{doc_name}' closed", "Failed to close document")
+    """Use the typed close gate; never hide closeDocument inside generated code."""
+
+    try:
+        result = None
+        if isinstance(freecad, FreeCADConnection):
+            result = freecad._invoke_mutation_v2(
+                "close_document",
+                {"doc_name": doc_name},
+                document_names=(doc_name,),
+                operation_name="Close document",
+            )
+        if result is None:
+            result = freecad.invoke_rpc("close_document", doc_name)
+        if isinstance(result, dict) and result.get("success"):
+            return text_response(f"Document '{doc_name}' closed")
+        error = result.get("error") if isinstance(result, dict) else result
+        return text_response(f"Failed to close document: {error}")
+    except Exception as exc:
+        logger.error("Failed to close document: %s", exc)
+        return text_response(f"Failed to close document: {exc}")
 
 
 def run_fem_analysis_operation(

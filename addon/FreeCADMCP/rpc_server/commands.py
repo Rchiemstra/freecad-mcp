@@ -12,8 +12,13 @@ import FreeCAD
 import FreeCADGui
 from PySide import QtCore, QtWidgets
 
-from rpc_server.ip_filter import validate_allowed_ips
-from rpc_server.settings import load_settings, save_settings
+from .ip_filter import validate_allowed_ips
+from .settings import (
+    LEASE_MODE_ENFORCE,
+    is_loopback_host,
+    load_settings,
+    save_settings,
+)
 
 
 class StartRPCServerCommand:
@@ -53,7 +58,26 @@ class ToggleRemoteConnectionsCommand:
     def Activated(self, checked=0):
         from . import rpc_server
         settings = load_settings()
-        settings["remote_enabled"] = bool(checked)
+        requested = bool(checked)
+        if (
+            requested
+            and settings.get("document_lease_mode") == LEASE_MODE_ENFORCE
+            and not settings.get(
+                "allow_authenticated_remote_without_transport_security", False
+            )
+        ):
+            FreeCAD.Console.PrintWarning(
+                "Remote Connections was not enabled: enforce mode keeps the addon "
+                "on loopback because HMAC does not encrypt XML-RPC. Use an SSH/TLS "
+                "tunnel, or deliberately configure the unsafe transport override.\n"
+            )
+            return
+
+        settings["remote_enabled"] = requested
+        if requested and is_loopback_host(settings.get("rpc_bind_host")):
+            # Preserve the pre-rpc_bind_host behavior for off/observe profiles:
+            # the explicit remote toggle means listen on all IPv4 interfaces.
+            settings["rpc_bind_host"] = "0.0.0.0"
         save_settings(settings)
 
         if settings["remote_enabled"]:

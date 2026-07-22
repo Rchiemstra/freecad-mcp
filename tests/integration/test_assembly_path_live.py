@@ -57,7 +57,9 @@ def _json(response) -> dict:
 def _json_after_output(response) -> dict:
     text = _text(response)
     if "Output:" in text:
-        return json.loads(text.split("Output:", 1)[1].strip())
+        # Operation feedback may append a recompute/state summary after the
+        # machine-readable first line. Parse exactly that JSON payload.
+        return json.loads(text.split("Output:", 1)[1].strip().splitlines()[0])
     return json.loads(text.splitlines()[-1])
 
 

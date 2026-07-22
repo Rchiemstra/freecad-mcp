@@ -2,6 +2,7 @@
 later I4/I10/M5/M6 helpers added in the same module)."""
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
 
 from mcp.types import TextContent
@@ -404,42 +405,59 @@ class TestI5DeleteObject:
 
 
 class TestI7SnapshotRestore:
-    """I7 — snapshot/restore round-trip via execute_code (P12)."""
+    """I7 — snapshot/restore uses the typed addon lifecycle (P12)."""
 
-    def test_snapshot_code_saves_and_rings_buffer(self):
+    def test_snapshot_uses_typed_rpc(self):
         conn = _ok_conn()
+        conn.invoke_rpc.return_value = {
+            "ok": True,
+            "snapshot_id": "snap-1",
+            "doc": "Doc",
+            "count": 1,
+        }
         snapshot_operation(conn, True, "Doc")
-        code = _code(conn)
-        assert_code_compiles(code)
-        # saveCopy (not save/FileName-swap) so the user's document FileName is
-        # untouched; mkdtemp because each snapshot lives in its own directory
-        # named <DocName>.FCStd for restore-in-place.
-        assert_code_contains(code, "_mcp_snapshots", "mkdtemp", "saveCopy", ".FCStd", "Doc")
+        conn.invoke_rpc.assert_called_once_with("snapshot", "Doc")
+        conn.execute_code.assert_not_called()
 
-    def test_restore_code_opens_snapshot_in_place(self):
+    def test_restore_uses_typed_rpc_not_close_open_code(self):
         conn = _ok_conn()
+        conn.invoke_rpc.return_value = {
+            "ok": True,
+            "restored_id": "snap-123",
+            "doc": "Doc",
+        }
         restore_operation(conn, True, "Doc", "snap-123")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "_mcp_snapshots", "closeDocument", "FreeCAD.open", "snap-123")
+        conn.invoke_rpc.assert_called_once_with("restore", "Doc", "snap-123")
+        conn.execute_code.assert_not_called()
 
     def test_snapshot_returns_json(self):
-        out = '{"ok": true, "snapshot_id": "snap-1", "doc": "Doc", "count": 1}'
-        resp = snapshot_operation(_ok_conn(out), True, "Doc")
-        assert _text(resp).startswith('{"ok": true, "snapshot_id": "snap-1"')
+        conn = _ok_conn()
+        conn.invoke_rpc.return_value = {
+            "ok": True, "snapshot_id": "snap-1", "doc": "Doc", "count": 1
+        }
+        resp = snapshot_operation(conn, True, "Doc")
+        assert json.loads(_text(resp))["snapshot_id"] == "snap-1"
 
     def test_restore_returns_json(self):
-        out = '{"ok": true, "restored_id": "snap-1", "doc": "Doc", "new_doc": "Doc", "count": 1}'
-        resp = restore_operation(_ok_conn(out), True, "Doc")
-        assert _text(resp).startswith('{"ok": true, "restored_id": "snap-1"')
+        conn = _ok_conn()
+        conn.invoke_rpc.return_value = {
+            "ok": True, "restored_id": "snap-1", "doc": "Doc",
+            "new_doc": "Doc", "count": 1
+        }
+        resp = restore_operation(conn, True, "Doc")
+        assert json.loads(_text(resp))["restored_id"] == "snap-1"
 
     def test_snapshot_failure_is_surfaced(self):
-        resp = snapshot_operation(_fail_conn(), True, "Doc")
-        assert "Failed to snapshot document" in _text(resp)
+        conn = _ok_conn()
+        conn.invoke_rpc.side_effect = RuntimeError("snapshot failed")
+        resp = snapshot_operation(conn, True, "Doc")
+        assert "Failed to snapshot document: snapshot failed" in _text(resp)
 
     def test_restore_failure_is_surfaced(self):
-        resp = restore_operation(_fail_conn(), True, "Doc")
-        assert "Failed to restore snapshot" in _text(resp)
+        conn = _ok_conn()
+        conn.invoke_rpc.side_effect = RuntimeError("restore failed")
+        resp = restore_operation(conn, True, "Doc")
+        assert "Failed to restore snapshot: restore failed" in _text(resp)
 
 
 class TestI9SolveAssembly:

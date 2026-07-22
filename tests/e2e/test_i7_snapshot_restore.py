@@ -27,13 +27,21 @@ def _payload(response) -> dict:
     text = tool_response_text(response)
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
     # Recompute progress noise can surround the payload line, so scan from the
-    # end for the first line that parses as JSON instead of trusting a fixed
-    # line position.
-    for line in reversed(text.splitlines()):
+    # start for the first complete JSON line instead of trusting a fixed line
+    # position.
+    for line in text.splitlines():
         line = line.strip()
-        if line.startswith("{"):
+        if not line.startswith("{"):
+            continue
+        try:
             return json.loads(line)
+        except json.JSONDecodeError:
+            continue
     raise AssertionError(f"no JSON payload line in response text: {text!r}")
 
 
@@ -58,8 +66,8 @@ def test_snapshot_restore_round_trip(freecad_session):
     restored_payload = _payload(restored)
     assert restored_payload["ok"] is True
     assert restored_payload["restored_id"] == snap_id
-    # Restore-in-place contract: the reopened document keeps the original name
-    # (the snapshot file is saved as <DocName>.FCStd for exactly this reason).
+    # Restore-in-place contract: the live proxy and original document name are
+    # retained even though the recovery artifact has an opaque temporary name.
     assert restored_payload["new_doc"] == doc_name
 
     names = {o.Name for o in FreeCAD.getDocument(doc_name).Objects}

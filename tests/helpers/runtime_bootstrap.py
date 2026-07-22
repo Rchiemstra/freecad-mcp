@@ -23,6 +23,11 @@ def ensure_freecad_stub() -> None:
         import FreeCAD  # noqa: F401
     except ModuleNotFoundError:
         fc = types.ModuleType("FreeCAD")
+        # E2E tests use this explicit marker to distinguish the lightweight
+        # collection-time shim from a real FreeCAD runtime.  A MagicMock may
+        # otherwise satisfy ``pytest.importorskip`` and make a host lifecycle
+        # test execute against recursive, non-serializable mock objects.
+        fc.__mcp_test_stub__ = True
         console = MagicMock()
         console.PrintMessage = MagicMock()
         console.PrintWarning = MagicMock()

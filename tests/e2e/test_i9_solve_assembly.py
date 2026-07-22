@@ -29,7 +29,15 @@ def _payload(response) -> dict:
     text = tool_response_text(response)
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
-    return json.loads(text.splitlines()[0])
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+    raise AssertionError(f"no JSON payload line in response text: {text!r}")
 
 
 def test_solve_assembly_runs_the_solver(freecad_session):

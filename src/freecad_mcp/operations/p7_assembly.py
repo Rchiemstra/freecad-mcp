@@ -66,11 +66,15 @@ def _run_json_code(
     try:
         opts = ExecuteOptions(
             document=document,
+            affected_documents=[document] if document and not read_only else None,
             recompute="none" if read_only else "target",
             recompute_documents=[document] if document and not read_only else None,
             read_only=read_only,
+            execution_mode="worker" if read_only else "auto",
             restore_active_document=True,
             capture_view=screenshot,
+            generated_operation=True,
+            operation_id=fail_prefix,
         )
         res = freecad.execute_code(code, opts)
         image = freecad.get_active_screenshot() if screenshot else None

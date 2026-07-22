@@ -59,15 +59,20 @@ def _global_placement(_obj):
         return _obj.getGlobalPlacement()
     except Exception:
         return getattr(_obj, 'Placement', FreeCAD.Placement())
-def _global_boundbox(_obj):
-    _shape = getattr(_obj, 'Shape', None)
+def _global_boundbox(_obj, _shape_override=None):
+    _shape = _shape_override if _shape_override is not None else getattr(_obj, 'Shape', None)
     if _shape is None or _shape.isNull(): return None
     _copy = _shape.copy()
-    _pl = _global_placement(_obj)
+    _global = _global_placement(_obj)
+    _local = getattr(_obj, 'Placement', FreeCAD.Placement())
     try:
-        _copy.Placement = _pl.multiply(getattr(_copy, 'Placement', FreeCAD.Placement()))
+        # Shape.Placement already includes the object's local Placement. Apply
+        # only the enclosing-container transform; multiplying by the complete
+        # global placement would apply the local translation twice.
+        _parent = _global.multiply(_local.inverse())
+        _copy.Placement = _parent.multiply(getattr(_copy, 'Placement', FreeCAD.Placement()))
     except Exception:
-        try: _copy.Placement = _pl
+        try: _copy.Placement = _global
         except Exception: pass
     return _copy.BoundBox
 def _bbox_delta(_a, _b):
