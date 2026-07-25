@@ -80,6 +80,7 @@ def _expected_entry(
     prop="Support",
     target_name="Box",
     property_type="App::PropertyLinkSub",
+    reference_index=0,
 ):
     return {
         "owner_document": doc.Name,
@@ -89,12 +90,13 @@ def _expected_entry(
         "target_document": doc.Name,
         "target_object": target_name,
         "subelements": list(subelements),
+        "reference_index": reference_index,
     }
 
 
 def _manifest_rows_for_linksublist(doc, holder, refs):
     rows = []
-    for target, subelements in refs:
+    for ref_index, (target, subelements) in enumerate(refs):
         rows.append(
             _expected_entry(
                 doc,
@@ -103,9 +105,26 @@ def _manifest_rows_for_linksublist(doc, holder, refs):
                 prop="Supports",
                 target_name=target.Name,
                 property_type="App::PropertyLinkSubList",
+                reference_index=ref_index,
             )
         )
     return rows
+
+
+def _strict_snapshot(expected_links):
+    return {
+        "link_policy": "strict",
+        "expected_links": list(expected_links),
+        "ignored_links": [],
+    }
+
+
+def _pre_validate(snapshot):
+    return _validate_expected_links_pre_recompute(snapshot)
+
+
+def _post_validate(anchors, snapshot):
+    return _validate_expected_links_post_recompute(anchors, snapshot)
 
 
 @pytest.mark.e2e
@@ -114,9 +133,10 @@ def test_linksub_exact_target_and_subelement_no_warning():
     holder = _linksub_holder(doc)
     holder.Support = (doc.Box, ["Face6"])
     entry = _expected_entry(doc, holder, ["Face6"])
-    anchors = _validate_expected_links_pre_recompute({"expected_links": [entry]})
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
     doc.recompute()
-    assert _validate_expected_links_post_recompute(anchors) == []
+    assert _post_validate(anchors, snapshot) == []
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -131,9 +151,10 @@ def test_xlinksub_exact_target_and_subelement_no_warning():
         ["Face3"],
         property_type="App::PropertyXLinkSub",
     )
-    anchors = _validate_expected_links_pre_recompute({"expected_links": [entry]})
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
     doc.recompute()
-    assert _validate_expected_links_post_recompute(anchors) == []
+    assert _post_validate(anchors, snapshot) == []
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -150,10 +171,11 @@ def test_linksublist_distinct_targets_exact_reopen():
     holder.Supports = refs
     doc.recompute()
     rows = _manifest_rows_for_linksublist(doc, holder, refs)
-    anchors = _validate_expected_links_pre_recompute({"expected_links": rows})
+    snapshot = _strict_snapshot(rows)
+    anchors = _pre_validate(snapshot)
     assert [item["ref_index"] for item in anchors] == [0, 1]
     doc.recompute()
-    assert _validate_expected_links_post_recompute(anchors) == []
+    assert _post_validate(anchors, snapshot) == []
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -170,7 +192,8 @@ def test_linksublist_preserves_separated_duplicate_multiplicity():
     holder.Supports = refs
     doc.recompute()
     rows = _manifest_rows_for_linksublist(doc, holder, refs)
-    anchors = _validate_expected_links_pre_recompute({"expected_links": rows})
+    snapshot = _strict_snapshot(rows)
+    anchors = _pre_validate(snapshot)
     assert [item["ref_index"] for item in anchors] == [0, 1, 2]
     FreeCAD.closeDocument(doc.Name)
 
@@ -192,7 +215,7 @@ def test_linksublist_pre_fails_when_final_duplicate_occurrence_missing():
         [(doc.Box, ["Face1"]), (box2, ["Face2"]), (doc.Box, ["Face1"])],
     )
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": rows})
+        _pre_validate(_strict_snapshot(rows))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -212,7 +235,7 @@ def test_linksublist_pre_fails_when_entry_missing(missing_index):
     holder.Supports = reopened
     doc.recompute()
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": rows})
+        _pre_validate(_strict_snapshot(rows))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -232,7 +255,7 @@ def test_linksublist_pre_fails_when_unexpected_extra_entry_present():
     ]
     doc.recompute()
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": rows})
+        _pre_validate(_strict_snapshot(rows))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -249,10 +272,11 @@ def test_linksublist_post_fails_when_entries_reorder_after_recompute():
     holder.Supports = refs
     doc.recompute()
     rows = _manifest_rows_for_linksublist(doc, holder, refs)
-    anchors = _validate_expected_links_pre_recompute({"expected_links": rows})
+    snapshot = _strict_snapshot(rows)
+    anchors = _pre_validate(snapshot)
     holder.Supports = [(box2, ["Face2"]), (doc.Box, ["Face1"])]
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_post_recompute(anchors)
+        _post_validate(anchors, snapshot)
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -269,9 +293,10 @@ def test_linksublist_post_emits_deterministic_multi_remap_warnings():
     holder.Supports = refs
     doc.recompute()
     rows = _manifest_rows_for_linksublist(doc, holder, refs)
-    anchors = _validate_expected_links_pre_recompute({"expected_links": rows})
+    snapshot = _strict_snapshot(rows)
+    anchors = _pre_validate(snapshot)
     holder.Supports = [(doc.Box, ["Face6"]), (box2, ["Face4"])]
-    warnings = _validate_expected_links_post_recompute(anchors)
+    warnings = _post_validate(anchors, snapshot)
     assert warnings == [
         f"subelement_remapped:{doc.Name}.Holder.Supports: Face1 -> Face6",
         f"subelement_remapped:{doc.Name}.Holder.Supports: Face2 -> Face4",
@@ -287,7 +312,7 @@ def test_pre_fails_owner_document_missing():
     entry = _expected_entry(doc, holder, ["Face1"])
     entry["owner_document"] = "MissingDocument"
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -299,7 +324,7 @@ def test_pre_fails_owner_object_missing():
     entry = _expected_entry(doc, holder, ["Face1"])
     entry["owner_object"] = "MissingHolder"
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -311,7 +336,7 @@ def test_pre_fails_property_missing():
     entry = _expected_entry(doc, holder, ["Face1"])
     entry["property"] = "MissingProperty"
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -322,6 +347,8 @@ def test_pre_fails_property_getter_raises(monkeypatch):
     holder.Support = (doc.Box, ["Face1"])
     entry = _expected_entry(doc, holder, ["Face1"])
 
+    getter_calls = {"count": 0}
+
     class BrokenDoc:
         Name = doc.Name
 
@@ -330,9 +357,11 @@ def test_pre_fails_property_getter_raises(monkeypatch):
 
                 class BrokenHolder:
                     Name = holder.Name
+                    PropertiesList = ["Support"]
 
                     @property
                     def Support(self):
+                        getter_calls["count"] += 1
                         raise RuntimeError("property getter failed")
 
                 return BrokenHolder()
@@ -343,7 +372,46 @@ def test_pre_fails_property_getter_raises(monkeypatch):
         lambda name: BrokenDoc() if name == doc.Name else FreeCAD.getDocument(name),
     )
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
+    assert getter_calls["count"] >= 1
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_post_fails_property_getter_raises(monkeypatch):
+    doc = _box_document("PostLinkGetterError")
+    holder = _linksub_holder(doc)
+    holder.Support = (doc.Box, ["Face2"])
+    entry = _expected_entry(doc, holder, ["Face2"])
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
+    getter_calls = {"count": 0}
+
+    class BrokenDoc:
+        Name = doc.Name
+
+        def getObject(self, name):
+            if name == holder.Name:
+
+                class BrokenHolder:
+                    Name = holder.Name
+                    PropertiesList = ["Support"]
+
+                    @property
+                    def Support(self):
+                        getter_calls["count"] += 1
+                        raise RuntimeError("property getter failed")
+
+                return BrokenHolder()
+            return doc.getObject(name)
+
+    monkeypatch.setattr(
+        "addon.FreeCADMCP.rpc_server.worker_entry.FreeCAD.getDocument",
+        lambda name: BrokenDoc() if name == doc.Name else FreeCAD.getDocument(name),
+    )
+    with pytest.raises(ExternalLinkUnresolved):
+        _post_validate(anchors, snapshot)
+    assert getter_calls["count"] >= 1
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -355,7 +423,7 @@ def test_pre_fails_target_document_mismatch():
     entry = _expected_entry(doc, holder, ["Face1"])
     entry["target_document"] = "OtherDocument"
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -367,7 +435,7 @@ def test_pre_fails_target_object_mismatch():
     entry = _expected_entry(doc, holder, ["Face1"])
     entry["target_object"] = "MissingBox"
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -378,7 +446,7 @@ def test_pre_fails_subelement_name_mismatch():
     holder.Support = (doc.Box, ["Face2"])
     entry = _expected_entry(doc, holder, ["Face6"])
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_pre_recompute({"expected_links": [entry]})
+        _pre_validate(_strict_snapshot([entry]))
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -388,7 +456,8 @@ def test_post_fails_when_target_object_changes():
     holder = _linksub_holder(doc)
     holder.Support = (doc.Box, ["Face2"])
     entry = _expected_entry(doc, holder, ["Face2"])
-    anchors = _validate_expected_links_pre_recompute({"expected_links": [entry]})
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
     second = doc.addObject("Part::Box", "Box2")
     second.Length = 5
     second.Width = 5
@@ -396,7 +465,7 @@ def test_post_fails_when_target_object_changes():
     doc.recompute()
     holder.Support = (second, ["Face2"])
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_post_recompute(anchors)
+        _post_validate(anchors, snapshot)
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -406,10 +475,11 @@ def test_post_fails_invalid_subelement_face999():
     holder = _linksub_holder(doc)
     holder.Support = (doc.Box, ["Face2"])
     entry = _expected_entry(doc, holder, ["Face2"])
-    anchors = _validate_expected_links_pre_recompute({"expected_links": [entry]})
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
     holder.Support = (doc.Box, ["Face999"])
     with pytest.raises(ExternalSubelementUnresolved):
-        _validate_expected_links_post_recompute(anchors)
+        _post_validate(anchors, snapshot)
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -419,10 +489,11 @@ def test_post_fails_when_subelement_list_grows():
     holder = _linksub_holder(doc)
     holder.Support = (doc.Box, ["Face2"])
     entry = _expected_entry(doc, holder, ["Face2"])
-    anchors = _validate_expected_links_pre_recompute({"expected_links": [entry]})
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
     holder.Support = (doc.Box, ["Face2", "Face1"])
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_expected_links_post_recompute(anchors)
+        _post_validate(anchors, snapshot)
     FreeCAD.closeDocument(doc.Name)
 
 
@@ -437,7 +508,8 @@ def test_save_reopen_phase1_matches_manifest_before_recompute(tmp_path):
     entry["owner_document"] = doc_name
     entry["target_document"] = doc_name
     reopened = FreeCAD.openDocument(str(path))
-    anchors = _validate_expected_links_pre_recompute({"expected_links": [entry]})
+    snapshot = _strict_snapshot([entry])
+    anchors = _pre_validate(snapshot)
     assert anchors[0]["ref_index"] == 0
     FreeCAD.closeDocument(reopened.Name)
 
@@ -486,6 +558,8 @@ def test_run_job_recompute_remap_warning_and_user_code_executes(monkeypatch, tmp
                     }
                 ],
                 "expected_links": [entry],
+                "link_policy": "strict",
+                "ignored_links": [],
             },
             "options": {"recompute": "none"},
         },
@@ -543,6 +617,8 @@ def test_run_job_preserves_remap_warnings_when_user_code_raises(monkeypatch, tmp
                     }
                 ],
                 "expected_links": [entry],
+                "link_policy": "strict",
+                "ignored_links": [],
             },
             "options": {"recompute": "none"},
         },
@@ -585,6 +661,8 @@ def test_run_job_fatal_validation_does_not_execute_user_code(tmp_path):
                     }
                 ],
                 "expected_links": [entry],
+                "link_policy": "strict",
+                "ignored_links": [],
             },
             "options": {"recompute": "none"},
         },
@@ -636,6 +714,7 @@ def test_link_policy_warn_omits_invalid_live_reference(tmp_path):
         )
         assert warned["ok"] is True
         assert any("Face999" in item for item in warned.get("link_warnings", []))
+        assert warned.get("ignored_links")
         assert all(
             "Face999" not in link.get("subelements", [])
             for link in warned.get("expected_links", [])

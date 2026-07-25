@@ -697,6 +697,7 @@ def _validate_saved_document_worker(path, document_name, profile, expected):
             }
         ],
         "expected_links": [],
+        "ignored_links": [],
         "link_policy": "strict",
         "state_indicators_best_effort": True,
     }

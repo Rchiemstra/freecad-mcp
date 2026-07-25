@@ -22,6 +22,7 @@ try:
         read_json_limited,
         validate_subelement_reference,
         validate_job,
+        validate_snapshot_manifest,
         write_json_atomic,
     )
 except ImportError:  # direct package import in tests
@@ -33,6 +34,7 @@ except ImportError:  # direct package import in tests
         read_json_limited,
         validate_subelement_reference,
         validate_job,
+        validate_snapshot_manifest,
         write_json_atomic,
     )
 
@@ -225,22 +227,167 @@ def _read_property_reference_entries(
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
 
 
+def _ignored_links_for_property(
+    snapshot: dict,
+    key: tuple[str, str, str],
+) -> dict[int, dict]:
+    ignored: dict[int, dict] = {}
+    for entry in snapshot.get("ignored_links") or []:
+        entry_key = (
+            entry["owner_document"],
+            entry["owner_object"],
+            entry["property"],
+        )
+        if entry_key != key:
+            continue
+        index = int(entry["reference_index"])
+        if index in ignored:
+            raise ExternalLinkUnresolved(
+                f"Snapshot links did not resolve: {key[0]}.{key[1]}.{key[2]}"
+            )
+        ignored[index] = entry
+    return ignored
+
+
+def _live_subelements_match_warn_policy(
+    live_subs,
+    kept_subs: list[str],
+    ignored_subs: list[str],
+) -> bool:
+    live = [str(item) for item in live_subs]
+    kept = [str(item) for item in kept_subs]
+    ignored = [str(item) for item in ignored_subs]
+    if len(live) != len(kept) + len(ignored):
+        return False
+    if [item for item in live if item in set(kept)] != kept:
+        return False
+    if [item for item in live if item in set(ignored)] != ignored:
+        return False
+    return set(live) == set(kept) | set(ignored)
+
+
+def _current_kept_subelements_post_recompute(
+    live_subs,
+    ignored_subs: list[str],
+) -> list[str] | None:
+    """Live subs with warn-policy ignored subs removed (multiset, first occurrence)."""
+    remaining = [str(item) for item in live_subs]
+    for ign in ignored_subs:
+        if ign not in remaining:
+            return None
+        remaining.remove(ign)
+    return remaining
+
+
+def _property_type_for_key(
+    snapshot: dict,
+    key: tuple[str, str, str],
+) -> str:
+    for source in (snapshot.get("expected_links") or [], snapshot.get("ignored_links") or []):
+        for entry in source:
+            if _property_group_key(entry) == key:
+                return str(entry.get("property_type") or "")
+    return ""
+
+
+def _is_single_linksub_property(property_type: str) -> bool:
+    return bool(property_type) and "LinkSub" in property_type and "LinkSubList" not in property_type
+
+
+def _normalize_reference_entries_for_property(
+    refs: list[tuple],
+    *,
+    property_type: str,
+    label: str,
+) -> list[tuple]:
+    """Collapse accidental per-subelement splits on single-target LinkSub properties."""
+    if not refs or not _is_single_linksub_property(property_type) or len(refs) == 1:
+        return refs
+    target_doc = refs[0][0].Document.Name
+    target_name = refs[0][0].Name
+    subs: list[str] = []
+    for target, subelements in refs:
+        if target.Document.Name != target_doc or target.Name != target_name:
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+        subs.extend(str(item) for item in subelements)
+    return [(refs[0][0], subs)]
+
+
+def _expected_rows_by_reference_index(rows: list[dict]) -> dict[int, dict]:
+    indexed: dict[int, dict] = {}
+    for offset, row in enumerate(rows):
+        index = int(row["reference_index"]) if "reference_index" in row else offset
+        if index in indexed:
+            raise ExternalLinkUnresolved(
+                f"Snapshot links did not resolve: duplicate reference_index {index}"
+            )
+        indexed[index] = row
+    return indexed
+
+
+def _validate_ignored_reference(
+    ignored: dict,
+    target,
+    subelements,
+    label: str,
+) -> None:
+    if (
+        target.Document.Name != ignored["target_document"]
+        or target.Name != ignored["target_object"]
+    ):
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    ignored_subs = [str(item) for item in ignored.get("subelements", [])]
+    if not ignored_subs:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    if not _live_subelements_match_warn_policy(subelements, [], ignored_subs):
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+
+
 def _validate_property_group_pre_recompute(
     expected_rows: list[dict],
+    snapshot: dict,
+    *,
+    property_key: tuple[str, str, str],
 ) -> list[dict]:
-    """Phase 1 for one property: exact-order reopen fidelity of all reference entries."""
-    if not expected_rows:
-        return []
-    key = _property_group_key(expected_rows[0])
+    """Phase 1 for one property: exact-order reopen fidelity with warn-policy exemptions."""
+    key = property_key
     refs, label = _read_property_reference_entries(key[0], key[1], key[2])
-    expected_identities = [_manifest_identity(row) for row in expected_rows]
-    current_identities = [_reference_identity(target, subs) for target, subs in refs]
-    if expected_identities != current_identities:
+    property_type = _property_type_for_key(snapshot, key)
+    refs = _normalize_reference_entries_for_property(
+        refs, property_type=property_type, label=label
+    )
+    ignored_by_index = _ignored_links_for_property(snapshot, key)
+    expected_by_ref = _expected_rows_by_reference_index(expected_rows)
+    anchors: list[dict] = []
+    for ref_index, (target, subelements) in enumerate(refs):
+        ignored = ignored_by_index.get(ref_index)
+        expected = expected_by_ref.pop(ref_index, None)
+        if ignored is not None and expected is not None:
+            kept_subs = [str(item) for item in expected.get("subelements", [])]
+            ignored_subs = [str(item) for item in ignored.get("subelements", [])]
+            if (
+                target.Document.Name != expected["target_document"]
+                or target.Name != expected["target_object"]
+                or target.Document.Name != ignored["target_document"]
+                or target.Name != ignored["target_object"]
+                or not _live_subelements_match_warn_policy(
+                    subelements, kept_subs, ignored_subs
+                )
+            ):
+                raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+            anchors.append({"expected": expected, "ref_index": ref_index})
+            continue
+        if ignored is not None:
+            _validate_ignored_reference(ignored, target, subelements, label)
+            continue
+        if expected is None:
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+        if _reference_identity(target, subelements) != _manifest_identity(expected):
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+        anchors.append({"expected": expected, "ref_index": ref_index})
+    if expected_by_ref:
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
-    return [
-        {"expected": expected, "ref_index": index}
-        for index, expected in enumerate(expected_rows)
-    ]
+    return anchors
 
 
 def _recompute_snapshot_documents() -> None:
@@ -248,18 +395,39 @@ def _recompute_snapshot_documents() -> None:
         doc.recompute()
 
 
+def _property_keys_in_snapshot(snapshot: dict) -> list[tuple[str, str, str]]:
+    order: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for entry in list(snapshot.get("expected_links") or []) + list(
+        snapshot.get("ignored_links") or []
+    ):
+        key = _property_group_key(entry)
+        if key in seen:
+            continue
+        seen.add(key)
+        order.append(key)
+    return order
+
+
 def _validate_expected_links_pre_recompute(snapshot) -> list[dict]:
     """Phase 1: per-property exact-order reopen fidelity before any document recompute."""
+    validate_snapshot_manifest(snapshot)
     anchors: list[dict] = []
-    for _key, expected_rows in _group_expected_link_entries(
-        snapshot.get("expected_links", [])
-    ):
-        anchors.extend(_validate_property_group_pre_recompute(expected_rows))
+    expected_map = dict(_group_expected_link_entries(snapshot.get("expected_links", [])))
+    for key in _property_keys_in_snapshot(snapshot):
+        anchors.extend(
+            _validate_property_group_pre_recompute(
+                expected_map.get(key, []), snapshot, property_key=key
+            )
+        )
     return anchors
 
 
 def _validate_property_group_post_recompute(
-    expected_rows: list[dict],
+    anchors_for_property: list[dict],
+    snapshot: dict,
+    *,
+    property_key: tuple[str, str, str],
 ) -> list[str]:
     """Phase 2 for one property: same entry count/order, target identity, subelement resolution.
 
@@ -268,9 +436,7 @@ def _validate_property_group_post_recompute(
     This does not prove persistent-topology equivalence for arbitrary valid faces.
     LinkSubList entry reordering is rejected because indices must still match the manifest.
     """
-    if not expected_rows:
-        return []
-    key = _property_group_key(expected_rows[0])
+    key = property_key
     label = f"{key[0]}.{key[1]}.{key[2]}"
     try:
         owner_doc = FreeCAD.getDocument(key[0])
@@ -288,13 +454,57 @@ def _validate_property_group_post_recompute(
         refs = _reference_entries(getattr(owner, key[2]))
     except Exception:
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
-    if len(refs) != len(expected_rows):
-        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    property_type = _property_type_for_key(snapshot, key)
+    refs = _normalize_reference_entries_for_property(
+        refs, property_type=property_type, label=label
+    )
+    ignored_by_index = _ignored_links_for_property(snapshot, key)
+    expected_by_ref = {
+        int(anchor["ref_index"]): anchor["expected"] for anchor in anchors_for_property
+    }
     warnings: list[str] = []
     missing_subelements: list[str] = []
-    for ref_index, expected in enumerate(expected_rows):
+    for ref_index, (target, subelements) in enumerate(refs):
+        ignored = ignored_by_index.get(ref_index)
+        expected = expected_by_ref.pop(ref_index, None)
+        if ignored is not None and expected is not None:
+            kept_subs = [str(item) for item in expected.get("subelements", [])]
+            ignored_subs = [str(item) for item in ignored.get("subelements", [])]
+            if (
+                target.Document.Name != expected["target_document"]
+                or target.Name != expected["target_object"]
+                or target.Document.Name != ignored["target_document"]
+                or target.Name != ignored["target_object"]
+            ):
+                raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+            current_kept_subs = _current_kept_subelements_post_recompute(
+                subelements, ignored_subs
+            )
+            if current_kept_subs is None:
+                raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+            entry_label = _expected_link_label(expected)
+            for subelement in current_kept_subs:
+                try:
+                    validate_subelement_reference(target, subelement)
+                except Exception as exc:
+                    missing_subelements.append(str(exc))
+            if len(current_kept_subs) != len(kept_subs):
+                raise ExternalLinkUnresolved(
+                    f"Snapshot links did not resolve: {entry_label}"
+                )
+            if current_kept_subs != kept_subs:
+                remap = ", ".join(
+                    f"{before} -> {after}"
+                    for before, after in zip(kept_subs, current_kept_subs)
+                )
+                warnings.append(f"subelement_remapped:{entry_label}: {remap}")
+            continue
+        if ignored is not None:
+            _validate_ignored_reference(ignored, target, subelements, label)
+            continue
+        if expected is None:
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
         entry_label = _expected_link_label(expected)
-        target, subelements = refs[ref_index]
         if (
             target.Document.Name != expected["target_document"]
             or target.Name != expected["target_object"]
@@ -319,6 +529,8 @@ def _validate_property_group_post_recompute(
                 for before, after in zip(expected_subs, current_subs)
             )
             warnings.append(f"subelement_remapped:{entry_label}: {remap}")
+    if expected_by_ref:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
     if missing_subelements:
         raise ExternalSubelementUnresolved(
             "Snapshot subelements did not resolve: "
@@ -327,13 +539,37 @@ def _validate_property_group_post_recompute(
     return warnings
 
 
-def _validate_expected_links_post_recompute(anchors: list[dict]) -> list[str]:
+def _validate_expected_links_post_recompute(anchors: list[dict], snapshot: dict) -> list[str]:
     warnings: list[str] = []
-    for _key, expected_rows in _group_expected_link_entries(
-        [anchor["expected"] for anchor in anchors]
-    ):
-        warnings.extend(_validate_property_group_post_recompute(expected_rows))
+    anchors_by_property: dict[tuple[str, str, str], list[dict]] = {}
+    for anchor in anchors:
+        key = _property_group_key(anchor["expected"])
+        anchors_by_property.setdefault(key, []).append(anchor)
+    for key in _property_keys_in_snapshot(snapshot):
+        property_anchors = anchors_by_property.get(key, [])
+        if not property_anchors and not _ignored_links_for_property(snapshot, key):
+            continue
+        warnings.extend(
+            _validate_property_group_post_recompute(
+                property_anchors, snapshot, property_key=key
+            )
+        )
     return warnings
+
+
+def _apply_snapshot_test_hooks(snapshot: dict, *, stage: str) -> None:
+    if os.environ.get("FREECAD_TEST") != "1":
+        return
+    hooks = snapshot.get("test_hooks") or {}
+    if stage == "after_recompute":
+        hook = hooks.get("after_recompute_remap")
+        if not hook:
+            return
+        doc = FreeCAD.getDocument(hook["owner_document"])
+        owner = doc.getObject(hook["owner_object"])
+        target = doc.getObject(hook["target_object"])
+        subs = [str(item) for item in hook.get("subelements", [])]
+        setattr(owner, hook["property"], (target, subs))
 
 
 def _attach_link_warnings(result: dict, link_validation_warnings: list[str]) -> None:
@@ -379,11 +615,12 @@ def run_job(job_path: str) -> int:
         if primary is None:
             raise RuntimeError(f"Primary snapshot did not open as {primary_name!r}")
         FreeCAD.setActiveDocument(primary.Name)
-        if snapshot.get("expected_links"):
+        if snapshot.get("expected_links") or snapshot.get("ignored_links"):
             link_anchors = _validate_expected_links_pre_recompute(snapshot)
             _recompute_snapshot_documents()
+            _apply_snapshot_test_hooks(snapshot, stage="after_recompute")
             link_validation_warnings = _validate_expected_links_post_recompute(
-                link_anchors
+                link_anchors, snapshot
             )
             _attach_link_warnings(result, link_validation_warnings)
         options = job.get("options") or {}

@@ -301,7 +301,7 @@ def _collect_link_manifest(
                     and not refs
                 ):
                     broken.append(f"{doc.Name}.{obj.Name}.{prop}")
-                for target, subelements in refs:
+                for ref_index, (target, subelements) in enumerate(refs):
                     target_doc = getattr(getattr(target, "Document", None), "Name", None)
                     target_name = getattr(target, "Name", None)
                     if (
@@ -327,6 +327,7 @@ def _collect_link_manifest(
                         "target_document": target_doc,
                         "target_object": target_name,
                         "subelements": subelements,
+                        "reference_index": ref_index,
                     })
     return (
         links,
@@ -413,8 +414,10 @@ def create_snapshot_bundle_gui(
 
     ``link_policy``:
     - ``strict`` (default): fail on broken links / invalid subelements.
-    - ``warn``: continue, omit bad refs from ``expected_links``, and return
-      ``link_warnings`` so the worker can still run read-only analysis.
+    - ``warn``: continue, omit bad refs from ``expected_links``, record structured
+      ``ignored_links`` (owner, property, ``reference_index``, target, ignored
+      subelements), and return ``link_warnings``. Phase-1/2 validation ignores only
+      those indexed entries while strictly checking every retained manifest row.
     """
     if link_policy not in {"strict", "warn"}:
         return {
@@ -436,6 +439,7 @@ def create_snapshot_bundle_gui(
             }
     links, broken, invalid_subelements = _collect_link_manifest(documents)
     link_warnings: list[str] = []
+    ignored_links: list[dict[str, Any]] = []
     if broken or invalid_subelements:
         if link_policy == "strict":
             if broken:
@@ -454,17 +458,28 @@ def create_snapshot_bundle_gui(
         for item in invalid_subelements:
             link_warnings.append(f"invalid_subelement:{item}")
         invalid_set = set(invalid_subelements)
+        ignored_links: list[dict[str, Any]] = []
         filtered_links = []
         for link in links:
-            subs = list(link.get("subelements") or [])
+            subs = [str(sub) for sub in link.get("subelements") or []]
             kept = [
                 sub
                 for sub in subs
                 if f"{link['target_document']}.{link['target_object']}.{sub}"
                 not in invalid_set
             ]
+            ignored_subs = [sub for sub in subs if sub not in kept]
+            if ignored_subs:
+                ignored_links.append({
+                    "owner_document": link["owner_document"],
+                    "owner_object": link["owner_object"],
+                    "property": link["property"],
+                    "reference_index": int(link["reference_index"]),
+                    "target_document": link["target_document"],
+                    "target_object": link["target_object"],
+                    "subelements": ignored_subs,
+                })
             if subs and not kept:
-                # Entire LinkSub was invalid — omit from expected_links.
                 continue
             entry = dict(link)
             entry["subelements"] = kept
@@ -534,6 +549,7 @@ def create_snapshot_bundle_gui(
         "selection": selection_before,
         "documents": entries,
         "expected_links": links,
+        "ignored_links": ignored_links,
         "link_policy": link_policy,
         "state_indicators_best_effort": True,
     }

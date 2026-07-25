@@ -70,7 +70,11 @@ def test_pre_recompute_rejects_duplicate_manifest_without_matching_third_entry(
         lambda *_args, **_kwargs: (refs, "Doc.Holder.Supports"),
     )
     with pytest.raises(ExternalLinkUnresolved):
-        _validate_property_group_pre_recompute(rows)
+        _validate_property_group_pre_recompute(
+            rows,
+            {"link_policy": "strict", "ignored_links": []},
+            property_key=("Doc", "Holder", "Supports"),
+        )
 
 
 @pytest.mark.unit
@@ -87,7 +91,11 @@ def test_pre_recompute_anchors_distinct_indexes_for_separated_duplicates(monkeyp
         "addon.FreeCADMCP.rpc_server.worker_entry._read_property_reference_entries",
         lambda *_args, **_kwargs: (refs, "Doc.Holder.Supports"),
     )
-    anchors = _validate_property_group_pre_recompute(rows)
+    anchors = _validate_property_group_pre_recompute(
+        rows,
+        {"link_policy": "strict", "ignored_links": []},
+        property_key=("Doc", "Holder", "Supports"),
+    )
     assert [item["ref_index"] for item in anchors] == [0, 1, 2]
     assert [_manifest_identity(item["expected"]) for item in anchors] == [
         _manifest_identity(row) for row in rows

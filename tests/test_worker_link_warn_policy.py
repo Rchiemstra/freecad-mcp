@@ -1,0 +1,462 @@
+"""link_policy=warn snapshot and worker validation (live FreeCAD)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+FreeCAD = pytest.importorskip("FreeCAD")
+FreeCADGui = pytest.importorskip("FreeCADGui")
+pytest.importorskip("Part")
+
+if not hasattr(FreeCADGui, "addCommand"):
+    FreeCADGui.addCommand = lambda *_args, **_kwargs: None
+
+from addon.FreeCADMCP.rpc_server.snapshot_service import (
+    create_snapshot_bundle_gui,
+    materialize_load_aliases,
+)
+from addon.FreeCADMCP.rpc_server.worker_entry import (
+    ExternalLinkUnresolved,
+    ExternalSubelementUnresolved,
+    _validate_expected_links_pre_recompute,
+    run_job,
+)
+from addon.FreeCADMCP.rpc_server.worker_manager import WorkerManager, WorkerRuntime
+from addon.FreeCADMCP.rpc_server.worker_protocol import ProtocolError, write_json_atomic
+
+MODULE_DIR = Path(__file__).parents[1] / "addon" / "FreeCADMCP" / "rpc_server"
+
+
+def _runtime() -> WorkerRuntime:
+    version = tuple(str(value) for value in FreeCAD.Version()[:4])
+    while len(version) < 4:
+        version += ("",)
+    return WorkerRuntime(
+        gui_executable=__import__("sys").executable,
+        freecad_home=FreeCAD.getHomePath(),
+        gui_version=version,
+    )
+
+
+def _box_document(name: str):
+    doc = FreeCAD.newDocument(name)
+    box = doc.addObject("Part::Box", "Box")
+    box.Length = 17
+    box.Width = 3
+    box.Height = 2
+    doc.recompute()
+    return doc
+
+
+def _execute_warn_snapshot(doc, manager: WorkerManager, code: str = "print('worker-ok')"):
+    workspace = manager.create_workspace()
+    snapshot = create_snapshot_bundle_gui(doc.Name, str(workspace), link_policy="warn")
+    assert snapshot["ok"] is True, snapshot
+    result = manager.execute(
+        code,
+        {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+        snapshot,
+        workspace,
+    )
+    return snapshot, result
+
+
+@pytest.mark.e2e
+def test_warn_wholly_invalid_linksub_executes(tmp_path):
+    doc = _box_document("WarnWhollyInvalid")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face999"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        snapshot, result = _execute_warn_snapshot(doc, manager)
+        assert result["success"] is True
+        assert "worker-ok" in result["message"]
+        assert any("Face999" in item for item in snapshot.get("link_warnings", []))
+        assert snapshot.get("expected_links") == []
+        assert len(snapshot.get("ignored_links") or []) == 1
+        assert result["link_warnings"] == snapshot["link_warnings"]
+        assert result["structured"]["link_warnings"] == snapshot["link_warnings"]
+        assert result["session"]["link_warnings"] == snapshot["link_warnings"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_mixed_subelement_on_one_target_executes(tmp_path):
+    doc = _box_document("WarnMixedSub")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        snapshot, result = _execute_warn_snapshot(doc, manager)
+        assert result["success"] is True
+        assert snapshot["expected_links"][0]["subelements"] == ["Face1"]
+        ignored = snapshot["ignored_links"][0]
+        assert ignored["reference_index"] == 0
+        assert ignored["subelements"] == ["Face999"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_linksublist_mixed_valid_invalid_executes(tmp_path):
+    doc = _box_document("WarnLinkSubList")
+    box2 = doc.addObject("Part::Box", "Box2")
+    box2.Length = 5
+    box2.Width = 4
+    box2.Height = 3
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSubList", "Supports")
+    holder.Supports = [
+        (doc.Box, ["Face1"]),
+        (box2, ["Face999"]),
+        (doc.Box, ["Face4"]),
+    ]
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        snapshot, result = _execute_warn_snapshot(doc, manager)
+        assert result["success"] is True
+        assert [row["subelements"] for row in snapshot["expected_links"]] == [
+            ["Face1"],
+            ["Face4"],
+        ]
+        assert snapshot["ignored_links"][0]["reference_index"] == 1
+        assert snapshot["ignored_links"][0]["subelements"] == ["Face999"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_duplicate_occurrences_around_invalid_entry(tmp_path):
+    doc = _box_document("WarnDupAroundInvalid")
+    box2 = doc.addObject("Part::Box", "Box2")
+    box2.Length = 5
+    box2.Width = 4
+    box2.Height = 3
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSubList", "Supports")
+    holder.Supports = [
+        (doc.Box, ["Face1"]),
+        (box2, ["Face999"]),
+        (doc.Box, ["Face1"]),
+    ]
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        snapshot, result = _execute_warn_snapshot(doc, manager)
+        assert result["success"] is True
+        assert len(snapshot["expected_links"]) == 2
+        assert snapshot["expected_links"][0]["subelements"] == ["Face1"]
+        assert snapshot["expected_links"][1]["subelements"] == ["Face1"]
+        assert snapshot["ignored_links"][0]["reference_index"] == 1
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_retained_face_missing_before_phase1_fails(tmp_path):
+    doc = _box_document("WarnRetainedMissing")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-retained")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    materialize_load_aliases(snapshot)
+    load_path = snapshot["documents"][0]["load_path"]
+    FreeCAD.closeDocument(doc.Name)
+    reopened = FreeCAD.openDocument(load_path)
+    reopened.Holder.Support = (reopened.Box, ["Face999"])
+    with pytest.raises(ExternalLinkUnresolved):
+        _validate_expected_links_pre_recompute(snapshot)
+    FreeCAD.closeDocument(reopened.Name)
+
+
+@pytest.mark.e2e
+def test_warn_extra_valid_reference_fails(tmp_path):
+    doc = _box_document("WarnExtraValid")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-extra")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    materialize_load_aliases(snapshot)
+    load_path = snapshot["documents"][0]["load_path"]
+    FreeCAD.closeDocument(doc.Name)
+    reopened = FreeCAD.openDocument(load_path)
+    reopened.Holder.Support = (reopened.Box, ["Face1", "Face2", "Face999"])
+    with pytest.raises(ExternalLinkUnresolved):
+        _validate_expected_links_pre_recompute(snapshot)
+    FreeCAD.closeDocument(reopened.Name)
+
+
+@pytest.mark.e2e
+def test_warn_tampered_ignored_metadata_fails(tmp_path):
+    doc = _box_document("WarnTamperIgnored")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        workspace = manager.create_workspace()
+        snapshot = create_snapshot_bundle_gui(doc.Name, str(workspace), link_policy="warn")
+        snapshot["ignored_links"][0]["subelements"] = ["Face1"]
+        result = manager.execute(
+            "print('must-not-run')",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot,
+            workspace,
+        )
+        assert result["success"] is False
+        assert result["error_code"] == "external_link_unresolved"
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_merged_snapshot_and_remap_warnings(tmp_path):
+    doc = _box_document("WarnMergeRemap")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        workspace = manager.create_workspace()
+        snapshot = create_snapshot_bundle_gui(doc.Name, str(workspace), link_policy="warn")
+        snapshot["test_hooks"] = {
+            "after_recompute_remap": {
+                "owner_document": snapshot["primary_document"],
+                "owner_object": holder.Name,
+                "property": "Support",
+                "target_object": "Box",
+                "subelements": ["Face6", "Face999"],
+            }
+        }
+        ok = manager.execute(
+            "print('merged-ok')",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot,
+            workspace,
+        )
+        assert ok["success"] is True, ok
+        assert any("invalid_subelement" in item for item in ok["link_warnings"])
+        assert any("Face1 -> Face6" in item for item in ok["link_warnings"])
+        workspace2 = manager.create_workspace()
+        snapshot2 = create_snapshot_bundle_gui(doc.Name, str(workspace2), link_policy="warn")
+        snapshot2["test_hooks"] = snapshot["test_hooks"]
+        bad = manager.execute(
+            "raise RuntimeError('user failure')",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot2,
+            workspace2,
+        )
+        assert bad["success"] is False
+        assert bad["error_code"] == "worker_execution_error"
+        assert bad["link_warnings"] == ok["link_warnings"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_strict_linksub_worker_executes(tmp_path):
+    doc = _box_document("WarnStrictHappy")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face6"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        snapshot, result = _execute_warn_snapshot(
+            doc, manager, code="print('strict-warn-ok')"
+        )
+        assert snapshot["link_policy"] == "warn"
+        assert snapshot["expected_links"][0]["subelements"] == ["Face6"]
+        assert result["success"] is True
+        assert "strict-warn-ok" in result["message"]
+        assert result.get("link_warnings") in (None, [])
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_retained_target_object_change_fails(tmp_path):
+    doc = _box_document("WarnTargetObj")
+    box2 = doc.addObject("Part::Box", "Box2")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-target-obj")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    materialize_load_aliases(snapshot)
+    load_path = snapshot["documents"][0]["load_path"]
+    FreeCAD.closeDocument(doc.Name)
+    reopened = FreeCAD.openDocument(load_path)
+    reopened.Holder.Support = (reopened.Box2, ["Face1", "Face999"])
+    with pytest.raises(ExternalLinkUnresolved):
+        _validate_expected_links_pre_recompute(snapshot)
+    FreeCAD.closeDocument(reopened.Name)
+
+
+@pytest.mark.e2e
+def test_warn_retained_subelement_name_change_fails(tmp_path):
+    doc = _box_document("WarnSubName")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-subname")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    materialize_load_aliases(snapshot)
+    load_path = snapshot["documents"][0]["load_path"]
+    FreeCAD.closeDocument(doc.Name)
+    reopened = FreeCAD.openDocument(load_path)
+    reopened.Holder.Support = (reopened.Box, ["Face2", "Face999"])
+    with pytest.raises(ExternalLinkUnresolved):
+        _validate_expected_links_pre_recompute(snapshot)
+    FreeCAD.closeDocument(reopened.Name)
+
+
+@pytest.mark.e2e
+def test_warn_linksublist_reorder_fails(tmp_path):
+    doc = _box_document("WarnListReorder")
+    box2 = doc.addObject("Part::Box", "Box2")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSubList", "Supports")
+    holder.Supports = [
+        (doc.Box, ["Face1"]),
+        (box2, ["Face999"]),
+        (doc.Box, ["Face4"]),
+    ]
+    doc.recompute()
+    workspace = str(tmp_path / "ws-reorder")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    materialize_load_aliases(snapshot)
+    load_path = snapshot["documents"][0]["load_path"]
+    FreeCAD.closeDocument(doc.Name)
+    reopened = FreeCAD.openDocument(load_path)
+    reopened.Holder.Supports = [
+        (reopened.Box, ["Face4"]),
+        (reopened.Box2, ["Face999"]),
+        (reopened.Box, ["Face1"]),
+    ]
+    with pytest.raises(ExternalLinkUnresolved):
+        _validate_expected_links_pre_recompute(snapshot)
+    FreeCAD.closeDocument(reopened.Name)
+
+
+@pytest.mark.e2e
+def test_warn_linksublist_duplicate_occurrence_lost_fails(tmp_path):
+    doc = _box_document("WarnDupLost")
+    box2 = doc.addObject("Part::Box", "Box2")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSubList", "Supports")
+    holder.Supports = [
+        (doc.Box, ["Face1"]),
+        (box2, ["Face999"]),
+        (doc.Box, ["Face1"]),
+    ]
+    doc.recompute()
+    workspace = str(tmp_path / "ws-dup-lost")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    materialize_load_aliases(snapshot)
+    load_path = snapshot["documents"][0]["load_path"]
+    FreeCAD.closeDocument(doc.Name)
+    reopened = FreeCAD.openDocument(load_path)
+    reopened.Holder.Supports = [
+        (reopened.Box, ["Face1"]),
+        (reopened.Box2, ["Face999"]),
+    ]
+    with pytest.raises(ExternalLinkUnresolved):
+        _validate_expected_links_pre_recompute(snapshot)
+    FreeCAD.closeDocument(reopened.Name)
+
+
+@pytest.mark.e2e
+def test_warn_tampered_expected_link_row_fails(tmp_path):
+    doc = _box_document("WarnTamperExpected")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Box, ["Face1", "Face999"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        workspace = manager.create_workspace()
+        snapshot = create_snapshot_bundle_gui(doc.Name, str(workspace), link_policy="warn")
+        snapshot["expected_links"] = []
+        result = manager.execute(
+            "print('must-not-run')",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot,
+            workspace,
+        )
+        assert result["success"] is False
+        assert result["error_code"] == "external_link_unresolved"
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.unit
+def test_validate_snapshot_rejects_ignored_links_under_strict_policy():
+    with pytest.raises(ProtocolError):
+        from addon.FreeCADMCP.rpc_server.worker_protocol import validate_snapshot_manifest
+
+        validate_snapshot_manifest(
+            {
+                "link_policy": "strict",
+                "expected_links": [],
+                "ignored_links": [
+                    {
+                        "owner_document": "Doc",
+                        "owner_object": "Holder",
+                        "property": "Support",
+                        "reference_index": 0,
+                        "target_document": "Doc",
+                        "target_object": "Box",
+                        "subelements": ["Face999"],
+                    }
+                ],
+            }
+        )
+
+
+@pytest.mark.unit
+def test_validate_snapshot_rejects_duplicate_ignored_reference_index():
+    from addon.FreeCADMCP.rpc_server.worker_protocol import validate_snapshot_manifest
+
+    entry = {
+        "owner_document": "Doc",
+        "owner_object": "Holder",
+        "property": "Support",
+        "reference_index": 0,
+        "target_document": "Doc",
+        "target_object": "Box",
+        "subelements": ["Face999"],
+    }
+    with pytest.raises(ProtocolError, match="duplicate reference_index"):
+        validate_snapshot_manifest(
+            {
+                "link_policy": "warn",
+                "expected_links": [],
+                "ignored_links": [entry, dict(entry)],
+            }
+        )
