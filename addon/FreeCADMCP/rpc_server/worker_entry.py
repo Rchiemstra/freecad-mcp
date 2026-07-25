@@ -155,51 +155,194 @@ def _reference_entries(value):
     return []
 
 
-def _validate_expected_links(snapshot) -> None:
-    missing_links = []
-    missing_subelements = []
-    for expected in snapshot.get("expected_links", []):
-        owner_doc = FreeCAD.getDocument(expected["owner_document"])
-        owner = owner_doc.getObject(expected["owner_object"]) if owner_doc else None
-        if owner is None:
-            missing_links.append(
-                f"{expected['owner_document']}.{expected['owner_object']}.{expected['property']}"
-            )
+def _expected_link_label(expected: dict) -> str:
+    return (
+        f"{expected['owner_document']}.{expected['owner_object']}.{expected['property']}"
+    )
+
+
+def _property_group_key(expected: dict) -> tuple[str, str, str]:
+    return (
+        expected["owner_document"],
+        expected["owner_object"],
+        expected["property"],
+    )
+
+
+def _manifest_identity(expected: dict) -> tuple[str, str, tuple[str, ...]]:
+    return (
+        expected["target_document"],
+        expected["target_object"],
+        tuple(str(item) for item in expected.get("subelements", [])),
+    )
+
+
+def _reference_identity(target, subelements) -> tuple[str, str, tuple[str, ...]]:
+    return (
+        target.Document.Name,
+        target.Name,
+        tuple(str(item) for item in subelements),
+    )
+
+
+def _group_expected_link_entries(
+    entries: list[dict],
+) -> list[tuple[tuple[str, str, str], list[dict]]]:
+    """Group manifest rows by owner property while preserving manifest order."""
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    order: list[tuple[str, str, str]] = []
+    for entry in entries:
+        key = _property_group_key(entry)
+        if key not in groups:
+            order.append(key)
+            groups[key] = []
+        groups[key].append(entry)
+    return [(key, groups[key]) for key in order]
+
+
+def _read_property_reference_entries(
+    owner_document: str,
+    owner_object: str,
+    property_name: str,
+) -> tuple[list[tuple], str]:
+    """Return parsed reference entries for one owner property or raise via label."""
+    label = f"{owner_document}.{owner_object}.{property_name}"
+    try:
+        owner_doc = FreeCAD.getDocument(owner_document)
+    except Exception:
+        owner_doc = None
+    if owner_doc is None:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    owner = owner_doc.getObject(owner_object)
+    if owner is None:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    properties = getattr(owner, "PropertiesList", None)
+    if not properties or property_name not in properties:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    try:
+        return _reference_entries(getattr(owner, property_name)), label
+    except Exception:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+
+
+def _validate_property_group_pre_recompute(
+    expected_rows: list[dict],
+) -> list[dict]:
+    """Phase 1 for one property: exact-order reopen fidelity of all reference entries."""
+    if not expected_rows:
+        return []
+    key = _property_group_key(expected_rows[0])
+    refs, label = _read_property_reference_entries(key[0], key[1], key[2])
+    expected_identities = [_manifest_identity(row) for row in expected_rows]
+    current_identities = [_reference_identity(target, subs) for target, subs in refs]
+    if expected_identities != current_identities:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    return [
+        {"expected": expected, "ref_index": index}
+        for index, expected in enumerate(expected_rows)
+    ]
+
+
+def _recompute_snapshot_documents() -> None:
+    for doc in FreeCAD.listDocuments().values():
+        doc.recompute()
+
+
+def _validate_expected_links_pre_recompute(snapshot) -> list[dict]:
+    """Phase 1: per-property exact-order reopen fidelity before any document recompute."""
+    anchors: list[dict] = []
+    for _key, expected_rows in _group_expected_link_entries(
+        snapshot.get("expected_links", [])
+    ):
+        anchors.extend(_validate_property_group_pre_recompute(expected_rows))
+    return anchors
+
+
+def _validate_property_group_post_recompute(
+    expected_rows: list[dict],
+) -> list[str]:
+    """Phase 2 for one property: same entry count/order, target identity, subelement resolution.
+
+    Post-recompute topological renaming is accepted only as same-index subelement name
+    changes on the same target object that still pass ``validate_subelement_reference``.
+    This does not prove persistent-topology equivalence for arbitrary valid faces.
+    LinkSubList entry reordering is rejected because indices must still match the manifest.
+    """
+    if not expected_rows:
+        return []
+    key = _property_group_key(expected_rows[0])
+    label = f"{key[0]}.{key[1]}.{key[2]}"
+    try:
+        owner_doc = FreeCAD.getDocument(key[0])
+    except Exception:
+        owner_doc = None
+    if owner_doc is None:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    owner = owner_doc.getObject(key[1])
+    if owner is None:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    properties = getattr(owner, "PropertiesList", None)
+    if not properties or key[2] not in properties:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    try:
+        refs = _reference_entries(getattr(owner, key[2]))
+    except Exception:
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    if len(refs) != len(expected_rows):
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    warnings: list[str] = []
+    missing_subelements: list[str] = []
+    for ref_index, expected in enumerate(expected_rows):
+        entry_label = _expected_link_label(expected)
+        target, subelements = refs[ref_index]
+        if (
+            target.Document.Name != expected["target_document"]
+            or target.Name != expected["target_object"]
+        ):
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+        expected_subs = [str(item) for item in expected.get("subelements", [])]
+        current_subs = [str(item) for item in subelements]
+        entry_subelement_errors: list[str] = []
+        for subelement in current_subs:
+            try:
+                validate_subelement_reference(target, subelement)
+            except Exception as exc:
+                entry_subelement_errors.append(str(exc))
+        if entry_subelement_errors:
+            missing_subelements.extend(entry_subelement_errors)
             continue
-        try:
-            refs = _reference_entries(getattr(owner, expected["property"]))
-        except Exception:
-            refs = []
-        matched = False
-        identity_matched = False
-        for target, subelements in refs:
-            if (
-                target.Document.Name == expected["target_document"]
-                and target.Name == expected["target_object"]
-                and list(subelements) == list(expected.get("subelements", []))
-            ):
-                identity_matched = True
-                try:
-                    for subelement in subelements:
-                        validate_subelement_reference(target, subelement)
-                except Exception as exc:
-                    missing_subelements.append(str(exc))
-                    continue
-                matched = True
-                break
-        if not matched and not identity_matched:
-            missing_links.append(
-                f"{expected['owner_document']}.{expected['owner_object']}.{expected['property']}"
+        if len(current_subs) != len(expected_subs):
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {entry_label}")
+        if current_subs != expected_subs:
+            remap = ", ".join(
+                f"{before} -> {after}"
+                for before, after in zip(expected_subs, current_subs)
             )
-    if missing_links:
-        raise ExternalLinkUnresolved(
-            "Snapshot links did not resolve: " + ", ".join(sorted(set(missing_links)))
-        )
+            warnings.append(f"subelement_remapped:{entry_label}: {remap}")
     if missing_subelements:
         raise ExternalSubelementUnresolved(
             "Snapshot subelements did not resolve: "
             + ", ".join(sorted(set(missing_subelements)))
         )
+    return warnings
+
+
+def _validate_expected_links_post_recompute(anchors: list[dict]) -> list[str]:
+    warnings: list[str] = []
+    for _key, expected_rows in _group_expected_link_entries(
+        [anchor["expected"] for anchor in anchors]
+    ):
+        warnings.extend(_validate_property_group_post_recompute(expected_rows))
+    return warnings
+
+
+def _attach_link_warnings(result: dict, link_validation_warnings: list[str]) -> None:
+    if not link_validation_warnings:
+        return
+    result["link_warnings"] = list(link_validation_warnings)
+    session = dict(result.get("session") or {})
+    session["link_warnings"] = list(link_validation_warnings)
+    result["session"] = session
 
 
 def run_job(job_path: str) -> int:
@@ -220,6 +363,7 @@ def run_job(job_path: str) -> int:
         "artifacts": [],
         "metrics": {},
     }
+    link_validation_warnings: list[str] = []
     try:
         validate_job(job)
         if job["kind"] == "probe":
@@ -236,9 +380,12 @@ def run_job(job_path: str) -> int:
             raise RuntimeError(f"Primary snapshot did not open as {primary_name!r}")
         FreeCAD.setActiveDocument(primary.Name)
         if snapshot.get("expected_links"):
-            for doc in FreeCAD.listDocuments().values():
-                doc.recompute()
-            _validate_expected_links(snapshot)
+            link_anchors = _validate_expected_links_pre_recompute(snapshot)
+            _recompute_snapshot_documents()
+            link_validation_warnings = _validate_expected_links_post_recompute(
+                link_anchors
+            )
+            _attach_link_warnings(result, link_validation_warnings)
         options = job.get("options") or {}
         recompute = options.get("recompute", "none")
         if recompute == "all":
@@ -259,12 +406,17 @@ def run_job(job_path: str) -> int:
             exec(job["code"], namespace)
         result["status"] = "ok"
         result["artifacts"] = emitter.artifacts
-        result["session"] = {
+        session = {
             "active_document_after": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None,
             "documents": sorted(FreeCAD.listDocuments().keys()),
             "worker_read_only_snapshot": True,
         }
+        if link_validation_warnings:
+            result["link_warnings"] = link_validation_warnings
+            session["link_warnings"] = link_validation_warnings
+        result["session"] = session
     except Exception as exc:
+        _attach_link_warnings(result, link_validation_warnings)
         result["error"] = {
             "type": type(exc).__name__,
             "message": str(exc),

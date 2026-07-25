@@ -119,6 +119,35 @@ class _WorkerInvocation:
     cancelled: bool = False
 
 
+def _merge_link_warnings(
+    snapshot: dict[str, Any],
+    worker_result: dict[str, Any],
+) -> list[str]:
+    """Merge snapshot and worker link warnings without duplicates, preserving order."""
+    merged: list[str] = []
+    seen: set[str] = set()
+    for source in (snapshot.get("link_warnings"), worker_result.get("link_warnings")):
+        for item in source or []:
+            text = str(item)
+            if text in seen:
+                continue
+            seen.add(text)
+            merged.append(text)
+    return merged
+
+
+def _apply_link_warnings(payload: dict[str, Any], link_warnings: list[str]) -> None:
+    if not link_warnings:
+        return
+    payload["link_warnings"] = link_warnings
+    structured = payload.get("structured")
+    if isinstance(structured, dict):
+        payload["structured"] = {**structured, "link_warnings": link_warnings}
+    session = payload.get("session")
+    if isinstance(session, dict):
+        payload["session"] = {**session, "link_warnings": link_warnings}
+
+
 class WorkerManager:
     """Run one worker with bounded admission: one active and three pending."""
 
@@ -477,13 +506,8 @@ class WorkerManager:
                     "artifacts": artifacts,
                     "stdout_truncated": bool(result.get("stdout_truncated")),
                 }
-                if snapshot.get("link_warnings"):
-                    payload["link_warnings"] = snapshot["link_warnings"]
-                    if isinstance(payload["structured"], dict):
-                        payload["structured"] = {
-                            **payload["structured"],
-                            "link_warnings": snapshot["link_warnings"],
-                        }
+                link_warnings = _merge_link_warnings(snapshot, result)
+                _apply_link_warnings(payload, link_warnings)
                 _console_message(
                     f"FreeCADMCP: worker IDLE job={job_id} "
                     f"ok duration={execution['duration_ms']:.0f}ms"
@@ -504,7 +528,7 @@ class WorkerManager:
                 f"FreeCADMCP: worker IDLE job={job_id} "
                 f"failed error_code={error_code}"
             )
-            return {
+            error_payload = {
                 "success": False,
                 "is_error": True,
                 "error_code": error_code,
@@ -514,6 +538,8 @@ class WorkerManager:
                 "session": result.get("session", {}),
                 "execution": execution,
             }
+            _apply_link_warnings(error_payload, _merge_link_warnings(snapshot, result))
+            return error_payload
         except WorkerVersionMismatch as exc:
             return self._error("worker_version_mismatch", str(exc), job_id=job_id)
         except UnsupportedWorkerGuiError as exc:
