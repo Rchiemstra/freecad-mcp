@@ -339,23 +339,65 @@ def _require_claimed_ignored_subelements_unresolvable(
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
 
 
-def _validate_ignored_reference(
-    ignored: dict,
-    target,
-    subelements,
-    label: str,
-) -> None:
+def _ignored_subelements_from_entry(ignored: dict) -> list[str]:
+    ignored_subs = [str(item) for item in ignored.get("subelements", [])]
+    if not ignored_subs:
+        raise ExternalLinkUnresolved("Snapshot links did not resolve")
+    return ignored_subs
+
+
+def _validate_ignored_target_identity(ignored: dict, target, label: str) -> None:
     if (
         target.Document.Name != ignored["target_document"]
         or target.Name != ignored["target_object"]
     ):
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
-    ignored_subs = [str(item) for item in ignored.get("subelements", [])]
-    if not ignored_subs:
-        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+
+
+def _validate_ignored_reference_pre_recompute(
+    ignored: dict,
+    target,
+    subelements,
+    label: str,
+) -> None:
+    """Phase 1: authenticate warn-policy ignored metadata on reopen."""
+    _validate_ignored_target_identity(ignored, target, label)
+    ignored_subs = _ignored_subelements_from_entry(ignored)
     if not _live_subelements_match_warn_policy(subelements, [], ignored_subs):
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
     _require_claimed_ignored_subelements_unresolvable(target, ignored_subs, label)
+
+
+def _ignored_subelements_present_in_live(live_subs, ignored_subs: list[str]) -> bool:
+    remaining = [str(item) for item in live_subs]
+    for ign in ignored_subs:
+        if ign not in remaining:
+            return False
+        remaining.remove(ign)
+    return True
+
+
+def _validate_authenticated_ignored_post_recompute(
+    ignored: dict,
+    target,
+    subelements,
+    label: str,
+    *,
+    kept_subs: list[str] | None = None,
+) -> None:
+    """Phase 2: structural fidelity for Phase-1-authenticated ignored occurrences."""
+    _validate_ignored_target_identity(ignored, target, label)
+    ignored_subs = _ignored_subelements_from_entry(ignored)
+    kept = [str(item) for item in (kept_subs or [])]
+    live = [str(item) for item in subelements]
+    if not _ignored_subelements_present_in_live(live, ignored_subs):
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    if not kept:
+        if live != ignored_subs:
+            raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+        return
+    if len(live) != len(kept) + len(ignored_subs):
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
 
 
 def _validate_property_group_pre_recompute(
@@ -393,10 +435,15 @@ def _validate_property_group_pre_recompute(
             _require_claimed_ignored_subelements_unresolvable(
                 target, ignored_subs, label
             )
-            anchors.append({"expected": expected, "ref_index": ref_index})
+            anchors.append(
+                {"expected": expected, "ignored": ignored, "ref_index": ref_index}
+            )
             continue
         if ignored is not None:
-            _validate_ignored_reference(ignored, target, subelements, label)
+            _validate_ignored_reference_pre_recompute(
+                ignored, target, subelements, label
+            )
+            anchors.append({"ignored": ignored, "ref_index": ref_index})
             continue
         if expected is None:
             raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
@@ -477,13 +524,22 @@ def _validate_property_group_post_recompute(
         refs, property_type=property_type, label=label
     )
     ignored_by_index = _ignored_links_for_property(snapshot, key)
+    authenticated_ignored_by_ref = {
+        int(anchor["ref_index"]): anchor["ignored"]
+        for anchor in anchors_for_property
+        if anchor.get("ignored") is not None
+    }
     expected_by_ref = {
-        int(anchor["ref_index"]): anchor["expected"] for anchor in anchors_for_property
+        int(anchor["ref_index"]): anchor["expected"]
+        for anchor in anchors_for_property
+        if anchor.get("expected") is not None
     }
     warnings: list[str] = []
     missing_subelements: list[str] = []
     for ref_index, (target, subelements) in enumerate(refs):
-        ignored = ignored_by_index.get(ref_index)
+        ignored = authenticated_ignored_by_ref.get(ref_index)
+        if ignored is None:
+            ignored = ignored_by_index.get(ref_index)
         expected = expected_by_ref.pop(ref_index, None)
         if ignored is not None and expected is not None:
             kept_subs = [str(item) for item in expected.get("subelements", [])]
@@ -491,12 +547,14 @@ def _validate_property_group_post_recompute(
             if (
                 target.Document.Name != expected["target_document"]
                 or target.Name != expected["target_object"]
-                or target.Document.Name != ignored["target_document"]
-                or target.Name != ignored["target_object"]
             ):
                 raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
-            _require_claimed_ignored_subelements_unresolvable(
-                target, ignored_subs, label
+            _validate_authenticated_ignored_post_recompute(
+                ignored,
+                target,
+                subelements,
+                label,
+                kept_subs=kept_subs,
             )
             current_kept_subs = _current_kept_subelements_post_recompute(
                 subelements, ignored_subs
@@ -521,7 +579,11 @@ def _validate_property_group_post_recompute(
                 warnings.append(f"subelement_remapped:{entry_label}: {remap}")
             continue
         if ignored is not None:
-            _validate_ignored_reference(ignored, target, subelements, label)
+            if ref_index not in authenticated_ignored_by_ref:
+                raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+            _validate_authenticated_ignored_post_recompute(
+                ignored, target, subelements, label
+            )
             continue
         if expected is None:
             raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
@@ -560,11 +622,18 @@ def _validate_property_group_post_recompute(
     return warnings
 
 
+def _anchor_property_key(anchor: dict) -> tuple[str, str, str]:
+    source = anchor.get("expected") or anchor.get("ignored")
+    if source is None:
+        raise ExternalLinkUnresolved("Snapshot links did not resolve")
+    return _property_group_key(source)
+
+
 def _validate_expected_links_post_recompute(anchors: list[dict], snapshot: dict) -> list[str]:
     warnings: list[str] = []
     anchors_by_property: dict[tuple[str, str, str], list[dict]] = {}
     for anchor in anchors:
-        key = _property_group_key(anchor["expected"])
+        key = _anchor_property_key(anchor)
         anchors_by_property.setdefault(key, []).append(anchor)
     for key in _property_keys_in_snapshot(snapshot):
         property_anchors = anchors_by_property.get(key, [])

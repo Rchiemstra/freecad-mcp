@@ -9,7 +9,7 @@ import pytest
 
 FreeCAD = pytest.importorskip("FreeCAD")
 FreeCADGui = pytest.importorskip("FreeCADGui")
-pytest.importorskip("Part")
+Part = pytest.importorskip("Part")
 
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
@@ -31,8 +31,75 @@ from addon.FreeCADMCP.rpc_server.worker_manager import (
     _merge_link_warnings,
 )
 from addon.FreeCADMCP.rpc_server.worker_protocol import ProtocolError, write_json_atomic
+from addon.FreeCADMCP.rpc_server.worker_protocol import validate_subelement_reference
 
 MODULE_DIR = Path(__file__).parents[1] / "addon" / "FreeCADMCP" / "rpc_server"
+
+
+def _six_face_target_document(name: str):
+    doc = FreeCAD.newDocument(name)
+    target = doc.addObject("Part::Feature", "Target")
+    target.Shape = Part.makeBox(10, 10, 10)
+    doc.recompute()
+    return doc
+
+
+def _expanded_target_shape():
+    base = Part.makeBox(10, 10, 10)
+    extra = Part.makeBox(4, 4, 4, FreeCAD.Vector(10, 0, 0))
+    return base.fuse(extra)
+
+
+def _recompute_expand_target(doc_name: str, *, target_name: str = "Target"):
+    def _hook():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.getObject(target_name).Shape = _expanded_target_shape()
+
+    return _hook
+
+
+def _assert_face7_invalid_then_valid(target):
+    with pytest.raises(Exception):
+        validate_subelement_reference(target, "Face7")
+    target.Shape = _expanded_target_shape()
+    validate_subelement_reference(target, "Face7")
+
+
+def _run_warn_snapshot_job(
+    monkeypatch,
+    tmp_path,
+    snapshot: dict,
+    *,
+    code: str = "print('worker-ok')",
+    recompute_hook,
+    job_id: str,
+):
+    materialize_load_aliases(snapshot)
+    monkeypatch.setattr(
+        worker_entry_module,
+        "_recompute_snapshot_documents",
+        recompute_hook,
+    )
+    result_path = tmp_path / f"{job_id}-result.json"
+    job_path = tmp_path / f"{job_id}-job.json"
+    write_json_atomic(
+        job_path,
+        {
+            "schema_version": 1,
+            "job_id": job_id,
+            "kind": "execute_code",
+            "code": code,
+            "artifact_directory": str(tmp_path / f"artifacts-{job_id}"),
+            "result_path": str(result_path),
+            "snapshot": snapshot,
+            "options": {"recompute": "none"},
+        },
+    )
+    exit_code = run_job(str(job_path))
+    worker_result = json.loads(result_path.read_text(encoding="utf-8"))
+    return exit_code, worker_result
 
 
 def _runtime() -> WorkerRuntime:
@@ -742,3 +809,163 @@ def test_validate_snapshot_rejects_duplicate_ignored_reference_index():
                 "ignored_links": [entry, dict(entry)],
             }
         )
+
+
+@pytest.mark.e2e
+def test_warn_ignored_face7_becomes_valid_after_recompute(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnIgnoredFace7Valid")
+    with pytest.raises(Exception):
+        validate_subelement_reference(doc.Target, "Face7")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face7"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-ignored-face7")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    assert snapshot["ok"] is True, snapshot
+    assert snapshot.get("expected_links") == []
+    assert snapshot["ignored_links"][0]["subelements"] == ["Face7"]
+    doc_name = snapshot["primary_document"]
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        recompute_hook=_recompute_expand_target(doc_name),
+        job_id="ignored-face7-valid",
+    )
+    assert exit_code == 0
+    assert worker_result["status"] == "ok"
+    assert "worker-ok" in worker_result["stdout"]
+    merged = _merge_link_warnings(snapshot, worker_result)
+    assert any("Face7" in item for item in merged)
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_mixed_retained_and_ignored_face7_becomes_valid(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnMixedFace7Valid")
+    doc.Target.Shape = Part.makeBox(10, 10, 10)
+    with pytest.raises(Exception):
+        validate_subelement_reference(doc.Target, "Face7")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face1", "Face7"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-mixed-face7")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    assert snapshot["ok"] is True, snapshot
+    assert snapshot["expected_links"][0]["subelements"] == ["Face1"]
+    assert snapshot["ignored_links"][0]["subelements"] == ["Face7"]
+    doc_name = snapshot["primary_document"]
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        recompute_hook=_recompute_expand_target(doc_name),
+        job_id="mixed-face7-valid",
+    )
+    assert exit_code == 0
+    assert worker_result["status"] == "ok"
+    assert "worker-ok" in worker_result["stdout"]
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_retained_remap_and_ignored_face7_becomes_valid(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnRemapIgnoredFace7")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face1", "Face7"])
+    doc.recompute()
+    workspace = str(tmp_path / "ws-remap-ignored-face7")
+    snapshot = create_snapshot_bundle_gui(doc.Name, workspace, link_policy="warn")
+    assert snapshot["ok"] is True, snapshot
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+
+    def recompute_remap_and_expand():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.Target.Shape = _expanded_target_shape()
+        live.getObject(holder_name).Support = (live.Target, ["Face6", "Face7"])
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        recompute_hook=recompute_remap_and_expand,
+        job_id="remap-ignored-face7",
+    )
+    assert exit_code == 0
+    merged = _merge_link_warnings(snapshot, worker_result)
+    assert any("invalid_subelement" in item for item in merged)
+    assert any("Face1 -> Face6" in item for item in merged)
+    assert merged == list(dict.fromkeys(merged))
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_post_recompute_ignored_occurrence_disappears_fails(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnIgnoredDisappears")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face1", "Face7"])
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-ignored-gone"), link_policy="warn"
+    )
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+
+    def recompute_drop_ignored():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.getObject(holder_name).Support = (live.Target, ["Face1"])
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        code="print('must-not-run')",
+        recompute_hook=recompute_drop_ignored,
+        job_id="ignored-disappears",
+    )
+    assert exit_code == 1
+    assert "must-not-run" not in worker_result["stdout"]
+    assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_post_recompute_extra_ignored_occurrence_fails(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnIgnoredExtra")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face7"])
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-ignored-extra"), link_policy="warn"
+    )
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+
+    def recompute_duplicate_ignored():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.Target.Shape = _expanded_target_shape()
+        live.getObject(holder_name).Support = (live.Target, ["Face7", "Face7"])
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        code="print('must-not-run')",
+        recompute_hook=recompute_duplicate_ignored,
+        job_id="ignored-extra",
+    )
+    assert exit_code == 1
+    assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
+    FreeCAD.closeDocument(doc.Name)
