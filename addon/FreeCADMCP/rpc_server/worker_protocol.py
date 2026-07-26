@@ -180,6 +180,54 @@ def reject_detectable_gui_usage(code: str) -> None:
             raise UnsupportedWorkerGuiError("FreeCAD GUI access is unsupported in worker jobs")
 
 
+def validate_snapshot_manifest(snapshot: dict[str, Any]) -> None:
+    """Validate snapshot link metadata carried into isolated workers."""
+    if not isinstance(snapshot, dict):
+        raise ProtocolError("worker snapshot manifest must be an object")
+    link_policy = snapshot.get("link_policy", "strict")
+    if link_policy not in {"strict", "warn"}:
+        raise ProtocolError(f"unsupported link_policy: {link_policy!r}")
+    ignored_links = snapshot.get("ignored_links", [])
+    if ignored_links is None:
+        ignored_links = []
+    if not isinstance(ignored_links, list):
+        raise ProtocolError("ignored_links must be a list")
+    if link_policy == "strict" and ignored_links:
+        raise ProtocolError("ignored_links requires link_policy warn")
+    seen_ignored: set[tuple[str, str, str, int]] = set()
+    for entry in ignored_links:
+        if not isinstance(entry, dict):
+            raise ProtocolError("ignored_links entries must be objects")
+        required = (
+            "owner_document",
+            "owner_object",
+            "property",
+            "reference_index",
+            "target_document",
+            "target_object",
+            "subelements",
+        )
+        for key in required:
+            if key not in entry:
+                raise ProtocolError(f"ignored_links entry missing {key!r}")
+        if not isinstance(entry["reference_index"], int) or entry["reference_index"] < 0:
+            raise ProtocolError("ignored_links reference_index must be a non-negative int")
+        subelements = entry["subelements"]
+        if not isinstance(subelements, list) or not subelements:
+            raise ProtocolError("ignored_links subelements must be a non-empty list")
+        if not all(isinstance(item, str) and item for item in subelements):
+            raise ProtocolError("ignored_links subelements must be non-empty strings")
+        dedupe_key = (
+            str(entry["owner_document"]),
+            str(entry["owner_object"]),
+            str(entry["property"]),
+            int(entry["reference_index"]),
+        )
+        if dedupe_key in seen_ignored:
+            raise ProtocolError("ignored_links contains duplicate reference_index")
+        seen_ignored.add(dedupe_key)
+
+
 def validate_job(job: dict[str, Any]) -> None:
     if job.get("schema_version") != SCHEMA_VERSION:
         raise ProtocolError("unsupported worker job schema")
@@ -208,6 +256,7 @@ def validate_job(job: dict[str, Any]) -> None:
     encoded_manifest = json.dumps(manifest).encode("utf-8")
     if len(encoded_manifest) > MAX_MANIFEST_BYTES:
         raise ProtocolError("worker snapshot manifest exceeds 1 MiB")
+    validate_snapshot_manifest(manifest)
     artifact_directory = job.get("artifact_directory")
     if not isinstance(artifact_directory, str) or not artifact_directory:
         raise ProtocolError("worker artifact_directory is required")
