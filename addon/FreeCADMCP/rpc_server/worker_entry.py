@@ -325,6 +325,20 @@ def _expected_rows_by_reference_index(rows: list[dict]) -> dict[int, dict]:
     return indexed
 
 
+def _require_claimed_ignored_subelements_unresolvable(
+    target,
+    ignored_subs: list[str],
+    label: str,
+) -> None:
+    """Reject ignored metadata that exempts subelements still valid on reopen."""
+    for subelement in ignored_subs:
+        try:
+            validate_subelement_reference(target, subelement)
+        except Exception:
+            continue
+        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+
+
 def _validate_ignored_reference(
     ignored: dict,
     target,
@@ -341,6 +355,7 @@ def _validate_ignored_reference(
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
     if not _live_subelements_match_warn_policy(subelements, [], ignored_subs):
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    _require_claimed_ignored_subelements_unresolvable(target, ignored_subs, label)
 
 
 def _validate_property_group_pre_recompute(
@@ -375,6 +390,9 @@ def _validate_property_group_pre_recompute(
                 )
             ):
                 raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+            _require_claimed_ignored_subelements_unresolvable(
+                target, ignored_subs, label
+            )
             anchors.append({"expected": expected, "ref_index": ref_index})
             continue
         if ignored is not None:
@@ -477,6 +495,9 @@ def _validate_property_group_post_recompute(
                 or target.Name != ignored["target_object"]
             ):
                 raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+            _require_claimed_ignored_subelements_unresolvable(
+                target, ignored_subs, label
+            )
             current_kept_subs = _current_kept_subelements_post_recompute(
                 subelements, ignored_subs
             )
@@ -557,21 +578,6 @@ def _validate_expected_links_post_recompute(anchors: list[dict], snapshot: dict)
     return warnings
 
 
-def _apply_snapshot_test_hooks(snapshot: dict, *, stage: str) -> None:
-    if os.environ.get("FREECAD_TEST") != "1":
-        return
-    hooks = snapshot.get("test_hooks") or {}
-    if stage == "after_recompute":
-        hook = hooks.get("after_recompute_remap")
-        if not hook:
-            return
-        doc = FreeCAD.getDocument(hook["owner_document"])
-        owner = doc.getObject(hook["owner_object"])
-        target = doc.getObject(hook["target_object"])
-        subs = [str(item) for item in hook.get("subelements", [])]
-        setattr(owner, hook["property"], (target, subs))
-
-
 def _attach_link_warnings(result: dict, link_validation_warnings: list[str]) -> None:
     if not link_validation_warnings:
         return
@@ -618,7 +624,6 @@ def run_job(job_path: str) -> int:
         if snapshot.get("expected_links") or snapshot.get("ignored_links"):
             link_anchors = _validate_expected_links_pre_recompute(snapshot)
             _recompute_snapshot_documents()
-            _apply_snapshot_test_hooks(snapshot, stage="after_recompute")
             link_validation_warnings = _validate_expected_links_post_recompute(
                 link_anchors, snapshot
             )

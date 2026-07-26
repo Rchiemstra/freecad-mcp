@@ -226,11 +226,6 @@ def validate_snapshot_manifest(snapshot: dict[str, Any]) -> None:
         if dedupe_key in seen_ignored:
             raise ProtocolError("ignored_links contains duplicate reference_index")
         seen_ignored.add(dedupe_key)
-    if snapshot.get("test_hooks") is not None:
-        import os
-
-        if os.environ.get("FREECAD_TEST") != "1":
-            raise ProtocolError("test_hooks are only allowed when FREECAD_TEST=1")
 
 
 def validate_job(job: dict[str, Any]) -> None:
