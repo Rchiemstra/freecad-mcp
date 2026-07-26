@@ -254,15 +254,22 @@ def _document_state(doc) -> dict[str, Any]:
 
 
 def _reference_entries(value) -> list[tuple[Any, list[str]]]:
+    """Normalize link values into targets and actual subelement names.
+
+    FreeCAD serializes a whole-object ``PropertyLinkSub`` reference with an
+    empty-string sentinel.  That sentinel is not a subelement and must not be
+    sent through subelement existence validation.
+    """
     if hasattr(value, "Document") and hasattr(value, "Name"):
         return [(value, [])]
     if isinstance(value, tuple) and value and hasattr(value[0], "Document"):
         subs: list[str] = []
         for item in value[1:]:
             if isinstance(item, str):
-                subs.append(item)
+                if item:
+                    subs.append(item)
             elif isinstance(item, (list, tuple)):
-                subs.extend(str(sub) for sub in item)
+                subs.extend(str(sub) for sub in item if str(sub))
         return [(value[0], subs)]
     if isinstance(value, (list, tuple)):
         result = []

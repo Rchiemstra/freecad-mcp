@@ -701,6 +701,82 @@ def test_worker_manager_merges_snapshot_link_warnings_on_success(tmp_path):
 
 
 @pytest.mark.e2e
+def test_whole_object_linksub_sentinel_executes_under_strict_policy(tmp_path):
+    doc = _box_document("WholeObjectSentinelStrict")
+    holder = _linksub_holder(doc)
+    holder.Support = (doc.Box, [""])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        workspace = manager.create_workspace()
+        snapshot = create_snapshot_bundle_gui(doc.Name, str(workspace))
+        assert snapshot["ok"] is True, snapshot
+        support = next(
+            entry
+            for entry in snapshot["expected_links"]
+            if entry["owner_object"] == holder.Name
+            and entry["property"] == "Support"
+        )
+        assert support["subelements"] == []
+        assert snapshot.get("ignored_links") == []
+        assert snapshot.get("link_warnings") is None
+
+        result = manager.execute(
+            "print('whole-object-link-ok')",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot,
+            workspace,
+        )
+        assert result["success"] is True, result
+        assert "whole-object-link-ok" in result["message"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_policy_ignores_only_real_invalid_subelements_with_empty_sentinel(
+    tmp_path,
+):
+    doc = _box_document("WholeObjectSentinelWarn")
+    whole_object = _linksub_holder(doc)
+    whole_object.Support = (doc.Box, [""])
+    invalid = doc.addObject("App::FeaturePython", "InvalidHolder")
+    invalid.addProperty("App::PropertyLinkSub", "Support")
+    invalid.Support = (doc.Box, ["Face999"])
+    doc.recompute()
+    manager = WorkerManager(_runtime(), str(MODULE_DIR))
+    try:
+        workspace = manager.create_workspace()
+        snapshot = create_snapshot_bundle_gui(
+            doc.Name, str(workspace), link_policy="warn"
+        )
+        assert snapshot["ok"] is True, snapshot
+        support = next(
+            entry
+            for entry in snapshot["expected_links"]
+            if entry["owner_object"] == whole_object.Name
+            and entry["property"] == "Support"
+        )
+        assert support["subelements"] == []
+        assert len(snapshot["ignored_links"]) == 1
+        assert snapshot["ignored_links"][0]["owner_object"] == invalid.Name
+        assert snapshot["ignored_links"][0]["subelements"] == ["Face999"]
+
+        result = manager.execute(
+            "print('warn-empty-sentinel-ok')",
+            {"document": doc.Name, "read_only": True, "execution_mode": "worker"},
+            snapshot,
+            workspace,
+        )
+        assert result["success"] is True, result
+        assert "warn-empty-sentinel-ok" in result["message"]
+    finally:
+        manager.stop()
+        FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
 def test_link_policy_warn_omits_invalid_live_reference(tmp_path):
     doc = _box_document("WarnPolicyPhase")
     holder = _linksub_holder(doc)
