@@ -969,3 +969,190 @@ def test_warn_post_recompute_extra_ignored_occurrence_fails(monkeypatch, tmp_pat
     assert exit_code == 1
     assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
     FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_post_recompute_ignored_only_linksub_disappears_fails(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnIgnoredOnlyGone")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face7"])
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-ignored-only-gone"), link_policy="warn"
+    )
+    assert snapshot.get("expected_links") == []
+    assert snapshot["ignored_links"][0]["reference_index"] == 0
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+
+    def recompute_clear_support():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.getObject(holder_name).Support = None
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        code="print('must-not-run')",
+        recompute_hook=recompute_clear_support,
+        job_id="ignored-only-gone",
+    )
+    assert exit_code == 1
+    assert "must-not-run" not in worker_result["stdout"]
+    assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_post_recompute_ignored_only_linksublist_occurrence_disappears_fails(
+    monkeypatch, tmp_path
+):
+    doc = _six_face_target_document("WarnIgnoredListGone")
+    box = doc.addObject("Part::Box", "Box")
+    box.Length = 5
+    box.Width = 4
+    box.Height = 3
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSubList", "Supports")
+    holder.Supports = [
+        (doc.Target, ["Face7"]),
+        (box, ["Face1"]),
+    ]
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-ignored-list-gone"), link_policy="warn"
+    )
+    assert snapshot["ignored_links"][0]["reference_index"] == 0
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+    box_name = box.Name
+
+    def recompute_drop_ignored_row():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.getObject(holder_name).Supports = [
+            (live.getObject(box_name), ["Face1"]),
+        ]
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        code="print('must-not-run')",
+        recompute_hook=recompute_drop_ignored_row,
+        job_id="ignored-list-gone",
+    )
+    assert exit_code == 1
+    assert "must-not-run" not in worker_result["stdout"]
+    assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_post_recompute_all_ignored_property_empty_fails(monkeypatch, tmp_path):
+    doc = _box_document("WarnAllIgnoredEmpty")
+    box2 = doc.addObject("Part::Box", "Box2")
+    box2.Length = 5
+    box2.Width = 4
+    box2.Height = 3
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSubList", "Supports")
+    holder.Supports = [
+        (doc.Box, ["Face999"]),
+        (box2, ["Face888"]),
+    ]
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-all-ignored-empty"), link_policy="warn"
+    )
+    assert snapshot.get("expected_links") == []
+    assert len(snapshot["ignored_links"]) == 2
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+
+    def recompute_clear_supports():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.getObject(holder_name).Supports = []
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        code="print('must-not-run')",
+        recompute_hook=recompute_clear_supports,
+        job_id="all-ignored-empty",
+    )
+    assert exit_code == 1
+    assert "must-not-run" not in worker_result["stdout"]
+    assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_post_recompute_mixed_reference_disappears_fails(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnMixedRefGone")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face1", "Face7"])
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-mixed-ref-gone"), link_policy="warn"
+    )
+    doc_name = snapshot["primary_document"]
+    holder_name = holder.Name
+
+    def recompute_clear_support():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+        live = FreeCAD.getDocument(doc_name)
+        live.getObject(holder_name).Support = None
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        code="print('must-not-run')",
+        recompute_hook=recompute_clear_support,
+        job_id="mixed-ref-gone",
+    )
+    assert exit_code == 1
+    assert "must-not-run" not in worker_result["stdout"]
+    assert worker_result["error"]["type"] == "ExternalLinkUnresolved"
+    FreeCAD.closeDocument(doc.Name)
+
+
+@pytest.mark.e2e
+def test_warn_ignored_only_face7_still_invalid_executes(monkeypatch, tmp_path):
+    doc = _six_face_target_document("WarnIgnoredOnlyStable")
+    with pytest.raises(Exception):
+        validate_subelement_reference(doc.Target, "Face7")
+    holder = doc.addObject("App::FeaturePython", "Holder")
+    holder.addProperty("App::PropertyLinkSub", "Support")
+    holder.Support = (doc.Target, ["Face7"])
+    doc.recompute()
+    snapshot = create_snapshot_bundle_gui(
+        doc.Name, str(tmp_path / "ws-ignored-only-stable"), link_policy="warn"
+    )
+    doc_name = snapshot["primary_document"]
+
+    def recompute_only():
+        for open_doc in FreeCAD.listDocuments().values():
+            open_doc.recompute()
+
+    exit_code, worker_result = _run_warn_snapshot_job(
+        monkeypatch,
+        tmp_path,
+        snapshot,
+        recompute_hook=recompute_only,
+        job_id="ignored-only-stable",
+    )
+    assert exit_code == 0
+    assert worker_result["status"] == "ok"
+    assert "worker-ok" in worker_result["stdout"]
+    FreeCAD.closeDocument(doc.Name)

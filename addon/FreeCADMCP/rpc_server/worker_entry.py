@@ -523,7 +523,6 @@ def _validate_property_group_post_recompute(
     refs = _normalize_reference_entries_for_property(
         refs, property_type=property_type, label=label
     )
-    ignored_by_index = _ignored_links_for_property(snapshot, key)
     authenticated_ignored_by_ref = {
         int(anchor["ref_index"]): anchor["ignored"]
         for anchor in anchors_for_property
@@ -537,10 +536,8 @@ def _validate_property_group_post_recompute(
     warnings: list[str] = []
     missing_subelements: list[str] = []
     for ref_index, (target, subelements) in enumerate(refs):
-        ignored = authenticated_ignored_by_ref.get(ref_index)
-        if ignored is None:
-            ignored = ignored_by_index.get(ref_index)
         expected = expected_by_ref.pop(ref_index, None)
+        ignored = authenticated_ignored_by_ref.pop(ref_index, None)
         if ignored is not None and expected is not None:
             kept_subs = [str(item) for item in expected.get("subelements", [])]
             ignored_subs = [str(item) for item in ignored.get("subelements", [])]
@@ -579,8 +576,6 @@ def _validate_property_group_post_recompute(
                 warnings.append(f"subelement_remapped:{entry_label}: {remap}")
             continue
         if ignored is not None:
-            if ref_index not in authenticated_ignored_by_ref:
-                raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
             _validate_authenticated_ignored_post_recompute(
                 ignored, target, subelements, label
             )
@@ -612,7 +607,7 @@ def _validate_property_group_post_recompute(
                 for before, after in zip(expected_subs, current_subs)
             )
             warnings.append(f"subelement_remapped:{entry_label}: {remap}")
-    if expected_by_ref:
+    if expected_by_ref or authenticated_ignored_by_ref:
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
     if missing_subelements:
         raise ExternalSubelementUnresolved(
