@@ -132,6 +132,25 @@ def test_remote_arbitrary_execution_is_disabled_by_default():
     assert _DEFAULT_SETTINGS["allow_remote_execute_code"] is False
     result = FreeCADRPC(allow_execute_code=False).execute_code("print('blocked')")
     assert result["error_code"] == "remote_execute_code_disabled"
+    assert result["execution_category"] == "public_execute_code"
+    assert result["code_analysis"]["code_sha256"]
+    assert result["mutation_scope"]["transaction_coverage"] == "unavailable"
+    assert result["mutation_scope"]["rollback_policy"] == "none"
+
+
+def test_execute_code_typed_tool_warning_excludes_generated_operations():
+    source = "FreeCAD.ActiveDocument.recompute()"
+    public = FreeCADRPC().execute_code(
+        source, {"execution_mode": "invalid"}
+    )
+    generated = FreeCADRPC().execute_code(
+        source,
+        {"execution_mode": "invalid", "generated_operation": True},
+    )
+    assert public["warnings"][0]["code"] == "TYPED_TOOL_AVAILABLE"
+    assert public["warnings"][0]["preferred_tools"] == ["recompute_document"]
+    assert generated["execution_category"] == "generated_internal_execute"
+    assert "warnings" not in generated
 
 
 def test_code_and_manifest_limits(tmp_path):

@@ -31,6 +31,11 @@ from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
 from PySide import QtCore, QtWidgets
 
 try:
+    from build_info import addon_build_id, addon_version
+except ImportError:
+    from addon.FreeCADMCP.build_info import addon_build_id, addon_version
+
+try:
     from document_state import (
         document_modified_or_dirty,
         require_document_modified,
@@ -42,6 +47,7 @@ except ImportError:
     )
 
 from .execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
+from .execute_code_analysis import analyze_execute_code, typed_tool_warning
 from .gui_dispatcher import (
     GuiBusyAfterTimeout,
     GuiDispatchError,
@@ -64,10 +70,17 @@ from .lease_protocol import (
     redact_sensitive as redact_lease_protocol_details,
 )
 from .mutation_guard import (
+    DocumentHealthVerdict,
     GuiMutationTransaction,
+    RollbackCoverage,
+    RpcMutationKind,
+    ValidationProfile,
+    calculate_document_health_delta,
+    capture_document_health,
     make_method_spec,
     validate_document_invariants,
 )
+from .telemetry import emit as emit_telemetry
 from .parts_library import (
     configure_parts_library_path,
     get_parts_list,
@@ -1541,6 +1554,501 @@ class FreeCADRPC:
         return inflight.token.checkpoint(phase)
 
     @staticmethod
+    def _expected_object_names(value):
+        """Extract bounded typed object-name hints without inspecting code."""
+
+        names = set()
+        ignored = {
+            "canonical_path",
+            "doc_name",
+            "document",
+            "document_name",
+            "document_session_uuid",
+            "file_path",
+            "path",
+        }
+
+        def visit(item, key="", depth=0):
+            if depth > 8 or len(names) >= 128:
+                return
+            normalized = str(key).lower()
+            if isinstance(item, dict):
+                for child_key, child in item.items():
+                    visit(child, str(child_key), depth + 1)
+                return
+            if isinstance(item, (list, tuple)):
+                for child in item[:128]:
+                    visit(child, key, depth + 1)
+                return
+            if (
+                isinstance(item, str)
+                and item
+                and normalized not in ignored
+                and (
+                    normalized.endswith("_name")
+                    or normalized
+                    in {
+                        "object",
+                        "objects",
+                        "object_name",
+                        "object_names",
+                        "feature",
+                        "features",
+                        "created",
+                        "deleted",
+                        "modified",
+                    }
+                )
+            ):
+                names.add(item)
+
+        visit(value)
+        return tuple(sorted(names))
+
+    @staticmethod
+    def _aggregate_document_health(deltas, *, unexpected_documents=()):
+        rank = {
+            DocumentHealthVerdict.UNKNOWN.value: 0,
+            DocumentHealthVerdict.HEALTHY.value: 1,
+            DocumentHealthVerdict.WARNING.value: 2,
+            DocumentHealthVerdict.DEGRADED.value: 3,
+            DocumentHealthVerdict.INVALID.value: 4,
+        }
+        verdict = DocumentHealthVerdict.UNKNOWN.value
+        for delta in deltas:
+            candidate = delta.verdict.value
+            if rank[candidate] > rank[verdict]:
+                verdict = candidate
+        if unexpected_documents and rank[verdict] < rank[
+            DocumentHealthVerdict.DEGRADED.value
+        ]:
+            verdict = DocumentHealthVerdict.DEGRADED.value
+        documents = [item.to_dict() for item in deltas]
+        aggregate = {
+            "verdict": verdict,
+            "documents": documents,
+            "unexpected_modified_documents": sorted(
+                str(item) for item in unexpected_documents
+            ),
+        }
+        fields = (
+            "new_recompute_errors",
+            "resolved_recompute_errors",
+            "new_invalid_state_objects",
+            "new_null_shapes",
+            "new_invalid_shapes",
+            "created_objects",
+            "deleted_objects",
+            "modified_objects",
+            "unexpected_modified_objects",
+        )
+        for field_name in fields:
+            aggregate[field_name] = sorted(
+                {
+                    f"{item.document_name}.{name}"
+                    for item in deltas
+                    for name in getattr(item, field_name)
+                }
+            )
+        return aggregate
+
+    @staticmethod
+    def _unknown_mutation_evidence(
+        operation,
+        *,
+        declared_documents=(),
+        coverage=RollbackCoverage.UNAVAILABLE,
+        reason="validation unavailable",
+    ):
+        coverage_value = str(getattr(coverage, "value", coverage))
+        return {
+            "document_health": {
+                "verdict": DocumentHealthVerdict.UNKNOWN.value,
+                "documents": [],
+                "validation_available": False,
+                "validation_error": str(reason)[:2048],
+                "new_recompute_errors": [],
+                "new_invalid_shapes": [],
+            },
+            "transaction": {
+                "status": "unavailable",
+                "enabled": False,
+                "documents": sorted(str(item) for item in declared_documents),
+                "started": False,
+                "committed": False,
+                "abort_attempted": False,
+                "abort_succeeded": None,
+                "abort_errors": [],
+                "rollback_attempted": False,
+                "rollback_succeeded": None,
+                "coverage": coverage_value,
+            },
+            "mutation_scope": {
+                "declared_documents": sorted(
+                    str(item) for item in declared_documents
+                ),
+                "expected_modified_objects": [],
+                "transaction_coverage": coverage_value,
+                "rollback_policy": "none",
+                "operation": str(operation),
+            },
+        }
+
+    def _observed_document_evidence(
+        self,
+        operation,
+        document,
+        *,
+        profile=ValidationProfile.DEFAULT,
+        coverage=RollbackCoverage.PARTIAL,
+    ):
+        snapshot = capture_document_health(document, profile=profile)
+        delta = calculate_document_health_delta(snapshot, snapshot)
+        health = self._aggregate_document_health([delta])
+        health["snapshot"] = snapshot.to_dict()
+        evidence = self._unknown_mutation_evidence(
+            operation,
+            declared_documents=(snapshot.document_name,),
+            coverage=coverage,
+        )
+        evidence["document_health"] = health
+        return evidence
+
+    @staticmethod
+    def _adapt_gui_mutation_result(
+        result,
+        *,
+        success_fields=None,
+        result_field=None,
+        expected_result_type=None,
+    ):
+        """Preserve postflight evidence while adapting legacy GUI sentinels.
+
+        Mutation guarding returns a dictionary even when the historical GUI
+        helper returned ``True`` or a list. Public RPC methods still expose
+        their legacy success fields, augmented with the authoritative health,
+        transaction, and mutation-scope records.
+        """
+
+        success_fields = dict(success_fields or {})
+        if isinstance(result, dict):
+            adapted = dict(result)
+            failed = (
+                adapted.get("success") is False or adapted.get("ok") is False
+            )
+            if failed:
+                return adapted
+            value = adapted.get("result")
+            if result_field is not None and (
+                expected_result_type is None
+                or isinstance(value, expected_result_type)
+            ):
+                adapted[result_field] = value
+            adapted.update(success_fields)
+            adapted.setdefault("success", True)
+            return adapted
+        if result is True:
+            return {"success": True, **success_fields}
+        if result_field is not None and (
+            expected_result_type is None
+            or isinstance(result, expected_result_type)
+        ):
+            return {
+                "success": True,
+                result_field: result,
+                **success_fields,
+            }
+        return {"success": False, "error": result}
+
+    def _execute_mutation_with_health(
+        self,
+        task,
+        documents,
+        spec,
+        *,
+        expected_objects=(),
+        inflight=None,
+        recompute_callback=None,
+        request_id=None,
+    ):
+        """Run, validate, then commit a typed GUI mutation."""
+
+        documents = tuple(documents)
+        expected = set(expected_objects)
+        declared_names = {
+            str(getattr(document, "Name", "") or "") for document in documents
+        }
+        all_before = {
+            str(getattr(document, "Name", "") or ""): capture_document_health(
+                document,
+                profile=(
+                    spec.validation_profile
+                    if document in documents
+                    else ValidationProfile.MINIMAL
+                ),
+                affected_objects=expected,
+            )
+            for document in tuple(FreeCAD.listDocuments().values())
+        }
+        before = {
+            str(getattr(document, "Name", "") or ""): all_before[
+                str(getattr(document, "Name", "") or "")
+            ]
+            for document in documents
+        }
+        transaction = GuiMutationTransaction(
+            documents,
+            f"MCP: {spec.name}",
+            enabled=spec.transaction,
+        )
+        result = None
+        failed = False
+        attempted_deltas = []
+        unexpected_documents = []
+        validation_error = None
+        transaction.__enter__()
+        try:
+            if inflight is not None:
+                inflight.token.checkpoint("gui_mutation_invocation")
+            result = task()
+            failed = isinstance(result, dict) and (
+                result.get("success") is False or result.get("ok") is False
+            )
+            if spec.kind == RpcMutationKind.CLOSE:
+                if failed:
+                    transaction.abort()
+                else:
+                    transaction.commit()
+                if not isinstance(result, dict):
+                    result = {"success": not failed, "result": result}
+                result = dict(result)
+                evidence = self._unknown_mutation_evidence(
+                    spec.name,
+                    declared_documents=declared_names,
+                    coverage=RollbackCoverage.UNAVAILABLE,
+                    reason=(
+                        "target document closed successfully"
+                        if not failed
+                        else "close failed before terminal identity validation"
+                    ),
+                )
+                result.update(evidence)
+                emit_telemetry(
+                    "document_health",
+                    "document_health_checked",
+                    status=result["document_health"]["verdict"],
+                    request_id=request_id,
+                    execution_id=request_id,
+                    payload={
+                        "operation": spec.name,
+                        "document_health": result["document_health"],
+                        "transaction": result["transaction"],
+                    },
+                )
+                return result, failed
+            if not failed and spec.recompute:
+                if inflight is not None:
+                    inflight.token.checkpoint("gui_recompute")
+                if recompute_callback is not None:
+                    recompute_callback()
+                for document in documents:
+                    document.recompute()
+            get_document = getattr(FreeCAD, "getDocument", lambda _name: None)
+            post_documents = tuple(
+                get_document(str(getattr(document, "Name", "") or ""))
+                or document
+                for document in documents
+            )
+            if not failed and spec.validator is not None:
+                validations = [
+                    dict(spec.validator(document)) for document in post_documents
+                ]
+                if isinstance(result, dict):
+                    result = dict(result)
+                    result["postflight_validation"] = validations
+
+            result_names = self._expected_object_names(result)
+            affected = expected.union(result_names)
+            after = {
+                str(getattr(document, "Name", "") or ""): capture_document_health(
+                    document,
+                    profile=spec.validation_profile,
+                    affected_objects=affected,
+                )
+                for document in post_documents
+            }
+            attempted_deltas = [
+                calculate_document_health_delta(
+                    before[name],
+                    after[name],
+                    expected_modified_objects=affected,
+                )
+                for name in before
+            ]
+
+            all_after_documents = tuple(FreeCAD.listDocuments().values())
+            for document in all_after_documents:
+                name = str(getattr(document, "Name", "") or "")
+                if name in declared_names:
+                    continue
+                previous = all_before.get(name)
+                current = capture_document_health(
+                    document, profile=ValidationProfile.MINIMAL
+                )
+                if previous is None or (
+                    previous.object_signatures != current.object_signatures
+                    or previous.object_count != current.object_count
+                    or previous.document_dirty != current.document_dirty
+                ):
+                    unexpected_documents.append(name)
+            for name in set(all_before).difference(
+                str(getattr(document, "Name", "") or "")
+                for document in all_after_documents
+            ):
+                if name not in declared_names:
+                    unexpected_documents.append(name)
+
+            attempted_health = self._aggregate_document_health(
+                attempted_deltas,
+                unexpected_documents=unexpected_documents,
+            )
+            health_degraded = attempted_health["verdict"] in {
+                DocumentHealthVerdict.DEGRADED.value,
+                DocumentHealthVerdict.INVALID.value,
+            }
+            if failed or health_degraded:
+                transaction.abort()
+            else:
+                transaction.commit()
+        except RequestCancellationError:
+            transaction.abort()
+            raise
+        except Exception as exc:
+            validation_error = f"{type(exc).__name__}: {exc}"[:2048]
+            transaction.abort()
+            failed = True
+            if isinstance(result, dict):
+                result = {
+                    **result,
+                    "success": False,
+                    "error_code": getattr(
+                        exc, "code", type(exc).__name__.upper()
+                    ),
+                    "error": str(exc),
+                }
+            else:
+                result = {
+                    "success": False,
+                    "error_code": getattr(
+                        exc, "code", type(exc).__name__.upper()
+                    ),
+                    "error": str(exc),
+                }
+        finally:
+            # Explicit commit/abort empties the transaction; this retains
+            # context-manager compatibility without committing after validation.
+            transaction.__exit__(None, None, None)
+
+        final_deltas = attempted_deltas
+        if transaction.abort_attempted:
+            final_deltas = []
+            for document in documents:
+                name = str(getattr(document, "Name", "") or "")
+                final_snapshot = capture_document_health(
+                    document,
+                    profile=spec.validation_profile,
+                    affected_objects=expected,
+                )
+                final_deltas.append(
+                    calculate_document_health_delta(
+                        before[name],
+                        final_snapshot,
+                        expected_modified_objects=expected,
+                        validation_error=(
+                            "transaction rollback failed"
+                            if transaction.abort_succeeded is False
+                            else None
+                        ),
+                    )
+                )
+        health = self._aggregate_document_health(
+            final_deltas,
+            unexpected_documents=unexpected_documents,
+        )
+        if attempted_deltas:
+            health["attempted_verdict"] = self._aggregate_document_health(
+                attempted_deltas,
+                unexpected_documents=unexpected_documents,
+            )["verdict"]
+        health["rollback_restored_health"] = bool(
+            transaction.abort_succeeded
+            and health["verdict"]
+            in {
+                DocumentHealthVerdict.HEALTHY.value,
+                DocumentHealthVerdict.WARNING.value,
+            }
+        )
+        if validation_error:
+            health["validation_error"] = validation_error
+        transaction_data = transaction.to_dict(coverage=spec.rollback_coverage)
+        if not isinstance(result, dict):
+            result = {"success": not failed, "result": result}
+        else:
+            result = dict(result)
+        result["transaction"] = transaction_data
+        result["document_health"] = health
+        result["mutation_scope"] = {
+            "declared_documents": sorted(declared_names),
+            "expected_modified_objects": sorted(expected),
+            "transaction_coverage": transaction_data["coverage"],
+            "rollback_policy": (
+                "abort_on_failure_or_degraded_health"
+                if transaction.enabled
+                else "none"
+            ),
+        }
+        if transaction.abort_succeeded is False:
+            result.update(
+                success=False,
+                outcome_status="degraded",
+                error_code="TRANSACTION_ROLLBACK_FAILED",
+                error="Document transaction rollback failed",
+            )
+        elif (
+            health.get("attempted_verdict")
+            in {
+                DocumentHealthVerdict.DEGRADED.value,
+                DocumentHealthVerdict.INVALID.value,
+            }
+            and not failed
+        ):
+            result.update(
+                success=False,
+                outcome_status="degraded",
+                error_code="DOCUMENT_HEALTH_DEGRADED",
+                error="Mutation was rolled back because document health degraded",
+            )
+            failed = True
+        emit_telemetry(
+            "document_health",
+            "document_health_checked",
+            status=health["verdict"],
+            error_code=result.get("error_code"),
+            request_id=request_id,
+            execution_id=request_id,
+            payload={
+                "operation": spec.name,
+                "document_health": health,
+                "transaction": transaction_data,
+            },
+        )
+        return result, bool(
+            failed
+            or result.get("success") is False
+            or result.get("ok") is False
+        )
+
+    @staticmethod
     def _model_credential(inflight_credential):
         lease = _import_document_lease()
         return lease.LeaseCredential(
@@ -1599,10 +2107,28 @@ class FreeCADRPC:
     @staticmethod
     def _finish_cancellation_resolution(inflight, result):
         """Publish one authoritative result and retire terminal credentials."""
-
-        return rpc_inflight_request_registry.finish_cancellation_resolution(
+        resolved = rpc_inflight_request_registry.finish_cancellation_resolution(
             inflight, result
         )
+        snapshot = inflight.token.snapshot()
+        emit_telemetry(
+            "cancellation",
+            "cancellation_completed",
+            status="cancelled",
+            error_code=(
+                "REQUEST_CANCELLED_AFTER_MUTATION"
+                if snapshot.mutation_started or snapshot.uncertain
+                else "REQUEST_CANCELLED"
+            ),
+            request_id=inflight.request_id,
+            execution_id=inflight.request_id,
+            recovery_incident_id=snapshot.recovery_incident_id,
+            payload={
+                "mutation_started": snapshot.mutation_started,
+                "completion_uncertain": snapshot.uncertain,
+            },
+        )
+        return resolved
 
     @staticmethod
     def _wait_for_cancellation_resolution(inflight, *, wait_timeout=None):
@@ -1974,6 +2500,27 @@ class FreeCADRPC:
                     )
                     if blocked is not None:
                         return blocked
+                if documents:
+                    return self._call_with_mutation_context(
+                        func,
+                        params,
+                        {
+                            "request_id": (
+                                dl.get_request_identity().get("request_id")
+                                or str(uuid.uuid4())
+                            ),
+                            "method": method_spec.name,
+                            "doc_keys": (),
+                            "doc_names": tuple(
+                                str(getattr(document, "Name", "") or "")
+                                for document in documents
+                            ),
+                            "identity": dict(dl.get_request_identity()),
+                            "method_spec": method_spec,
+                            "expected_objects": self._expected_object_names(params),
+                            "lease_enforced": False,
+                        },
+                    )
             return func(*params)
 
         identity = dl.get_request_identity()
@@ -2122,6 +2669,7 @@ class FreeCADRPC:
                         method_spec,
                         name=operation_id,
                         validator=validate_document_invariants,
+                        rollback_coverage=RollbackCoverage.DOCUMENT_ONLY,
                     )
                 if not generated_operation and not settings.get(
                     "allow_unsafe_mutating_execute_code", False
@@ -2195,6 +2743,8 @@ class FreeCADRPC:
                         "doc_names": tuple(declared),
                         "identity": dict(dl.get_request_identity()),
                         "method_spec": method_spec,
+                        "expected_objects": self._expected_object_names(params),
+                        "lease_enforced": True,
                     },
                 )
 
@@ -2280,6 +2830,8 @@ class FreeCADRPC:
                 "doc_names": (doc_name,),
                 "identity": dict(dl.get_request_identity()),
                 "method_spec": method_spec,
+                "expected_objects": self._expected_object_names(params),
+                "lease_enforced": True,
             },
         )
 
@@ -2300,6 +2852,8 @@ class FreeCADRPC:
                 "doc_names": tuple(context["doc_names"]),
                 "identity": dict(context["identity"]),
                 "method_spec": context["method_spec"],
+                "expected_objects": tuple(context.get("expected_objects", ())),
+                "lease_enforced": bool(context.get("lease_enforced", True)),
             }
             request_id = captured["request_id"]
             original_task = task
@@ -2308,7 +2862,10 @@ class FreeCADRPC:
                 dl = _import_document_lock()
                 if inflight is not None:
                     inflight.token.checkpoint("gui_revalidation")
-                if document_lease_service is not None:
+                if (
+                    captured["lease_enforced"]
+                    and document_lease_service is not None
+                ):
                     lease = _import_document_lease()
                     credentials = []
                     marker_keys = list(captured["doc_keys"]) + list(
@@ -2401,38 +2958,20 @@ class FreeCADRPC:
 
                             capability_cm = nullcontext([])
 
+                        def begin_recompute():
+                            for _name, credential, _state in credentials:
+                                document_lease_service.begin_recompute(credential)
+
                         with capability_cm:
-                            with GuiMutationTransaction(
+                            result, failed = self._execute_mutation_with_health(
+                                original_task,
                                 documents,
-                                f"MCP: {operation}",
-                                enabled=spec.transaction,
-                            ) as transaction:
-                                if inflight is not None:
-                                    inflight.token.checkpoint("gui_mutation_invocation")
-                                result = original_task()
-                                failed = isinstance(result, dict) and (
-                                    result.get("success") is False
-                                    or result.get("ok") is False
-                                )
-                                if failed:
-                                    transaction.abort()
-                                elif spec.recompute:
-                                    if inflight is not None:
-                                        inflight.token.checkpoint("gui_recompute")
-                                    for _name, credential, _state in credentials:
-                                        document_lease_service.begin_recompute(
-                                            credential
-                                        )
-                                    for document in documents:
-                                        document.recompute()
-                                if not failed and spec.validator is not None:
-                                    validations = [
-                                        spec.validator(document)
-                                        for document in documents
-                                    ]
-                                    if isinstance(result, dict):
-                                        result = dict(result)
-                                        result["lease_postflight"] = validations
+                                spec,
+                                expected_objects=captured["expected_objects"],
+                                inflight=inflight,
+                                recompute_callback=begin_recompute,
+                                request_id=captured["request_id"],
+                            )
                         for name, credential, _state in credentials:
                             document = FreeCAD.getDocument(name)
                             dirty = (
@@ -2443,7 +2982,10 @@ class FreeCADRPC:
                             if failed:
                                 document_lease_service.record_error(
                                     credential,
-                                    code="OPERATION_FAILED",
+                                    code=str(
+                                        result.get("error_code")
+                                        or "OPERATION_FAILED"
+                                    ),
                                     message=_redact_rpc_diagnostic(
                                         result.get("error")
                                         or result.get("message")
@@ -2490,6 +3032,34 @@ class FreeCADRPC:
                             dl.end_agent_mutation_scope(
                                 captured["request_id"], marker_keys
                             )
+
+                if not captured["lease_enforced"]:
+                    documents = [
+                        FreeCAD.getDocument(name)
+                        for name in captured["doc_names"]
+                    ]
+                    if any(document is None for document in documents):
+                        return {
+                            "success": False,
+                            "error_code": "DOCUMENT_NOT_FOUND",
+                            "error": (
+                                "A declared document closed before mutation "
+                                "execution"
+                            ),
+                        }
+                    if inflight is not None:
+                        inflight.token.begin_mutation(
+                            "gui_mutation_scope_resolved"
+                        )
+                    result, _failed = self._execute_mutation_with_health(
+                        original_task,
+                        documents,
+                        captured["method_spec"],
+                        expected_objects=captured["expected_objects"],
+                        inflight=inflight,
+                        request_id=captured["request_id"],
+                    )
+                    return result
 
                 for key in captured["doc_keys"]:
                     allowed = dl.check_mutation_allowed(
@@ -2673,6 +3243,29 @@ class FreeCADRPC:
                 )
                 if (
                     completion_state is not None
+                    and completion_state.recovery_incident_id
+                ):
+                    completion_state = inflight.token.mark_recovered(
+                        "recovery_completed"
+                    )
+                    emit_telemetry(
+                        "recovery",
+                        (
+                            "recovery_completed"
+                            if outcome.ok
+                            else "recovery_failed"
+                        ),
+                        status="succeeded" if outcome.ok else "failed",
+                        error_code=None if outcome.ok else "GUI_TASK_FAILED",
+                        request_id=inflight.request_id,
+                        execution_id=inflight.request_id,
+                        recovery_incident_id=(
+                            completion_state.recovery_incident_id
+                        ),
+                        payload={"late_completion_available": True},
+                    )
+                if (
+                    completion_state is not None
                     and completion_state.cancellation_requested
                 ):
                     self._complete_request_cancellation(
@@ -2712,21 +3305,41 @@ class FreeCADRPC:
                 and not completion_seen.is_set()
                 and not (
                     isinstance(exc, GuiDispatchTimeout)
-                    and "while executing" in str(exc)
+                    and exc.execution_started
                 )
             ):
                 rpc_inflight_request_registry.end_gui_phase(
                     inflight.session_id, inflight.request_id
                 )
             logger.error("RPC GUI dispatch failed: %s", exc)
+            recovery = None
+            if (
+                isinstance(exc, GuiDispatchTimeout)
+                and exc.completion_uncertain
+            ):
+                if inflight is not None:
+                    recovery = inflight.token.mark_uncertain(
+                        "gui_completion_uncertain"
+                    )
+                    emit_telemetry(
+                        "recovery",
+                        "recovery_started",
+                        status="warning",
+                        error_code="GUI_COMPLETION_UNCERTAIN",
+                        request_id=inflight.request_id,
+                        execution_id=inflight.request_id,
+                        recovery_incident_id=recovery.recovery_incident_id,
+                        payload={
+                            "stage": "gui_execution",
+                            "mutation_started": recovery.mutation_started,
+                        },
+                    )
             if (
                 context
                 and document_lease_service is not None
                 and isinstance(exc, GuiDispatchTimeout)
-                and "before execution" not in str(exc)
+                and exc.completion_uncertain
             ):
-                if inflight is not None:
-                    inflight.token.mark_uncertain("gui_completion_uncertain")
                 for name in context["doc_names"]:
                     try:
                         credential, _document_identity = _credential_for_document(
@@ -2743,22 +3356,30 @@ class FreeCADRPC:
                         )
                     except Exception:
                         pass
-            if isinstance(exc, GuiDispatchTimeout):
-                code = "GUI_TIMEOUT"
-            elif isinstance(exc, GuiBusyAfterTimeout):
-                code = "GUI_BUSY_AFTER_TIMEOUT"
-            elif isinstance(exc, GuiTaskError):
-                code = "GUI_TASK_FAILED"
-            else:
-                code = "GUI_DISPATCH_FAILED"
+            code = getattr(exc, "error_code", "GUI_DISPATCH_FAILED")
+            timeout_snapshot = (
+                inflight.token.snapshot() if inflight is not None else None
+            )
             return {
                 "success": False,
                 "error_code": code,
                 "error": str(exc),
                 "request_id": request_id,
+                "timeout_stage": getattr(exc, "timeout_stage", None),
+                "execution_started": bool(
+                    getattr(exc, "execution_started", False)
+                ),
+                "mutation_started": bool(
+                    inflight is not None
+                    and inflight.token.snapshot().mutation_started
+                ),
                 "completion_uncertain": bool(
-                    isinstance(exc, GuiDispatchTimeout)
-                    and "before execution" not in str(exc)
+                    getattr(exc, "completion_uncertain", False)
+                ),
+                "recovery_incident_id": (
+                    timeout_snapshot.recovery_incident_id
+                    if timeout_snapshot is not None
+                    else None
                 ),
             }
 
@@ -3399,13 +4020,63 @@ class FreeCADRPC:
             # After session refresh the replay state remains visible, while an
             # old session's inflight details are not disclosed or cancellable.
             inflight = rpc_inflight_request_registry.status(session_id, request_id)
+            if status.status == "expired":
+                state = "expired"
+            elif inflight is not None:
+                if inflight.terminal:
+                    if inflight.cancellation_requested:
+                        state = (
+                            "completed_after_cancel_request"
+                            if status.response
+                            and isinstance(status.response, dict)
+                            and status.response.get("late_completion")
+                            else "cancelled"
+                        )
+                    elif inflight.terminal_status == "failed":
+                        state = "failed"
+                    else:
+                        state = "completed"
+                elif inflight.cancellation_requested:
+                    state = "cancel_requested"
+                elif inflight.uncertain:
+                    state = "running_after_timeout"
+                elif inflight.active_gui_phases:
+                    state = "running"
+                else:
+                    state = "queued"
+            elif status.status == "completed":
+                state = "completed"
+            elif status.status in {"new", "in_progress"}:
+                state = "running"
+            else:
+                state = "unknown"
             return {
                 "success": True,
                 "request_id": request_id,
-                "state": (
-                    inflight.terminal_status
-                    if inflight is not None and inflight.terminal
-                    else status.status
+                "state": state,
+                "stage": inflight.phase if inflight is not None else None,
+                "execution_started": bool(
+                    inflight is not None and inflight.active_gui_phases
+                ),
+                "mutation_started": bool(
+                    inflight is not None and inflight.mutation_started
+                ),
+                "cancellation_requested": bool(
+                    inflight is not None and inflight.cancellation_requested
+                ),
+                "completion_uncertain": bool(
+                    inflight is not None and inflight.uncertain
+                ),
+                "late_completion_available": bool(
+                    status.response
+                    and isinstance(status.response, dict)
+                    and status.response.get("late_completion")
+                ),
+                "result_available": bool(status.response is not None),
+                "recovery_incident_id": (
+                    inflight.recovery_incident_id
+                    if inflight is not None
+                    else None
                 ),
                 "response": status.response,
                 "inflight": (
@@ -3471,10 +4142,26 @@ class FreeCADRPC:
                 "cancellation": cancellation.to_public_dict(),
             }
         target = rpc_inflight_request_registry.get(session_id, target_request_id)
+        emit_telemetry(
+            "cancellation",
+            "cancellation_requested",
+            status="warning",
+            request_id=str(target_request_id),
+            execution_id=str(target_request_id),
+            payload={"registry_status": cancellation.status},
+        )
         lease_events = []
         if target is not None and cancellation.status != "completed":
             target.token.set_phase("cancellation_requested")
             lease_events = self._begin_request_cancellation(target)
+            emit_telemetry(
+                "cancellation",
+                "cancellation_acknowledged",
+                status="warning",
+                request_id=str(target_request_id),
+                execution_id=str(target_request_id),
+                payload={"lease_event_count": len(lease_events or ())},
+            )
 
         queue_status = "not_queued"
         if target is not None and gui_dispatcher is not None:
@@ -4123,13 +4810,27 @@ class FreeCADRPC:
 
         def error_response(exc):
             if isinstance(exc, SaveServiceError):
-                return {
+                response = {
                     "success": False,
                     "error_code": exc.code,
                     "error": str(exc),
                     "save_error": exc.to_dict(request_id=request_id),
                 }
-            return _lease_service_error(exc, request_id=request_id)
+            else:
+                response = _lease_service_error(exc, request_id=request_id)
+            response.update(
+                self._unknown_mutation_evidence(
+                    f"{mode}_document",
+                    declared_documents=(
+                        (phase["document_name"],)
+                        if phase.get("document_name")
+                        else ()
+                    ),
+                    coverage=RollbackCoverage.PARTIAL,
+                    reason=f"save lifecycle failed: {type(exc).__name__}",
+                )
+            )
+            return response
 
         def marker_keys_for(document, document_identity):
             candidates = {
@@ -4166,6 +4867,12 @@ class FreeCADRPC:
                     original_identity=document_identity,
                     validation_expectations=_saved_document_expectations(document),
                     source_path=(str(getattr(document, "FileName", "") or "") or None),
+                    health_before=capture_document_health(
+                        document,
+                        profile=ValidationProfile(
+                            str(validation_profile).lower()
+                        ),
+                    ),
                 )
                 marker_keys = marker_keys_for(document, document_identity)
                 dl = _import_document_lock()
@@ -4527,6 +5234,27 @@ class FreeCADRPC:
                         "previous_path": result.previous_path,
                     },
                 }
+                health_after = capture_document_health(
+                    document,
+                    profile=ValidationProfile(str(validation_profile).lower()),
+                )
+                health_delta = calculate_document_health_delta(
+                    phase["health_before"],
+                    health_after,
+                )
+                response["document_health"] = self._aggregate_document_health(
+                    [health_delta]
+                )
+                response["document_health"]["save_reopen_validation"] = (
+                    result.to_dict()
+                )
+                evidence = self._unknown_mutation_evidence(
+                    f"{mode}_document",
+                    declared_documents=(phase["document_name"],),
+                    coverage=RollbackCoverage.PARTIAL,
+                )
+                response["transaction"] = evidence["transaction"]
+                response["mutation_scope"] = evidence["mutation_scope"]
                 if release:
                     promoted_identity = (
                         document_identity_service.inspect_registered_document(
@@ -4783,8 +5511,8 @@ class FreeCADRPC:
                 if rpc_runtime_manifest is not None
                 else []
             ),
-            "addon_version": "0.1.20",
-            "addon_build_id": "freecad-mcp-addon-0.1.20",
+            "addon_version": addon_version,
+            "addon_build_id": addon_build_id,
             "freecad_version": freecad_version,
             "profile_path_fingerprint": _profile_fingerprint(),
             "document_lease_mode": settings.get("document_lease_mode", "off"),
@@ -4793,13 +5521,26 @@ class FreeCADRPC:
     def check_rpc_sync(self, nonce):
         """Round-trip a nonce through the GUI queue to prove call correlation."""
         res = self._dispatch_gui(lambda: {"nonce": nonce})
+        identity = _import_document_lock().get_request_identity()
+        recovery = rpc_inflight_request_registry.latest_recovery_incident(
+            identity.get("authenticated_session_id")
+        )
         if not isinstance(res, dict) or res.get("nonce") != nonce:
             return {
                 "success": False,
                 "expected_nonce": nonce,
                 "received": res,
+                "recovery_incident_id": (
+                    recovery.recovery_incident_id if recovery is not None else None
+                ),
             }
-        return {"success": True, "nonce": nonce}
+        return {
+            "success": True,
+            "nonce": nonce,
+            "recovery_incident_id": (
+                recovery.recovery_incident_id if recovery is not None else None
+            ),
+        }
 
     def create_document(self, name="New_Document"):
         dl = _import_document_lock()
@@ -4815,7 +5556,13 @@ class FreeCADRPC:
                 lease = _import_document_lease()
                 if inflight is not None:
                     inflight.token.checkpoint("create_document_gui")
-                if FreeCAD.getDocument(name) is not None:
+                try:
+                    existing_document = FreeCAD.getDocument(name)
+                except NameError:
+                    # FreeCAD 1.1 raises for an unknown document while older
+                    # releases returned None.
+                    existing_document = None
+                if existing_document is not None:
                     return {
                         "success": False,
                         "error_code": "DOCUMENT_ALREADY_OPEN",
@@ -4907,7 +5654,7 @@ class FreeCADRPC:
                         FreeCAD.Console.PrintWarning(
                             "[MCP] core mutation owner sync failed after create\n"
                         )
-                    return {
+                    response = {
                         "success": True,
                         "document_name": name,
                         **grant.to_dict(),
@@ -4917,6 +5664,14 @@ class FreeCADRPC:
                             "stale_after_seconds": 90,
                         },
                     }
+                    response.update(
+                        self._observed_document_evidence(
+                            "create_document",
+                            document,
+                            coverage=RollbackCoverage.PARTIAL,
+                        )
+                    )
+                    return response
                 except RequestCancellationError:
                     self._complete_request_cancellation(
                         inflight, dirty=True, snapshot_id=snapshot_id
@@ -4955,13 +5710,54 @@ class FreeCADRPC:
                             identity.get("request_id"), marker_keys
                         )
 
-            return self._dispatch_gui(create_and_lease)
+            response = self._dispatch_gui(create_and_lease)
+            if isinstance(response, dict) and "document_health" not in response:
+                response = {
+                    **response,
+                    **self._unknown_mutation_evidence(
+                        "create_document",
+                        declared_documents=(name,),
+                        coverage=RollbackCoverage.PARTIAL,
+                        reason=(
+                            "document creation did not reach validated postflight"
+                        ),
+                    ),
+                }
+            return response
 
         res = self._dispatch_gui(lambda: self._create_document_gui(name))
         if res is True:
-            return {"success": True, "document_name": name}
+            document = FreeCAD.getDocument(name)
+            response = {"success": True, "document_name": name}
+            if document is not None:
+                response.update(
+                    self._observed_document_evidence(
+                        "create_document",
+                        document,
+                        coverage=RollbackCoverage.PARTIAL,
+                    )
+                )
+            else:
+                response.update(
+                    self._unknown_mutation_evidence(
+                        "create_document",
+                        declared_documents=(name,),
+                        coverage=RollbackCoverage.PARTIAL,
+                        reason="new document was not available for validation",
+                    )
+                )
+            return response
         else:
-            return {"success": False, "error": res}
+            return {
+                "success": False,
+                "error": res,
+                **self._unknown_mutation_evidence(
+                    "create_document",
+                    declared_documents=(name,),
+                    coverage=RollbackCoverage.PARTIAL,
+                    reason="document creation failed before postflight validation",
+                ),
+            }
 
     def create_object(self, doc_name, obj_data: dict[str, Any]):
         obj = Object(
@@ -4971,10 +5767,9 @@ class FreeCADRPC:
             properties=obj_data.get("Properties", {}),
         )
         res = self._dispatch_gui(lambda: self._create_object_gui(doc_name, obj))
-        if res is True:
-            return {"success": True, "object_name": obj.name}
-        else:
-            return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"object_name": obj.name}
+        )
 
     def edit_object(
         self, doc_name: str, obj_name: str, properties: dict[str, Any]
@@ -4984,10 +5779,9 @@ class FreeCADRPC:
             properties=properties.get("Properties", {}),
         )
         res = self._dispatch_gui(lambda: self._edit_object_gui(doc_name, obj))
-        if res is True:
-            return {"success": True, "object_name": obj.name}
-        else:
-            return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"object_name": obj.name}
+        )
 
     def inspect_references(
         self,
@@ -5031,10 +5825,9 @@ class FreeCADRPC:
 
     def delete_object(self, doc_name: str, obj_name: str):
         res = self._dispatch_gui(lambda: self._delete_object_gui(doc_name, obj_name))
-        if res is True:
-            return {"success": True, "object_name": obj_name}
-        else:
-            return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"object_name": obj_name}
+        )
 
     @staticmethod
     def _collect_invalid_objects() -> dict[str, list[dict[str, Any]]]:
@@ -5097,22 +5890,61 @@ class FreeCADRPC:
     def execute_code(
         self, code: str, options: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        options = options or {}
+        generated_operation = bool(options.get("generated_operation"))
+        analysis = analyze_execute_code(code, options)
+        category = (
+            "generated_internal_execute"
+            if generated_operation
+            else "read_only_worker_analysis"
+            if options.get("read_only")
+            else "public_execute_code"
+        )
+        warning = None if generated_operation else typed_tool_warning(analysis)
+        emit_telemetry(
+            "execute_code",
+            "routing_completed",
+            payload={
+                "execution_category": category,
+                "analysis": analysis,
+                "typed_tool_available": bool(warning),
+            },
+        )
+
+        def annotate(payload):
+            if not isinstance(payload, dict):
+                return payload
+            annotated = dict(payload)
+            annotated["execution_category"] = category
+            annotated["code_analysis"] = analysis
+            annotated.setdefault(
+                "mutation_scope",
+                {
+                    "declared_documents": analysis["document_scope"],
+                    "transaction_coverage": "unavailable",
+                    "rollback_policy": "none",
+                },
+            )
+            if warning is not None:
+                annotated.setdefault("warnings", []).append(warning)
+            return annotated
+
         if not self.allow_execute_code:
-            return {
+            return annotate({
                 "success": False,
                 "is_error": True,
                 "error_code": "remote_execute_code_disabled",
                 "error": "Arbitrary execute_code is disabled while remote RPC is enabled",
-            }
-        options = options or {}
+            })
+
         execution_mode = options.get("execution_mode", "auto")
         if execution_mode not in ("gui", "worker", "auto"):
-            return {
+            return annotate({
                 "success": False,
                 "is_error": True,
                 "error_code": "invalid_execution_mode",
                 "error": f"Unsupported execution_mode: {execution_mode!r}",
-            }
+            })
         # Arbitrary Python marked read-only is never evaluated against the live
         # GUI document.  The caller's execution-mode preference cannot weaken
         # this boundary: typed/audited GUI reads have their own RPC methods,
@@ -5123,16 +5955,16 @@ class FreeCADRPC:
         use_worker = execution_mode == "worker" or read_only_requested
         if use_worker:
             if not bool(options.get("read_only", False)):
-                return {
+                return annotate({
                     "success": False,
                     "is_error": True,
                     "error_code": "invalid_execution_mode",
                     "error": "execution_mode='worker' requires read_only=True",
-                }
-            return self._execute_code_worker(code, options)
+                })
+            return annotate(self._execute_code_worker(code, options))
 
         if options.get("timeout_seconds") is not None:
-            return {
+            return annotate({
                 "success": False,
                 "is_error": True,
                 "error_code": "gui_timeout_not_supported",
@@ -5142,7 +5974,7 @@ class FreeCADRPC:
                     "with execution_mode='auto' or 'worker', or remove "
                     "timeout_seconds for bounded GUI work."
                 ),
-            }
+            })
 
         loop_risk = find_gui_geometry_loop_risk(code)
         read_only = bool(options.get("read_only", False))
@@ -5196,7 +6028,7 @@ class FreeCADRPC:
                     "the work into bounded chunks and explicitly set "
                     "execution_mode='gui' with allow_gui_geometry_loop=true."
                 )
-            return {
+            return annotate({
                 "success": False,
                 "is_error": True,
                 "blocked": "gui_thread_geometry_loop",
@@ -5205,14 +6037,14 @@ class FreeCADRPC:
                     f"{loop_risk.reason} ({loop_risk.expensive_calls} expensive "
                     f"geometry call sites, {loop_risk.loops} loops). {guidance}"
                 ),
-            }
+            })
 
         risk = find_gui_blocking_risk(
             code,
             read_only=bool(options.get("read_only", False)),
         )
         if risk is not None:
-            return {
+            return annotate({
                 "success": False,
                 "is_error": True,
                 "blocked": "gui_thread_boolean_audit",
@@ -5223,7 +6055,7 @@ class FreeCADRPC:
                     "sampled point-to-shape distances, or run the boolean audit in "
                     "an isolated FreeCADCmd process."
                 ),
-            }
+            })
 
         def task():
             output_buffer = io.StringIO()
@@ -5377,7 +6209,9 @@ class FreeCADRPC:
 
         res = self._dispatch_gui(task, self.EXECUTE_TIMEOUT)
         if isinstance(res, str):
-            return {"success": False, "error": res, "is_error": True}
+            return annotate(
+                {"success": False, "error": res, "is_error": True}
+            )
         if res.get("ok"):
             session = res.get("session", {})
             flat_errors = []
@@ -5396,7 +6230,7 @@ class FreeCADRPC:
                             "state": item.get("state", []),
                         }
                     )
-            return {
+            return annotate({
                 "success": True,
                 "message": "Python code execution completed.\nOutput: "
                 + res.get("stdout", ""),
@@ -5404,9 +6238,9 @@ class FreeCADRPC:
                 "session": session,
                 "structured": session,
                 "execution": {"mode": "gui"},
-            }
+            })
         tb = res.get("traceback")
-        return {
+        return annotate({
             "success": False,
             "error": res.get("error", "Unknown error"),
             "traceback": tb,
@@ -5414,7 +6248,7 @@ class FreeCADRPC:
             "session": res.get("session", {}),
             "message": res.get("stdout", ""),
             "is_error": True,
-        }
+        })
 
     def _execute_code_worker(
         self, code: str, options: dict[str, Any]
@@ -5525,10 +6359,10 @@ class FreeCADRPC:
         res = self._dispatch_gui(
             lambda: self._insert_part_from_library(doc_name, relative_path)
         )
-        if res is True:
-            return {"success": True, "message": "Part inserted from library."}
-        else:
-            return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res,
+            success_fields={"message": "Part inserted from library."},
+        )
 
     def list_documents(self):
         res = self._dispatch_gui(lambda: list(FreeCAD.listDocuments().keys()))
@@ -5536,9 +6370,9 @@ class FreeCADRPC:
 
     def reload_document(self, doc_name: str) -> dict[str, Any]:
         res = self._dispatch_gui(lambda: self._reload_document_gui(doc_name))
-        if res is True:
-            return {"success": True, "document_name": doc_name}
-        return {"success": False, "error": str(res)}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"document_name": doc_name}
+        )
 
     def open_document(self, path: str) -> dict[str, Any]:
         from .gui_tools import open_document as _open_document
@@ -5699,6 +6533,21 @@ class FreeCADRPC:
         completion status (e.g. check SessionState.Label via get_object).
         """
 
+        analysis = analyze_execute_code(code, {"execution_mode": "async"})
+        emit_telemetry(
+            "execute_code",
+            "policy_rejected",
+            status="warning",
+            error_code="DEPRECATED_EXECUTE_CODE_ASYNC",
+            payload={
+                "execution_category": "deprecated_execute_code_async",
+                "analysis": analysis,
+                "deprecation": (
+                    "Use worker jobs or request-aware MCP tasks for long work"
+                ),
+            },
+        )
+
         def _set_status(msg):
             self._dispatch_gui(
                 lambda: FreeCADGui.getMainWindow().statusBar().showMessage(msg)
@@ -5726,7 +6575,21 @@ class FreeCADRPC:
 
         _set_status("MCP: running background task…")
         threading.Thread(target=worker, daemon=True).start()
-        return {"success": True, "message": "Code execution started in background."}
+        return {
+            "success": True,
+            "message": "Code execution started in background.",
+            "warnings": [
+                {
+                    "code": "DEPRECATED_EXECUTE_CODE_ASYNC",
+                    "message": (
+                        "Use worker jobs or request-aware MCP tasks; compatibility "
+                        "is retained only in off/observe mode."
+                    ),
+                }
+            ],
+            "execution_category": "deprecated_execute_code_async",
+            "code_analysis": analysis,
+        }
 
     def get_parts_list(self):
         return get_parts_list()
@@ -6062,9 +6925,9 @@ class FreeCADRPC:
         res = self._dispatch_gui(
             lambda: self._sketch_create_gui(doc_name, sketch_name, body_name, attach_to)
         )
-        if res is True:
-            return {"success": True, "sketch_name": sketch_name}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"sketch_name": sketch_name}
+        )
 
     def sketch_add_geometry(
         self, doc_name: str, sketch_name: str, geometry: list
@@ -6072,9 +6935,11 @@ class FreeCADRPC:
         res = self._dispatch_gui(
             lambda: self._sketch_add_geometry_gui(doc_name, sketch_name, geometry)
         )
-        if isinstance(res, list):
-            return {"success": True, "indices": res}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res,
+            result_field="indices",
+            expected_result_type=list,
+        )
 
     def sketch_add_constraint(
         self, doc_name: str, sketch_name: str, constraints: list
@@ -6082,9 +6947,7 @@ class FreeCADRPC:
         res = self._dispatch_gui(
             lambda: self._sketch_add_constraint_gui(doc_name, sketch_name, constraints)
         )
-        if res is True:
-            return {"success": True}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(res)
 
     def pad_feature(
         self,
@@ -6107,9 +6970,9 @@ class FreeCADRPC:
                 reversed_dir,
             )
         )
-        if res is True:
-            return {"success": True, "pad_name": pad_name}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"pad_name": pad_name}
+        )
 
     def pocket_feature(
         self,
@@ -6132,27 +6995,21 @@ class FreeCADRPC:
                 reversed_dir,
             )
         )
-        if res is True:
-            return {"success": True, "pocket_name": pocket_name}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(
+            res, success_fields={"pocket_name": pocket_name}
+        )
 
     def recompute_document(self, doc_name: str) -> dict:
         res = self._dispatch_gui(lambda: self._recompute_document_gui(doc_name))
-        if res is True:
-            return {"success": True}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(res)
 
     def undo(self, doc_name: str) -> dict:
         res = self._dispatch_gui(lambda: self._undo_gui(doc_name))
-        if res is True:
-            return {"success": True}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(res)
 
     def redo(self, doc_name: str) -> dict:
         res = self._dispatch_gui(lambda: self._redo_gui(doc_name))
-        if res is True:
-            return {"success": True}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(res)
 
     def get_recompute_log(self, doc_name: str) -> list:
         """Return recompute state for every object in a document (read-only)."""
@@ -6331,9 +7188,7 @@ class FreeCADRPC:
 
     def close_document(self, doc_name: str) -> dict:
         res = self._dispatch_gui(lambda: self._close_document_gui(doc_name))
-        if res is True:
-            return {"success": True}
-        return {"success": False, "error": res}
+        return self._adapt_gui_mutation_result(res)
 
     def snapshot(self, doc_name: str) -> dict:
         """I7 — save the current document into a ring buffer of the last 5
@@ -7848,8 +8703,8 @@ def start_rpc_server(port=None):
                 rpc_port=int(actual_port),
                 freecad_version=freecad_version_text,
                 freecad_revision=freecad_revision,
-                addon_version="0.1.20",
-                addon_build_id="freecad-mcp-addon-0.1.20",
+                addon_version=addon_version,
+                addon_build_id=addon_build_id,
                 profile_path_fingerprint=_profile_fingerprint(),
             )
             rpc_session_manager = SessionManager(

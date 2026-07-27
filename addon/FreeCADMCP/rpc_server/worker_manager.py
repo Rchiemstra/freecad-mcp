@@ -23,6 +23,7 @@ from .process_control import (
     terminate_process_tree,
 )
 from .snapshot_service import materialize_load_aliases
+from .telemetry import emit as emit_telemetry
 from .worker_protocol import (
     MAX_ARTIFACT_BYTES,
     MAX_ARTIFACTS_TOTAL_BYTES,
@@ -43,6 +44,13 @@ _VERSION_RE = re.compile(
     r"FreeCAD\s+(\d+)\.(\d+)\.(\d+)(?:[^\r\n]*?Revision:\s*([^\r\n]+))?"
 )
 VERSION_PROBE_TIMEOUT_SECONDS = 15
+
+_WORKER_LIFECYCLE_CODES = {
+    "worker_cancelled": "WORKER_CANCELLED",
+    "worker_timeout": "WORKER_TIMEOUT_DURING_EXECUTION",
+    "worker_execution_error": "WORKER_TASK_FAILED",
+    "worker_crash": "WORKER_TASK_FAILED",
+}
 
 
 def _console_message(text: str) -> None:
@@ -318,6 +326,15 @@ class WorkerManager:
                 return self._error("server_stopping", "Worker manager is stopping", job_id=job_id)
             self._invocations[job_id] = invocation
             self._work_queue.put_nowait(invocation)
+        emit_telemetry(
+            "worker_manager",
+            "worker_job_created",
+            worker_job_id=job_id,
+            payload={
+                "primary_document": snapshot.get("primary_document"),
+                "timeout_seconds": options.get("timeout_seconds"),
+            },
+        )
         invocation.completed.wait()
         return invocation.result or self._error(
             "worker_internal_error", "Worker invocation completed without a result", job_id=job_id
@@ -346,6 +363,11 @@ class WorkerManager:
                 else:
                     with self._state_lock:
                         self._active_invocation = invocation
+                    emit_telemetry(
+                        "worker_manager",
+                        "worker_job_started",
+                        worker_job_id=invocation.job_id,
+                    )
                     invocation.result = self._execute_now(invocation)
             finally:
                 with self._state_lock:
@@ -355,6 +377,30 @@ class WorkerManager:
                 invocation.completed.set()
                 self._admission.release()
                 self._work_queue.task_done()
+                result = invocation.result or {}
+                emit_telemetry(
+                    "worker_manager",
+                    (
+                        "worker_job_cancelled"
+                        if result.get("error_code") == "WORKER_CANCELLED"
+                        else "worker_job_completed"
+                    ),
+                    status=(
+                        "succeeded"
+                        if result.get("success")
+                        else (
+                            "cancelled"
+                            if result.get("error_code") == "WORKER_CANCELLED"
+                            else "failed"
+                        )
+                    ),
+                    error_code=result.get("error_code"),
+                    worker_job_id=invocation.job_id,
+                    payload={
+                        "execution": result.get("execution"),
+                        "legacy_error_code": result.get("legacy_error_code"),
+                    },
+                )
 
     def _execute_now(self, invocation: _WorkerInvocation) -> dict[str, Any]:
         code = invocation.code
@@ -458,6 +504,15 @@ class WorkerManager:
                 if process.poll() is None:
                     terminated = terminate_process_tree(process, job_object)
                     log_thread.join(timeout=2.0)
+                    emit_telemetry(
+                        "worker_manager",
+                        "worker_job_timeout",
+                        status="timed_out",
+                        error_code="WORKER_TIMEOUT_DURING_EXECUTION",
+                        duration_ms=(time.monotonic() - started) * 1000.0,
+                        worker_job_id=job_id,
+                        payload={"terminated": terminated},
+                    )
                     return self._error(
                         "worker_timeout",
                         f"Worker exceeded {timeout:g}s; process tree terminated={terminated}",
@@ -485,6 +540,7 @@ class WorkerManager:
             )
             execution = {
                 "mode": "worker",
+                "stage": "completed",
                 "job_id": job_id,
                 "duration_ms": (time.monotonic() - started) * 1000.0,
                 "snapshot_duration_ms": snapshot.get("snapshot_duration_ms", 0.0),
@@ -531,12 +587,21 @@ class WorkerManager:
             error_payload = {
                 "success": False,
                 "is_error": True,
-                "error_code": error_code,
+                "error_code": (
+                    "WORKER_TASK_FAILED"
+                    if error_code == "worker_execution_error"
+                    else error_code
+                ),
+                **(
+                    {"legacy_error_code": error_code}
+                    if error_code == "worker_execution_error"
+                    else {}
+                ),
                 "error": error.get("message", f"Worker exited {return_code}"),
                 "traceback": result.get("traceback"),
                 "message": result.get("stdout", ""),
                 "session": result.get("session", {}),
-                "execution": execution,
+                "execution": {**execution, "stage": "failed"},
             }
             _apply_link_warnings(error_payload, _merge_link_warnings(snapshot, result))
             return error_payload
@@ -569,9 +634,29 @@ class WorkerManager:
                     "worker_cancelled", "Pending worker job was cancelled", job_id=job_id
                 )
                 invocation.completed.set()
+        emit_telemetry(
+            "worker_manager",
+            "worker_job_cancel_requested",
+            status="warning",
+            error_code="WORKER_CANCEL_REQUESTED",
+            worker_job_id=job_id,
+            payload={"state": "active" if active else "pending"},
+        )
         terminated = terminate_process_tree(process) if process is not None else False
+        if active and process is not None and not terminated:
+            return {
+                "success": False,
+                "error_code": "WORKER_TERMINATION_FAILED",
+                "legacy_error_code": "worker_termination_failed",
+                "error": "The active worker process tree could not be terminated",
+                "job_id": job_id,
+                "state": "active",
+                "termination_requested": True,
+                "terminated": False,
+            }
         return {
             "success": True,
+            "cancellation_code": "WORKER_CANCEL_REQUESTED",
             "job_id": job_id,
             "state": "active" if active else "pending",
             "termination_requested": active,
@@ -738,10 +823,26 @@ class WorkerManager:
 
     @staticmethod
     def _error(error_code: str, error: str, **execution) -> dict[str, Any]:
+        stable_code = _WORKER_LIFECYCLE_CODES.get(error_code, error_code)
         return {
             "success": False,
             "is_error": True,
-            "error_code": error_code,
+            "error_code": stable_code,
+            **(
+                {"legacy_error_code": error_code}
+                if stable_code != error_code
+                else {}
+            ),
             "error": error,
-            "execution": {"mode": "worker", **execution},
+            "execution": {
+                "mode": "worker",
+                "stage": (
+                    "cancelled"
+                    if stable_code == "WORKER_CANCELLED"
+                    else "timed_out"
+                    if stable_code.startswith("WORKER_TIMEOUT_")
+                    else "failed"
+                ),
+                **execution,
+            },
         }

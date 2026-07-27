@@ -11,6 +11,8 @@ from typing import Any, Callable
 
 from PySide import QtCore, QtWidgets
 
+from .telemetry import emit as emit_telemetry
+
 
 def _is_unittest_mock(value: Any) -> bool:
     return type(value).__module__.startswith("unittest.mock")
@@ -59,6 +61,35 @@ def _gui_busy_for_3d_navigation() -> bool:
 class GuiDispatchError(RuntimeError):
     """Base error raised to the XML-RPC handler by GUI dispatch."""
 
+    error_code = "GUI_DISPATCH_FAILED"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        request_id: str | None = None,
+        timeout_stage: str | None = None,
+        execution_started: bool = False,
+        mutation_started: bool = False,
+        completion_uncertain: bool = False,
+    ) -> None:
+        self.request_id = request_id
+        self.timeout_stage = timeout_stage
+        self.execution_started = bool(execution_started)
+        self.mutation_started = bool(mutation_started)
+        self.completion_uncertain = bool(completion_uncertain)
+        super().__init__(message)
+
+    def to_public_dict(self) -> dict[str, Any]:
+        return {
+            "error_code": self.error_code,
+            "timeout_stage": self.timeout_stage,
+            "request_id": self.request_id,
+            "execution_started": self.execution_started,
+            "mutation_started": self.mutation_started,
+            "completion_uncertain": self.completion_uncertain,
+        }
+
 
 class GuiDispatchTimeout(GuiDispatchError):
     """The GUI did not complete a request before its caller timed out."""
@@ -67,9 +98,13 @@ class GuiDispatchTimeout(GuiDispatchError):
 class GuiBusyAfterTimeout(GuiDispatchError):
     """A timed-out request is still occupying FreeCAD's GUI thread."""
 
+    error_code = "GUI_BUSY_AFTER_TIMEOUT"
+
 
 class GuiTaskError(GuiDispatchError):
     """A callable raised while executing on the GUI thread."""
+
+    error_code = "GUI_TASK_FAILED"
 
 
 @dataclass(frozen=True)
@@ -146,9 +181,23 @@ class GuiRequest:
     ) -> None:
         callback = None
         with self._state_lock:
+            previous_state = self.state
             self.outcome = outcome
             self.state = "completed"
             callback = self.on_complete
+        emit_telemetry(
+            "gui_dispatcher",
+            (
+                "gui_execution_late_completed"
+                if previous_state == "timed_out_running"
+                else "gui_execution_completed"
+            ),
+            status="succeeded" if outcome.ok else "failed",
+            error_code=None if outcome.ok else "GUI_TASK_FAILED",
+            request_id=self.request_id,
+            execution_id=self.request_id,
+            payload={"previous_state": previous_state},
+        )
         if callback is not None:
             try:
                 callback(self.request_id, outcome)
@@ -191,10 +240,15 @@ class GuiDispatcher(QtCore.QObject):
             )
 
     @staticmethod
-    def _unwrap(outcome: GuiOutcome) -> Any:
+    def _unwrap(outcome: GuiOutcome, request: GuiRequest | None = None) -> Any:
         if outcome.ok:
             return outcome.value
-        raise GuiTaskError(outcome.error or "Unknown GUI task error")
+        raise GuiTaskError(
+            outcome.error or "Unknown GUI task error",
+            request_id=request.request_id if request is not None else None,
+            timeout_stage="gui_execution",
+            execution_started=True,
+        )
 
     def submit(
         self,
@@ -211,17 +265,28 @@ class GuiDispatcher(QtCore.QObject):
             session_id=session_id,
             on_complete=on_complete,
         )
+        emit_telemetry(
+            "gui_dispatcher",
+            "gui_execution_queued",
+            request_id=request.request_id,
+            execution_id=request.request_id,
+            session_id=request.session_id,
+            payload={"timeout_seconds": timeout},
+        )
 
         # start_rpc_server and some trusted internal callers already run on the
         # GUI thread. Waiting on our own event loop here would deadlock.
         if QtCore.QThread.currentThread() == self.thread():
             outcome = self._execute_request(request)
             request.complete(outcome)
-            return self._unwrap(outcome)
+            return self._unwrap(outcome, request)
 
         with self._queue_lock:
             if not self._accepting:
-                raise GuiDispatchError("RPC GUI dispatcher is stopping")
+                raise GuiDispatchError(
+                    "RPC GUI dispatcher is stopping",
+                    request_id=request.request_id,
+                )
             timed_out = self._timed_out_request
             if timed_out is not None and timed_out.completed:
                 self._timed_out_request = None
@@ -229,7 +294,10 @@ class GuiDispatcher(QtCore.QObject):
             if timed_out is not None:
                 raise GuiBusyAfterTimeout(
                     "FreeCAD GUI is still executing a request that timed out; "
-                    "new GUI work is rejected until it finishes"
+                    "new GUI work is rejected until it finishes",
+                    request_id=request.request_id,
+                    timeout_stage="admission",
+                    completion_uncertain=True,
                 )
             if request.session_id:
                 key = (request.session_id, request.request_id)
@@ -242,7 +310,8 @@ class GuiDispatcher(QtCore.QObject):
                     existing = None
                 if existing is not None:
                     raise GuiDispatchError(
-                        "authenticated request already has queued GUI work"
+                        "authenticated request already has queued GUI work",
+                        request_id=request.request_id,
                     )
                 self._requests_by_owner[key] = request
             self._requests.append(request)
@@ -291,12 +360,43 @@ class GuiDispatcher(QtCore.QObject):
                 # instead of incorrectly quarantining an idle dispatcher.
                 request.completion.wait()
                 return self._unwrap(
-                    request.outcome or GuiOutcome(False, error="Missing GUI outcome")
+                    request.outcome or GuiOutcome(False, error="Missing GUI outcome"),
+                    request,
                 )
-            raise GuiDispatchTimeout(
-                f"Timed out after {timeout}s waiting for FreeCAD GUI response{suffix}"
+            before_execution = pending_cancelled
+            error = GuiDispatchTimeout(
+                f"Timed out after {timeout}s waiting for FreeCAD GUI response{suffix}",
+                request_id=request.request_id,
+                timeout_stage=(
+                    "before_execution" if before_execution else "during_execution"
+                ),
+                execution_started=not before_execution,
+                completion_uncertain=not before_execution,
             )
-        return self._unwrap(request.outcome or GuiOutcome(False, error="Missing GUI outcome"))
+            error.error_code = (
+                "GUI_TIMEOUT_BEFORE_EXECUTION"
+                if before_execution
+                else "GUI_TIMEOUT_DURING_EXECUTION"
+            )
+            emit_telemetry(
+                "gui_dispatcher",
+                "gui_execution_timeout",
+                status="timed_out",
+                error_code=error.error_code,
+                request_id=request.request_id,
+                execution_id=request.request_id,
+                session_id=request.session_id,
+                payload={
+                    "timeout_stage": error.timeout_stage,
+                    "execution_started": error.execution_started,
+                    "completion_uncertain": error.completion_uncertain,
+                },
+            )
+            raise error
+        return self._unwrap(
+            request.outcome or GuiOutcome(False, error="Missing GUI outcome"),
+            request,
+        )
 
     def _forget_request_locked(self, request: GuiRequest) -> None:
         if request.session_id:
@@ -354,6 +454,14 @@ class GuiDispatcher(QtCore.QObject):
             return
 
         if request.mark_running():
+            emit_telemetry(
+                "gui_dispatcher",
+                "gui_execution_started",
+                request_id=request.request_id,
+                execution_id=request.request_id,
+                session_id=request.session_id,
+                payload={},
+            )
             def forget_before_wake() -> None:
                 with self._queue_lock:
                     self._forget_request_locked(request)

@@ -2,7 +2,9 @@
 
 # FreeCAD MCP
 
-This repository is a FreeCAD MCP that allows you to control FreeCAD from Claude Desktop.
+This is the `Rchiemstra/freecad-mcp` fork, which controls FreeCAD through MCP.
+The original upstream project is
+[`neka-nat/freecad-mcp`](https://github.com/neka-nat/freecad-mcp).
 
 ## Demo
 
@@ -42,7 +44,7 @@ FreeCAD Addon directory is
 Please put `addon/FreeCADMCP` directory to the addon directory.
 
 ```bash
-git clone https://github.com/neka-nat/freecad-mcp.git
+git clone https://github.com/Rchiemstra/freecad-mcp.git
 cd freecad-mcp
 
 # For Linux (Ubuntu/Debian)
@@ -54,6 +56,13 @@ cp -r addon/FreeCADMCP ~/.local/share/FreeCAD/v1-1/Mod/
 
 # For macOS (FreeCAD 1.1)
 cp -r addon/FreeCADMCP ~/Library/Application\ Support/FreeCAD/v1-1/Mod/
+```
+
+Install the Python package and copy the addon from this same checkout so their
+build IDs match:
+
+```bash
+python -m pip install -e .
 ```
 
 When you install addon, you need to restart FreeCAD.
@@ -153,6 +162,14 @@ merely a successful `ping` or an unauthenticated status response.
 
 Documentation:
 
+- [Runtime and build identity](doc/runtime-identity.md)
+- [Structured MCP results](doc/structured-results.md)
+- [Telemetry](doc/telemetry.md)
+- [Document health](doc/document-health.md)
+- [Transactions and rollback](doc/transactions-and-rollback.md)
+- [Request lifecycle and MCP Tasks](doc/request-lifecycle.md)
+- [Benchmarking](doc/benchmarking.md)
+- [Execute-code migration](doc/execute-code-migration.md)
 - [Lease lifecycle and GUI behavior](doc/document-leases.md)
 - [Sidecar schema v2](doc/document-lease-sidecar-v2.md)
 - [Isolated instance setup and manifest](doc/isolated-instance.md)
@@ -201,7 +218,9 @@ For developer.
 First, you need clone this repository.
 
 ```bash
-git clone https://github.com/neka-nat/freecad-mcp.git
+git clone https://github.com/Rchiemstra/freecad-mcp.git
+cd freecad-mcp
+python -m pip install -e .
 ```
 
 ```json
@@ -331,7 +350,9 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `run_fem_analysis` — runs the CalculiX solver on an existing `Fem::FemAnalysis` and returns summary results (max von Mises stress, max displacement, node count, working directory). Auto-creates a `SolverCcxTools` if the analysis has none. See [`examples/cantilever_fem.py`](examples/cantilever_fem.py) for an end-to-end usage example.
 
 ### Diagnostics (read-only guards for the silent FreeCAD behaviours in `doc/mcp-feedback-status.md`)
+* `get_runtime_info` — exact MCP package, addon, FreeCAD, RPC protocol, profile, and compatibility identity. Run this first when diagnosing the wrong checkout or a stale addon copy.
 * `check_rpc_sync` — round-trip a unique nonce through the GUI queue. Run it after an `execute_code` timeout or before trusting follow-up model checks; a timeout or nonce mismatch means work should stop until the RPC queue is healthy.
+* `get_request_status`, `cancel_request` — query and cooperatively cancel the exact authenticated request after a timeout. Heavy calls also support negotiated MCP Tasks; clients without that extension keep the synchronous behavior.
 * `preview_attachment` — inspect a datum's attachment and the cross-body placement-drop risk (P1).
 * `find_faces`, `find_edges` — locate sub-shapes by geometry (type / normal / centre / radius), removing face/edge-index fragility.
 * `face_normal`, `edge_axis` — global normal/axis of a single sub-shape, avoiding the Direction-vs-Axis trap (P8).
@@ -368,7 +389,12 @@ Run the suite via Docker Compose from this directory — do not rely on host `py
 docker compose run --rm unit   # mock-based ops / template generation
 docker compose run --rm e2e    # live FreeCADCmd parametric + regression tests
 docker compose run --rm core   # FreeCAD core C++ repro markers
+docker compose run --rm benchmark # 20 task KPI report and quality gates
 ```
+
+The benchmark writes `benchmark-results.json` and `benchmark-report.md`.
+Telemetry is one JSONL file per process/session under `debug_logs/` by default;
+set `FREECAD_MCP_DEBUG_LOG_DIR` to choose another directory.
 
 ## Contributors
 

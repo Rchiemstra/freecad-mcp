@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import threading
 import time
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Iterable
@@ -56,6 +57,7 @@ class InflightSnapshot:
     terminal_status: str | None
     cancel_requested_at: float | None
     cancellation_resolved: bool
+    recovery_incident_id: str | None
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +72,7 @@ class InflightSnapshot:
             "terminal": self.terminal,
             "terminal_status": self.terminal_status,
             "cancellation_resolved": self.cancellation_resolved,
+            "recovery_incident_id": self.recovery_incident_id,
         }
 
 
@@ -96,6 +99,7 @@ class CancellationToken:
         self._cancellation_resolution_complete = threading.Event()
         self._cancellation_begin_claimed = False
         self._cancellation_begin_complete = threading.Event()
+        self._recovery_incident_id: str | None = None
         self._lock = threading.RLock()
 
     def _snapshot_locked(self) -> InflightSnapshot:
@@ -113,6 +117,7 @@ class CancellationToken:
             terminal_status=self._terminal_status,
             cancel_requested_at=self._cancel_requested_at,
             cancellation_resolved=self._cancellation_resolved,
+            recovery_incident_id=self._recovery_incident_id,
         )
 
     def snapshot(self) -> InflightSnapshot:
@@ -181,6 +186,14 @@ class CancellationToken:
     def mark_uncertain(self, phase: str = "completion_uncertain") -> InflightSnapshot:
         with self._lock:
             self._uncertain = True
+            self._phase = str(phase)[:128]
+            if self._recovery_incident_id is None:
+                self._recovery_incident_id = str(uuid.uuid4())
+            return self._snapshot_locked()
+
+    def mark_recovered(self, phase: str = "recovery_completed") -> InflightSnapshot:
+        with self._lock:
+            self._uncertain = False
             self._phase = str(phase)[:128]
             return self._snapshot_locked()
 
@@ -455,6 +468,22 @@ class InflightRequestRegistry:
     def status(self, session_id: str, request_id: str) -> InflightSnapshot | None:
         request = self.get(session_id, request_id)
         return request.token.snapshot() if request is not None else None
+
+    def latest_recovery_incident(
+        self, session_id: str | None = None
+    ) -> InflightSnapshot | None:
+        """Return the newest visible uncertain/recovered request tombstone."""
+
+        with self._lock:
+            requests = [*self._active.values(), *reversed(self._terminal.values())]
+            for request in requests:
+                snapshot = request.token.snapshot()
+                if (
+                    snapshot.recovery_incident_id
+                    and (session_id is None or snapshot.session_id == session_id)
+                ):
+                    return snapshot
+        return None
 
     def refresh_terminal(
         self, session_id: str, request_id: str

@@ -2,6 +2,7 @@
 #
 #   docker compose run --rm unit      # fast mock-based tests (no FreeCAD)
 #   docker compose run --rm e2e       # live FreeCAD repro / regression tests
+#   docker compose run --rm benchmark # 20 task KPI benchmark and reports
 #   docker compose run --rm shell     # drop into a shell in the test image
 #
 # The image is shared; only the command differs.
@@ -33,6 +34,17 @@ services:
       context: .
       dockerfile: Dockerfile
     command: ["-m", "core", "-ra", "--tb=short"]
+
+  benchmark:
+    image: freecad-mcp-tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      FREECAD_MCP_BENCHMARK_OUTPUT_DIR: /results
+    volumes:
+      - ./:/results
+    command: ["-m", "benchmark", "tests/benchmark", "-ra", "--tb=short"]
 
   shell:
     image: freecad-mcp-tests

@@ -5,15 +5,28 @@ import random
 import re
 import threading
 import uuid
+import warnings
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import CallToolResult, ImageContent, TextContent
+from mcp.types import CallToolResult
 
+from .build_info import (
+    as_dict as build_info_dict,
+    build_id,
+    event_schema_version,
+    git_commit,
+    git_dirty,
+    package_version,
+    protocol_version,
+)
 from .freecad_client import FreeCADConnection
+from .instrumented_server import InstrumentedFastMCP
+from .outcomes import OutcomeStatus
 from .rpc_auth import (
+    REQUIRED_PROTOCOL_FEATURES,
     RpcAuthError,
     build_handshake_request_from_manifest,
     load_instance_manifest,
@@ -22,6 +35,8 @@ from .rpc_auth import (
     verify_handshake_response_from_manifest,
 )
 from .responses import json_response, tool_fail
+from .telemetry import close_default_writer, emit_event
+from .telemetry.context import get_context, update_context
 from .operations import (
     # Core
     close_document_operation,
@@ -294,6 +309,16 @@ def _authenticate_connection(conn: FreeCADConnection, *, force: bool = False) ->
         return
     manifest = _manifest_for_authentication()
     secret_path = state.auth_file or manifest.auth_secret_file
+    emit_event(
+        "authentication",
+        "authentication_started",
+        payload={
+            "forced_refresh": bool(force),
+            "profile_instance_id": getattr(
+                manifest, "profile_instance_id", state.instance_id or "unknown"
+            ),
+        },
+    )
     secret = load_profile_secret(secret_path)
     try:
         mcp_identity = make_mcp_runtime_identity(
@@ -301,7 +326,7 @@ def _authenticate_connection(conn: FreeCADConnection, *, force: bool = False) ->
             pid=state.mcp_pid,
             process_started_at=state.mcp_process_started_at,
             hostname=state.mcp_host,
-            client_build_id="freecad-mcp-0.1.20",
+            client_build_id=build_id,
         )
         request = build_handshake_request_from_manifest(
             secret=secret,
@@ -329,6 +354,53 @@ def _authenticate_connection(conn: FreeCADConnection, *, force: bool = False) ->
         conn.configure_session_refresher(
             lambda: _refresh_authenticated_connection(conn)
         )
+        compatibility = _compatibility_for_manifest(verified.manifest)
+        state.compatibility_warnings = compatibility["warnings"]
+        emit_event(
+            "authentication",
+            "authentication_completed",
+            payload={
+                "mcp": build_info_dict(),
+                "addon": {
+                    "version": getattr(
+                        verified.manifest, "addon_version", "unknown"
+                    ),
+                    "build_id": getattr(
+                        verified.manifest, "addon_build_id", "unknown"
+                    ),
+                    "runtime_id": getattr(
+                        verified.manifest, "addon_runtime_id", "unknown"
+                    ),
+                },
+                "freecad": {
+                    "version": getattr(
+                        verified.manifest, "freecad_version", "unknown"
+                    ),
+                    "revision": getattr(
+                        verified.manifest, "freecad_revision", "unknown"
+                    ),
+                    "pid": getattr(verified.manifest, "freecad_pid", None),
+                },
+                "rpc": {
+                    "protocol_version": getattr(
+                        verified.manifest, "protocol_version", protocol_version
+                    ),
+                    "features": list(
+                        getattr(verified, "negotiated_features", ()) or ()
+                    ),
+                },
+                "compatibility": compatibility,
+            },
+        )
+    except Exception as exc:
+        emit_event(
+            "authentication",
+            "authentication_failed",
+            status=OutcomeStatus.FAILED.value,
+            error_code=getattr(exc, "code", type(exc).__name__.upper()),
+            payload={"exception_type": type(exc).__name__},
+        )
+        raise
     finally:
         secret = b""
 
@@ -412,6 +484,21 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     heartbeat_task = None
     try:
         logger.info("FreeCADMCP server starting up")
+        emit_event(
+            "mcp",
+            "session_started",
+            payload={
+                "mcp": {
+                    **build_info_dict(),
+                    "pid": state.mcp_pid or os.getpid(),
+                    "runtime_id": state.mcp_instance_id,
+                },
+                "rpc_endpoint": {
+                    "host": state.rpc_host,
+                    "port": state.rpc_port,
+                },
+            },
+        )
         logger.info(
             "MCP lease identity: %s (pid=%s)",
             state.mcp_instance_id,
@@ -464,12 +551,37 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             state.rpc_session_expires_at = None
             state.authenticated_manifest = None
         logger.info("FreeCADMCP server shut down")
+        emit_event(
+            "mcp",
+            "session_stopped",
+            payload={
+                "mcp_runtime_id": state.mcp_instance_id,
+                "held_document_count": len(state.document_sessions),
+            },
+        )
+        close_default_writer()
 
 
-mcp = FastMCP(
+mcp = InstrumentedFastMCP(
     "FreeCADMCP",
     instructions="FreeCAD integration through the Model Context Protocol",
     lifespan=server_lifespan,
+)
+
+# The SDK negotiates this capability only with clients that advertise
+# task-augmented tool calls. Ordinary clients keep the synchronous path.
+# SDKs without the experimental extension remain fully compatible.
+try:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        mcp._mcp_server.experimental.enable_tasks()
+except (AttributeError, ImportError):
+    logger.info("MCP Tasks extension unavailable; synchronous fallback active")
+
+# Task cancellation reuses the authenticated request control plane. The link is
+# populated by FreeCADConnection once the existing RPC request ID is known.
+mcp.task_request_canceller = (
+    lambda request_id: get_freecad_connection().cancel_request(request_id)
 )
 
 
@@ -511,6 +623,166 @@ def get_freecad_connection() -> FreeCADConnection:
         return conn
 
 
+def _compatibility_for_manifest(manifest: Any | None) -> dict[str, Any]:
+    warnings: list[str] = []
+    if manifest is None:
+        return {
+            "compatible": True,
+            "warnings": ["Authenticated runtime identity is not available"],
+        }
+    addon_protocol = int(getattr(manifest, "protocol_version", 0) or 0)
+    features = set(getattr(manifest, "features", ()) or ())
+    missing = sorted(set(REQUIRED_PROTOCOL_FEATURES).difference(features))
+    compatible = addon_protocol == protocol_version and not missing
+    addon_build = str(getattr(manifest, "addon_build_id", "") or "")
+    if addon_build and addon_build != build_id:
+        warnings.append(
+            "MCP package and FreeCAD addon build IDs differ; protocol compatibility "
+            "permits this connection"
+        )
+    addon_version = str(getattr(manifest, "addon_version", "") or "")
+    if addon_version and addon_version != package_version:
+        warnings.append(
+            "MCP package and FreeCAD addon versions differ; verify both were "
+            "installed from the intended checkout"
+        )
+    if addon_protocol != protocol_version:
+        warnings.append(
+            f"RPC protocol mismatch: MCP={protocol_version}, addon={addon_protocol}"
+        )
+    if missing:
+        warnings.append("Missing required RPC features: " + ", ".join(missing))
+    return {"compatible": compatible, "warnings": warnings}
+
+
+def _runtime_info_payload() -> dict[str, Any]:
+    manifest = state.authenticated_manifest
+    info: dict[str, Any] = {}
+    if manifest is None:
+        try:
+            reported = get_freecad_connection().get_instance_info()
+            info = dict(reported) if isinstance(reported, dict) else {}
+        except Exception:
+            info = {}
+
+    addon = {
+        "version": (
+            getattr(manifest, "addon_version", None)
+            if manifest is not None
+            else info.get("addon_version")
+        )
+        or "unknown",
+        "build_id": (
+            getattr(manifest, "addon_build_id", None)
+            if manifest is not None
+            else info.get("addon_build_id")
+        )
+        or "unknown",
+        "runtime_id": (
+            getattr(manifest, "addon_runtime_id", None)
+            if manifest is not None
+            else info.get("addon_runtime_id")
+        )
+        or "unknown",
+    }
+    raw_version = (
+        getattr(manifest, "freecad_version", None)
+        if manifest is not None
+        else info.get("freecad_version")
+    )
+    if isinstance(raw_version, (list, tuple)):
+        freecad_version = ".".join(str(item) for item in raw_version[:3])
+        freecad_revision = (
+            str(raw_version[3]) if len(raw_version) > 3 else "unknown"
+        )
+    else:
+        freecad_version = str(raw_version or "unknown")
+        freecad_revision = str(
+            getattr(manifest, "freecad_revision", None)
+            if manifest is not None
+            else info.get("freecad_revision") or "unknown"
+        )
+    features = list(
+        getattr(manifest, "features", ())
+        if manifest is not None
+        else info.get("protocol_features") or ()
+    )
+    addon_protocol = int(
+        (
+            getattr(manifest, "protocol_version", None)
+            if manifest is not None
+            else info.get("protocol_version")
+        )
+        or 1
+    )
+    profile_fingerprint = (
+        getattr(manifest, "profile_path_fingerprint", None)
+        if manifest is not None
+        else info.get("profile_path_fingerprint")
+    )
+    profile_instance = (
+        getattr(manifest, "profile_id", None)
+        if manifest is not None
+        else info.get("profile_instance_id") or info.get("instance_id")
+    )
+    compatibility = (
+        _compatibility_for_manifest(manifest)
+        if manifest is not None
+        else {
+            "compatible": addon_protocol == protocol_version,
+            "warnings": (
+                []
+                if addon_protocol == protocol_version
+                else [
+                    f"RPC protocol mismatch: MCP={protocol_version}, "
+                    f"addon={addon_protocol}"
+                ]
+            ),
+        }
+    )
+    state.compatibility_warnings = list(compatibility["warnings"])
+    return {
+        "mcp": {
+            "version": package_version,
+            "build_id": build_id,
+            "git_commit": git_commit,
+            "git_dirty": git_dirty,
+            "pid": state.mcp_pid or os.getpid(),
+            "runtime_id": state.mcp_instance_id,
+            "event_schema_version": event_schema_version,
+        },
+        "addon": addon,
+        "freecad": {
+            "version": freecad_version,
+            "revision": freecad_revision,
+            "pid": (
+                getattr(manifest, "freecad_pid", None)
+                if manifest is not None
+                else info.get("pid")
+            ),
+        },
+        "rpc": {
+            "protocol_version": addon_protocol,
+            "features": sorted(str(item) for item in features),
+        },
+        "profile": {
+            "instance_id": profile_instance or state.instance_id or "unknown",
+            "path_fingerprint": profile_fingerprint or "unknown",
+        },
+        "compatibility": compatibility,
+    }
+
+
+@mcp.tool()
+def get_runtime_info(ctx: Context) -> CallToolResult:
+    """Report exact MCP, addon, FreeCAD, RPC, and isolated-profile identity."""
+
+    return json_response(
+        _runtime_info_payload(),
+        message="Connected FreeCAD MCP runtime identity",
+    )
+
+
 @mcp.tool()
 def check_rpc_sync(ctx: Context) -> CallToolResult:
     """Verify that the next FreeCAD GUI response belongs to this exact call.
@@ -523,16 +795,85 @@ def check_rpc_sync(ctx: Context) -> CallToolResult:
     result = get_freecad_connection().check_rpc_sync(nonce)
     if result.get("success") and result.get("nonce") == nonce:
         return json_response({"ok": True, "synchronized": True, "nonce": nonce})
+    if result.get("success") and result.get("nonce") != nonce:
+        details = {
+            "ok": False,
+            "synchronized": False,
+            "expected_nonce": nonce,
+            "rpc_result": result,
+        }
+        return tool_fail(
+            "FreeCAD GUI-RPC synchronization nonce did not match this call",
+            structured=details,
+            error_code="NONCE_MISMATCH",
+        )
+    if not isinstance(result, dict) or "success" not in result:
+        return tool_fail(
+            "FreeCAD GUI-RPC synchronization returned a malformed response",
+            structured={"rpc_result": result},
+            error_code="MALFORMED_RESPONSE",
+        )
     details = {
         "ok": False,
         "synchronized": False,
         "expected_nonce": nonce,
         "rpc_result": result,
     }
+    return json_response(
+        details,
+        status=OutcomeStatus.CONDITION_FALSE,
+        message="FreeCAD GUI-RPC queue is currently not synchronized",
+    )
+
+
+@mcp.tool()
+def get_request_status(ctx: Context, request_id: str) -> CallToolResult:
+    """Query a timed-out or long-running authenticated request without replaying it."""
+
+    try:
+        result = get_freecad_connection().get_request_status(request_id)
+    except Exception as exc:
+        return tool_fail(
+            f"Failed to query request status: {exc}",
+            error_code=getattr(exc, "code", type(exc).__name__.upper()),
+        )
+    state_value = str(result.get("state") or "unknown")
+    status = (
+        OutcomeStatus.CONDITION_FALSE
+        if result.get("success") and state_value in {"unknown", "expired"}
+        else None
+    )
+    return json_response(
+        result,
+        status=status,
+        message=f"Request {request_id}: {state_value}",
+    )
+
+
+@mcp.tool()
+def cancel_request(ctx: Context, request_id: str) -> CallToolResult:
+    """Request cooperative cancellation for an authenticated RPC request."""
+
+    try:
+        result = get_freecad_connection().cancel_request(request_id)
+    except Exception as exc:
+        return tool_fail(
+            f"Failed to cancel request: {exc}",
+            error_code=getattr(exc, "code", type(exc).__name__.upper()),
+        )
+    if result.get("success"):
+        cancellation = result.get("cancellation") or {}
+        return json_response(
+            result,
+            message=(
+                f"Cancellation {cancellation.get('status', 'requested')} "
+                f"for request {request_id}"
+            ),
+        )
     return tool_fail(
-        "FreeCAD GUI-RPC synchronization check failed.\n"
-        + json.dumps(details, ensure_ascii=False, indent=2, default=str),
-        structured=details,
+        str(result.get("error") or "Request cancellation failed"),
+        structured=result,
+        error_code=result.get("error_code"),
     )
 
 
@@ -1132,7 +1473,7 @@ def delete_object(
 
 
 @mcp.tool()
-def execute_code_async(ctx: Context, code: str) -> list[TextContent]:
+def execute_code_async(ctx: Context, code: str) -> CallToolResult:
     """Deprecated legacy background execution; blocked in lease enforcement.
 
     This compatibility tool is unavailable in ``enforce`` mode because it has
@@ -1562,7 +1903,7 @@ def get_parts_list(ctx: Context) -> CallToolResult:
 
 
 @mcp.tool()
-def reload_document(ctx: Context, doc_name: str) -> list[TextContent]:
+def reload_document(ctx: Context, doc_name: str) -> CallToolResult:
     """Close and re-open a document to pick up external file changes.
 
     Use this AFTER the document's .FCStd file has been modified by
@@ -5553,7 +5894,7 @@ def run_fem_analysis(
     doc_name: str,
     analysis_name: str,
     timeout: int = 600,
-) -> list[TextContent | ImageContent]:
+) -> CallToolResult:
     """Run the CalculiX solver on an existing Fem::FemAnalysis container and return summary results.
 
     Prerequisites in the document:
@@ -5725,7 +6066,7 @@ def main():
         state.auth_file = requested_auth or None
     # MCP-process lease identity (distinct from the FreeCAD addon instance_id)
     state.mcp_client_label = os.environ.get("FREECAD_MCP_CLIENT", "freecad-mcp")
-    mcp_identity = make_mcp_runtime_identity(client_build_id="freecad-mcp-0.1.20")
+    mcp_identity = make_mcp_runtime_identity(client_build_id=build_id)
     state.mcp_instance_id = mcp_identity.runtime_id
     state.mcp_pid = mcp_identity.pid
     state.mcp_host = mcp_identity.hostname

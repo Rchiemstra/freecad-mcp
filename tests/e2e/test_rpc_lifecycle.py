@@ -97,7 +97,7 @@ def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
             assert not thread.is_alive()
         codes = sorted(result["error_code"] for result in worker_results)
         assert codes.count("server_stopping") == 2
-        assert codes.count("worker_cancelled") == 1
+        assert codes.count("WORKER_CANCELLED") == 1
 
         assert "started" in rpc_server.start_rpc_server(port=0).lower()
         new_port = rpc_server.rpc_server_instance.server_address[1]

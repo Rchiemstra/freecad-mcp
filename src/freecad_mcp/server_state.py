@@ -32,6 +32,9 @@ class ServerState:
     authenticated_manifest: Any | None = field(default=None, repr=False)
     rpc_session_id: str | None = None
     rpc_session_expires_at: str | None = None
+    compatibility_warnings: list[str] = field(default_factory=list)
+    recovery_incidents: dict[str, str] = field(default_factory=dict)
+    mcp_task_requests: dict[str, str] = field(default_factory=dict)
     # Live FreeCAD Document.Name -> addon-issued session UUID. Names are
     # diagnostic aliases only; credentials remain keyed by the UUID.
     document_sessions: dict[str, str] = field(default_factory=dict)

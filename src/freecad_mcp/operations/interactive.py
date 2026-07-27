@@ -31,8 +31,8 @@ def normalize_view_name(view_name: str) -> str:
 def open_document_operation(freecad: FreeCADConnection, path: str) -> ToolResponse:
     result = freecad.open_document(path)
     if result.get("ok") or result.get("success"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def activate_document_operation(
@@ -40,8 +40,8 @@ def activate_document_operation(
 ) -> ToolResponse:
     result = freecad.activate_document(doc_name)
     if result.get("ok") or result.get("success"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def set_tree_expanded_operation(
@@ -52,8 +52,8 @@ def set_tree_expanded_operation(
 ) -> ToolResponse:
     result = freecad.set_tree_expanded(doc_name, object_names, mode)
     if result.get("ok"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def select_subshapes_operation(
@@ -64,22 +64,22 @@ def select_subshapes_operation(
 ) -> ToolResponse:
     result = freecad.select_subshapes(doc_name, selections or [], clear)
     if result.get("ok"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def get_selection_operation(freecad: FreeCADConnection) -> ToolResponse:
     result = freecad.get_selection()
     if result.get("ok"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def get_gui_state_operation(freecad: FreeCADConnection) -> ToolResponse:
     result = freecad.get_gui_state()
     if result.get("ok"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def recompute_and_wait_operation(
@@ -87,8 +87,8 @@ def recompute_and_wait_operation(
 ) -> ToolResponse:
     result = freecad.recompute_and_wait(doc_name)
     if result.get("ok"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def set_section_view_operation(
@@ -103,8 +103,8 @@ def set_section_view_operation(
         enabled, placement, base, normal, no_manip
     )
     if result.get("ok"):
-        return tool_ok(json.dumps(result))
-    return tool_fail(json.dumps(result))
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def diagnose_pocket_operation(
@@ -225,4 +225,4 @@ def compare_documents_operation(
         "state_b": state_b,
         "diff": diff,
     }
-    return tool_ok(json.dumps(payload))
+    return json_response(payload)

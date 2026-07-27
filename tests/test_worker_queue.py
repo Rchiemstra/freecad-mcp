@@ -58,8 +58,11 @@ def test_one_active_three_pending_and_targeted_pending_cancellation(monkeypatch)
         assert cancellation["state"] == "pending"
         release_active.set()
         results = [future.result(timeout=5) for future in futures]
-        cancelled = [r for r in results if r.get("error_code") == "worker_cancelled"]
+        cancelled = [
+            r for r in results if r.get("error_code") == "WORKER_CANCELLED"
+        ]
         assert len(cancelled) == 1
+        assert cancelled[0]["legacy_error_code"] == "worker_cancelled"
         assert cancelled[0]["execution"]["job_id"] == cancelled_id
     finally:
         release_active.set()

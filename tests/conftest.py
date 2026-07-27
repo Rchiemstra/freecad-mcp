@@ -33,7 +33,7 @@ from mcp.types import ImageContent, TextContent
 # ---------------------------------------------------------------------------
 
 def pytest_configure(config: pytest.Config) -> None:
-    for marker in ("unit", "e2e", "core"):
+    for marker in ("unit", "e2e", "core", "benchmark"):
         config.addinivalue_line("markers", marker)
 
 
@@ -51,7 +51,7 @@ def pytest_collection_modifyitems(
     covered without needing a marker on each. Tests already tagged unit/e2e/core
     are left untouched.
     """
-    layers = {"unit", "e2e", "core"}
+    layers = {"unit", "e2e", "core", "benchmark"}
     for item in items:
         if not layers.intersection(m.name for m in item.iter_markers()):
             item.add_marker(pytest.mark.unit)

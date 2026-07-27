@@ -42,6 +42,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY addon ./addon
 COPY scripts ./scripts
+COPY benchmarks ./benchmarks
 COPY tests ./tests
 
 RUN pip install --no-cache-dir -e ".[dev]"

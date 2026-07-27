@@ -81,5 +81,7 @@ def test_repair_preflight_failure_is_structured_tool_error():
     response = repair_references_operation(connection, "Model", [{}], validate=True)
 
     assert response.isError is True
-    assert response.structuredContent == result
+    assert response.structuredContent["status"] == "failed"
+    assert response.structuredContent["data"] == result
+    assert response.structuredContent["repair_committed"] is False
     assert "repair_committed" in _text(response)

@@ -16,6 +16,9 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+debug_logs/
+benchmark-results.json
+benchmark-report.md
 
 # IDE
 .vscode/
