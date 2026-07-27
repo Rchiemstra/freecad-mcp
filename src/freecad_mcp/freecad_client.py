@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import threading
+import time
 import xmlrpc.client
 import uuid
 from collections.abc import Callable, Iterable, Mapping
@@ -16,6 +17,9 @@ from .lease_manager import (
     RpcRequestContext,
 )
 from .template_resources import read_template_text
+from .telemetry import emit_event
+from .telemetry.context import get_context, update_context
+from .mcp_tasks import link_runtime
 
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -526,10 +530,11 @@ class FreeCADConnection:
             raise LeaseNotFoundError(
                 f"authenticated mutation {operation_name!r} has no declared leased document"
             )
+        effective_task_id = task_id or get_context().task_id
         return manager.build_request_context(
             document_session_uuids=session_ids,
             operation_name=operation_name,
-            task_id=task_id,
+            task_id=effective_task_id,
             request_id=request_id,
         )
 
@@ -699,17 +704,46 @@ class FreeCADConnection:
     ) -> Any:
         """Invoke a method on a serialized general or independent control lane."""
 
+        started = time.monotonic()
+        emit_event(
+            "rpc_client",
+            "rpc_invocation_started",
+            payload={
+                "method": method,
+                "control_lane": bool(control),
+                "custom_timeout": timeout,
+            },
+        )
         with self._identity_lock:
             if self._disconnected:
                 raise RuntimeError("FreeCAD RPC connection is disconnected")
-        if timeout is not None and timeout != self._timeout and not control:
-            lane = self._make_proxy(timeout)
-            try:
-                return lane.call(method, *args)
-            finally:
-                lane.close()
-        lane = self.control_server if control else self.server
-        return lane.call(method, *args)
+        try:
+            if timeout is not None and timeout != self._timeout and not control:
+                lane = self._make_proxy(timeout)
+                try:
+                    result = lane.call(method, *args)
+                finally:
+                    lane.close()
+            else:
+                lane = self.control_server if control else self.server
+                result = lane.call(method, *args)
+        except Exception as exc:
+            emit_event(
+                "rpc_client",
+                "rpc_invocation_failed",
+                status="failed",
+                duration_ms=(time.monotonic() - started) * 1000.0,
+                error_code=getattr(exc, "code", type(exc).__name__.upper()),
+                payload={"method": method, "exception_type": type(exc).__name__},
+            )
+            raise
+        emit_event(
+            "rpc_client",
+            "rpc_invocation_completed",
+            duration_ms=(time.monotonic() - started) * 1000.0,
+            payload={"method": method, "control_lane": bool(control)},
+        )
+        return result
 
     def invoke_v2(
         self,
@@ -722,6 +756,43 @@ class FreeCADConnection:
     ) -> dict[str, Any]:
         """Send one immutable v2 envelope without shared credential headers."""
 
+        document_sessions = tuple(
+            item.document_session_uuid for item in context.lease_credentials
+        )
+        category = "typed_direct_rpc"
+        if method == "execute_code" and isinstance(params, Mapping):
+            options = params.get("options")
+            if isinstance(options, Mapping) and options.get("generated_operation"):
+                category = "generated_internal_execute"
+            elif isinstance(options, Mapping) and options.get("read_only"):
+                category = "read_only_worker_analysis"
+            else:
+                category = "public_execute_code"
+        update_context(
+            request_id=context.request_id,
+            execution_id=context.request_id,
+            task_id=context.task_id or None,
+            document_session_uuid=(
+                document_sessions[0] if len(document_sessions) == 1 else None
+            ),
+            execution_category=category,
+        )
+        task_context_id = get_context().task_id
+        if task_context_id:
+            link_runtime(
+                task_context_id,
+                request_id=context.request_id,
+            )
+        emit_event(
+            "rpc_client",
+            "routing_completed",
+            payload={
+                "method": method,
+                "execution_category": category,
+                "document_session_uuids": list(document_sessions),
+                "control_lane": bool(control),
+            },
+        )
         wire_params = _sign_generated_execute_params(method, params, context)
         envelope = context.to_envelope(method, wire_params)
         transport_method = "invoke_v2_control" if control else "invoke_v2"
@@ -736,6 +807,28 @@ class FreeCADConnection:
             raise RpcInvocationError(method, exc) from None
         error = response.get("error") if isinstance(response, Mapping) else None
         error_code = error.get("code") if isinstance(error, Mapping) else None
+        if isinstance(response, Mapping):
+            result = response.get("result")
+            candidates = [response, result] if isinstance(result, Mapping) else [response]
+            for candidate in candidates:
+                execution = candidate.get("execution")
+                worker_job_id = candidate.get("worker_job_id") or candidate.get("job_id")
+                if isinstance(execution, Mapping):
+                    worker_job_id = worker_job_id or execution.get("job_id")
+                recovery_incident_id = candidate.get("recovery_incident_id")
+                updates: dict[str, Any] = {}
+                if worker_job_id:
+                    updates["worker_job_id"] = worker_job_id
+                    if task_context_id:
+                        link_runtime(
+                            task_context_id,
+                            request_id=context.request_id,
+                            worker_job_id=str(worker_job_id),
+                        )
+                if recovery_incident_id:
+                    updates["recovery_incident_id"] = recovery_incident_id
+                if updates:
+                    update_context(**updates)
         if error_code not in {"SESSION_EXPIRED", "UNKNOWN_SESSION"}:
             return response
         with self._identity_lock:

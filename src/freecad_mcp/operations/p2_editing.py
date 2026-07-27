@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse
+from ..responses import ToolResponse, tool_fail
 from ..template_resources import render_template_lines
 from .core import _run_code
 
@@ -110,8 +110,10 @@ def sketch_fillet_operation(
     radius: float,
 ) -> ToolResponse:
     if radius <= 0:
-        from ..responses import text_response
-        return text_response("fillet radius must be > 0")
+        return tool_fail(
+            "fillet radius must be > 0",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
         "p2_editing/sketch_fillet.py.txt",
         geo1=repr(geo1),

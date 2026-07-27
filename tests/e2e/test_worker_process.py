@@ -141,11 +141,13 @@ def test_timeout_and_crash_do_not_poison_the_next_worker_job():
 
     try:
         timed_out = run("import time; time.sleep(5)", timeout=1)
-        assert timed_out["error_code"] == "worker_timeout"
+        assert timed_out["error_code"] == "WORKER_TIMEOUT_DURING_EXECUTION"
+        assert timed_out["legacy_error_code"] == "worker_timeout"
         assert run("print('after timeout')")["success"] is True
 
         crashed = run("import os; os._exit(23)")
-        assert crashed["error_code"] == "worker_crash"
+        assert crashed["error_code"] == "WORKER_TASK_FAILED"
+        assert crashed["legacy_error_code"] == "worker_crash"
         recovered = run("print('after crash')")
         assert recovered["success"] is True
         assert "after crash" in recovered["message"]
@@ -647,7 +649,7 @@ def test_active_cancellation_kills_descendant_and_next_job_succeeds(tmp_path):
         cancellation = manager.cancel(status["active_job_id"])
         assert cancellation["success"] is True
         thread.join(timeout=10)
-        assert result[0]["error_code"] == "worker_cancelled"
+        assert result[0]["error_code"] == "WORKER_CANCELLED"
 
         deadline = time.monotonic() + 5
         state_path = Path(f"/proc/{child_pid}/status")

@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse
+from ..responses import ToolResponse, tool_fail
 from ..template_resources import render_template_lines
 from .core import _run_code
 
@@ -36,8 +36,10 @@ def sketch_add_polyline_operation(
     construction: bool = False,
 ) -> ToolResponse:
     if len(points) < 2:
-        from ..responses import text_response
-        return text_response("polyline requires at least 2 points")
+        return tool_fail(
+            "polyline requires at least 2 points",
+            error_code="INVALID_ARGUMENT",
+        )
     c = repr(construction)
     segment_lines = []
     pts = [(p["x"], p["y"]) for p in points]
@@ -263,8 +265,10 @@ def sketch_add_regular_polygon_operation(
     construction: bool = False,
 ) -> ToolResponse:
     if sides < 3:
-        from ..responses import text_response
-        return text_response("regular polygon requires at least 3 sides")
+        return tool_fail(
+            "regular polygon requires at least 3 sides",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
         "p1_curves/sketch_add_regular_polygon.py.txt",
         cx=repr(cx),
@@ -296,11 +300,15 @@ def sketch_add_parametric_curve_operation(
     construction: bool = False,
 ) -> ToolResponse:
     if samples < 10 or samples > 2000:
-        from ..responses import text_response
-        return text_response("samples must be between 10 and 2000")
+        return tool_fail(
+            "samples must be between 10 and 2000",
+            error_code="INVALID_ARGUMENT",
+        )
     if t_start >= t_end:
-        from ..responses import text_response
-        return text_response("t_start must be less than t_end")
+        return tool_fail(
+            "t_start must be less than t_end",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(
         "p1_curves/sketch_add_parametric_curve.py.txt",
         t_start=repr(t_start),

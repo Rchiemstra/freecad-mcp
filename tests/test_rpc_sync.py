@@ -48,3 +48,26 @@ def test_mcp_sync_check_accepts_matching_nonce(monkeypatch):
 
     assert response.isError is False
     assert "synchronized" in response.content[0].text
+
+
+def test_mcp_sync_busy_is_condition_false_not_tool_error(monkeypatch):
+    connection = MagicMock()
+    connection.check_rpc_sync.return_value = {
+        "success": False,
+        "error_code": "GUI_BUSY_AFTER_TIMEOUT",
+        "recovery_incident_id": "recovery-id",
+    }
+    monkeypatch.setattr(server_module, "get_freecad_connection", lambda: connection)
+    monkeypatch.setattr(
+        server_module.uuid, "uuid4", lambda: MagicMock(hex="current-nonce")
+    )
+
+    response = server_module.check_rpc_sync(None)
+
+    assert response.isError is False
+    assert response.structuredContent["status"] == "condition_false"
+    assert response.structuredContent["synchronized"] is False
+    assert (
+        response.structuredContent["rpc_result"]["recovery_incident_id"]
+        == "recovery-id"
+    )

@@ -10,7 +10,7 @@ import json
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, text_response, tool_ok
+from ..responses import ToolResponse, json_response, tool_fail
 from ..template_resources import render_template_lines, render_template_text
 from .p7_assembly import _doc_preamble, _run_json_code, _shared_helpers
 
@@ -347,8 +347,11 @@ def geometric_diff_operation(
     try:
         current = json.loads(text)
     except Exception:
-        return tool_ok("Failed to capture current state for diff: " + text)
-    return tool_ok(json.dumps(_diff_states(before, current)))
+        return tool_fail(
+            "Failed to capture current state for diff: " + text,
+            error_code="MALFORMED_RESPONSE",
+        )
+    return json_response(_diff_states(before, current))
 
 
 def create_placement_binder_operation(

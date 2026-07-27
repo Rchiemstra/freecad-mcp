@@ -510,7 +510,8 @@ def test_pinned_replay_compacts_after_ttl_and_is_not_evicted_until_release():
 
     active.clear()
     assert cache.prune() == 1
-    assert cache.status(runtime_id, envelope.request_id).status == "unknown"
+    assert cache.status(runtime_id, envelope.request_id).status == "expired"
+    assert cache.status(runtime_id, str(uuid.uuid4())).status == "unknown"
 
 
 def test_replay_capacity_never_evicts_pinned_or_in_progress_entries():

@@ -1564,6 +1564,9 @@ class RequestReplayCache:
             owner_has_unresolved_lease or (lambda _runtime_id: False)
         )
         self._entries: dict[tuple[str, str], _ReplayEntry] = {}
+        # Bounded tombstones let request-status distinguish a genuinely
+        # unknown UUID from a known result whose retention window elapsed.
+        self._expired: dict[tuple[str, str], None] = {}
         self._lock = threading.RLock()
 
     def set_owner_lease_predicate(
@@ -1609,6 +1612,7 @@ class RequestReplayCache:
                     else None,
                 )
             self._ensure_capacity_locked()
+            self._expired.pop(key, None)
             self._entries[key] = _ReplayEntry(
                 fingerprint=fingerprint,
                 expires_at=now + self._ttl,
@@ -1655,7 +1659,9 @@ class RequestReplayCache:
             self._prune_locked(now)
             entry = self._entries.get(key)
             if entry is None:
-                return ReplayCheck("unknown")
+                return ReplayCheck(
+                    "expired" if key in self._expired else "unknown"
+                )
             return ReplayCheck(
                 entry.state,
                 copy.deepcopy(entry.response)
@@ -1718,8 +1724,16 @@ class RequestReplayCache:
                     entry.response_compacted = True
                 continue
             self._entries.pop(key, None)
+            self._remember_expired_locked(key)
             removed += 1
         return removed
+
+    def _remember_expired_locked(self, key: tuple[str, str]) -> None:
+        self._expired.pop(key, None)
+        self._expired[key] = None
+        while len(self._expired) > self._max_entries:
+            oldest = next(iter(self._expired))
+            self._expired.pop(oldest, None)
 
     def _entry_is_pinned_locked(
         self, key: tuple[str, str], entry: _ReplayEntry
@@ -1747,6 +1761,7 @@ class RequestReplayCache:
         if completed:
             _, oldest_key = min(completed)
             self._entries.pop(oldest_key, None)
+            self._remember_expired_locked(oldest_key)
             return
         raise LeaseProtocolError(
             "REPLAY_JOURNAL_FULL",

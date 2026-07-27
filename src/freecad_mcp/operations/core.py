@@ -59,6 +59,11 @@ def create_document_operation(
         res = freecad.create_document(name)
         if res["success"]:
             credential_data = res.get("credential") or {}
+            public_res = dict(res)
+            # The credential is a one-time bearer secret. It is retained only
+            # in the private lease manager and must never cross the MCP tool
+            # result boundary, including structuredContent.
+            public_res.pop("credential", None)
             if credential_data and lease_manager is not None:
                 from ..lease_manager import LeaseCredential
 
@@ -75,11 +80,25 @@ def create_document_operation(
                     document_sessions[res["document_name"]] = (
                         credential.document_session_uuid
                     )
+                public_res["lease"] = {
+                    "lease_id": credential.lease_id,
+                    "document_session_uuid": credential.document_session_uuid,
+                    "generation": credential.generation,
+                    "credential_stored": True,
+                }
                 return tool_ok(
-                    f"Document '{res['document_name']}' created and leased successfully"
+                    f"Document '{res['document_name']}' created and leased successfully",
+                    structured=public_res,
                 )
-            return tool_ok(f"Document '{res['document_name']}' created successfully")
-        return tool_fail(f"Failed to create document: {res['error']}")
+            return tool_ok(
+                f"Document '{res['document_name']}' created successfully",
+                structured=public_res,
+            )
+        return tool_fail(
+            f"Failed to create document: {res['error']}",
+            structured=res,
+            error_code=res.get("error_code"),
+        )
     except Exception as e:
         logger.error(f"Failed to create document: {str(e)}")
         return tool_fail(f"Failed to create document: {str(e)}")
@@ -103,9 +122,16 @@ def create_object_operation(
         }
         res = freecad.create_object(doc_name, obj_data)
         if res["success"]:
-            response = tool_ok(f"Object '{res['object_name']}' created successfully")
+            response = tool_ok(
+                f"Object '{res['object_name']}' created successfully",
+                structured=res,
+            )
         else:
-            response = tool_fail(f"Failed to create object: {res['error']}")
+            response = tool_fail(
+                f"Failed to create object: {res['error']}",
+                structured=res,
+                error_code=res.get("error_code"),
+            )
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
@@ -123,9 +149,16 @@ def edit_object_operation(
     try:
         res = freecad.edit_object(doc_name, obj_name, {"Properties": obj_properties})
         if res["success"]:
-            response = tool_ok(f"Object '{res['object_name']}' edited successfully")
+            response = tool_ok(
+                f"Object '{res['object_name']}' edited successfully",
+                structured=res,
+            )
         else:
-            response = tool_fail(f"Failed to edit object: {res['error']}")
+            response = tool_fail(
+                f"Failed to edit object: {res['error']}",
+                structured=res,
+                error_code=res.get("error_code"),
+            )
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
@@ -243,10 +276,12 @@ def delete_object_operation(
             msg = json_part
             if log_summary:
                 msg += "\n" + log_summary
-            response = tool_ok(msg)
+            response = tool_ok(msg, structured=res)
         else:
             response = tool_fail(
-                f"Failed to delete object: {res.get('error', res.get('message', 'unknown error'))}"
+                f"Failed to delete object: {res.get('error', res.get('message', 'unknown error'))}",
+                structured=res,
+                error_code=res.get("error_code"),
             )
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
@@ -319,16 +354,24 @@ def execute_code_async_operation(
     try:
         res = freecad.execute_code_async(code)
         if res["success"]:
-            return text_response(
+            return tool_ok(
                 "Code execution started in background.\n"
                 "Use get_object to poll a document object for completion "
                 "(e.g. check SessionState.Label). "
-                "FreeCAD's Report View will show output when done."
+                "FreeCAD's Report View will show output when done.",
+                structured=res,
             )
-        return text_response(f"Failed to start async execution: {res.get('error', 'unknown')}")
+        return tool_fail(
+            f"Failed to start async execution: {res.get('error', 'unknown')}",
+            structured=res,
+            error_code=res.get("error_code"),
+        )
     except Exception as e:
         logger.error(f"Failed to start async code execution: {str(e)}")
-        return text_response(f"Failed to start async code execution: {str(e)}")
+        return tool_fail(
+            f"Failed to start async code execution: {str(e)}",
+            error_code=type(e).__name__.upper(),
+        )
 
 
 def get_view_operation(
@@ -394,7 +437,7 @@ def get_view_operation(
                 "geometric_diff for richer text-only diffs, and find_faces / "
                 "face_normal for specific subshapes."
             )
-            return tool_ok(note + "\n" + output)
+            return tool_ok(note + "\n" + output, structured=res)
     except Exception as e:
         logger.error(f"get_view fallback failed: {e}")
     return tool_fail("Cannot get screenshot in the current view type (such as TechDraw or Spreadsheet)")
@@ -459,9 +502,16 @@ def insert_part_from_library_operation(
     try:
         res = freecad.insert_part_from_library(doc_name, relative_path)
         if res["success"]:
-            response = tool_ok(f"Part inserted from library: {res['message']}")
+            response = tool_ok(
+                f"Part inserted from library: {res['message']}",
+                structured=res,
+            )
         else:
-            response = tool_fail(f"Failed to insert part from library: {res['error']}")
+            response = tool_fail(
+                f"Failed to insert part from library: {res['error']}",
+                structured=res,
+                error_code=res.get("error_code"),
+            )
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
@@ -503,10 +553,19 @@ def get_parts_list_operation(freecad: FreeCADConnection) -> ToolResponse:
         parts = freecad.get_parts_list()
     except Exception as e:
         logger.error(f"Failed to get parts list: {str(e)}")
-        return text_response(f"Failed to get parts list: {str(e)}")
+        return tool_fail(
+            f"Failed to get parts list: {str(e)}",
+            error_code=type(e).__name__.upper(),
+        )
     if parts:
         return json_response(parts)
-    return text_response("No parts found in the parts library. You must add parts_library addon.")
+    return json_response(
+        {"parts": [], "available": False},
+        status="condition_false",
+        message=(
+            "No parts found in the parts library. You must add parts_library addon."
+        ),
+    )
 
 
 def list_documents_operation(freecad: FreeCADConnection) -> ToolResponse:
@@ -568,11 +627,12 @@ def _run_code(
                     for e in errors
                 )
                 msg += f"\nRecompute errors detected: {names}"
-            response = tool_ok(msg)
+            response = tool_ok(msg, structured=res)
         else:
             response = tool_fail(
                 f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}",
-                structured=res.get("structured") if isinstance(res.get("structured"), dict) else None,
+                structured=res,
+                error_code=res.get("error_code"),
             )
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
@@ -1291,12 +1351,18 @@ def close_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolR
         if result is None:
             result = freecad.invoke_rpc("close_document", doc_name)
         if isinstance(result, dict) and result.get("success"):
-            return text_response(f"Document '{doc_name}' closed")
+            return tool_ok(f"Document '{doc_name}' closed", structured=result)
         error = result.get("error") if isinstance(result, dict) else result
-        return text_response(f"Failed to close document: {error}")
+        return tool_fail(
+            f"Failed to close document: {error}",
+            structured=result if isinstance(result, dict) else None,
+        )
     except Exception as exc:
         logger.error("Failed to close document: %s", exc)
-        return text_response(f"Failed to close document: {exc}")
+        return tool_fail(
+            f"Failed to close document: {exc}",
+            error_code=type(exc).__name__.upper(),
+        )
 
 
 def run_fem_analysis_operation(
@@ -1328,7 +1394,10 @@ def run_fem_analysis_operation(
         })
     except Exception as e:
         logger.error(f"Failed to run FEM analysis: {str(e)}")
-        return text_response(f"Failed to run FEM analysis: {str(e)}")
+        return tool_fail(
+            f"Failed to run FEM analysis: {str(e)}",
+            error_code=type(e).__name__.upper(),
+        )
 
 
 def reload_document_operation(
@@ -1341,10 +1410,18 @@ def reload_document_operation(
     try:
         res = freecad.reload_document(doc_name)
         if res.get("success"):
-            return text_response(
-                f"Document '{res['document_name']}' reloaded from disk."
+            return tool_ok(
+                f"Document '{res['document_name']}' reloaded from disk.",
+                structured=res,
             )
-        return text_response(f"Failed to reload document: {res.get('error')}")
+        return tool_fail(
+            f"Failed to reload document: {res.get('error')}",
+            structured=res,
+            error_code=res.get("error_code"),
+        )
     except Exception as e:
         logger.error(f"Failed to reload document: {str(e)}")
-        return text_response(f"Failed to reload document: {str(e)}")
+        return tool_fail(
+            f"Failed to reload document: {str(e)}",
+            error_code=type(e).__name__.upper(),
+        )

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, json_response, text_response
+from ..responses import ToolResponse, json_response, tool_fail
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -23,10 +23,13 @@ def snapshot_operation(
         result = freecad.invoke_rpc("snapshot", doc_name)
         if isinstance(result, dict):
             return json_response(result)
-        return text_response(f"Failed to snapshot document: {result}")
+        return tool_fail(f"Failed to snapshot document: {result}")
     except Exception as exc:
         logger.error("Failed to snapshot document: %s", exc)
-        return text_response(f"Failed to snapshot document: {exc}")
+        return tool_fail(
+            f"Failed to snapshot document: {exc}",
+            error_code=type(exc).__name__.upper(),
+        )
 
 
 def restore_operation(
@@ -53,7 +56,10 @@ def restore_operation(
             result = freecad.invoke_rpc("restore", doc_name, snapshot_id)
         if isinstance(result, dict):
             return json_response(result)
-        return text_response(f"Failed to restore snapshot: {result}")
+        return tool_fail(f"Failed to restore snapshot: {result}")
     except Exception as exc:
         logger.error("Failed to restore snapshot: %s", exc)
-        return text_response(f"Failed to restore snapshot: {exc}")
+        return tool_fail(
+            f"Failed to restore snapshot: {exc}",
+            error_code=type(exc).__name__.upper(),
+        )

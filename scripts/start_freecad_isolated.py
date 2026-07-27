@@ -44,12 +44,13 @@ from freecad_mcp.rpc_auth import (  # noqa: E402
     make_mcp_runtime_identity,
     verify_handshake_response,
 )
+from freecad_mcp.build_info import build_id as MCP_BUILD_ID  # noqa: E402
 
 
 PROFILE_NAME = ".freecad-mcp-isolated"
 MANIFEST_FILENAME = "instance-manifest.json"
 MANIFEST_SCHEMA_VERSION = 1
-LAUNCHER_BUILD_ID = "freecad-mcp-isolated-launcher-0.1.20"
+LAUNCHER_BUILD_ID = f"{MCP_BUILD_ID}-isolated-launcher"
 _MANIFEST_FIELDS = frozenset(
     {
         "schema_version",

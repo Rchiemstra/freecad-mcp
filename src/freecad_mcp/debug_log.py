@@ -16,6 +16,8 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from .telemetry.redaction import redact_payload
+
 logger = logging.getLogger("FreeCADMCPserver.debug")
 
 _DEFAULT_LOG_PATH = Path(os.environ.get("FREECAD_MCP_DEBUG_LOG", "mcp_debug.log"))
@@ -145,7 +147,7 @@ def _known_secrets(payload: Any, supplied: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted(found, key=len, reverse=True))
 
 
-def redact_payload(payload: Any, *, secrets: Iterable[str] = ()) -> Any:
+def _legacy_redact_payload(payload: Any, *, secrets: Iterable[str] = ()) -> Any:
     """Return a log-safe copy of *payload* with credential/code data redacted.
 
     Sensitive values discovered under credential-shaped keys are also removed

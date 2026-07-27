@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse
+from ..responses import ToolResponse, tool_fail
 from ..template_resources import render_template_lines
 from .core import _build_assertion_code, _run_code, _partdesign_pattern_helper_code
 
@@ -68,8 +68,10 @@ def loft_feature_operation(
     closed: bool = False,
 ) -> ToolResponse:
     if len(sketch_names) < 2:
-        from ..responses import text_response
-        return text_response("loft requires at least 2 sketches")
+        return tool_fail(
+            "loft requires at least 2 sketches",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _doc_preamble(doc_name) + render_template_lines(
         "p3_features/loft_feature.py.txt",
         body_name=repr(body_name),
@@ -158,8 +160,10 @@ def fillet_feature_operation(
     body_name: str | None = None,
 ) -> ToolResponse:
     if radius <= 0:
-        from ..responses import text_response
-        return text_response("fillet radius must be > 0")
+        return tool_fail(
+            "fillet radius must be > 0",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _doc_preamble(doc_name) + render_template_lines(
         "p3_features/fillet_feature.py.txt",
         base_feature=repr(base_feature),
@@ -188,8 +192,10 @@ def chamfer_feature_operation(
     body_name: str | None = None,
 ) -> ToolResponse:
     if size <= 0:
-        from ..responses import text_response
-        return text_response("chamfer size must be > 0")
+        return tool_fail(
+            "chamfer size must be > 0",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _doc_preamble(doc_name) + render_template_lines(
         "p3_features/chamfer_feature.py.txt",
         base_feature=repr(base_feature),

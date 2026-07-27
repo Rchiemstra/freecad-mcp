@@ -86,10 +86,15 @@ def _run_json_code(
                 output += "\n" + str({"recompute_errors": errors})
             if preflight:
                 output = output + "\n" + preflight
-            return add_screenshot_if_available(tool_ok(output), image, only_text_feedback)
+            return add_screenshot_if_available(
+                tool_ok(output, structured=res),
+                image,
+                only_text_feedback,
+            )
         return tool_fail(
             f"{fail_prefix}: {res.get('error', res.get('message', 'unknown error'))}",
-            structured=res.get("structured") if isinstance(res.get("structured"), dict) else None,
+            structured=res,
+            error_code=res.get("error_code"),
         )
     except Exception as exc:
         logger.error("%s: %s", fail_prefix, exc)
@@ -98,7 +103,10 @@ def _run_json_code(
 
 def _validate_if_exists(if_exists: str) -> ToolResponse | None:
     if if_exists not in {"error", "skip", "replace"}:
-        return text_response("if_exists must be one of: error, skip, replace")
+        return tool_fail(
+            "if_exists must be one of: error, skip, replace",
+            error_code="INVALID_ARGUMENT",
+        )
     return None
 
 
@@ -399,7 +407,10 @@ def sketch_add_external_projection_operation(
     defining: bool = False,
 ) -> ToolResponse:
     if projection_mode not in {"auto", "edge", "face", "point"}:
-        return text_response("projection_mode must be one of: auto, edge, face, point")
+        return tool_fail(
+            "projection_mode must be one of: auto, edge, face, point",
+            error_code="INVALID_ARGUMENT",
+        )
     lines = _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
         "p7_assembly/sketch_add_external_projection.py.txt",
         sketch_name=repr(sketch_name),
