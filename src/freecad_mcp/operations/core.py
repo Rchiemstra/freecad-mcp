@@ -343,14 +343,18 @@ def get_view_operation(
     from .interactive import normalize_view_name
 
     view_name = normalize_view_name(view_name)
-    screenshot = freecad.get_active_screenshot(
-        view_name,
-        width,
-        height,
-        focus_object=focus_object,
-        focus_objects=focus_objects,
-        yaw_deg=yaw_deg,
-    )
+    try:
+        screenshot = freecad.get_active_screenshot(
+            view_name,
+            width,
+            height,
+            focus_object=focus_object,
+            focus_objects=focus_objects,
+            yaw_deg=yaw_deg,
+        )
+    except Exception as e:
+        logger.error(f"Failed to get view: {str(e)}")
+        return tool_fail(f"Failed to get view: {str(e)}")
     if screenshot is not None:
         focus_bits = []
         if focus_object:
