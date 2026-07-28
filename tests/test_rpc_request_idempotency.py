@@ -123,6 +123,9 @@ def test_method_descriptor_pin_policy_excludes_reads_and_automatic_heartbeat():
         "acquire_document_lock", "LIFECYCLE"
     ).pin_replay_for_lease_lifetime
     assert make_method_spec(
+        "adopt_dirty_document", "LIFECYCLE"
+    ).pin_replay_for_lease_lifetime
+    assert make_method_spec(
         "lease_reconcile", "LIFECYCLE"
     ).pin_replay_for_lease_lifetime
     assert make_method_spec(

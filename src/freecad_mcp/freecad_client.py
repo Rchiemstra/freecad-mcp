@@ -1815,6 +1815,41 @@ class FreeCADConnection:
             hash_policy,
         )
 
+    def adopt_dirty_document(
+        self,
+        *,
+        selector: Mapping[str, Any],
+        task_description: str = "",
+        client: str = "",
+        agent_id: str = "",
+        hash_policy: str = "sha256",
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        params = {
+            "selector": dict(selector),
+            "task_description": task_description,
+            "client": client,
+            "agent_id": agent_id,
+            "hash_policy": hash_policy,
+        }
+        routed = self._invoke_mutation_v2(
+            "adopt_dirty_document",
+            params,
+            operation_name="Adopt dirty document",
+            task_id=agent_id,
+            request_id=request_id,
+            require_credentials=False,
+        )
+        if routed is not None:
+            return routed
+        return self.server.adopt_dirty_document(
+            dict(selector),
+            task_description,
+            client,
+            agent_id,
+            hash_policy,
+        )
+
     def get_document_lock(
         self,
         doc_name: str = "",

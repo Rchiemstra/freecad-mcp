@@ -360,6 +360,43 @@ def test_post_save_validation_runs_on_rpc_caller_not_gui_thread(tmp_path, monkey
 
 
 @pytest.mark.unit
+def test_invalid_live_references_block_typed_save_before_write(tmp_path, monkeypatch):
+    context = _configure_rpc_test(monkeypatch, tmp_path)
+    invalid = {
+        "object": "Joint",
+        "property": "Reference2",
+        "property_type": "App::PropertyXLinkSub",
+        "valid": False,
+        "validation_performed": True,
+        "errors": ["Face294 is not available"],
+        "references": [],
+    }
+    monkeypatch.setattr(
+        rpc_server,
+        "inspect_references_gui",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "invalid_count": 1,
+            "references": [invalid],
+            "validation_performed": True,
+            "recomputed": False,
+        },
+    )
+
+    result = context.rpc.save_document({"document_session_uuid": "document-session"})
+
+    assert result["success"] is False
+    assert result["error_code"] == "SAVE_DOMAIN_VALIDATION_FAILED"
+    assert result["save_error"]["stage"] == "live_reference_preflight"
+    assert result["save_error"]["mutation_may_have_occurred"] is False
+    assert result["save_error"]["details"]["invalid_count"] == 1
+    assert result["save_error"]["details"]["references"] == [invalid]
+    assert context.document.save_thread is None
+    assert "begin-save" not in dict(context.events)
+    assert context.lease_service.error_recorded is False
+
+
+@pytest.mark.unit
 def test_failed_save_as_validation_keeps_reservation_and_records_gui_error(
     tmp_path, monkeypatch
 ):

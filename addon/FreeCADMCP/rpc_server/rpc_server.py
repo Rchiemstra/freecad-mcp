@@ -103,6 +103,7 @@ from .snapshot_service import (
     restore_snapshot_in_place_gui,
 )
 from .save_service import (
+    DomainValidationError,
     SaveService,
     SaveServiceError,
     compare_file_to_baseline,
@@ -649,6 +650,31 @@ def _freecad_version_parts():
     return tuple(str(part) for part in (value or ()))
 
 
+def _confirm_dirty_document_adoption_gui(document, document_identity) -> bool:
+    """Ask the local FreeCAD user before an agent adopts unsaved work."""
+
+    if QtWidgets.QApplication.instance() is None:
+        return False
+    name = str(getattr(document, "Label", "") or document_identity.name)
+    path = str(document_identity.canonical_path or "(unsaved document)")
+    answer = QtWidgets.QMessageBox.warning(
+        None,
+        "Adopt unsaved FreeCAD document?",
+        (
+            f'An MCP client wants to adopt the existing unsaved changes in "{name}".\n\n'
+            f"File: {path}\n\n"
+            "FreeCAD will first create a recovery copy. The client will then receive "
+            "the write lease and may repair and save this document through the verified "
+            "save lifecycle.\n\n"
+            "Continue only if you intend to give the connected client control of these "
+            "unsaved changes."
+        ),
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+        QtWidgets.QMessageBox.Cancel,
+    )
+    return answer == QtWidgets.QMessageBox.Yes
+
+
 _SAVE_VALIDATION_MARKER = "__FREECAD_MCP_SAVE_VALIDATION__"
 
 
@@ -937,6 +963,21 @@ def _live_document_from_selector(selector):
     """Resolve a selector only against currently open FreeCAD documents."""
     if not isinstance(selector, dict):
         raise ValueError("DocumentSelector must be an object")
+    accepted_fields = {
+        "document_name",
+        "document_session_uuid",
+        "canonical_path",
+    }
+    unexpected_fields = sorted(
+        str(field) for field in selector if field not in accepted_fields
+    )
+    if unexpected_fields:
+        raise ValueError(
+            "Unsupported DocumentSelector field(s): "
+            + ", ".join(unexpected_fields)
+            + ". Accepted fields are document_name, document_session_uuid, "
+            "and canonical_path"
+        )
     name = selector.get("document_name") or ""
     session_uuid = selector.get("document_session_uuid") or ""
     canonical_path = selector.get("canonical_path") or ""
@@ -2155,7 +2196,11 @@ class FreeCADRPC:
         if not snapshot.cancellation_requested:
             return []
         wait_timeout = 0.0 if shutdown_requested.is_set() else None
-        if inflight.method in {"acquire_document_lock", "create_document"}:
+        if inflight.method in {
+            "acquire_document_lock",
+            "adopt_dirty_document",
+            "create_document",
+        }:
             claimed, cached = inflight.token.claim_cancellation_resolution()
             if not claimed:
                 if cached is not None:
@@ -2278,7 +2323,11 @@ class FreeCADRPC:
 
         if inflight is None or not inflight.token.snapshot().cancellation_requested:
             return []
-        if inflight.method in {"acquire_document_lock", "create_document"}:
+        if inflight.method in {
+            "acquire_document_lock",
+            "adopt_dirty_document",
+            "create_document",
+        }:
             return []
         if not inflight.token.claim_cancellation_begin():
             # Do not race completion/CAS rollback ahead of the thread that
@@ -2526,6 +2575,7 @@ class FreeCADRPC:
         identity = dl.get_request_identity()
         authenticated_methods = {
             "acquire_document_lock",
+            "adopt_dirty_document",
             "update_document_lock",
             "heartbeat_document_lock",
             "lease_heartbeat_batch",
@@ -3673,6 +3723,7 @@ class FreeCADRPC:
                     envelope.method
                     in {
                         "acquire_document_lock",
+                        "adopt_dirty_document",
                         "create_document",
                     }
                     and response["ok"]
@@ -4208,6 +4259,7 @@ class FreeCADRPC:
         client,
         agent_id,
         hash_policy,
+        adopt_dirty=False,
     ):
         """Reserve first, hash off Qt, then snapshot/promote on Qt."""
 
@@ -4243,12 +4295,27 @@ class FreeCADRPC:
                 document, document_identity = _live_document_from_selector(
                     requested_selector
                 )
-                if require_document_modified(document):
-                    lease = _import_document_lease()
+                lease = _import_document_lease()
+                document_dirty = require_document_modified(document)
+                if adopt_dirty:
+                    if not document_dirty:
+                        raise lease.DirtyAdoptionError(
+                            "the selected document has no unsaved changes to adopt"
+                        )
+                    if not document_identity.canonical_path:
+                        raise lease.DirtyAdoptionError(
+                            "initial dirty adoption currently requires an existing saved file"
+                        )
+                    if not _confirm_dirty_document_adoption_gui(
+                        document, document_identity
+                    ):
+                        raise lease.DirtyAdoptionError(
+                            "dirty-document adoption was not confirmed in FreeCAD"
+                        )
+                elif document_dirty:
                     raise lease.DirtyAcquisitionError(
                         "a pre-existing dirty document requires local adoption"
                     )
-                lease = _import_document_lease()
                 owner = lease.LeaseOwner(
                     addon_profile_id=rpc_runtime_manifest.profile_id,
                     addon_runtime_id=rpc_runtime_manifest.addon_runtime_id,
@@ -4267,20 +4334,30 @@ class FreeCADRPC:
                     client=client or request_identity.get("client") or "",
                     agent_id=agent_id or request_identity.get("agent_id") or "",
                 )
-                reservation = document_lease_service.begin_acquisition(
-                    {
-                        "document_session_uuid": document_identity.session_uuid,
-                        "document_name": document_identity.name,
-                        **(
-                            {"canonical_path": document_identity.canonical_path}
-                            if document_identity.canonical_path
-                            else {}
-                        ),
-                    },
-                    owner,
-                    task_summary=task_description,
-                    document_dirty=False,
-                )
+                exact_selector = {
+                    "document_session_uuid": document_identity.session_uuid,
+                    "document_name": document_identity.name,
+                    **(
+                        {"canonical_path": document_identity.canonical_path}
+                        if document_identity.canonical_path
+                        else {}
+                    ),
+                }
+                if adopt_dirty:
+                    reservation = document_lease_service.begin_dirty_adoption(
+                        exact_selector,
+                        owner,
+                        task_summary=task_description,
+                        document_dirty=True,
+                        local_confirmation=True,
+                    )
+                else:
+                    reservation = document_lease_service.begin_acquisition(
+                        exact_selector,
+                        owner,
+                        task_summary=task_description,
+                        document_dirty=False,
+                    )
                 self._retain_inflight_credential(reservation.credential)
                 phase.update(
                     credential=reservation.credential,
@@ -4374,7 +4451,12 @@ class FreeCADRPC:
                     raise lease.CoordinationError(
                         "live document identity changed during acquisition"
                     )
-                if require_document_modified(document):
+                document_dirty = require_document_modified(document)
+                if adopt_dirty and not document_dirty:
+                    raise lease.DirtyAdoptionError(
+                        "the document became clean during dirty adoption"
+                    )
+                if not adopt_dirty and document_dirty:
                     raise lease.DirtyAcquisitionError(
                         "document became dirty during acquisition"
                     )
@@ -4383,11 +4465,21 @@ class FreeCADRPC:
                 snapshot_id = create_lease_baseline_snapshot_gui(document)
                 if inflight is not None:
                     inflight.token.checkpoint("acquisition_snapshot_complete")
-                if require_document_modified(document):
+                document_dirty = require_document_modified(document)
+                if adopt_dirty and not document_dirty:
+                    raise lease.DirtyAdoptionError(
+                        "the document became clean while its recovery snapshot was captured"
+                    )
+                if not adopt_dirty and document_dirty:
                     raise lease.DirtyAcquisitionError(
                         "document became dirty while its baseline snapshot was captured"
                     )
-                grant = document_lease_service.complete_acquisition(
+                completion = (
+                    document_lease_service.complete_dirty_adoption
+                    if adopt_dirty
+                    else document_lease_service.complete_acquisition
+                )
+                grant = completion(
                     credential,
                     baseline=phase["baseline"],
                     baseline_validated=bool(original_identity.canonical_path),
@@ -4539,6 +4631,65 @@ class FreeCADRPC:
             return result
 
         return self._dispatch_gui(task)
+
+    def adopt_dirty_document(
+        self,
+        selector: dict[str, Any] | None = None,
+        task_description: str = "",
+        client: str = "",
+        agent_id: str = "",
+        hash_policy: str = "sha256",
+    ) -> dict[str, Any]:
+        """Locally confirm and adopt an already-dirty document into lease v2."""
+
+        try:
+            dl = _import_document_lock()
+        except ImportError as exc:
+            return {"success": False, "error": str(exc)}
+        if not dl.is_enabled():
+            return {
+                "success": False,
+                "error_code": "document_lock_disabled",
+                "error": "enable_document_lock is false in freecad_mcp_settings.json",
+            }
+        identity = dl.get_request_identity()
+        if not identity.get("instance_id"):
+            return {
+                "success": False,
+                "error_code": "missing_instance_id",
+                "error": "X-MCP-Instance-Id header is required to adopt a document",
+            }
+        if not identity.get("authenticated_session_id"):
+            return {
+                "success": False,
+                "error_code": "authenticated_session_required",
+                "error": "Dirty-document adoption requires authenticated lease protocol v2",
+            }
+        requested_selector = dict(selector or {})
+        if not requested_selector:
+            return {
+                "success": False,
+                "error_code": "document_identity_required",
+                "error": (
+                    "Provide selector.document_name, selector.document_session_uuid, "
+                    "or selector.canonical_path"
+                ),
+            }
+        if document_lease_service is None:
+            return {
+                "success": False,
+                "error_code": "LEASE_PROTOCOL_UNAVAILABLE",
+                "error": "Document lease v2 is unavailable",
+            }
+        return self._acquire_document_lock_v2(
+            requested_selector,
+            request_identity=identity,
+            task_description=task_description,
+            client=client,
+            agent_id=agent_id,
+            hash_policy=hash_policy,
+            adopt_dirty=True,
+        )
 
     def get_document_lock(
         self,
@@ -4891,6 +5042,37 @@ class FreeCADRPC:
                     },
                 )
                 self._touch_inflight_credential(credential, inflight)
+                reference_preflight = inspect_references_gui(
+                    document_identity.name,
+                    only_invalid=True,
+                    validate=True,
+                )
+                if not reference_preflight.get("ok"):
+                    raise DomainValidationError(
+                        "Unable to inspect live document references before save",
+                        stage="live_reference_preflight",
+                        path=document_identity.canonical_path,
+                        mutation_may_have_occurred=False,
+                        details={"inspection": reference_preflight},
+                    )
+                invalid_references = list(
+                    reference_preflight.get("references") or ()
+                )
+                if invalid_references:
+                    raise DomainValidationError(
+                        (
+                            f"Typed save blocked by {len(invalid_references)} invalid "
+                            "live reference properties"
+                        ),
+                        stage="live_reference_preflight",
+                        path=document_identity.canonical_path,
+                        mutation_may_have_occurred=False,
+                        details={
+                            "invalid_count": len(invalid_references),
+                            "references": invalid_references[:100],
+                            "recomputed": False,
+                        },
+                    )
                 saving = document_lease_service.begin_save(credential)
                 save_state_entered = True
                 phase.update(

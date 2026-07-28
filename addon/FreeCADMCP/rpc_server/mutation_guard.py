@@ -421,6 +421,7 @@ _NO_OUTER_TRANSACTION = frozenset(
 _LEASE_LIFETIME_IDEMPOTENCY_METHODS = frozenset(
     {
         "acquire_document_lock",
+        "adopt_dirty_document",
         "update_document_lock",
         "lease_reconcile",
         "release_document_lock",

@@ -37,6 +37,7 @@ from .service import (  # noqa: F401 - public package re-exports
     AuthorizationError,
     CleanReleaseError,
     CoordinationError,
+    DirtyAdoptionError,
     DirtyAcquisitionError,
     DocumentLeaseService,
     ForeignRecoveryError,

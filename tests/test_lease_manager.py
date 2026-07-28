@@ -587,6 +587,7 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
     monkeypatch.setattr(connection, "invoke_v2", invoke)
 
     acquire_request = _request_id("acquire-request")
+    adopt_request = _request_id("adopt-request")
     update_request = _request_id("update-request")
     save_request = _request_id("save-request")
     release_request = _request_id("release-request")
@@ -597,6 +598,9 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
         "document_session_uuid": "doc-a",
         "document_name": "Alpha",
     }
+    assert connection.adopt_dirty_document(
+        selector=selector, request_id=adopt_request
+    )["success"]
     assert connection.update_document_lock(
         selector, progress_detail="Recomputing", request_id=update_request
     )["success"]
@@ -608,13 +612,16 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
 
     assert [item["method"] for item in envelopes] == [
         "acquire_document_lock",
+        "adopt_dirty_document",
         "update_document_lock",
         "save_document",
         "release_document_lock",
     ]
     assert envelopes[0]["request_id"] == acquire_request
     assert envelopes[0]["lease_credentials"] == []
-    for envelope in envelopes[1:]:
+    assert envelopes[1]["request_id"] == adopt_request
+    assert envelopes[1]["lease_credentials"] == []
+    for envelope in envelopes[2:]:
         assert envelope["lease_credentials"][0]["token"] == "secret-a"
     assert envelopes[-1]["request_id"] == release_request
 

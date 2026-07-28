@@ -205,6 +205,7 @@ from .parametric import (
 # Document lock / lease
 from .locking import (
     acquire_document_lock_operation,
+    adopt_dirty_document_operation,
     force_release_stale_lock_operation,
     get_document_lock_operation,
     heartbeat_document_lock_operation,
@@ -380,6 +381,7 @@ __all__ = [
     "diagnose_parametric_operation",
     # Document lock
     "acquire_document_lock_operation",
+    "adopt_dirty_document_operation",
     "get_document_lock_operation",
     "list_document_locks_operation",
     "heartbeat_document_lock_operation",

@@ -31,8 +31,12 @@ active lease or recovery record exists.
 ## Lifecycle
 
 1. The MCP client authenticates to the exact addon profile/runtime.
-2. `acquire_document_lock` resolves a live FreeCAD document and returns a
-   256-bit token once. The addon retains only its SHA-256 fingerprint.
+2. `acquire_document_lock` resolves a clean live FreeCAD document and returns a
+   256-bit token once. The addon retains only its SHA-256 fingerprint. A
+   document that was already dirty must instead use `adopt_dirty_document`;
+   FreeCAD asks the local user for confirmation and creates an owner-only
+   recovery `saveCopy` before returning the one-time credential. Adoption does
+   not save or recompute the live document.
 3. Every mutation declares the document session UUID and sends the lease ID,
    generation, and token in an immutable request envelope.
 4. Authorization is checked before queueing and again on FreeCAD's GUI thread
@@ -59,12 +63,19 @@ Heartbeats run every 10 seconds with jitter, disk renewal is coalesced to 30
 seconds, and a 90-second gap becomes `STALE`. Stale never means automatically
 safe to delete or reuse.
 
-The public lifecycle tools are `acquire_document_lock`, `get_document_lock`,
-`list_document_locks`, `update_document_lock`, `save_document`,
+The public lifecycle tools are `acquire_document_lock`,
+`adopt_dirty_document`, `get_document_lock`, `list_document_locks`,
+`update_document_lock`, `save_document`,
 `save_document_as`, `finalize_document_edit`, and the lease-aware snapshot and
 restore tools. Heartbeat batching and reconciliation are authenticated internal
 control operations. Force release is deliberately absent from ordinary MCP
 tool exposure.
+
+Every typed lifecycle selector exposes exactly three accepted keys:
+`document_name`, `document_session_uuid`, and `canonical_path`. At least one is
+required. Supplying several makes them identity assertions, so they must all
+resolve to the same open document. Fields such as `name`, `document`, and
+`doc_name` are rejected by the tool schema and the addon RPC boundary.
 
 ## Modelling and reads
 

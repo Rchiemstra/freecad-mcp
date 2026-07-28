@@ -1750,6 +1750,7 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "shutdown_rpc_server": (VerbKind.LIFECYCLE, _none_doc),
     # Lock verbs themselves
     "acquire_document_lock": (VerbKind.LIFECYCLE, _none_doc),
+    "adopt_dirty_document": (VerbKind.LIFECYCLE, _none_doc),
     "get_document_lock": (VerbKind.LIFECYCLE, _none_doc),
     "list_document_locks": (VerbKind.LIFECYCLE, _none_doc),
     "heartbeat_document_lock": (VerbKind.LIFECYCLE, _none_doc),

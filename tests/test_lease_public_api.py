@@ -24,6 +24,7 @@ def test_public_lease_tools_exclude_control_and_local_recovery_helpers():
     tools = _tool_registry()
     assert {
         "acquire_document_lock",
+        "adopt_dirty_document",
         "get_document_lock",
         "list_document_locks",
         "update_document_lock",
@@ -41,6 +42,17 @@ def test_public_lease_signatures_prefer_typed_v2_and_label_v1_compatibility():
     assert {"selector", "task_description", "agent_id", "hash_policy"} <= set(acquire)
     assert acquire["hash_policy"].default == "sha256"
     assert "deprecated protocol-v1" in inspect.getdoc(server.acquire_document_lock)
+
+    adopt = inspect.signature(server.adopt_dirty_document).parameters
+    assert set(adopt) == {
+        "ctx",
+        "selector",
+        "task_description",
+        "agent_id",
+        "hash_policy",
+    }
+    assert adopt["hash_policy"].default == "sha256"
+    assert "local confirmation dialog" in inspect.getdoc(server.adopt_dirty_document)
 
     get = inspect.signature(server.get_document_lock).parameters
     assert "selector" in get
@@ -86,4 +98,25 @@ def test_typed_save_and_finalize_signatures_match_lifecycle_contract():
         "expected_destination_sha256",
         "validation_profile",
     }
+
+
+def test_document_selector_schema_names_fields_and_rejects_unknown_keys():
+    tools = _tool_registry()
+    expected = {
+        "document_name",
+        "document_session_uuid",
+        "canonical_path",
+    }
+    for name in {
+        "adopt_dirty_document",
+        "update_document_lock",
+        "save_document",
+        "save_document_as",
+        "finalize_document_edit",
+    }:
+        parameters = tools[name].parameters
+        selector = parameters["properties"]["selector"]
+        schema = parameters["$defs"][selector["$ref"].rsplit("/", 1)[-1]]
+        assert set(schema["properties"]) == expected
+        assert schema["additionalProperties"] is False
 

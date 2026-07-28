@@ -28,6 +28,7 @@ from addon.FreeCADMCP.document_lease.service import (
     AuthorizationError,
     CleanReleaseError,
     CoordinationError,
+    DirtyAdoptionError,
     DirtyAcquisitionError,
     DocumentLeaseService,
     ForeignRecoveryError,
@@ -407,6 +408,70 @@ class TestDocumentLeaseAuthorization:
         with pytest.raises(DirtyAcquisitionError):
             service.acquire(identity.session_uuid, _owner(), document_dirty=True)
         assert not model.with_name(model.name + ".freecad-mcp.lock").exists()
+
+    def test_dirty_adoption_requires_local_confirmation_and_dirty_state(self, tmp_path):
+        model = tmp_path / "dirty-adoption-preconditions.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="DirtyAdoption", path=model)
+        service = DocumentLeaseService(identities)
+
+        with pytest.raises(DirtyAdoptionError, match="local GUI confirmation"):
+            service.begin_dirty_adoption(
+                identity.session_uuid,
+                _owner(),
+                document_dirty=True,
+                local_confirmation=False,
+            )
+        with pytest.raises(DirtyAdoptionError, match="currently dirty"):
+            service.begin_dirty_adoption(
+                identity.session_uuid,
+                _owner(),
+                document_dirty=False,
+                local_confirmation=True,
+            )
+        assert service.get(identity.session_uuid) is None
+        assert not model.with_name(model.name + ".freecad-mcp.lock").exists()
+
+    def test_dirty_adoption_preserves_dirty_authority_and_baseline(self, tmp_path):
+        model = tmp_path / "dirty-adoption.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="DirtyAdoption", path=model)
+        service = DocumentLeaseService(identities)
+
+        reservation = service.begin_dirty_adoption(
+            identity.session_uuid,
+            _owner(),
+            task_summary="Repair existing unsaved work",
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        assert reservation.record.state == LeaseState.ACQUIRING
+        assert reservation.record.dirty is True
+        assert reservation.record.last_mutation_revision == 1
+        baseline = capture_file_baseline(model, platform=identities.platform)
+
+        with pytest.raises(DirtyAdoptionError, match="does not match"):
+            service.complete_acquisition(
+                reservation.credential,
+                baseline=baseline,
+                baseline_validated=True,
+                snapshot_id=_uuid(),
+            )
+
+        adopted = service.complete_dirty_adoption(
+            reservation.credential,
+            baseline=baseline,
+            baseline_validated=True,
+            snapshot_id=_uuid(),
+        )
+        assert adopted.record.state == LeaseState.LOCKED_IDLE
+        assert adopted.record.dirty is True
+        assert adopted.record.last_mutation_revision == 1
+        assert adopted.record.baseline == baseline
+        assert adopted.record.validation_complete is True
+        assert adopted.record.snapshot_id
 
     def test_malformed_foreign_sidecar_is_preserved(self, tmp_path):
         model = tmp_path / "foreign.FCStd"

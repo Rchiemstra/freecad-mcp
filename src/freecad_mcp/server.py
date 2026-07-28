@@ -8,7 +8,7 @@ import uuid
 import warnings
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, Dict, Literal
+from typing import Any, AsyncIterator, Dict, Literal, TypedDict
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import CallToolResult
@@ -204,6 +204,7 @@ from .operations import (
     diagnose_parametric_operation,
     # Document lock
     acquire_document_lock_operation,
+    adopt_dirty_document_operation,
     get_document_lock_operation,
     list_document_locks_operation,
     heartbeat_document_lock_operation,
@@ -850,6 +851,16 @@ def get_request_status(ctx: Context, request_id: str) -> CallToolResult:
     )
 
 
+class DocumentSelectorInput(TypedDict, total=False):
+    """Exact public fields accepted by document lifecycle selectors."""
+
+    __pydantic_config__ = {"extra": "forbid"}
+
+    document_name: str
+    document_session_uuid: str
+    canonical_path: str
+
+
 @mcp.tool()
 def cancel_request(ctx: Context, request_id: str) -> CallToolResult:
     """Request cooperative cancellation for an authenticated RPC request."""
@@ -884,7 +895,7 @@ def acquire_document_lock(
     file_path: str = "",
     session_id: str = "",
     task_description: str = "",
-    selector: dict[str, str] | None = None,
+    selector: DocumentSelectorInput | None = None,
     agent_id: str = "",
     hash_policy: Literal["sha256"] = "sha256",
 ) -> CallToolResult:
@@ -916,12 +927,41 @@ def acquire_document_lock(
 
 
 @mcp.tool()
+def adopt_dirty_document(
+    ctx: Context,
+    selector: DocumentSelectorInput,
+    task_description: str = "",
+    agent_id: str = "",
+    hash_policy: Literal["sha256"] = "sha256",
+) -> CallToolResult:
+    """Adopt existing unsaved changes into the verified lease-v2 lifecycle.
+
+    The selector must contain ``document_name``, ``document_session_uuid``, or
+    ``canonical_path``. FreeCAD presents a local confirmation dialog and creates
+    a recovery snapshot before this MCP process receives the lease credential.
+    The main FCStd is not saved by adoption.
+    """
+
+    return adopt_dirty_document_operation(
+        get_freecad_connection(),
+        selector=selector,
+        task_description=task_description,
+        client=state.mcp_client_label,
+        agent_id=agent_id,
+        hash_policy=hash_policy,
+        lease_manager=state.lease_manager,
+        document_sessions=state.document_sessions,
+        store_token=state.lease_tokens,
+    )
+
+
+@mcp.tool()
 def get_document_lock(
     ctx: Context,
     doc_name: str = "",
     file_path: str = "",
     session_id: str = "",
-    selector: dict[str, str] | None = None,
+    selector: DocumentSelectorInput | None = None,
 ) -> CallToolResult:
     """Return redacted effective local/foreign lease state for one document.
 
@@ -975,7 +1015,7 @@ def heartbeat_document_lock(
 @mcp.tool()
 def update_document_lock(
     ctx: Context,
-    selector: dict[str, str],
+    selector: DocumentSelectorInput,
     task_description: str = "",
     progress_detail: str = "",
 ) -> CallToolResult:
@@ -995,7 +1035,7 @@ def update_document_lock(
 @mcp.tool()
 def release_document_lock(
     ctx: Context,
-    selector: dict[str, str] | None = None,
+    selector: DocumentSelectorInput | None = None,
     disposition: Literal["saved", "restored"] = "saved",
     doc_key: str = "",
     token: str = "",
@@ -1073,10 +1113,15 @@ def _apply_save_aliases(result: dict[str, Any]) -> None:
 @mcp.tool()
 def save_document(
     ctx: Context,
-    selector: dict[str, str],
+    selector: DocumentSelectorInput,
     validation_profile: str = "default",
 ) -> CallToolResult:
-    """Compare, save, hash, reopen-verify, and retain the renewable lease."""
+    """Compare, save, hash, reopen-verify, and retain the renewable lease.
+
+    Select the open document with ``document_name``,
+    ``document_session_uuid``, or ``canonical_path``. If more than one field is
+    supplied, every field must identify the same live document.
+    """
     result = get_freecad_connection().save_document(
         selector, validation_profile=validation_profile
     )
@@ -1088,13 +1133,18 @@ def save_document(
 @mcp.tool()
 def save_document_as(
     ctx: Context,
-    selector: dict[str, str],
+    selector: DocumentSelectorInput,
     destination: str,
     overwrite: bool = False,
     expected_destination_sha256: str = "",
     validation_profile: str = "default",
 ) -> CallToolResult:
-    """Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases."""
+    """Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases.
+
+    Select the open document with ``document_name``,
+    ``document_session_uuid``, or ``canonical_path``. If more than one field is
+    supplied, every field must identify the same live document.
+    """
     result = get_freecad_connection().save_document_as(
         selector,
         destination,
@@ -1110,7 +1160,7 @@ def save_document_as(
 @mcp.tool()
 def finalize_document_edit(
     ctx: Context,
-    selector: dict[str, str],
+    selector: DocumentSelectorInput,
     save_mode: Literal["save", "save_as", "first_save"] = "save",
     destination: str = "",
     overwrite: bool = False,

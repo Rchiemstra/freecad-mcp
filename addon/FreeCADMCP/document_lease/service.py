@@ -75,6 +75,10 @@ class DirtyAcquisitionError(LeaseServiceError):
     code = "DIRTY_REQUIRES_LOCAL_ADOPTION"
 
 
+class DirtyAdoptionError(LeaseServiceError):
+    code = "DIRTY_ADOPTION_PRECONDITION_FAILED"
+
+
 class CleanReleaseError(LeaseServiceError):
     code = "CLEAN_RELEASE_PRECONDITION_FAILED"
 
@@ -641,11 +645,54 @@ class DocumentLeaseService:
     ) -> LeaseGrant:
         """Publish ACQUIRING before baseline hashing or snapshot creation."""
 
-        identity = self.identity_service.resolve(selector)
         if document_dirty:
             raise DirtyAcquisitionError(
                 "a pre-existing dirty document requires local adoption"
             )
+        return self._begin_acquisition_record(
+            selector,
+            owner,
+            task_summary=task_summary,
+            document_dirty=False,
+        )
+
+    def begin_dirty_adoption(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        task_summary: str = "",
+        document_dirty: bool,
+        local_confirmation: bool,
+    ) -> LeaseGrant:
+        """Reserve a locally confirmed, pre-existing dirty document."""
+
+        if local_confirmation is not True:
+            raise DirtyAdoptionError(
+                "dirty-document adoption requires explicit local GUI confirmation"
+            )
+        if document_dirty is not True:
+            raise DirtyAdoptionError(
+                "dirty-document adoption requires a currently dirty live document"
+            )
+        return self._begin_acquisition_record(
+            selector,
+            owner,
+            task_summary=task_summary,
+            document_dirty=True,
+        )
+
+    def _begin_acquisition_record(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        task_summary: str,
+        document_dirty: bool,
+    ) -> LeaseGrant:
+        """Publish one clean acquisition or confirmed dirty-adoption record."""
+
+        identity = self.identity_service.resolve(selector)
         with self._lock:
             existing = self._records.get(identity.session_uuid)
             if existing is not None:
@@ -678,7 +725,8 @@ class DocumentLeaseService:
                 last_heartbeat_at=now,
                 monotonic_heartbeat_ns=now_mono,
                 task_summary=_bounded_text(task_summary, 1024),
-                dirty=False,
+                dirty=document_dirty,
+                last_mutation_revision=1 if document_dirty else 0,
                 baseline=None,
                 validation_complete=False,
                 snapshot_id=None,
@@ -703,6 +751,24 @@ class DocumentLeaseService:
             )
             return LeaseGrant(credential=credential, record=record)
 
+    def complete_dirty_adoption(
+        self,
+        credential: LeaseCredential,
+        *,
+        baseline: FileBaseline,
+        baseline_validated: bool,
+        snapshot_id: str,
+    ) -> LeaseGrant:
+        """Promote only an ACQUIRING record created for dirty adoption."""
+
+        return self._complete_acquisition_record(
+            credential,
+            baseline=baseline,
+            baseline_validated=baseline_validated,
+            snapshot_id=snapshot_id,
+            expected_dirty=True,
+        )
+
     def complete_acquisition(
         self,
         credential: LeaseCredential,
@@ -711,12 +777,39 @@ class DocumentLeaseService:
         baseline_validated: bool,
         snapshot_id: str | None,
     ) -> LeaseGrant:
-        """Promote only an exact reservation with complete saved-file evidence."""
+        """Promote only an exact clean reservation with complete evidence."""
+
+        return self._complete_acquisition_record(
+            credential,
+            baseline=baseline,
+            baseline_validated=baseline_validated,
+            snapshot_id=snapshot_id,
+            expected_dirty=False,
+        )
+
+    def _complete_acquisition_record(
+        self,
+        credential: LeaseCredential,
+        *,
+        baseline: FileBaseline | None,
+        baseline_validated: bool,
+        snapshot_id: str | None,
+        expected_dirty: bool,
+    ) -> LeaseGrant:
+        """Promote one exact reservation with complete saved-file evidence."""
 
         with self._lock:
             record = self._record_for_credential(
                 credential, allowed_states={LeaseState.ACQUIRING}
             )
+            if record.dirty != expected_dirty:
+                raise DirtyAdoptionError(
+                    "the acquisition reservation does not match the requested lifecycle"
+                )
+            if expected_dirty and record.last_mutation_revision < 1:
+                raise DirtyAdoptionError(
+                    "dirty adoption has no recorded pre-existing mutation"
+                )
             path = record.document.canonical_path
             normalized_snapshot = None
             if snapshot_id:

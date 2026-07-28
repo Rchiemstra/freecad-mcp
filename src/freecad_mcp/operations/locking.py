@@ -22,6 +22,41 @@ def _lock_response(result: dict[str, Any]) -> ToolResponse:
     return tool_fail(f"[{code}] {message}", structured=result)
 
 
+def _store_lease_grant(
+    result: dict[str, Any],
+    *,
+    lease_manager: LeaseClientManager | None,
+    document_sessions: dict[str, str] | None,
+    store_token: dict[str, str] | None,
+    fallback_document_name: str = "",
+) -> None:
+    credential_data = result.get("credential") or {}
+    document_data = result.get("document") or {}
+    if result.get("success") and credential_data and lease_manager is not None:
+        credential = LeaseCredential(
+            lease_id=str(credential_data["lease_id"]),
+            document_session_uuid=str(credential_data["document_session_uuid"]),
+            generation=int(credential_data["generation"]),
+            token=str(credential_data["token"]),
+        )
+        canonical_path = document_data.get("canonical_path")
+        lease_manager.store(
+            credential,
+            canonical_paths=([canonical_path] if canonical_path else ()),
+        )
+        document_name = str(
+            document_data.get("name") or fallback_document_name or ""
+        )
+        if document_name and document_sessions is not None:
+            document_sessions[document_name] = credential.document_session_uuid
+    if result.get("success") and store_token is not None:
+        lease = result.get("lease") or {}
+        token = result.get("token") or lease.get("token")
+        doc_key = lease.get("doc_key")
+        if token and doc_key:
+            store_token[doc_key] = token
+
+
 def acquire_document_lock_operation(
     freecad: FreeCADConnection,
     *,
@@ -48,39 +83,54 @@ def acquire_document_lock_operation(
             agent_id=agent_id,
             hash_policy=hash_policy,
         )
-        credential_data = result.get("credential") or {}
-        document_data = result.get("document") or {}
-        if result.get("success") and credential_data and lease_manager is not None:
-            credential = LeaseCredential(
-                lease_id=str(credential_data["lease_id"]),
-                document_session_uuid=str(
-                    credential_data["document_session_uuid"]
-                ),
-                generation=int(credential_data["generation"]),
-                token=str(credential_data["token"]),
-            )
-            canonical_path = document_data.get("canonical_path")
-            lease_manager.store(
-                credential,
-                canonical_paths=([canonical_path] if canonical_path else ()),
-            )
-            document_name = str(document_data.get("name") or doc_name or "")
-            if document_name and document_sessions is not None:
-                document_sessions[document_name] = credential.document_session_uuid
-        if result.get("success") and store_token is not None:
-            lease = result.get("lease") or {}
-            token = result.get("token") or lease.get("token")
-            doc_key = lease.get("doc_key")
-            if token and doc_key:
-                store_token[doc_key] = token
-            # Do not pin a single active token on the transport: mutations
-            # authenticate by instance_id; token is validated only when sent
-            # (heartbeat / release). Pinning the last-acquired token would
-            # break multi-document sessions.
+        _store_lease_grant(
+            result,
+            lease_manager=lease_manager,
+            document_sessions=document_sessions,
+            store_token=store_token,
+            fallback_document_name=doc_name,
+        )
+        # Do not pin a single active token on the transport: mutations
+        # authenticate by instance_id; token is validated only when sent
+        # (heartbeat / release). Pinning the last-acquired token would
+        # break multi-document sessions.
         return _lock_response(result)
     except Exception as exc:
         logger.error("acquire_document_lock failed: %s", exc)
         return tool_fail(f"acquire_document_lock failed: {exc}")
+
+
+def adopt_dirty_document_operation(
+    freecad: FreeCADConnection,
+    *,
+    selector: dict[str, Any],
+    task_description: str = "",
+    client: str = "",
+    agent_id: str = "",
+    hash_policy: str = "sha256",
+    lease_manager: LeaseClientManager | None = None,
+    document_sessions: dict[str, str] | None = None,
+    store_token: dict[str, str] | None = None,
+) -> ToolResponse:
+    try:
+        result = freecad.adopt_dirty_document(
+            selector=selector,
+            task_description=task_description,
+            client=client,
+            agent_id=agent_id,
+            hash_policy=hash_policy,
+        )
+        _store_lease_grant(
+            result,
+            lease_manager=lease_manager,
+            document_sessions=document_sessions,
+            store_token=store_token,
+            fallback_document_name=str(selector.get("document_name") or ""),
+        )
+        return _lock_response(result)
+    except Exception as exc:
+        logger.error("adopt_dirty_document failed: %s", exc)
+        return tool_fail(f"adopt_dirty_document failed: {exc}")
 
 
 def get_document_lock_operation(
