@@ -143,6 +143,14 @@ class RpcRequestContext:
         sessions = [item.document_session_uuid for item in self.lease_credentials]
         if len(sessions) != len(set(sessions)):
             raise ValueError("request context contains duplicate document credentials")
+        if self.task_id:
+            try:
+                parsed_task_id = uuid.UUID(str(self.task_id))
+            except (ValueError, AttributeError, TypeError) as exc:
+                raise ValueError("task_id must be a UUID") from exc
+            if parsed_task_id.int == 0:
+                raise ValueError("task_id must not be the nil UUID")
+            object.__setattr__(self, "task_id", str(parsed_task_id))
 
     def to_envelope(
         self,

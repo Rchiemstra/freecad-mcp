@@ -42,6 +42,7 @@ class _Document:
         self.Objects = []
         self.save_thread = None
         self.save_as_thread = None
+        self.mutation_owner_cleared = 0
 
     def save(self):
         self.save_thread = threading.get_ident()
@@ -53,6 +54,9 @@ class _Document:
         _write_fcstd(destination, "saved-as")
         self.FileName = destination
         self.Modified = False
+
+    def clearMutationOwner(self):
+        self.mutation_owner_cleared += 1
 
 
 class _Record(SimpleNamespace):
@@ -145,7 +149,7 @@ class _LeaseService:
         )
 
     def release_clean(self, _credential, *, validation):
-        assert validation.baseline == self.idle.baseline
+        assert validation.baseline == self.verified.baseline
         assert validation.baseline_validated is True
         assert validation.document_modified is False
         self.events.append(("release-clean", threading.get_ident()))
@@ -357,6 +361,24 @@ def test_post_save_validation_runs_on_rpc_caller_not_gui_thread(tmp_path, monkey
     assert event_threads["final-document-revalidation"] in context.gui_thread_ids
     assert event_threads["mark-verified"] in context.gui_thread_ids
     assert context.lease_service.error_recorded is False
+
+
+@pytest.mark.unit
+def test_finalize_release_clears_core_mutation_owner(tmp_path, monkeypatch):
+    context = _configure_rpc_test(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        rpc_server,
+        "_validate_saved_document_worker",
+        lambda *_args: {"ok": True, "worker_reopened": True},
+    )
+
+    result = context.rpc.finalize_document_edit(
+        {"document_session_uuid": "document-session"}
+    )
+
+    assert result["success"] is True
+    assert result["released"] is True
+    assert context.document.mutation_owner_cleared == 1
 
 
 @pytest.mark.unit

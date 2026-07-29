@@ -8,8 +8,9 @@ import shutil
 import stat
 import time
 import uuid
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import FreeCAD
 import FreeCADGui
@@ -412,10 +413,72 @@ def _dependency_closure(primary) -> list[Any]:
     return list(by_name.values())
 
 
+def _snapshot_save_capability(
+    documents: list[Any],
+    mutation_generations: Mapping[str, int] | None,
+):
+    """Authorize only the internal ``saveCopy`` calls used by worker snapshots."""
+
+    if mutation_generations is None:
+        return nullcontext([])
+    try:
+        from addon.FreeCADMCP.document_lease import core_authority
+    except ImportError:
+        try:
+            from document_lease import core_authority
+        except ImportError:
+            return nullcontext([])
+    return core_authority.open_documents_mutation_capability(
+        documents,
+        generations=mutation_generations,
+        kinds=("SaveAs",),
+    )
+
+
+@contextmanager
+def _snapshot_save_context(
+    documents: list[Any],
+    mutation_generations: Mapping[str, int] | None,
+    mutation_request_id: str,
+    mutation_document_keys: tuple[str, ...],
+):
+    """Keep snapshot saves core-authorized and observer-attributed."""
+
+    document_lock = None
+    marker_entered = False
+    try:
+        if mutation_generations:
+            if not mutation_request_id or not mutation_document_keys:
+                raise RuntimeError("leased snapshot mutation attribution is unavailable")
+            try:
+                from addon.FreeCADMCP import document_lock
+            except ImportError:
+                import document_lock
+            marker_entered = True
+            if not document_lock.begin_agent_mutation_scope(
+                mutation_request_id, mutation_document_keys
+            ):
+                raise RuntimeError(
+                    "leased snapshot mutation attribution was rejected"
+                )
+        with _snapshot_save_capability(
+            documents, mutation_generations
+        ) as capabilities:
+            yield capabilities
+    finally:
+        if marker_entered and document_lock is not None:
+            document_lock.end_agent_mutation_scope(
+                mutation_request_id, mutation_document_keys
+            )
+
+
 def create_snapshot_bundle_gui(
     document_name: str | None,
     workspace: str,
     link_policy: str = "strict",
+    mutation_generations: Mapping[str, int] | None = None,
+    mutation_request_id: str = "",
+    mutation_document_keys: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Save a primary document and its open dependency closure on the GUI thread.
 
@@ -507,18 +570,24 @@ def create_snapshot_bundle_gui(
     started = time.monotonic()
     try:
         entries = []
-        for index, item in enumerate(documents, 1):
-            canonical = snapshots / f"{index:04d}_{item.Name}.FCStd"
-            load_path = load / f"{item.Name}.FCStd"
-            item.saveCopy(str(canonical))
-            entries.append({
-                **states_before[item.Name],
-                "snapshot_filename": canonical.name,
-                "snapshot_path": str(canonical),
-                "load_filename": load_path.name,
-                "load_path": str(load_path),
-                "primary": item.Name == doc.Name,
-            })
+        with _snapshot_save_context(
+            documents,
+            mutation_generations,
+            mutation_request_id,
+            mutation_document_keys,
+        ):
+            for index, item in enumerate(documents, 1):
+                canonical = snapshots / f"{index:04d}_{item.Name}.FCStd"
+                load_path = load / f"{item.Name}.FCStd"
+                item.saveCopy(str(canonical))
+                entries.append({
+                    **states_before[item.Name],
+                    "snapshot_filename": canonical.name,
+                    "snapshot_path": str(canonical),
+                    "load_filename": load_path.name,
+                    "load_path": str(load_path),
+                    "primary": item.Name == doc.Name,
+                })
     except Exception as exc:
         return {
             "ok": False,
@@ -569,9 +638,19 @@ def create_primary_snapshot_gui(
     document_name: str | None,
     workspace: str,
     link_policy: str = "strict",
+    mutation_generations: Mapping[str, int] | None = None,
+    mutation_request_id: str = "",
+    mutation_document_keys: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Compatibility name retained while Phase 3 now includes dependencies."""
-    return create_snapshot_bundle_gui(document_name, workspace, link_policy=link_policy)
+    return create_snapshot_bundle_gui(
+        document_name,
+        workspace,
+        link_policy=link_policy,
+        mutation_generations=mutation_generations,
+        mutation_request_id=mutation_request_id,
+        mutation_document_keys=mutation_document_keys,
+    )
 
 
 def materialize_load_aliases(snapshot: dict[str, Any]) -> None:

@@ -896,6 +896,18 @@ def _import_document_lease():
         return mod
 
 
+def _import_core_authority():
+    """Import the core-authority bridge in addon and repository layouts."""
+    try:
+        from addon.FreeCADMCP.document_lease import core_authority as mod
+
+        return mod
+    except ImportError:
+        from document_lease import core_authority as mod
+
+        return mod
+
+
 def _redact_rpc_diagnostic(value, *, identity=None, inflight=None):
     """Return bounded diagnostic text with exact request secrets removed."""
 
@@ -1261,6 +1273,58 @@ def _v2_status_for_context(context):
         for record in document_lease_service.list_records()
         if record.get("document", {}).get("session_uuid") in document_ids
     ]
+
+
+def _snapshot_mutation_context_for_request() -> dict[str, Any]:
+    """Return core generations and observer attribution for a snapshot caller."""
+
+    if document_lease_service is None:
+        return {
+            "generations": None,
+            "request_id": "",
+            "document_keys": (),
+        }
+    try:
+        identity = _import_document_lock().get_request_identity()
+    except Exception:
+        return {
+            "generations": {},
+            "request_id": "",
+            "document_keys": (),
+        }
+    runtime_id = str(identity.get("instance_id") or "")
+    if not runtime_id:
+        return {
+            "generations": {},
+            "request_id": "",
+            "document_keys": (),
+        }
+    generations: dict[str, int] = {}
+    document_keys: set[str] = set()
+    for record in document_lease_service.list_records():
+        owner = record.get("owner") or {}
+        document = record.get("document") or {}
+        if str(owner.get("mcp_instance_id") or "") != runtime_id:
+            continue
+        name = str(document.get("name") or "")
+        generation = int(record.get("generation") or 0)
+        if name and generation > 0:
+            generations[name] = generation
+            document_keys.update(
+                str(value)
+                for value in (
+                    name,
+                    document.get("session_uuid"),
+                    document.get("canonical_path"),
+                    document.get("comparison_key"),
+                )
+                if value
+            )
+    return {
+        "generations": generations,
+        "request_id": str(identity.get("request_id") or ""),
+        "document_keys": tuple(sorted(document_keys)),
+    }
 
 
 class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):
@@ -5762,6 +5826,12 @@ class FreeCADRPC:
                     response["release"] = document_lease_service.release_clean(
                         credential, validation=evidence
                     )
+                    try:
+                        _import_core_authority().sync_clear_from_release(document)
+                    except Exception:
+                        FreeCAD.Console.PrintWarning(
+                            "[MCP] core mutation owner clear failed after finalize\n"
+                        )
                     _discard_terminal_snapshot(response["release"])
                     response["released"] = True
                 return response
@@ -6845,6 +6915,7 @@ class FreeCADRPC:
             }
 
         snapshot = None
+        mutation_context = _snapshot_mutation_context_for_request()
         with snapshot_coordinator:
             for attempt in range(2):
                 snapshot = self._dispatch_snapshot_gui(
@@ -6852,6 +6923,9 @@ class FreeCADRPC:
                         options.get("document"),
                         str(workspace),
                         link_policy=str(options.get("link_policy") or "strict"),
+                        mutation_generations=mutation_context["generations"],
+                        mutation_request_id=mutation_context["request_id"],
+                        mutation_document_keys=mutation_context["document_keys"],
                     )
                 )
                 if not isinstance(snapshot, dict):

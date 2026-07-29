@@ -81,6 +81,7 @@ def test_set_and_clear_owner_soft_compat():
 
 def test_open_mutation_capability_holds_capsule_until_exit():
     doc = _FakeDoc()
+    core_authority.set_mcp_owner(doc, generation=7)
     with core_authority.open_mutation_capability(
         doc, generation=7, kinds=("AddObject", "PropertyWrite")
     ) as capsule:
@@ -92,6 +93,15 @@ def test_open_mutation_capability_soft_compat_without_api():
     stock = SimpleNamespace(Name="Stock")
     with core_authority.open_mutation_capability(stock, generation=1) as capsule:
         assert capsule is None
+
+
+def test_open_mutation_capability_is_noop_for_unrestricted_core_document():
+    doc = _FakeDoc()
+    with core_authority.open_mutation_capability(
+        doc, generation=0, kinds=("SaveAs",)
+    ) as capsule:
+        assert capsule is None
+    assert doc.capability_calls == []
 
 
 def test_kinds_for_rpc_method():
@@ -135,6 +145,8 @@ def test_open_documents_mutation_capability_multi_doc():
     a.Name = "A"
     b = _FakeDoc()
     b.Name = "B"
+    core_authority.set_mcp_owner(a, generation=1)
+    core_authority.set_mcp_owner(b, generation=2)
     with core_authority.open_documents_mutation_capability(
         [a, b],
         generations={"A": 1, "B": 2},

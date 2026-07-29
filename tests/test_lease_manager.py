@@ -150,12 +150,13 @@ def test_user_intervention_heartbeat_revokes_token_and_alias(tmp_path: Path):
 @pytest.mark.unit
 def test_request_context_is_immutable_and_builds_v2_envelope():
     credential = _credential("doc-a", "secret-a", generation=8)
+    task_id = _request_id("task-1")
     context = RpcRequestContext(
         request_id=_request_id("request-1"),
         session_token="session-token",
         lease_credentials=(credential,),
         operation_name="Create Pad",
-        task_id="task-1",
+        task_id=task_id,
     )
 
     with pytest.raises(FrozenInstanceError):
@@ -179,7 +180,7 @@ def test_request_context_is_immutable_and_builds_v2_envelope():
                 "token": "secret-a",
             }
         ],
-        "operation": {"name": "Create Pad", "task_id": "task-1"},
+        "operation": {"name": "Create Pad", "task_id": task_id},
     }
 
 
@@ -190,6 +191,17 @@ def test_request_context_rejects_non_uuid_and_nil_request_ids():
             RpcRequestContext(
                 request_id=invalid,
                 session_token="session-token",
+            )
+
+
+@pytest.mark.unit
+def test_request_context_rejects_non_uuid_and_nil_task_ids():
+    for invalid in ("create-body", "agent-human-name", str(uuid.UUID(int=0))):
+        with pytest.raises(ValueError, match="task_id"):
+            RpcRequestContext(
+                request_id=_request_id("valid-request"),
+                session_token="session-token",
+                task_id=invalid,
             )
 
 
@@ -523,8 +535,7 @@ def test_generated_mutation_uses_scoped_v2_envelope_and_caller_request_id(
     assert {item["request_id"] for item in envelopes} == {fixed_request}
     assert all(item["method"] == "execute_code" for item in envelopes)
     assert all(
-        item["operation"]
-        == {"name": "partdesign.create-pad", "task_id": "partdesign.create-pad"}
+        item["operation"] == {"name": "partdesign.create-pad"}
         for item in envelopes
     )
     assert [
@@ -592,14 +603,20 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
     save_request = _request_id("save-request")
     release_request = _request_id("release-request")
     assert connection.acquire_document_lock(
-        doc_name="Alpha", request_id=acquire_request
+        doc_name="Alpha",
+        agent_id="agent-human-name",
+        task_description="Acquire for a fit-test edit",
+        request_id=acquire_request,
     )["success"]
     selector = {
         "document_session_uuid": "doc-a",
         "document_name": "Alpha",
     }
     assert connection.adopt_dirty_document(
-        selector=selector, request_id=adopt_request
+        selector=selector,
+        agent_id="agent-human-name",
+        task_description="Adopt a user-edited fit-test document",
+        request_id=adopt_request,
     )["success"]
     assert connection.update_document_lock(
         selector, progress_detail="Recomputing", request_id=update_request
@@ -619,8 +636,20 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
     ]
     assert envelopes[0]["request_id"] == acquire_request
     assert envelopes[0]["lease_credentials"] == []
+    assert envelopes[0]["operation"] == {"name": "Acquire document lease"}
+    assert envelopes[0]["params"]["agent_id"] == "agent-human-name"
+    assert (
+        envelopes[0]["params"]["task_description"]
+        == "Acquire for a fit-test edit"
+    )
     assert envelopes[1]["request_id"] == adopt_request
     assert envelopes[1]["lease_credentials"] == []
+    assert envelopes[1]["operation"] == {"name": "Adopt dirty document"}
+    assert envelopes[1]["params"]["agent_id"] == "agent-human-name"
+    assert (
+        envelopes[1]["params"]["task_description"]
+        == "Adopt a user-edited fit-test document"
+    )
     for envelope in envelopes[2:]:
         assert envelope["lease_credentials"][0]["token"] == "secret-a"
     assert envelopes[-1]["request_id"] == release_request

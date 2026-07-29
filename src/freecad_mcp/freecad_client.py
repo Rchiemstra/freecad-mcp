@@ -1209,7 +1209,6 @@ class FreeCADConnection:
                 {"code": code, "options": dict(opts)},
                 document_names=document_names,
                 operation_name=operation_id or "execute_code",
-                task_id=operation_id,
                 request_id=request_id,
             )
             if routed is not None:
@@ -1798,7 +1797,6 @@ class FreeCADConnection:
             "acquire_document_lock",
             params,
             operation_name="Acquire document lease",
-            task_id=agent_id,
             request_id=request_id,
             require_credentials=False,
         )
@@ -1836,7 +1834,6 @@ class FreeCADConnection:
             "adopt_dirty_document",
             params,
             operation_name="Adopt dirty document",
-            task_id=agent_id,
             request_id=request_id,
             require_credentials=False,
         )

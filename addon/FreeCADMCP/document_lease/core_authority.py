@@ -177,6 +177,9 @@ def open_mutation_capability(
     if doc is None or not callable(getattr(doc, "openMutationCapability", None)):
         yield None
         return
+    if not is_core_enforced(doc):
+        yield None
+        return
     kind_list = list(kinds) if kinds is not None else list(LIVE_MUTATION_KINDS)
     if not kind_list:
         yield None
