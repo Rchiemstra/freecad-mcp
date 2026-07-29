@@ -131,8 +131,6 @@ def acquire_document_lock_operation(
     hash_policy: str = "sha256",
     lease_manager: LeaseClientManager | None = None,
     document_sessions: dict[str, str] | None = None,
-    store_token: dict[str, str] | None = None,
-    legacy_document_keys: dict[str, str] | None = None,
 ) -> ToolResponse:
     try:
         result = freecad.acquire_document_lock(
@@ -149,8 +147,7 @@ def acquire_document_lock_operation(
             result,
             lease_manager=lease_manager,
             document_sessions=document_sessions,
-            store_token=store_token,
-            legacy_document_keys=legacy_document_keys,
+            store_token=None,
             fallback_document_name=doc_name,
         )
         # Do not pin a single active token on the transport: mutations

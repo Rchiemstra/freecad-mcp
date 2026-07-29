@@ -37,11 +37,13 @@ def test_public_lease_tools_exclude_control_and_local_recovery_helpers():
     assert "force_release_stale_lock" not in tools
 
 
-def test_public_lease_signatures_prefer_typed_v2_and_label_v1_compatibility():
+def test_public_lease_signatures_use_v2_with_deprecated_selector_aliases():
     acquire = inspect.signature(server.acquire_document_lock).parameters
     assert {"selector", "task_description", "agent_id", "hash_policy"} <= set(acquire)
     assert acquire["hash_policy"].default == "sha256"
-    assert "deprecated protocol-v1" in inspect.getdoc(server.acquire_document_lock)
+    acquire_doc = inspect.getdoc(server.acquire_document_lock)
+    assert "deprecated selector" in acquire_doc
+    assert "authenticated protocol-v2 service" in acquire_doc
 
     adopt = inspect.signature(server.adopt_dirty_document).parameters
     assert set(adopt) == {

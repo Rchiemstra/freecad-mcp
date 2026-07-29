@@ -938,7 +938,12 @@ def acquire_lease(
     rpc_port: int | None = None,
     document_dirty: bool = False,
 ) -> dict[str, Any]:
-    """Acquire an exclusive lease. Creates sidecar for path-keyed (saved) docs."""
+    """Acquire a legacy v1 lease for migration tests and existing adapters.
+
+    Production ``acquire_document_lock`` must use ``DocumentLeaseService``;
+    this primitive remains only so an already-running v1 lease can be exercised
+    through its bounded migration lifecycle.
+    """
     if not instance_id:
         return {
             "success": False,

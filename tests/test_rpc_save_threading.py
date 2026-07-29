@@ -517,11 +517,13 @@ def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
     monkeypatch.setattr(rpc_server, "document_lease_service", service)
     monkeypatch.setattr(rpc_server, "document_identity_service", identities)
     monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", manifest)
-    monkeypatch.setattr(
-        rpc_server,
-        "_live_document_from_selector",
-        lambda _selector: (document, identity),
-    )
+    selectors = []
+
+    def resolve_selector(selector):
+        selectors.append(dict(selector))
+        return document, identity
+
+    monkeypatch.setattr(rpc_server, "_live_document_from_selector", resolve_selector)
     monkeypatch.setattr(
         rpc_server, "_import_document_lock", lambda: _DocumentLock(events)
     )
@@ -539,13 +541,21 @@ def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
         snapshot_after_reservation,
     )
 
-    result = rpc.acquire_document_lock(
-        selector={"document_session_uuid": identity.session_uuid}
-    )
+    result = rpc.acquire_document_lock(doc_name=document.Name)
 
     assert result["success"] is True
+    assert selectors == [{"document_name": document.Name}]
     event_threads = dict(events)
     assert event_threads["hash"] == caller_thread
     assert event_threads["snapshot"] in gui_thread_ids
     assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
     assert result["document_state"]["snapshot_id"] == snapshot_id
+    persisted = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert {
+        "schema_version",
+        "record_kind",
+        "document",
+        "owner",
+        "lease",
+        "document_state",
+    } <= set(persisted)

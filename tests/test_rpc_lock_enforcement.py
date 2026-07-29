@@ -143,6 +143,49 @@ def test_open_document_rejects_duplicate_before_calling_freecad(monkeypatch):
 
 @pytest.mark.unit
 class TestRpcLockEnforcement:
+    def test_unauthenticated_acquire_cannot_fall_back_to_flat_v1_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Legacy.FCStd"
+        model.write_bytes(b"legacy baseline")
+        set_request_identity(
+            instance_id="legacy-owner",
+            pid=1,
+            host="localhost",
+        )
+        monkeypatch.setattr(addon_rpc, "document_lease_service", object())
+
+        result = FreeCADRPC().acquire_document_lock(
+            doc_name="Legacy",
+            file_path=str(model),
+        )
+
+        assert result["success"] is False
+        assert result["error_code"] == "LEASE_PROTOCOL_REQUIRED"
+        assert not Path(f"{model}.freecad-mcp.lock").exists()
+
+    def test_acquire_rejects_conflicting_selector_aliases(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        set_request_identity(
+            instance_id="authenticated-owner",
+            authenticated_session_id="rpc-session",
+        )
+        monkeypatch.setattr(addon_rpc, "document_lease_service", object())
+        rpc = FreeCADRPC()
+        rpc._acquire_document_lock_v2 = MagicMock()
+
+        result = rpc.acquire_document_lock(
+            doc_name="AliasName",
+            selector={"document_name": "SelectorName"},
+        )
+
+        assert result["success"] is False
+        assert result["error_code"] == "DOCUMENT_SELECTOR_CONFLICT"
+        rpc._acquire_document_lock_v2.assert_not_called()
+
     def test_observe_accepts_only_matching_live_v1_sidecar(
         self, tmp_path, monkeypatch
     ):

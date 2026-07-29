@@ -909,9 +909,9 @@ def acquire_document_lock(
     the same open document; ActiveDocument is never used. The one-time private
     credential is retained by this MCP process for later calls.
 
-    ``doc_name``, ``file_path``, and ``session_id`` are deprecated protocol-v1
-    compatibility aliases for off/observe profiles. Enforce mode requires the
-    authenticated protocol-v2 selector path.
+    ``doc_name``, ``file_path``, and ``session_id`` are deprecated selector
+    aliases. They still acquire through the authenticated protocol-v2 service
+    and produce the same canonical schema-v2 sidecar as ``selector``.
     """
     return acquire_document_lock_operation(
         get_freecad_connection(),
@@ -925,8 +925,6 @@ def acquire_document_lock(
         hash_policy=hash_policy,
         lease_manager=state.lease_manager,
         document_sessions=state.document_sessions,
-        store_token=state.lease_tokens,
-        legacy_document_keys=state.legacy_document_keys,
     )
 
 

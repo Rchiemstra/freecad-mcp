@@ -4611,68 +4611,49 @@ class FreeCADRPC:
                 ),
             }
 
-        if document_lease_service is not None and identity.get(
-            "authenticated_session_id"
-        ):
-            requested_selector = dict(selector or {})
-            if doc_name:
-                requested_selector.setdefault("document_name", doc_name)
-            if file_path:
-                requested_selector.setdefault("canonical_path", file_path)
-            if session_id:
-                requested_selector.setdefault("document_session_uuid", session_id)
-            return self._acquire_document_lock_v2(
-                requested_selector,
-                request_identity=identity,
-                task_description=task_description,
-                client=client,
-                agent_id=agent_id,
-                hash_policy=hash_policy,
-            )
-
-        def task():
-            name = doc_name
-            dirty = False
-            if name:
-                doc = FreeCAD.getDocument(name)
-                if doc is None:
-                    return {
-                        "success": False,
-                        "error_code": "document_not_found",
-                        "error": f"Document {name!r} not found",
-                    }
-                dirty = document_modified_or_dirty(doc)
-                fname = getattr(doc, "FileName", None) or ""
-                path = file_path or (fname if fname else "")
-            else:
-                path = file_path
-                name = doc_name or ""
-            key = dl.resolve_doc_key(
-                doc_name=name or None,
-                file_path=path or None,
-                session_id=session_id or None,
-            )
-            result = dl.acquire_lease(
-                doc_key=key,
-                doc_name=name or key,
-                instance_id=instance_id,
-                client=client or identity.get("client") or "",
-                pid=int(identity.get("pid") or 0),
-                host=identity.get("host") or "",
-                task_description=task_description or "",
-                rpc_port=identity.get("rpc_port"),
-                document_dirty=dirty,
-            )
-            if result.get("success"):
-                try:
-                    from lock_indicator import refresh_lock_indicator
-
-                    refresh_lock_indicator()
-                except Exception:
-                    pass
-            return result
-
-        return self._dispatch_gui(task)
+        if document_lease_service is None:
+            return {
+                "success": False,
+                "error_code": "LEASE_PROTOCOL_UNAVAILABLE",
+                "error": "Document lease v2 is unavailable",
+            }
+        if not identity.get("authenticated_session_id"):
+            return {
+                "success": False,
+                "error_code": "LEASE_PROTOCOL_REQUIRED",
+                "error": (
+                    "Document acquisition requires an authenticated protocol-v2 "
+                    "session; legacy identity arguments are selector aliases only"
+                ),
+            }
+        requested_selector = dict(selector or {})
+        selector_aliases = {
+            "document_name": doc_name,
+            "canonical_path": file_path,
+            "document_session_uuid": session_id,
+        }
+        for selector_field, value in selector_aliases.items():
+            if not value:
+                continue
+            existing = requested_selector.get(selector_field)
+            if existing and str(existing) != str(value):
+                return {
+                    "success": False,
+                    "error_code": "DOCUMENT_SELECTOR_CONFLICT",
+                    "error": (
+                        f"{selector_field} was supplied with conflicting selector "
+                        "and deprecated-alias values"
+                    ),
+                }
+            requested_selector[selector_field] = value
+        return self._acquire_document_lock_v2(
+            requested_selector,
+            request_identity=identity,
+            task_description=task_description,
+            client=client,
+            agent_id=agent_id,
+            hash_policy=hash_policy,
+        )
 
     def adopt_dirty_document(
         self,
