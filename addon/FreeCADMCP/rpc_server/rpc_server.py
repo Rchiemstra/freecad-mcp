@@ -8948,7 +8948,11 @@ class FreeCADRPC:
         try:
             doc = FreeCAD.getDocument(doc_name)
             if not doc:
-                return f"Document '{doc_name}' not found."
+                return {
+                    "success": False,
+                    "error_code": "DOCUMENT_NOT_FOUND",
+                    "error": f"Document '{doc_name}' not found.",
+                }
             if document_lease_service is not None:
                 try:
                     identity = document_identity_service.resolve(
@@ -8960,16 +8964,37 @@ class FreeCADRPC:
                 except Exception:
                     active = None
                 if active is not None:
-                    return (
-                        "A leased document cannot be closed by the generic RPC. "
-                        "Finalize and verify the save first; terminal close is "
-                        "lease-service owned."
-                    )
+                    return {
+                        "success": False,
+                        "error_code": "DOCUMENT_LEASE_ACTIVE",
+                        "error": (
+                            "A leased document cannot be closed by the generic RPC. "
+                            "Finalize and verify the save first, then close the "
+                            "released document."
+                        ),
+                    }
             FreeCAD.closeDocument(doc_name)
+            if FreeCAD.getDocument(doc_name):
+                return {
+                    "success": False,
+                    "error_code": "DOCUMENT_CLOSE_REJECTED",
+                    "error": (
+                        f"FreeCAD did not close document '{doc_name}'; "
+                        "the application remains running."
+                    ),
+                }
             FreeCAD.Console.PrintMessage(f"Document '{doc_name}' closed via RPC.\n")
-            return True
+            return {
+                "success": True,
+                "document_name": doc_name,
+                "result": True,
+            }
         except Exception as e:
-            return str(e)
+            return {
+                "success": False,
+                "error_code": type(e).__name__.upper(),
+                "error": str(e),
+            }
 
     def _snapshot_gui(self, doc_name: str):
         import os

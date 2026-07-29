@@ -1351,7 +1351,21 @@ def close_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolR
         if result is None:
             result = freecad.invoke_rpc("close_document", doc_name)
         if isinstance(result, dict) and result.get("success"):
-            return tool_ok(f"Document '{doc_name}' closed", structured=result)
+            backend_result = result.get("result", True)
+            if backend_result is True:
+                return tool_ok(f"Document '{doc_name}' closed", structured=result)
+            failure = {
+                **result,
+                "success": False,
+                "error_code": result.get(
+                    "error_code", "DOCUMENT_CLOSE_NOT_CONFIRMED"
+                ),
+                "error": result.get("error") or str(backend_result),
+            }
+            return tool_fail(
+                f"Failed to close document: {failure['error']}",
+                structured=failure,
+            )
         error = result.get("error") if isinstance(result, dict) else result
         return tool_fail(
             f"Failed to close document: {error}",

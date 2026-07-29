@@ -142,6 +142,60 @@ def test_open_document_rejects_duplicate_before_calling_freecad(monkeypatch):
 
 
 @pytest.mark.unit
+def test_close_document_active_lease_is_failure_and_keeps_document_open(monkeypatch):
+    document = SimpleNamespace(Name="Leased", Label="Leased", FileName="")
+    close_document = MagicMock()
+    identity = SimpleNamespace(session_uuid=str(uuid.uuid4()))
+    lease_service = SimpleNamespace(get=MagicMock(return_value={"lease_id": "held"}))
+
+    monkeypatch.setattr(addon_rpc.FreeCAD, "getDocument", lambda _name: document)
+    monkeypatch.setattr(addon_rpc.FreeCAD, "closeDocument", close_document)
+    monkeypatch.setattr(
+        addon_rpc,
+        "document_identity_service",
+        SimpleNamespace(resolve=MagicMock(return_value=identity)),
+    )
+    monkeypatch.setattr(addon_rpc, "document_lease_service", lease_service)
+    rpc = FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task: task())
+
+    result = rpc.close_document(document.Name)
+
+    assert result["success"] is False
+    assert result["error_code"] == "DOCUMENT_LEASE_ACTIVE"
+    assert "Finalize and verify" in result["error"]
+    close_document.assert_not_called()
+    lease_service.get.assert_called_once_with(
+        {"document_session_uuid": identity.session_uuid}
+    )
+
+
+@pytest.mark.unit
+def test_close_document_removes_only_target_and_keeps_runtime_available(monkeypatch):
+    target = SimpleNamespace(Name="Target", Label="Target", FileName="")
+    survivor = SimpleNamespace(Name="Survivor", Label="Survivor", FileName="")
+    documents = {target.Name: target, survivor.Name: survivor}
+    console = SimpleNamespace(PrintMessage=MagicMock())
+
+    monkeypatch.setattr(addon_rpc.FreeCAD, "getDocument", documents.get)
+    monkeypatch.setattr(
+        addon_rpc.FreeCAD, "closeDocument", lambda name: documents.pop(name, None)
+    )
+    monkeypatch.setattr(addon_rpc.FreeCAD, "Console", console)
+    monkeypatch.setattr(addon_rpc, "document_lease_service", None)
+    rpc = FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task: task())
+
+    result = rpc.close_document(target.Name)
+
+    assert result["success"] is True
+    assert result["result"] is True
+    assert addon_rpc.FreeCAD.getDocument(target.Name) is None
+    assert addon_rpc.FreeCAD.getDocument(survivor.Name) is survivor
+    console.PrintMessage.assert_called_once()
+
+
+@pytest.mark.unit
 class TestRpcLockEnforcement:
     def test_unauthenticated_acquire_cannot_fall_back_to_flat_v1_sidecar(
         self, tmp_path, monkeypatch
