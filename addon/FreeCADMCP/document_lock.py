@@ -870,6 +870,46 @@ def list_leases() -> list[LeaseRecord]:
         return list(_registry.values())
 
 
+def inspect_persisted_compatibility_lease(doc_key: str) -> dict[str, Any] | None:
+    """Return a redacted live v1 lease only when its sidecar still matches.
+
+    This is status evidence, not mutation authority: no token is returned and
+    callers must still use ``check_persisted_mutation_allowed`` before writing.
+    """
+
+    if not (os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd")):
+        return None
+    with _registry_lock:
+        record = _registry.get(doc_key)
+    if record is None:
+        return None
+    persisted = _read_sidecar(sidecar_path_for(doc_key))
+    if not persisted:
+        return None
+    # A schema-v2 (or future-version) sidecar must only be interpreted by its
+    # strict parser, even if some fields happen to resemble a legacy record.
+    if "schema_version" in persisted or "record_kind" in persisted:
+        return None
+    try:
+        generation_matches = int(persisted.get("generation", 0)) == int(
+            record.generation
+        )
+    except (TypeError, ValueError):
+        generation_matches = False
+    expected_fingerprint = record.to_sidecar_dict()["token_fingerprint"]
+    if (
+        persisted.get("doc_key") != record.doc_key
+        or persisted.get("lease_id") != record.lease_id
+        or not generation_matches
+        or not hmac.compare_digest(
+            str(persisted.get("token_fingerprint", "")),
+            str(expected_fingerprint),
+        )
+    ):
+        return None
+    return record.to_dict()
+
+
 def discover_sidecar_leases(search_paths: list[str] | None = None) -> list[LeaseRecord]:
     """Load leases from known sidecars next to provided FCStd paths."""
     found: list[LeaseRecord] = []

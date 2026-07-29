@@ -707,6 +707,19 @@ def _foreign_shadow_leases(service: Any) -> list[dict[str, Any]]:
             if not os.path.lexists(sidecar):
                 continue
             try:
+                from document_lock import inspect_persisted_compatibility_lease
+
+                compatibility = inspect_persisted_compatibility_lease(
+                    identity.canonical_path
+                )
+            except Exception:
+                compatibility = None
+            if compatibility is not None:
+                # The legacy snapshot is already supplied by list_leases().
+                # Do not add a contradictory red v2-parser shadow for the same
+                # proven-live local observe-mode lease.
+                continue
+            try:
                 record = service.sidecar_store.read(sidecar)
                 payload = record.to_public_dict()
                 payload["source"] = "foreign_sidecar"

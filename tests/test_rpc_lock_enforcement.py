@@ -181,6 +181,58 @@ class TestRpcLockEnforcement:
         blocked = _effective_sidecar_block(document, get_request_identity())
         assert blocked["error_code"] == "SIDECAR_UNKNOWN"
 
+    def test_get_lock_reports_matching_live_v1_as_local_compatibility(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Legacy.FCStd"
+        model.write_bytes(b"legacy baseline")
+        document = SimpleNamespace(
+            Name="Legacy",
+            Label="Legacy",
+            FileName=str(model),
+            Modified=True,
+        )
+        identity = SimpleNamespace(
+            session_uuid=str(uuid.uuid4()),
+            canonical_path=str(model.resolve()),
+            to_dict=lambda: {},
+        )
+        strict_store = SimpleNamespace(
+            read=MagicMock(
+                side_effect=AssertionError(
+                    "strict v2 parser must not read a proven local v1 sidecar"
+                )
+            )
+        )
+        service = SimpleNamespace(
+            get_effective=lambda _selector: None,
+            sidecar_store=strict_store,
+        )
+        monkeypatch.setattr(addon_rpc, "document_lease_service", service)
+        monkeypatch.setattr(
+            addon_rpc,
+            "_live_document_from_selector",
+            lambda _selector: (document, identity),
+        )
+        acquired = acquire_lease(
+            doc_key=str(model.resolve()),
+            doc_name=document.Name,
+            instance_id="legacy-owner",
+            pid=1,
+            document_dirty=True,
+        )
+
+        result = FreeCADRPC().get_document_lock(
+            selector={"document_name": document.Name}
+        )
+
+        assert result["success"] is True
+        assert result["locked"] is True
+        assert result["source"] == "local_compatibility_v1"
+        assert result["lease"] == acquired["lease"]
+        strict_store.read.assert_not_called()
+
     def test_save_document_selects_legacy_lifecycle_for_v1_token(self):
         set_request_identity(
             instance_id="legacy-owner",

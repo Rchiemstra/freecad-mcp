@@ -199,6 +199,41 @@ def test_malformed_foreign_sidecar_becomes_red_shadow(tmp_path, monkeypatch):
     assert lock_indicator._state_presentation(view["state"])[1] == "#b42318"
 
 
+def test_matching_live_compatibility_sidecar_does_not_add_red_shadow(
+    tmp_path, monkeypatch
+):
+    model = tmp_path / "Local.FCStd"
+    model.write_bytes(b"model")
+    sidecar = tmp_path / "Local.FCStd.freecad-mcp.lock"
+    sidecar.write_text("flat-v1-placeholder", encoding="utf-8")
+
+    class Identity:
+        session_uuid = "local-document"
+        name = "Local"
+        canonical_path = str(model)
+
+    class Store:
+        def read(self, _path):
+            raise AssertionError("strict v2 parser must not read a proven local v1 sidecar")
+
+    service = SimpleNamespace(
+        list_records=lambda: [],
+        identity_service=SimpleNamespace(resolve=lambda _selector: Identity()),
+        sidecar_store=Store(),
+    )
+    document = SimpleNamespace(Name="Local", Modified=True)
+    freecad = SimpleNamespace(listDocuments=lambda: {"Local": document})
+    compatibility_module = SimpleNamespace(
+        inspect_persisted_compatibility_lease=lambda path: (
+            {"lease_id": "legacy-local"} if path == str(model) else None
+        )
+    )
+    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
+    monkeypatch.setitem(sys.modules, "document_lock", compatibility_module)
+
+    assert lock_indicator._foreign_shadow_leases(service) == []
+
+
 class _Action:
     def __init__(self, name: str, enabled: bool = True):
         self._name = name

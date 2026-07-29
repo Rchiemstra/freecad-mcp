@@ -22,6 +22,7 @@ from addon.FreeCADMCP.document_lock import (
     configure_runtime_lease_mode,
     force_release_stale_lock,
     heartbeat_lease,
+    inspect_persisted_compatibility_lease,
     is_enabled,
     is_enforcement_enabled,
     mark_save_verified,
@@ -287,6 +288,46 @@ class TestDocumentLockSidecar:
         assert "token" not in side
         assert side["token_fingerprint"].startswith("sha256:")
         assert side["instance_id"] == "inst-a"
+
+    def test_status_inspection_proves_matching_live_compatibility_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        fcstd = tmp_path / "model.FCStd"
+        fcstd.write_bytes(b"data")
+        key = str(fcstd.resolve())
+        acquired = acquire_lease(
+            doc_key=key,
+            doc_name="model",
+            instance_id="local-instance",
+            pid=42,
+        )
+
+        inspected = inspect_persisted_compatibility_lease(key)
+
+        assert inspected == acquired["lease"]
+        assert "token" not in inspected
+        assert "token_fingerprint" not in inspected
+
+    def test_status_inspection_rejects_replaced_compatibility_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        fcstd = tmp_path / "model.FCStd"
+        fcstd.write_bytes(b"data")
+        key = str(fcstd.resolve())
+        acquire_lease(
+            doc_key=key,
+            doc_name="model",
+            instance_id="local-instance",
+            pid=42,
+        )
+        sidecar = sidecar_path_for(key)
+        replaced = json.loads(sidecar.read_text(encoding="utf-8"))
+        replaced["lease_id"] = "foreign-replacement"
+        sidecar.write_text(json.dumps(replaced), encoding="utf-8")
+
+        assert inspect_persisted_compatibility_lease(key) is None
 
     def test_heartbeat_renew(self, tmp_path, monkeypatch):
         _enable(tmp_path, monkeypatch)

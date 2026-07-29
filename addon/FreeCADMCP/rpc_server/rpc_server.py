@@ -445,15 +445,29 @@ def _trusted_boot_identity():
         try:
             import ctypes
 
-            buffer = (ctypes.c_ubyte * 64)()
+            # SystemTimeOfDayInformation is a fixed-size class: the kernel
+            # returns STATUS_INFO_LENGTH_MISMATCH for anything but its exact
+            # size (48 bytes on x64) rather than filling a larger buffer, so
+            # an oversized allocation silently yields no boot evidence. Retry
+            # once at the length the kernel reports back.
+            status_info_length_mismatch = 0xC0000004
             returned = ctypes.c_ulong()
-            status = ctypes.windll.ntdll.NtQuerySystemInformation(
-                3, buffer, ctypes.sizeof(buffer), ctypes.byref(returned)
-            )
-            if status == 0:
-                boot_ticks = ctypes.c_int64.from_buffer(buffer).value
-                if boot_ticks > 0:
-                    return f"windows-boot:{boot_ticks:x}"
+            for size in (48, None):
+                if size is None:
+                    size = int(returned.value)
+                    if size <= 0:
+                        break
+                buffer = (ctypes.c_ubyte * size)()
+                status = ctypes.windll.ntdll.NtQuerySystemInformation(
+                    3, buffer, ctypes.sizeof(buffer), ctypes.byref(returned)
+                )
+                if status == 0:
+                    boot_ticks = ctypes.c_int64.from_buffer(buffer).value
+                    if boot_ticks > 0:
+                        return f"windows-boot:{boot_ticks:x}"
+                    break
+                if (status & 0xFFFFFFFF) != status_info_length_mismatch:
+                    break
         except Exception:
             pass
     try:
@@ -4765,6 +4779,16 @@ class FreeCADRPC:
                         "lease": record,
                     }
                 if document_identity.canonical_path:
+                    compatibility = dl.inspect_persisted_compatibility_lease(
+                        document_identity.canonical_path
+                    )
+                    if compatibility is not None:
+                        return {
+                            "success": True,
+                            "locked": True,
+                            "source": "local_compatibility_v1",
+                            "lease": compatibility,
+                        }
                     lease = _import_document_lease()
                     sidecar = lease.sidecar_path_for(document_identity.canonical_path)
                     if os.path.lexists(sidecar):
@@ -4837,6 +4861,14 @@ class FreeCADRPC:
                             document_identity.session_uuid in local_ids
                             or not document_identity.canonical_path
                         ):
+                            continue
+                        compatibility = dl.inspect_persisted_compatibility_lease(
+                            document_identity.canonical_path
+                        )
+                        if compatibility is not None:
+                            compatibility["source"] = "local_compatibility_v1"
+                            local.append(compatibility)
+                            local_ids.add(document_identity.session_uuid)
                             continue
                         sidecar = lease.sidecar_path_for(
                             document_identity.canonical_path
