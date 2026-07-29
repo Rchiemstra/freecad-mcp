@@ -35,6 +35,18 @@ class TestLeaseStateModel:
         assert LeaseState.RELEASING in ALLOWED_TRANSITIONS[LeaseState.USER_INTERVENED]
         assert LeaseState.RELEASING in ALLOWED_TRANSITIONS[LeaseState.UNLOCKED_DIRTY]
 
+    def test_every_state_has_a_legal_exit_to_unlocked_saved(self):
+        for start in LeaseState:
+            reachable = {start}
+            pending = [start]
+            while pending:
+                current = pending.pop()
+                for successor in ALLOWED_TRANSITIONS[current]:
+                    if successor not in reachable:
+                        reachable.add(successor)
+                        pending.append(successor)
+            assert LeaseState.UNLOCKED_SAVED in reachable, start
+
     def test_invalid_transition_is_rejected(self):
         with pytest.raises(InvalidTransitionError):
             validate_transition(LeaseState.LOCKED_EDITING, LeaseState.RELEASING)

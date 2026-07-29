@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import FreeCADGui
+import os
 from pathlib import Path
 
 
@@ -215,3 +216,44 @@ def test_forced_gui_geometry_mutation_optin_reaches_gui(monkeypatch):
     )
     assert result["success"] is True
     assert dispatched.get("called") is True
+
+
+def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
+    model = tmp_path / "Model.FCStd"
+    model.write_bytes(b"before")
+    before_mtime = model.stat().st_mtime_ns
+
+    class _Document:
+        Name = "Model"
+        FileName = str(model)
+        Modified = True
+        Objects = []
+
+        def save(self):
+            model.write_bytes(b"saved content with a different size")
+            os.utime(model, ns=(before_mtime + 1_000_000, before_mtime + 1_000_000))
+            self.Modified = False
+
+    document = _Document()
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(
+        rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "getDocument",
+        lambda name: document if name == document.Name else None,
+    )
+    monkeypatch.setattr(rpc_server.FreeCAD, "ActiveDocument", document)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", lambda: {})
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+
+    result = rpc.execute_code(
+        "FreeCAD.getDocument('Model').save()",
+        {"document": "Model", "execution_mode": "gui"},
+    )
+
+    assert result["success"] is True
+    assert model.stat().st_mtime_ns > before_mtime
+    assert result["session"]["saved"] is True
+    assert result["session"]["saved_documents"] == ["Model"]

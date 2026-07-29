@@ -6613,6 +6613,25 @@ class FreeCADRPC:
                 name: require_document_modified(doc)
                 for name, doc in FreeCAD.listDocuments().items()
             }
+
+            def _disk_signature(doc):
+                file_name = str(getattr(doc, "FileName", "") or "")
+                if not file_name:
+                    return None
+                try:
+                    stat = os.stat(file_name)
+                except OSError:
+                    return (os.path.normcase(os.path.abspath(file_name)), None, None)
+                return (
+                    os.path.normcase(os.path.abspath(file_name)),
+                    stat.st_mtime_ns,
+                    stat.st_size,
+                )
+
+            disk_before = {
+                name: _disk_signature(doc)
+                for name, doc in FreeCAD.listDocuments().items()
+            }
             invalid_before = self._collect_invalid_objects()
 
             if target_doc and activate_doc:
@@ -6716,13 +6735,30 @@ class FreeCADRPC:
                 name: require_document_modified(doc)
                 for name, doc in FreeCAD.listDocuments().items()
             }
+            disk_after = {
+                name: _disk_signature(doc)
+                for name, doc in FreeCAD.listDocuments().items()
+            }
+            saved_documents = sorted(
+                name
+                for name, after_signature in disk_after.items()
+                if after_signature is not None
+                and (
+                    disk_before.get(name) != after_signature
+                    or (
+                        dirty_before.get(name) is True
+                        and dirty_after.get(name) is False
+                    )
+                )
+            )
             target_doc_obj = FreeCAD.getDocument(target_doc) if target_doc else None
             session = {
                 "active_document_before": active_before,
                 "active_document_after": active_after,
                 "dirty_before": dirty_before,
                 "dirty_after": dirty_after,
-                "saved": False,
+                "saved": bool(saved_documents),
+                "saved_documents": saved_documents,
                 "file_path": getattr(target_doc_obj, "FileName", "")
                 if target_doc_obj
                 else "",
@@ -9219,6 +9255,7 @@ def start_rpc_server(port=None):
 
     rpc_session_manager = None
     rpc_runtime_manifest = None
+    rpc_v2_initialization_warning = ""
     if profile_id and auth_secret_file:
         try:
             secret = load_profile_secret(auth_secret_file)
@@ -9262,6 +9299,11 @@ def start_rpc_server(port=None):
                 rpc_server_started_at = ""
                 rpc_server_actual_endpoint = None
                 return "RPC Server could not initialize authenticated lease protocol"
+            rpc_v2_initialization_warning = (
+                " WARNING: authenticated RPC protocol v2 is unavailable; "
+                "check profile_instance_id, auth_secret_file, and trusted "
+                f"boot/process identity ({_redact_rpc_diagnostic(exc)})."
+            )
 
     rpc_server_instance.register_instance(
         FreeCADRPC(
@@ -9284,6 +9326,7 @@ def start_rpc_server(port=None):
     msg = f"RPC Server started at {actual_host}:{actual_port}."
     if remote_enabled:
         msg += f" Allowed IPs: {allowed_ips}"
+    msg += rpc_v2_initialization_warning
     return msg
 
 

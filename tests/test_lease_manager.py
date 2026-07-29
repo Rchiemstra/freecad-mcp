@@ -627,6 +627,43 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
 
 
 @pytest.mark.unit
+def test_release_via_selector_only_uses_private_credential(monkeypatch):
+    from freecad_mcp import server
+
+    manager = LeaseClientManager(session_token="rpc-session")
+    manager.store(_credential("doc-a", "secret-a", generation=3))
+    test_state = ServerState(
+        lease_manager=manager,
+        document_sessions={"Alpha": "doc-a"},
+    )
+    connection = mock.Mock()
+    connection.release_document_lock.return_value = {
+        "success": True,
+        "terminal_state": "UNLOCKED_SAVED",
+    }
+    monkeypatch.setattr(server, "state", test_state)
+    monkeypatch.setattr(server, "get_freecad_connection", lambda: connection)
+
+    response = server.release_document_lock(
+        None,
+        selector={"document_name": "Alpha"},
+    )
+
+    assert response.isError is False
+    connection.release_document_lock.assert_called_once_with(
+        "",
+        "",
+        selector={
+            "document_name": "Alpha",
+            "document_session_uuid": "doc-a",
+        },
+        disposition="saved",
+    )
+    assert manager.get(document_session_uuid="doc-a") is None
+    assert test_state.document_sessions == {}
+
+
+@pytest.mark.unit
 def test_legacy_save_token_forces_direct_compatibility_route(monkeypatch):
     calls, created, _started, _release = _install_fake_proxies(monkeypatch)
     connection = FreeCADConnection(timeout=5)

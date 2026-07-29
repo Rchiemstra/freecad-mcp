@@ -290,6 +290,144 @@ def test_rpc_start_rejects_configuration_error_before_binding(monkeypatch):
     assert bound == []
 
 
+def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
+    from addon.FreeCADMCP.rpc_server import rpc_server
+
+    profile_id = str(uuid.uuid4())
+    app_thread = object()
+    dispatcher = SimpleNamespace(deleteLater=lambda: None)
+    lease_service = SimpleNamespace(
+        list_records=lambda: [],
+        has_unresolved_owner=lambda _owner: False,
+    )
+    replay_cache = SimpleNamespace(set_owner_lease_predicate=lambda _predicate: None)
+
+    class _Server:
+        server_address = ("127.0.0.1", 19875)
+
+        def register_instance(self, instance):
+            self.instance = instance
+
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    class _Thread:
+        def __init__(self, *, target, daemon):
+            self.target = target
+            self.daemon = daemon
+
+        def start(self):
+            self.target()
+
+    settings = {
+        "document_lease_mode": "observe",
+        "profile_instance_id": profile_id,
+        "auth_secret_file": "profile.secret",
+        "rpc_port": 0,
+        "remote_enabled": False,
+        "allowed_ips": "127.0.0.1",
+    }
+    runtime_identity = SimpleNamespace(
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=123,
+        freecad_process_started_at="2026-07-22T00:00:00Z",
+        boot_id="boot-test",
+    )
+    manifest = SimpleNamespace(
+        protocol_version=2,
+        features=("authenticated_rpc_v2",),
+    )
+
+    monkeypatch.setattr(rpc_server, "rpc_server_instance", None)
+    monkeypatch.setattr(rpc_server, "rpc_session_manager", None)
+    monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
+    monkeypatch.setattr(rpc_server, "rpc_request_replay_cache", replay_cache)
+    monkeypatch.setattr(
+        rpc_server.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: SimpleNamespace(thread=lambda: app_thread)),
+    )
+    monkeypatch.setattr(
+        rpc_server.QtCore.QThread,
+        "currentThread",
+        staticmethod(lambda: app_thread),
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCADGui, "getMainWindow", lambda: None, raising=False
+    )
+    monkeypatch.setattr(rpc_server, "GuiDispatcher", lambda _parent: dispatcher)
+    monkeypatch.setattr(rpc_server, "load_settings", lambda: dict(settings))
+    monkeypatch.setattr(rpc_server, "configure_parts_library_path", lambda _path: None)
+    monkeypatch.setattr(rpc_server, "_freecad_version_parts", lambda: ("1", "1", "0", "r"))
+    monkeypatch.setattr(rpc_server, "_profile_fingerprint", lambda: "profile-hash")
+    monkeypatch.setattr(rpc_server.FreeCAD, "getUserAppDataDir", lambda: "")
+    monkeypatch.setattr(
+        rpc_server.FreeCAD, "getHomePath", lambda: "", raising=False
+    )
+    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", lambda: {})
+    monkeypatch.setattr(rpc_server, "WorkerManager", lambda *_args: object())
+    monkeypatch.setattr(
+        rpc_server, "initialize_document_lease_runtime", lambda _settings: lease_service
+    )
+    monkeypatch.setattr(rpc_server, "resolve_rpc_bind_host", lambda _settings: "127.0.0.1")
+    monkeypatch.setattr(rpc_server, "FilteredXMLRPCServer", lambda *_args, **_kwargs: _Server())
+    monkeypatch.setattr(
+        rpc_server,
+        "_require_authenticated_lease_runtime",
+        lambda _profile_id: runtime_identity,
+    )
+    monkeypatch.setattr(rpc_server, "make_runtime_manifest", lambda **_kwargs: manifest)
+    monkeypatch.setattr(rpc_server, "SessionManager", session_manager)
+    monkeypatch.setattr(rpc_server.threading, "Thread", _Thread)
+    return rpc_server
+
+
+def test_session_manager_built_when_configured(monkeypatch):
+    built = []
+
+    def build_session_manager(*, manifest, secret):
+        manager = SimpleNamespace(manifest=manifest, secret=secret)
+        built.append(manager)
+        return manager
+
+    rpc_server = _prepare_authenticated_rpc_start(
+        monkeypatch, session_manager=build_session_manager
+    )
+    monkeypatch.setattr(rpc_server, "load_profile_secret", lambda _path: b"x" * 32)
+
+    result = rpc_server.start_rpc_server()
+
+    assert result == "RPC Server started at 127.0.0.1:19875."
+    assert rpc_server.rpc_session_manager is built[0]
+    assert built[0].manifest.protocol_version == 2
+
+
+def test_v2_init_failure_is_visible_in_observe_mode(monkeypatch):
+    rpc_server = _prepare_authenticated_rpc_start(
+        monkeypatch,
+        session_manager=lambda **_kwargs: pytest.fail(
+            "SessionManager must not be reached"
+        ),
+    )
+    monkeypatch.setattr(
+        rpc_server,
+        "load_profile_secret",
+        lambda _path: (_ for _ in ()).throw(
+            RuntimeError("trusted boot identity is unavailable")
+        ),
+    )
+
+    result = rpc_server.start_rpc_server()
+
+    assert "WARNING: authenticated RPC protocol v2 is unavailable" in result
+    assert "trusted boot identity is unavailable" in result
+    assert "profile_instance_id" in result
+    assert rpc_server.rpc_session_manager is None
+
+
 def test_rpc_stop_preserves_addon_process_lease_authority(monkeypatch):
     """Restarting the transport must not orphan UUIDs or active sidecars."""
 
@@ -553,6 +691,47 @@ def test_local_runtime_identity_uses_profile_and_conservative_process_evidence(
     rpc_server.document_lease_service.local_runtime_identity = unavailable
     with pytest.raises(RuntimeError, match="identity is unavailable"):
         rpc_server._require_authenticated_lease_runtime(profile_id)
+
+
+def test_boot_identity_non_empty():
+    from addon.FreeCADMCP.rpc_server import rpc_server
+
+    assert rpc_server._trusted_boot_identity()
+
+
+def test_ntquery_exact_buffer_size(monkeypatch):
+    import ctypes
+
+    from addon.FreeCADMCP.rpc_server import rpc_server
+
+    class _MissingProcPath:
+        def __init__(self, _path):
+            pass
+
+        def read_text(self, **_kwargs):
+            raise OSError("procfs unavailable")
+
+    sizes = []
+
+    def nt_query(_info_class, buffer, size, returned):
+        sizes.append(size)
+        returned._obj.value = 48
+        ctypes.c_int64.from_buffer(buffer).value = 0x1234
+        return 0
+
+    monkeypatch.setattr(rpc_server, "Path", _MissingProcPath)
+    monkeypatch.setattr(rpc_server.os, "name", "nt")
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        SimpleNamespace(
+            ntdll=SimpleNamespace(NtQuerySystemInformation=nt_query)
+        ),
+        raising=False,
+    )
+
+    assert rpc_server._trusted_boot_identity() == "windows-boot:1234"
+    assert sizes == [48]
 
 
 def test_document_lease_runtime_does_not_coerce_task_summary_opt_in():

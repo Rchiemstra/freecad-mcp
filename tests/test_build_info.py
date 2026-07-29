@@ -86,6 +86,7 @@ def test_runtime_info_matching_identity_and_no_credentials(monkeypatch):
     assert payload["mcp"]["build_id"] == server.build_id
     assert payload["addon"]["runtime_id"] == "addon-runtime"
     assert payload["freecad"]["pid"] == 456
+    assert payload["rpc"]["protocol_version"] == 2
     assert payload["compatibility"] == {"compatible": True, "warnings": []}
     assert "do-not-expose" not in json.dumps(response.structuredContent)
 

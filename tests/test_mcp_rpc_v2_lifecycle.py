@@ -434,6 +434,12 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
                 addon_manifest.addon_runtime_id
             )
 
+            runtime_response = await session.call_tool("get_runtime_info", {})
+            assert runtime_response.isError is False
+            runtime_info = runtime_response.structuredContent["data"]
+            assert runtime_info["rpc"]["protocol_version"] == 2
+            assert runtime_info["compatibility"]["compatible"] is True
+
             sidecar = sidecar_path_for(model_path)
             assert sidecar.is_file()
             sidecar_text = sidecar.read_text(encoding="utf-8")

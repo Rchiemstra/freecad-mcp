@@ -276,6 +276,99 @@ class TestRpcLockEnforcement:
         assert result["lease"] == acquired["lease"]
         strict_store.read.assert_not_called()
 
+    def test_list_locks_shows_open_compatibility_lease(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Legacy.FCStd"
+        model.write_bytes(b"legacy baseline")
+        document = SimpleNamespace(
+            Name="Legacy",
+            Label="Legacy",
+            FileName=str(model),
+            Modified=True,
+        )
+        identity = SimpleNamespace(
+            session_uuid=str(uuid.uuid4()),
+            canonical_path=str(model.resolve()),
+            to_dict=lambda: {"session_uuid": "legacy-document"},
+        )
+        strict_store = SimpleNamespace(
+            read=MagicMock(
+                side_effect=AssertionError(
+                    "strict v2 parser must not read a proven local v1 sidecar"
+                )
+            )
+        )
+        service = SimpleNamespace(
+            list_effective_records=lambda: [],
+            sidecar_store=strict_store,
+        )
+        monkeypatch.setattr(addon_rpc, "document_lease_service", service)
+        monkeypatch.setattr(addon_rpc, "_ensure_v2_document", lambda _doc: identity)
+        monkeypatch.setattr(
+            addon_rpc.FreeCAD, "listDocuments", lambda: {document.Name: document}
+        )
+        acquired = acquire_lease(
+            doc_key=str(model.resolve()),
+            doc_name=document.Name,
+            instance_id="legacy-owner",
+            pid=1,
+            document_dirty=True,
+        )
+        rpc = FreeCADRPC()
+        monkeypatch.setattr(rpc, "_dispatch_gui", lambda task: task())
+
+        result = rpc.list_document_locks()
+
+        assert result["success"] is True
+        assert len(result["leases"]) == 1
+        assert result["leases"][0]["source"] == "local_compatibility_v1"
+        assert result["leases"][0]["lease_id"] == acquired["lease"]["lease_id"]
+        strict_store.read.assert_not_called()
+
+    def test_list_locks_surfaces_malformed_sidecar_instead_of_omitting_it(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Malformed.FCStd"
+        model.write_bytes(b"model")
+        sidecar = Path(f"{model}.freecad-mcp.lock")
+        sidecar.write_text('{"unexpected":"record"}', encoding="utf-8")
+        document = SimpleNamespace(
+            Name="Malformed",
+            Label="Malformed",
+            FileName=str(model),
+            Modified=False,
+        )
+        identity = SimpleNamespace(
+            session_uuid=str(uuid.uuid4()),
+            canonical_path=str(model.resolve()),
+            to_dict=lambda: {"session_uuid": "malformed-document"},
+        )
+        service = SimpleNamespace(
+            list_effective_records=lambda: [],
+            sidecar_store=SimpleNamespace(
+                read=MagicMock(side_effect=ValueError("malformed sidecar"))
+            ),
+        )
+        monkeypatch.setattr(addon_rpc, "document_lease_service", service)
+        monkeypatch.setattr(addon_rpc, "_ensure_v2_document", lambda _doc: identity)
+        monkeypatch.setattr(
+            addon_rpc.FreeCAD, "listDocuments", lambda: {document.Name: document}
+        )
+        rpc = FreeCADRPC()
+        monkeypatch.setattr(rpc, "_dispatch_gui", lambda task: task())
+
+        result = rpc.list_document_locks()
+
+        assert result["success"] is True
+        assert result["leases"] == []
+        assert len(result["sidecars"]) == 1
+        assert result["sidecars"][0]["source"] == "unknown_sidecar"
+        assert result["sidecars"][0]["error_code"] == "SIDECAR_UNKNOWN"
+        assert "malformed sidecar" in result["sidecars"][0]["error"]
+
     def test_save_document_selects_legacy_lifecycle_for_v1_token(self):
         set_request_identity(
             instance_id="legacy-owner",

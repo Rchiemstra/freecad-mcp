@@ -463,8 +463,12 @@ def test_finalize_rejects_unknown_save_mode_before_any_document_write():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "selector_form",
+    ["doc_name", "document_name", "document_session_uuid", "canonical_path"],
+)
 def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, selector_form
 ):
     model = tmp_path / "acquire.FCStd"
     _write_fcstd(model, "acquire")
@@ -541,10 +545,23 @@ def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
         snapshot_after_reservation,
     )
 
-    result = rpc.acquire_document_lock(doc_name=document.Name)
+    if selector_form == "doc_name":
+        call_kwargs = {"doc_name": document.Name}
+        expected_selector = {"document_name": document.Name}
+    elif selector_form == "document_name":
+        call_kwargs = {"selector": {"document_name": document.Name}}
+        expected_selector = {"document_name": document.Name}
+    elif selector_form == "document_session_uuid":
+        call_kwargs = {"selector": {"document_session_uuid": identity.session_uuid}}
+        expected_selector = {"document_session_uuid": identity.session_uuid}
+    else:
+        call_kwargs = {"selector": {"canonical_path": identity.canonical_path}}
+        expected_selector = {"canonical_path": identity.canonical_path}
+
+    result = rpc.acquire_document_lock(**call_kwargs)
 
     assert result["success"] is True
-    assert selectors == [{"document_name": document.Name}]
+    assert selectors == [expected_selector]
     event_threads = dict(events)
     assert event_threads["hash"] == caller_thread
     assert event_threads["snapshot"] in gui_thread_ids
