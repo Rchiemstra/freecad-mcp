@@ -30,6 +30,11 @@ been inspected and resolved.
   reservation. After a restart, the same retry also requires proof that the
   recorded FreeCAD owner is dead. Promoted leases still require explicit
   recovery.
+- **Close and reopen in the same FreeCAD process:** an unlocked document drops
+  its old proxy registration. A document with local or foreign recovery
+  authority retains a one-shot marker and may rebind only the same name, path,
+  and filesystem identity. Untouched reservations can then retry; promoted
+  leases remain blocked for explicit recovery.
 - **GUI timeout/hang:** treat the running mutation as uncertain until the GUI
   returns. Do not retry with a new request ID or clear its sidecar blindly.
   Retrying the same request ID returns the recorded status and never invokes
@@ -38,6 +43,10 @@ been inspected and resolved.
 - **Cancellation:** queued work may return to idle only if it never began.
   Cancellation during a mutation ends in error until save or restore proves the
   document state.
+- **Crash after acquisition `saveCopy`:** the snapshot ID is checkpointed in
+  the `ACQUIRING` sidecar before promotion. Recovery retains that snapshot and
+  refuses automatic reservation replacement, because it may contain unsaved
+  user work.
 - **Save failure/disk full:** retain ownership and sidecars, free space or pick a
   safe Save As destination, then retry. A failed save is never a clean release.
 - **Save As conflict:** the original document remains owned and the destination

@@ -28,6 +28,7 @@ sequenceDiagram
     Lease->>Disk: create sidecar
     RPC->>Disk: hash saved baseline
     RPC->>GUI: create owner-only saveCopy
+    RPC->>Lease: checkpoint snapshot ID in sidecar
     RPC->>Lease: promote LOCKED_IDLE
     Lease-->>Client: one-time credential
 
@@ -38,6 +39,7 @@ sequenceDiagram
     alt user confirms
         RPC->>Lease: CAS-publish dirty ACQUIRING
         RPC->>GUI: create owner-only saveCopy
+        RPC->>Lease: checkpoint snapshot ID in sidecar
         RPC->>Lease: promote dirty LOCKED_IDLE
         Lease-->>Client: one-time credential
     else user cancels
@@ -111,6 +113,48 @@ sequenceDiagram
 A changed filesystem identity is tolerated during import only for this
 unreturned-reservation shape. Replacement still requires proof that the
 recorded FreeCAD owner is dead. A dead MCP child alone is not sufficient.
+An `ACQUIRING` record from a dead FreeCAD process is also an unreturned
+reservation: the public RPC does not return its credential until promotion.
+It may be replaced after the same exact-shape, death-proof, and CAS checks.
+An `ACQUIRING` record in the current FreeCAD process remains active and cannot
+be replaced. If snapshot creation finished before the crash, its ID is already
+checkpointed in the sidecar; that record is not automatically replaceable
+because it may preserve unsaved user work.
+
+## Close and reopen inside FreeCAD
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant GUI as FreeCAD GUI
+    participant Observer as Lease observer
+    participant Identity as Identity registry
+    participant Lease as Lease service
+    participant Client as MCP client
+
+    User->>GUI: Close document
+    alt no local or foreign authority
+        Observer->>Identity: unregister closed proxy
+        User->>GUI: Reopen same FCStd
+        GUI->>Identity: register fresh document UUID
+    else recovery authority exists
+        Observer->>Lease: fence local owner if needed
+        Observer->>Lease: retain one-shot close marker
+        User->>GUI: Reopen same FCStd
+        Lease->>Identity: exact proxy rebind
+        alt untouched unreturned reservation
+            Client->>Lease: CAS retry acquisition
+            Lease-->>Client: new credential
+        else promoted or otherwise recoverable lease
+            Lease-->>Client: conflict; explicit recovery remains required
+        end
+    end
+```
+
+The rebind requires the same name, canonical path, and filesystem identity.
+It is rejected when the close was not observed, the old proxy is supplied,
+or the file changed while closed. Foreign recovery authority is retained
+across the same close/reopen cycle without rewriting its sidecar.
 
 ## Multiple clients
 
@@ -146,10 +190,22 @@ sequenceDiagram
 | Dirty | Unreturned `STALE` reservation | Same local runtime | Adopt | CAS rotation and new credential | `test_confirmed_dirty_adoption_fences_unreturned_stale_reservation` |
 | Clean | Unreturned `USER_INTERVENED` reservation | Same local runtime | Acquire | CAS rotation and new credential | `test_gui_save_refreshes_identity_and_clean_retry_fences_lost_reservation` |
 | Clean | Unreturned reservation after atomic GUI save | Same live proxy/path | Acquire | Identity refresh, then successful RPC acquisition | `test_gui_save_then_clean_acquire_avoids_identity_registration_deadlock` |
+| Clean or dirty | Local unreturned `STALE`/`USER_INTERVENED` reservation | Same local runtime | Acquire/adopt | All four state/dirty combinations rotate authority | `test_local_unreturned_reservation_retry_matrix` |
+| Any | Local `ACQUIRING` reservation | Current FreeCAD process | Competing acquire | Refused while the original request may still be running | multi-client conflict tests |
+| Clean | Foreign `ACQUIRING` reservation after restart | Previous FreeCAD proven dead | Acquire | Import and CAS rotation | `test_dead_foreign_unreturned_reservation_retry_matrix` |
+| Clean or dirty | Foreign `ACQUIRING` with checkpointed snapshot | Previous FreeCAD dead | Acquire/adopt | Refused; snapshot recovery authority retained | `test_foreign_acquiring_with_checkpointed_snapshot_requires_recovery` |
 | Clean | Foreign unreturned reservation after restart | Previous FreeCAD proven dead | Acquire | Import, CAS rotation, and local identity rebind | `test_restart_rebinds_dead_unreturned_reservation_after_gui_save` |
 | Clean | Foreign unreturned reservation after restart | Previous FreeCAD alive/unknown | Acquire | Refused; sidecar unchanged | `test_restart_will_not_replace_unreturned_reservation_if_owner_is_alive` and foreign recovery proof tests |
+| Dirty | Foreign `ACQUIRING` reservation after addon restart | Same FreeCAD process, replaced addon runtime | Adopt | Confirmed dirty adoption rotates authority | `test_same_freecad_addon_restart_retries_dirty_acquiring_reservation` |
+| Any | Foreign reservation changed after import | Previous owner/concurrent process | Acquire/adopt | CAS refusal; changed sidecar preserved | `test_foreign_acquiring_retry_is_cas_fenced_after_import` |
+| Any | Unlocked document is closed/reopened | No authority | Open/acquire | Old proxy unregistered; fresh identity registered | `test_unlocked_close_unregisters_identity_for_fresh_reopen` |
+| Clean | Unreturned local reservation is closed/reopened | Exact same saved file | Acquire | One-shot proxy rebind, then CAS retry | `test_close_reopen_then_clean_acquire_avoids_identity_registration_deadlock` |
+| Any | Promoted lease is closed/reopened | Exact same saved file | Acquire | Proxy rebind succeeds; recovery block remains | `test_close_reopen_rebinds_promoted_lease_but_keeps_recovery_block` |
+| Any | Recovery document is closed/reopened | File identity changed while closed | Open/acquire | Rebind refused; authority retained | `test_close_reopen_refuses_changed_file_identity` |
+| Any | Foreign recovery document is closed/reopened | Exact same saved file | Open/acquire | Foreign authority retained and rebound | `test_close_reopen_preserves_foreign_recovery_then_dead_owner_retry` |
 | Any | Promoted `STALE` or `USER_INTERVENED` lease | Any | Acquire/adopt | Refused; explicit recovery required | promoted stale/intervened refusal tests |
 | Any | Active lease from another MCP instance | Any | Acquire | `LEASE_CONFLICT` | `test_clients_share_one_cas_fenced_acquisition_authority` |
+| Any | Claude, GPT Sol, and Cursor acquire simultaneously | Same FreeCAD process | Acquire | Exactly one winner and two conflicts | `test_simultaneous_claude_gpt_sol_cursor_race_has_one_winner` |
 | Any | Old credential after takeover/retry | Any | Authorize/mutate | Rejected by lease ID/generation/token fencing | authorization and multi-client tests |
 | Any | Malformed, unknown-schema, changed, or mismatched sidecar | Any | Import/acquire | Refused and preserved byte-for-byte | foreign recovery and sidecar suites |
 | Any | Save As or replacement document proxy | Any | Implicit identity refresh | Refused; guarded Save As/rebind required | `test_gui_save_refresh_rejects_save_as_and_replacement_proxy` |
@@ -163,6 +219,10 @@ sequenceDiagram
   the exact registered proxy at the same path.
 - Automatic retry never replaces a promoted lease or one with a baseline,
   recovery snapshot, successful save, validation, or agent mutation history.
+- A recovery snapshot ID is persisted while still `ACQUIRING`, before the
+  promotion CAS, closing the process-exit window after `saveCopy`.
 - Foreign retry requires compare-and-swap plus positive old-FreeCAD death
   proof; timeout or a dead MCP client is not enough.
+- Closing an unlocked document removes its stale proxy identity; closing a
+  recovery document retains only a one-shot, exact-file rebind capability.
 - Unknown authority is preserved and blocks mutations.

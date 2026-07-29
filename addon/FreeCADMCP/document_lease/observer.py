@@ -245,39 +245,38 @@ def register_live_document_recovery(
     if identities is None:
         raise RuntimeError("document identity service is unavailable")
     try:
-        from document_lease.identity import (
-            DocumentIdentityError,
-            IdentityMismatchError,
-        )
-    except ImportError:
-        from addon.FreeCADMCP.document_lease.identity import (  # type: ignore
-            DocumentIdentityError,
-            IdentityMismatchError,
-        )
-    try:
         identity = identities.register_document(document)
-    except DocumentIdentityError:
-        # Do not resolve-by-name here.  A same-name entry can belong to a
-        # different live proxy (reload/recreate), and inspect would then raise
-        # IdentityMismatchError while recovery is only optional discovery.
-        logger.debug(
-            "live document registration failed; skip recovery import",
-            exc_info=True,
-        )
-        return None, None
     except Exception:
-        logger.debug(
-            "live document registration failed; skip recovery import",
-            exc_info=True,
+        # A locally observed close leaves its exact identity and sidecar
+        # authoritative. Rebind only through the service's one-shot close
+        # marker; never classify registration errors by import-sensitive
+        # exception identity or resolve by name into an arbitrary proxy.
+        rebinder = getattr(
+            service,
+            "rebind_closed_recovery_document",
+            None,
         )
-        return None, None
+        if not callable(rebinder):
+            logger.debug(
+                "live document registration failed; skip recovery import",
+                exc_info=True,
+            )
+            return None, None
+        try:
+            identity = rebinder(document=document)
+        except Exception:
+            logger.debug(
+                "closed live document rebind failed; skip recovery import",
+                exc_info=True,
+            )
+            return None, None
     # This second, non-mutating inspection is the evidence passed to the
     # recovery service; a stale/replaced proxy or unexpected path fails here.
     try:
         live_identity = identities.inspect_registered_document(
             identity.session_uuid, document
         )
-    except IdentityMismatchError:
+    except Exception:
         logger.debug(
             "registered live proxy mismatch; skip recovery import",
             exc_info=True,
@@ -668,9 +667,28 @@ class LeaseObserver:
         )
 
     def slotDeletedDocument(self, document):  # noqa: N802
-        # Do not unregister identity or remove any sidecar here.  The retained
-        # USER_INTERVENED record is the recovery authority after a user close.
-        return self._handle(document, "document close")
+        # A leased document retains one-shot reopen authority; an unlocked
+        # document is unregistered so opening it again gets a fresh identity.
+        document = _document_from_subject(document)
+        record = self._handle(document, "document close")
+        if document is None:
+            return record
+        try:
+            service = get_runtime_service(self._service_provider)
+            if service is None:
+                return record
+            identity = self._identity_for_document(service, document)
+            closer = getattr(service, "handle_document_closed", None)
+            if identity is None or not callable(closer):
+                return record
+            closed = closer(identity.session_uuid, document=document)
+            return record if record is not None else closed
+        except Exception:
+            logger.warning(
+                "unable to retain or unregister closed document identity",
+                exc_info=True,
+            )
+            return record
 
     def take_over_selected_document(
         self, *, reason: str = "Local user selected Take Over"

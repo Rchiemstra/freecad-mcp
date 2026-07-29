@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
@@ -477,6 +479,52 @@ class TestDocumentLeaseAuthorization:
         assert adopted.record.validation_complete is True
         assert adopted.record.snapshot_id
 
+    def test_acquisition_snapshot_is_checkpointed_before_promotion(self, tmp_path):
+        model = tmp_path / "checkpointed-snapshot.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="Checkpointed", path=model)
+        service = DocumentLeaseService(identities)
+        reservation = service.begin_dirty_adoption(
+            identity.session_uuid,
+            _owner(),
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        snapshot_id = _uuid()
+
+        checkpointed = service.record_acquisition_snapshot(
+            reservation.credential,
+            snapshot_id=snapshot_id,
+        )
+
+        persisted = service.sidecar_store.read(sidecar_path_for(model))
+        assert checkpointed.snapshot_id == snapshot_id
+        assert persisted.snapshot_id == snapshot_id
+        assert (
+            service._is_unreturned_reservation(
+                checkpointed,
+                allow_active_acquiring=True,
+            )
+            is False
+        )
+        with pytest.raises(CoordinationError, match="does not match"):
+            service.complete_dirty_adoption(
+                reservation.credential,
+                baseline=capture_file_baseline(model, platform=identities.platform),
+                baseline_validated=True,
+                snapshot_id=_uuid(),
+            )
+
+        adopted = service.complete_dirty_adoption(
+            reservation.credential,
+            baseline=capture_file_baseline(model, platform=identities.platform),
+            baseline_validated=True,
+            snapshot_id=snapshot_id,
+        )
+        assert adopted.record.state == LeaseState.LOCKED_IDLE
+        assert adopted.record.snapshot_id == snapshot_id
+
     def test_confirmed_dirty_adoption_fences_unreturned_stale_reservation(
         self, tmp_path
     ):
@@ -640,6 +688,151 @@ class TestDocumentLeaseAuthorization:
         with pytest.raises(LeaseConflictError, match="already has a lease"):
             service.begin_acquisition(identity.session_uuid, owners[2])
 
+    @pytest.mark.parametrize("fence", ["STALE", "USER_INTERVENED"])
+    @pytest.mark.parametrize("document_dirty", [False, True], ids=["clean", "dirty"])
+    def test_local_unreturned_reservation_retry_matrix(
+        self,
+        tmp_path,
+        fence,
+        document_dirty,
+    ):
+        model = tmp_path / f"local-{fence}-{document_dirty}.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="RetryMatrix", path=model)
+        service = DocumentLeaseService(identities)
+        original_owner = replace(_owner(), client="Claude")
+        if document_dirty:
+            abandoned = service.begin_dirty_adoption(
+                identity.session_uuid,
+                original_owner,
+                document_dirty=True,
+                local_confirmation=True,
+            )
+        else:
+            abandoned = service.begin_acquisition(
+                identity.session_uuid,
+                original_owner,
+            )
+        if fence == "STALE":
+            fenced = service.mark_stale(identity.session_uuid)
+        else:
+            fenced = service.takeover(
+                identity.session_uuid,
+                dirty=document_dirty,
+                reason="Unscoped user action before response delivery",
+            )
+        retry_owner = replace(
+            _owner(),
+            mcp_instance_id=_uuid(),
+            client="GPT Sol",
+        )
+
+        if document_dirty:
+            retry = service.begin_dirty_adoption(
+                identity.session_uuid,
+                retry_owner,
+                document_dirty=True,
+                local_confirmation=True,
+            )
+        else:
+            retry = service.begin_acquisition(
+                identity.session_uuid,
+                retry_owner,
+            )
+
+        assert retry.record.state == LeaseState.ACQUIRING
+        assert retry.record.dirty is document_dirty
+        assert retry.record.generation == fenced.generation + 1
+        with pytest.raises(AuthorizationError):
+            service.authorize(abandoned.credential)
+
+    def test_simultaneous_claude_gpt_sol_cursor_race_has_one_winner(self, tmp_path):
+        model = tmp_path / "simultaneous-clients.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="SharedModel", path=model)
+        service = DocumentLeaseService(identities)
+        clients = ["Claude", "GPT Sol", "Cursor"]
+        owners = [
+            replace(
+                _owner(),
+                mcp_instance_id=_uuid(),
+                mcp_pid=2000 + index,
+                client=client,
+                agent_id=f"{client}-agent",
+            )
+            for index, client in enumerate(clients)
+        ]
+        barrier = threading.Barrier(len(owners))
+
+        def attempt(owner):
+            barrier.wait(timeout=5)
+            try:
+                return (
+                    "granted",
+                    service.begin_acquisition(identity.session_uuid, owner),
+                )
+            except LeaseConflictError:
+                return ("conflict", owner.client)
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            results = list(executor.map(attempt, owners))
+
+        grants = [value for outcome, value in results if outcome == "granted"]
+        conflicts = [value for outcome, value in results if outcome == "conflict"]
+        assert len(grants) == 1
+        assert len(conflicts) == 2
+        assert sorted([grants[0].record.owner.client, *conflicts]) == sorted(clients)
+        assert service.get(identity.session_uuid)["lease"]["state"] == (
+            LeaseState.ACQUIRING.value
+        )
+
+    def test_unreturned_classifier_rejects_every_recovery_evidence_boundary(
+        self,
+        tmp_path,
+    ):
+        model = tmp_path / "classifier-boundaries.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="Classifier", path=model)
+        service = DocumentLeaseService(identities)
+        acquiring = service.begin_acquisition(
+            identity.session_uuid,
+            _owner(),
+        ).record
+        stale = service.mark_stale(identity.session_uuid)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+
+        assert service._is_unreturned_reservation(acquiring) is False
+        assert (
+            service._is_unreturned_reservation(
+                acquiring,
+                allow_active_acquiring=True,
+            )
+            is True
+        )
+        assert service._is_unreturned_reservation(stale) is True
+
+        disqualified = [
+            replace(
+                stale,
+                document=replace(stale.document, canonical_path=None),
+            ),
+            replace(stale, last_mutation_revision=2),
+            replace(stale, last_verified_save_revision=1),
+            replace(stale, last_successful_save_at="2026-07-29T20:10:00Z"),
+            replace(stale, baseline=baseline),
+            replace(stale, validation_complete=True),
+            replace(stale, snapshot_id=_uuid()),
+            replace(stale, error=None),
+            replace(stale, state=LeaseState.LOCKED_ERROR),
+        ]
+        assert all(
+            service._is_unreturned_reservation(record) is False
+            for record in disqualified
+        )
+
     def test_malformed_foreign_sidecar_is_preserved(self, tmp_path):
         model = tmp_path / "foreign.FCStd"
         model.write_bytes(b"file")
@@ -655,6 +848,296 @@ class TestDocumentLeaseAuthorization:
 
 @pytest.mark.unit
 class TestForeignRecoveryImport:
+    def test_foreign_acquiring_with_checkpointed_snapshot_requires_recovery(
+        self,
+        tmp_path,
+    ):
+        model = tmp_path / "checkpointed-foreign-acquiring.FCStd"
+        model.write_bytes(b"saved baseline")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        abandoned = foreign_service.begin_dirty_adoption(
+            foreign_document.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        checkpointed = foreign_service.record_acquisition_snapshot(
+            abandoned.credential,
+            snapshot_id=_uuid(),
+        )
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(LeaseConflictError, match="foreign recovery"):
+            restarted.begin_dirty_adoption(
+                local_document.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid(), client="GPT Sol"),
+                document_dirty=True,
+                local_confirmation=True,
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+        imported = restarted.get_foreign_recovery(local_document.session_uuid)
+        assert imported["document_state"]["snapshot_id"] == checkpointed.snapshot_id
+
+    @pytest.mark.parametrize(
+        "state",
+        ["ACQUIRING", "STALE", "USER_INTERVENED"],
+    )
+    @pytest.mark.parametrize(
+        "replace_saved_file",
+        [False, True],
+        ids=["same-file", "atomic-save-replacement"],
+    )
+    def test_dead_foreign_unreturned_reservation_retry_matrix(
+        self,
+        tmp_path,
+        state,
+        replace_saved_file,
+    ):
+        model = tmp_path / f"foreign-{state}-{replace_saved_file}.FCStd"
+        replacement = tmp_path / f"replacement-{state}-{replace_saved_file}.FCStd"
+        model.write_bytes(b"saved baseline")
+        replacement.write_bytes(b"atomic GUI save")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        abandoned = foreign_service.begin_acquisition(
+            foreign_document.session_uuid,
+            owner,
+        )
+        if state == "STALE":
+            fenced = foreign_service.mark_stale(foreign_document.session_uuid)
+        elif state == "USER_INTERVENED":
+            fenced = foreign_service.takeover(
+                foreign_document.session_uuid,
+                dirty=False,
+                reason="Unscoped GUI action before response delivery",
+            )
+        else:
+            fenced = abandoned.record
+        if replace_saved_file:
+            model.unlink()
+            replacement.replace(model)
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        imported = restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        retry = restarted.begin_acquisition(
+            local_document.session_uuid,
+            replace(
+                _owner(),
+                mcp_instance_id=_uuid(),
+                client="GPT Sol",
+            ),
+        )
+
+        assert imported["lease"]["state"] == state
+        assert retry.record.state == LeaseState.ACQUIRING
+        assert retry.record.document == local_document
+        assert retry.record.generation == fenced.generation + 1
+        assert restarted.get_foreign_recovery(local_document.session_uuid) is None
+
+    def test_same_freecad_addon_restart_retries_dirty_acquiring_reservation(
+        self,
+        tmp_path,
+    ):
+        model = tmp_path / "addon-runtime-restart.FCStd"
+        model.write_bytes(b"saved baseline")
+        owner = replace(_owner(), client="Cursor")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        abandoned = foreign_service.begin_dirty_adoption(
+            foreign_document.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+        )
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(
+                owner,
+                freecad_pid=owner.freecad_pid,
+                freecad_process_started_at=owner.freecad_process_started_at,
+                addon_runtime_id=_uuid(),
+            ),
+        )
+        restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        retry = restarted.begin_dirty_adoption(
+            local_document.session_uuid,
+            replace(_owner(), mcp_instance_id=_uuid(), client="GPT Sol"),
+            document_dirty=True,
+            local_confirmation=True,
+        )
+
+        assert retry.record.state == LeaseState.ACQUIRING
+        assert retry.record.dirty is True
+        assert retry.record.generation == abandoned.record.generation + 1
+        assert retry.record.document == local_document
+
+    def test_foreign_acquiring_retry_refuses_live_owner(self, tmp_path):
+        model = tmp_path / "live-owner-acquiring.FCStd"
+        model.write_bytes(b"saved baseline")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        foreign_service.begin_acquisition(foreign_document.session_uuid, owner)
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(
+                True,
+                process_started_at=owner.freecad_process_started_at,
+            ),
+        )
+        restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(ForeignRecoveryError, match="still alive"):
+            restarted.begin_acquisition(
+                local_document.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid(), client="Cursor"),
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+        assert restarted.get_foreign_recovery(local_document.session_uuid) is not None
+
+    def test_foreign_acquiring_retry_refuses_unknown_owner_liveness(self, tmp_path):
+        model = tmp_path / "unknown-owner-acquiring.FCStd"
+        model.write_bytes(b"saved baseline")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        foreign_service.begin_acquisition(foreign_document.session_uuid, owner)
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=None,
+        )
+        restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(ForeignRecoveryError, match="unavailable"):
+            restarted.begin_acquisition(
+                local_document.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid(), client="Cursor"),
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+        assert restarted.get_foreign_recovery(local_document.session_uuid) is not None
+
+    def test_foreign_acquiring_retry_is_cas_fenced_after_import(self, tmp_path):
+        model = tmp_path / "foreign-cas-race.FCStd"
+        model.write_bytes(b"saved baseline")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        abandoned = foreign_service.begin_acquisition(
+            foreign_document.session_uuid,
+            owner,
+        )
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        changed = abandoned.record.revised(current_operation="Concurrent update")
+        foreign_service.sidecar_store.replace(
+            sidecar,
+            changed,
+            expected=abandoned.record,
+        )
+
+        with pytest.raises(CoordinationError, match="changed after import"):
+            restarted.begin_acquisition(
+                local_document.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid()),
+            )
+
+        assert foreign_service.sidecar_store.read(sidecar) == changed
+        assert restarted.get(local_document.session_uuid) is None
+
+    def test_promoted_foreign_lease_rejects_atomic_file_replacement(self, tmp_path):
+        model = tmp_path / "promoted-file-replacement.FCStd"
+        replacement = tmp_path / "replacement.FCStd"
+        model.write_bytes(b"saved baseline")
+        replacement.write_bytes(b"untrusted replacement")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        foreign_service.acquire(
+            foreign_document.session_uuid,
+            owner,
+            snapshot_id=_uuid(),
+        )
+        model.unlink()
+        replacement.replace(model)
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(local_identities)
+
+        with pytest.raises(ForeignRecoveryError, match="different filesystem file"):
+            restarted.import_adjacent_foreign_recovery(
+                local_document.session_uuid,
+                live_document=local_document,
+            )
+        assert restarted.get_foreign_recovery(local_document.session_uuid) is None
+
     def test_restart_rebinds_dead_unreturned_reservation_after_gui_save(self, tmp_path):
         model = tmp_path / "gui-saved-before-restart.FCStd"
         replacement = tmp_path / "replacement.FCStd"

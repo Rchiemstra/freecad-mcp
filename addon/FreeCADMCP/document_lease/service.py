@@ -245,6 +245,7 @@ class DocumentLeaseService:
         self._pending_save_as: dict[str, LeaseRecord] = {}
         self._cancellations: dict[str, _CancellationContext] = {}
         self._foreign_records: dict[str, ForeignRecoveryRecord] = {}
+        self._closed_documents: dict[str, tuple[int, DocumentIdentity]] = {}
         self._effective_error_times: dict[tuple[str, str, int], str] = {}
         self._local_runtime_identity = local_runtime_identity
         self._process_liveness_probe = process_liveness_probe
@@ -351,7 +352,10 @@ class DocumentLeaseService:
             and not unverified_destination
             and not (
                 allow_unreturned_file_replacement
-                and self._is_unreturned_reservation(persisted)
+                and self._is_unreturned_reservation(
+                    persisted,
+                    allow_active_acquiring=True,
+                )
             )
         ):
             raise ForeignRecoveryError(
@@ -724,7 +728,8 @@ class DocumentLeaseService:
             foreign = self._foreign_records.get(identity.session_uuid)
             if foreign is not None:
                 if replace_unreturned_reservation and self._is_unreturned_reservation(
-                    foreign.persisted
+                    foreign.persisted,
+                    allow_active_acquiring=True,
                 ):
                     return self._replace_unreturned_reservation(
                         foreign.persisted,
@@ -784,7 +789,11 @@ class DocumentLeaseService:
             return LeaseGrant(credential=credential, record=record)
 
     @staticmethod
-    def _is_unreturned_reservation(record: LeaseRecord) -> bool:
+    def _is_unreturned_reservation(
+        record: LeaseRecord,
+        *,
+        allow_active_acquiring: bool = False,
+    ) -> bool:
         """Recognize a fenced reservation that never reached promotion.
 
         This narrow shape excludes every lease that could contain agent edits or
@@ -792,6 +801,12 @@ class DocumentLeaseService:
         dirty adoption may therefore fence it without losing recovery authority.
         """
 
+        acquiring = (
+            allow_active_acquiring
+            and record.state == LeaseState.ACQUIRING
+            and not record.user_intervened
+            and record.error is None
+        )
         stale = (
             record.state == LeaseState.STALE
             and not record.user_intervened
@@ -805,7 +820,7 @@ class DocumentLeaseService:
             and record.error.code == "USER_INTERVENED"
         )
         return bool(
-            (stale or intervened)
+            (acquiring or stale or intervened)
             and record.document.canonical_path is not None
             and record.last_mutation_revision in {0, 1}
             and record.last_verified_save_revision == 0
@@ -892,6 +907,7 @@ class DocumentLeaseService:
                 ) from exc
         self._records[identity.session_uuid] = replacement
         self._foreign_records.pop(identity.session_uuid, None)
+        self._closed_documents.pop(identity.session_uuid, None)
         self._generations[identity.session_uuid] = generation
         self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
         credential = LeaseCredential(
@@ -920,6 +936,32 @@ class DocumentLeaseService:
             snapshot_id=snapshot_id,
             expected_dirty=True,
         )
+
+    def record_acquisition_snapshot(
+        self,
+        credential: LeaseCredential,
+        *,
+        snapshot_id: str,
+    ) -> LeaseRecord:
+        """Persist recovery-snapshot authority before acquisition promotion."""
+
+        try:
+            normalized_snapshot = str(uuid.UUID(str(snapshot_id)))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise LeaseServiceError("acquisition snapshot ID must be a UUID") from exc
+        with self._lock:
+            record = self._record_for_credential(
+                credential,
+                allowed_states={LeaseState.ACQUIRING},
+            )
+            if record.snapshot_id is not None:
+                if record.snapshot_id != normalized_snapshot:
+                    raise CoordinationError(
+                        "acquisition snapshot authority already changed"
+                    )
+                return record
+            updated = record.revised(snapshot_id=normalized_snapshot)
+            return self._commit(record, updated)
 
     def complete_acquisition(
         self,
@@ -971,6 +1013,13 @@ class DocumentLeaseService:
                     raise LeaseServiceError(
                         "acquisition snapshot ID must be a UUID"
                     ) from exc
+            if (
+                record.snapshot_id is not None
+                and record.snapshot_id != normalized_snapshot
+            ):
+                raise CoordinationError(
+                    "acquisition snapshot does not match checkpointed authority"
+                )
             if path:
                 if not os.path.isfile(path):
                     raise LeaseServiceError(
@@ -1065,6 +1114,10 @@ class DocumentLeaseService:
                 ) from exc
             self._records.pop(credential.document_session_uuid, None)
             self._last_sidecar_heartbeat_ns.pop(credential.document_session_uuid, None)
+            self._closed_documents.pop(
+                credential.document_session_uuid,
+                None,
+            )
             return {
                 "rolled_back": True,
                 "document_session_uuid": credential.document_session_uuid,
@@ -2101,6 +2154,170 @@ class DocumentLeaseService:
             updated = record.revised(document=refreshed)
             return self._commit(record, updated)
 
+    def handle_document_closed(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        *,
+        document: Any,
+    ) -> LeaseRecord | dict[str, Any] | None:
+        """Retain recovery authority or unregister an unlocked closed proxy."""
+
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            exact = self.identity_service.inspect_registered_document(
+                identity.session_uuid,
+                document,
+            )
+            record = self._records.get(identity.session_uuid)
+            if record is not None:
+                if record.state not in {
+                    LeaseState.USER_INTERVENED,
+                    LeaseState.UNLOCKED_DIRTY,
+                }:
+                    raise LeaseStateError(
+                        "document close can be marked only after local fencing",
+                        details={"state": record.state.value},
+                    )
+                self._assert_sidecar_matches(record)
+                if exact != record.document:
+                    raise CoordinationError(
+                        "closed live proxy does not match lease authority"
+                    )
+                self._closed_documents[identity.session_uuid] = (
+                    id(document),
+                    exact,
+                )
+                return record
+
+            foreign = self._foreign_records.get(identity.session_uuid)
+            if foreign is not None:
+                if exact != foreign.local_document:
+                    raise CoordinationError(
+                        "closed live proxy does not match foreign recovery authority"
+                    )
+                if not exact.canonical_path:
+                    raise ForeignRecoveryError(
+                        "foreign recovery document has no saved path"
+                    )
+                try:
+                    persisted = self.sidecar_store.read(
+                        sidecar_path_for(exact.canonical_path)
+                    )
+                except SidecarError as exc:
+                    raise CoordinationError(
+                        f"foreign recovery sidecar is unavailable or invalid: {exc}"
+                    ) from exc
+                if persisted != foreign.persisted:
+                    raise CoordinationError(
+                        "foreign recovery authority changed before document close"
+                    )
+                self._closed_documents[identity.session_uuid] = (
+                    id(document),
+                    exact,
+                )
+                return foreign.to_public_dict()
+
+            if identity.session_uuid in self._pending_save_as:
+                raise CoordinationError(
+                    "a pending Save As authority cannot be unregistered"
+                )
+            self._closed_documents.pop(identity.session_uuid, None)
+            self.identity_service.unregister(identity.session_uuid)
+            return None
+
+    def rebind_closed_recovery_document(
+        self,
+        *,
+        document: Any,
+    ) -> DocumentIdentity:
+        """Rebind a same-file proxy after an observed recovery-document reopen."""
+
+        name = str(getattr(document, "Name", "") or "").strip()
+        raw_path = str(getattr(document, "FileName", "") or "").strip()
+        if not name or not raw_path:
+            raise LocalRecoveryError(
+                "closed-document recovery requires a saved named document"
+            )
+        canonical, comparison = canonicalize_path(
+            raw_path,
+            platform=self.identity_service.platform,
+        )
+        observed_file = file_identity_for_path(
+            canonical,
+            platform=self.identity_service.platform,
+        )
+        identity = self.identity_service.resolve(
+            {
+                "document_name": name,
+                "canonical_path": canonical,
+            }
+        )
+        with self._lock:
+            closed = self._closed_documents.get(identity.session_uuid)
+            if closed is None:
+                raise LocalRecoveryError(
+                    "the previous live document was not observed closing"
+                )
+            previous_proxy_id, closed_identity = closed
+            if id(document) == previous_proxy_id:
+                raise LocalRecoveryError(
+                    "closed-document recovery requires a replacement proxy"
+                )
+            record = self._records.get(identity.session_uuid)
+            foreign = self._foreign_records.get(identity.session_uuid)
+            if record is not None:
+                if record.state not in {
+                    LeaseState.USER_INTERVENED,
+                    LeaseState.UNLOCKED_DIRTY,
+                }:
+                    raise LeaseStateError(
+                        "closed-document rebind requires local recovery authority",
+                        details={"state": record.state.value},
+                    )
+                self._assert_sidecar_matches(record)
+                authoritative = record.document
+            elif foreign is not None:
+                if not identity.canonical_path:
+                    raise ForeignRecoveryError(
+                        "foreign recovery document has no saved path"
+                    )
+                try:
+                    persisted = self.sidecar_store.read(
+                        sidecar_path_for(identity.canonical_path)
+                    )
+                except SidecarError as exc:
+                    raise CoordinationError(
+                        f"foreign recovery sidecar is unavailable or invalid: {exc}"
+                    ) from exc
+                if persisted != foreign.persisted:
+                    raise CoordinationError(
+                        "foreign recovery authority changed after document close"
+                    )
+                authoritative = foreign.local_document
+            else:
+                raise LeaseConflictError(
+                    "the closed document has no retained recovery authority"
+                )
+            if (
+                closed_identity != authoritative
+                or name != authoritative.name
+                or comparison != authoritative.comparison_key
+                or observed_file != authoritative.file_identity
+            ):
+                raise CoordinationError(
+                    "reopened document does not match the closed file identity"
+                )
+            rebound = self.identity_service.rebind_document(
+                identity.session_uuid,
+                document,
+            )
+            if rebound != authoritative:
+                raise CoordinationError(
+                    "reopened document rebind changed lease identity"
+                )
+            self._closed_documents.pop(identity.session_uuid, None)
+            return rebound
+
     def acknowledge_local_dirty(
         self,
         selector: DocumentSelector | Mapping[str, Any] | str,
@@ -2263,6 +2480,7 @@ class DocumentLeaseService:
             result = terminal.to_public_dict()
             self._records.pop(identity.session_uuid, None)
             self._last_sidecar_heartbeat_ns.pop(identity.session_uuid, None)
+            self._closed_documents.pop(identity.session_uuid, None)
             return result
 
     def mark_stale(
@@ -2438,6 +2656,10 @@ class DocumentLeaseService:
             result = terminal.to_public_dict()
             self._records.pop(credential.document_session_uuid, None)
             self._last_sidecar_heartbeat_ns.pop(credential.document_session_uuid, None)
+            self._closed_documents.pop(
+                credential.document_session_uuid,
+                None,
+            )
             return result
 
     def get(
