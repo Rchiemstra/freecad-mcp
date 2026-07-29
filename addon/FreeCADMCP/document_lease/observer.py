@@ -521,6 +521,56 @@ class LeaseObserver:
             return None
         return self._handle(document, kind, detail=detail)
 
+    def _refresh_finished_save(self, document: Any) -> Any | None:
+        """Refresh recovery state after FreeCAD finishes clearing ``Modified``.
+
+        Some supported FreeCAD builds emit ``slotFinishSaveDocument`` before
+        the document's dirty flag is cleared.  This queued second pass may
+        update only an already-fenced local recovery record; it must never turn
+        a normally attributed owner save into a delayed takeover.
+        """
+
+        document = _document_from_subject(document)
+        if document is None:
+            return None
+        try:
+            service = get_runtime_service(self._service_provider)
+            if service is None:
+                return None
+            with self._event_lock:
+                identity = self._identity_for_document(service, document)
+                if identity is None:
+                    return None
+                current = service.get(identity.session_uuid)
+                if current is None or _record_state(current) not in {
+                    "USER_INTERVENED",
+                    "UNLOCKED_DIRTY",
+                }:
+                    return None
+                dirty = _document_dirty(document)
+                record = current
+                if dirty is not None:
+                    updater = getattr(service, "update_local_dirty", None)
+                    if callable(updater):
+                        record = updater(identity.session_uuid, dirty=dirty)
+                refresher = getattr(
+                    service,
+                    "refresh_local_recovery_document_identity",
+                    None,
+                )
+                if callable(refresher):
+                    record = refresher(
+                        identity.session_uuid,
+                        document=document,
+                    )
+                return record
+        except Exception:
+            logger.warning(
+                "unable to refresh completed FreeCAD save",
+                exc_info=True,
+            )
+            return None
+
     # App::DocumentObserverPython callbacks.  The before/after pairs are
     # intentionally both present: availability and ordering vary across
     # supported FreeCAD builds, while takeover itself is idempotent.
@@ -659,12 +709,24 @@ class LeaseObserver:
         return self._handle(document, "save", detail=str(filename or ""))
 
     def slotFinishSaveDocument(self, document, filename):  # noqa: N802
-        return self._handle(
+        record = self._handle(
             document,
             "save",
             detail=str(filename or ""),
             refresh_saved_identity=True,
         )
+        # FreeCAD 1.2/26.3 on Windows clears ``Document.Modified`` only after
+        # this callback returns. Queue a bounded second pass only when the
+        # synchronous pass still observes dirty/unknown state.
+        if _document_dirty(_document_from_subject(document)) is not False:
+            try:
+                self._notification_queue(lambda: self._refresh_finished_save(document))
+            except Exception:
+                logger.warning(
+                    "completed-save refresh queue failed",
+                    exc_info=True,
+                )
+        return record
 
     def slotDeletedDocument(self, document):  # noqa: N802
         # A leased document retains one-shot reopen authority; an unlocked

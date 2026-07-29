@@ -8,10 +8,11 @@ import uuid
 import warnings
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, Dict, Literal, TypedDict
+from typing import Any, AsyncIterator, Dict, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import CallToolResult
+from typing_extensions import TypedDict
 
 from .build_info import (
     as_dict as build_info_dict,

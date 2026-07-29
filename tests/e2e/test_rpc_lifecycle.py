@@ -60,10 +60,34 @@ def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
         port = old_server.server_address[1]
         assert _call(port, "ping") is True
 
-        for index in range(3):
-            code = "import time; time.sleep(60)" if index == 0 else f"print({index})"
+        long_thread = threading.Thread(
+            target=lambda: worker_results.append(
+                _call(
+                    port,
+                    "execute_code",
+                    "import time; time.sleep(60)",
+                    {
+                        "document": doc.Name,
+                        "read_only": True,
+                        "execution_mode": "worker",
+                        "timeout_seconds": 120,
+                    },
+                )
+            )
+        )
+        long_thread.start()
+        worker_threads.append(long_thread)
+        _pump_until(
+            app,
+            lambda: (
+                rpc_server.worker_manager is not None
+                and rpc_server.worker_manager.status()["busy"]
+            ),
+        )
+
+        for index in (1, 2):
             thread = threading.Thread(
-                target=lambda payload=code: worker_results.append(
+                target=lambda payload=f"print({index})": worker_results.append(
                     _call(
                         port,
                         "execute_code",
@@ -95,6 +119,7 @@ def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
         for thread in worker_threads:
             thread.join(timeout=10)
             assert not thread.is_alive()
+        assert all("error_code" in result for result in worker_results), worker_results
         codes = sorted(result["error_code"] for result in worker_results)
         assert codes.count("server_stopping") == 2
         assert codes.count("WORKER_CANCELLED") == 1

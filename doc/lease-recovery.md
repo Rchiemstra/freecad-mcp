@@ -26,10 +26,13 @@ been inspected and resolved.
   or dirty acknowledgement.
 - **GUI Ctrl+S during an unreturned acquisition:** the observer fences the
   reservation and refreshes an atomic same-path FCStd replacement against the
-  exact live document proxy. A clean retry may CAS-replace only that untouched
-  reservation. After a restart, the same retry also requires proof that the
-  recorded FreeCAD owner is dead. Promoted leases still require explicit
-  recovery.
+  exact live document proxy. Because supported GUI builds clear
+  `Gui::Document.Modified` after the finish-save observer callback returns, a
+  queued second pass records the resulting clean state without ever taking
+  over an attributed agent save. A clean retry may CAS-replace only that
+  untouched reservation. After a restart, the same retry also requires proof
+  that the recorded FreeCAD owner is dead. Promoted leases still require
+  explicit recovery.
 - **Close and reopen in the same FreeCAD process:** an unlocked document drops
   its old proxy registration. A document with local or foreign recovery
   authority retains a one-shot marker and may rebind only the same name, path,

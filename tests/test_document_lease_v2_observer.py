@@ -212,7 +212,45 @@ def test_supported_app_callbacks_fence_unscoped_changes(tmp_path, callback, args
 
     assert len(service.takeovers) == 1
     assert kind in service.takeovers[0]["reason"]
+    assert len(queued) == (2 if callback == "slotFinishSaveDocument" else 1)
+
+
+def test_finish_save_queues_clean_state_refresh_after_callback_returns(tmp_path):
+    document = FakeDocument("Model", str(tmp_path / "Model.FCStd"), modified=True)
+    observer, service, queued, _delivered = make_observer(document)
+
+    observer.slotFinishSaveDocument(document, document.FileName)
+
+    assert service.current["state"] == "USER_INTERVENED"
+    assert service.dirty_updates == []
+    assert len(queued) == 2
+
+    document.Modified = False
+    queued[1]()
+
+    assert service.dirty_updates == [("doc-session", False)]
+    assert service.identity_refreshes == [
+        ("doc-session", document),
+        ("doc-session", document),
+    ]
+
+
+def test_finish_save_deferred_refresh_never_takes_over_attributed_owner(tmp_path):
+    document = FakeDocument("Model", str(tmp_path / "Model.FCStd"), modified=True)
+    observer, service, queued, _delivered = make_observer(
+        document,
+        checker=lambda _key: True,
+    )
+
+    assert observer.slotFinishSaveDocument(document, document.FileName) is None
     assert len(queued) == 1
+
+    document.Modified = False
+    queued[0]()
+
+    assert service.takeovers == []
+    assert service.dirty_updates == []
+    assert service.identity_refreshes == []
 
 
 def test_gui_edit_mode_resolves_view_provider_object(tmp_path):

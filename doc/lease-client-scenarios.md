@@ -73,6 +73,8 @@ sequenceDiagram
     Observer->>Lease: fence to USER_INTERVENED
     Note over Disk: FreeCAD may atomically replace FCStd
     Observer->>Identity: refresh exact proxy at same path
+    Observer->>Observer: queue post-save dirty refresh
+    Note over Observer: Gui::Document clears Modified after finish callback
     Identity->>Lease: persist new file identity
     New->>Lease: acquire clean document
     Lease->>Disk: CAS replace unreturned reservation
@@ -188,7 +190,7 @@ sequenceDiagram
 | Dirty | None | User cancels | Adopt | Exact rollback; no sidecar or snapshot remains | `test_dirty_adoption_requires_local_confirmation` |
 | Dirty | None | User confirms | Adopt | Dirty baseline snapshot and promoted lease | `test_dirty_adoption_snapshots_then_returns_dirty_lease` |
 | Dirty | Unreturned `STALE` reservation | Same local runtime | Adopt | CAS rotation and new credential | `test_confirmed_dirty_adoption_fences_unreturned_stale_reservation` |
-| Clean | Unreturned `USER_INTERVENED` reservation | Same local runtime | Acquire | CAS rotation and new credential | `test_gui_save_refreshes_identity_and_clean_retry_fences_lost_reservation` |
+| Clean | Unreturned `USER_INTERVENED` reservation | Same local runtime | Acquire | CAS rotation and new credential | `test_gui_save_refreshes_identity_and_clean_retry_fences_lost_reservation` and live `test_live_gui_save_close_reopen_rebinds_and_allows_clean_retry` |
 | Clean | Unreturned reservation after atomic GUI save | Same live proxy/path | Acquire | Identity refresh, then successful RPC acquisition | `test_gui_save_then_clean_acquire_avoids_identity_registration_deadlock` |
 | Clean or dirty | Local unreturned `STALE`/`USER_INTERVENED` reservation | Same local runtime | Acquire/adopt | All four state/dirty combinations rotate authority | `test_local_unreturned_reservation_retry_matrix` |
 | Any | Local `ACQUIRING` reservation | Current FreeCAD process | Competing acquire | Refused while the original request may still be running | multi-client conflict tests |
@@ -198,8 +200,8 @@ sequenceDiagram
 | Clean | Foreign unreturned reservation after restart | Previous FreeCAD alive/unknown | Acquire | Refused; sidecar unchanged | `test_restart_will_not_replace_unreturned_reservation_if_owner_is_alive` and foreign recovery proof tests |
 | Dirty | Foreign `ACQUIRING` reservation after addon restart | Same FreeCAD process, replaced addon runtime | Adopt | Confirmed dirty adoption rotates authority | `test_same_freecad_addon_restart_retries_dirty_acquiring_reservation` |
 | Any | Foreign reservation changed after import | Previous owner/concurrent process | Acquire/adopt | CAS refusal; changed sidecar preserved | `test_foreign_acquiring_retry_is_cas_fenced_after_import` |
-| Any | Unlocked document is closed/reopened | No authority | Open/acquire | Old proxy unregistered; fresh identity registered | `test_unlocked_close_unregisters_identity_for_fresh_reopen` |
-| Clean | Unreturned local reservation is closed/reopened | Exact same saved file | Acquire | One-shot proxy rebind, then CAS retry | `test_close_reopen_then_clean_acquire_avoids_identity_registration_deadlock` |
+| Any | Unlocked document is closed/reopened | No authority | Open/acquire | Old proxy unregistered; fresh identity registered | `test_unlocked_close_unregisters_identity_for_fresh_reopen` and live `test_live_unlocked_close_reopen_gets_fresh_session_identity` |
+| Clean | Unreturned local reservation is closed/reopened | Exact same saved file | Acquire | One-shot proxy rebind, then CAS retry | `test_close_reopen_then_clean_acquire_avoids_identity_registration_deadlock` and live `test_live_gui_save_close_reopen_rebinds_and_allows_clean_retry` |
 | Any | Promoted lease is closed/reopened | Exact same saved file | Acquire | Proxy rebind succeeds; recovery block remains | `test_close_reopen_rebinds_promoted_lease_but_keeps_recovery_block` |
 | Any | Recovery document is closed/reopened | File identity changed while closed | Open/acquire | Rebind refused; authority retained | `test_close_reopen_refuses_changed_file_identity` |
 | Any | Foreign recovery document is closed/reopened | Exact same saved file | Open/acquire | Foreign authority retained and rebound | `test_close_reopen_preserves_foreign_recovery_then_dead_owner_retry` |
@@ -209,6 +211,33 @@ sequenceDiagram
 | Any | Old credential after takeover/retry | Any | Authorize/mutate | Rejected by lease ID/generation/token fencing | authorization and multi-client tests |
 | Any | Malformed, unknown-schema, changed, or mismatched sidecar | Any | Import/acquire | Refused and preserved byte-for-byte | foreign recovery and sidecar suites |
 | Any | Save As or replacement document proxy | Any | Implicit identity refresh | Refused; guarded Save As/rebind required | `test_gui_save_refresh_rejects_save_as_and_replacement_proxy` |
+
+## Coverage layers and boundary
+
+The pure-Python suite exhaustively parameterizes the supported protocol state
+machine: clean/dirty state, local/foreign authority, owner liveness, file
+identity, snapshot checkpoint, callback order, client race, cancellation, and
+compare-and-swap conflict. The live `FreeCADCmd` layer then verifies the
+runtime adapters with temporary documents:
+
+- real FCStd save and atomic same-path file identity;
+- real App document observer callbacks;
+- real close/open proxy replacement and one-shot rebind;
+- embedded Python 3.11 MCP schema import;
+- RPC shutdown with active and queued workers; and
+- Windows Job Object descendant termination.
+
+`FreeCADCmd` has no interactive `Gui::Document`, so the live save test models
+only the final GUI dirty-flag clear that `Gui::Document::save()` performs after
+`App::Document::save()` returns. The callback, FCStd write, file identity,
+sidecar CAS, close, reopen, and retry are real. GUI confirmation rendering and
+the “Don't ask again” preference are separately tested at the dialog boundary.
+
+No finite suite can enumerate hardware failure, arbitrary third-party macros,
+or malicious external sidecar changes at every machine instruction. Those
+cases are covered by the fail-closed invariants below: unknown or changed
+authority is preserved, no credential is inferred, and mutation remains
+blocked until explicit recovery.
 
 ## Invariants checked by the suite
 

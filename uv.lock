@@ -157,6 +157,7 @@ version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
+    { name = "typing-extensions" },
     { name = "validators" },
 ]
 
@@ -183,6 +184,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5" },
+    { name = "typing-extensions", specifier = ">=4.12" },
     { name = "validators", specifier = ">=0.34.0" },
 ]
 provides-extras = ["dev"]
