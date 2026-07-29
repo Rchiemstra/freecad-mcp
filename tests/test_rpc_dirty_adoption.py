@@ -16,6 +16,7 @@ from addon.FreeCADMCP.document_lease import (
     SidecarStore,
     sidecar_path_for,
 )
+from addon.FreeCADMCP.document_lease import observer as lease_observer
 from addon.FreeCADMCP.rpc_server import rpc_server
 from addon.FreeCADMCP.rpc_server.inflight_requests import InflightRequestRegistry
 
@@ -133,10 +134,7 @@ def test_dirty_adoption_rejects_unsupported_selector_fields_before_confirmation(
 
     assert result["success"] is False
     assert "Unsupported DocumentSelector field(s): doc_name" in result["error"]
-    assert (
-        "document_name, document_session_uuid, and canonical_path"
-        in result["error"]
-    )
+    assert "document_name, document_session_uuid, and canonical_path" in result["error"]
     assert confirmations == []
     assert service.list_records() == []
     assert not sidecar_path_for(model).exists()
@@ -224,6 +222,65 @@ def test_dirty_adoption_retries_unreturned_stale_reservation(tmp_path, monkeypat
     assert result["document_state"]["snapshot_id"] == snapshot_id
     assert model.read_bytes() == original
     assert document.Modified is True
+
+
+def test_gui_save_then_clean_acquire_avoids_identity_registration_deadlock(
+    tmp_path, monkeypatch
+):
+    rpc, document, model, _original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    identity = service.identity_service.register_document(document)
+    runtime = service.local_runtime_identity
+    abandoned = service.begin_dirty_adoption(
+        identity.session_uuid,
+        LeaseOwner(
+            addon_profile_id=runtime.addon_profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            mcp_instance_id="22222222-2222-4222-8222-222222222222",
+            mcp_pid=202,
+            mcp_process_started_at="2026-07-28T00:00:02Z",
+            hostname=runtime.hostname,
+            client="Claude",
+            agent_id="claude-agent",
+        ),
+        document_dirty=True,
+        local_confirmation=True,
+    )
+    observer = lease_observer.LeaseObserver(service_provider=lambda: service)
+
+    observer.slotStartSaveDocument(document, document.FileName)
+    replacement = tmp_path / "FreeCAD-save.FCStd"
+    replacement.write_bytes(b"clean archive written through atomic replacement")
+    model.unlink()
+    replacement.replace(model)
+    document.Modified = False
+    refreshed = observer.slotFinishSaveDocument(document, document.FileName)
+    assert refreshed.document.file_identity != identity.file_identity
+    monkeypatch.setattr(
+        rpc_server,
+        "create_lease_baseline_snapshot_gui",
+        lambda _document: str(uuid.uuid4()),
+    )
+
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Continue after reconnect",
+        client="GPT Sol",
+        agent_id="gpt-sol-agent",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["credential"]["generation"] == abandoned.credential.generation + 2
+    assert result.get("error_code") != "LEASE_SERVICE_ERROR"
+    assert "identity could not be registered" not in str(result)
+    persisted = service.sidecar_store.read(sidecar_path_for(model))
+    assert persisted.document.file_identity == refreshed.document.file_identity
+    assert persisted.owner.client == "GPT Sol"
 
 
 def test_dirty_adoption_rolls_back_if_saved_baseline_changes_before_promotion(

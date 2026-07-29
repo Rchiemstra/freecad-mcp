@@ -290,7 +290,11 @@ class DocumentLeaseService:
             raise CoordinationError("registry and sidecar authority do not match")
 
     def _assert_foreign_document_exact(
-        self, local: DocumentIdentity, persisted: LeaseRecord
+        self,
+        local: DocumentIdentity,
+        persisted: LeaseRecord,
+        *,
+        allow_unreturned_file_replacement: bool = False,
     ) -> None:
         """Require the adjacent record to describe the exact currently-open file."""
 
@@ -345,6 +349,10 @@ class DocumentLeaseService:
         if (
             foreign_document.file_identity != observed_identity
             and not unverified_destination
+            and not (
+                allow_unreturned_file_replacement
+                and self._is_unreturned_reservation(persisted)
+            )
         ):
             raise ForeignRecoveryError(
                 "the adjacent sidecar identifies a different filesystem file"
@@ -654,6 +662,7 @@ class DocumentLeaseService:
             owner,
             task_summary=task_summary,
             document_dirty=False,
+            replace_unreturned_reservation=True,
         )
 
     def begin_dirty_adoption(
@@ -680,7 +689,7 @@ class DocumentLeaseService:
             owner,
             task_summary=task_summary,
             document_dirty=True,
-            replace_stale_dirty_reservation=True,
+            replace_unreturned_reservation=True,
         )
 
     def _begin_acquisition_record(
@@ -690,7 +699,7 @@ class DocumentLeaseService:
         *,
         task_summary: str,
         document_dirty: bool,
-        replace_stale_dirty_reservation: bool = False,
+        replace_unreturned_reservation: bool = False,
     ) -> LeaseGrant:
         """Publish one clean acquisition or confirmed dirty-adoption record."""
 
@@ -698,14 +707,15 @@ class DocumentLeaseService:
         with self._lock:
             existing = self._records.get(identity.session_uuid)
             if existing is not None:
-                if (
-                    replace_stale_dirty_reservation
-                    and self._is_unreturned_dirty_reservation(existing)
+                if replace_unreturned_reservation and self._is_unreturned_reservation(
+                    existing
                 ):
-                    return self._replace_stale_dirty_reservation(
+                    return self._replace_unreturned_reservation(
                         existing,
+                        identity,
                         owner,
                         task_summary=task_summary,
+                        document_dirty=document_dirty,
                     )
                 raise LeaseConflictError(
                     "the live document already has a lease",
@@ -713,6 +723,17 @@ class DocumentLeaseService:
                 )
             foreign = self._foreign_records.get(identity.session_uuid)
             if foreign is not None:
+                if replace_unreturned_reservation and self._is_unreturned_reservation(
+                    foreign.persisted
+                ):
+                    return self._replace_unreturned_reservation(
+                        foreign.persisted,
+                        identity,
+                        owner,
+                        task_summary=task_summary,
+                        document_dirty=document_dirty,
+                        foreign=foreign,
+                    )
                 raise LeaseConflictError(
                     "a foreign recovery record owns the live document",
                     details=foreign.to_public_dict(),
@@ -763,45 +784,80 @@ class DocumentLeaseService:
             return LeaseGrant(credential=credential, record=record)
 
     @staticmethod
-    def _is_unreturned_dirty_reservation(record: LeaseRecord) -> bool:
-        """Recognize a stale reservation that never reached promotion.
+    def _is_unreturned_reservation(record: LeaseRecord) -> bool:
+        """Recognize a fenced reservation that never reached promotion.
 
         This narrow shape excludes every lease that could contain agent edits or
-        a completed recovery snapshot. A fresh local dirty-adoption confirmation
-        may therefore fence it without saving or discarding the live document.
+        a completed recovery snapshot. A clean acquisition or a freshly confirmed
+        dirty adoption may therefore fence it without losing recovery authority.
         """
 
-        return bool(
+        stale = (
             record.state == LeaseState.STALE
-            and record.dirty
             and not record.user_intervened
-            and record.last_mutation_revision == 1
+            and record.error is not None
+            and record.error.code == "LEASE_STALE"
+        )
+        intervened = (
+            record.state == LeaseState.USER_INTERVENED
+            and record.user_intervened
+            and record.error is not None
+            and record.error.code == "USER_INTERVENED"
+        )
+        return bool(
+            (stale or intervened)
+            and record.document.canonical_path is not None
+            and record.last_mutation_revision in {0, 1}
             and record.last_verified_save_revision == 0
             and record.last_successful_save_at is None
             and record.baseline is None
             and not record.validation_complete
             and record.snapshot_id is None
             and record.migration is None
-            and record.error is not None
-            and record.error.code == "LEASE_STALE"
         )
 
-    def _replace_stale_dirty_reservation(
+    def _replace_unreturned_reservation(
         self,
-        stale: LeaseRecord,
+        previous: LeaseRecord,
+        identity: DocumentIdentity,
         owner: LeaseOwner,
         *,
         task_summary: str,
+        document_dirty: bool,
+        foreign: ForeignRecoveryRecord | None = None,
     ) -> LeaseGrant:
-        """CAS-fence one locally held, unreturned dirty reservation."""
+        """CAS-fence one local/foreign reservation whose credential was not returned."""
+
+        if foreign is not None:
+            if foreign.local_document != identity or foreign.persisted != previous:
+                raise CoordinationError(
+                    "the imported foreign recovery authority changed"
+                )
+            path = sidecar_path_for(identity.canonical_path)
+            try:
+                persisted = self.sidecar_store.read(path)
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"foreign acquisition sidecar is unavailable or invalid: {exc}"
+                ) from exc
+            if persisted != previous:
+                raise CoordinationError(
+                    "foreign acquisition authority changed after import"
+                )
+            self._assert_foreign_document_exact(
+                identity,
+                persisted,
+                allow_unreturned_file_replacement=True,
+            )
+            self._prove_foreign_owner_dead(persisted.owner)
 
         raw_token = self._token_factory()
         if not raw_token:
             raise LeaseServiceError("token factory returned an empty token")
         generation = (
             max(
-                stale.generation,
-                self._generations.get(stale.document.session_uuid, 0),
+                previous.generation,
+                self._generations.get(identity.session_uuid, 0),
             )
             + 1
         )
@@ -811,35 +867,36 @@ class DocumentLeaseService:
             lease_id=str(self._uuid_factory()),
             generation=generation,
             token_fingerprint=token_fingerprint(raw_token),
-            document=stale.document,
+            document=identity,
             owner=owner,
             state=LeaseState.ACQUIRING,
-            record_revision=stale.record_revision + 1,
-            state_revision=stale.state_revision + 1,
+            record_revision=previous.record_revision + 1,
+            state_revision=previous.state_revision + 1,
             acquired_at=now,
             last_heartbeat_at=now,
             monotonic_heartbeat_ns=now_mono,
             task_summary=_bounded_text(task_summary, 1024),
-            dirty=True,
-            last_mutation_revision=1,
+            dirty=document_dirty,
+            last_mutation_revision=1 if document_dirty else 0,
             baseline=None,
             validation_complete=False,
             snapshot_id=None,
         )
-        path = self._sidecar_path(stale)
+        path = self._sidecar_path(previous)
         if path is not None:
             try:
-                self.sidecar_store.replace(path, replacement, expected=stale)
+                self.sidecar_store.replace(path, replacement, expected=previous)
             except SidecarError as exc:
                 raise CoordinationError(
-                    f"stale acquisition reservation could not be fenced: {exc}"
+                    f"unreturned acquisition reservation could not be fenced: {exc}"
                 ) from exc
-        self._records[stale.document.session_uuid] = replacement
-        self._generations[stale.document.session_uuid] = generation
-        self._last_sidecar_heartbeat_ns[stale.document.session_uuid] = now_mono
+        self._records[identity.session_uuid] = replacement
+        self._foreign_records.pop(identity.session_uuid, None)
+        self._generations[identity.session_uuid] = generation
+        self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
         credential = LeaseCredential(
             lease_id=replacement.lease_id,
-            document_session_uuid=stale.document.session_uuid,
+            document_session_uuid=identity.session_uuid,
             generation=generation,
             token=raw_token,
             mcp_instance_id=owner.mcp_instance_id,
@@ -1754,7 +1811,11 @@ class DocumentLeaseService:
                 raise ForeignRecoveryError(
                     f"adjacent sidecar is unavailable or invalid: {exc}"
                 ) from exc
-            self._assert_foreign_document_exact(registered, persisted)
+            self._assert_foreign_document_exact(
+                registered,
+                persisted,
+                allow_unreturned_file_replacement=True,
+            )
             existing = self._foreign_records.get(registered.session_uuid)
             if existing is not None:
                 if (
@@ -2001,6 +2062,43 @@ class DocumentLeaseService:
                     record.validation_complete if not dirty else False
                 ),
             )
+            return self._commit(record, updated)
+
+    def refresh_local_recovery_document_identity(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        *,
+        document: Any,
+    ) -> LeaseRecord:
+        """Refresh a GUI-saved file identity for an already-fenced document.
+
+        A normal FreeCAD save may atomically replace the archive at the same
+        path. This token-less repair is intentionally restricted to local
+        recovery states and the exact registered live proxy.
+        """
+
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            record = self._records.get(identity.session_uuid)
+            if record is None:
+                raise LeaseConflictError("the selected document has no recovery record")
+            if record.state not in {
+                LeaseState.USER_INTERVENED,
+                LeaseState.UNLOCKED_DIRTY,
+            }:
+                raise LeaseStateError(
+                    "saved-file identity can refresh only after takeover",
+                    details={"state": record.state.value},
+                )
+            self._assert_sidecar_matches(record)
+            refreshed = self.identity_service.refresh_saved_document(document)
+            if refreshed.session_uuid != identity.session_uuid:
+                raise CoordinationError(
+                    "saved document identity changed its live session"
+                )
+            if refreshed == record.document:
+                return record
+            updated = record.revised(document=refreshed)
             return self._commit(record, updated)
 
     def acknowledge_local_dirty(

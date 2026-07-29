@@ -338,9 +338,7 @@ class LeaseObserver:
         self._notification_queue = notification_queue or _qt_or_direct_queue
         self._event_lock = threading.RLock()
 
-    def _is_agent_attributed(
-        self, document: Any, identity: Any | None = None
-    ) -> bool:
+    def _is_agent_attributed(self, document: Any, identity: Any | None = None) -> bool:
         for key in _document_keys(document, identity):
             try:
                 if self._agent_mutation_checker(key):
@@ -411,6 +409,7 @@ class LeaseObserver:
         *,
         detail: str = "",
         force: bool = False,
+        refresh_saved_identity: bool = False,
     ) -> Any | None:
         document = _document_from_subject(document)
         if document is None:
@@ -449,42 +448,64 @@ class LeaseObserver:
                     "USER_INTERVENED",
                     "UNLOCKED_DIRTY",
                 }:
+                    record = current
                     updater = getattr(service, "update_local_dirty", None)
                     if callable(updater):
                         try:
-                            return updater(identity.session_uuid, dirty=dirty)
+                            record = updater(identity.session_uuid, dirty=dirty)
                         except Exception:
                             logger.debug(
                                 "unable to refresh local recovery dirty state",
                                 exc_info=True,
                             )
-                    return current
-                reason = f"Unscoped FreeCAD {kind} detected"
-                if detail:
-                    clean_detail = " ".join(str(detail).split())[:512]
-                    if clean_detail:
-                        reason += f": {clean_detail}"
-                reason = reason[:2048]
-                record = service.takeover(
-                    identity.session_uuid,
-                    dirty=dirty,
-                    reason=reason,
-                )
-                try:
-                    from document_lease import core_authority
-
-                    core_authority.bump_takeover(document)
-                except Exception:
-                    logger.debug(
-                        "core mutation takeover sync failed", exc_info=True
+                else:
+                    reason = f"Unscoped FreeCAD {kind} detected"
+                    if detail:
+                        clean_detail = " ".join(str(detail).split())[:512]
+                        if clean_detail:
+                            reason += f": {clean_detail}"
+                    reason = reason[:2048]
+                    record = service.takeover(
+                        identity.session_uuid,
+                        dirty=dirty,
+                        reason=reason,
                     )
-                self._notify(
-                    kind=kind,
-                    identity=identity,
-                    reason=reason,
-                    dirty=dirty,
-                    record=record,
-                )
+                    try:
+                        from document_lease import core_authority
+
+                        core_authority.bump_takeover(document)
+                    except Exception:
+                        logger.debug(
+                            "core mutation takeover sync failed", exc_info=True
+                        )
+                    self._notify(
+                        kind=kind,
+                        identity=identity,
+                        reason=reason,
+                        dirty=dirty,
+                        record=record,
+                    )
+                if refresh_saved_identity:
+                    refresher = getattr(
+                        service,
+                        "refresh_local_recovery_document_identity",
+                        None,
+                    )
+                    if callable(refresher):
+                        try:
+                            record = refresher(
+                                identity.session_uuid,
+                                document=document,
+                            )
+                        except Exception:
+                            # Keep the takeover fence authoritative. A later
+                            # RPC or restart must still fail closed rather than
+                            # treating an unverified replacement as the same
+                            # file.
+                            logger.warning(
+                                "unable to refresh GUI-saved document identity",
+                                exc_info=True,
+                            )
                 return record
         except Exception:
             # FreeCAD catches observer exceptions, but logging and containing
@@ -639,7 +660,12 @@ class LeaseObserver:
         return self._handle(document, "save", detail=str(filename or ""))
 
     def slotFinishSaveDocument(self, document, filename):  # noqa: N802
-        return self._handle(document, "save", detail=str(filename or ""))
+        return self._handle(
+            document,
+            "save",
+            detail=str(filename or ""),
+            refresh_saved_identity=True,
+        )
 
     def slotDeletedDocument(self, document):  # noqa: N802
         # Do not unregister identity or remove any sidecar here.  The retained

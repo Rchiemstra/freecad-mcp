@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+import uuid
 from pathlib import Path
 
 import FreeCADGui
@@ -48,6 +49,7 @@ class FakeService:
         self.current = {"state": "LOCKED_IDLE", "generation": 7}
         self.takeovers = []
         self.dirty_updates = []
+        self.identity_refreshes = []
         self.sidecar_delete_calls = []
 
     def get(self, selector):
@@ -63,6 +65,10 @@ class FakeService:
     def update_local_dirty(self, selector, *, dirty):
         self.dirty_updates.append((selector, dirty))
         self.current = {**self.current, "dirty": dirty}
+        return self.current
+
+    def refresh_local_recovery_document_identity(self, selector, *, document):
+        self.identity_refreshes.append((selector, document))
         return self.current
 
 
@@ -112,9 +118,7 @@ def test_property_change_fences_owner_and_queues_redacted_notification(tmp_path)
     assert not hasattr(delivered[0], "token")
 
 
-def test_unknown_gui_modified_state_is_fenced_as_dirty(
-    tmp_path, monkeypatch
-):
+def test_unknown_gui_modified_state_is_fenced_as_dirty(tmp_path, monkeypatch):
     document = FakeDocument("Model", str(tmp_path / "Model.FCStd"))
     del document.Modified
     monkeypatch.setattr(
@@ -125,9 +129,7 @@ def test_unknown_gui_modified_state_is_fenced_as_dirty(
     )
     observer, service, _queued, _delivered = make_observer(document)
 
-    observer.slotChangedObject(
-        types.SimpleNamespace(Document=document), "Placement"
-    )
+    observer.slotChangedObject(types.SimpleNamespace(Document=document), "Placement")
 
     assert service.takeovers[0]["dirty"] is True
 
@@ -262,8 +264,75 @@ def test_intervened_document_observer_refreshes_dirty_without_new_takeover(tmp_p
     assert result["state"] == "USER_INTERVENED"
     assert result["dirty"] is False
     assert service.dirty_updates[-1] == ("doc-session", False)
+    assert service.identity_refreshes == [("doc-session", document)]
     assert len(service.takeovers) == 1
     assert len(queued) == 1
+
+
+def test_gui_save_refreshes_identity_and_clean_retry_fences_lost_reservation(
+    tmp_path,
+):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.model import LeaseOwner, LeaseState
+    from addon.FreeCADMCP.document_lease.service import (
+        AuthorizationError,
+        DocumentLeaseService,
+    )
+
+    model = tmp_path / "Model.FCStd"
+    replacement = tmp_path / "saved.FCStd"
+    model.write_bytes(b"saved baseline")
+    replacement.write_bytes(b"user GUI save")
+    document = FakeDocument("Model", str(model), modified=True)
+    identities = DocumentIdentityService()
+    identity = identities.register_document(document)
+    service = DocumentLeaseService(identities)
+
+    def owner(client):
+        return LeaseOwner(
+            addon_profile_id=str(uuid.uuid4()),
+            addon_runtime_id=str(uuid.uuid4()),
+            freecad_pid=101,
+            freecad_process_started_at="2026-07-29T20:00:00Z",
+            boot_id="test-boot",
+            mcp_instance_id=str(uuid.uuid4()),
+            mcp_pid=202,
+            mcp_process_started_at="2026-07-29T20:00:01Z",
+            hostname="localhost",
+            client=client,
+            agent_id=f"{client}-agent",
+        )
+
+    abandoned = service.begin_dirty_adoption(
+        identity.session_uuid,
+        owner("Claude"),
+        document_dirty=True,
+        local_confirmation=True,
+    )
+    observer = observer_mod.LeaseObserver(service_provider=lambda: service)
+
+    started = observer.slotStartSaveDocument(document, document.FileName)
+    assert started.state == LeaseState.USER_INTERVENED
+    model.unlink()
+    replacement.replace(model)
+    document.Modified = False
+
+    finished = observer.slotFinishSaveDocument(document, document.FileName)
+
+    assert finished.state == LeaseState.USER_INTERVENED
+    assert finished.dirty is False
+    assert finished.document.file_identity != identity.file_identity
+    assert identities.register_document(document) == finished.document
+
+    retry = service.begin_acquisition(
+        finished.document.session_uuid,
+        owner("GPT Sol"),
+        task_summary="Retry after GUI save",
+    )
+    assert retry.record.state == LeaseState.ACQUIRING
+    assert retry.record.generation == abandoned.record.generation + 2
+    with pytest.raises(AuthorizationError):
+        service.authorize(abandoned.credential)
 
 
 def test_manual_takeover_uses_selected_document_even_during_agent_context(tmp_path):

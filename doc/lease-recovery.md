@@ -24,6 +24,12 @@ been inspected and resolved.
 - **FreeCAD crash or reboot:** reopen the file, inspect the foreign recovery
   record, verify the last saved FCStd and snapshot, then choose save, restore,
   or dirty acknowledgement.
+- **GUI Ctrl+S during an unreturned acquisition:** the observer fences the
+  reservation and refreshes an atomic same-path FCStd replacement against the
+  exact live document proxy. A clean retry may CAS-replace only that untouched
+  reservation. After a restart, the same retry also requires proof that the
+  recorded FreeCAD owner is dead. Promoted leases still require explicit
+  recovery.
 - **GUI timeout/hang:** treat the running mutation as uncertain until the GUI
   returns. Do not retry with a new request ID or clear its sidecar blindly.
   Retrying the same request ID returns the recorded status and never invokes
@@ -70,6 +76,9 @@ been inspected and resolved.
 Never delete `.freecad-mcp.lock` or its `.guard` merely because it is old. If
 the UI cannot prove recovery safely, preserve the files and copy the FCStd
 before performing manual diagnosis.
+
+See [lease client scenarios](lease-client-scenarios.md) for the save/reconnect
+sequence diagrams and tested refusal matrix.
 
 ## Save As recovery pairs
 

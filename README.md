@@ -174,6 +174,7 @@ Documentation:
 - [Sidecar schema v2](doc/document-lease-sidecar-v2.md)
 - [Isolated instance setup and manifest](doc/isolated-instance.md)
 - [Crash and stale-lock recovery](doc/lease-recovery.md)
+- [Lease client scenarios and sequence diagrams](doc/lease-client-scenarios.md)
 - [Security model and limitations](doc/lease-security.md)
 
 ## Setting up Claude Desktop

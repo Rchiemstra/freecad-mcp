@@ -138,6 +138,42 @@ class TestDocumentIdentityService:
         with pytest.raises(IdentityMismatchError):
             service.register_document(doc)
 
+    def test_exact_proxy_gui_save_can_refresh_atomic_file_replacement(self, tmp_path):
+        model = tmp_path / "model.FCStd"
+        replacement = tmp_path / "replacement.FCStd"
+        model.write_bytes(b"original")
+        replacement.write_bytes(b"saved replacement")
+        doc = _FakeDocument("Model", str(model))
+        service = DocumentIdentityService()
+        original = service.register_document(doc)
+
+        model.unlink()
+        replacement.replace(model)
+        refreshed = service.refresh_saved_document(doc)
+
+        assert refreshed.session_uuid == original.session_uuid
+        assert refreshed.name == original.name
+        assert refreshed.comparison_key == original.comparison_key
+        assert refreshed.file_identity != original.file_identity
+        assert service.register_document(doc) == refreshed
+
+    def test_gui_save_refresh_rejects_save_as_and_replacement_proxy(self, tmp_path):
+        source = tmp_path / "source.FCStd"
+        target = tmp_path / "target.FCStd"
+        source.write_bytes(b"source")
+        target.write_bytes(b"target")
+        original = _FakeDocument("Model", str(source))
+        replacement_proxy = _FakeDocument("Model", str(source))
+        service = DocumentIdentityService()
+        service.register_document(original)
+
+        with pytest.raises(UnknownDocumentError, match="registered live document"):
+            service.refresh_saved_document(replacement_proxy)
+
+        original.FileName = str(target)
+        with pytest.raises(IdentityMismatchError, match="name or path"):
+            service.refresh_saved_document(original)
+
     def test_save_as_preserves_uuid_and_old_path_alias(self, tmp_path):
         source = tmp_path / "source.FCStd"
         target = tmp_path / "target.FCStd"
@@ -147,12 +183,14 @@ class TestDocumentIdentityService:
         identity = service.register(name="Model", path=source)
         updated = service.update_path(identity.session_uuid, target)
         assert updated.session_uuid == identity.session_uuid
-        assert service.resolve(
-            DocumentSelector(canonical_path=str(source))
-        ).session_uuid == identity.session_uuid
-        assert service.resolve(
-            DocumentSelector(canonical_path=str(target))
-        ).session_uuid == identity.session_uuid
+        assert (
+            service.resolve(DocumentSelector(canonical_path=str(source))).session_uuid
+            == identity.session_uuid
+        )
+        assert (
+            service.resolve(DocumentSelector(canonical_path=str(target))).session_uuid
+            == identity.session_uuid
+        )
 
     def test_reload_rebind_preserves_uuid_and_replaces_only_live_proxy(self, tmp_path):
         source = tmp_path / "Model.FCStd"
@@ -165,9 +203,10 @@ class TestDocumentIdentityService:
         rebound = service.rebind_document(identity.session_uuid, replacement)
 
         assert rebound.session_uuid == identity.session_uuid
-        assert service.inspect_registered_document(
-            identity.session_uuid, replacement
-        ) == rebound
+        assert (
+            service.inspect_registered_document(identity.session_uuid, replacement)
+            == rebound
+        )
         with pytest.raises(IdentityMismatchError):
             service.inspect_registered_document(identity.session_uuid, original)
 
@@ -185,9 +224,10 @@ class TestDocumentIdentityService:
         with pytest.raises(DuplicateDocumentError):
             service.rebind_document(identity.session_uuid, replacement)
 
-        assert service.inspect_registered_document(
-            identity.session_uuid, original
-        ) == identity
+        assert (
+            service.inspect_registered_document(identity.session_uuid, original)
+            == identity
+        )
         with pytest.raises(IdentityMismatchError):
             service.inspect_registered_document(identity.session_uuid, replacement)
 
@@ -206,9 +246,7 @@ class TestDocumentIdentityService:
         with pytest.raises(DuplicateDocumentError):
             service.register(name="Third", path=alias)
 
-    def test_typed_open_preflight_rejects_path_and_hardlink_before_open(
-        self, tmp_path
-    ):
+    def test_typed_open_preflight_rejects_path_and_hardlink_before_open(self, tmp_path):
         source = tmp_path / "source.FCStd"
         alias = tmp_path / "hardlink.FCStd"
         unused = tmp_path / "unused.FCStd"
@@ -226,8 +264,8 @@ class TestDocumentIdentityService:
         with pytest.raises(DuplicateDocumentError):
             service.assert_open_path_available(alias)
 
-        canonical, comparison, file_identity = (
-            service.assert_open_path_available(unused)
+        canonical, comparison, file_identity = service.assert_open_path_available(
+            unused
         )
         assert canonical
         assert comparison

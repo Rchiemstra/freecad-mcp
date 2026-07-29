@@ -40,7 +40,11 @@ from addon.FreeCADMCP.document_lease.service import (
     LiveDocumentValidationError,
     ProcessLivenessEvidence,
 )
-from addon.FreeCADMCP.document_lease.sidecar import SidecarConflictError, SidecarStore
+from addon.FreeCADMCP.document_lease.sidecar import (
+    SidecarConflictError,
+    SidecarStore,
+    sidecar_path_for,
+)
 
 
 def _uuid() -> str:
@@ -536,6 +540,106 @@ class TestDocumentLeaseAuthorization:
                 local_confirmation=True,
             )
 
+    def test_clean_retry_does_not_replace_promoted_user_intervened_lease(
+        self, tmp_path
+    ):
+        model = tmp_path / "promoted-user-intervened.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="Promoted", path=model)
+        service = DocumentLeaseService(identities)
+        promoted = service.acquire(
+            identity.session_uuid,
+            _owner(),
+            snapshot_id=_uuid(),
+        )
+        service.takeover(
+            identity.session_uuid,
+            dirty=False,
+            reason="Local save touched a promoted lease",
+        )
+
+        with pytest.raises(LeaseConflictError, match="already has a lease"):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replace(
+                    _owner(),
+                    mcp_instance_id=_uuid(),
+                    client="GPT Sol",
+                ),
+            )
+        with pytest.raises(AuthorizationError):
+            service.authorize(promoted.credential)
+
+    def test_retry_does_not_replace_promoted_unsaved_user_intervened_lease(self):
+        identities = DocumentIdentityService()
+        identity = identities.register(name="Unsaved", path=None)
+        service = DocumentLeaseService(identities)
+        reservation = service.begin_acquisition(identity.session_uuid, _owner())
+        promoted = service.complete_acquisition(
+            reservation.credential,
+            baseline=None,
+            baseline_validated=False,
+            snapshot_id=None,
+        )
+        service.takeover(
+            identity.session_uuid,
+            dirty=True,
+            reason="Local edit of promoted unsaved document",
+        )
+
+        with pytest.raises(LeaseConflictError, match="already has a lease"):
+            service.begin_dirty_adoption(
+                identity.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid()),
+                document_dirty=True,
+                local_confirmation=True,
+            )
+        with pytest.raises(AuthorizationError):
+            service.authorize(promoted.credential)
+
+    @pytest.mark.parametrize(
+        "winner",
+        ["Claude", "GPT Sol", "Cursor"],
+    )
+    def test_clients_share_one_cas_fenced_acquisition_authority(self, tmp_path, winner):
+        model = tmp_path / f"multi-client-{winner}.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="SharedModel", path=model)
+        service = DocumentLeaseService(identities)
+        clients = ["Claude", "GPT Sol", "Cursor"]
+        ordered = [winner, *(client for client in clients if client != winner)]
+        owners = [
+            replace(
+                _owner(),
+                mcp_instance_id=_uuid(),
+                mcp_pid=1000 + index,
+                client=client,
+                agent_id=f"{client}-agent",
+            )
+            for index, client in enumerate(ordered)
+        ]
+
+        first = service.begin_acquisition(identity.session_uuid, owners[0])
+        for contender in owners[1:]:
+            with pytest.raises(LeaseConflictError, match="already has a lease"):
+                service.begin_acquisition(identity.session_uuid, contender)
+
+        service.takeover(
+            identity.session_uuid,
+            dirty=False,
+            reason="Unscoped GUI save before the response returned",
+        )
+        second = service.begin_acquisition(identity.session_uuid, owners[1])
+
+        assert second.record.owner.client == ordered[1]
+        assert second.record.generation == first.record.generation + 2
+        with pytest.raises(AuthorizationError):
+            service.authorize(first.credential)
+        with pytest.raises(LeaseConflictError, match="already has a lease"):
+            service.begin_acquisition(identity.session_uuid, owners[2])
+
     def test_malformed_foreign_sidecar_is_preserved(self, tmp_path):
         model = tmp_path / "foreign.FCStd"
         model.write_bytes(b"file")
@@ -551,6 +655,122 @@ class TestDocumentLeaseAuthorization:
 
 @pytest.mark.unit
 class TestForeignRecoveryImport:
+    def test_restart_rebinds_dead_unreturned_reservation_after_gui_save(self, tmp_path):
+        model = tmp_path / "gui-saved-before-restart.FCStd"
+        replacement = tmp_path / "replacement.FCStd"
+        model.write_bytes(b"saved baseline")
+        replacement.write_bytes(b"new GUI save")
+        owner = replace(_owner(), client="Claude")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        abandoned = foreign_service.begin_dirty_adoption(
+            foreign_document.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        intervened = foreign_service.takeover(
+            foreign_document.session_uuid,
+            dirty=False,
+            reason="Unscoped FreeCAD save detected: LastModifiedDate",
+        )
+        assert intervened.state == LeaseState.USER_INTERVENED
+
+        model.unlink()
+        replacement.replace(model)
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+
+        imported = restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        retry_owner = replace(
+            _owner(),
+            mcp_instance_id=_uuid(),
+            mcp_pid=303,
+            client="GPT Sol",
+        )
+        retry = restarted.begin_acquisition(
+            local_document.session_uuid,
+            retry_owner,
+            task_summary="Reconnect after clean GUI save",
+        )
+
+        persisted = restarted.sidecar_store.read(sidecar_path_for(model))
+        assert imported["lease"]["state"] == LeaseState.USER_INTERVENED.value
+        assert retry.record.lease_id == persisted.lease_id
+        assert retry.record.generation == persisted.generation
+        assert retry.record.token_fingerprint == persisted.token_fingerprint
+        assert retry.record.document == persisted.document
+        assert retry.record.owner == persisted.owner
+        assert retry.record.document == local_document
+        assert retry.record.document.session_uuid != (
+            abandoned.record.document.session_uuid
+        )
+        assert retry.record.document.file_identity != (
+            abandoned.record.document.file_identity
+        )
+        assert retry.record.generation == intervened.generation + 1
+        assert restarted.get_foreign_recovery(local_document.session_uuid) is None
+
+    def test_restart_will_not_replace_unreturned_reservation_if_owner_is_alive(
+        self, tmp_path
+    ):
+        model = tmp_path / "live-owner-gui-save.FCStd"
+        replacement = tmp_path / "replacement.FCStd"
+        model.write_bytes(b"saved baseline")
+        replacement.write_bytes(b"new GUI save")
+        owner = replace(_owner(), client="Cursor")
+        foreign_identities = DocumentIdentityService()
+        foreign_document = foreign_identities.register(name="Model", path=model)
+        foreign_service = DocumentLeaseService(foreign_identities)
+        foreign_service.begin_dirty_adoption(
+            foreign_document.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        foreign_service.takeover(
+            foreign_document.session_uuid,
+            dirty=False,
+            reason="Unscoped FreeCAD save detected",
+        )
+        model.unlink()
+        replacement.replace(model)
+
+        local_identities = DocumentIdentityService()
+        local_document = local_identities.register(name="Model", path=model)
+        restarted = DocumentLeaseService(
+            local_identities,
+            local_runtime_identity=_local_runtime(owner),
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(
+                True,
+                process_started_at=owner.freecad_process_started_at,
+            ),
+        )
+        restarted.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(ForeignRecoveryError, match="still alive"):
+            restarted.begin_acquisition(
+                local_document.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid()),
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+        assert restarted.get(local_document.session_uuid) is None
+        assert restarted.get_foreign_recovery(local_document.session_uuid) is not None
+
     def test_import_is_redacted_immutable_and_blocks_new_acquisition(self, tmp_path):
         (
             _,
@@ -1288,9 +1508,12 @@ class TestSaveAsIdentityConsistency:
         assert cancelled.state == LeaseState.LOCKED_IDLE
         assert cancelled.migration is None
         assert not destination_sidecar.exists()
-        assert SidecarStore().read(
-            source.with_name(source.name + ".freecad-mcp.lock")
-        ).migration is None
+        assert (
+            SidecarStore()
+            .read(source.with_name(source.name + ".freecad-mcp.lock"))
+            .migration
+            is None
+        )
 
     def test_typed_cancellation_rolls_back_exact_save_as_reservation_once(
         self, saved_lease, tmp_path
@@ -1325,9 +1548,12 @@ class TestSaveAsIdentityConsistency:
         assert completed.state == LeaseState.LOCKED_IDLE
         assert repeated == completed
         assert not destination_sidecar.exists()
-        assert SidecarStore().read(
-            source.with_name(source.name + ".freecad-mcp.lock")
-        ).migration is None
+        assert (
+            SidecarStore()
+            .read(source.with_name(source.name + ".freecad-mcp.lock"))
+            .migration
+            is None
+        )
 
     def test_post_invocation_cancellation_keeps_save_as_recovery_records(
         self, saved_lease, tmp_path

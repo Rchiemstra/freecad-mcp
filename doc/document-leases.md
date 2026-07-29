@@ -107,4 +107,5 @@ API.
 
 See [sidecar schema](document-lease-sidecar-v2.md),
 [recovery](lease-recovery.md), [security](lease-security.md), and
+[client scenario diagrams](lease-client-scenarios.md), and
 [isolated setup](isolated-instance.md).
