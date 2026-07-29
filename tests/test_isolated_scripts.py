@@ -395,16 +395,12 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     monkeypatch.setattr(
         launcher,
         "_load_parent_start_freecad",
-        lambda: SimpleNamespace(
-            _launch_details=lambda executable, extra: (
-                [str(executable), *extra],
-                str(tmp_path),
-                {},
-            )
-        ),
+        lambda: SimpleNamespace(_launch_env=lambda _executable: {}),
     )
-    def spawn(*_args, **_kwargs):
+
+    def spawn(command, **_kwargs):
         assert reservation.closed is True
+        assert command == [str(freecad)]
         return Process()
 
     monkeypatch.setattr(launcher.subprocess, "Popen", spawn)

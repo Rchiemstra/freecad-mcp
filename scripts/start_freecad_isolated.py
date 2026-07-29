@@ -506,8 +506,13 @@ def main() -> int:
     endpoint_reservation = _reserve_endpoint(host, port)
     try:
         helper = _load_parent_start_freecad()
-        cmd, cwd, env = helper._launch_details(freecad, sys.argv[1:])
-        env = dict(env)
+        # Launch FreeCAD directly so Popen.pid is the exact process identity
+        # authenticated by the addon.  The general launcher may wrap build-tree
+        # executables in ``pixi run``; on Windows that leaves Pixi as the parent
+        # PID and makes strict runtime binding reject the real FreeCAD child.
+        cmd = [str(freecad), *sys.argv[1:]]
+        cwd = str(freecad.parent)
+        env = dict(helper._launch_env(freecad))
         env["FREECAD_USER_HOME"] = str(profile)
         env["FREECAD_USER_DATA"] = str(profile)
         env["FREECAD_USER_TEMP"] = str(profile / "temp")
