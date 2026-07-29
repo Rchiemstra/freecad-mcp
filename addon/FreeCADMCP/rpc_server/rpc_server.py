@@ -947,6 +947,11 @@ def _ensure_v2_document(document):
     identity, imported = register_live_document_recovery(
         document_lease_service, document
     )
+    if identity is None:
+        lease = _import_document_lease()
+        raise lease.DocumentIdentityError(
+            "live document identity could not be registered"
+        )
     if imported is not None:
         try:
             from lock_indicator import refresh_lock_indicator
@@ -1076,7 +1081,7 @@ def _credential_for_selector(selector, identity=None):
 
 
 def _effective_sidecar_block(document, request_identity):
-    """Block active or unreadable v2 sidecars in every compatibility mode."""
+    """Block foreign/unknown sidecars while honoring a proven live v1 lease."""
 
     path = str(getattr(document, "FileName", "") or "")
     if not path:
@@ -1093,6 +1098,29 @@ def _effective_sidecar_block(document, request_identity):
     try:
         persisted = store.read(sidecar)
     except Exception as exc:
+        # A v1 sidecar remains unknown when found on disk by itself. During the
+        # documented off/observe migration window, however, the same addon
+        # process can prove the flat record against its private live registry,
+        # exact instance identity, bearer token, generation, and fingerprint.
+        # This does not parse or migrate v1 data into the v2 authority.
+        try:
+            dl = _import_document_lock()
+            doc_key = dl.resolve_doc_key(
+                doc_name=str(getattr(document, "Name", "") or "") or None,
+                file_path=path,
+            )
+            compatible = dl.check_persisted_mutation_allowed(
+                doc_key,
+                identity=request_identity,
+                allowed_states={
+                    dl.LeaseState.LOCKED_IDLE.value,
+                    dl.LeaseState.LOCKED_ERROR.value,
+                },
+            )
+            if compatible.get("success"):
+                return None
+        except Exception:
+            pass
         return {
             "success": False,
             "error_code": "SIDECAR_UNKNOWN",
@@ -4936,6 +4964,271 @@ class FreeCADRPC:
         except Exception as exc:
             return _lease_service_error(exc)
 
+    def _run_legacy_save(self, selector, *, validation_profile="default"):
+        """Run a verified same-path save for a proven live v1 observe lease."""
+
+        dl = _import_document_lock()
+        if dl.is_enforcement_enabled():
+            return {
+                "success": False,
+                "error_code": "LEASE_PROTOCOL_REQUIRED",
+                "error": "Protocol-v1 save compatibility is disabled in enforce mode",
+            }
+        if save_service is None:
+            return {
+                "success": False,
+                "error_code": "SAVE_SERVICE_UNAVAILABLE",
+                "error": "The typed save service is not initialized",
+            }
+
+        captured_identity = dict(dl.get_request_identity())
+        token = str(captured_identity.get("lease_token") or "")
+        request_id = str(captured_identity.get("request_id") or "")
+        phase = {}
+        inflight = self._current_inflight()
+
+        def failure_response(exc, *, dirty=None):
+            if phase.get("doc_key") and phase.get("save_state_entered"):
+                try:
+                    document = FreeCAD.getDocument(phase.get("document_name", ""))
+                    observed_dirty = (
+                        document_modified_or_dirty(document)
+                        if document is not None
+                        else True
+                    )
+                    dl.transition_lease(
+                        phase["doc_key"],
+                        token,
+                        dl.LeaseState.LOCKED_ERROR.value,
+                        current_operation="save_failed",
+                        document_dirty=(
+                            observed_dirty if dirty is None else bool(dirty)
+                        ),
+                        request_id=request_id or None,
+                        error={
+                            "code": str(
+                                getattr(exc, "code", type(exc).__name__.upper())
+                            ),
+                            "message": _redact_rpc_diagnostic(
+                                exc,
+                                identity=captured_identity,
+                                inflight=inflight,
+                            ),
+                        },
+                    )
+                except Exception:
+                    pass
+            if isinstance(exc, SaveServiceError):
+                return {
+                    "success": False,
+                    "error_code": exc.code,
+                    "error": str(exc),
+                    "save_error": exc.to_dict(request_id=request_id or None),
+                }
+            return {
+                "success": False,
+                "error_code": str(
+                    getattr(exc, "code", type(exc).__name__.upper())
+                ),
+                "error": _redact_rpc_diagnostic(
+                    exc, identity=captured_identity, inflight=inflight
+                ),
+            }
+
+        def prepare_gui():
+            try:
+                document, document_identity = _live_document_from_selector(selector)
+                source_path = str(getattr(document, "FileName", "") or "")
+                if not source_path:
+                    raise ValueError(
+                        "Protocol-v1 compatibility supports same-path save only"
+                    )
+                doc_key = dl.resolve_doc_key(
+                    doc_name=document_identity.name,
+                    file_path=source_path,
+                )
+                authorized = dl.check_persisted_mutation_allowed(
+                    doc_key,
+                    identity=captured_identity,
+                    allowed_states={
+                        dl.LeaseState.LOCKED_IDLE.value,
+                        dl.LeaseState.LOCKED_ERROR.value,
+                    },
+                )
+                if not authorized.get("success"):
+                    return authorized
+                record = dl.get_lease(doc_key)
+                if record is None or not record.baseline_hash:
+                    raise RuntimeError(
+                        "The compatibility lease has no accepted file baseline"
+                    )
+                reference_preflight = inspect_references_gui(
+                    document_identity.name,
+                    only_invalid=True,
+                    validate=True,
+                )
+                if not reference_preflight.get("ok"):
+                    raise DomainValidationError(
+                        "Unable to inspect live document references before save",
+                        stage="live_reference_preflight",
+                        path=source_path,
+                        mutation_may_have_occurred=False,
+                        details={"inspection": reference_preflight},
+                    )
+                invalid_references = list(
+                    reference_preflight.get("references") or ()
+                )
+                if invalid_references:
+                    raise DomainValidationError(
+                        (
+                            f"Typed save blocked by {len(invalid_references)} "
+                            "invalid live reference properties"
+                        ),
+                        stage="live_reference_preflight",
+                        path=source_path,
+                        mutation_may_have_occurred=False,
+                        details={
+                            "invalid_count": len(invalid_references),
+                            "references": invalid_references[:100],
+                        },
+                    )
+                phase.update(
+                    doc_key=doc_key,
+                    document_name=document_identity.name,
+                    source_path=source_path,
+                    expected_sha256=record.baseline_hash,
+                    validation_expectations=_saved_document_expectations(document),
+                )
+                transitioned = dl.transition_lease(
+                    doc_key,
+                    token,
+                    dl.LeaseState.LOCKED_SAVING.value,
+                    current_operation="saving",
+                    request_id=request_id or None,
+                )
+                if not transitioned.get("success"):
+                    return transitioned
+                phase["save_state_entered"] = True
+                return {"success": True}
+            except Exception as exc:
+                return failure_response(exc, dirty=False)
+
+        self._request_checkpoint("legacy_save_prepare_queue")
+        prepared = self._dispatch_gui(prepare_gui, timeout=self.EXECUTE_TIMEOUT)
+        if not isinstance(prepared, dict) or not prepared.get("success"):
+            return prepared
+
+        try:
+            lease = _import_document_lease()
+            baseline = lease.capture_file_baseline(
+                phase["source_path"],
+                platform=(
+                    document_identity_service.platform
+                    if document_identity_service is not None
+                    else None
+                ),
+            )
+            if not hmac.compare_digest(
+                str(baseline.sha256), str(phase["expected_sha256"])
+            ):
+                raise RuntimeError(
+                    "The saved file changed after the compatibility lease was acquired"
+                )
+            preflight = save_service.prepare_save(
+                phase["source_path"],
+                expected_baseline=baseline,
+                expected_path=phase["source_path"],
+                validation_profile=validation_profile,
+            )
+        except Exception as exc:
+            return failure_response(exc, dirty=False)
+
+        def invoke_gui():
+            marker_keys = [
+                phase["doc_key"],
+                phase["document_name"],
+                phase["source_path"],
+            ]
+            attribution_started = False
+            try:
+                document = FreeCAD.getDocument(phase["document_name"])
+                if document is None:
+                    raise RuntimeError("document closed before save invocation")
+                authorized = dl.check_persisted_mutation_allowed(
+                    phase["doc_key"],
+                    identity=captured_identity,
+                    allowed_states={dl.LeaseState.LOCKED_SAVING.value},
+                )
+                if not authorized.get("success"):
+                    raise RuntimeError(
+                        authorized.get("error")
+                        or "Compatibility lease authorization failed"
+                    )
+                dl.begin_agent_mutation_scope(request_id, marker_keys)
+                attribution_started = True
+                phase["invocation"] = save_service.invoke_save_gui(
+                    document, preflight
+                )
+                return {"success": True}
+            except Exception as exc:
+                return failure_response(exc)
+            finally:
+                if attribution_started:
+                    dl.end_agent_mutation_scope(request_id, marker_keys)
+
+        self._request_checkpoint("legacy_save_invocation_queue")
+        invoked = self._dispatch_gui(invoke_gui, timeout=self.EXECUTE_TIMEOUT)
+        if not isinstance(invoked, dict) or not invoked.get("success"):
+            return invoked
+
+        try:
+            result = save_service.verify_saved_file(
+                phase["invocation"],
+                domain_validator=lambda saved_path, profile: (
+                    _validate_saved_document_worker(
+                        saved_path,
+                        phase["document_name"],
+                        profile,
+                        phase["validation_expectations"],
+                    )
+                ),
+            )
+        except Exception as exc:
+            return failure_response(exc)
+
+        def promote_gui():
+            try:
+                document = FreeCAD.getDocument(phase["document_name"])
+                if document is None:
+                    raise RuntimeError("saved document closed before lease promotion")
+                save_service.revalidate_saved_document_gui(document, result)
+                promoted = dl.mark_save_verified(
+                    phase["doc_key"],
+                    token,
+                    baseline_mtime=result.baseline.mtime_ns / 1_000_000_000,
+                    baseline_hash=result.baseline.sha256,
+                )
+                if not promoted.get("success"):
+                    return promoted
+                return {
+                    "success": True,
+                    "save": result.to_dict(),
+                    "lease": promoted["lease"],
+                    "aliases": {
+                        "document_session_uuid": promoted["lease"].get(
+                            "document_session_uuid", ""
+                        ),
+                        "canonical_path": result.path,
+                        "previous_path": result.previous_path,
+                    },
+                    "compatibility_protocol": 1,
+                }
+            except Exception as exc:
+                return failure_response(exc)
+
+        self._request_checkpoint("legacy_save_promotion_queue")
+        return self._dispatch_gui(promote_gui, timeout=self.EXECUTE_TIMEOUT)
+
     def _run_typed_save(
         self,
         selector,
@@ -5492,6 +5785,12 @@ class FreeCADRPC:
         return self._dispatch_gui(promote_gui_phase, timeout=self.EXECUTE_TIMEOUT)
 
     def save_document(self, selector, validation_profile="default"):
+        identity = _import_document_lock().get_request_identity()
+        if identity.get("lease_token") and not identity.get("lease_credentials"):
+            return self._run_legacy_save(
+                selector,
+                validation_profile=validation_profile,
+            )
         return self._run_typed_save(
             selector,
             mode="save",
@@ -5531,6 +5830,49 @@ class FreeCADRPC:
                 "error_code": "INVALID_SAVE_MODE",
                 "error": "save_mode must be save, save_as, or first_save",
             }
+        identity = _import_document_lock().get_request_identity()
+        if identity.get("lease_token") and not identity.get("lease_credentials"):
+            if normalized != "save":
+                return {
+                    "success": False,
+                    "error_code": "LEASE_PROTOCOL_REQUIRED",
+                    "error": (
+                        "Protocol-v1 compatibility supports same-path finalization "
+                        "only; Save As and first save require protocol v2"
+                    ),
+                }
+            saved = self._run_legacy_save(
+                selector,
+                validation_profile=validation_profile,
+            )
+            if not saved.get("success"):
+                return saved
+            lease_payload = saved.get("lease") or {}
+            doc_key = str(lease_payload.get("doc_key") or "")
+            token = str(identity.get("lease_token") or "")
+            released = _import_document_lock().release_lease(doc_key, token)
+            if not released.get("success"):
+                return {
+                    **saved,
+                    "success": False,
+                    "error_code": released.get(
+                        "error_code", "LEASE_RELEASE_FAILED"
+                    ),
+                    "error": released.get(
+                        "error", "Verified save completed but release failed"
+                    ),
+                    "release": released,
+                    "released": False,
+                }
+            saved["release"] = released
+            saved["released"] = True
+            try:
+                from lock_indicator import refresh_lock_indicator
+
+                refresh_lock_indicator()
+            except Exception:
+                pass
+            return saved
         return self._run_typed_save(
             selector,
             mode=(

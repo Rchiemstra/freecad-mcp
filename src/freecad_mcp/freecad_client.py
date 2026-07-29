@@ -1908,8 +1908,15 @@ class FreeCADConnection:
         validation_profile: str = "default",
         *,
         request_id: str | None = None,
+        legacy_token: str = "",
     ) -> dict[str, Any]:
         selected = dict(selector)
+        if legacy_token:
+            self.set_active_lease_token(legacy_token)
+            try:
+                return self.server.save_document(selected, validation_profile)
+            finally:
+                self.set_active_lease_token(None)
         routed = self._invoke_mutation_v2(
             "save_document",
             {
@@ -1968,8 +1975,22 @@ class FreeCADConnection:
         validation_profile: str = "default",
         *,
         request_id: str | None = None,
+        legacy_token: str = "",
     ) -> dict[str, Any]:
         selected = dict(selector)
+        if legacy_token:
+            self.set_active_lease_token(legacy_token)
+            try:
+                return self.server.finalize_document_edit(
+                    selected,
+                    save_mode,
+                    destination,
+                    overwrite,
+                    expected_destination_sha256,
+                    validation_profile,
+                )
+            finally:
+                self.set_active_lease_token(None)
         routed = self._invoke_mutation_v2(
             "finalize_document_edit",
             {

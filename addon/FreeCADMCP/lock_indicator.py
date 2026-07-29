@@ -38,6 +38,16 @@ _deterred_actions: dict[int, Any] = {}
 
 _LOCAL_SAVE_GUI_TIMEOUT = 120.0
 
+
+def _mcp_dock_features(dock_widget_type: Any) -> Any:
+    """Keep the MCP details panel docked inside the FreeCAD main window."""
+
+    return (
+        dock_widget_type.DockWidgetClosable
+        | dock_widget_type.DockWidgetMovable
+    )
+
+
 _AGENT_OWNED_STATES = frozenset(
     {
         "ACQUIRING",
@@ -1486,11 +1496,10 @@ def install_lock_indicator() -> None:
 
     dock = QtWidgets.QDockWidget("MCP Document Lock", main)
     dock.setObjectName("McpDocumentLockDock")
-    dock.setFeatures(
-        QtWidgets.QDockWidget.DockWidgetClosable
-        | QtWidgets.QDockWidget.DockWidgetMovable
-        | QtWidgets.QDockWidget.DockWidgetFloatable
-    )
+    # Keep this panel dock-only. Floating reparents the live, timer-refreshed
+    # widget tree through a native top-level window and has caused FreeCAD to
+    # fast-fail during an undock drag on Windows.
+    dock.setFeatures(_mcp_dock_features(QtWidgets.QDockWidget))
     # A close only hides the details.  It never releases a lease and never
     # removes the permanent status-bar widget.
     dock.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
@@ -1945,6 +1954,7 @@ def install_lock_indicator() -> None:
 
     try:
         main.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+        dock.setFloating(False)
         _dock_widget = dock
     except Exception:
         _dock_widget = None

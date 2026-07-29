@@ -206,9 +206,11 @@ from .parametric import (
 from .locking import (
     acquire_document_lock_operation,
     adopt_dirty_document_operation,
+    forget_legacy_document_key,
     force_release_stale_lock_operation,
     get_document_lock_operation,
     heartbeat_document_lock_operation,
+    legacy_selector_doc_key,
     list_document_locks_operation,
     release_document_lock_operation,
     update_document_lock_operation,
@@ -382,9 +384,11 @@ __all__ = [
     # Document lock
     "acquire_document_lock_operation",
     "adopt_dirty_document_operation",
+    "forget_legacy_document_key",
     "get_document_lock_operation",
     "list_document_locks_operation",
     "heartbeat_document_lock_operation",
+    "legacy_selector_doc_key",
     "release_document_lock_operation",
     "update_document_lock_operation",
     "force_release_stale_lock_operation",

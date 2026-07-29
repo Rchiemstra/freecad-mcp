@@ -205,9 +205,11 @@ from .operations import (
     # Document lock
     acquire_document_lock_operation,
     adopt_dirty_document_operation,
+    forget_legacy_document_key,
     get_document_lock_operation,
     list_document_locks_operation,
     heartbeat_document_lock_operation,
+    legacy_selector_doc_key,
     release_document_lock_operation,
     update_document_lock_operation,
     force_release_stale_lock_operation,
@@ -547,6 +549,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         finally:
             state.freecad_connection = None
             state.lease_tokens.clear()
+            state.legacy_document_keys.clear()
             state.document_sessions.clear()
             state.rpc_session_id = None
             state.rpc_session_expires_at = None
@@ -923,6 +926,7 @@ def acquire_document_lock(
         lease_manager=state.lease_manager,
         document_sessions=state.document_sessions,
         store_token=state.lease_tokens,
+        legacy_document_keys=state.legacy_document_keys,
     )
 
 
@@ -1047,31 +1051,67 @@ def release_document_lock(
     for off/observe migration only and are rejected for enforce-mode mutation.
     Agents cannot use this tool for dirty abandonment.
     """
-    if selector and state.lease_manager.connected:
-        session_uuid = selector.get("document_session_uuid") or ""
-        if not session_uuid and selector.get("document_name"):
-            session_uuid = state.document_sessions.get(selector["document_name"], "")
-        if not session_uuid and selector.get("canonical_path"):
-            credential = state.lease_manager.get(
-                canonical_path=selector["canonical_path"]
-            )
-            session_uuid = (
-                credential.document_session_uuid if credential is not None else ""
-            )
-        if not session_uuid:
-            return tool_fail("Selector does not identify a credential held by this MCP")
-        credential = state.lease_manager.require(document_session_uuid=session_uuid)
-        normalized_selector = dict(selector)
-        normalized_selector["document_session_uuid"] = session_uuid
-        return release_document_lock_operation(
-            get_freecad_connection(),
-            doc_key="",
-            token="",
-            selector=normalized_selector,
-            disposition=disposition,
-            lease_manager=state.lease_manager,
-            document_sessions=state.document_sessions,
+    if selector:
+        path_credential = (
+            state.lease_manager.get(canonical_path=selector["canonical_path"])
+            if selector.get("canonical_path")
+            else None
         )
+        session_candidates = {
+            str(value)
+            for value in (
+                selector.get("document_session_uuid"),
+                state.document_sessions.get(
+                    str(selector.get("document_name") or ""), ""
+                ),
+                (
+                    path_credential.document_session_uuid
+                    if path_credential is not None
+                    else ""
+                ),
+            )
+            if value
+        }
+        session_uuid = (
+            next(iter(session_candidates))
+            if len(session_candidates) == 1
+            else ""
+        )
+        credential = (
+            state.lease_manager.get(document_session_uuid=session_uuid)
+            if session_uuid
+            else None
+        )
+        if credential is not None:
+            normalized_selector = dict(selector)
+            normalized_selector["document_session_uuid"] = session_uuid
+            return release_document_lock_operation(
+                get_freecad_connection(),
+                doc_key="",
+                token="",
+                selector=normalized_selector,
+                disposition=disposition,
+                lease_manager=state.lease_manager,
+                document_sessions=state.document_sessions,
+            )
+
+        legacy_key = legacy_selector_doc_key(
+            dict(selector), state.legacy_document_keys
+        )
+        legacy_token = state.lease_tokens.get(legacy_key, "")
+        if legacy_key and legacy_token:
+            result = release_document_lock_operation(
+                get_freecad_connection(),
+                doc_key=legacy_key,
+                token=legacy_token,
+                store_token=state.lease_tokens,
+            )
+            if not result.isError:
+                forget_legacy_document_key(
+                    legacy_key, state.legacy_document_keys
+                )
+            return result
+        return tool_fail("Selector does not identify a credential held by this MCP")
     tok = token or state.lease_tokens.get(doc_key, "")
     if not tok:
         return tool_fail("No lease token provided and none stored for this doc_key.")
@@ -1122,8 +1162,13 @@ def save_document(
     ``document_session_uuid``, or ``canonical_path``. If more than one field is
     supplied, every field must identify the same live document.
     """
+    legacy_key = legacy_selector_doc_key(
+        dict(selector), state.legacy_document_keys
+    )
     result = get_freecad_connection().save_document(
-        selector, validation_profile=validation_profile
+        selector,
+        validation_profile=validation_profile,
+        legacy_token=state.lease_tokens.get(legacy_key, ""),
     )
     if result.get("success"):
         _apply_save_aliases(result)
@@ -1172,6 +1217,9 @@ def finalize_document_edit(
     Any validation, save, or sidecar-removal failure retains a visible locked
     error/recovery record instead of presenting a clean release.
     """
+    legacy_key = legacy_selector_doc_key(
+        dict(selector), state.legacy_document_keys
+    )
     result = get_freecad_connection().finalize_document_edit(
         selector,
         save_mode=save_mode,
@@ -1179,9 +1227,15 @@ def finalize_document_edit(
         overwrite=overwrite,
         expected_destination_sha256=expected_destination_sha256,
         validation_profile=validation_profile,
+        legacy_token=state.lease_tokens.get(legacy_key, ""),
     )
     if result.get("success"):
         _apply_save_aliases(result)
+        if legacy_key and result.get("released"):
+            state.lease_tokens.pop(legacy_key, None)
+            forget_legacy_document_key(
+                legacy_key, state.legacy_document_keys
+            )
         session_uuid = str(
             (result.get("aliases") or {}).get("document_session_uuid")
             or selector.get("document_session_uuid")

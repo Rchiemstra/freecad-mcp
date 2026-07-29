@@ -65,26 +65,38 @@ from PySide import QtCore
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
 
 
-_document_lease_runtime_shutdown_connected = False
+_document_lease_runtime_shutdown_state = {"connected": False}
 
 
-def _connect_document_lease_runtime_shutdown(rpc_server):
-    global _document_lease_runtime_shutdown_connected
-    app = QtCore.QCoreApplication.instance()
-    if app is None or _document_lease_runtime_shutdown_connected:
+def _connect_document_lease_runtime_shutdown(
+    rpc_server,
+    _qt_core=QtCore,
+    _state=_document_lease_runtime_shutdown_state,
+):
+    """Connect shutdown without relying on InitGui's execution globals.
+
+    FreeCAD can execute InitGui.py with separate global and local mappings.
+    Delayed Qt callbacks therefore need their helpers and mutable state bound
+    directly instead of resolving names through the script globals.
+    """
+
+    app = _qt_core.QCoreApplication.instance()
+    if app is None or _state["connected"]:
         return
     app.aboutToQuit.connect(rpc_server.shutdown_document_lease_runtime)
-    _document_lease_runtime_shutdown_connected = True
+    _state["connected"] = True
 
 
-def _initialize_document_lease_runtime():
+def _initialize_document_lease_runtime(
+    _connect_shutdown=_connect_document_lease_runtime_shutdown,
+):
     """Start process-lifetime identity/status even when RPC auto-start is off."""
 
     try:
         from rpc_server import rpc_server
 
         rpc_server.initialize_document_lease_runtime()
-        _connect_document_lease_runtime_shutdown(rpc_server)
+        _connect_shutdown(rpc_server)
     except Exception as e:
         FreeCAD.Console.PrintWarning(
             f"[MCP] Document lease runtime not initialized: {e}\n"
@@ -108,12 +120,15 @@ def _register_git_sidecar_observer():
 QtCore.QTimer.singleShot(0, _register_git_sidecar_observer)
 
 
-_document_lease_shutdown_connected = False
+_document_lease_shutdown_state = {"connected": False}
 
 
-def _register_document_lease_observer():
+def _register_document_lease_observer(
+    _connect_shutdown=_connect_document_lease_runtime_shutdown,
+    _qt_core=QtCore,
+    _shutdown_state=_document_lease_shutdown_state,
+):
     """Install the v2 observer independently of RPC auto-start ordering."""
-    global _document_lease_shutdown_connected
     try:
         from document_lease.observer import register_observer, unregister_observer
 
@@ -130,11 +145,11 @@ def _register_document_lease_observer():
             return
         from rpc_server import rpc_server
 
-        _connect_document_lease_runtime_shutdown(rpc_server)
-        app = QtCore.QCoreApplication.instance()
-        if app is not None and not _document_lease_shutdown_connected:
+        _connect_shutdown(rpc_server)
+        app = _qt_core.QCoreApplication.instance()
+        if app is not None and not _shutdown_state["connected"]:
             app.aboutToQuit.connect(unregister_observer)
-            _document_lease_shutdown_connected = True
+            _shutdown_state["connected"] = True
     except Exception as e:
         FreeCAD.Console.PrintWarning(
             f"[MCP] Document lease observer not registered: {e}\n"

@@ -18,6 +18,7 @@ from addon.FreeCADMCP.document_lock import (
     VERB_CLASSIFICATION,
     acquire_lease,
     ensure_session_id,
+    get_request_identity,
     reset_registry_for_tests,
     set_request_identity,
 )
@@ -33,6 +34,7 @@ from addon.FreeCADMCP.rpc_server import rpc_server as addon_rpc
 from addon.FreeCADMCP.rpc_server.rpc_server import (
     FreeCADRPC,
     _assert_mutation_file_metadata_unchanged,
+    _effective_sidecar_block,
     _generated_execute_signature as addon_generated_execute_signature,
 )
 from freecad_mcp.freecad_client import (
@@ -141,6 +143,192 @@ def test_open_document_rejects_duplicate_before_calling_freecad(monkeypatch):
 
 @pytest.mark.unit
 class TestRpcLockEnforcement:
+    def test_observe_accepts_only_matching_live_v1_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Legacy.FCStd"
+        model.write_bytes(b"legacy baseline")
+        document = SimpleNamespace(
+            Name="Legacy",
+            Label="Legacy",
+            FileName=str(model),
+            Modified=False,
+        )
+        monkeypatch.setattr(addon_rpc.FreeCAD, "getDocument", lambda _name: document)
+        monkeypatch.setattr(addon_rpc, "document_lease_service", None)
+
+        acquired = acquire_lease(
+            doc_key=str(model.resolve()),
+            doc_name=document.Name,
+            instance_id="legacy-owner",
+            pid=1,
+        )
+        set_request_identity(
+            instance_id="legacy-owner",
+            lease_token=acquired["token"],
+        )
+
+        assert (
+            _effective_sidecar_block(document, get_request_identity()) is None
+        )
+
+        sidecar = Path(f"{model}.freecad-mcp.lock")
+        replaced = json.loads(sidecar.read_text(encoding="utf-8"))
+        replaced["generation"] += 1
+        sidecar.write_text(json.dumps(replaced), encoding="utf-8")
+
+        blocked = _effective_sidecar_block(document, get_request_identity())
+        assert blocked["error_code"] == "SIDECAR_UNKNOWN"
+
+    def test_save_document_selects_legacy_lifecycle_for_v1_token(self):
+        set_request_identity(
+            instance_id="legacy-owner",
+            lease_token="legacy-secret",
+            lease_credentials=[],
+        )
+        rpc = FreeCADRPC()
+        rpc._run_legacy_save = MagicMock(return_value={"success": True})
+
+        result = rpc.save_document(
+            {"document_name": "Legacy"},
+            validation_profile="strict",
+        )
+
+        assert result == {"success": True}
+        rpc._run_legacy_save.assert_called_once_with(
+            {"document_name": "Legacy"},
+            validation_profile="strict",
+        )
+
+    def test_legacy_save_runs_compare_verify_and_promote(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Legacy.FCStd"
+        model.write_bytes(b"before")
+        document = SimpleNamespace(
+            Name="Legacy",
+            Label="Legacy",
+            FileName=str(model),
+            Modified=True,
+        )
+        identity = SimpleNamespace(name="Legacy")
+        acquired = acquire_lease(
+            doc_key=str(model.resolve()),
+            doc_name=document.Name,
+            instance_id="legacy-owner",
+            pid=1,
+        )
+        set_request_identity(
+            instance_id="legacy-owner",
+            lease_token=acquired["token"],
+            request_id=str(uuid.uuid4()),
+            lease_credentials=[],
+        )
+
+        class SaveResult:
+            path = str(model.resolve())
+            previous_path = path
+
+            def __init__(self):
+                self.baseline = addon_rpc._import_document_lease().capture_file_baseline(
+                    self.path
+                )
+
+            def to_dict(self):
+                return {
+                    "path": self.path,
+                    "baseline": self.baseline.to_dict(),
+                }
+
+        save = SimpleNamespace()
+        save.prepare_save = MagicMock(return_value=object())
+
+        def invoke(_document, _preflight):
+            model.write_bytes(b"after")
+            document.Modified = False
+            return object()
+
+        save.invoke_save_gui = MagicMock(side_effect=invoke)
+        save.verify_saved_file = MagicMock(
+            side_effect=lambda _invocation, domain_validator: SaveResult()
+        )
+        save.revalidate_saved_document_gui = MagicMock()
+
+        monkeypatch.setattr(addon_rpc, "save_service", save)
+        monkeypatch.setattr(
+            addon_rpc,
+            "document_identity_service",
+            SimpleNamespace(platform=None),
+        )
+        monkeypatch.setattr(
+            addon_rpc,
+            "_live_document_from_selector",
+            lambda _selector: (document, identity),
+        )
+        monkeypatch.setattr(
+            addon_rpc, "_saved_document_expectations", lambda _document: {}
+        )
+        monkeypatch.setattr(
+            addon_rpc,
+            "inspect_references_gui",
+            lambda *_args, **_kwargs: {"ok": True, "references": []},
+        )
+        monkeypatch.setattr(
+            addon_rpc.FreeCAD, "getDocument", lambda _name: document
+        )
+        rpc = FreeCADRPC()
+        rpc._dispatch_gui = lambda task, timeout=None: task()
+
+        result = rpc._run_legacy_save({"document_name": "Legacy"})
+
+        assert result["success"] is True
+        assert result["compatibility_protocol"] == 1
+        assert result["lease"]["state"] == "LOCKED_IDLE"
+        assert result["lease"]["document_dirty"] is False
+        save.prepare_save.assert_called_once()
+        save.invoke_save_gui.assert_called_once()
+        save.verify_saved_file.assert_called_once()
+        save.revalidate_saved_document_gui.assert_called_once()
+
+    def test_legacy_finalize_releases_verified_same_path_save(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        model = tmp_path / "Legacy.FCStd"
+        model.write_bytes(b"saved")
+        key = str(model.resolve())
+        acquired = acquire_lease(
+            doc_key=key,
+            doc_name="Legacy",
+            instance_id="legacy-owner",
+            pid=1,
+        )
+        set_request_identity(
+            instance_id="legacy-owner",
+            lease_token=acquired["token"],
+            lease_credentials=[],
+        )
+        rpc = FreeCADRPC()
+        rpc._run_legacy_save = MagicMock(
+            return_value={
+                "success": True,
+                "lease": acquired["lease"],
+                "save": {"path": key},
+            }
+        )
+
+        result = rpc.finalize_document_edit(
+            {"document_name": "Legacy"},
+            save_mode="save",
+        )
+
+        assert result["success"] is True
+        assert result["released"] is True
+        assert result["release"]["terminal_state"] == "UNLOCKED_SAVED"
+        assert not Path(f"{model}.freecad-mcp.lock").exists()
+
     def test_lease_service_errors_deep_redact_credentials_and_fingerprints(self):
         exc = LeaseServiceError(
             "safe failure",

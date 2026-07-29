@@ -348,6 +348,20 @@ def test_created_document_freshly_registers_and_imports_adjacent_v2(tmp_path):
     assert delivered[0].document_session_uuid == "local-session"
 
 
+def test_created_document_defers_identity_until_open_path_is_attached():
+    document = FakeDocument("Opening", filename="", modified=False)
+
+    class Identities:
+        @staticmethod
+        def register_document(_document):
+            raise AssertionError("provisional unsaved identity was registered")
+
+    service = types.SimpleNamespace(identity_service=Identities())
+    observer = observer_mod.LeaseObserver(service_provider=lambda: service)
+
+    assert observer.slotCreatedDocument(document) is None
+
+
 def test_created_document_never_clears_or_recovers_invalid_sidecar(tmp_path):
     model = tmp_path / "Malformed.FCStd"
     model.write_bytes(b"archive")

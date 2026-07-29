@@ -24,6 +24,7 @@ from addon.FreeCADMCP.document_lock import (
     heartbeat_lease,
     is_enabled,
     is_enforcement_enabled,
+    mark_save_verified,
     migrate_lease_key,
     release_lease,
     reset_registry_for_tests,
@@ -316,6 +317,70 @@ class TestDocumentLockSidecar:
         rel = release_lease(key, acq["token"])
         assert rel["success"] is True
         assert not side.exists()
+
+    def test_verified_compatibility_save_promotes_release_evidence(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        fcstd = tmp_path / "model.FCStd"
+        fcstd.write_bytes(b"before")
+        key = str(fcstd.resolve())
+        acquired = acquire_lease(
+            doc_key=key,
+            doc_name="model",
+            instance_id="a",
+            pid=1,
+        )
+        token = acquired["token"]
+        from addon.FreeCADMCP.document_lock import get_lease, transition_lease
+
+        record = get_lease(key)
+        record.last_mutation_revision = 4
+        assert transition_lease(
+            key, token, "LOCKED_SAVING", document_dirty=True
+        )["success"]
+
+        fcstd.write_bytes(b"after")
+        promoted = mark_save_verified(
+            key,
+            token,
+            baseline_mtime=fcstd.stat().st_mtime,
+            baseline_hash="verified-sha256",
+        )
+
+        assert promoted["success"] is True
+        assert promoted["lease"]["state"] == "LOCKED_IDLE"
+        assert promoted["lease"]["document_dirty"] is False
+        assert promoted["lease"]["last_verified_save_revision"] == 5
+        assert release_lease(key, token)["success"] is True
+
+    def test_compatibility_save_promotion_rejects_replaced_sidecar(
+        self, tmp_path, monkeypatch
+    ):
+        _enable(tmp_path, monkeypatch, enable=True, enforce=False)
+        fcstd = tmp_path / "model.FCStd"
+        fcstd.write_bytes(b"before")
+        key = str(fcstd.resolve())
+        acquired = acquire_lease(
+            doc_key=key,
+            doc_name="model",
+            instance_id="a",
+            pid=1,
+        )
+        sidecar = sidecar_path_for(key)
+        replaced = json.loads(sidecar.read_text(encoding="utf-8"))
+        replaced["generation"] += 1
+        sidecar.write_text(json.dumps(replaced), encoding="utf-8")
+
+        promoted = mark_save_verified(
+            key,
+            acquired["token"],
+            baseline_mtime=fcstd.stat().st_mtime,
+            baseline_hash="verified-sha256",
+        )
+
+        assert promoted["success"] is False
+        assert promoted["error_code"] == "sidecar_replaced"
 
     def test_force_release_stale_requires_dead_pid(self, tmp_path, monkeypatch):
         _enable(tmp_path, monkeypatch)

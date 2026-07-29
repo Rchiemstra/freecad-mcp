@@ -627,6 +627,62 @@ def test_v2_lifecycle_routes_acquire_without_credential_then_save_and_release(
 
 
 @pytest.mark.unit
+def test_legacy_save_token_forces_direct_compatibility_route(monkeypatch):
+    calls, created, _started, _release = _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="rpc-session")
+    connection.configure_lease_routing(manager, lambda _name: None)
+
+    def direct_save(selector, validation_profile):
+        headers = dict(created[0].transport.extra_headers)
+        calls.append(
+            (0, "save_document", (selector, validation_profile, headers))
+        )
+        return {"success": True}
+
+    monkeypatch.setattr(created[0], "save_document", direct_save, raising=False)
+    result = connection.save_document(
+        {"document_name": "Legacy"},
+        legacy_token="legacy-secret",
+    )
+    connection.disconnect()
+
+    assert result == {"success": True}
+    _lane, _method, (_selector, _profile, headers) = calls[-1]
+    assert headers["X-MCP-Lease-Token"] == "legacy-secret"
+    assert "X-MCP-Session-Token" not in headers
+    assert not any(call[1] == "invoke_v2" for call in calls)
+
+
+@pytest.mark.unit
+def test_legacy_finalize_token_forces_direct_compatibility_route(monkeypatch):
+    calls, created, _started, _release = _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="rpc-session")
+    connection.configure_lease_routing(manager, lambda _name: None)
+
+    def direct_finalize(*args):
+        headers = dict(created[0].transport.extra_headers)
+        calls.append((0, "finalize_document_edit", (*args, headers)))
+        return {"success": True, "released": True}
+
+    monkeypatch.setattr(
+        created[0], "finalize_document_edit", direct_finalize, raising=False
+    )
+    result = connection.finalize_document_edit(
+        {"document_name": "Legacy"},
+        legacy_token="legacy-secret",
+    )
+    connection.disconnect()
+
+    assert result == {"success": True, "released": True}
+    headers = calls[-1][2][-1]
+    assert headers["X-MCP-Lease-Token"] == "legacy-secret"
+    assert "X-MCP-Session-Token" not in headers
+    assert not any(call[1] == "invoke_v2" for call in calls)
+
+
+@pytest.mark.unit
 def test_authenticated_create_returns_one_time_credential_without_existing_lease(
     monkeypatch,
 ):

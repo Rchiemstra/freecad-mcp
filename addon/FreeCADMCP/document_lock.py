@@ -1247,6 +1247,120 @@ def transition_lease(
     }
 
 
+def mark_save_verified(
+    doc_key: str,
+    token: str,
+    *,
+    baseline_mtime: float,
+    baseline_hash: str,
+) -> dict[str, Any]:
+    """Promote a compatibility-v1 save after off-thread file verification."""
+
+    with _registry_lock:
+        record = _registry.get(doc_key)
+        if record is None:
+            return {
+                "success": False,
+                "error_code": "document_not_locked",
+                "error": "No active lease for this document",
+            }
+        if not token or not hmac.compare_digest(str(record.token), str(token)):
+            return {
+                "success": False,
+                "error_code": "invalid_lease_token",
+                "error": "Lease token does not match",
+                "lease": record.to_dict(),
+            }
+        if record.state not in {
+            LeaseState.LOCKED_SAVING.value,
+            LeaseState.LOCKED_IDLE.value,
+        }:
+            return {
+                "success": False,
+                "error_code": "lease_state_blocks_save_promotion",
+                "error": f"Cannot promote a verified save from {record.state}",
+                "lease": record.to_dict(),
+            }
+        expected_lease_id = record.lease_id
+        expected_generation = record.generation
+        expected_fingerprint = record.to_sidecar_dict()["token_fingerprint"]
+
+    is_path_key = os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd")
+    if is_path_key:
+        side = sidecar_path_for(doc_key)
+        persisted = _read_sidecar(side)
+        try:
+            persisted_generation = int(persisted.get("generation", 0))
+        except (AttributeError, TypeError, ValueError):
+            persisted_generation = 0
+        if (
+            not persisted
+            or "schema_version" in persisted
+            or "record_kind" in persisted
+            or persisted.get("lease_id") != expected_lease_id
+            or persisted_generation != expected_generation
+            or not hmac.compare_digest(
+                str(persisted.get("token_fingerprint", "")),
+                str(expected_fingerprint),
+            )
+        ):
+            return {
+                "success": False,
+                "error_code": "sidecar_replaced",
+                "error": (
+                    "The compatibility sidecar changed before save promotion; "
+                    "writes remain blocked"
+                ),
+            }
+
+    with _registry_lock:
+        record = _registry.get(doc_key)
+        if (
+            record is None
+            or record.lease_id != expected_lease_id
+            or record.generation != expected_generation
+            or not hmac.compare_digest(str(record.token), str(token))
+        ):
+            return {
+                "success": False,
+                "error_code": "lease_replaced",
+                "error": "The compatibility lease changed before save promotion",
+            }
+        record.state = LeaseState.LOCKED_IDLE.value
+        record.state_revision += 1
+        record.record_revision += 1
+        record.last_heartbeat = time.time()
+        record.current_operation = ""
+        record.document_dirty = False
+        record.last_save_time = time.time()
+        record.baseline_mtime = float(baseline_mtime)
+        record.baseline_hash = str(baseline_hash)
+        record.last_verified_save_revision = record.last_mutation_revision
+        record.error_info = None
+        payload = record.to_dict()
+        sidecar_payload = record.to_sidecar_dict()
+
+    if is_path_key:
+        try:
+            _write_json_atomic(side, sidecar_payload)
+        except OSError as exc:
+            with _registry_lock:
+                current = _registry.get(doc_key)
+                if current is not None:
+                    current.state = LeaseState.LOCKED_ERROR.value
+                    current.error_info = {
+                        "code": "sidecar_write_failed",
+                        "message": str(exc),
+                    }
+            return {
+                "success": False,
+                "error_code": "sidecar_write_failed",
+                "error": str(exc),
+                "lease": payload,
+            }
+    return {"success": True, "lease": payload}
+
+
 def release_lease(doc_key: str, token: str) -> dict[str, Any]:
     with _registry_lock:
         record = _registry.get(doc_key)
@@ -1669,6 +1783,62 @@ def check_mutation_allowed(
             "lease": record.to_dict(),
         }
     return {"success": True, "lease": record.to_dict()}
+
+
+def check_persisted_mutation_allowed(
+    doc_key: str,
+    *,
+    identity: dict[str, Any] | None = None,
+    allowed_states: set[str] | None = None,
+) -> dict[str, Any]:
+    """Authorize a live v1 record and prove its adjacent sidecar is unchanged."""
+
+    authorization = check_mutation_allowed(
+        doc_key,
+        identity=identity,
+        allowed_states=allowed_states,
+    )
+    if not authorization.get("success"):
+        return authorization
+    if not (os.path.isabs(doc_key) and doc_key.lower().endswith(".fcstd")):
+        return authorization
+    with _registry_lock:
+        record = _registry.get(doc_key)
+    persisted = _read_sidecar(sidecar_path_for(doc_key))
+    if record is None or not persisted:
+        return {
+            "success": False,
+            "error_code": "sidecar_missing",
+            "error": "The compatibility sidecar is missing or unreadable",
+        }
+    # Never reinterpret a schema-v2 (or future-version) record as v1.
+    if "schema_version" in persisted or "record_kind" in persisted:
+        return {
+            "success": False,
+            "error_code": "sidecar_protocol_mismatch",
+            "error": "The sidecar is not a protocol-v1 compatibility record",
+        }
+    expected_fingerprint = record.to_sidecar_dict()["token_fingerprint"]
+    try:
+        generation_matches = int(persisted.get("generation", 0)) == int(
+            record.generation
+        )
+    except (TypeError, ValueError):
+        generation_matches = False
+    if (
+        persisted.get("lease_id") != record.lease_id
+        or not generation_matches
+        or not hmac.compare_digest(
+            str(persisted.get("token_fingerprint", "")),
+            str(expected_fingerprint),
+        )
+    ):
+        return {
+            "success": False,
+            "error_code": "sidecar_replaced",
+            "error": "The compatibility sidecar no longer matches the live lease",
+        }
+    return authorization
 
 
 def annotate_read_result(result: Any, doc_key: str | None) -> Any:

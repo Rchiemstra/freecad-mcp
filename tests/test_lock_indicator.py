@@ -146,6 +146,19 @@ def test_public_refresh_only_emits_gui_bridge_signal(monkeypatch):
     assert calls == ["queued"]
 
 
+def test_mcp_details_panel_cannot_float_outside_freecad():
+    dock_widget_type = SimpleNamespace(
+        DockWidgetClosable=1,
+        DockWidgetMovable=2,
+        DockWidgetFloatable=4,
+    )
+
+    features = lock_indicator._mcp_dock_features(dock_widget_type)
+
+    assert features == 3
+    assert features & dock_widget_type.DockWidgetFloatable == 0
+
+
 def test_malformed_foreign_sidecar_becomes_red_shadow(tmp_path, monkeypatch):
     model = tmp_path / "Foreign.FCStd"
     model.write_bytes(b"model")

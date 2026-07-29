@@ -44,3 +44,7 @@ class ServerState:
     # Legacy v1 doc_key → token map retained until server.py is migrated to the
     # manager. New code must not use this shared dictionary for request routing.
     lease_tokens: dict[str, str] = field(default_factory=dict, repr=False)
+    # Selector alias → legacy v1 doc_key. This contains no credential material;
+    # it lets the documented selector form select a v1 token from
+    # ``lease_tokens`` during the temporary off/observe compatibility window.
+    legacy_document_keys: dict[str, str] = field(default_factory=dict)

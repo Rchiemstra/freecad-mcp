@@ -509,6 +509,14 @@ class LeaseObserver:
         service = get_runtime_service(self._service_provider)
         if service is None:
             return None
+        # FreeCAD can emit this callback for a file being opened before its
+        # final FileName has been attached to the live proxy. Registering that
+        # provisional "unsaved" identity poisons the later path assertion.
+        # Saved documents are registered once their path is observable by the
+        # normal lazy status/acquire path; genuinely unsaved documents need no
+        # adjacent-sidecar recovery at creation time.
+        if not str(getattr(document, "FileName", "") or "").strip():
+            return None
         try:
             identity, imported = register_live_document_recovery(service, document)
             if imported is not None:
