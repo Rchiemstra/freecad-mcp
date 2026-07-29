@@ -110,6 +110,11 @@ def test_python_and_fcmacro_launch_probe_then_keep_python_production_path(tmp_pa
     production = MODULE_DIR / "worker_entry.py"
     macro_probe = tmp_path / "worker entry probe.FCMacro"
     shutil.copy2(production, macro_probe)
+    probe_profile = tmp_path / "probe-profile"
+    probe_profile.mkdir()
+    probe_environment = os.environ.copy()
+    probe_environment["FREECAD_USER_HOME"] = str(probe_profile)
+    probe_environment["FREECAD_USER_DATA"] = str(probe_profile)
 
     for entry in (production, macro_probe):
         result_path = tmp_path / f"{entry.suffix[1:]}-result.json"
@@ -126,6 +131,7 @@ def test_python_and_fcmacro_launch_probe_then_keep_python_production_path(tmp_pa
             capture_output=True,
             timeout=30,
             check=False,
+            env=probe_environment,
         )
         assert completed.returncode == 0, completed.stdout + completed.stderr
         result = read_json_limited(result_path)

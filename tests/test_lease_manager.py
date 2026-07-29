@@ -21,6 +21,10 @@ from freecad_mcp.lease_manager import (
     canonicalize_document_path,
 )
 from freecad_mcp.operations.core import create_document_operation
+from freecad_mcp.operations.locking import (
+    acquire_document_lock_operation,
+    adopt_dirty_document_operation,
+)
 from freecad_mcp.server_state import ServerState
 
 
@@ -814,6 +818,130 @@ def test_create_document_operation_custodies_credential_and_redacts_tool_result(
     assert stored.token == token
     assert document_sessions == {"Fresh": "doc-new"}
     assert token not in repr(response)
+
+
+@pytest.mark.parametrize(
+    ("operation", "connection_method", "operation_kwargs"),
+    [
+        (
+            acquire_document_lock_operation,
+            "acquire_document_lock",
+            {"doc_name": "Recovered"},
+        ),
+        (
+            adopt_dirty_document_operation,
+            "adopt_dirty_document",
+            {"selector": {"document_name": "Recovered"}},
+        ),
+    ],
+)
+@pytest.mark.unit
+def test_acquire_and_adopt_custody_credential_before_next_mutation(
+    tmp_path,
+    operation,
+    connection_method,
+    operation_kwargs,
+):
+    token = f"one-time-{connection_method}-token"
+    model = tmp_path / "Recovered.FCStd"
+    freecad = mock.Mock()
+    getattr(freecad, connection_method).return_value = {
+        "success": True,
+        "document": {
+            "name": "Recovered",
+            "canonical_path": str(model),
+        },
+        "credential": {
+            "lease_id": f"lease-{connection_method}",
+            "document_session_uuid": "doc-recovered",
+            "generation": 9,
+            "token": token,
+        },
+        "lease": {"state": "LOCKED_IDLE"},
+    }
+    manager = LeaseClientManager(session_token="rpc-session")
+    document_sessions: dict[str, str] = {}
+
+    response = operation(
+        freecad,
+        lease_manager=manager,
+        document_sessions=document_sessions,
+        **operation_kwargs,
+    )
+
+    assert response.isError is False
+    assert manager.require(
+        document_session_uuid="doc-recovered",
+        canonical_path=model,
+    ).token == token
+    assert document_sessions == {"Recovered": "doc-recovered"}
+    next_request = manager.build_request_context(
+        document_session_uuids=("doc-recovered",),
+        operation_name="Create assembly after recovery",
+    )
+    assert next_request.lease_credentials[0].token == token
+
+
+@pytest.mark.parametrize(
+    ("operation", "operation_kwargs"),
+    [
+        (acquire_document_lock_operation, {"doc_name": "Replayed"}),
+        (
+            adopt_dirty_document_operation,
+            {"selector": {"document_name": "Replayed"}},
+        ),
+    ],
+)
+@pytest.mark.unit
+def test_idempotent_acquire_or_adopt_replay_reuses_custodied_redacted_token(
+    monkeypatch,
+    tmp_path,
+    operation,
+    operation_kwargs,
+):
+    _calls, _created, _started, _release = _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    model = tmp_path / "Replayed.FCStd"
+    credential = LeaseCredential(
+        lease_id="lease-replayed",
+        document_session_uuid="doc-replayed",
+        generation=4,
+        token="one-time-replayed-token",
+    )
+    manager = LeaseClientManager(session_token="rpc-session")
+    manager.store(credential, canonical_paths=(model,))
+    connection.configure_lease_routing(manager, lambda _name: "doc-replayed")
+
+    def invoke(_method, _params, context, **_kwargs):
+        return {
+            "ok": True,
+            "request_id": context.request_id,
+            "result": {
+                "success": True,
+                "document": {
+                    "name": "Replayed",
+                    "canonical_path": str(model),
+                },
+                "credential": credential.to_wire(),
+                "lease": {"state": "LOCKED_IDLE"},
+            },
+        }
+
+    monkeypatch.setattr(connection, "invoke_v2", invoke)
+    document_sessions: dict[str, str] = {}
+
+    response = operation(
+        connection,
+        lease_manager=manager,
+        document_sessions=document_sessions,
+        **operation_kwargs,
+    )
+    connection.disconnect()
+
+    assert response.isError is False
+    assert manager.require(document_session_uuid="doc-replayed") == credential
+    assert document_sessions == {"Replayed": "doc-replayed"}
+    assert credential.token not in repr(response)
 
 
 @pytest.mark.unit

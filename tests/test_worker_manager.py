@@ -177,6 +177,28 @@ def test_code_and_manifest_limits(tmp_path):
         manager.stop()
 
 
+def test_worker_environment_uses_disposable_workspace_profile(
+    tmp_path,
+    monkeypatch,
+):
+    inherited_home = tmp_path / "normal-user-profile"
+    inherited_data = tmp_path / "normal-user-data"
+    monkeypatch.setenv("FREECAD_USER_HOME", str(inherited_home))
+    monkeypatch.setenv("FREECAD_USER_DATA", str(inherited_data))
+    monkeypatch.setenv("WORKER_RUNTIME_SENTINEL", "preserved")
+    workspace = tmp_path / "worker"
+
+    environment = WorkerManager._worker_environment(workspace)
+
+    expected = workspace / "profile"
+    assert expected.is_dir()
+    assert environment["FREECAD_USER_HOME"] == str(expected)
+    assert environment["FREECAD_USER_DATA"] == str(expected)
+    assert environment["WORKER_RUNTIME_SENTINEL"] == "preserved"
+    assert os.environ["FREECAD_USER_HOME"] == str(inherited_home)
+    assert os.environ["FREECAD_USER_DATA"] == str(inherited_data)
+
+
 def test_result_json_limit(tmp_path):
     result = tmp_path / "result.json"
     with result.open("wb") as handle:

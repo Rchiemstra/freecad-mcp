@@ -360,9 +360,26 @@ class LeaseObserver:
             selectors.append({"canonical_path": filename})
         for selector in selectors:
             try:
-                return identity_service.resolve(selector)
+                identity = identity_service.resolve(selector)
             except Exception:
                 continue
+            # A queued observer callback may outlive the App::Document proxy
+            # that produced it.  Name/path resolution alone would then find a
+            # newly reopened replacement and let the stale callback update its
+            # dirty state.  Production identity services can prove the exact
+            # registered proxy; lightweight compatibility providers that do
+            # not expose that check retain their previous behavior.
+            inspector = getattr(
+                identity_service,
+                "inspect_registered_document",
+                None,
+            )
+            if callable(inspector):
+                try:
+                    inspector(identity.session_uuid, document)
+                except Exception:
+                    continue
+            return identity
         return None
 
     def _notify(
@@ -732,7 +749,15 @@ class LeaseObserver:
         # A leased document retains one-shot reopen authority; an unlocked
         # document is unregistered so opening it again gets a fresh identity.
         document = _document_from_subject(document)
-        record = self._handle(document, "document close")
+        # Some supported builds do not emit the finish-save callback in every
+        # close/application-shutdown sequence. Refresh the exact proxy's
+        # same-path identity here as a final bounded opportunity before
+        # retaining the one-shot reopen marker.
+        record = self._handle(
+            document,
+            "document close",
+            refresh_saved_identity=True,
+        )
         if document is None:
             return record
         try:

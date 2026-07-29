@@ -286,6 +286,25 @@ class WorkerManager:
             raise RuntimeError("temporary worker root exceeds its configured limit")
         return Path(tempfile.mkdtemp(prefix="mcp_worker_", dir=self.temp_root))
 
+    @staticmethod
+    def _worker_environment(workspace: Path) -> dict[str, str]:
+        """Return an inherited environment with a job-private FreeCAD profile.
+
+        FreeCADCmd otherwise loads the GUI process's normal user profile,
+        including unrelated addons, debugger hooks, and auto-start services.
+        Besides making read-only workers non-deterministic, those hooks can
+        delay process exit until the job times out. The worker still inherits
+        the runtime DLL/PATH environment required by the matching FreeCAD
+        build, but all FreeCAD user data is scoped to the disposable job.
+        """
+
+        profile = workspace / "profile"
+        profile.mkdir(parents=True, exist_ok=True)
+        environment = os.environ.copy()
+        environment["FREECAD_USER_HOME"] = str(profile)
+        environment["FREECAD_USER_DATA"] = str(profile)
+        return environment
+
     def execute(
         self,
         code: str,
@@ -464,6 +483,7 @@ class WorkerManager:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     cwd=str(workspace),
+                    env=self._worker_environment(workspace),
                     **popen_platform_options(),
                 )
                 self._active_process = process

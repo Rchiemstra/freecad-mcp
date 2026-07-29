@@ -141,9 +141,12 @@ sequenceDiagram
         GUI->>Identity: register fresh document UUID
     else recovery authority exists
         Observer->>Lease: fence local owner if needed
+        Observer->>Identity: refresh exact same-path save identity
+        Note over Observer: Covers close when finish-save callback was absent
         Observer->>Lease: retain one-shot close marker
         User->>GUI: Reopen same FCStd
         Lease->>Identity: exact proxy rebind
+        Note over Observer: Delayed callbacks from old proxy are ignored
         alt untouched unreturned reservation
             Client->>Lease: CAS retry acquisition
             Lease-->>Client: new credential
@@ -186,6 +189,8 @@ sequenceDiagram
 | Live document | Existing authority | Owner evidence | Requested action | Expected result | Regression coverage |
 |---|---|---|---|---|---|
 | Clean | None | n/a | Acquire | Lease promoted and credential returned | RPC and lifecycle suites |
+| Clean or dirty | Successful acquire/adopt response | Current MCP process | Next mutation | Credential and name/path mapping are already in private custody | `test_acquire_and_adopt_custody_credential_before_next_mutation` and MCP lifecycle suite |
+| Any | Successful acquire/adopt response is replayed idempotently | Same MCP process already custodied token | Re-handle response | Exact local grant is reused; redaction marker is never stored as a token | `test_idempotent_acquire_or_adopt_replay_reuses_custodied_redacted_token` |
 | Dirty | None | n/a | Normal acquire | `DIRTY_REQUIRES_LOCAL_ADOPTION` | dirty-adoption RPC suite |
 | Dirty | None | User cancels | Adopt | Exact rollback; no sidecar or snapshot remains | `test_dirty_adoption_requires_local_confirmation` |
 | Dirty | None | User confirms | Adopt | Dirty baseline snapshot and promoted lease | `test_dirty_adoption_snapshots_then_returns_dirty_lease` |
@@ -202,6 +207,9 @@ sequenceDiagram
 | Any | Foreign reservation changed after import | Previous owner/concurrent process | Acquire/adopt | CAS refusal; changed sidecar preserved | `test_foreign_acquiring_retry_is_cas_fenced_after_import` |
 | Any | Unlocked document is closed/reopened | No authority | Open/acquire | Old proxy unregistered; fresh identity registered | `test_unlocked_close_unregisters_identity_for_fresh_reopen` and live `test_live_unlocked_close_reopen_gets_fresh_session_identity` |
 | Clean | Unreturned local reservation is closed/reopened | Exact same saved file | Acquire | One-shot proxy rebind, then CAS retry | `test_close_reopen_then_clean_acquire_avoids_identity_registration_deadlock` and live `test_live_gui_save_close_reopen_rebinds_and_allows_clean_retry` |
+| Clean | Save-start is observed, finish-save is absent, then document closes | Same exact proxy/path | Close/reopen | Close refreshes atomic file identity and preserves one-shot rebind | `test_save_start_then_close_refreshes_identity_without_finish_callback` |
+| Any | Deferred save callback runs after close/reopen | Old proxy replaced | Refresh dirty state | Callback is ignored and cannot overwrite the reopened document's state | `test_deferred_save_refresh_ignores_closed_proxy_after_reopen` |
+| Any | Arbitrary observer callback arrives from closed proxy | Reopened document has a new owner | Fence mutation | Stale callback is ignored and cannot revoke the new owner | `test_stale_closed_proxy_callback_cannot_fence_reopened_owner` |
 | Any | Promoted lease is closed/reopened | Exact same saved file | Acquire | Proxy rebind succeeds; recovery block remains | `test_close_reopen_rebinds_promoted_lease_but_keeps_recovery_block` |
 | Any | Recovery document is closed/reopened | File identity changed while closed | Open/acquire | Rebind refused; authority retained | `test_close_reopen_refuses_changed_file_identity` |
 | Any | Foreign recovery document is closed/reopened | Exact same saved file | Open/acquire | Foreign authority retained and rebound | `test_close_reopen_preserves_foreign_recovery_then_dead_owner_retry` |
@@ -246,6 +254,8 @@ blocked until explicit recovery.
 - Every retry rotates the lease ID, generation, and token.
 - A GUI save can refresh file identity only after local fencing and only for
   the exact registered proxy at the same path.
+- A callback from a closed proxy cannot resolve by reused name/path into its
+  reopened replacement or update that replacement's recovery state.
 - Automatic retry never replaces a promoted lease or one with a baseline,
   recovery snapshot, successful save, validation, or agent mutation history.
 - A recovery snapshot ID is persisted while still `ACQUIRING`, before the

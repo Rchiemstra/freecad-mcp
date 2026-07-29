@@ -80,12 +80,36 @@ def _store_lease_grant(
     credential_data = result.get("credential") or {}
     document_data = result.get("document") or {}
     if result.get("success") and credential_data and lease_manager is not None:
-        credential = LeaseCredential(
-            lease_id=str(credential_data["lease_id"]),
-            document_session_uuid=str(credential_data["document_session_uuid"]),
-            generation=int(credential_data["generation"]),
-            token=str(credential_data["token"]),
-        )
+        lease_id = str(credential_data["lease_id"])
+        document_session_uuid = str(credential_data["document_session_uuid"])
+        generation = int(credential_data["generation"])
+        token = str(credential_data.get("token") or "")
+        credential = None
+        if token in {"", "[REDACTED]"}:
+            # An idempotent RPC replay can return a cached acquisition result
+            # after this process already custodied its one-time token.
+            # Response scrubbing then replaces that known secret. Reuse only
+            # an exact matching local grant; never infer a missing credential.
+            current = lease_manager.get(
+                document_session_uuid=document_session_uuid,
+            )
+            if (
+                current is not None
+                and current.lease_id == lease_id
+                and current.generation == generation
+            ):
+                credential = current
+            else:
+                raise ValueError(
+                    "redacted acquisition replay has no matching local credential"
+                )
+        if credential is None:
+            credential = LeaseCredential(
+                lease_id=lease_id,
+                document_session_uuid=document_session_uuid,
+                generation=generation,
+                token=token,
+            )
         canonical_path = document_data.get("canonical_path")
         lease_manager.store(
             credential,

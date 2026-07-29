@@ -379,6 +379,165 @@ def test_close_reopen_rebinds_unreturned_reservation_then_allows_retry(tmp_path)
     assert retry.record.generation == abandoned.record.generation + 2
 
 
+def test_save_start_then_close_refreshes_identity_without_finish_callback(tmp_path):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.model import LeaseOwner, LeaseState
+    from addon.FreeCADMCP.document_lease.service import DocumentLeaseService
+
+    model = tmp_path / "CloseAfterSave.FCStd"
+    replacement = tmp_path / "saved.FCStd"
+    model.write_bytes(b"saved baseline")
+    replacement.write_bytes(b"user GUI save")
+    closed = FakeDocument("CloseAfterSave", str(model), modified=True)
+    identities = DocumentIdentityService()
+    original = identities.register_document(closed)
+    service = DocumentLeaseService(identities)
+    service.begin_dirty_adoption(
+        original.session_uuid,
+        LeaseOwner(
+            addon_profile_id=str(uuid.uuid4()),
+            addon_runtime_id=str(uuid.uuid4()),
+            freecad_pid=101,
+            freecad_process_started_at="2026-07-29T20:00:00Z",
+            boot_id="test-boot",
+            mcp_instance_id=str(uuid.uuid4()),
+            mcp_pid=202,
+            mcp_process_started_at="2026-07-29T20:00:01Z",
+            hostname="localhost",
+            client="Claude",
+            agent_id="claude-agent",
+        ),
+        document_dirty=True,
+        local_confirmation=True,
+    )
+    observer = observer_mod.LeaseObserver(service_provider=lambda: service)
+
+    observer.slotStartSaveDocument(closed, closed.FileName)
+    model.unlink()
+    replacement.replace(model)
+    closed.Modified = False
+    closed_record = observer.slotDeletedDocument(closed)
+
+    assert closed_record.state == LeaseState.USER_INTERVENED
+    assert closed_record.document.file_identity != original.file_identity
+    reopened = FakeDocument("CloseAfterSave", str(model), modified=False)
+    rebound, imported = observer_mod.register_live_document_recovery(
+        service,
+        reopened,
+    )
+    assert imported is None
+    assert rebound == closed_record.document
+
+
+def test_deferred_save_refresh_ignores_closed_proxy_after_reopen(tmp_path):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.model import LeaseOwner
+    from addon.FreeCADMCP.document_lease.service import DocumentLeaseService
+
+    model = tmp_path / "DeferredAfterReopen.FCStd"
+    model.write_bytes(b"saved baseline")
+    closed = FakeDocument("DeferredAfterReopen", str(model), modified=True)
+    identities = DocumentIdentityService()
+    identity = identities.register_document(closed)
+    service = DocumentLeaseService(identities)
+    service.begin_dirty_adoption(
+        identity.session_uuid,
+        LeaseOwner(
+            addon_profile_id=str(uuid.uuid4()),
+            addon_runtime_id=str(uuid.uuid4()),
+            freecad_pid=101,
+            freecad_process_started_at="2026-07-29T20:00:00Z",
+            boot_id="test-boot",
+            mcp_instance_id=str(uuid.uuid4()),
+            mcp_pid=202,
+            mcp_process_started_at="2026-07-29T20:00:01Z",
+            hostname="localhost",
+            client="Claude",
+            agent_id="claude-agent",
+        ),
+        document_dirty=True,
+        local_confirmation=True,
+    )
+    queued = []
+    observer = observer_mod.LeaseObserver(
+        service_provider=lambda: service,
+        notification_queue=queued.append,
+    )
+
+    observer.slotFinishSaveDocument(closed, closed.FileName)
+    assert len(queued) == 1
+    closed.Modified = False
+    observer.slotDeletedDocument(closed)
+    reopened = FakeDocument("DeferredAfterReopen", str(model), modified=False)
+    rebound, imported = observer_mod.register_live_document_recovery(
+        service,
+        reopened,
+    )
+    assert imported is None
+    assert rebound is not None
+
+    reopened.Modified = True
+    observer.slotChangedDocument(reopened, "Touched")
+    assert service.get(identity.session_uuid)["document_state"]["dirty"] is True
+
+    queued[0]()
+
+    assert service.get(identity.session_uuid)["document_state"]["dirty"] is True
+
+
+def test_stale_closed_proxy_callback_cannot_fence_reopened_owner(tmp_path):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.model import LeaseOwner, LeaseState
+    from addon.FreeCADMCP.document_lease.service import DocumentLeaseService
+
+    model = tmp_path / "StaleProxy.FCStd"
+    model.write_bytes(b"saved baseline")
+    closed = FakeDocument("StaleProxy", str(model), modified=False)
+    identities = DocumentIdentityService()
+    identity = identities.register_document(closed)
+    service = DocumentLeaseService(identities)
+
+    def owner(client):
+        return LeaseOwner(
+            addon_profile_id=str(uuid.uuid4()),
+            addon_runtime_id=str(uuid.uuid4()),
+            freecad_pid=101,
+            freecad_process_started_at="2026-07-29T20:00:00Z",
+            boot_id="test-boot",
+            mcp_instance_id=str(uuid.uuid4()),
+            mcp_pid=202,
+            mcp_process_started_at="2026-07-29T20:00:01Z",
+            hostname="localhost",
+            client=client,
+            agent_id=f"{client}-agent",
+        )
+
+    service.begin_acquisition(identity.session_uuid, owner("Claude"))
+    observer = observer_mod.LeaseObserver(service_provider=lambda: service)
+    observer.slotDeletedDocument(closed)
+    reopened = FakeDocument("StaleProxy", str(model), modified=False)
+    rebound, imported = observer_mod.register_live_document_recovery(
+        service,
+        reopened,
+    )
+    assert imported is None
+    replacement = service.begin_acquisition(
+        rebound.session_uuid,
+        owner("Cursor"),
+    )
+
+    closed.Modified = True
+    assert observer.slotChangedDocument(closed, "LateCallback") is None
+
+    assert (
+        service.authorize(
+            replacement.credential,
+            allowed_states={LeaseState.ACQUIRING},
+        ).state
+        == LeaseState.ACQUIRING
+    )
+
+
 def test_close_reopen_rebinds_promoted_lease_but_keeps_recovery_block(tmp_path):
     from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
     from addon.FreeCADMCP.document_lease.model import LeaseOwner
