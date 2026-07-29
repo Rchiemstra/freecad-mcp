@@ -664,16 +664,23 @@ def _freecad_version_parts():
     return tuple(str(part) for part in (value or ()))
 
 
+_confirm_dirty_adoption_for_session = False
+
+
 def _confirm_dirty_document_adoption_gui(document, document_identity) -> bool:
     """Ask the local FreeCAD user before an agent adopts unsaved work."""
 
+    global _confirm_dirty_adoption_for_session
     if QtWidgets.QApplication.instance() is None:
         return False
+    if _confirm_dirty_adoption_for_session:
+        return True
     name = str(getattr(document, "Label", "") or document_identity.name)
     path = str(document_identity.canonical_path or "(unsaved document)")
-    answer = QtWidgets.QMessageBox.warning(
-        None,
-        "Adopt unsaved FreeCAD document?",
+    message_box = QtWidgets.QMessageBox()
+    message_box.setIcon(QtWidgets.QMessageBox.Warning)
+    message_box.setWindowTitle("Adopt unsaved FreeCAD document?")
+    message_box.setText(
         (
             f'An MCP client wants to adopt the existing unsaved changes in "{name}".\n\n'
             f"File: {path}\n\n"
@@ -682,11 +689,20 @@ def _confirm_dirty_document_adoption_gui(document, document_identity) -> bool:
             "save lifecycle.\n\n"
             "Continue only if you intend to give the connected client control of these "
             "unsaved changes."
-        ),
-        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
-        QtWidgets.QMessageBox.Cancel,
+        )
     )
-    return answer == QtWidgets.QMessageBox.Yes
+    message_box.setStandardButtons(
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel
+    )
+    message_box.setDefaultButton(QtWidgets.QMessageBox.Cancel)
+    do_not_ask = QtWidgets.QCheckBox(
+        "Don't ask again for this FreeCAD session", message_box
+    )
+    message_box.setCheckBox(do_not_ask)
+    confirmed = message_box.exec() == QtWidgets.QMessageBox.Yes
+    if confirmed and do_not_ask.isChecked():
+        _confirm_dirty_adoption_for_session = True
+    return confirmed
 
 
 _SAVE_VALIDATION_MARKER = "__FREECAD_MCP_SAVE_VALIDATION__"
@@ -4566,8 +4582,6 @@ class FreeCADRPC:
                     raise lease.DirtyAcquisitionError(
                         "document became dirty during acquisition"
                     )
-                if inflight is not None:
-                    inflight.token.begin_mutation("acquisition_snapshot_save_copy")
                 snapshot_id = create_lease_baseline_snapshot_gui(document)
                 if inflight is not None:
                     inflight.token.checkpoint("acquisition_snapshot_complete")
@@ -4611,9 +4625,14 @@ class FreeCADRPC:
                     },
                 }
             except RequestCancellationError:
-                self._complete_request_cancellation(
+                cancellation_events = self._complete_request_cancellation(
                     inflight, dirty=True, snapshot_id=snapshot_id
                 )
+                if snapshot_id and any(
+                    isinstance(event, dict) and event.get("rolled_back") is True
+                    for event in cancellation_events
+                ):
+                    discard_lease_baseline_snapshot(snapshot_id)
                 raise
             except Exception as exc:
                 try:

@@ -680,6 +680,7 @@ class DocumentLeaseService:
             owner,
             task_summary=task_summary,
             document_dirty=True,
+            replace_stale_dirty_reservation=True,
         )
 
     def _begin_acquisition_record(
@@ -689,6 +690,7 @@ class DocumentLeaseService:
         *,
         task_summary: str,
         document_dirty: bool,
+        replace_stale_dirty_reservation: bool = False,
     ) -> LeaseGrant:
         """Publish one clean acquisition or confirmed dirty-adoption record."""
 
@@ -696,6 +698,15 @@ class DocumentLeaseService:
         with self._lock:
             existing = self._records.get(identity.session_uuid)
             if existing is not None:
+                if (
+                    replace_stale_dirty_reservation
+                    and self._is_unreturned_dirty_reservation(existing)
+                ):
+                    return self._replace_stale_dirty_reservation(
+                        existing,
+                        owner,
+                        task_summary=task_summary,
+                    )
                 raise LeaseConflictError(
                     "the live document already has a lease",
                     details=existing.to_public_dict(),
@@ -750,6 +761,90 @@ class DocumentLeaseService:
                 mcp_instance_id=owner.mcp_instance_id,
             )
             return LeaseGrant(credential=credential, record=record)
+
+    @staticmethod
+    def _is_unreturned_dirty_reservation(record: LeaseRecord) -> bool:
+        """Recognize a stale reservation that never reached promotion.
+
+        This narrow shape excludes every lease that could contain agent edits or
+        a completed recovery snapshot. A fresh local dirty-adoption confirmation
+        may therefore fence it without saving or discarding the live document.
+        """
+
+        return bool(
+            record.state == LeaseState.STALE
+            and record.dirty
+            and not record.user_intervened
+            and record.last_mutation_revision == 1
+            and record.last_verified_save_revision == 0
+            and record.last_successful_save_at is None
+            and record.baseline is None
+            and not record.validation_complete
+            and record.snapshot_id is None
+            and record.migration is None
+            and record.error is not None
+            and record.error.code == "LEASE_STALE"
+        )
+
+    def _replace_stale_dirty_reservation(
+        self,
+        stale: LeaseRecord,
+        owner: LeaseOwner,
+        *,
+        task_summary: str,
+    ) -> LeaseGrant:
+        """CAS-fence one locally held, unreturned dirty reservation."""
+
+        raw_token = self._token_factory()
+        if not raw_token:
+            raise LeaseServiceError("token factory returned an empty token")
+        generation = (
+            max(
+                stale.generation,
+                self._generations.get(stale.document.session_uuid, 0),
+            )
+            + 1
+        )
+        now = self._utc_clock()
+        now_mono = self._monotonic_ns()
+        replacement = LeaseRecord(
+            lease_id=str(self._uuid_factory()),
+            generation=generation,
+            token_fingerprint=token_fingerprint(raw_token),
+            document=stale.document,
+            owner=owner,
+            state=LeaseState.ACQUIRING,
+            record_revision=stale.record_revision + 1,
+            state_revision=stale.state_revision + 1,
+            acquired_at=now,
+            last_heartbeat_at=now,
+            monotonic_heartbeat_ns=now_mono,
+            task_summary=_bounded_text(task_summary, 1024),
+            dirty=True,
+            last_mutation_revision=1,
+            baseline=None,
+            validation_complete=False,
+            snapshot_id=None,
+        )
+        path = self._sidecar_path(stale)
+        if path is not None:
+            try:
+                self.sidecar_store.replace(path, replacement, expected=stale)
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"stale acquisition reservation could not be fenced: {exc}"
+                ) from exc
+        self._records[stale.document.session_uuid] = replacement
+        self._generations[stale.document.session_uuid] = generation
+        self._last_sidecar_heartbeat_ns[stale.document.session_uuid] = now_mono
+        credential = LeaseCredential(
+            lease_id=replacement.lease_id,
+            document_session_uuid=stale.document.session_uuid,
+            generation=generation,
+            token=raw_token,
+            mcp_instance_id=owner.mcp_instance_id,
+        )
+        return LeaseGrant(credential=credential, record=replacement)
 
     def complete_dirty_adoption(
         self,
@@ -928,7 +1023,7 @@ class DocumentLeaseService:
         dirty: bool = True,
         snapshot_id: str | None = None,
     ) -> LeaseRecord:
-        """Retain acquisition authority after create/saveCopy cancellation.
+        """Retain acquisition authority after a live-state mutation.
 
         An acquisition credential has not yet been returned, so silently
         aborting after mutation would orphan changed state.  This exact typed

@@ -10,13 +10,14 @@ import pytest
 from addon.FreeCADMCP.document_lease import (
     DocumentIdentityService,
     DocumentLeaseService,
+    LeaseOwner,
     LeaseState,
     LocalRuntimeIdentity,
     SidecarStore,
     sidecar_path_for,
 )
 from addon.FreeCADMCP.rpc_server import rpc_server
-
+from addon.FreeCADMCP.rpc_server.inflight_requests import InflightRequestRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -181,6 +182,50 @@ def test_dirty_adoption_snapshots_then_returns_dirty_lease(tmp_path, monkeypatch
     assert document.Modified is True
 
 
+def test_dirty_adoption_retries_unreturned_stale_reservation(tmp_path, monkeypatch):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    runtime = service.local_runtime_identity
+    identity = service.identity_service.register_document(document)
+    abandoned = service.begin_dirty_adoption(
+        identity.session_uuid,
+        LeaseOwner(
+            addon_profile_id=runtime.addon_profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            mcp_instance_id="22222222-2222-4222-8222-222222222222",
+            mcp_pid=202,
+            mcp_process_started_at="2026-07-28T00:00:02Z",
+            hostname=runtime.hostname,
+            client="pytest",
+            agent_id="abandoned-agent",
+        ),
+        document_dirty=True,
+        local_confirmation=True,
+    )
+    service.mark_stale(abandoned.credential.document_session_uuid)
+    snapshot_id = str(uuid.uuid4())
+    monkeypatch.setattr(
+        rpc_server, "_confirm_dirty_document_adoption_gui", lambda *_args: True
+    )
+    monkeypatch.setattr(
+        rpc_server, "create_lease_baseline_snapshot_gui", lambda _doc: snapshot_id
+    )
+
+    result = rpc.adopt_dirty_document(selector={"document_name": document.Name})
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["credential"]["generation"] == abandoned.credential.generation + 1
+    assert result["credential"]["lease_id"] != abandoned.credential.lease_id
+    assert result["document_state"]["snapshot_id"] == snapshot_id
+    assert model.read_bytes() == original
+    assert document.Modified is True
+
+
 def test_dirty_adoption_rolls_back_if_saved_baseline_changes_before_promotion(
     tmp_path, monkeypatch
 ):
@@ -216,4 +261,117 @@ def test_dirty_adoption_rolls_back_if_saved_baseline_changes_before_promotion(
     assert discarded == [snapshot_id]
     assert service.list_records() == []
     assert not sidecar_path_for(model).exists()
+    assert document.Modified is True
+
+
+def test_dirty_adoption_dialog_can_suppress_repeat_prompts_for_session(monkeypatch):
+    boxes = []
+
+    class Application:
+        @staticmethod
+        def instance():
+            return object()
+
+    class CheckBox:
+        def __init__(self, text, parent):
+            self.text = text
+            self.parent = parent
+
+        @staticmethod
+        def isChecked():
+            return True
+
+    class MessageBox:
+        Warning = 1
+        Yes = 2
+        Cancel = 4
+
+        def __init__(self):
+            boxes.append(self)
+
+        def setIcon(self, value):
+            self.icon = value
+
+        def setWindowTitle(self, value):
+            self.title = value
+
+        def setText(self, value):
+            self.text = value
+
+        def setStandardButtons(self, value):
+            self.buttons = value
+
+        def setDefaultButton(self, value):
+            self.default = value
+
+        def setCheckBox(self, value):
+            self.checkbox = value
+
+        def exec(self):
+            return self.Yes
+
+    monkeypatch.setattr(
+        rpc_server,
+        "QtWidgets",
+        SimpleNamespace(
+            QApplication=Application,
+            QMessageBox=MessageBox,
+            QCheckBox=CheckBox,
+        ),
+    )
+    monkeypatch.setattr(rpc_server, "_confirm_dirty_adoption_for_session", False)
+    document = SimpleNamespace(Label="Dirty model")
+    identity = SimpleNamespace(name="DirtyModel", canonical_path="DirtyModel.FCStd")
+
+    assert rpc_server._confirm_dirty_document_adoption_gui(document, identity) is True
+    assert rpc_server._confirm_dirty_document_adoption_gui(document, identity) is True
+    assert len(boxes) == 1
+    assert "Don't ask again" in boxes[0].checkbox.text
+    assert rpc_server._confirm_dirty_adoption_for_session is True
+
+
+def test_cancelled_dirty_snapshot_rolls_back_without_orphan(tmp_path, monkeypatch):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    monkeypatch.setattr(
+        rpc_server, "_confirm_dirty_document_adoption_gui", lambda *_args: True
+    )
+    discarded = []
+    snapshot_id = str(uuid.uuid4())
+    registry = InflightRequestRegistry()
+    inflight = registry.register(
+        "rpc-session",
+        "dirty-adoption-request",
+        "adopt_dirty_document",
+        lease_affecting=True,
+    )
+
+    def snapshot_then_cancel(_document):
+        assert inflight.token.request_cancel()[0] is True
+        return snapshot_id
+
+    monkeypatch.setattr(
+        rpc_server, "create_lease_baseline_snapshot_gui", snapshot_then_cancel
+    )
+    monkeypatch.setattr(
+        rpc_server,
+        "discard_lease_baseline_snapshot",
+        lambda opaque_id: discarded.append(opaque_id),
+    )
+    monkeypatch.setattr(rpc_server, "rpc_inflight_request_registry", registry)
+    rpc._inflight_context.value = inflight
+    try:
+        with pytest.raises(Exception) as failure:
+            rpc.adopt_dirty_document(selector={"document_name": document.Name})
+    finally:
+        del rpc._inflight_context.value
+
+    assert failure.value.__class__.__name__ == "RequestCancellationError"
+    assert inflight.token.snapshot().mutation_started is False
+    assert inflight.token.cancellation_resolution()[0]["rolled_back"] is True
+    assert discarded == [snapshot_id]
+    assert service.list_records() == []
+    assert not sidecar_path_for(model).exists()
+    assert model.read_bytes() == original
     assert document.Modified is True

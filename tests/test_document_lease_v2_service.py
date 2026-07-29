@@ -473,6 +473,69 @@ class TestDocumentLeaseAuthorization:
         assert adopted.record.validation_complete is True
         assert adopted.record.snapshot_id
 
+    def test_confirmed_dirty_adoption_fences_unreturned_stale_reservation(
+        self, tmp_path
+    ):
+        model = tmp_path / "dirty-adoption-stale.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="DirtyAdoption", path=model)
+        service = DocumentLeaseService(identities)
+
+        abandoned = service.begin_dirty_adoption(
+            identity.session_uuid,
+            _owner(),
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        stale = service.mark_stale(identity.session_uuid)
+        replacement_owner = replace(_owner(), mcp_instance_id=_uuid(), mcp_pid=9876)
+
+        replacement = service.begin_dirty_adoption(
+            identity.session_uuid,
+            replacement_owner,
+            task_summary="Retry locally confirmed adoption",
+            document_dirty=True,
+            local_confirmation=True,
+        )
+
+        assert stale.state == LeaseState.STALE
+        assert replacement.record.state == LeaseState.ACQUIRING
+        assert replacement.record.generation == abandoned.record.generation + 1
+        assert replacement.record.lease_id != abandoned.record.lease_id
+        assert replacement.credential.token != abandoned.credential.token
+        assert replacement.record.owner == replacement_owner
+        with pytest.raises(AuthorizationError):
+            service.authorize(abandoned.credential)
+
+    def test_dirty_adoption_does_not_replace_promoted_stale_lease(self, tmp_path):
+        model = tmp_path / "dirty-adoption-promoted-stale.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="DirtyAdoption", path=model)
+        service = DocumentLeaseService(identities)
+        reservation = service.begin_dirty_adoption(
+            identity.session_uuid,
+            _owner(),
+            document_dirty=True,
+            local_confirmation=True,
+        )
+        service.complete_dirty_adoption(
+            reservation.credential,
+            baseline=capture_file_baseline(model, platform=identities.platform),
+            baseline_validated=True,
+            snapshot_id=_uuid(),
+        )
+        service.mark_stale(identity.session_uuid)
+
+        with pytest.raises(LeaseConflictError, match="already has a lease"):
+            service.begin_dirty_adoption(
+                identity.session_uuid,
+                replace(_owner(), mcp_instance_id=_uuid()),
+                document_dirty=True,
+                local_confirmation=True,
+            )
+
     def test_malformed_foreign_sidecar_is_preserved(self, tmp_path):
         model = tmp_path / "foreign.FCStd"
         model.write_bytes(b"file")
