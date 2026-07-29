@@ -66,7 +66,11 @@ def create_lease_baseline_snapshot_gui(document) -> str:
     target = recovery_snapshot_path(snapshot_id)
     if os.path.lexists(target):
         raise RuntimeError("recovery snapshot identifier collision")
-    temporary = target.with_suffix(".FCStd.tmp")
+    # FreeCAD's saveCopy appends ``.FCStd`` when the requested filename does
+    # not already end in that extension.  Keep the temporary marker before the
+    # extension so the file is created at the exact path we later harden,
+    # fsync, and atomically replace.
+    temporary = target.with_name(f"{target.stem}.tmp{target.suffix}")
     if os.path.lexists(temporary):
         raise RuntimeError("recovery snapshot temporary path already exists")
     try:

@@ -52,6 +52,48 @@ def _snapshot(tmp_path):
 
 
 @pytest.mark.unit
+def test_recovery_snapshot_temporary_name_retains_fcstd_extension(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        snapshot_service.FreeCAD,
+        "getUserAppDataDir",
+        lambda: str(tmp_path),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        snapshot_service, "_harden_directory_permissions", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        snapshot_service, "_harden_permissions", lambda *_args, **_kwargs: None
+    )
+    requested = []
+
+    class SnapshotDocument:
+        @staticmethod
+        def saveCopy(path):
+            requested_path = snapshot_service.Path(path)
+            requested.append(requested_path)
+            # Match FreeCAD's behavior: append .FCStd if the requested name
+            # does not already carry the native document extension.
+            output = (
+                requested_path
+                if requested_path.suffix.casefold() == ".fcstd"
+                else snapshot_service.Path(f"{requested_path}.FCStd")
+            )
+            output.write_bytes(b"snapshot")
+
+    snapshot_id = snapshot_service.create_lease_baseline_snapshot_gui(
+        SnapshotDocument()
+    )
+    artifact = snapshot_service.recovery_snapshot_path(snapshot_id)
+
+    assert requested[0].name.endswith(".tmp.FCStd")
+    assert artifact.read_bytes() == b"snapshot"
+    assert list(artifact.parent.glob("*.tmp*")) == []
+
+
+@pytest.mark.unit
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits only")
 def test_recovery_snapshot_keeps_directory_traversable_and_file_private(
     tmp_path, monkeypatch
