@@ -52,6 +52,14 @@ def _fake_qapp(*, mouse=None, popup=None, modal=None):
     return _FakeQApp(mouse=mouse, popup=popup, modal=modal)
 
 
+class _FakeOverlay:
+    def __init__(self, *, visible):
+        self._visible = visible
+
+    def isVisible(self):
+        return self._visible
+
+
 def _queue_one(dispatcher, value="task"):
     """Submit one request from a worker thread and wait until it is queued."""
     result = []
@@ -411,6 +419,34 @@ def test_drain_defers_while_popup_or_modal_is_active(monkeypatch):
     dispatcher._drain_one()
     thread.join(timeout=0.5)
     assert result == ["popup-blocked"]
+
+
+def test_drain_ignores_stale_invisible_popup_or_modal(monkeypatch):
+    _app()
+    dispatcher = GuiDispatcher()
+    fake_app = _fake_qapp(
+        popup=_FakeOverlay(visible=False),
+        modal=_FakeOverlay(visible=False),
+    )
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: fake_app),
+    )
+    single_shot = MagicMock()
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtCore.QTimer,
+        "singleShot",
+        single_shot,
+    )
+
+    thread, result = _queue_one(dispatcher, value="not-blocked")
+    dispatcher._drain_one()
+    thread.join(timeout=0.5)
+
+    assert result == ["not-blocked"]
+    assert dispatcher.pending_count == 0
+    single_shot.assert_not_called()
 
 
 def test_drain_runs_immediately_when_no_mouse_popup_or_modal(monkeypatch):

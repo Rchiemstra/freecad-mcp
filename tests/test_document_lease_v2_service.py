@@ -42,6 +42,7 @@ from addon.FreeCADMCP.document_lease.service import (
     LiveDocumentValidationError,
     OrphanedForeignRecoveryRequired,
     ProcessLivenessEvidence,
+    SavedForeignRecoveryRequired,
 )
 from addon.FreeCADMCP.document_lease.sidecar import (
     SidecarConflictError,
@@ -924,6 +925,417 @@ class TestForeignRecoveryImport:
         assert service.get_foreign_recovery(local_document.session_uuid) is None
         persisted = service.sidecar_store.read(sidecar)
         assert service._authority_equal(completed.record, persisted)
+
+    def test_saved_clean_document_self_recovers_acknowledged_dirty_sidecar(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
+        )
+        taken = foreign_service.takeover(
+            foreign_grant.credential.document_session_uuid,
+            dirty=True,
+            reason="Confirmed local GUI takeover",
+        )
+        acknowledged = foreign_service.acknowledge_local_dirty(
+            taken.document.session_uuid,
+            document_dirty=True,
+            reason="Confirmed local GUI keep-dirty acknowledgement",
+        )
+        saved = tmp_path / "saved-replacement.FCStd"
+        saved.write_bytes(b"user saved the formerly dirty document")
+        os.replace(saved, model)
+        local_document = service.identity_service.update_path(
+            local_document.session_uuid,
+            model,
+        )
+        imported = service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        replacement_owner = replace(
+            owner,
+            addon_runtime_id=_uuid(),
+            freecad_pid=99,
+            freecad_process_started_at="2026-07-22T00:02:00Z",
+            mcp_instance_id=_uuid(),
+            mcp_pid=303,
+            mcp_process_started_at="2026-07-22T00:05:00Z",
+            client="GPT Sol",
+            agent_id="gpt-sol-agent",
+        )
+        sidecar = sidecar_path_for(model)
+        before_dirty_attempt = sidecar.read_bytes()
+
+        with pytest.raises(SavedForeignRecoveryRequired):
+            service.begin_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+            )
+        with pytest.raises(DirtyAcquisitionError):
+            service.begin_saved_foreign_recovery_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=True,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+            )
+        with pytest.raises(SavedForeignRecoveryRequired):
+            service.begin_dirty_adoption(
+                local_document.session_uuid,
+                replacement_owner,
+                document_dirty=True,
+                local_confirmation=True,
+            )
+        with pytest.raises(DirtyAdoptionError, match="explicit local GUI confirmation"):
+            service.begin_saved_foreign_recovery_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=True,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                adopt_dirty=True,
+                local_confirmation=False,
+            )
+        assert sidecar.read_bytes() == before_dirty_attempt
+
+        reservation = service.begin_saved_foreign_recovery_acquisition(
+            local_document.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=local_document,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            task_summary="Continue after the user saved",
+        )
+        completed = service.complete_acquisition(
+            reservation.credential,
+            baseline=baseline,
+            baseline_validated=True,
+            snapshot_id=_uuid(),
+        )
+
+        assert imported["source"] == "foreign_recovery"
+        assert completed.record.state == LeaseState.LOCKED_IDLE
+        assert completed.record.generation == acknowledged.generation + 1
+        assert completed.record.document == local_document
+        assert completed.record.owner == replacement_owner
+        assert completed.record.baseline == baseline
+        assert service.get_foreign_recovery(local_document.session_uuid) is None
+        persisted = service.sidecar_store.read(sidecar)
+        assert service._authority_equal(completed.record, persisted)
+
+    def test_clean_reopen_self_recovers_abandoned_locked_error_sidecar(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
+        )
+        foreign_service.begin_mutation(
+            foreign_grant.credential,
+            operation="Build feature",
+        )
+        errored = foreign_service.record_error(
+            foreign_grant.credential,
+            code="OPERATION_FAILED",
+            message="guard rejected the build after rollback",
+            dirty=True,
+        )
+        imported = service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        replacement_owner = replace(
+            owner,
+            addon_runtime_id=_uuid(),
+            freecad_pid=99,
+            freecad_process_started_at="2026-07-22T00:02:00Z",
+            mcp_instance_id=_uuid(),
+            mcp_pid=303,
+            mcp_process_started_at="2026-07-22T00:05:00Z",
+        )
+
+        with pytest.raises(SavedForeignRecoveryRequired):
+            service.begin_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+            )
+
+        reservation = service.begin_saved_foreign_recovery_acquisition(
+            local_document.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=local_document,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            task_summary="Continue after closing the failed edit without saving",
+        )
+        completed = service.complete_acquisition(
+            reservation.credential,
+            baseline=baseline,
+            baseline_validated=True,
+            snapshot_id=_uuid(),
+        )
+
+        assert imported["source"] == "foreign_recovery"
+        assert completed.record.state == LeaseState.LOCKED_IDLE
+        assert completed.record.generation == errored.generation + 1
+        assert completed.record.document == local_document
+        assert completed.record.owner == replacement_owner
+        assert completed.record.baseline == baseline
+        assert service.get_foreign_recovery(local_document.session_uuid) is None
+        persisted = service.sidecar_store.read(sidecar_path_for(model))
+        assert service._authority_equal(completed.record, persisted)
+
+    def test_abandoned_locked_error_recovery_refuses_changed_saved_file(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
+        )
+        foreign_service.begin_mutation(
+            foreign_grant.credential,
+            operation="Build feature",
+        )
+        foreign_service.record_error(
+            foreign_grant.credential,
+            code="OPERATION_FAILED",
+            message="guard rejected the build after rollback",
+            dirty=True,
+        )
+        model.write_bytes(b"saved file changed after the failed runtime exited")
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        changed_baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        sidecar = sidecar_path_for(model)
+        before = sidecar.read_bytes()
+
+        with pytest.raises(
+            LiveDocumentValidationError,
+            match="no longer matches the errored lease baseline",
+        ):
+            service.begin_saved_foreign_recovery_acquisition(
+                local_document.session_uuid,
+                replace(owner, mcp_instance_id=_uuid()),
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=False,
+                    baseline=changed_baseline,
+                    baseline_validated=True,
+                ),
+            )
+
+        assert sidecar.read_bytes() == before
+        assert service.list_records() == []
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
+
+    def test_confirmed_dirty_adoption_self_recovers_acknowledged_dirty_sidecar(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
+        )
+        taken = foreign_service.takeover(
+            foreign_grant.credential.document_session_uuid,
+            dirty=True,
+            reason="Confirmed local GUI takeover",
+        )
+        acknowledged = foreign_service.acknowledge_local_dirty(
+            taken.document.session_uuid,
+            document_dirty=True,
+            reason="Confirmed local GUI keep-dirty acknowledgement",
+        )
+        saved = tmp_path / "saved-before-dirty-reopen.FCStd"
+        saved.write_bytes(b"saved file whose migrated live document reopened dirty")
+        os.replace(saved, model)
+        local_document = service.identity_service.update_path(
+            local_document.session_uuid,
+            model,
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        replacement_owner = replace(
+            owner,
+            addon_runtime_id=_uuid(),
+            freecad_pid=99,
+            freecad_process_started_at="2026-07-22T00:02:00Z",
+            mcp_instance_id=_uuid(),
+            mcp_pid=303,
+            mcp_process_started_at="2026-07-22T00:05:00Z",
+            client="GPT Sol",
+            agent_id="gpt-sol-agent",
+        )
+
+        with pytest.raises(SavedForeignRecoveryRequired):
+            service.begin_dirty_adoption(
+                local_document.session_uuid,
+                replacement_owner,
+                task_summary="Adopt migration-dirty reopened document",
+                document_dirty=True,
+                local_confirmation=True,
+            )
+
+        reservation = service.begin_saved_foreign_recovery_acquisition(
+            local_document.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=local_document,
+                document_modified=True,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            task_summary="Adopt migration-dirty reopened document",
+            adopt_dirty=True,
+            local_confirmation=True,
+        )
+        completed = service.complete_dirty_adoption(
+            reservation.credential,
+            baseline=baseline,
+            baseline_validated=True,
+            snapshot_id=_uuid(),
+        )
+
+        assert completed.record.state == LeaseState.LOCKED_IDLE
+        assert completed.record.dirty is True
+        assert completed.record.last_mutation_revision == 1
+        assert completed.record.generation == acknowledged.generation + 1
+        assert completed.record.document == local_document
+        assert completed.record.owner == replacement_owner
+        assert completed.record.baseline == baseline
+        assert service.get_foreign_recovery(local_document.session_uuid) is None
+        persisted = service.sidecar_store.read(sidecar_path_for(model))
+        assert service._authority_equal(completed.record, persisted)
+
+    def test_saved_dirty_sidecar_recovery_refuses_a_still_live_owner(
+        self,
+        tmp_path,
+    ):
+        live_evidence = {}
+
+        def probe(_pid):
+            return ProcessLivenessEvidence(
+                exists=True,
+                process_started_at=live_evidence["started_at"],
+            )
+
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=probe,
+        )
+        live_evidence["started_at"] = owner.freecad_process_started_at
+        taken = foreign_service.takeover(
+            foreign_grant.credential.document_session_uuid,
+            dirty=True,
+        )
+        foreign_service.acknowledge_local_dirty(
+            taken.document.session_uuid,
+            document_dirty=True,
+        )
+        saved = tmp_path / "saved-replacement.FCStd"
+        saved.write_bytes(b"user saved while the recorded owner remained alive")
+        os.replace(saved, model)
+        local_document = service.identity_service.update_path(
+            local_document.session_uuid,
+            model,
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        before = sidecar.read_bytes()
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+
+        with pytest.raises(ForeignRecoveryError, match="still alive"):
+            service.begin_saved_foreign_recovery_acquisition(
+                local_document.session_uuid,
+                replace(owner, mcp_instance_id=_uuid()),
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+            )
+
+        assert sidecar.read_bytes() == before
+        assert service.list_records() == []
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
 
     def test_missing_sidecar_self_recovery_refuses_changed_saved_file(
         self,

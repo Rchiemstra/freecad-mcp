@@ -107,6 +107,18 @@ class OrphanedForeignRecoveryRequired(ForeignRecoveryError):
     code = "ORPHANED_FOREIGN_RECOVERY_REQUIRED"
 
 
+class SavedForeignRecoveryRequired(ForeignRecoveryError):
+    """A saved local-recovery sidecar needs off-GUI verification and fencing."""
+
+    code = "SAVED_FOREIGN_RECOVERY_REQUIRED"
+
+
+class LockedErrorHandoffRequired(LeaseServiceError):
+    """A confirmed new MCP owner must fence an errored local credential."""
+
+    code = "LOCKED_ERROR_HANDOFF_REQUIRED"
+
+
 @dataclass(frozen=True)
 class LeaseGrant:
     credential: LeaseCredential
@@ -302,6 +314,7 @@ class DocumentLeaseService:
         persisted: LeaseRecord,
         *,
         allow_unreturned_file_replacement: bool = False,
+        allow_saved_dirty_file_replacement: bool = False,
     ) -> None:
         """Require the adjacent record to describe the exact currently-open file."""
 
@@ -353,9 +366,14 @@ class DocumentLeaseService:
             and persisted.baseline is None
             and not persisted.validation_complete
         )
+        saved_dirty_recovery = bool(
+            allow_saved_dirty_file_replacement
+            and self._is_saved_dirty_foreign_candidate(persisted)
+        )
         if (
             foreign_document.file_identity != observed_identity
             and not unverified_destination
+            and not saved_dirty_recovery
             and not (
                 allow_unreturned_file_replacement
                 and self._is_unreturned_reservation(
@@ -370,6 +388,7 @@ class DocumentLeaseService:
         if (
             persisted.baseline is not None
             and persisted.baseline.file_identity != foreign_document.file_identity
+            and not saved_dirty_recovery
         ):
             raise ForeignRecoveryError(
                 "the foreign baseline and document file identities disagree"
@@ -519,6 +538,49 @@ class DocumentLeaseService:
             and record.baseline is not None
             and record.validation_complete
             and record.last_verified_save_revision == record.last_mutation_revision
+            and record.migration is None
+        )
+
+    @staticmethod
+    def _is_saved_dirty_foreign_candidate(record: LeaseRecord) -> bool:
+        """Recognize explicit local dirty recovery that a later save can resolve.
+
+        ``UNLOCKED_DIRTY`` has no usable agent credential: local takeover already
+        rotated the generation, and the subsequent acknowledgement deliberately
+        retained only recovery authority. A new runtime may therefore supersede
+        it after proving the old FreeCAD owner dead, independently validating
+        the current saved file, and either observing a clean live document or
+        completing the normal confirmed dirty-adoption flow.
+        """
+
+        return bool(
+            record.state == LeaseState.UNLOCKED_DIRTY
+            and record.dirty
+            and record.user_intervened
+            and record.error is not None
+            and record.error.code == "DIRTY_ACKNOWLEDGED"
+            and record.baseline is not None
+            and record.migration is None
+        )
+
+    @staticmethod
+    def _is_abandoned_locked_error_foreign_candidate(record: LeaseRecord) -> bool:
+        """Recognize errored dirty authority stranded by a dead FreeCAD runtime.
+
+        The recovery snapshot and original saved-file baseline make this
+        distinguishable from an arbitrary active/error sidecar. Acquisition
+        still has to prove the recorded FreeCAD owner dead and prove that the
+        currently saved file is the exact original baseline before authority
+        can be rotated.
+        """
+
+        return bool(
+            record.state == LeaseState.LOCKED_ERROR
+            and record.dirty
+            and not record.user_intervened
+            and record.error is not None
+            and record.baseline is not None
+            and record.snapshot_id is not None
             and record.migration is None
         )
 
@@ -815,9 +877,44 @@ class DocumentLeaseService:
         """Publish one clean acquisition or confirmed dirty-adoption record."""
 
         identity = self.identity_service.resolve(selector)
+        adjacent_path = (
+            sidecar_path_for(identity.canonical_path)
+            if identity.canonical_path
+            else None
+        )
+        if adjacent_path is not None and os.path.lexists(adjacent_path):
+            # Observer discovery normally imports adjacent v2 authority when a
+            # document opens. Acquisition repeats that read-only discovery so
+            # an already-open document can self-recover after an addon restart
+            # or delayed sidecar appearance. Unknown/malformed/mismatched
+            # sidecars remain untouched and still fail at atomic create below.
+            with self._lock:
+                known = bool(
+                    identity.session_uuid in self._records
+                    or identity.session_uuid in self._foreign_records
+                )
+            if not known:
+                try:
+                    self.import_adjacent_foreign_recovery(
+                        identity.session_uuid,
+                        live_document=identity,
+                    )
+                except LeaseServiceError:
+                    pass
         with self._lock:
             existing = self._records.get(identity.session_uuid)
             if existing is not None:
+                if (
+                    document_dirty
+                    and existing.state == LeaseState.LOCKED_ERROR
+                    and existing.dirty
+                    and not existing.user_intervened
+                ):
+                    raise LockedErrorHandoffRequired(
+                        "a dirty local LOCKED_ERROR lease requires confirmed "
+                        "credential handoff",
+                        details=existing.to_public_dict(),
+                    )
                 if replace_unreturned_reservation and self._is_unreturned_reservation(
                     existing
                 ):
@@ -862,6 +959,21 @@ class DocumentLeaseService:
                         task_summary=task_summary,
                         document_dirty=document_dirty,
                         foreign=foreign,
+                    )
+                if (
+                    foreign_path is not None
+                    and os.path.lexists(foreign_path)
+                    and (
+                        self._is_saved_dirty_foreign_candidate(foreign.persisted)
+                        or self._is_abandoned_locked_error_foreign_candidate(
+                            foreign.persisted
+                        )
+                    )
+                ):
+                    raise SavedForeignRecoveryRequired(
+                        "a document is blocked by recoverable dirty authority from "
+                        "another runtime and requires verified in-process fencing",
+                        details=foreign.to_public_dict(),
                     )
                 raise LeaseConflictError(
                     "a foreign recovery record owns the live document",
@@ -1040,6 +1152,342 @@ class DocumentLeaseService:
                 mcp_instance_id=owner.mcp_instance_id,
             )
             return LeaseGrant(credential=credential, record=replacement)
+
+    def begin_saved_foreign_recovery_acquisition(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        validation: LiveDocumentValidation,
+        task_summary: str = "",
+        adopt_dirty: bool = False,
+        local_confirmation: bool = False,
+    ) -> LeaseGrant:
+        """CAS-fence recoverable dirty authority for a verified live document.
+
+        This path never deletes coordination data and never trusts the stale
+        record's old baseline as current file evidence. It requires an exact
+        same-path imported record, proof that its FreeCAD owner is dead, and
+        a freshly captured baseline for the currently saved file.
+        ``UNLOCKED_DIRTY`` may follow a later user save, while ``LOCKED_ERROR``
+        must still match its original saved-file baseline exactly. A dirty
+        live document additionally requires the normal explicit local GUI
+        adoption confirmation. The existing sidecar is then atomically
+        replaced by new ``ACQUIRING`` authority, so no unlocked filesystem gap
+        is introduced.
+        """
+
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            foreign = self._foreign_records.get(identity.session_uuid)
+            if foreign is None:
+                raise LeaseConflictError(
+                    "the selected document has no foreign recovery record"
+                )
+            if foreign.local_document != identity:
+                raise ForeignRecoveryError(
+                    "the live document identity changed after foreign import"
+                )
+            previous = foreign.persisted
+            acknowledged_dirty = self._is_saved_dirty_foreign_candidate(previous)
+            abandoned_locked_error = (
+                self._is_abandoned_locked_error_foreign_candidate(previous)
+            )
+            if not acknowledged_dirty and not abandoned_locked_error:
+                raise ForeignRecoveryError(
+                    "foreign authority is not recoverable dirty authority"
+                )
+            path = (
+                sidecar_path_for(identity.canonical_path)
+                if identity.canonical_path
+                else None
+            )
+            if path is None:
+                raise ForeignRecoveryError(
+                    "saved foreign recovery requires a saved open document"
+                )
+            try:
+                persisted = self.sidecar_store.read(path)
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"saved foreign recovery sidecar is unavailable or invalid: {exc}"
+                ) from exc
+            if persisted != previous:
+                raise CoordinationError(
+                    "saved foreign recovery authority changed before fencing"
+                )
+            self._assert_foreign_document_exact(
+                identity,
+                persisted,
+                allow_saved_dirty_file_replacement=True,
+            )
+            self._prove_foreign_owner_dead(previous.owner)
+            if not isinstance(validation, LiveDocumentValidation):
+                raise LiveDocumentValidationError(
+                    "fresh LiveDocumentValidation evidence is required"
+                )
+            if validation.document != identity:
+                raise LiveDocumentValidationError(
+                    "live document evidence does not match the registered document"
+                )
+            if validation.document_modified and not adopt_dirty:
+                raise DirtyAcquisitionError(
+                    "a pre-existing dirty document requires local adoption"
+                )
+            if validation.document_modified and local_confirmation is not True:
+                raise DirtyAdoptionError(
+                    "dirty-document recovery requires explicit local GUI confirmation"
+                )
+            if adopt_dirty and not validation.document_modified:
+                raise DirtyAdoptionError(
+                    "dirty-document recovery requires a currently dirty live document"
+                )
+            if validation.baseline_validated is not True:
+                raise LiveDocumentValidationError(
+                    "saved foreign recovery requires a validated saved-file baseline"
+                )
+            if not isinstance(validation.baseline, FileBaseline):
+                raise LiveDocumentValidationError(
+                    "saved foreign recovery requires a saved-file baseline"
+                )
+            if (
+                abandoned_locked_error
+                and validation.baseline != previous.baseline
+            ):
+                raise LiveDocumentValidationError(
+                    "the saved file no longer matches the errored lease baseline"
+                )
+            self._assert_current_baseline(
+                identity,
+                validation.baseline,
+                error_type=LiveDocumentValidationError,
+            )
+
+            raw_token = self._token_factory()
+            if not raw_token:
+                raise LeaseServiceError("token factory returned an empty token")
+            generation = (
+                max(
+                    previous.generation,
+                    self._generations.get(identity.session_uuid, 0),
+                )
+                + 1
+            )
+            now = self._utc_clock()
+            now_mono = self._monotonic_ns()
+            replacement = LeaseRecord(
+                lease_id=str(self._uuid_factory()),
+                generation=generation,
+                token_fingerprint=token_fingerprint(raw_token),
+                document=identity,
+                owner=owner,
+                state=LeaseState.ACQUIRING,
+                record_revision=previous.record_revision + 1,
+                state_revision=previous.state_revision + 1,
+                acquired_at=now,
+                last_heartbeat_at=now,
+                monotonic_heartbeat_ns=now_mono,
+                task_summary=_bounded_text(task_summary, 1024),
+                dirty=bool(adopt_dirty),
+                last_mutation_revision=1 if adopt_dirty else 0,
+                baseline=None,
+                validation_complete=False,
+                snapshot_id=None,
+            )
+            try:
+                self.sidecar_store.replace(path, replacement, expected=previous)
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"saved foreign recovery could not be fenced: {exc}"
+                ) from exc
+            self._records[identity.session_uuid] = replacement
+            self._foreign_records.pop(identity.session_uuid, None)
+            self._closed_documents.pop(identity.session_uuid, None)
+            self._generations[identity.session_uuid] = generation
+            self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+            self._clear_effective_error_times(identity.session_uuid)
+            credential = LeaseCredential(
+                lease_id=replacement.lease_id,
+                document_session_uuid=identity.session_uuid,
+                generation=generation,
+                token=raw_token,
+                mcp_instance_id=owner.mcp_instance_id,
+            )
+            return LeaseGrant(credential=credential, record=replacement)
+
+    def claim_locked_error_handoff(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        validation: LiveDocumentValidation,
+        local_confirmation: bool,
+        task_summary: str = "",
+    ) -> LeaseGrant:
+        """Fence an errored local credential into a confirmed new MCP owner.
+
+        ``LOCKED_ERROR`` proves the previous operation has finished and the
+        document remains fenced. Explicit local GUI confirmation authorizes a
+        new MCP client to continue the dirty document without closing it. The
+        original acquisition baseline and recovery snapshot are preserved while
+        lease ID, generation, token digest, and owner are atomically rotated.
+        """
+
+        if local_confirmation is not True:
+            raise DirtyAdoptionError(
+                "LOCKED_ERROR handoff requires explicit local GUI confirmation"
+            )
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            current = self._records.get(identity.session_uuid)
+            if current is None:
+                raise LeaseConflictError(
+                    "the selected document has no local lease to hand off"
+                )
+            if current.state != LeaseState.LOCKED_ERROR:
+                raise LeaseStateError(
+                    "credential handoff requires a LOCKED_ERROR lease",
+                    details={"state": current.state.value},
+                )
+            if (
+                not current.dirty
+                or current.user_intervened
+                or current.error is None
+                or current.baseline is None
+                or current.snapshot_id is None
+                or current.migration is not None
+            ):
+                raise DirtyAdoptionError(
+                    "LOCKED_ERROR authority lacks complete dirty recovery evidence"
+                )
+            if identity.session_uuid in self._pending_save_as:
+                raise CoordinationError(
+                    "credential handoff is blocked during Save As recovery"
+                )
+            self._assert_sidecar_matches(current)
+
+            local = self._local_runtime_identity
+            if local is None:
+                raise CoordinationError("local runtime identity is unavailable")
+            expected_runtime = (
+                local.addon_profile_id,
+                local.addon_runtime_id,
+                local.freecad_pid,
+                local.freecad_process_started_at,
+                local.boot_id,
+            )
+            if (
+                current.owner.addon_profile_id,
+                current.owner.addon_runtime_id,
+                current.owner.freecad_pid,
+                current.owner.freecad_process_started_at,
+                current.owner.boot_id,
+            ) != expected_runtime:
+                raise CoordinationError(
+                    "LOCKED_ERROR authority does not belong to this FreeCAD runtime"
+                )
+            if (
+                owner.addon_profile_id,
+                owner.addon_runtime_id,
+                owner.freecad_pid,
+                owner.freecad_process_started_at,
+                owner.boot_id,
+            ) != expected_runtime:
+                raise CoordinationError(
+                    "replacement owner does not belong to this FreeCAD runtime"
+                )
+            if not isinstance(validation, LiveDocumentValidation):
+                raise LiveDocumentValidationError(
+                    "fresh LiveDocumentValidation evidence is required"
+                )
+            if validation.document != identity:
+                raise LiveDocumentValidationError(
+                    "live document evidence does not match the registered document"
+                )
+            if validation.document_modified is not True:
+                raise DirtyAdoptionError(
+                    "LOCKED_ERROR handoff requires a currently dirty live document"
+                )
+            if (
+                validation.baseline_validated is not True
+                or not isinstance(validation.baseline, FileBaseline)
+            ):
+                raise LiveDocumentValidationError(
+                    "LOCKED_ERROR handoff requires a validated saved-file baseline"
+                )
+            if validation.baseline != current.baseline:
+                raise LiveDocumentValidationError(
+                    "the saved file changed after the errored lease was acquired"
+                )
+            self._assert_current_baseline(
+                identity,
+                validation.baseline,
+                error_type=LiveDocumentValidationError,
+            )
+
+            raw_token = self._token_factory()
+            if not raw_token:
+                raise LeaseServiceError("token factory returned an empty token")
+            replacement_fingerprint = token_fingerprint(raw_token)
+            if secrets.compare_digest(
+                replacement_fingerprint,
+                current.token_fingerprint,
+            ):
+                raise LeaseServiceError(
+                    "token factory did not rotate the fencing digest"
+                )
+            generation = (
+                max(
+                    current.generation,
+                    self._generations.get(identity.session_uuid, 0),
+                )
+                + 1
+            )
+            now = self._utc_clock()
+            now_mono = self._monotonic_ns()
+            # This is an authority handoff, not a document-state mutation.
+            # Publish the final idle successor as one CAS revision so the
+            # sidecar store never exposes an intermediate owner/state pair.
+            claimed = current.revised(
+                state=LeaseState.LOCKED_IDLE,
+                state_revision=current.state_revision + 1,
+                lease_id=str(self._uuid_factory()),
+                generation=generation,
+                token_fingerprint=replacement_fingerprint,
+                owner=owner,
+                acquired_at=now,
+                last_heartbeat_at=now,
+                monotonic_heartbeat_ns=now_mono,
+                heartbeat_sequence=0,
+                current_operation="",
+                task_summary=_bounded_text(task_summary, 1024),
+                dirty=True,
+                error=None,
+                validation_complete=False,
+            )
+            path = self._sidecar_path(current)
+            if path is None:
+                raise CoordinationError(
+                    "LOCKED_ERROR handoff requires a saved document sidecar"
+                )
+            try:
+                self.sidecar_store.replace(path, claimed, expected=current)
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"LOCKED_ERROR credential handoff could not be fenced: {exc}"
+                ) from exc
+            self._records[identity.session_uuid] = claimed
+            self._generations[identity.session_uuid] = generation
+            self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+            self._clear_effective_error_times(identity.session_uuid)
+            credential = LeaseCredential(
+                lease_id=claimed.lease_id,
+                document_session_uuid=identity.session_uuid,
+                generation=generation,
+                token=raw_token,
+                mcp_instance_id=owner.mcp_instance_id,
+            )
+            return LeaseGrant(credential=credential, record=claimed)
 
     @staticmethod
     def _is_unreturned_reservation(
@@ -2088,8 +2536,11 @@ class DocumentLeaseService:
         """Import one strict v2 sidecar without changing its persisted authority.
 
         The returned/public record is redacted. Malformed, unknown-schema,
-        missing, mismatched-path, and mismatched-file records are never added
-        to the foreign registry and are never rewritten or removed.
+        missing, and mismatched-path records are never added to the foreign
+        registry and are never rewritten or removed. A replaced filesystem
+        identity is accepted only for an explicit ``UNLOCKED_DIRTY`` local
+        acknowledgement; acquisition must still prove its owner dead and
+        independently validate the newly saved file before CAS fencing it.
         """
 
         registered = self.identity_service.resolve(selector)
@@ -2121,6 +2572,7 @@ class DocumentLeaseService:
                 registered,
                 persisted,
                 allow_unreturned_file_replacement=True,
+                allow_saved_dirty_file_replacement=True,
             )
             existing = self._foreign_records.get(registered.session_uuid)
             if existing is not None:

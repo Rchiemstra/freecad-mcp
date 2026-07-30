@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from types import SimpleNamespace
 
 import pytest
 
 from addon.FreeCADMCP.document_lease import (
+    AuthorizationError,
     DocumentIdentityService,
     DocumentLeaseService,
     LeaseConflictError,
     LeaseOwner,
     LeaseState,
     LocalRuntimeIdentity,
+    ProcessLivenessEvidence,
     SidecarStore,
+    capture_file_baseline,
     sidecar_path_for,
 )
 from addon.FreeCADMCP.document_lease import observer as lease_observer
@@ -177,6 +181,89 @@ def test_dirty_adoption_snapshots_then_returns_dirty_lease(tmp_path, monkeypatch
     assert snapshots == [document]
     assert service.list_records()[0]["document_state"]["dirty"] is True
     assert sidecar_path_for(model).exists()
+    assert model.read_bytes() == original
+    assert document.Modified is True
+
+
+def test_confirmed_dirty_adoption_handoffs_local_locked_error(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    identity = service.identity_service.register_document(document)
+    runtime = service.local_runtime_identity
+    old_owner = LeaseOwner(
+        addon_profile_id=runtime.addon_profile_id,
+        addon_runtime_id=runtime.addon_runtime_id,
+        freecad_pid=runtime.freecad_pid,
+        freecad_process_started_at=runtime.freecad_process_started_at,
+        boot_id=runtime.boot_id,
+        mcp_instance_id="22222222-2222-4222-8222-222222222222",
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-28T00:00:02Z",
+        hostname=runtime.hostname,
+        client="previous-agent",
+        agent_id="previous-agent",
+    )
+    baseline = capture_file_baseline(
+        model,
+        platform=service.identity_service.platform,
+    )
+    snapshot_id = str(uuid.uuid4())
+    reservation = service.begin_dirty_adoption(
+        identity.session_uuid,
+        old_owner,
+        document_dirty=True,
+        local_confirmation=True,
+    )
+    service.record_acquisition_snapshot(
+        reservation.credential,
+        snapshot_id=snapshot_id,
+    )
+    active = service.complete_dirty_adoption(
+        reservation.credential,
+        baseline=baseline,
+        baseline_validated=True,
+        snapshot_id=snapshot_id,
+    )
+    service.begin_mutation(active.credential, operation="pad_feature")
+    errored = service.record_error(
+        active.credential,
+        code="OPERATION_FAILED",
+        message="SILENT BUILD MISMATCH",
+        dirty=True,
+    )
+    monkeypatch.setattr(
+        rpc_server, "_confirm_dirty_document_adoption_gui", lambda *_args: True
+    )
+    monkeypatch.setattr(
+        rpc_server,
+        "create_lease_baseline_snapshot_gui",
+        lambda _document: pytest.fail("handoff must preserve the existing snapshot"),
+    )
+
+    result = rpc.adopt_dirty_document(
+        selector={"document_name": document.Name},
+        task_description="Continue after typed operation rollback",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["document_state"]["dirty"] is True
+    assert result["document_state"]["snapshot_id"] == snapshot_id
+    assert result["document_state"]["baseline"] == baseline.to_dict()
+    assert result["credential"]["generation"] == errored.generation + 1
+    assert result["owner"]["mcp_instance_id"] == _DocumentLock.get_request_identity()[
+        "instance_id"
+    ]
+    with pytest.raises(AuthorizationError):
+        service.authorize(active.credential)
+    persisted = service.sidecar_store.read(sidecar_path_for(model))
+    assert persisted.generation == result["credential"]["generation"]
+    assert persisted.state == LeaseState.LOCKED_IDLE
+    assert persisted.snapshot_id == snapshot_id
     assert model.read_bytes() == original
     assert document.Modified is True
 
@@ -453,6 +540,264 @@ def test_clean_acquire_self_recovers_missing_foreign_sidecar(
     persisted = service.sidecar_store.read(sidecar_path_for(model))
     assert persisted.document == local_document
     assert persisted.owner.addon_runtime_id == runtime.addon_runtime_id
+    assert service.get_foreign_recovery(local_document.session_uuid) is None
+
+
+@pytest.mark.parametrize(
+    ("document_modified", "method_name"),
+    [
+        (False, "acquire_document_lock"),
+        (True, "adopt_dirty_document"),
+    ],
+)
+def test_acquisition_self_recovers_saved_acknowledged_dirty_sidecar(
+    tmp_path,
+    monkeypatch,
+    document_modified,
+    method_name,
+):
+    model = tmp_path / "SavedDirtyRecovery.FCStd"
+    model.write_bytes(b"saved baseline before local takeover")
+    document = _DirtyDocument(model)
+    document.Name = "SavedDirtyRecovery"
+    document.Label = "Saved dirty recovery"
+    document.Modified = document_modified
+    owner = LeaseOwner(
+        addon_profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=42,
+        freecad_process_started_at="2026-07-30T00:00:00Z",
+        boot_id="test-boot",
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-30T00:00:01Z",
+        hostname=rpc_server.platform.node(),
+        client="Claude",
+        agent_id="claude-agent",
+    )
+    foreign_identities = DocumentIdentityService()
+    foreign_document = foreign_identities.register(
+        name=document.Name,
+        path=model,
+    )
+    foreign_service = DocumentLeaseService(foreign_identities)
+    foreign_grant = foreign_service.acquire(
+        foreign_document.session_uuid,
+        owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+    taken = foreign_service.takeover(
+        foreign_grant.credential.document_session_uuid,
+        dirty=True,
+        reason="Confirmed local GUI takeover",
+    )
+    acknowledged = foreign_service.acknowledge_local_dirty(
+        taken.document.session_uuid,
+        document_dirty=True,
+        reason="Confirmed local GUI keep-dirty acknowledgement",
+    )
+    saved_bytes = b"user saved the recovered document before restarting FreeCAD"
+    replacement = tmp_path / "SavedDirtyRecovery.replacement.FCStd"
+    replacement.write_bytes(saved_bytes)
+    os.replace(replacement, model)
+
+    identities = DocumentIdentityService()
+    local_document = identities.register_document(document)
+    runtime = SimpleNamespace(
+        profile_id=owner.addon_profile_id,
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=99,
+        freecad_process_started_at="2026-07-30T00:10:00Z",
+        boot_id=owner.boot_id,
+    )
+    service = DocumentLeaseService(
+        identities,
+        SidecarStore(network_detector=lambda _path: False),
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=runtime.profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            hostname=owner.hostname,
+        ),
+        process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
+    )
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, timeout=None: task())
+    monkeypatch.setattr(rpc_server, "_import_document_lock", lambda: _DocumentLock())
+    monkeypatch.setattr(rpc_server, "document_identity_service", identities)
+    monkeypatch.setattr(rpc_server, "document_lease_service", service)
+    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", runtime)
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "getDocument",
+        lambda name: document if name == document.Name else None,
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "listDocuments",
+        lambda: {document.Name: document},
+    )
+    monkeypatch.setattr(
+        rpc_server,
+        "create_lease_baseline_snapshot_gui",
+        lambda _document: str(uuid.uuid4()),
+    )
+    confirmations = []
+    monkeypatch.setattr(
+        rpc_server,
+        "_confirm_dirty_document_adoption_gui",
+        lambda doc, identity: confirmations.append((doc, identity)) or True,
+    )
+
+    result = getattr(rpc, method_name)(
+        selector={"document_name": document.Name},
+        task_description="Continue after the user saved and restarted",
+        client="GPT Sol",
+        agent_id="gpt-sol-agent",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["document_state"]["dirty"] is document_modified
+    assert result["credential"]["generation"] == acknowledged.generation + 1
+    assert bool(confirmations) is document_modified
+    assert model.read_bytes() == saved_bytes
+    persisted = service.sidecar_store.read(sidecar_path_for(model))
+    assert persisted.document == local_document
+    assert persisted.owner.addon_runtime_id == runtime.addon_runtime_id
+    assert persisted.state == LeaseState.LOCKED_IDLE
+    assert service.get_foreign_recovery(local_document.session_uuid) is None
+
+
+@pytest.mark.parametrize(
+    ("document_modified", "method_name"),
+    [
+        (False, "acquire_document_lock"),
+        (True, "adopt_dirty_document"),
+    ],
+)
+def test_acquisition_self_recovers_abandoned_locked_error_sidecar(
+    tmp_path,
+    monkeypatch,
+    document_modified,
+    method_name,
+):
+    model = tmp_path / "AbandonedLockedError.FCStd"
+    original = b"saved baseline before the failed edit"
+    model.write_bytes(original)
+    document = _DirtyDocument(model)
+    document.Name = "AbandonedLockedError"
+    document.Label = "Abandoned locked error"
+    document.Modified = document_modified
+    owner = LeaseOwner(
+        addon_profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=42,
+        freecad_process_started_at="2026-07-30T00:00:00Z",
+        boot_id="test-boot",
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-30T00:00:01Z",
+        hostname=rpc_server.platform.node(),
+        client="Claude",
+        agent_id="claude-agent",
+    )
+    foreign_identities = DocumentIdentityService()
+    foreign_document = foreign_identities.register(
+        name=document.Name,
+        path=model,
+    )
+    foreign_service = DocumentLeaseService(foreign_identities)
+    foreign_grant = foreign_service.acquire(
+        foreign_document.session_uuid,
+        owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+    foreign_service.begin_mutation(
+        foreign_grant.credential,
+        operation="Build feature",
+    )
+    errored = foreign_service.record_error(
+        foreign_grant.credential,
+        code="OPERATION_FAILED",
+        message="guard rejected the build after rollback",
+        dirty=True,
+    )
+
+    identities = DocumentIdentityService()
+    local_document = identities.register_document(document)
+    runtime = SimpleNamespace(
+        profile_id=owner.addon_profile_id,
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=99,
+        freecad_process_started_at="2026-07-30T00:10:00Z",
+        boot_id=owner.boot_id,
+    )
+    service = DocumentLeaseService(
+        identities,
+        SidecarStore(network_detector=lambda _path: False),
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=runtime.profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            hostname=owner.hostname,
+        ),
+        process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
+    )
+    service.import_adjacent_foreign_recovery(
+        local_document.session_uuid,
+        live_document=local_document,
+    )
+
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, timeout=None: task())
+    monkeypatch.setattr(rpc_server, "_import_document_lock", lambda: _DocumentLock())
+    monkeypatch.setattr(rpc_server, "document_identity_service", identities)
+    monkeypatch.setattr(rpc_server, "document_lease_service", service)
+    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", runtime)
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "getDocument",
+        lambda name: document if name == document.Name else None,
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "listDocuments",
+        lambda: {document.Name: document},
+    )
+    monkeypatch.setattr(
+        rpc_server,
+        "create_lease_baseline_snapshot_gui",
+        lambda _document: str(uuid.uuid4()),
+    )
+    confirmations = []
+    monkeypatch.setattr(
+        rpc_server,
+        "_confirm_dirty_document_adoption_gui",
+        lambda doc, identity: confirmations.append((doc, identity)) or True,
+    )
+
+    result = getattr(rpc, method_name)(
+        selector={"document_name": document.Name},
+        task_description="Continue after closing the failed edit without saving",
+        client="GPT Sol",
+        agent_id="gpt-sol-agent",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["document_state"]["dirty"] is document_modified
+    assert result["credential"]["generation"] == errored.generation + 1
+    assert bool(confirmations) is document_modified
+    assert model.read_bytes() == original
+    persisted = service.sidecar_store.read(sidecar_path_for(model))
+    assert persisted.document == local_document
+    assert persisted.owner.addon_runtime_id == runtime.addon_runtime_id
+    assert persisted.state == LeaseState.LOCKED_IDLE
     assert service.get_foreign_recovery(local_document.session_uuid) is None
 
 

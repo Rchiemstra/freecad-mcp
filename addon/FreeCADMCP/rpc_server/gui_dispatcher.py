@@ -43,6 +43,19 @@ def _blocking_overlay_active(app: Any) -> bool:
             continue
         if widget is None or _is_unittest_mock(widget):
             continue
+        # Qt can retain an "active" popup/modal pointer briefly after the
+        # native window was hidden or closed during startup. Treating that
+        # stale invisible widget as blocking defers every queued RPC forever,
+        # even though the GUI is responsive and no dialog can be dismissed.
+        is_visible = getattr(widget, "isVisible", None)
+        if callable(is_visible):
+            try:
+                if not bool(is_visible()):
+                    continue
+            except Exception:
+                # If visibility cannot be established, preserve the
+                # conservative modal guard.
+                pass
         return True
     return False
 

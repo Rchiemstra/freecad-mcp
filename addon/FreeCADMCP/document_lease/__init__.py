@@ -44,6 +44,7 @@ from .service import (  # noqa: F401 - public package re-exports
     ForeignRecoveryRecord,
     LeaseConflictError,
     LeaseGrant,
+    LockedErrorHandoffRequired,
     LocalRuntimeIdentity,
     LocalRecoveryError,
     LeaseServiceError,
@@ -51,6 +52,7 @@ from .service import (  # noqa: F401 - public package re-exports
     LiveDocumentValidationError,
     OrphanedForeignRecoveryRequired,
     ProcessLivenessEvidence,
+    SavedForeignRecoveryRequired,
 )
 from .sidecar import (  # noqa: F401 - public package re-exports
     MAX_SIDECAR_BYTES,

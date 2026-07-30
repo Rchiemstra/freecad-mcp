@@ -20,6 +20,36 @@ from addon.FreeCADMCP.rpc_server.mutation_guard import (
 pytestmark = pytest.mark.unit
 
 
+def test_typed_mutations_can_recover_locked_error_but_arbitrary_code_cannot():
+    assert make_method_spec("pad_feature", "MUTATING").allowed_during_recovery
+    assert make_method_spec("edit_object", "MUTATING").allowed_during_recovery
+    assert make_method_spec("restore", "MUTATING").allowed_during_recovery
+    assert not make_method_spec(
+        "execute_code", "MUTATING"
+    ).allowed_during_recovery
+    assert not make_method_spec(
+        "run_transaction", "MUTATING"
+    ).allowed_during_recovery
+
+
+def test_signed_generated_operation_inherits_typed_recovery_permission():
+    execute_spec = make_method_spec("execute_code", "MUTATING")
+
+    typed_spec = addon_rpc._generated_operation_method_spec(
+        execute_spec,
+        "partdesign.create-pad",
+    )
+    arbitrary_spec = addon_rpc._generated_operation_method_spec(
+        execute_spec,
+        "execute_code",
+    )
+
+    assert typed_spec.name == "partdesign.create-pad"
+    assert typed_spec.allowed_during_recovery is True
+    assert typed_spec.rollback_coverage == RollbackCoverage.DOCUMENT_ONLY
+    assert arbitrary_spec.allowed_during_recovery is False
+
+
 class Shape:
     def __init__(self, code=1, *, null=False, valid=True):
         self.code = code

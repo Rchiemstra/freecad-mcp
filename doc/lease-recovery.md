@@ -9,10 +9,10 @@ been inspected and resolved.
 
 | Status | Agent writes | Recommended action |
 |---|---|---|
-| `LOCKED_ERROR` | Blocked except typed retry/restore paths | Read the structured error, fix the cause, retry save/validation, or restore the baseline |
+| `LOCKED_ERROR` | Fenced, but resumable | The credential owner may correct or retry through health-checked typed tools. A different MCP process may continue a dirty document in the same FreeCAD runtime only after local confirmation atomically rotates the credential. After that FreeCAD runtime exits, a clean reopen may self-recover only when the saved FCStd still exactly matches the original baseline |
 | `STALE` | Blocked | If the exact authenticated runtime returns unchanged, reconcile; otherwise inspect and confirm local takeover |
 | `USER_INTERVENED` | Old credential permanently revoked | Finish locally with save-and-clear, restore-and-clear, or keep-dirty acknowledgement |
-| `UNLOCKED_DIRTY` | Blocked and no new acquisition | Inspect, save or restore locally, then clear/adopt explicitly |
+| `UNLOCKED_DIRTY` | Blocked until current state is verified | After restart, a clean acquire or explicitly confirmed dirty adoption may self-recover only with exact document/file validation and proof that the recorded FreeCAD owner is dead |
 | Missing/replaced sidecar | Blocked by default | A clean acquire may self-recover only from an imported `LOCKED_IDLE` record with an unchanged validated baseline and proven-inactive authority; otherwise use confirmed recovery |
 | Malformed/unknown sidecar | Blocked | Preserve or quarantine through the local recovery UI after owner/liveness checks; never edit it in place |
 
@@ -47,6 +47,31 @@ been inspected and resolved.
   malformed, or concurrently recreated sidecar still fails closed. This path
   also repairs exact-proxy identity drift under the same evidence, avoiding a
   stacked `DOCUMENT_IDENTITY_ERROR`.
+- **Saved `UNLOCKED_DIRTY` sidecar after restart:** a normal clean acquire or
+  explicitly confirmed dirty adoption may import the unchanged terminal
+  recovery record even when the user's atomic save replaced the FCStd
+  filesystem identity. This covers files that reopen dirty because FreeCAD
+  migrated a deprecated property. The addon proves the recorded FreeCAD owner
+  dead, validates the exact live document lifecycle, hashes and revalidates the
+  current saved file, then CAS-replaces the unchanged sidecar with a
+  higher-generation `ACQUIRING` record. It never deletes the sidecar or creates
+  an unlocked gap. A live/unknown owner, unconfirmed dirty document, malformed
+  record, changed path, concurrent sidecar update, or file change during
+  validation remains blocked.
+- **Typed operation failure:** the transaction rolls back but the visible
+  `LOCKED_ERROR` fence remains. The credential owner may retry or correct the
+  failure with typed, scoped mutation tools; arbitrary `execute_code` and
+  legacy nested-code helpers remain blocked. If another MCP process must
+  continue, `adopt_dirty_document` presents local confirmation, verifies that
+  the saved baseline is unchanged, preserves the recovery snapshot, and
+  atomically rotates the lease ID, generation, token digest, and owner.
+- **Dirty `LOCKED_ERROR` after closing without saving:** a normal acquire may
+  import and fence the foreign recovery record when the reopened document is
+  clean, the recorded FreeCAD process is proven dead, and a fresh SHA-256
+  baseline exactly matches the errored lease's original saved-file baseline.
+  The old MCP client process does not keep authority alive after its bound
+  FreeCAD runtime has exited. A changed file, live/unknown FreeCAD owner,
+  missing recovery snapshot, or concurrent sidecar update remains blocked.
 - **GUI timeout/hang:** treat the running mutation as uncertain until the GUI
   returns. Do not retry with a new request ID or clear its sidecar blindly.
   Retrying the same request ID returns the recorded status and never invokes
@@ -128,6 +153,8 @@ LOCKED_ERROR
 ├─ save/validation failure is retryable → retry typed save or validation
 ├─ synthetic FOREIGN_SIDECAR_INVALID over a clean verified foreign record
 │  └─ clean acquire → hash/identity/liveness proof → atomic generation fence
+├─ old FreeCAD exited + clean reopen + original saved baseline unchanged
+│  └─ clean acquire → dead-FreeCAD proof + exact hash → atomic generation fence
 ├─ secure baseline is available → restore, inspect, then save and verify
 └─ state must remain dirty → confirmed takeover and keep-dirty acknowledgement
 
@@ -137,6 +164,10 @@ USER_INTERVENED
 └─ defer resolution → acknowledge UNLOCKED_DIRTY (new agents remain blocked)
 
 UNLOCKED_DIRTY
-├─ save or restore can be verified → clear the recovery record
+├─ current recovery runtime can save or restore → verify and clear
+├─ restarted runtime + clean exact document + dead owner
+│  └─ clean acquire → hash/identity/liveness proof → atomic generation fence
+├─ restarted runtime + confirmed dirty adoption + dead owner
+│  └─ snapshot + hash/identity/liveness proof → atomic generation fence
 └─ not yet safe → leave the record and sidecar in place
 ```

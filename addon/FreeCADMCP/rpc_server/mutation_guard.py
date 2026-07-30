@@ -465,13 +465,16 @@ def make_method_spec(name: str, kind: str) -> RpcMethodSpec:
         "pad_feature",
         "pocket_feature",
     }
-    return RpcMethodSpec(
-        name,
+    mutation_kind = (
         RpcMutationKind.RESTORE
         if name in {"restore", "reload_document"}
         else RpcMutationKind.CLOSE
         if name == "close_document"
-        else RpcMutationKind.LIVE_MUTATION,
+        else RpcMutationKind.LIVE_MUTATION
+    )
+    return RpcMethodSpec(
+        name,
+        mutation_kind,
         transaction=name not in _NO_OUTER_TRANSACTION,
         recompute=name in partdesign_methods,
         validator=(
@@ -480,7 +483,18 @@ def make_method_spec(name: str, kind: str) -> RpcMethodSpec:
             else None
         ),
         may_rebind_document=name in {"restore", "reload_document", "close_document"},
-        allowed_during_recovery=name in {"restore"},
+        # A failed typed mutation rolls the document transaction back but leaves
+        # the lease in LOCKED_ERROR as a visible fence. The credential owner
+        # must be able to correct or retry through another typed, health-checked
+        # mutation. Keep arbitrary-code and legacy nested-code escape hatches
+        # blocked; local restore/reload remains an explicit recovery path.
+        allowed_during_recovery=(
+            mutation_kind == RpcMutationKind.RESTORE
+            or (
+                mutation_kind == RpcMutationKind.LIVE_MUTATION
+                and name not in {"execute_code", "run_transaction"}
+            )
+        ),
         pin_replay_for_lease_lifetime=True,
         validation_profile=(
             ValidationProfile.FULL

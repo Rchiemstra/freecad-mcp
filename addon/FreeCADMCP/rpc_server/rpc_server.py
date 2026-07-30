@@ -184,6 +184,23 @@ def _validate_generated_operation_envelope(envelope):
         )
 
 
+def _generated_operation_method_spec(base_spec, operation_id):
+    """Specialize signed ``execute_code`` as its typed operation.
+
+    In particular, a generated typed operation must inherit the typed method's
+    recovery permission instead of the generic arbitrary-code prohibition.
+    """
+
+    generated_spec = make_method_spec(operation_id, "MUTATING")
+    return replace(
+        base_spec,
+        name=operation_id,
+        validator=validate_document_invariants,
+        allowed_during_recovery=generated_spec.allowed_during_recovery,
+        rollback_coverage=RollbackCoverage.DOCUMENT_ONLY,
+    )
+
+
 shutdown_requested = threading.Event()
 logger = logging.getLogger("FreeCADMCP.rpc_server")
 addon_loaded_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -2815,11 +2832,9 @@ class FreeCADRPC:
                     # Generated scripts own their detailed transactions and
                     # requested recompute, while the common guard still checks
                     # document/Body/Tip invariants before returning idle.
-                    method_spec = replace(
+                    method_spec = _generated_operation_method_spec(
                         method_spec,
-                        name=operation_id,
-                        validator=validate_document_invariants,
-                        rollback_coverage=RollbackCoverage.DOCUMENT_ONLY,
+                        operation_id,
                     )
                 if not generated_operation and not settings.get(
                     "allow_unsafe_mutating_execute_code", False
@@ -4362,6 +4377,7 @@ class FreeCADRPC:
                         raise lease.DirtyAdoptionError(
                             "dirty-document adoption was not confirmed in FreeCAD"
                         )
+                    phase["dirty_adoption_confirmed"] = True
                 elif document_dirty:
                     raise lease.DirtyAcquisitionError(
                         "a pre-existing dirty document requires local adoption"
@@ -4423,6 +4439,25 @@ class FreeCADRPC:
                     # The service atomically publishes replacement authority
                     # only after the second GUI pass revalidates this document.
                     phase["orphaned_foreign_recovery"] = True
+                except lease.SavedForeignRecoveryRequired:
+                    # Recover either an explicit UNLOCKED_DIRTY acknowledgement
+                    # after a later save or a dirty LOCKED_ERROR stranded by a
+                    # dead FreeCAD runtime. The service requires the latter's
+                    # saved file to match its original baseline exactly. A
+                    # reopen can itself become dirty due to document migration;
+                    # the normal dirty-adoption confirmation authorizes that
+                    # lifecycle. Hash the current saved file off-GUI, then
+                    # CAS-replace the sidecar only after proving its owner dead.
+                    phase["saved_foreign_recovery"] = True
+                except lease.LockedErrorHandoffRequired:
+                    if not adopt_dirty or not phase.get("dirty_adoption_confirmed"):
+                        raise
+                    # The failed operation has completed and its transaction
+                    # rolled back, but another MCP process owns the private
+                    # credential. Hash the unchanged saved baseline off-GUI,
+                    # then atomically rotate authority after the local user has
+                    # confirmed that this agent may continue the dirty document.
+                    phase["locked_error_handoff"] = True
                 else:
                     self._retain_inflight_credential(reservation.credential)
                     phase["credential"] = reservation.credential
@@ -4519,6 +4554,46 @@ class FreeCADRPC:
                     raise lease.DirtyAcquisitionError(
                         "document became dirty during acquisition"
                     )
+                if phase.get("locked_error_handoff"):
+                    grant = document_lease_service.claim_locked_error_handoff(
+                        phase["exact_selector"],
+                        phase["owner"],
+                        validation=lease.LiveDocumentValidation(
+                            document=observed,
+                            document_modified=document_dirty,
+                            baseline=phase["baseline"],
+                            baseline_validated=bool(
+                                original_identity.canonical_path
+                            ),
+                        ),
+                        local_confirmation=bool(
+                            phase.get("dirty_adoption_confirmed")
+                        ),
+                        task_summary=task_description,
+                    )
+                    credential = grant.credential
+                    phase["credential"] = credential
+                    self._retain_inflight_credential(credential)
+                    try:
+                        from document_lease import core_authority
+
+                        core_authority.sync_owner_from_lease_record(
+                            document, grant.record
+                        )
+                    except Exception:
+                        FreeCAD.Console.PrintWarning(
+                            "[MCP] core mutation owner sync failed after "
+                            "LOCKED_ERROR handoff\n"
+                        )
+                    return {
+                        "success": True,
+                        **grant.to_dict(),
+                        "expiry_policy": {
+                            "heartbeat_interval_seconds": 10,
+                            "sidecar_flush_interval_seconds": 30,
+                            "stale_after_seconds": 90,
+                        },
+                    }
                 if phase.get("orphaned_foreign_recovery"):
                     reservation = (
                         document_lease_service.begin_orphaned_foreign_acquisition(
@@ -4533,6 +4608,29 @@ class FreeCADRPC:
                                 ),
                             ),
                             task_summary=task_description,
+                        )
+                    )
+                    credential = reservation.credential
+                    phase["credential"] = credential
+                    self._retain_inflight_credential(credential)
+                elif phase.get("saved_foreign_recovery"):
+                    reservation = (
+                        document_lease_service.begin_saved_foreign_recovery_acquisition(
+                            phase["exact_selector"],
+                            phase["owner"],
+                            validation=lease.LiveDocumentValidation(
+                                document=observed,
+                                document_modified=document_dirty,
+                                baseline=phase["baseline"],
+                                baseline_validated=bool(
+                                    original_identity.canonical_path
+                                ),
+                            ),
+                            task_summary=task_description,
+                            adopt_dirty=adopt_dirty,
+                            local_confirmation=bool(
+                                phase.get("dirty_adoption_confirmed")
+                            ),
                         )
                     )
                     credential = reservation.credential
