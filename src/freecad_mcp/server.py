@@ -5481,8 +5481,15 @@ def sketch_add_external_projection(
     source_ref: str,
     projection_mode: Literal["auto", "edge", "face", "point"] = "auto",
     defining: bool = False,
+    allow_gui_geometry_loop: bool = False,
 ) -> CallToolResult:
-    """Add external geometry to a sketch with assembly-aware preflight checks."""
+    """Add external geometry to a sketch with assembly-aware preflight checks.
+
+    Set ``allow_gui_geometry_loop=True`` to explicitly run the bounded preflight
+    and projection mutation on FreeCAD's GUI thread. The default is false
+    because the static geometry-loop guard cannot prove this generated
+    preflight is bounded.
+    """
     return sketch_add_external_projection_operation(
         get_freecad_connection(),
         state.only_text_feedback,
@@ -5491,6 +5498,7 @@ def sketch_add_external_projection(
         source_ref,
         projection_mode,
         defining,
+        allow_gui_geometry_loop,
     )
 
 

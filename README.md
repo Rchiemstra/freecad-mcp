@@ -349,7 +349,9 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `create_assembly`, `create_assembly_joint`, `create_assembly_grounded_joint`, `solve_assembly`
 * `build_path_wire`, `sweep_pipe`
 * `create_part_container`, `create_subshape_binder`, `create_datum_plane`, `move_object`
-* `get_document_tree`, `sketch_add_external_projection`
+* `get_document_tree`, `sketch_add_external_projection` — pass
+  `allow_gui_geometry_loop=true` to explicitly admit its bounded
+  assembly-aware preflight on the GUI thread.
 * `create_assembly_joint` warns when a referenced component's body has cross-body datums attached (M4 / P5 guardrail).
 
 ### FEM Analysis

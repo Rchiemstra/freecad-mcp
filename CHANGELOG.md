@@ -13,5 +13,7 @@
   public-code analysis, and typed-tool migration guidance.
 - Added lease-safe typed `sketch_delete_constraint` and
   `sketch_delete_geometry` operations with atomic batch validation.
+- Added an explicit GUI-loop override to `sketch_add_external_projection` for
+  its bounded assembly-aware preflight.
 - Preserved lease, isolated-instance, worker, snapshot, and remote-RPC security
   behavior while retaining readable text and legacy worker-code aliases.

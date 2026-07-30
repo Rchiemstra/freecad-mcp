@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, add_screenshot_if_available, text_response, tool_fail, tool_ok
+from ..responses import ToolResponse, add_screenshot_if_available, tool_fail, tool_ok
 from ..execute_options import ExecuteOptions
 from ..template_resources import render_template_lines, render_template_text
 
@@ -62,6 +62,8 @@ def _run_json_code(
     screenshot: bool = False,
     document: str | None = None,
     read_only: bool = False,
+    execution_mode: str = "auto",
+    allow_gui_geometry_loop: bool = False,
 ) -> ToolResponse:
     try:
         opts = ExecuteOptions(
@@ -70,9 +72,10 @@ def _run_json_code(
             recompute="none" if read_only else "target",
             recompute_documents=[document] if document and not read_only else None,
             read_only=read_only,
-            execution_mode="worker" if read_only else "auto",
+            execution_mode="worker" if read_only else execution_mode,
             restore_active_document=True,
             capture_view=screenshot,
+            allow_gui_geometry_loop=allow_gui_geometry_loop,
             generated_operation=True,
             operation_id=fail_prefix,
         )
@@ -405,6 +408,7 @@ def sketch_add_external_projection_operation(
     source_ref: str,
     projection_mode: str = "auto",
     defining: bool = False,
+    allow_gui_geometry_loop: bool = False,
 ) -> ToolResponse:
     if projection_mode not in {"auto", "edge", "face", "point"}:
         return tool_fail(
@@ -418,7 +422,16 @@ def sketch_add_external_projection_operation(
         projection_mode=repr(projection_mode),
         defining=repr(defining),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to add external projection", screenshot=True, document=doc_name)
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to add external projection",
+        screenshot=True,
+        document=doc_name,
+        execution_mode="gui" if allow_gui_geometry_loop else "auto",
+        allow_gui_geometry_loop=allow_gui_geometry_loop,
+    )
 
 
 def build_path_wire_operation(

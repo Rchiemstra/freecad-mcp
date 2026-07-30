@@ -5,6 +5,7 @@ from __future__ import annotations
 import FreeCADGui
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 
 # The conda FreeCAD test package is headless and omits GUI command registration.
@@ -12,6 +13,9 @@ if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 from addon.FreeCADMCP.rpc_server import rpc_server
+from freecad_mcp.operations.p7_assembly import (
+    sketch_add_external_projection_operation,
+)
 
 
 HANGING_SYMMETRY_CODE = r'''
@@ -37,6 +41,56 @@ for radius in radii:
 class _DispatcherMustNotBeUsed:
     def submit(self, *_args, **_kwargs):
         raise AssertionError("risky payload was dispatched to FreeCAD's GUI thread")
+
+
+def _external_projection_payload(*, allow_gui_geometry_loop):
+    connection = MagicMock()
+    connection.get_active_screenshot.return_value = None
+    connection.execute_code.return_value = {
+        "success": False,
+        "error": "capture only",
+    }
+    sketch_add_external_projection_operation(
+        connection,
+        True,
+        "Doc",
+        "Sketch",
+        "Binder:Face1",
+        allow_gui_geometry_loop=allow_gui_geometry_loop,
+    )
+    code, options = connection.execute_code.call_args[0]
+    return code, options.to_dict()
+
+
+def test_external_projection_default_is_blocked_by_actual_loop_guard(monkeypatch):
+    code, options = _external_projection_payload(allow_gui_geometry_loop=False)
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+
+    result = rpc_server.FreeCADRPC().execute_code(code, options)
+
+    assert result["success"] is False
+    assert result["blocked"] == "gui_thread_geometry_loop"
+    assert result["code_analysis"]["call_families"]
+    assert "allow_gui_geometry_loop=true" in result["error"]
+
+
+def test_external_projection_explicit_override_reaches_gui_dispatch():
+    code, options = _external_projection_payload(allow_gui_geometry_loop=True)
+    rpc = rpc_server.FreeCADRPC()
+    dispatched = {}
+
+    def fake_dispatch_gui(task, timeout):
+        dispatched["called"] = True
+        dispatched["timeout"] = timeout
+        return {"ok": True, "session": {}, "stdout": ""}
+
+    rpc._dispatch_gui = fake_dispatch_gui
+    result = rpc.execute_code(code, options)
+
+    assert options["execution_mode"] == "gui"
+    assert options["allow_gui_geometry_loop"] is True
+    assert result["success"] is True
+    assert dispatched["called"] is True
 
 
 def test_transformed_symmetric_difference_forced_gui_routes_to_worker(monkeypatch):
