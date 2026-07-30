@@ -49,6 +49,7 @@ from .service import (  # noqa: F401 - public package re-exports
     LeaseServiceError,
     LeaseStateError,
     LiveDocumentValidationError,
+    OrphanedForeignRecoveryRequired,
     ProcessLivenessEvidence,
 )
 from .sidecar import (  # noqa: F401 - public package re-exports

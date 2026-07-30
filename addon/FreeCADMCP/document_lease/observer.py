@@ -244,9 +244,11 @@ def register_live_document_recovery(
     identities = getattr(service, "identity_service", None)
     if identities is None:
         raise RuntimeError("document identity service is unavailable")
+    registration_failed = False
     try:
         identity = identities.register_document(document)
     except Exception:
+        registration_failed = True
         # A locally observed close leaves its exact identity and sidecar
         # authoritative. Rebind only through the service's one-shot close
         # marker; never classify registration errors by import-sensitive
@@ -261,15 +263,43 @@ def register_live_document_recovery(
                 "live document registration failed; skip recovery import",
                 exc_info=True,
             )
-            return None, None
+        else:
+            try:
+                identity = rebinder(document=document)
+                registration_failed = False
+            except Exception:
+                logger.debug(
+                    "closed live document rebind failed; try orphan repair",
+                    exc_info=True,
+                )
+    orphan_refresher = getattr(
+        service,
+        "refresh_orphaned_foreign_document_identity",
+        None,
+    )
+    should_try_orphan_repair = registration_failed
+    if not should_try_orphan_repair:
+        raw_path = str(getattr(document, "FileName", "") or "").strip()
+        get_foreign = getattr(service, "get_foreign_recovery", None)
+        if raw_path and not os.path.lexists(f"{raw_path}.freecad-mcp.lock"):
+            try:
+                should_try_orphan_repair = bool(
+                    callable(get_foreign)
+                    and get_foreign(identity.session_uuid) is not None
+                )
+            except Exception:
+                should_try_orphan_repair = False
+    if should_try_orphan_repair and callable(orphan_refresher):
         try:
-            identity = rebinder(document=document)
+            identity = orphan_refresher(document=document)
+            registration_failed = False
         except Exception:
             logger.debug(
-                "closed live document rebind failed; skip recovery import",
+                "orphaned foreign document identity repair was not applicable",
                 exc_info=True,
             )
-            return None, None
+    if registration_failed:
+        return None, None
     # This second, non-mutating inspection is the evidence passed to the
     # recovery service; a stale/replaced proxy or unexpected path fails here.
     try:

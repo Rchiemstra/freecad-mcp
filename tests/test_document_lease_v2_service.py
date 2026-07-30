@@ -40,6 +40,7 @@ from addon.FreeCADMCP.document_lease.service import (
     LocalRuntimeIdentity,
     LocalRecoveryError,
     LiveDocumentValidationError,
+    OrphanedForeignRecoveryRequired,
     ProcessLivenessEvidence,
 )
 from addon.FreeCADMCP.document_lease.sidecar import (
@@ -848,6 +849,217 @@ class TestDocumentLeaseAuthorization:
 
 @pytest.mark.unit
 class TestForeignRecoveryImport:
+    def test_clean_missing_sidecar_self_recovers_dead_document_session(
+        self,
+        tmp_path,
+    ):
+        def current_runtime(owner):
+            return LocalRuntimeIdentity(
+                addon_profile_id=owner.addon_profile_id,
+                addon_runtime_id=owner.addon_runtime_id,
+                freecad_pid=owner.freecad_pid,
+                freecad_process_started_at=owner.freecad_process_started_at,
+                boot_id=owner.boot_id,
+                hostname=owner.hostname,
+            )
+
+        (
+            model,
+            owner,
+            foreign_grant,
+            _foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            runtime_factory=current_runtime,
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        sidecar.unlink()
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        replacement_owner = replace(
+            owner,
+            mcp_instance_id=_uuid(),
+            mcp_pid=303,
+            mcp_process_started_at="2026-07-22T00:05:00Z",
+            client="GPT Sol",
+            agent_id="gpt-sol-agent",
+        )
+
+        with pytest.raises(OrphanedForeignRecoveryRequired):
+            service.begin_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+            )
+
+        reservation = service.begin_orphaned_foreign_acquisition(
+            local_document.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=local_document,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            task_summary="Continue saved clean document",
+        )
+        completed = service.complete_acquisition(
+            reservation.credential,
+            baseline=baseline,
+            baseline_validated=True,
+            snapshot_id=_uuid(),
+        )
+
+        assert completed.record.state == LeaseState.LOCKED_IDLE
+        assert completed.record.generation == foreign_grant.record.generation + 1
+        assert completed.record.document == local_document
+        assert completed.record.owner == replacement_owner
+        assert service.get_foreign_recovery(local_document.session_uuid) is None
+        persisted = service.sidecar_store.read(sidecar)
+        assert service._authority_equal(completed.record, persisted)
+
+    def test_missing_sidecar_self_recovery_refuses_changed_saved_file(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            _foreign_grant,
+            _foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        sidecar.unlink()
+        model.write_bytes(b"changed after sidecar loss")
+        changed_baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+
+        with pytest.raises(
+            LiveDocumentValidationError,
+            match="no longer matches",
+        ):
+            service.begin_orphaned_foreign_acquisition(
+                local_document.session_uuid,
+                replace(owner, mcp_instance_id=_uuid()),
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=False,
+                    baseline=changed_baseline,
+                    baseline_validated=True,
+                ),
+            )
+
+        assert not sidecar.exists()
+        assert service.get(local_document.session_uuid) is None
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
+
+    def test_missing_sidecar_self_recovery_refuses_live_foreign_owner(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            _foreign_grant,
+            _foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(
+                True,
+                process_started_at=owner.freecad_process_started_at,
+            ),
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        sidecar.unlink()
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+
+        with pytest.raises(ForeignRecoveryError, match="still alive"):
+            service.begin_orphaned_foreign_acquisition(
+                local_document.session_uuid,
+                replace(owner, mcp_instance_id=_uuid()),
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+            )
+
+        assert not sidecar.exists()
+        assert service.get(local_document.session_uuid) is None
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
+
+    def test_missing_sidecar_self_recovery_preserves_recreated_authority(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        sidecar.unlink()
+        foreign_service.sidecar_store.create(sidecar, foreign_grant.record)
+        before = sidecar.read_bytes()
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+
+        with pytest.raises(CoordinationError, match="reappeared"):
+            service.begin_orphaned_foreign_acquisition(
+                local_document.session_uuid,
+                replace(owner, mcp_instance_id=_uuid()),
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+            )
+
+        assert sidecar.read_bytes() == before
+        assert service.get(local_document.session_uuid) is None
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
+
     def test_foreign_acquiring_with_checkpointed_snapshot_requires_recovery(
         self,
         tmp_path,

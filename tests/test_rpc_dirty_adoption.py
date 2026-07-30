@@ -350,6 +350,112 @@ def test_close_reopen_then_clean_acquire_avoids_identity_registration_deadlock(
     assert persisted.owner.client == "Cursor"
 
 
+def test_clean_acquire_self_recovers_missing_foreign_sidecar(
+    tmp_path,
+    monkeypatch,
+):
+    model = tmp_path / "OrphanedClean.FCStd"
+    original = b"validated clean saved document"
+    model.write_bytes(original)
+    document = _DirtyDocument(model)
+    document.Name = "OrphanedClean"
+    document.Label = "Orphaned clean"
+    document.Modified = False
+    owner = LeaseOwner(
+        addon_profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=42,
+        freecad_process_started_at="2026-07-30T00:00:00Z",
+        boot_id="test-boot",
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-30T00:00:01Z",
+        hostname=rpc_server.platform.node(),
+        client="Claude",
+        agent_id="claude-agent",
+    )
+    foreign_identities = DocumentIdentityService()
+    foreign_document = foreign_identities.register(
+        name=document.Name,
+        path=model,
+    )
+    foreign_service = DocumentLeaseService(foreign_identities)
+    foreign_grant = foreign_service.acquire(
+        foreign_document.session_uuid,
+        owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+
+    identities = DocumentIdentityService()
+    local_document = identities.register_document(document)
+    runtime = SimpleNamespace(
+        profile_id=owner.addon_profile_id,
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=owner.freecad_pid,
+        freecad_process_started_at=owner.freecad_process_started_at,
+        boot_id=owner.boot_id,
+    )
+    service = DocumentLeaseService(
+        identities,
+        SidecarStore(network_detector=lambda _path: False),
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=runtime.profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            hostname=owner.hostname,
+        ),
+    )
+    service.import_adjacent_foreign_recovery(
+        local_document.session_uuid,
+        live_document=local_document,
+    )
+    sidecar_path_for(model).unlink()
+
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, timeout=None: task())
+    monkeypatch.setattr(rpc_server, "_import_document_lock", lambda: _DocumentLock())
+    monkeypatch.setattr(rpc_server, "document_identity_service", identities)
+    monkeypatch.setattr(rpc_server, "document_lease_service", service)
+    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", runtime)
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "getDocument",
+        lambda name: document if name == document.Name else None,
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "listDocuments",
+        lambda: {document.Name: document},
+    )
+    monkeypatch.setattr(
+        rpc_server,
+        "create_lease_baseline_snapshot_gui",
+        lambda _document: str(uuid.uuid4()),
+    )
+
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Continue after missing sidecar",
+        client="GPT Sol",
+        agent_id="gpt-sol-agent",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["credential"]["generation"] == (
+        foreign_grant.credential.generation + 1
+    )
+    assert "DOCUMENT_IDENTITY_ERROR" not in str(result)
+    assert "FOREIGN_SIDECAR_INVALID" not in str(result)
+    assert model.read_bytes() == original
+    persisted = service.sidecar_store.read(sidecar_path_for(model))
+    assert persisted.document == local_document
+    assert persisted.owner.addon_runtime_id == runtime.addon_runtime_id
+    assert service.get_foreign_recovery(local_document.session_uuid) is None
+
+
 def test_dirty_adoption_rolls_back_if_saved_baseline_changes_before_promotion(
     tmp_path, monkeypatch
 ):

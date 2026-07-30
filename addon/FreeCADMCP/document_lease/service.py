@@ -101,6 +101,12 @@ class ForeignRecoveryError(LocalRecoveryError):
     code = "FOREIGN_RECOVERY_UNSAFE"
 
 
+class OrphanedForeignRecoveryRequired(ForeignRecoveryError):
+    """A clean missing-sidecar record needs off-GUI verification."""
+
+    code = "ORPHANED_FOREIGN_RECOVERY_REQUIRED"
+
+
 @dataclass(frozen=True)
 class LeaseGrant:
     credential: LeaseCredential
@@ -453,6 +459,107 @@ class DocumentLeaseService:
             )
         return "recorded FreeCAD PID now belongs to a different process"
 
+    def _prove_orphaned_foreign_authority_inactive(
+        self, foreign: ForeignRecoveryRecord
+    ) -> str:
+        """Prove no credential can still drive the imported authority.
+
+        Most records use the normal same-host process/runtime death proof. A
+        missing sidecar can also strand a record created by this exact addon
+        runtime after its original document session was replaced. In that
+        case, the old session's absence from both identity and lease registries
+        is stronger authorization evidence than a PID probe: credentials for
+        that UUID cannot pass this service's registry fence.
+        """
+
+        try:
+            return self._prove_foreign_owner_dead(foreign.persisted.owner)
+        except ForeignRecoveryError as original_error:
+            local = self._local_runtime_identity
+            owner = foreign.persisted.owner
+            same_runtime = bool(
+                local is not None
+                and local.addon_profile_id == owner.addon_profile_id
+                and local.addon_runtime_id == owner.addon_runtime_id
+                and local.freecad_pid == owner.freecad_pid
+                and local.freecad_process_started_at == owner.freecad_process_started_at
+                and local.boot_id == owner.boot_id
+                and local.hostname
+                and owner.hostname
+                and local.hostname.casefold() == owner.hostname.casefold()
+            )
+            foreign_session = foreign.persisted.document.session_uuid
+            local_session = foreign.local_document.session_uuid
+            if not same_runtime or foreign_session == local_session:
+                raise original_error
+            if (
+                foreign_session in self._records
+                or foreign_session in self._pending_save_as
+                or foreign_session in self._foreign_records
+            ):
+                raise original_error
+            try:
+                self.identity_service.resolve(foreign_session)
+            except Exception:
+                return (
+                    "recorded document session is no longer registered in the "
+                    "current addon runtime"
+                )
+            raise original_error
+
+    @staticmethod
+    def _is_clean_orphaned_foreign_candidate(record: LeaseRecord) -> bool:
+        """Recognize authority that proves all mutations reached a clean save."""
+
+        return bool(
+            record.state == LeaseState.LOCKED_IDLE
+            and not record.dirty
+            and not record.user_intervened
+            and record.error is None
+            and record.baseline is not None
+            and record.validation_complete
+            and record.last_verified_save_revision == record.last_mutation_revision
+            and record.migration is None
+        )
+
+    def _assert_current_baseline(
+        self,
+        identity: DocumentIdentity,
+        baseline: FileBaseline,
+        *,
+        error_type: type[LeaseServiceError] = CoordinationError,
+    ) -> None:
+        """Revalidate lightweight file metadata after an off-lock hash."""
+
+        path = identity.canonical_path
+        if not path or not os.path.isfile(path):
+            raise error_type(
+                "the saved document path is missing or is not a regular file"
+            )
+        try:
+            info = os.stat(path)
+            current_identity = file_identity_for_path(
+                path, platform=self.identity_service.platform
+            )
+        except (DocumentIdentityError, OSError) as exc:
+            raise error_type(
+                f"the saved document identity cannot be revalidated: {exc}"
+            ) from exc
+        failures = []
+        if int(info.st_size) != baseline.size:
+            failures.append("size changed")
+        if int(info.st_mtime_ns) != baseline.mtime_ns:
+            failures.append("modification time changed")
+        if current_identity != baseline.file_identity:
+            failures.append("file identity changed")
+        if current_identity != identity.file_identity:
+            failures.append("registered document identity changed")
+        if failures:
+            raise error_type(
+                "the saved document changed during orphan recovery: "
+                + "; ".join(failures)
+            )
+
     def _validate_live_evidence(
         self,
         record: LeaseRecord,
@@ -727,6 +834,23 @@ class DocumentLeaseService:
                 )
             foreign = self._foreign_records.get(identity.session_uuid)
             if foreign is not None:
+                foreign_path = (
+                    sidecar_path_for(identity.canonical_path)
+                    if identity.canonical_path
+                    else None
+                )
+                if (
+                    replace_unreturned_reservation
+                    and not document_dirty
+                    and foreign_path is not None
+                    and not os.path.lexists(foreign_path)
+                    and self._is_clean_orphaned_foreign_candidate(foreign.persisted)
+                ):
+                    raise OrphanedForeignRecoveryRequired(
+                        "a clean foreign recovery record lost its sidecar and "
+                        "requires verified in-process fencing",
+                        details=foreign.to_public_dict(),
+                    )
                 if replace_unreturned_reservation and self._is_unreturned_reservation(
                     foreign.persisted,
                     allow_active_acquiring=True,
@@ -787,6 +911,135 @@ class DocumentLeaseService:
                 mcp_instance_id=owner.mcp_instance_id,
             )
             return LeaseGrant(credential=credential, record=record)
+
+    def begin_orphaned_foreign_acquisition(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        validation: LiveDocumentValidation,
+        task_summary: str = "",
+    ) -> LeaseGrant:
+        """Atomically fence a clean foreign record whose sidecar disappeared.
+
+        This is the sole automatic missing-sidecar recovery path. It requires
+        fresh clean-document evidence and a full saved-file baseline matching
+        the last validated clean authority. Publication uses atomic create, so
+        a sidecar that reappears or is concurrently recreated wins the race and
+        recovery fails closed.
+        """
+
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            foreign = self._foreign_records.get(identity.session_uuid)
+            if foreign is None:
+                raise LeaseConflictError(
+                    "the selected document has no foreign recovery record"
+                )
+            if foreign.local_document != identity:
+                raise ForeignRecoveryError(
+                    "the live document identity changed after foreign import"
+                )
+            previous = foreign.persisted
+            if not self._is_clean_orphaned_foreign_candidate(previous):
+                raise ForeignRecoveryError(
+                    "foreign authority does not prove a fully saved clean document"
+                )
+            path = (
+                sidecar_path_for(identity.canonical_path)
+                if identity.canonical_path
+                else None
+            )
+            if path is None:
+                raise ForeignRecoveryError(
+                    "orphan recovery requires a saved open document"
+                )
+            if os.path.lexists(path):
+                raise CoordinationError(
+                    "foreign recovery sidecar reappeared before fencing"
+                )
+            self._prove_orphaned_foreign_authority_inactive(foreign)
+            if not isinstance(validation, LiveDocumentValidation):
+                raise LiveDocumentValidationError(
+                    "fresh LiveDocumentValidation evidence is required"
+                )
+            if validation.document != identity:
+                raise LiveDocumentValidationError(
+                    "live document evidence does not match the registered document"
+                )
+            if validation.document_modified:
+                raise DirtyAcquisitionError(
+                    "a pre-existing dirty document requires local adoption"
+                )
+            if validation.baseline_validated is not True:
+                raise LiveDocumentValidationError(
+                    "orphan recovery requires a validated saved-file baseline"
+                )
+            if not isinstance(validation.baseline, FileBaseline):
+                raise LiveDocumentValidationError(
+                    "orphan recovery requires a saved-file baseline"
+                )
+            if validation.baseline != previous.baseline:
+                raise LiveDocumentValidationError(
+                    "the saved file no longer matches the foreign clean baseline"
+                )
+            self._assert_current_baseline(
+                identity,
+                validation.baseline,
+                error_type=LiveDocumentValidationError,
+            )
+
+            raw_token = self._token_factory()
+            if not raw_token:
+                raise LeaseServiceError("token factory returned an empty token")
+            generation = (
+                max(
+                    previous.generation,
+                    self._generations.get(identity.session_uuid, 0),
+                )
+                + 1
+            )
+            now = self._utc_clock()
+            now_mono = self._monotonic_ns()
+            replacement = LeaseRecord(
+                lease_id=str(self._uuid_factory()),
+                generation=generation,
+                token_fingerprint=token_fingerprint(raw_token),
+                document=identity,
+                owner=owner,
+                state=LeaseState.ACQUIRING,
+                record_revision=previous.record_revision + 1,
+                state_revision=previous.state_revision + 1,
+                acquired_at=now,
+                last_heartbeat_at=now,
+                monotonic_heartbeat_ns=now_mono,
+                task_summary=_bounded_text(task_summary, 1024),
+                dirty=False,
+                last_mutation_revision=0,
+                baseline=None,
+                validation_complete=False,
+                snapshot_id=None,
+            )
+            try:
+                self.sidecar_store.create(path, replacement)
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"orphaned foreign authority could not be fenced: {exc}"
+                ) from exc
+            self._records[identity.session_uuid] = replacement
+            self._foreign_records.pop(identity.session_uuid, None)
+            self._closed_documents.pop(identity.session_uuid, None)
+            self._generations[identity.session_uuid] = generation
+            self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+            self._clear_effective_error_times(identity.session_uuid)
+            credential = LeaseCredential(
+                lease_id=replacement.lease_id,
+                document_session_uuid=identity.session_uuid,
+                generation=generation,
+                token=raw_token,
+                mcp_instance_id=owner.mcp_instance_id,
+            )
+            return LeaseGrant(credential=credential, record=replacement)
 
     @staticmethod
     def _is_unreturned_reservation(
@@ -2700,6 +2953,78 @@ class DocumentLeaseService:
         with self._lock:
             foreign = self._foreign_records.get(identity.session_uuid)
             return foreign.to_public_dict() if foreign else None
+
+    def refresh_orphaned_foreign_document_identity(
+        self, *, document: Any
+    ) -> DocumentIdentity:
+        """Repair exact-proxy identity drift for a clean missing-sidecar record.
+
+        Registration can detect an identity mismatch before acquisition gets a
+        chance to run its full hash. This bounded repair locates only the exact
+        previously registered proxy, proves its foreign authority inactive,
+        and accepts a refresh only when the on-disk metadata still matches the
+        foreign record's validated clean baseline. The acquisition path repeats
+        the check with SHA-256 evidence before publishing new authority.
+        """
+
+        session_uuid = self.identity_service.registered_session_uuid(document)
+        with self._lock:
+            foreign = self._foreign_records.get(session_uuid)
+            if foreign is None:
+                raise LeaseConflictError(
+                    "the registered document has no foreign recovery record"
+                )
+            previous = foreign.persisted
+            if not self._is_clean_orphaned_foreign_candidate(previous):
+                raise ForeignRecoveryError(
+                    "foreign authority does not prove a fully saved clean document"
+                )
+            canonical_path = foreign.local_document.canonical_path
+            if not canonical_path:
+                raise ForeignRecoveryError(
+                    "orphan identity repair requires a saved document"
+                )
+            path = sidecar_path_for(canonical_path)
+            if os.path.lexists(path):
+                raise CoordinationError(
+                    "foreign sidecar still exists; identity repair is not automatic"
+                )
+            self._prove_orphaned_foreign_authority_inactive(foreign)
+            observed = self.identity_service.inspect_registered_document(
+                session_uuid, document
+            )
+            if (
+                observed.name != foreign.local_document.name
+                or observed.comparison_key != foreign.local_document.comparison_key
+                or observed.comparison_key != previous.document.comparison_key
+            ):
+                raise ForeignRecoveryError(
+                    "live document name or path changed after foreign import"
+                )
+            baseline = previous.baseline
+            if not isinstance(baseline, FileBaseline):
+                raise ForeignRecoveryError(
+                    "foreign clean authority has no valid saved-file baseline"
+                )
+            self._assert_current_baseline(
+                observed,
+                baseline,
+                error_type=ForeignRecoveryError,
+            )
+            refreshed = self.identity_service.refresh_saved_document(document)
+            if (
+                refreshed.session_uuid != session_uuid
+                or refreshed.name != observed.name
+                or refreshed.comparison_key != observed.comparison_key
+                or refreshed.file_identity != observed.file_identity
+            ):
+                raise CoordinationError(
+                    "orphan identity refresh changed the live document binding"
+                )
+            self._foreign_records[session_uuid] = replace(
+                foreign, local_document=refreshed
+            )
+            return refreshed
 
     def list_foreign_recoveries(self) -> list[dict[str, Any]]:
         with self._lock:

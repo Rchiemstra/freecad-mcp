@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import types
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import FreeCADGui
@@ -284,6 +285,87 @@ def test_finish_save_refreshes_registered_identity_without_lease(tmp_path):
     assert refreshed.session_uuid == original.session_uuid
     assert refreshed.file_identity == observed.file_identity
     assert service.get(refreshed.session_uuid) is None
+
+
+def test_missing_foreign_sidecar_repairs_exact_proxy_identity_error(tmp_path):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.model import LeaseOwner
+    from addon.FreeCADMCP.document_lease.service import (
+        DocumentLeaseService,
+        LocalRuntimeIdentity,
+        ProcessLivenessEvidence,
+    )
+    from addon.FreeCADMCP.document_lease.sidecar import sidecar_path_for
+
+    model = tmp_path / "StackedFault.FCStd"
+    model.write_bytes(b"validated saved document")
+    owner = LeaseOwner(
+        addon_profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=101,
+        freecad_process_started_at="2026-07-30T00:00:00Z",
+        boot_id="test-boot",
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-30T00:00:01Z",
+        hostname="localhost",
+        client="Claude",
+        agent_id="claude-agent",
+    )
+    foreign_identities = DocumentIdentityService()
+    foreign_document = foreign_identities.register(name="StackedFault", path=model)
+    foreign_service = DocumentLeaseService(foreign_identities)
+    foreign_service.acquire(
+        foreign_document.session_uuid,
+        owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+
+    document = FakeDocument("StackedFault", str(model), modified=False)
+    identities = DocumentIdentityService()
+    local_document = identities.register_document(document)
+    service = DocumentLeaseService(
+        identities,
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=str(uuid.uuid4()),
+            addon_runtime_id=str(uuid.uuid4()),
+            freecad_pid=303,
+            freecad_process_started_at="2026-07-30T00:05:00Z",
+            boot_id=owner.boot_id,
+            hostname=owner.hostname,
+        ),
+        process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+    )
+    service.import_adjacent_foreign_recovery(
+        local_document.session_uuid,
+        live_document=local_document,
+    )
+    sidecar_path_for(model).unlink()
+
+    # Reproduce the stacked in-memory fault: exact proxy/path still identify
+    # the clean file, but the registry entry can no longer pass registration.
+    identities._entries[local_document.session_uuid].identity = replace(  # noqa: SLF001
+        local_document,
+        file_identity=None,
+    )
+
+    repaired, imported = observer_mod.register_live_document_recovery(
+        service,
+        document,
+    )
+
+    assert imported is None
+    assert repaired == local_document
+    assert (
+        identities.inspect_registered_document(
+            repaired.session_uuid,
+            document,
+        )
+        == repaired
+    )
+    effective = service.get_effective(repaired.session_uuid)
+    assert effective["document_state"]["error"]["code"] == ("FOREIGN_SIDECAR_INVALID")
+    assert "DOCUMENT_IDENTITY_ERROR" not in str(effective)
 
 
 def test_gui_edit_mode_resolves_view_provider_object(tmp_path):

@@ -4393,28 +4393,39 @@ class FreeCADRPC:
                         else {}
                     ),
                 }
-                if adopt_dirty:
-                    reservation = document_lease_service.begin_dirty_adoption(
-                        exact_selector,
-                        owner,
-                        task_summary=task_description,
-                        document_dirty=True,
-                        local_confirmation=True,
-                    )
-                else:
-                    reservation = document_lease_service.begin_acquisition(
-                        exact_selector,
-                        owner,
-                        task_summary=task_description,
-                        document_dirty=False,
-                    )
-                self._retain_inflight_credential(reservation.credential)
                 phase.update(
-                    credential=reservation.credential,
                     document_identity=document_identity,
                     document_name=document_identity.name,
                     canonical_path=document_identity.canonical_path,
+                    exact_selector=exact_selector,
+                    owner=owner,
                 )
+                try:
+                    if adopt_dirty:
+                        reservation = document_lease_service.begin_dirty_adoption(
+                            exact_selector,
+                            owner,
+                            task_summary=task_description,
+                            document_dirty=True,
+                            local_confirmation=True,
+                        )
+                    else:
+                        reservation = document_lease_service.begin_acquisition(
+                            exact_selector,
+                            owner,
+                            task_summary=task_description,
+                            document_dirty=False,
+                        )
+                except lease.OrphanedForeignRecoveryRequired:
+                    if adopt_dirty:
+                        raise
+                    # Full-file hashing deliberately runs off the GUI thread.
+                    # The service atomically publishes replacement authority
+                    # only after the second GUI pass revalidates this document.
+                    phase["orphaned_foreign_recovery"] = True
+                else:
+                    self._retain_inflight_credential(reservation.credential)
+                    phase["credential"] = reservation.credential
                 if inflight is not None:
                     inflight.token.checkpoint("acquisition_reserved")
                 return {"success": True}
@@ -4455,8 +4466,11 @@ class FreeCADRPC:
             failure = exc
 
             def rollback_gui():
+                credential = phase.get("credential")
+                if credential is None:
+                    return _lease_service_error(failure, request_id=request_id)
                 try:
-                    document_lease_service.abort_acquisition(phase["credential"])
+                    document_lease_service.abort_acquisition(credential)
                     return _lease_service_error(failure, request_id=request_id)
                 except Exception as rollback_exc:
                     return _lease_service_error(rollback_exc, request_id=request_id)
@@ -4467,7 +4481,7 @@ class FreeCADRPC:
             snapshot_id = None
             marker_keys = []
             attribution_started = False
-            credential = phase["credential"]
+            credential = phase.get("credential")
             try:
                 if inflight is not None:
                     inflight.token.checkpoint("acquisition_snapshot_gui")
@@ -4486,11 +4500,6 @@ class FreeCADRPC:
                 dl.begin_agent_mutation_scope(request_id, marker_keys)
                 attribution_started = True
                 lease = _import_document_lease()
-                document_lease_service.authorize(
-                    credential,
-                    selector={"document_session_uuid": original_identity.session_uuid},
-                    allowed_states={lease.LeaseState.ACQUIRING},
-                )
                 observed = document_identity_service.inspect_registered_document(
                     original_identity.session_uuid, document
                 )
@@ -4509,6 +4518,33 @@ class FreeCADRPC:
                 if not adopt_dirty and document_dirty:
                     raise lease.DirtyAcquisitionError(
                         "document became dirty during acquisition"
+                    )
+                if phase.get("orphaned_foreign_recovery"):
+                    reservation = (
+                        document_lease_service.begin_orphaned_foreign_acquisition(
+                            phase["exact_selector"],
+                            phase["owner"],
+                            validation=lease.LiveDocumentValidation(
+                                document=observed,
+                                document_modified=document_dirty,
+                                baseline=phase["baseline"],
+                                baseline_validated=bool(
+                                    original_identity.canonical_path
+                                ),
+                            ),
+                            task_summary=task_description,
+                        )
+                    )
+                    credential = reservation.credential
+                    phase["credential"] = credential
+                    self._retain_inflight_credential(credential)
+                else:
+                    document_lease_service.authorize(
+                        credential,
+                        selector={
+                            "document_session_uuid": original_identity.session_uuid
+                        },
+                        allowed_states={lease.LeaseState.ACQUIRING},
                     )
                 snapshot_id = create_lease_baseline_snapshot_gui(document)
                 document_lease_service.record_acquisition_snapshot(
@@ -4565,12 +4601,13 @@ class FreeCADRPC:
                     discard_lease_baseline_snapshot(snapshot_id)
                 raise
             except Exception as exc:
-                try:
-                    document_lease_service.abort_acquisition(credential)
-                except Exception as rollback_exc:
-                    # A failed CAS rollback is stricter than the triggering
-                    # error. Keep both the sidecar and recovery artifact.
-                    return _lease_service_error(rollback_exc, request_id=request_id)
+                if credential is not None:
+                    try:
+                        document_lease_service.abort_acquisition(credential)
+                    except Exception as rollback_exc:
+                        # A failed CAS rollback is stricter than the triggering
+                        # error. Keep both the sidecar and recovery artifact.
+                        return _lease_service_error(rollback_exc, request_id=request_id)
                 if snapshot_id:
                     discard_lease_baseline_snapshot(snapshot_id)
                 return _lease_service_error(exc, request_id=request_id)

@@ -13,7 +13,7 @@ been inspected and resolved.
 | `STALE` | Blocked | If the exact authenticated runtime returns unchanged, reconcile; otherwise inspect and confirm local takeover |
 | `USER_INTERVENED` | Old credential permanently revoked | Finish locally with save-and-clear, restore-and-clear, or keep-dirty acknowledgement |
 | `UNLOCKED_DIRTY` | Blocked and no new acquisition | Inspect, save or restore locally, then clear/adopt explicitly |
-| Missing/replaced sidecar | Blocked | Repair it under the guard only when exact ownership can be proven; otherwise use confirmed recovery |
+| Missing/replaced sidecar | Blocked by default | A clean acquire may self-recover only from an imported `LOCKED_IDLE` record with an unchanged validated baseline and proven-inactive authority; otherwise use confirmed recovery |
 | Malformed/unknown sidecar | Blocked | Preserve or quarantine through the local recovery UI after owner/liveness checks; never edit it in place |
 
 ## Common failures
@@ -38,6 +38,15 @@ been inspected and resolved.
   authority retains a one-shot marker and may rebind only the same name, path,
   and filesystem identity. Untouched reservations can then retry; promoted
   leases remain blocked for explicit recovery.
+- **Sidecar deleted after foreign import:** a normal clean acquire performs one
+  bounded in-process recovery only when the immutable record is `LOCKED_IDLE`,
+  clean, non-migrating, fully save-verified, and its foreign runtime or document
+  session is provably inactive. The live document must be clean and an off-GUI
+  SHA-256 baseline must exactly match the persisted baseline. The addon then
+  atomically creates a higher-generation `ACQUIRING` sidecar; a changed,
+  malformed, or concurrently recreated sidecar still fails closed. This path
+  also repairs exact-proxy identity drift under the same evidence, avoiding a
+  stacked `DOCUMENT_IDENTITY_ERROR`.
 - **GUI timeout/hang:** treat the running mutation as uncertain until the GUI
   returns. Do not retry with a new request ID or clear its sidecar blindly.
   Retrying the same request ID returns the recorded status and never invokes
@@ -117,6 +126,8 @@ STALE
 
 LOCKED_ERROR
 ├─ save/validation failure is retryable → retry typed save or validation
+├─ synthetic FOREIGN_SIDECAR_INVALID over a clean verified foreign record
+│  └─ clean acquire → hash/identity/liveness proof → atomic generation fence
 ├─ secure baseline is available → restore, inspect, then save and verify
 └─ state must remain dirty → confirmed takeover and keep-dirty acknowledgement
 
