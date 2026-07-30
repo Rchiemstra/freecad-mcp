@@ -11,5 +11,7 @@
   incidents, late-completion correlation, and negotiated MCP Tasks fallback.
 - Added the 20-task Docker benchmark, KPI reports, adoption categories, AST-only
   public-code analysis, and typed-tool migration guidance.
+- Added lease-safe typed `sketch_delete_constraint` and
+  `sketch_delete_geometry` operations with atomic batch validation.
 - Preserved lease, isolated-instance, worker, snapshot, and remote-RPC security
   behavior while retaining readable text and legacy worker-code aliases.

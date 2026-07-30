@@ -1486,6 +1486,60 @@ class FreeCADConnection:
             return routed
         return self.server.sketch_add_constraint(doc_name, sketch_name, constraints)
 
+    def sketch_delete_constraint(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        constraint_indices: list[int] | None = None,
+        constraint_names: list[str] | None = None,
+    ) -> dict[str, Any]:
+        indices = list(constraint_indices or [])
+        names = list(constraint_names or [])
+        routed = self._invoke_mutation_v2(
+            "sketch_delete_constraint",
+            {
+                "doc_name": doc_name,
+                "sketch_name": sketch_name,
+                "constraint_indices": indices,
+                "constraint_names": names,
+            },
+            document_names=(doc_name,),
+            operation_name="Delete sketch constraints",
+        )
+        if routed is not None:
+            return routed
+        return self.server.sketch_delete_constraint(
+            doc_name,
+            sketch_name,
+            indices,
+            names,
+        )
+
+    def sketch_delete_geometry(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        geometry_indices: list[int],
+    ) -> dict[str, Any]:
+        indices = list(geometry_indices)
+        routed = self._invoke_mutation_v2(
+            "sketch_delete_geometry",
+            {
+                "doc_name": doc_name,
+                "sketch_name": sketch_name,
+                "geometry_indices": indices,
+            },
+            document_names=(doc_name,),
+            operation_name="Delete sketch geometry",
+        )
+        if routed is not None:
+            return routed
+        return self.server.sketch_delete_geometry(
+            doc_name,
+            sketch_name,
+            indices,
+        )
+
     def pad_feature(
         self,
         doc_name: str,

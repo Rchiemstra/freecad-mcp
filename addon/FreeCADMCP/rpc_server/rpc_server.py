@@ -7539,6 +7539,38 @@ class FreeCADRPC:
         )
         return self._adapt_gui_mutation_result(res)
 
+    def sketch_delete_constraint(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        constraint_indices=None,
+        constraint_names=None,
+    ) -> dict:
+        res = self._dispatch_gui(
+            lambda: self._sketch_delete_constraint_gui(
+                doc_name,
+                sketch_name,
+                constraint_indices,
+                constraint_names,
+            )
+        )
+        return self._adapt_gui_mutation_result(res)
+
+    def sketch_delete_geometry(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        geometry_indices: list,
+    ) -> dict:
+        res = self._dispatch_gui(
+            lambda: self._sketch_delete_geometry_gui(
+                doc_name,
+                sketch_name,
+                geometry_indices,
+            )
+        )
+        return self._adapt_gui_mutation_result(res)
+
     def pad_feature(
         self,
         doc_name: str,
@@ -8322,6 +8354,233 @@ class FreeCADRPC:
             return True
         except Exception as e:
             return str(e)
+
+    @staticmethod
+    def _sketch_delete_error(code, message, **details):
+        return {
+            "success": False,
+            "error_code": code,
+            "error": message,
+            **details,
+        }
+
+    def _sketch_delete_constraint_gui(
+        self,
+        doc_name,
+        sketch_name,
+        constraint_indices,
+        constraint_names,
+    ):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return self._sketch_delete_error(
+                    "DOCUMENT_NOT_FOUND",
+                    f"Document '{doc_name}' not found.",
+                )
+            sketch = doc.getObject(sketch_name)
+            if not sketch:
+                return self._sketch_delete_error(
+                    "SKETCH_NOT_FOUND",
+                    f"Sketch '{sketch_name}' not found.",
+                )
+            if not hasattr(sketch, "delConstraints"):
+                return self._sketch_delete_error(
+                    "NOT_A_SKETCH",
+                    f"Object '{sketch_name}' is not an editable Sketcher sketch.",
+                )
+
+            indices = list(constraint_indices or [])
+            names = list(constraint_names or [])
+            if not indices and not names:
+                return self._sketch_delete_error(
+                    "INVALID_ARGUMENT",
+                    "Provide at least one constraint index or name.",
+                )
+            if any(
+                isinstance(index, bool)
+                or not isinstance(index, int)
+                or index < 0
+                for index in indices
+            ):
+                return self._sketch_delete_error(
+                    "INVALID_ARGUMENT",
+                    "constraint_indices must contain non-negative integers.",
+                )
+            if any(not isinstance(name, str) or not name for name in names):
+                return self._sketch_delete_error(
+                    "INVALID_ARGUMENT",
+                    "constraint_names must contain non-empty strings.",
+                )
+
+            constraints = list(getattr(sketch, "Constraints", []) or [])
+            invalid_indices = sorted(
+                {index for index in indices if index >= len(constraints)}
+            )
+            if invalid_indices:
+                return self._sketch_delete_error(
+                    "CONSTRAINT_INDEX_OUT_OF_RANGE",
+                    (
+                        "Constraint index out of range: "
+                        + ", ".join(str(index) for index in invalid_indices)
+                    ),
+                    invalid_indices=invalid_indices,
+                    constraint_count=len(constraints),
+                )
+
+            resolved = set(indices)
+            for name in names:
+                matches = [
+                    index
+                    for index, constraint in enumerate(constraints)
+                    if getattr(constraint, "Name", "") == name
+                ]
+                if not matches:
+                    return self._sketch_delete_error(
+                        "CONSTRAINT_NOT_FOUND",
+                        f"Constraint name not found: {name}",
+                        constraint_name=name,
+                    )
+                if len(matches) > 1:
+                    return self._sketch_delete_error(
+                        "CONSTRAINT_NAME_AMBIGUOUS",
+                        f"Constraint name is not unique: {name}",
+                        constraint_name=name,
+                        matching_indices=matches,
+                    )
+                resolved.add(matches[0])
+
+            target_indices = sorted(resolved)
+            deleted = [
+                {
+                    "index": index,
+                    "name": str(getattr(constraints[index], "Name", "") or ""),
+                    "type": str(getattr(constraints[index], "Type", "") or ""),
+                }
+                for index in target_indices
+            ]
+            sketch.delConstraints(target_indices, True)
+            doc.recompute()
+            remaining_count = len(
+                list(getattr(sketch, "Constraints", []) or [])
+            )
+            return {
+                "success": True,
+                "sketch": str(getattr(sketch, "Name", sketch_name)),
+                "deleted_constraints": deleted,
+                "deleted_count": len(target_indices),
+                "remaining_constraint_count": remaining_count,
+            }
+        except Exception as exc:
+            return self._sketch_delete_error(
+                "SKETCH_CONSTRAINT_DELETE_FAILED",
+                str(exc),
+            )
+
+    def _sketch_delete_geometry_gui(
+        self,
+        doc_name,
+        sketch_name,
+        geometry_indices,
+    ):
+        try:
+            doc = FreeCAD.getDocument(doc_name)
+            if not doc:
+                return self._sketch_delete_error(
+                    "DOCUMENT_NOT_FOUND",
+                    f"Document '{doc_name}' not found.",
+                )
+            sketch = doc.getObject(sketch_name)
+            if not sketch:
+                return self._sketch_delete_error(
+                    "SKETCH_NOT_FOUND",
+                    f"Sketch '{sketch_name}' not found.",
+                )
+            if not hasattr(sketch, "delGeometries"):
+                return self._sketch_delete_error(
+                    "NOT_A_SKETCH",
+                    f"Object '{sketch_name}' is not an editable Sketcher sketch.",
+                )
+
+            indices = list(geometry_indices or [])
+            if not indices:
+                return self._sketch_delete_error(
+                    "INVALID_ARGUMENT",
+                    "geometry_indices must be a non-empty list.",
+                )
+            if any(
+                isinstance(index, bool)
+                or not isinstance(index, int)
+                or index < 0
+                for index in indices
+            ):
+                return self._sketch_delete_error(
+                    "INVALID_ARGUMENT",
+                    "geometry_indices must contain non-negative integers.",
+                )
+
+            geometry = list(getattr(sketch, "Geometry", []) or [])
+            invalid_indices = sorted(
+                {index for index in indices if index >= len(geometry)}
+            )
+            if invalid_indices:
+                return self._sketch_delete_error(
+                    "GEOMETRY_INDEX_OUT_OF_RANGE",
+                    (
+                        "Geometry index out of range: "
+                        + ", ".join(str(index) for index in invalid_indices)
+                    ),
+                    invalid_indices=invalid_indices,
+                    geometry_count=len(geometry),
+                )
+
+            target_indices = sorted(set(indices))
+            deleted = []
+            for index in target_indices:
+                construction = None
+                try:
+                    construction = bool(sketch.getConstruction(index))
+                except Exception:
+                    pass
+                deleted.append(
+                    {
+                        "index": index,
+                        "type": str(
+                            getattr(geometry[index], "TypeId", "")
+                            or type(geometry[index]).__name__
+                        ),
+                        "construction": construction,
+                    }
+                )
+
+            constraint_count_before = len(
+                list(getattr(sketch, "Constraints", []) or [])
+            )
+            sketch.delGeometries(target_indices)
+            doc.recompute()
+            remaining_geometry_count = len(
+                list(getattr(sketch, "Geometry", []) or [])
+            )
+            remaining_constraint_count = len(
+                list(getattr(sketch, "Constraints", []) or [])
+            )
+            return {
+                "success": True,
+                "sketch": str(getattr(sketch, "Name", sketch_name)),
+                "deleted_geometry": deleted,
+                "deleted_count": len(target_indices),
+                "remaining_geometry_count": remaining_geometry_count,
+                "dependent_constraints_removed": max(
+                    0,
+                    constraint_count_before - remaining_constraint_count,
+                ),
+                "remaining_constraint_count": remaining_constraint_count,
+            }
+        except Exception as exc:
+            return self._sketch_delete_error(
+                "SKETCH_GEOMETRY_DELETE_FAILED",
+                str(exc),
+            )
 
     def _spreadsheet_create_gui(self, doc_name, sheet_name):
         try:

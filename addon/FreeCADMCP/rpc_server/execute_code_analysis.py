@@ -15,6 +15,10 @@ _TYPED_PATTERNS = {
     "setexpression": "set_expression",
     "addconstraint": "sketch_add_constraint",
     "addgeometry": "sketch_add_geometry",
+    "delconstraint": "sketch_delete_constraint",
+    "delconstraints": "sketch_delete_constraint",
+    "delgeometry": "sketch_delete_geometry",
+    "delgeometries": "sketch_delete_geometry",
 }
 
 _TYPE_PATTERNS = {

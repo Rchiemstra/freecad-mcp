@@ -458,6 +458,8 @@ def make_method_spec(name: str, kind: str) -> RpcMethodSpec:
         "sketch_create",
         "sketch_add_geometry",
         "sketch_add_constraint",
+        "sketch_delete_constraint",
+        "sketch_delete_geometry",
         "sketch_attach",
         "sketch_edit_constraint",
         "pad_feature",

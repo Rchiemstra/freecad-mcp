@@ -64,6 +64,8 @@ from .operations import (
     sketch_create_operation,
     sketch_add_geometry_operation,
     sketch_add_constraint_operation,
+    sketch_delete_constraint_operation,
+    sketch_delete_geometry_operation,
     sketch_add_line_operation,
     sketch_add_circle_operation,
     sketch_add_arc_operation,
@@ -2377,6 +2379,71 @@ def sketch_add_constraint(
         doc_name,
         sketch_name,
         constraints,
+    )
+
+
+@mcp.tool()
+def sketch_delete_constraint(
+    ctx: Context,
+    doc_name: str,
+    sketch_name: str,
+    constraint_indices: list[int] | None = None,
+    constraint_names: list[str] | None = None,
+) -> CallToolResult:
+    """Delete one or more constraints from a Sketcher sketch.
+
+    All selectors are resolved and validated before the sketch changes. The
+    selected constraints are then deleted in one transaction, so constraint
+    indices cannot shift between deletions. Names and indices may be combined;
+    duplicate selections are deleted only once.
+
+    Args:
+        doc_name: Document containing the sketch.
+        sketch_name: Name of the target sketch.
+        constraint_indices: Zero-based constraint indices to delete.
+        constraint_names: Stable constraint names to delete.
+
+    Returns:
+        Deleted constraint descriptors and the remaining constraint count.
+    """
+    return sketch_delete_constraint_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        constraint_indices=constraint_indices,
+        constraint_names=constraint_names,
+    )
+
+
+@mcp.tool()
+def sketch_delete_geometry(
+    ctx: Context,
+    doc_name: str,
+    sketch_name: str,
+    geometry_indices: list[int],
+) -> CallToolResult:
+    """Delete one or more geometry items from a Sketcher sketch.
+
+    Geometry indices are zero-based and are validated before mutation. FreeCAD
+    also removes constraints that depend on deleted geometry; the result
+    reports how many dependent constraints were removed.
+
+    Args:
+        doc_name: Document containing the sketch.
+        sketch_name: Name of the target sketch.
+        geometry_indices: Non-empty list of zero-based geometry indices.
+
+    Returns:
+        Deleted geometry descriptors, remaining counts, and the number of
+        dependent constraints removed by FreeCAD.
+    """
+    return sketch_delete_geometry_operation(
+        get_freecad_connection(),
+        state.only_text_feedback,
+        doc_name,
+        sketch_name,
+        geometry_indices,
     )
 
 

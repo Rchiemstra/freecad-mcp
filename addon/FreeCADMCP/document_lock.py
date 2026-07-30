@@ -1999,6 +1999,8 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "sketch_create": (VerbKind.MUTATING, _params0_doc),
     "sketch_add_geometry": (VerbKind.MUTATING, _params0_doc),
     "sketch_add_constraint": (VerbKind.MUTATING, _params0_doc),
+    "sketch_delete_constraint": (VerbKind.MUTATING, _params0_doc),
+    "sketch_delete_geometry": (VerbKind.MUTATING, _params0_doc),
     "sketch_attach": (VerbKind.MUTATING, _params0_doc),
     "sketch_edit_constraint": (VerbKind.MUTATING, _params0_doc),
     "pad_feature": (VerbKind.MUTATING, _params0_doc),

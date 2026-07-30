@@ -313,6 +313,11 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 
 ### Sketching
 * `sketch_create`, `sketch_add_geometry`, `sketch_add_constraint`
+* `sketch_delete_constraint` — delete a validated batch by index and/or stable
+  name in one transaction; useful for removing multiple Block constraints
+  without index-shift errors.
+* `sketch_delete_geometry` — delete a validated batch of geometry indices and
+  report dependent constraints removed by FreeCAD.
 * `sketch_add_line`, `sketch_add_circle`, `sketch_add_arc`, `sketch_add_rectangle`
 * `sketch_add_polyline`, `sketch_add_bspline`, `sketch_add_bspline_through_points`, `sketch_add_bezier`, `sketch_add_ellipse`, `sketch_add_arc_of_ellipse`, `sketch_add_slot`, `sketch_add_regular_polygon`, `sketch_add_parametric_curve`, `sketch_import_points`, `sketch_toggle_construction`
 * `sketch_trim`, `sketch_extend`, `sketch_split`, `sketch_fillet`, `sketch_offset`, `sketch_symmetry`
