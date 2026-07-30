@@ -790,6 +790,96 @@ class TestDocumentLeaseAuthorization:
             LeaseState.ACQUIRING.value
         )
 
+    def test_same_owner_fences_local_unreturned_acquiring_without_stale_wait(
+        self, tmp_path
+    ):
+        model = tmp_path / "same-owner-acquiring.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="SameOwner", path=model)
+        service = DocumentLeaseService(identities)
+        owner = _owner()
+        abandoned_request_id = _uuid()
+        abandoned = service.begin_dirty_adoption(
+            identity.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+            acquisition_request_id=abandoned_request_id,
+            live_acquisition_request_ids=frozenset(),
+        )
+
+        replacement = service.begin_dirty_adoption(
+            identity.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+            acquisition_request_id=_uuid(),
+            live_acquisition_request_ids=frozenset(),
+        )
+
+        assert replacement.record.generation == abandoned.record.generation + 1
+        assert replacement.record.state == LeaseState.ACQUIRING
+        with pytest.raises(AuthorizationError):
+            service.authorize(abandoned.credential)
+
+    def test_same_owner_live_request_blocks_concurrent_fence(self, tmp_path):
+        model = tmp_path / "live-same-owner.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="LiveSame", path=model)
+        service = DocumentLeaseService(identities)
+        owner = _owner()
+        live_request_id = _uuid()
+        abandoned = service.begin_dirty_adoption(
+            identity.session_uuid,
+            owner,
+            document_dirty=True,
+            local_confirmation=True,
+            acquisition_request_id=live_request_id,
+            live_acquisition_request_ids=frozenset(),
+        )
+
+        with pytest.raises(LeaseConflictError, match="already has a lease"):
+            service.begin_dirty_adoption(
+                identity.session_uuid,
+                owner,
+                document_dirty=True,
+                local_confirmation=True,
+                acquisition_request_id=_uuid(),
+                live_acquisition_request_ids=frozenset({live_request_id}),
+            )
+
+        assert service.get(identity.session_uuid)["lease_id"] == abandoned.record.lease_id
+
+    def test_competing_mcp_cannot_fence_live_local_acquiring(self, tmp_path):
+        model = tmp_path / "competing-acquiring.FCStd"
+        model.write_bytes(b"saved baseline")
+        identities = DocumentIdentityService()
+        identity = identities.register(name="Competing", path=model)
+        service = DocumentLeaseService(identities)
+        abandoned = service.begin_dirty_adoption(
+            identity.session_uuid,
+            _owner(),
+            document_dirty=True,
+            local_confirmation=True,
+            acquisition_request_id=_uuid(),
+            live_acquisition_request_ids=frozenset(),
+        )
+        competing = replace(_owner(), mcp_instance_id=_uuid(), client="GPT Sol")
+
+        with pytest.raises(LeaseConflictError, match="already has a lease"):
+            service.begin_dirty_adoption(
+                identity.session_uuid,
+                competing,
+                document_dirty=True,
+                local_confirmation=True,
+                acquisition_request_id=_uuid(),
+                live_acquisition_request_ids=frozenset(),
+            )
+
+        assert service.get(identity.session_uuid)["lease_id"] == abandoned.record.lease_id
+
     def test_unreturned_classifier_rejects_every_recovery_evidence_boundary(
         self,
         tmp_path,

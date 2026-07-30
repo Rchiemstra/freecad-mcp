@@ -419,16 +419,15 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
             )
             credential = acquired["credential"]
             session_uuid = credential["document_session_uuid"]
-            raw_lease_token = credential["token"]
             assert acquired["success"] is True
             assert acquired["lease"]["state"] == "LOCKED_IDLE"
+            assert acquired.get("credential_stored") is True
+            assert credential["token"] == "[REDACTED]"
             assert test_state.document_sessions == {document.Name: session_uuid}
-            assert (
-                test_state.lease_manager.require(
-                    document_session_uuid=session_uuid
-                ).token
-                == raw_lease_token
-            )
+            raw_lease_token = test_state.lease_manager.require(
+                document_session_uuid=session_uuid
+            ).token
+            assert raw_lease_token not in {"", "[REDACTED]"}
             assert isinstance(test_state.freecad_connection, FreeCADConnection)
             assert test_state.authenticated_manifest.addon_runtime_id == (
                 addon_manifest.addon_runtime_id
@@ -517,13 +516,32 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
             assert worker_validations[0]["expected"]["objects"] == ["BoundaryObject"]
 
             assert rpc.handshakes == 1
-            assert [item["method"] for item in rpc.v2_calls] == [
+            methods = [item["method"] for item in rpc.v2_calls]
+            assert "acknowledge_acquisition_claim" in methods
+            assert [
+                method
+                for method in methods
+                if method != "acknowledge_acquisition_claim"
+            ] == [
                 "acquire_document_lock",
                 "create_object",
                 "finalize_document_edit",
             ]
-            assert [item["credential_count"] for item in rpc.v2_calls] == [0, 1, 1]
-            assert len({item["request_id"] for item in rpc.v2_calls}) == 3
+            assert [
+                item["credential_count"]
+                for item in rpc.v2_calls
+                if item["method"] != "acknowledge_acquisition_claim"
+            ] == [0, 1, 1]
+            assert (
+                len(
+                    {
+                        item["request_id"]
+                        for item in rpc.v2_calls
+                        if item["method"] != "acknowledge_acquisition_claim"
+                    }
+                )
+                == 3
+            )
             assert all(
                 threading_name.startswith("FreeCADMCP-RPC")
                 for method, threading_name in rpc.dispatches

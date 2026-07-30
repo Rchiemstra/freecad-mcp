@@ -9,7 +9,7 @@ been inspected and resolved.
 
 | Status | Agent writes | Recommended action |
 |---|---|---|
-| `LOCKED_ERROR` | Fenced, but resumable | The credential owner may correct or retry through health-checked typed tools. A different MCP process may continue a dirty document in the same FreeCAD runtime only after local confirmation atomically rotates the credential. After that FreeCAD runtime exits, a clean reopen may self-recover only when the saved FCStd still exactly matches the original baseline |
+| `LOCKED_ERROR` | Fenced, but resumable | The credential owner may correct or retry through health-checked typed tools. A different MCP process may automatically continue a dirty document in the same FreeCAD runtime after live revalidation atomically rotates the credential; no agent-start pop-up is shown. After that FreeCAD runtime exits, a clean reopen may self-recover only when the saved FCStd still exactly matches the original baseline |
 | `STALE` | Blocked | If the exact authenticated runtime returns unchanged, reconcile; otherwise inspect and confirm local takeover |
 | `USER_INTERVENED` | Old credential permanently revoked | Finish locally with save-and-clear, restore-and-clear, or keep-dirty acknowledgement |
 | `UNLOCKED_DIRTY` | Blocked until current state is verified | After restart, a clean acquire or explicitly confirmed dirty adoption may self-recover only with exact document/file validation and proof that the recorded FreeCAD owner is dead |
@@ -62,7 +62,7 @@ been inspected and resolved.
   `LOCKED_ERROR` fence remains. The credential owner may retry or correct the
   failure with typed, scoped mutation tools; arbitrary `execute_code` and
   legacy nested-code helpers remain blocked. If another MCP process must
-  continue, `adopt_dirty_document` presents local confirmation, verifies that
+  continue, `adopt_dirty_document` verifies that
   the saved baseline is unchanged, preserves the recovery snapshot, and
   atomically rotates the lease ID, generation, token digest, and owner.
 - **Dirty `LOCKED_ERROR` after closing without saving:** a normal acquire may
@@ -100,9 +100,35 @@ been inspected and resolved.
 - **Lost response/session refresh:** retry only with the original request ID and
   unchanged method, parameters, operation metadata, and lease credentials. A
   renewed session token is expected and does not change request identity.
-  Acquisition/create credentials are one-time results; if their response was
-  lost, the replay status is `ACQUISITION_RESULT_NOT_REPLAYABLE` and local
-  recovery is required rather than issuing a second acquisition.
+  Acquisition/create credentials are one-time results and are never stored in
+  the public replay cache. After a transport-lost success, the same
+  authenticated MCP runtime may reclaim the credential repeatedly through
+  `claim_acquisition_result` or by replaying the original request ID until it
+  acknowledges custody (`acknowledge_acquisition_claim`) or first uses the
+  credential. `get_request_status` may report `result_claimable` / redacted
+  claim metadata, never the raw token. The MCP client automatically polls
+  status/claim after an acquire/adopt transport timeout and surfaces
+  `request_id` when recovery remains pending.
+- **Interrupted dirty adoption before promotion:** all agent-start dirty
+  adoption is auto-authorized with no FreeCAD pop-up. A live ``LOCKED_ERROR``
+  handoff returns `LOCKED_ERROR_HANDOFF_PENDING` immediately while a background
+  continuation performs bounded GUI authorization/revalidation and hash/CAS
+  claim. It escrows the credential for control-lane polling via
+  `get_request_status` then the public
+  `claim_acquisition_result` tool (custodies locally; never returns the raw
+  token). Cancel the pre-CAS continuation with `cancel_request` only before the
+  atomic `begin_claim` gate; after that boundary cancel is not-cancellable and
+  the credential stays claimable when escrowed. Post-gate CAS/validation failure
+  still becomes terminal `failed` (no credential). A claim-phase GUI timeout
+  leaves the handoff uncertain until late CAS completion rather than journaling
+  a terminal failure over a possible grant. Bounded reserve/hash/promote phases
+  use
+  `ACQUIRE_GUI_PHASE_TIMEOUT_S` (45s) and `ACQUIRE_HASH_TIMEOUT_S` (30s) so
+  `2 × 45 + 30 + cleanup <= CLIENT_LIFECYCLE_TIMEOUT_S` (150s) for non-dialog
+  work. A timeout or cancel after `ACQUIRING` publication aborts the
+  mutation-free reservation or lets the same MCP instance fence it only when
+  that acquisition request ID is no longer live; the 90-second stale watchdog
+  remains only a last-resort fallback.
 - **`REPLAY_JOURNAL_FULL`:** no protected entry was evicted. Resolve/finalize
   outstanding leases or restart FreeCAD only through the normal recovery path;
   never work around the error by changing request IDs repeatedly.

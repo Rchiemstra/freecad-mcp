@@ -66,30 +66,71 @@ def create_document_operation(
             public_res.pop("credential", None)
             if credential_data and lease_manager is not None:
                 from ..lease_manager import LeaseCredential
+                from ..outcomes import OutcomeStatus
 
-                credential = LeaseCredential(
-                    lease_id=str(credential_data["lease_id"]),
-                    document_session_uuid=str(
-                        credential_data["document_session_uuid"]
-                    ),
-                    generation=int(credential_data["generation"]),
-                    token=str(credential_data["token"]),
-                )
-                lease_manager.store(credential)
+                try:
+                    credential = LeaseCredential(
+                        lease_id=str(credential_data["lease_id"]),
+                        document_session_uuid=str(
+                            credential_data["document_session_uuid"]
+                        ),
+                        generation=int(credential_data["generation"]),
+                        token=str(credential_data["token"]),
+                    )
+                    lease_manager.store(credential)
+                except Exception:
+                    logger.exception(
+                        "local create_document credential custody failed; "
+                        "escrow left unacknowledged"
+                    )
+                    public_res["credential_stored"] = False
+                    public_res["token_exported"] = False
+                    return json_response(
+                        public_res,
+                        status=OutcomeStatus.WARNING,
+                        message=(
+                            f"Document '{res.get('document_name') or name}' created "
+                            "but local credential custody failed; escrow remains "
+                            "unacknowledged for retry"
+                        ),
+                    )
                 if document_sessions is not None:
                     document_sessions[res["document_name"]] = (
                         credential.document_session_uuid
                     )
+                cleanup_pending = False
+                if res.get("request_id"):
+                    try:
+                        freecad.acknowledge_acquisition_claim(str(res["request_id"]))
+                    except Exception:
+                        logger.exception(
+                            "acquisition claim acknowledgement after create failed; "
+                            "cleanup pending"
+                        )
+                        cleanup_pending = True
                 public_res["lease"] = {
                     "lease_id": credential.lease_id,
                     "document_session_uuid": credential.document_session_uuid,
                     "generation": credential.generation,
                     "credential_stored": True,
                 }
+                public_res["credential_stored"] = True
+                public_res["token_exported"] = False
+                if cleanup_pending:
+                    public_res["cleanup_pending"] = True
+                    return json_response(
+                        public_res,
+                        status=OutcomeStatus.WARNING,
+                        message=(
+                            f"Document '{res['document_name']}' created and leased; "
+                            "escrow cleanup is pending"
+                        ),
+                    )
                 return tool_ok(
                     f"Document '{res['document_name']}' created and leased successfully",
                     structured=public_res,
                 )
+            public_res["credential_stored"] = False
             return tool_ok(
                 f"Document '{res['document_name']}' created successfully",
                 structured=public_res,

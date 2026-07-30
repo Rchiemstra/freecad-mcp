@@ -198,7 +198,7 @@ class TestExternalProjection:
         assert_code_compiles(code)
         assert_code_contains(
             code,
-            "addExternal",
+            "_sk.addExternal(_src.Name, _sub",
             "binder and sketch must share parent container",
             "Sketcher::SketchObject",
             "datum normal not parallel to face",

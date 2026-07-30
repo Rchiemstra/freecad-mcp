@@ -35,21 +35,17 @@ sequenceDiagram
     Client->>RPC: acquire_document_lock(dirty document)
     RPC-->>Client: DIRTY_REQUIRES_LOCAL_ADOPTION
     Client->>RPC: adopt_dirty_document
-    RPC->>User: Confirm adoption + optional Don't ask again
-    alt user confirms
-        RPC->>Lease: CAS-publish dirty ACQUIRING
-        RPC->>GUI: create owner-only saveCopy
-        RPC->>Lease: checkpoint snapshot ID in sidecar
-        RPC->>Lease: promote dirty LOCKED_IDLE
-        Lease-->>Client: one-time credential
-    else user cancels
-        RPC->>Lease: exact CAS rollback
-        RPC-->>Client: adoption precondition failed
-    end
+    Note over RPC: Initial dirty adoption auto-authorized (no pop-up)
+    RPC->>Lease: CAS-publish dirty ACQUIRING
+    RPC->>GUI: create owner-only saveCopy
+    RPC->>Lease: checkpoint snapshot ID in sidecar
+    RPC->>Lease: promote dirty LOCKED_IDLE
+    Lease-->>Client: one-time credential
 ```
 
-The “Don't ask again” choice applies only to later dirty adoptions in the
-current FreeCAD process. Restarting FreeCAD restores the confirmation prompt.
+Starting an MCP agent implies write intent, so dirty adoption never opens a
+FreeCAD confirmation dialog. A live dirty ``LOCKED_ERROR`` handoff is
+auto-authorized, then revalidated and CAS-rotated asynchronously.
 
 ## GUI save while acquisition response is unavailable
 
@@ -192,9 +188,15 @@ sequenceDiagram
 | Clean or dirty | Successful acquire/adopt response | Current MCP process | Next mutation | Credential and name/path mapping are already in private custody | `test_acquire_and_adopt_custody_credential_before_next_mutation` and MCP lifecycle suite |
 | Any | Successful acquire/adopt response is replayed idempotently | Same MCP process already custodied token | Re-handle response | Exact local grant is reused; redaction marker is never stored as a token | `test_idempotent_acquire_or_adopt_replay_reuses_custodied_redacted_token` |
 | Dirty | None | n/a | Normal acquire | `DIRTY_REQUIRES_LOCAL_ADOPTION` | dirty-adoption RPC suite |
-| Dirty | None | User cancels | Adopt | Exact rollback; no sidecar or snapshot remains | `test_dirty_adoption_requires_local_confirmation` |
-| Dirty | None | User confirms | Adopt | Dirty baseline snapshot and promoted lease | `test_dirty_adoption_snapshots_then_returns_dirty_lease` |
+| Dirty | None | n/a | Adopt | Dirty baseline snapshot and promoted lease (no FreeCAD pop-up for unlocked dirty) | `test_dirty_adoption_snapshots_then_returns_dirty_lease` / `test_dirty_adoption_auto_confirms_without_dialog` |
+| Dirty | Live dirty `LOCKED_ERROR` | Competing MCP | Adopt | Auto-authorized with no pop-up; pending immediately, then bounded revalidation/CAS and control-lane status/claim | `test_automatic_dirty_adoption_handoffs_local_locked_error` / `test_locked_error_handoff_pending_returns_before_authorization` / `test_locked_error_handoff_claim_timeout_still_escrows_late_cas` |
+| Dirty | Live dirty `LOCKED_ERROR` | Competing MCP + `cancel_request` wins before CAS | Adopt/cancel | Prior credential remains valid | `test_locked_error_handoff_cancel_before_cas_keeps_prior_owner` |
 | Dirty | Unreturned `STALE` reservation | Same local runtime | Adopt | CAS rotation and new credential | `test_confirmed_dirty_adoption_fences_unreturned_stale_reservation` |
+| Dirty | Unreturned abandoned `ACQUIRING` (request not live) | Same MCP instance | Adopt | Immediate CAS rotation without waiting for stale | `test_client_timeout_after_acquiring_allows_same_owner_retry` / `test_same_owner_fences_local_unreturned_acquiring_without_stale_wait` |
+| Dirty | Live `ACQUIRING` (request still inflight) | Same MCP, new request id | Adopt | `LEASE_CONFLICT` (no concurrent same-runtime fence) | `test_same_runtime_live_acquiring_is_not_fenced_by_concurrent_request` / `test_same_owner_live_request_blocks_concurrent_fence` |
+| Dirty | Live `ACQUIRING` reservation | Competing MCP instance | Adopt | `LEASE_CONFLICT` while original may still run | `test_foreign_live_acquiring_is_not_fenced_by_local_retry` / `test_competing_mcp_cannot_fence_live_local_acquiring` |
+| Any | Successful acquire/adopt response lost on the wire | Same MCP runtime + request id | Auto status/claim (tool path) or claim/replay | Durable peek until ack; status stays redacted | `test_adopt_transport_timeout_auto_claims_and_custodies_credential` / `test_acquisition_token_is_returned_once_and_claimable_after_response_loss` / `test_claim_acquisition_result_is_durable_until_ack` |
+| Dirty | Baseline hash exceeds `ACQUIRE_HASH_TIMEOUT_S` | n/a | Adopt | Abort `ACQUIRING`; no 90s wait | `test_hash_timeout_aborts_acquiring_without_long_wait` |
 | Clean | Unreturned `USER_INTERVENED` reservation | Same local runtime | Acquire | CAS rotation and new credential | `test_gui_save_refreshes_identity_and_clean_retry_fences_lost_reservation` and live `test_live_gui_save_close_reopen_rebinds_and_allows_clean_retry` |
 | Clean | Unreturned reservation after atomic GUI save | Same live proxy/path | Acquire | Identity refresh, then successful RPC acquisition | `test_gui_save_then_clean_acquire_avoids_identity_registration_deadlock` |
 | Clean or dirty | Local unreturned `STALE`/`USER_INTERVENED` reservation | Same local runtime | Acquire/adopt | All four state/dirty combinations rotate authority | `test_local_unreturned_reservation_retry_matrix` |
@@ -240,8 +242,8 @@ runtime adapters with temporary documents:
 `FreeCADCmd` has no interactive `Gui::Document`, so the live save test models
 only the final GUI dirty-flag clear that `Gui::Document::save()` performs after
 `App::Document::save()` returns. The callback, FCStd write, file identity,
-sidecar CAS, close, reopen, and retry are real. GUI confirmation rendering and
-the “Don't ask again” preference are separately tested at the dialog boundary.
+sidecar CAS, close, reopen, and retry are real. Dirty adoption auto-confirms
+without a FreeCAD pop-up (`test_dirty_adoption_auto_confirms_without_dialog`).
 
 No finite suite can enumerate hardware failure, arbitrary third-party macros,
 or malicious external sidecar changes at every machine instruction. Those

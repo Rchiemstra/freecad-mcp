@@ -21,7 +21,7 @@ import time
 import traceback
 import uuid
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -53,6 +53,8 @@ from .gui_dispatcher import (
     GuiDispatchTimeout,
     GuiDispatcher,
 )
+from .acquisition_claims import AcquisitionClaimStore
+from .handoff_continuations import HandoffContinuationStore
 from .inflight_requests import (
     InflightLeaseCredential,
     InflightRequestRegistry,
@@ -218,6 +220,11 @@ rpc_request_replay_cache = RequestReplayCache()
 # Process-wide by design: handler timeouts and listener shutdown must not erase
 # the ownership/cancellation state of GUI work that is still completing.
 rpc_inflight_request_registry = InflightRequestRegistry()
+# Private one-shot vault for acquire/adopt/create credentials after response loss.
+# Public status and replay caches never store the raw token.
+rpc_acquisition_claim_store = AcquisitionClaimStore()
+# Async LOCKED_ERROR handoff: detect returns pending; background authorize+claim.
+rpc_handoff_continuation_store = HandoffContinuationStore()
 document_identity_service = None
 document_lease_service = None
 document_lease_runtime_policy = None
@@ -679,45 +686,25 @@ def _freecad_version_parts():
     return tuple(str(part) for part in (value or ()))
 
 
-_confirm_dirty_adoption_for_session = False
-
-
 def _confirm_dirty_document_adoption_gui(document, document_identity) -> bool:
-    """Ask the local FreeCAD user before an agent adopts unsaved work."""
+    """Auto-authorize initial dirty adoption without opening a dialog.
 
-    global _confirm_dirty_adoption_for_session
-    if QtWidgets.QApplication.instance() is None:
-        return False
-    if _confirm_dirty_adoption_for_session:
-        return True
-    name = str(getattr(document, "Label", "") or document_identity.name)
-    path = str(document_identity.canonical_path or "(unsaved document)")
-    message_box = QtWidgets.QMessageBox()
-    message_box.setIcon(QtWidgets.QMessageBox.Warning)
-    message_box.setWindowTitle("Adopt unsaved FreeCAD document?")
-    message_box.setText(
-        (
-            f'An MCP client wants to adopt the existing unsaved changes in "{name}".\n\n'
-            f"File: {path}\n\n"
-            "FreeCAD will first create a recovery copy. The client will then receive "
-            "the write lease and may repair and save this document through the verified "
-            "save lifecycle.\n\n"
-            "Continue only if you intend to give the connected client control of these "
-            "unsaved changes."
-        )
-    )
-    message_box.setStandardButtons(
-        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel
-    )
-    message_box.setDefaultButton(QtWidgets.QMessageBox.Cancel)
-    do_not_ask = QtWidgets.QCheckBox(
-        "Don't ask again for this FreeCAD session", message_box
-    )
-    message_box.setCheckBox(do_not_ask)
-    confirmed = message_box.exec() == QtWidgets.QMessageBox.Yes
-    if confirmed and do_not_ask.isChecked():
-        _confirm_dirty_adoption_for_session = True
-    return confirmed
+    Starting an MCP agent implies write intent on an unlocked dirty document.
+    """
+
+    del document, document_identity
+    return True
+
+
+def _authorize_locked_error_handoff_gui(document, document_identity) -> bool:
+    """Auto-authorize agent-start handoff without opening a dialog.
+
+    The later GUI phase still revalidates the selected live document immediately
+    before the atomic credential rotation.
+    """
+
+    del document, document_identity
+    return True
 
 
 _SAVE_VALIDATION_MARKER = "__FREECAD_MCP_SAVE_VALIDATION__"
@@ -1711,6 +1698,19 @@ class FreeCADRPC:
 
     TIMEOUT = 30
     EXECUTE_TIMEOUT = 120
+    # Deadline hierarchy for document acquisition/adoption (seconds):
+    # CLIENT_LIFECYCLE_TIMEOUT_S (150, freecad_client default)
+    #   >= 2 * ACQUIRE_GUI_PHASE_TIMEOUT_S (45)
+    #   + ACQUIRE_HASH_TIMEOUT_S (30)
+    #   + response/cleanup headroom.
+    # All agent-start dirty adoption paths are auto-authorized (no dialog).
+    # Live LOCKED_ERROR handoff remains asynchronous: detect returns
+    # LOCKED_ERROR_HANDOFF_PENDING immediately, then bounded GUI
+    # authorization/revalidation and hash/CAS work store the credential for
+    # control-lane polling.
+    ACQUIRE_GUI_PHASE_TIMEOUT_S = 45
+    ACQUIRE_HASH_TIMEOUT_S = 30
+    CLIENT_LIFECYCLE_TIMEOUT_S = 150
 
     def __init__(self, allow_execute_code: bool = True):
         self.allow_execute_code = allow_execute_code
@@ -2265,6 +2265,24 @@ class FreeCADRPC:
                 ),
             )
         )
+        if rpc_acquisition_claim_store is not None:
+            try:
+                identity = _import_document_lock().get_request_identity()
+                rpc_acquisition_claim_store.acknowledge_credential(
+                    mcp_runtime_id=str(
+                        identity.get("instance_id")
+                        or getattr(credential, "mcp_instance_id", "")
+                        or ""
+                    ),
+                    lease_id=credential.lease_id,
+                    document_session_uuid=credential.document_session_uuid,
+                    generation=credential.generation,
+                    token=credential.token,
+                )
+            except Exception:
+                logger.debug(
+                    "acquisition claim auto-ack failed", exc_info=True
+                )
 
     @staticmethod
     def _finish_cancellation_resolution(inflight, result):
@@ -3000,8 +3018,12 @@ class FreeCADRPC:
             },
         )
 
-    def _dispatch_gui(self, task, timeout=None):
-        """Run *task* on the GUI thread and preserve legacy string errors."""
+    def _dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
+        """Run *task* on the GUI thread and preserve legacy string errors.
+
+        ``late_on_complete`` is invoked when the GUI task finishes, including
+        after the waiter has already timed out (completion_uncertain).
+        """
         dispatcher = gui_dispatcher
         if dispatcher is None:
             return "RPC GUI dispatcher is not initialized"
@@ -3422,6 +3444,13 @@ class FreeCADRPC:
                 completion_state is None or completion_state.handler_finished
             ):
                 replay_on_complete(completed_request_id, outcome, completion_state)
+            if late_on_complete is not None:
+                try:
+                    late_on_complete(completed_request_id, outcome)
+                except Exception:
+                    logger.debug(
+                        "late_on_complete callback failed", exc_info=True
+                    )
 
         try:
             return dispatcher.submit(
@@ -3430,7 +3459,13 @@ class FreeCADRPC:
                 request_id=request_id,
                 session_id=session_id,
                 on_complete=(
-                    on_complete if gui_phase_registered or replay_on_complete else None
+                    on_complete
+                    if (
+                        gui_phase_registered
+                        or replay_on_complete
+                        or late_on_complete is not None
+                    )
+                    else None
                 ),
             )
         except GuiDispatchError as exc:
@@ -3615,7 +3650,43 @@ class FreeCADRPC:
                 pin_to_owner_leases=lease_affecting,
             )
             if replay.status == "completed":
-                return replay.response
+                claim_store = rpc_acquisition_claim_store
+                if (
+                    claim_store is not None
+                    and envelope.method
+                    in {
+                        "acquire_document_lock",
+                        "adopt_dirty_document",
+                        "create_document",
+                    }
+                ):
+                    claimed = claim_store.claim(
+                        session.mcp.runtime_id, envelope.request_id
+                    )
+                    if claimed is not None:
+                        return {
+                            "ok": True,
+                            "request_id": envelope.request_id,
+                            "addon_runtime_id": invocation_runtime_id,
+                            "result": claimed,
+                            "claimed_acquisition_result": True,
+                        }
+                cached = replay.response
+                if (
+                    isinstance(cached, dict)
+                    and isinstance(cached.get("error"), dict)
+                    and cached["error"].get("code")
+                    == "ACQUISITION_RESULT_NOT_REPLAYABLE"
+                    and claim_store is not None
+                ):
+                    refreshed = dict(cached)
+                    error = dict(cached["error"])
+                    error["claimable"] = claim_store.claimable(
+                        session.mcp.runtime_id, envelope.request_id
+                    )
+                    refreshed["error"] = error
+                    return refreshed
+                return cached
             if replay.status == "in_progress":
                 return {
                     "ok": False,
@@ -3801,22 +3872,70 @@ class FreeCADRPC:
                     and isinstance(result, dict)
                     and result.get("credential")
                 ):
-                    # The addon never retains a replayable copy of the raw
-                    # acquisition token.  A transport-lost acquisition is
-                    # recovered through redacted status/local reconciliation,
-                    # not by returning the secret a second time.
-                    cached_response = {
-                        "ok": False,
-                        "request_id": envelope.request_id,
-                        "addon_runtime_id": invocation_runtime_id,
-                        "error": {
-                            "code": "ACQUISITION_RESULT_NOT_REPLAYABLE",
-                            "message": (
-                                "This acquisition request already completed; "
-                                "its one-time credential cannot be returned again"
-                            ),
-                        },
-                    }
+                    # Raw tokens are never stored in the replay cache. A
+                    # transport-lost acquisition is recovered once through the
+                    # private claim vault (same authenticated runtime + request
+                    # id), never through public status. Escrow failure must not
+                    # publish a success response: ownership may already have
+                    # rotated and the token would otherwise be unrecoverable.
+                    escrowed = False
+                    try:
+                        if rpc_acquisition_claim_store is not None:
+                            rpc_acquisition_claim_store.store(
+                                mcp_runtime_id=session.mcp.runtime_id,
+                                request_id=envelope.request_id,
+                                method=envelope.method,
+                                credential=result["credential"],
+                                result=result,
+                            )
+                            escrowed = True
+                    except Exception:
+                        logger.exception(
+                            "Failed to retain private acquisition claim for %s",
+                            envelope.request_id,
+                        )
+                    if not escrowed:
+                        scrubbed = dict(result)
+                        scrubbed.pop("credential", None)
+                        scrubbed["success"] = False
+                        scrubbed["error_code"] = (
+                            "ACQUISITION_CREDENTIAL_ESCROW_FAILED"
+                        )
+                        scrubbed["error"] = (
+                            "Document ownership changed but the acquisition "
+                            "credential could not be escrowed; recovery is "
+                            "required and the token was never published"
+                        )
+                        scrubbed["recovery_required"] = True
+                        scrubbed["credential_stored"] = False
+                        response = {
+                            "ok": False,
+                            "request_id": envelope.request_id,
+                            "addon_runtime_id": invocation_runtime_id,
+                            "result": scrubbed,
+                        }
+                        cached_response = response
+                    else:
+                        claimable = bool(
+                            rpc_acquisition_claim_store is not None
+                            and rpc_acquisition_claim_store.claimable(
+                                session.mcp.runtime_id, envelope.request_id
+                            )
+                        )
+                        cached_response = {
+                            "ok": False,
+                            "request_id": envelope.request_id,
+                            "addon_runtime_id": invocation_runtime_id,
+                            "error": {
+                                "code": "ACQUISITION_RESULT_NOT_REPLAYABLE",
+                                "message": (
+                                    "This acquisition request already completed; "
+                                    "its one-time credential cannot be returned from "
+                                    "the replay cache"
+                                ),
+                                "claimable": claimable,
+                            },
+                        }
                 handler_status = (
                     "cancelled"
                     if inflight.token.snapshot().cancellation_requested
@@ -3840,6 +3959,7 @@ class FreeCADRPC:
                             "GUI_COMPLETION_UNCERTAIN",
                             "REQUEST_CANCELLED_AFTER_MUTATION",
                             "REQUEST_OUTCOME_UNCERTAIN",
+                            "LOCKED_ERROR_HANDOFF_PENDING",
                         }
                     )
                 )
@@ -4170,11 +4290,42 @@ class FreeCADRPC:
                 state = "running"
             else:
                 state = "unknown"
+            continuation = (
+                rpc_handoff_continuation_store.get(mcp_runtime_id, request_id)
+                if rpc_handoff_continuation_store is not None
+                else None
+            )
+            confirmation_pending = False
+            handoff_pending = False
+            if continuation is not None:
+                public = continuation.to_public_dict()
+                confirmation_pending = bool(public.get("confirmation_pending"))
+                handoff_pending = bool(public.get("handoff_pending"))
+                if continuation.state in HandoffContinuationStore.ACTIVE:
+                    if continuation.state == "claim_committed":
+                        state = "claim_committed"
+                    else:
+                        state = "running"
+                elif continuation.state == "claimable":
+                    state = "completed"
+                elif continuation.state == "claimed":
+                    state = "completed"
+                elif continuation.state == "cancelled":
+                    state = "cancelled"
+                elif continuation.state in {"denied", "failed"}:
+                    state = "failed"
+                if public.get("cancellation_requested"):
+                    # Prefer the continuation flag when inflight already ended.
+                    pass
             return {
                 "success": True,
                 "request_id": request_id,
                 "state": state,
-                "stage": inflight.phase if inflight is not None else None,
+                "stage": (
+                    continuation.stage
+                    if continuation is not None
+                    else (inflight.phase if inflight is not None else None)
+                ),
                 "execution_started": bool(
                     inflight is not None and inflight.active_gui_phases
                 ),
@@ -4182,10 +4333,18 @@ class FreeCADRPC:
                     inflight is not None and inflight.mutation_started
                 ),
                 "cancellation_requested": bool(
-                    inflight is not None and inflight.cancellation_requested
+                    (inflight is not None and inflight.cancellation_requested)
+                    or (
+                        continuation is not None
+                        and continuation.cancel_requested.is_set()
+                    )
                 ),
                 "completion_uncertain": bool(
                     inflight is not None and inflight.uncertain
+                )
+                or (
+                    continuation is not None
+                    and continuation.state == "claiming_uncertain"
                 ),
                 "late_completion_available": bool(
                     status.response
@@ -4193,12 +4352,30 @@ class FreeCADRPC:
                     and status.response.get("late_completion")
                 ),
                 "result_available": bool(status.response is not None),
+                "result_claimable": bool(
+                    rpc_acquisition_claim_store is not None
+                    and rpc_acquisition_claim_store.claimable(
+                        mcp_runtime_id, request_id
+                    )
+                ),
+                "confirmation_pending": confirmation_pending,
+                "handoff_pending": handoff_pending,
+                "acquisition_claim": (
+                    rpc_acquisition_claim_store.public_status(
+                        mcp_runtime_id, request_id
+                    )
+                    if rpc_acquisition_claim_store is not None
+                    else {"claimable": False}
+                ),
                 "recovery_incident_id": (
                     inflight.recovery_incident_id if inflight is not None else None
                 ),
                 "response": status.response,
                 "inflight": (
                     inflight.to_public_dict() if inflight is not None else None
+                ),
+                "handoff_continuation": (
+                    continuation.to_public_dict() if continuation is not None else None
                 ),
             }
         except Exception as exc:
@@ -4213,6 +4390,8 @@ class FreeCADRPC:
             "lease_reconcile",
             "get_request_status",
             "cancel_request",
+            "claim_acquisition_result",
+            "acknowledge_acquisition_claim",
             "get_worker_status",
             "cancel_worker_job",
         }
@@ -4229,11 +4408,218 @@ class FreeCADRPC:
             )
         return self.invoke_v2(payload)
 
+    def claim_acquisition_result(self, request_id):
+        """Return a lost acquire/adopt/create credential exactly once.
+
+        Public status never includes the token. Only the authenticated MCP
+        runtime that initiated the request may claim it. Handoff continuations
+        are authoritative when present: running/terminal states are reported
+        before the vault is consulted.
+        """
+
+        identity = _import_document_lock().get_request_identity()
+        mcp_runtime_id = identity.get("instance_id")
+        if not mcp_runtime_id:
+            return {
+                "success": False,
+                "error_code": "AUTHENTICATED_SESSION_REQUIRED",
+                "error": "Acquisition claim requires an authenticated MCP runtime",
+            }
+        request_id = str(request_id or "")
+        continuation = (
+            rpc_handoff_continuation_store.get(mcp_runtime_id, request_id)
+            if rpc_handoff_continuation_store is not None
+            else None
+        )
+        if continuation is not None:
+            if continuation.state in HandoffContinuationStore.ACTIVE:
+                return {
+                    "success": False,
+                    "pending": True,
+                    "error_code": "ACQUISITION_CLAIM_PENDING",
+                    "error": (
+                        "LOCKED_ERROR handoff has not finished escrow yet; "
+                        "continue polling get_request_status"
+                    ),
+                    "request_id": request_id,
+                    "handoff_continuation": continuation.to_public_dict(),
+                    "result_claimable": False,
+                }
+            if continuation.state == "cancelled":
+                return {
+                    "success": False,
+                    "error_code": (
+                        continuation.error_code or "LOCKED_ERROR_HANDOFF_CANCELLED"
+                    ),
+                    "error": (
+                        continuation.error
+                        or "LOCKED_ERROR handoff was cancelled; nothing to claim"
+                    ),
+                    "request_id": request_id,
+                    "handoff_continuation": continuation.to_public_dict(),
+                }
+            if continuation.state in {"failed", "denied"}:
+                return {
+                    "success": False,
+                    "error_code": (
+                        continuation.error_code or "LOCKED_ERROR_HANDOFF_FAILED"
+                    ),
+                    "error": (
+                        continuation.error
+                        or "LOCKED_ERROR handoff ended without a claimable credential"
+                    ),
+                    "request_id": request_id,
+                    "handoff_continuation": continuation.to_public_dict(),
+                    "recovery_required": bool(
+                        continuation.error_code
+                        in {
+                            "ACQUISITION_CREDENTIAL_ESCROW_FAILED",
+                            "ACQUISITION_CREDENTIAL_UNAVAILABLE",
+                        }
+                        or (continuation.error or "").find("recovery") >= 0
+                    ),
+                }
+            if continuation.state == "claimed":
+                return {
+                    "success": True,
+                    "already_claimed": True,
+                    "credential_stored": True,
+                    "token_exported": False,
+                    "request_id": request_id,
+                    "error": (
+                        "Acquisition credential was already taken into custody; "
+                        "no private token is returned"
+                    ),
+                    "handoff_continuation": continuation.to_public_dict(),
+                }
+            if continuation.state == "claimable":
+                if rpc_acquisition_claim_store is None:
+                    return {
+                        "success": False,
+                        "error_code": "ACQUISITION_CLAIM_UNAVAILABLE",
+                        "error": (
+                            "No claimable acquisition credential remains for this "
+                            "request"
+                        ),
+                        "request_id": request_id,
+                    }
+                claimed = rpc_acquisition_claim_store.claim(
+                    mcp_runtime_id, request_id
+                )
+                if claimed is None:
+                    rpc_handoff_continuation_store.update(
+                        mcp_runtime_id,
+                        request_id,
+                        state="failed",
+                        stage="handoff_failed",
+                        error_code="ACQUISITION_CREDENTIAL_UNAVAILABLE",
+                        error=(
+                            "Escrowed acquisition credential expired or is missing; "
+                            "ownership may require recovery"
+                        ),
+                    )
+                    updated = rpc_handoff_continuation_store.get(
+                        mcp_runtime_id, request_id
+                    )
+                    return {
+                        "success": False,
+                        "error_code": "ACQUISITION_CREDENTIAL_UNAVAILABLE",
+                        "error": (
+                            "Escrowed acquisition credential expired or is missing; "
+                            "ownership may require recovery"
+                        ),
+                        "request_id": request_id,
+                        "recovery_required": True,
+                        "handoff_continuation": (
+                            updated.to_public_dict() if updated is not None else None
+                        ),
+                    }
+                return {
+                    "success": True,
+                    "request_id": request_id,
+                    **claimed,
+                }
+        if rpc_acquisition_claim_store is None:
+            return {
+                "success": False,
+                "error_code": "AUTHENTICATED_SESSION_REQUIRED",
+                "error": "Acquisition claim requires an authenticated MCP runtime",
+            }
+        claimed = rpc_acquisition_claim_store.claim(mcp_runtime_id, request_id)
+        if claimed is None:
+            return {
+                "success": False,
+                "error_code": "ACQUISITION_CLAIM_UNAVAILABLE",
+                "error": (
+                    "No claimable acquisition credential remains for this request"
+                ),
+                "request_id": request_id,
+                "acquisition_claim": rpc_acquisition_claim_store.public_status(
+                    mcp_runtime_id, request_id
+                ),
+            }
+        return {
+            "success": True,
+            "request_id": request_id,
+            **claimed,
+        }
+
+    def acknowledge_acquisition_claim(self, request_id):
+        """Scrub a durable acquisition claim after the client custodied it."""
+
+        identity = _import_document_lock().get_request_identity()
+        mcp_runtime_id = identity.get("instance_id")
+        if rpc_acquisition_claim_store is None or not mcp_runtime_id:
+            return {
+                "success": False,
+                "error_code": "AUTHENTICATED_SESSION_REQUIRED",
+                "error": (
+                    "Acquisition claim acknowledgement requires an authenticated "
+                    "MCP runtime"
+                ),
+            }
+        request_id = str(request_id or "")
+        acknowledged = rpc_acquisition_claim_store.acknowledge(
+            mcp_runtime_id, request_id
+        )
+        if (
+            acknowledged
+            and rpc_handoff_continuation_store is not None
+        ):
+            rpc_handoff_continuation_store.update(
+                mcp_runtime_id,
+                request_id,
+                state="claimed",
+                stage="handoff_complete",
+            )
+        return {
+            "success": True,
+            "request_id": request_id,
+            "acknowledged": bool(acknowledged),
+            "acquisition_claim": rpc_acquisition_claim_store.public_status(
+                mcp_runtime_id, request_id
+            ),
+            "handoff_continuation": (
+                rpc_handoff_continuation_store.get(
+                    mcp_runtime_id, request_id
+                ).to_public_dict()
+                if rpc_handoff_continuation_store is not None
+                and rpc_handoff_continuation_store.get(mcp_runtime_id, request_id)
+                is not None
+                else None
+            ),
+        }
+
     def cancel_request(self, target_request_id):
         """Cancel one request owned by this authenticated RPC session.
 
         This is a reserved control-plane operation.  It is intentionally not
         registered as a FastMCP/model-facing tool.
+
+        For async LOCKED_ERROR handoff, the continuation state overrides an
+        inflight tombstone: irreversible/claimable states always return
+        ``REQUEST_NOT_CANCELLABLE``, while terminal failed/denied return their
+        actual details (never claim advice).
         """
 
         identity = _import_document_lock().get_request_identity()
@@ -4244,30 +4630,216 @@ class FreeCADRPC:
                 "error_code": "AUTHENTICATED_SESSION_REQUIRED",
                 "error": "Request cancellation is scoped to an authenticated session",
             }
+        target_request_id = str(target_request_id or "")
         cancellation = rpc_inflight_request_registry.request_cancel(
             session_id, target_request_id
         )
+        mcp_runtime_id = identity.get("instance_id")
+        handoff_cancel_status = None
+        handoff_entry = None
+        if (
+            rpc_handoff_continuation_store is not None
+            and mcp_runtime_id
+            and target_request_id
+        ):
+            handoff_entry = rpc_handoff_continuation_store.get(
+                mcp_runtime_id, target_request_id
+            )
+            handoff_cancel_status = rpc_handoff_continuation_store.request_cancel(
+                mcp_runtime_id, target_request_id
+            )
+            if handoff_entry is None and handoff_cancel_status != "not_found":
+                handoff_entry = rpc_handoff_continuation_store.get(
+                    mcp_runtime_id, target_request_id
+                )
+
+        def _handoff_public():
+            entry = (
+                rpc_handoff_continuation_store.get(mcp_runtime_id, target_request_id)
+                if rpc_handoff_continuation_store is not None and mcp_runtime_id
+                else None
+            )
+            return entry.to_public_dict() if entry is not None else None
+
+        # Continuation overrides every IR status, including a completed tombstone.
+        if handoff_cancel_status == "not_cancellable":
+            entry = (
+                rpc_handoff_continuation_store.get(mcp_runtime_id, target_request_id)
+                if rpc_handoff_continuation_store is not None and mcp_runtime_id
+                else handoff_entry
+            )
+            state = entry.state if entry is not None else "claim_committed"
+            if state == "claimable":
+                message = (
+                    "LOCKED_ERROR handoff already escrowed a claimable credential; "
+                    "call claim_acquisition_result instead of cancelling"
+                )
+            elif state == "claim_committed":
+                message = (
+                    "LOCKED_ERROR handoff has crossed the ownership-rotation "
+                    "boundary; continue polling get_request_status because an "
+                    "escrowed credential may not exist yet"
+                )
+            else:
+                message = (
+                    "LOCKED_ERROR handoff has crossed an irreversible boundary "
+                    "and cannot be cancelled"
+                )
+            return {
+                "success": False,
+                "error_code": "REQUEST_NOT_CANCELLABLE",
+                "error": message,
+                "target_request_id": target_request_id,
+                "cancellation": {
+                    "status": "not_cancellable",
+                    "cancel_requested": False,
+                },
+                "gui_queue": "not_queued",
+                "lease_events": [],
+                "handoff_cancelled": False,
+                "handoff_continuation": _handoff_public(),
+            }
+        if handoff_cancel_status == "terminal_failed":
+            entry = (
+                rpc_handoff_continuation_store.get(mcp_runtime_id, target_request_id)
+                if rpc_handoff_continuation_store is not None and mcp_runtime_id
+                else handoff_entry
+            )
+            return {
+                "success": False,
+                "error_code": (
+                    (entry.error_code if entry is not None else None)
+                    or "LOCKED_ERROR_HANDOFF_FAILED"
+                ),
+                "error": (
+                    (entry.error if entry is not None else None)
+                    or "LOCKED_ERROR handoff failed; no credential is available to claim"
+                ),
+                "target_request_id": target_request_id,
+                "cancellation": {
+                    "status": "terminal_failed",
+                    "cancel_requested": False,
+                },
+                "gui_queue": "not_queued",
+                "lease_events": [],
+                "handoff_cancelled": False,
+                "handoff_continuation": _handoff_public(),
+            }
+        if handoff_cancel_status == "terminal_denied":
+            entry = (
+                rpc_handoff_continuation_store.get(mcp_runtime_id, target_request_id)
+                if rpc_handoff_continuation_store is not None and mcp_runtime_id
+                else handoff_entry
+            )
+            return {
+                "success": False,
+                "error_code": (
+                    (entry.error_code if entry is not None else None)
+                    or "LOCKED_ERROR_HANDOFF_DENIED"
+                ),
+                "error": (
+                    (entry.error if entry is not None else None)
+                    or "LOCKED_ERROR handoff was denied; no credential is available to claim"
+                ),
+                "target_request_id": target_request_id,
+                "cancellation": {
+                    "status": "terminal_denied",
+                    "cancel_requested": False,
+                },
+                "gui_queue": "not_queued",
+                "lease_events": [],
+                "handoff_cancelled": False,
+                "handoff_continuation": _handoff_public(),
+            }
+        if handoff_cancel_status == "already_claimed":
+            return {
+                "success": False,
+                "error_code": "REQUEST_ALREADY_COMPLETED",
+                "error": (
+                    "LOCKED_ERROR handoff credential is already in custody; "
+                    "cancellation is impossible and no token is returned"
+                ),
+                "target_request_id": target_request_id,
+                "cancellation": {
+                    "status": "already_completed",
+                    "cancel_requested": False,
+                },
+                "gui_queue": "not_queued",
+                "lease_events": [],
+                "handoff_cancelled": False,
+                "handoff_continuation": _handoff_public(),
+            }
+
+        handoff_cancelled = handoff_cancel_status in {
+            "cancelled",
+            "already_cancelled",
+        }
         if cancellation.status == "unknown":
+            if handoff_cancelled:
+                emit_telemetry(
+                    "cancellation",
+                    "cancellation_requested",
+                    status="warning",
+                    request_id=target_request_id,
+                    execution_id=target_request_id,
+                    payload={"registry_status": "handoff_continuation"},
+                )
+                return {
+                    "success": True,
+                    "target_request_id": target_request_id,
+                    "cancellation": {
+                        "status": "handoff_cancelled",
+                        "cancel_requested": True,
+                    },
+                    "gui_queue": "not_queued",
+                    "lease_events": [],
+                    "handoff_cancelled": True,
+                    "handoff_continuation": _handoff_public(),
+                }
             return {
                 "success": False,
                 "error_code": "REQUEST_NOT_FOUND",
                 "error": "No cancellable request exists in this authenticated session",
+            }
+        if handoff_cancelled and cancellation.status == "completed":
+            # Detect handler already tombstoned; continuation cancel still wins.
+            emit_telemetry(
+                "cancellation",
+                "cancellation_requested",
+                status="warning",
+                request_id=target_request_id,
+                execution_id=target_request_id,
+                payload={"registry_status": "completed_tombstone_handoff"},
+            )
+            return {
+                "success": True,
+                "target_request_id": target_request_id,
+                "cancellation": {
+                    "status": "handoff_cancelled",
+                    "cancel_requested": True,
+                },
+                "gui_queue": "not_queued",
+                "lease_events": [],
+                "handoff_cancelled": True,
+                "handoff_continuation": _handoff_public(),
             }
         if cancellation.status == "not_cancellable":
             return {
                 "success": False,
                 "error_code": "REQUEST_NOT_CANCELLABLE",
                 "error": "The request has crossed an irreversible completion boundary",
-                "target_request_id": str(target_request_id),
+                "target_request_id": target_request_id,
                 "cancellation": cancellation.to_public_dict(),
+                "handoff_cancelled": handoff_cancelled,
+                "handoff_continuation": _handoff_public(),
             }
         target = rpc_inflight_request_registry.get(session_id, target_request_id)
         emit_telemetry(
             "cancellation",
             "cancellation_requested",
             status="warning",
-            request_id=str(target_request_id),
-            execution_id=str(target_request_id),
+            request_id=target_request_id,
+            execution_id=target_request_id,
             payload={"registry_status": cancellation.status},
         )
         lease_events = []
@@ -4278,8 +4850,8 @@ class FreeCADRPC:
                 "cancellation",
                 "cancellation_acknowledged",
                 status="warning",
-                request_id=str(target_request_id),
-                execution_id=str(target_request_id),
+                request_id=target_request_id,
+                execution_id=target_request_id,
                 payload={"lease_event_count": len(lease_events or ())},
             )
 
@@ -4306,16 +4878,606 @@ class FreeCADRPC:
 
         return {
             "success": True,
-            "target_request_id": str(target_request_id),
+            "target_request_id": target_request_id,
             "cancellation": cancellation.to_public_dict(),
             "gui_queue": queue_status,
             "lease_events": lease_events,
+            "handoff_cancelled": handoff_cancelled,
+            "handoff_continuation": _handoff_public(),
         }
 
     def ping(self):
         return True
 
     # --- Document lock verbs -------------------------------------------------
+
+    def _start_locked_error_handoff_continuation(
+        self,
+        *,
+        request_id,
+        mcp_runtime_id,
+        requested_selector,
+        task_description,
+        phase,
+    ):
+        """Kick off automatic bounded handoff after a mutation-free detect."""
+
+        if rpc_handoff_continuation_store is None or not mcp_runtime_id or not request_id:
+            return
+        rpc_handoff_continuation_store.begin(
+            mcp_runtime_id=mcp_runtime_id, request_id=request_id
+        )
+        thread = threading.Thread(
+            target=self._run_locked_error_handoff_continuation,
+            kwargs={
+                "request_id": request_id,
+                "mcp_runtime_id": mcp_runtime_id,
+                "requested_selector": dict(requested_selector or {}),
+                "task_description": task_description,
+                "phase": dict(phase),
+            },
+            name=f"FreeCADMCP-HandoffConfirm-{str(request_id)[:8]}",
+            daemon=True,
+        )
+        thread.start()
+
+    def _journal_handoff_terminal(
+        self, *, mcp_runtime_id, request_id, response
+    ):
+        if rpc_request_replay_cache is None or not mcp_runtime_id or not request_id:
+            return
+        try:
+            rpc_request_replay_cache.journal_completion(
+                mcp_runtime_id, request_id, response
+            )
+        except Exception:
+            logger.debug(
+                "handoff continuation journal_completion failed", exc_info=True
+            )
+
+    def _escrow_locked_error_handoff_claim(
+        self,
+        *,
+        mcp_runtime_id,
+        request_id,
+        claimed,
+    ):
+        """Store CAS grant in the claim vault and mark the continuation claimable.
+
+        Must run immediately after successful ``claim_locked_error_handoff`` so a
+        claim-phase waiter timeout cannot discard the rotated credential. Vault
+        failure after ownership CAS is a recovery-required terminal failure:
+        the token is never published and the continuation is not claimable.
+        """
+
+        if not isinstance(claimed, dict) or not claimed.get("success"):
+            return False
+        credential = claimed.get("credential") or {}
+        if not credential.get("token"):
+            return False
+        if rpc_acquisition_claim_store is None:
+            if rpc_handoff_continuation_store is not None:
+                rpc_handoff_continuation_store.update(
+                    mcp_runtime_id,
+                    request_id,
+                    state="failed",
+                    stage="handoff_failed",
+                    error_code="ACQUISITION_CREDENTIAL_ESCROW_FAILED",
+                    error=(
+                        "Ownership rotated but the acquisition claim vault is "
+                        "unavailable; recovery is required and no claimable "
+                        "credential exists"
+                    ),
+                )
+            self._journal_handoff_terminal(
+                mcp_runtime_id=mcp_runtime_id,
+                request_id=request_id,
+                response={
+                    "ok": False,
+                    "request_id": request_id,
+                    "addon_runtime_id": rpc_server_runtime_id,
+                    "result": {
+                        "success": False,
+                        "error_code": "ACQUISITION_CREDENTIAL_ESCROW_FAILED",
+                        "error": (
+                            "Ownership rotated but the acquisition claim vault "
+                            "is unavailable; recovery is required"
+                        ),
+                        "request_id": request_id,
+                        "recovery_required": True,
+                        "confirmation_pending": False,
+                        "handoff_pending": False,
+                    },
+                },
+            )
+            return False
+        try:
+            rpc_acquisition_claim_store.store(
+                mcp_runtime_id=mcp_runtime_id,
+                request_id=request_id,
+                method="adopt_dirty_document",
+                credential=credential,
+                result=claimed,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Failed to escrow LOCKED_ERROR handoff credential for %s",
+                request_id,
+            )
+            if rpc_handoff_continuation_store is not None:
+                rpc_handoff_continuation_store.update(
+                    mcp_runtime_id,
+                    request_id,
+                    state="failed",
+                    stage="handoff_failed",
+                    error_code="ACQUISITION_CREDENTIAL_ESCROW_FAILED",
+                    error=(
+                        "Ownership rotated but credential escrow failed; "
+                        "recovery is required and no claimable credential exists: "
+                        f"{_redact_rpc_diagnostic(exc)}"
+                    ),
+                )
+            self._journal_handoff_terminal(
+                mcp_runtime_id=mcp_runtime_id,
+                request_id=request_id,
+                response={
+                    "ok": False,
+                    "request_id": request_id,
+                    "addon_runtime_id": rpc_server_runtime_id,
+                    "result": {
+                        "success": False,
+                        "error_code": "ACQUISITION_CREDENTIAL_ESCROW_FAILED",
+                        "error": (
+                            "Ownership rotated but credential escrow failed; "
+                            "recovery is required and no claimable credential exists"
+                        ),
+                        "request_id": request_id,
+                        "recovery_required": True,
+                        "confirmation_pending": False,
+                        "handoff_pending": False,
+                    },
+                },
+            )
+            return False
+        self._journal_handoff_terminal(
+            mcp_runtime_id=mcp_runtime_id,
+            request_id=request_id,
+            response={
+                "ok": False,
+                "request_id": request_id,
+                "addon_runtime_id": rpc_server_runtime_id,
+                "error": {
+                    "code": "ACQUISITION_RESULT_NOT_REPLAYABLE",
+                    "message": (
+                        "This acquisition request already completed; "
+                        "its one-time credential cannot be returned from "
+                        "the replay cache"
+                    ),
+                    "claimable": True,
+                },
+            },
+        )
+        if rpc_handoff_continuation_store is not None:
+            rpc_handoff_continuation_store.update(
+                mcp_runtime_id,
+                request_id,
+                state="claimable",
+                stage="handoff_complete",
+            )
+        return True
+
+    def _run_locked_error_handoff_continuation(
+        self,
+        *,
+        request_id,
+        mcp_runtime_id,
+        requested_selector,
+        task_description,
+        phase,
+    ):
+        """Confirm on GUI (unbounded), then hash/CAS-claim within phase budgets."""
+
+        store = rpc_handoff_continuation_store
+        acquire_timeout = self.ACQUIRE_GUI_PHASE_TIMEOUT_S
+        lease = _import_document_lease()
+
+        def cancelled():
+            return store is not None and store.is_cancelled(
+                mcp_runtime_id, request_id
+            )
+
+        def fail(code, message):
+            if cancelled():
+                # Cancel already published the terminal state; do not overwrite.
+                if store is not None and store.get(mcp_runtime_id, request_id) is not None:
+                    entry = store.get(mcp_runtime_id, request_id)
+                    if entry is not None and entry.state == "cancelled":
+                        self._journal_handoff_terminal(
+                            mcp_runtime_id=mcp_runtime_id,
+                            request_id=request_id,
+                            response={
+                                "ok": False,
+                                "request_id": request_id,
+                                "addon_runtime_id": rpc_server_runtime_id,
+                                "result": {
+                                    "success": False,
+                                    "error_code": "LOCKED_ERROR_HANDOFF_CANCELLED",
+                                    "error": entry.error
+                                    or "LOCKED_ERROR handoff was cancelled",
+                                    "request_id": request_id,
+                                    "confirmation_pending": False,
+                                    "handoff_pending": False,
+                                },
+                            },
+                        )
+                return
+            if store is not None:
+                store.update(
+                    mcp_runtime_id,
+                    request_id,
+                    state=(
+                        "denied"
+                        if code.endswith("NOT_CONFIRMED")
+                        or "not authorized" in str(message).lower()
+                        else "failed"
+                    ),
+                    stage="handoff_failed",
+                    error_code=code,
+                    error=str(message),
+                )
+            self._journal_handoff_terminal(
+                mcp_runtime_id=mcp_runtime_id,
+                request_id=request_id,
+                response={
+                    "ok": False,
+                    "request_id": request_id,
+                    "addon_runtime_id": rpc_server_runtime_id,
+                    "result": {
+                        "success": False,
+                        "error_code": code,
+                        "error": str(message),
+                        "request_id": request_id,
+                        "confirmation_pending": False,
+                        "handoff_pending": False,
+                    },
+                },
+            )
+
+        try:
+            if cancelled():
+                fail(
+                    "LOCKED_ERROR_HANDOFF_CANCELLED",
+                    "LOCKED_ERROR handoff was cancelled before authorization",
+                )
+                return
+
+            if store is not None:
+                store.update(
+                    mcp_runtime_id,
+                    request_id,
+                    state="authorizing",
+                    stage="handoff_authorize",
+                )
+
+            def authorize_handoff_gui():
+                try:
+                    if cancelled():
+                        return {
+                            "success": False,
+                            "error_code": "LOCKED_ERROR_HANDOFF_CANCELLED",
+                            "error": (
+                                "LOCKED_ERROR handoff was cancelled before authorization"
+                            ),
+                            "request_id": request_id,
+                        }
+                    document, document_identity = _live_document_from_selector(
+                        requested_selector
+                    )
+                    if not require_document_modified(document):
+                        return {
+                            "success": False,
+                            "error_code": "DIRTY_ADOPTION_PRECONDITION_FAILED",
+                            "error": (
+                                "the selected document has no unsaved changes to adopt"
+                            ),
+                            "request_id": request_id,
+                        }
+                    if not _authorize_locked_error_handoff_gui(
+                        document, document_identity
+                    ):
+                        return {
+                            "success": False,
+                            "error_code": "DIRTY_ADOPTION_PRECONDITION_FAILED",
+                            "error": (
+                                "LOCKED_ERROR handoff was not authorized"
+                            ),
+                            "request_id": request_id,
+                        }
+                    if cancelled():
+                        return {
+                            "success": False,
+                            "error_code": "LOCKED_ERROR_HANDOFF_CANCELLED",
+                            "error": (
+                                "LOCKED_ERROR handoff was cancelled after authorization"
+                            ),
+                            "request_id": request_id,
+                        }
+                    phase["locked_error_handoff"] = True
+                    phase["locked_error_handoff_authorized"] = True
+                    phase["document_identity"] = document_identity
+                    phase["document_name"] = document_identity.name
+                    phase["canonical_path"] = document_identity.canonical_path
+                    return {"success": True}
+                except Exception as exc:
+                    return _lease_service_error(exc, request_id=request_id)
+
+            authorized = self._dispatch_gui(
+                authorize_handoff_gui, timeout=acquire_timeout
+            )
+            if cancelled():
+                fail(
+                    "LOCKED_ERROR_HANDOFF_CANCELLED",
+                    "LOCKED_ERROR handoff was cancelled after authorization",
+                )
+                return
+            if not isinstance(authorized, dict) or not authorized.get("success"):
+                code = (
+                    (authorized or {}).get("error_code")
+                    if isinstance(authorized, dict)
+                    else "DIRTY_ADOPTION_PRECONDITION_FAILED"
+                )
+                message = (
+                    (authorized or {}).get("error")
+                    if isinstance(authorized, dict)
+                    else "LOCKED_ERROR handoff authorization failed"
+                )
+                fail(
+                    str(code or "DIRTY_ADOPTION_PRECONDITION_FAILED"),
+                    message or "LOCKED_ERROR handoff authorization failed",
+                )
+                return
+
+            if cancelled():
+                fail(
+                    "LOCKED_ERROR_HANDOFF_CANCELLED",
+                    "LOCKED_ERROR handoff was cancelled before hashing",
+                )
+                return
+
+            if store is not None:
+                store.update(
+                    mcp_runtime_id,
+                    request_id,
+                    state="hashing",
+                    stage="acquisition_hash",
+                )
+            baseline = None
+            path = phase.get("canonical_path")
+            if path:
+                if not os.path.isfile(path):
+                    fail(
+                        "LEASE_SERVICE_ERROR",
+                        "saved document path is missing or is not a regular file",
+                    )
+                    return
+                hash_platform = document_identity_service.platform
+
+                def _hash_baseline():
+                    return lease.capture_file_baseline(
+                        path, platform=hash_platform
+                    )
+
+                hash_pool = ThreadPoolExecutor(max_workers=1)
+                try:
+                    future = hash_pool.submit(_hash_baseline)
+                    try:
+                        baseline = future.result(
+                            timeout=self.ACQUIRE_HASH_TIMEOUT_S
+                        )
+                    except FuturesTimeoutError:
+                        future.cancel()
+                        fail(
+                            "LEASE_SERVICE_ERROR",
+                            "acquisition baseline hashing exceeded "
+                            f"{self.ACQUIRE_HASH_TIMEOUT_S}s budget",
+                        )
+                        return
+                finally:
+                    hash_pool.shutdown(wait=False, cancel_futures=True)
+            phase["baseline"] = baseline
+
+            if cancelled():
+                fail(
+                    "LOCKED_ERROR_HANDOFF_CANCELLED",
+                    "LOCKED_ERROR handoff was cancelled before claim",
+                )
+                return
+
+            if store is not None:
+                store.update(
+                    mcp_runtime_id,
+                    request_id,
+                    state="claiming",
+                    stage="acquisition_claim",
+                )
+
+            def claim_handoff_gui():
+                document = FreeCAD.getDocument(phase["document_name"])
+                if document is None:
+                    raise RuntimeError(
+                        "document closed while handoff authorization was pending"
+                    )
+                original_identity = phase["document_identity"]
+                observed = document_identity_service.inspect_registered_document(
+                    original_identity.session_uuid, document
+                )
+                if (
+                    observed.comparison_key != original_identity.comparison_key
+                    or observed.file_identity != original_identity.file_identity
+                ):
+                    raise lease.CoordinationError(
+                        "live document identity changed during handoff authorization"
+                    )
+                document_dirty = require_document_modified(document)
+                if not document_dirty:
+                    raise lease.DirtyAdoptionError(
+                        "the document became clean during handoff authorization"
+                    )
+                # Atomic cancel-vs-CAS gate after revalidation: cancel either
+                # wins here or becomes not-cancellable for ownership rotation.
+                if store is not None and not store.begin_claim(
+                    mcp_runtime_id, request_id
+                ):
+                    return {
+                        "success": False,
+                        "error_code": "LOCKED_ERROR_HANDOFF_CANCELLED",
+                        "error": (
+                            "LOCKED_ERROR handoff was cancelled before claim"
+                        ),
+                        "request_id": request_id,
+                    }
+                grant = document_lease_service.claim_locked_error_handoff(
+                    phase["exact_selector"],
+                    phase["owner"],
+                    validation=lease.LiveDocumentValidation(
+                        document=observed,
+                        document_modified=document_dirty,
+                        baseline=phase["baseline"],
+                        baseline_validated=bool(original_identity.canonical_path),
+                    ),
+                    local_confirmation=True,
+                    task_summary=task_description,
+                )
+                try:
+                    from document_lease import core_authority
+
+                    core_authority.sync_owner_from_lease_record(
+                        document, grant.record
+                    )
+                except Exception:
+                    FreeCAD.Console.PrintWarning(
+                        "[MCP] core mutation owner sync failed after "
+                        "LOCKED_ERROR handoff\n"
+                    )
+                claimed = {
+                    "success": True,
+                    **grant.to_dict(),
+                    "expiry_policy": {
+                        "heartbeat_interval_seconds": 10,
+                        "sidecar_flush_interval_seconds": 30,
+                        "stale_after_seconds": 90,
+                    },
+                }
+                # Escrow immediately after irreversible CAS so a claim-phase
+                # waiter timeout cannot discard the rotated credential.
+                if not self._escrow_locked_error_handoff_claim(
+                    mcp_runtime_id=mcp_runtime_id,
+                    request_id=request_id,
+                    claimed=claimed,
+                ):
+                    scrubbed = dict(claimed)
+                    scrubbed.pop("credential", None)
+                    scrubbed["success"] = False
+                    scrubbed["error_code"] = "ACQUISITION_CREDENTIAL_ESCROW_FAILED"
+                    scrubbed["error"] = (
+                        "Ownership rotated but credential escrow failed; "
+                        "recovery is required and no claimable credential exists"
+                    )
+                    scrubbed["recovery_required"] = True
+                    scrubbed["request_id"] = request_id
+                    return scrubbed
+                return claimed
+
+            def claim_late_complete(_completed_request_id, outcome):
+                """Backup escrow / terminal journal if the waiter already left."""
+
+                if outcome is None:
+                    return
+                if getattr(outcome, "ok", False):
+                    value = getattr(outcome, "value", None)
+                    if isinstance(value, dict) and value.get("success"):
+                        # claim_handoff_gui already escrows; keep as belt/suspenders
+                        # for callers that might return success without store.
+                        if (
+                            rpc_acquisition_claim_store is None
+                            or not rpc_acquisition_claim_store.claimable(
+                                mcp_runtime_id, request_id
+                            )
+                        ):
+                            self._escrow_locked_error_handoff_claim(
+                                mcp_runtime_id=mcp_runtime_id,
+                                request_id=request_id,
+                                claimed=value,
+                            )
+                    return
+                # Late failure: only journal denied/failed when vault is empty.
+                if (
+                    rpc_acquisition_claim_store is not None
+                    and rpc_acquisition_claim_store.claimable(
+                        mcp_runtime_id, request_id
+                    )
+                ):
+                    return
+                error = getattr(outcome, "error", None) or "LOCKED_ERROR handoff claim failed"
+                fail("LEASE_CONFLICT", str(error))
+
+            claimed = self._dispatch_gui(
+                claim_handoff_gui,
+                timeout=acquire_timeout,
+                late_on_complete=claim_late_complete,
+            )
+            if isinstance(claimed, dict) and claimed.get("completion_uncertain"):
+                # Do not fail(): a late CAS may still escrow the grant.
+                if store is not None:
+                    entry = store.get(mcp_runtime_id, request_id)
+                    if entry is not None and entry.state != "claimable":
+                        store.update(
+                            mcp_runtime_id,
+                            request_id,
+                            state="claiming_uncertain",
+                            stage="acquisition_claim",
+                        )
+                return
+
+            if (
+                rpc_acquisition_claim_store is not None
+                and rpc_acquisition_claim_store.claimable(mcp_runtime_id, request_id)
+            ):
+                # Escrow already published (including late on_complete races).
+                return
+
+            if not isinstance(claimed, dict) or not claimed.get("success"):
+                code = (
+                    (claimed or {}).get("error_code")
+                    if isinstance(claimed, dict)
+                    else "LEASE_CONFLICT"
+                )
+                message = (
+                    (claimed or {}).get("error")
+                    if isinstance(claimed, dict)
+                    else "LOCKED_ERROR handoff claim failed"
+                )
+                fail(str(code or "LEASE_CONFLICT"), message)
+                return
+
+            self._escrow_locked_error_handoff_claim(
+                mcp_runtime_id=mcp_runtime_id,
+                request_id=request_id,
+                claimed=claimed,
+            )
+        except Exception as exc:
+            logger.exception(
+                "LOCKED_ERROR handoff continuation failed for %s", request_id
+            )
+            if (
+                rpc_acquisition_claim_store is not None
+                and rpc_acquisition_claim_store.claimable(mcp_runtime_id, request_id)
+            ):
+                return
+            fail(
+                getattr(exc, "code", type(exc).__name__.upper()),
+                _redact_rpc_diagnostic(exc),
+            )
 
     def _acquire_document_lock_v2(
         self,
@@ -4351,6 +5513,22 @@ class FreeCADRPC:
         phase: dict[str, Any] = {}
         inflight = self._current_inflight()
         self._request_checkpoint("acquisition_start")
+        acquire_timeout = self.ACQUIRE_GUI_PHASE_TIMEOUT_S
+
+        def _abort_phase_reservation():
+            """Best-effort rollback of a mutation-free ACQUIRING reservation."""
+
+            credential = phase.get("credential")
+            if credential is None or document_lease_service is None:
+                return
+            try:
+                document_lease_service.abort_acquisition(credential)
+            except Exception:
+                logger.exception(
+                    "Failed to abort unreturned acquisition reservation after timeout"
+                )
+            else:
+                phase.pop("credential", None)
 
         def reserve_gui():
             reservation = None
@@ -4363,6 +5541,16 @@ class FreeCADRPC:
                 lease = _import_document_lease()
                 document_dirty = require_document_modified(document)
                 if adopt_dirty:
+                    # Auto-authorize unlocked dirty adoption only after the
+                    # selector resolves. Live LOCKED_ERROR handoff uses a
+                    # separate confirmation path below.
+                    if not _confirm_dirty_document_adoption_gui(
+                        document, document_identity
+                    ):
+                        raise lease.DirtyAdoptionError(
+                            "dirty-document adoption was not authorized"
+                        )
+                    phase["initial_dirty_adoption_authorized"] = True
                     if not document_dirty:
                         raise lease.DirtyAdoptionError(
                             "the selected document has no unsaved changes to adopt"
@@ -4371,13 +5559,6 @@ class FreeCADRPC:
                         raise lease.DirtyAdoptionError(
                             "initial dirty adoption currently requires an existing saved file"
                         )
-                    if not _confirm_dirty_document_adoption_gui(
-                        document, document_identity
-                    ):
-                        raise lease.DirtyAdoptionError(
-                            "dirty-document adoption was not confirmed in FreeCAD"
-                        )
-                    phase["dirty_adoption_confirmed"] = True
                 elif document_dirty:
                     raise lease.DirtyAcquisitionError(
                         "a pre-existing dirty document requires local adoption"
@@ -4417,6 +5598,11 @@ class FreeCADRPC:
                     owner=owner,
                 )
                 try:
+                    live_request_ids = (
+                        rpc_inflight_request_registry.active_lifecycle_request_ids()
+                        if rpc_inflight_request_registry is not None
+                        else frozenset()
+                    )
                     if adopt_dirty:
                         reservation = document_lease_service.begin_dirty_adoption(
                             exact_selector,
@@ -4424,6 +5610,8 @@ class FreeCADRPC:
                             task_summary=task_description,
                             document_dirty=True,
                             local_confirmation=True,
+                            acquisition_request_id=request_id,
+                            live_acquisition_request_ids=live_request_ids,
                         )
                     else:
                         reservation = document_lease_service.begin_acquisition(
@@ -4431,6 +5619,8 @@ class FreeCADRPC:
                             owner,
                             task_summary=task_description,
                             document_dirty=False,
+                            acquisition_request_id=request_id,
+                            live_acquisition_request_ids=live_request_ids,
                         )
                 except lease.OrphanedForeignRecoveryRequired:
                     if adopt_dirty:
@@ -4445,19 +5635,17 @@ class FreeCADRPC:
                     # dead FreeCAD runtime. The service requires the latter's
                     # saved file to match its original baseline exactly. A
                     # reopen can itself become dirty due to document migration;
-                    # the normal dirty-adoption confirmation authorizes that
-                    # lifecycle. Hash the current saved file off-GUI, then
-                    # CAS-replace the sidecar only after proving its owner dead.
+                    # initial dirty adoption auto-authorizes that lifecycle.
+                    # Hash the current saved file off-GUI, then CAS-replace the
+                    # sidecar only after proving its owner dead.
                     phase["saved_foreign_recovery"] = True
                 except lease.LockedErrorHandoffRequired:
-                    if not adopt_dirty or not phase.get("dirty_adoption_confirmed"):
+                    if not adopt_dirty:
                         raise
-                    # The failed operation has completed and its transaction
-                    # rolled back, but another MCP process owns the private
-                    # credential. Hash the unchanged saved baseline off-GUI,
-                    # then atomically rotate authority after the local user has
-                    # confirmed that this agent may continue the dirty document.
-                    phase["locked_error_handoff"] = True
+                    # Mark pending without mutating the lease. The background
+                    # continuation auto-authorizes, revalidates, and CAS-claims
+                    # within bounded phases.
+                    phase["locked_error_handoff_pending"] = True
                 else:
                     self._retain_inflight_credential(reservation.credential)
                     phase["credential"] = reservation.credential
@@ -4476,9 +5664,47 @@ class FreeCADRPC:
                 return _lease_service_error(exc, request_id=request_id)
 
         self._request_checkpoint("acquisition_reserve_queue")
-        reserved = self._dispatch_gui(reserve_gui, timeout=self.EXECUTE_TIMEOUT)
+        try:
+            reserved = self._dispatch_gui(reserve_gui, timeout=acquire_timeout)
+        except Exception:
+            _abort_phase_reservation()
+            raise
         if not isinstance(reserved, dict) or not reserved.get("success"):
+            if isinstance(reserved, dict) and reserved.get("completion_uncertain"):
+                # Timed-out GUI work may still publish ACQUIRING after this
+                # handler returns. Request cancellation so cooperative
+                # checkpoints abort before or immediately after publish, and
+                # roll back any credential already retained.
+                if inflight is not None:
+                    rpc_inflight_request_registry.request_cancel(
+                        inflight.session_id, inflight.request_id
+                    )
+                _abort_phase_reservation()
+                if inflight is not None:
+                    self._complete_request_cancellation(inflight)
             return reserved
+
+        if phase.get("locked_error_handoff_pending"):
+            # Return immediately while a background continuation performs
+            # bounded authorization, hash/CAS claim, and credential escrow.
+            self._start_locked_error_handoff_continuation(
+                request_id=request_id,
+                mcp_runtime_id=str(request_identity.get("instance_id") or ""),
+                requested_selector=requested_selector,
+                task_description=task_description,
+                phase=dict(phase),
+            )
+            return {
+                "success": False,
+                "error_code": "LOCKED_ERROR_HANDOFF_PENDING",
+                "error": (
+                    "Automatically taking over another agent's dirty "
+                    "LOCKED_ERROR lease"
+                ),
+                "request_id": request_id,
+                "confirmation_pending": False,
+                "handoff_pending": True,
+            }
 
         try:
             self._request_checkpoint("acquisition_hash")
@@ -4489,9 +5715,31 @@ class FreeCADRPC:
                     raise _import_document_lease().LeaseServiceError(
                         "saved document path is missing or is not a regular file"
                     )
-                baseline = _import_document_lease().capture_file_baseline(
-                    path, platform=document_identity_service.platform
-                )
+                lease_mod = _import_document_lease()
+                hash_platform = document_identity_service.platform
+
+                def _hash_baseline():
+                    return lease_mod.capture_file_baseline(
+                        path, platform=hash_platform
+                    )
+
+                hash_pool = ThreadPoolExecutor(max_workers=1)
+                try:
+                    future = hash_pool.submit(_hash_baseline)
+                    try:
+                        baseline = future.result(
+                            timeout=self.ACQUIRE_HASH_TIMEOUT_S
+                        )
+                    except FuturesTimeoutError as exc:
+                        future.cancel()
+                        # Do not wait for the orphaned hasher: waiting would
+                        # defeat the budget and leave ACQUIRING wedged longer.
+                        raise lease_mod.LeaseServiceError(
+                            "acquisition baseline hashing exceeded "
+                            f"{self.ACQUIRE_HASH_TIMEOUT_S}s budget"
+                        ) from exc
+                finally:
+                    hash_pool.shutdown(wait=False, cancel_futures=True)
             phase["baseline"] = baseline
             self._request_checkpoint("acquisition_hash_complete")
         except RequestCancellationError:
@@ -4510,7 +5758,7 @@ class FreeCADRPC:
                 except Exception as rollback_exc:
                     return _lease_service_error(rollback_exc, request_id=request_id)
 
-            return self._dispatch_gui(rollback_gui, timeout=self.EXECUTE_TIMEOUT)
+            return self._dispatch_gui(rollback_gui, timeout=acquire_timeout)
 
         def snapshot_and_promote_gui():
             snapshot_id = None
@@ -4567,7 +5815,7 @@ class FreeCADRPC:
                             ),
                         ),
                         local_confirmation=bool(
-                            phase.get("dirty_adoption_confirmed")
+                            phase.get("locked_error_handoff_authorized")
                         ),
                         task_summary=task_description,
                     )
@@ -4628,8 +5876,11 @@ class FreeCADRPC:
                             ),
                             task_summary=task_description,
                             adopt_dirty=adopt_dirty,
+                            # Dead-owner recovery may reuse dirty-adoption
+                            # auto-authorization; live LOCKED_ERROR handoff
+                            # uses locked_error_handoff_authorized instead.
                             local_confirmation=bool(
-                                phase.get("dirty_adoption_confirmed")
+                                phase.get("initial_dirty_adoption_authorized")
                             ),
                         )
                     )
@@ -4715,9 +5966,27 @@ class FreeCADRPC:
                     dl.end_agent_mutation_scope(request_id, marker_keys)
 
         self._request_checkpoint("acquisition_snapshot_queue")
-        return self._dispatch_gui(
-            snapshot_and_promote_gui, timeout=self.EXECUTE_TIMEOUT
+        promoted = self._dispatch_gui(
+            snapshot_and_promote_gui, timeout=acquire_timeout
         )
+        if (
+            isinstance(promoted, dict)
+            and not promoted.get("success")
+            and promoted.get("completion_uncertain")
+        ):
+            # Snapshot/promote may still complete after the handler timed out.
+            # Prefer cancellation cleanup for pre-promotion ACQUIRING; a late
+            # successful promote is recoverable via the private claim vault.
+            if inflight is not None:
+                rpc_inflight_request_registry.request_cancel(
+                    inflight.session_id, inflight.request_id
+                )
+                self._complete_request_cancellation(
+                    inflight, dirty=True, snapshot_id=phase.get("snapshot_id")
+                )
+            elif phase.get("credential") is not None:
+                _abort_phase_reservation()
+        return promoted
 
     def acquire_document_lock(
         self,
@@ -6299,11 +7568,18 @@ class FreeCADRPC:
                     # Publish in-process ACQUIRING authority before saveCopy so
                     # observers and re-entrant GUI work never see a newly
                     # created document without its authenticated fence.
+                    live_request_ids = (
+                        rpc_inflight_request_registry.active_lifecycle_request_ids()
+                        if rpc_inflight_request_registry is not None
+                        else frozenset()
+                    )
                     reservation = document_lease_service.begin_acquisition(
                         selector,
                         owner,
                         task_summary="Create new document",
                         document_dirty=False,
+                        acquisition_request_id=identity.get("request_id"),
+                        live_acquisition_request_ids=live_request_ids,
                     )
                     self._retain_inflight_credential(reservation.credential)
                     if inflight is not None:

@@ -225,11 +225,21 @@ class InstanceMismatchError(RuntimeError):
 class RpcInvocationError(RuntimeError):
     """Credential-safe transport failure for an authenticated invocation."""
 
-    def __init__(self, method: str, cause: BaseException) -> None:
+    def __init__(
+        self,
+        method: str,
+        cause: BaseException,
+        *,
+        request_id: str | None = None,
+    ) -> None:
+        self.method = method
+        self.request_id = str(request_id or "") or None
         self.code = type(cause).__name__.upper()
-        super().__init__(
-            f"Authenticated RPC {method!r} failed ({type(cause).__name__})"
-        )
+        self.cause = cause
+        detail = f"Authenticated RPC {method!r} failed ({type(cause).__name__})"
+        if self.request_id:
+            detail = f"{detail}; request_id={self.request_id}"
+        super().__init__(detail)
 
 
 class FreeCADConnection:
@@ -557,6 +567,9 @@ class FreeCADConnection:
             for key in ("request_id", "addon_runtime_id", "leases"):
                 if key in response:
                     unwrapped.setdefault(key, response[key])
+            # Do not acknowledge acquisition claims here: custody happens in
+            # lease_manager.store() after unwrap. Acking early can scrub the
+            # vault before the client retains the token.
             with self._identity_lock:
                 manager = self._lease_manager
             if manager is not None:
@@ -804,7 +817,25 @@ class FreeCADConnection:
                 timeout=timeout,
             )
         except Exception as exc:
-            raise RpcInvocationError(method, exc) from None
+            if (
+                not control
+                and method
+                in {
+                    "acquire_document_lock",
+                    "adopt_dirty_document",
+                    "create_document",
+                }
+            ):
+                recovered = self._recover_acquisition_after_transport_loss(
+                    method,
+                    context.request_id,
+                    params=params,
+                )
+                if recovered is not None:
+                    return recovered
+            raise RpcInvocationError(
+                method, exc, request_id=context.request_id
+            ) from None
         error = response.get("error") if isinstance(response, Mapping) else None
         error_code = error.get("code") if isinstance(error, Mapping) else None
         if isinstance(response, Mapping):
@@ -842,7 +873,9 @@ class FreeCADConnection:
         try:
             refresher()
         except Exception as exc:
-            raise RpcInvocationError(method, exc) from None
+            raise RpcInvocationError(
+                method, exc, request_id=context.request_id
+            ) from None
         refreshed = manager.build_request_context(
             document_session_uuids=tuple(
                 item.document_session_uuid for item in context.lease_credentials
@@ -862,7 +895,237 @@ class FreeCADConnection:
                 timeout=timeout,
             )
         except Exception as exc:
-            raise RpcInvocationError(method, exc) from None
+            raise RpcInvocationError(
+                method, exc, request_id=context.request_id
+            ) from None
+
+    def _recover_acquisition_after_transport_loss(
+        self,
+        method: str,
+        request_id: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        poll_attempts: int = 8,
+        poll_interval_s: float = 0.25,
+    ) -> dict[str, Any] | None:
+        """Status/claim recovery after the acquisition XML-RPC response is lost.
+
+        Returns an invoke_v2-shaped success envelope when the credential can be
+        reclaimed; otherwise ``None`` so the caller re-raises with request_id.
+        """
+
+        del params  # reserved for future selector-aware status filtering
+        target = str(request_id or "")
+        if not target:
+            return None
+        deadline = time.monotonic() + max(1.0, poll_attempts * poll_interval_s)
+        last_status: dict[str, Any] | None = None
+        while time.monotonic() <= deadline:
+            try:
+                last_status = self.get_request_status(target)
+            except Exception:
+                last_status = None
+            if isinstance(last_status, Mapping) and last_status.get("success"):
+                state = str(last_status.get("state") or "")
+                claimable = bool(
+                    last_status.get("result_claimable")
+                    or (
+                        isinstance(last_status.get("acquisition_claim"), Mapping)
+                        and last_status["acquisition_claim"].get("claimable")
+                    )
+                )
+                if claimable or state in {"completed", "completed_after_cancel_request"}:
+                    claimed = self.claim_acquisition_result(target)
+                    if (
+                        isinstance(claimed, Mapping)
+                        and claimed.get("success")
+                        and isinstance(claimed.get("credential"), Mapping)
+                        and claimed["credential"].get("token")
+                    ):
+                        # Ack only after the tool path custodied the token.
+                        return {
+                            "ok": True,
+                            "request_id": target,
+                            "result": claimed,
+                            "recovered_after_transport_loss": True,
+                        }
+                if state in {
+                    "failed",
+                    "cancelled",
+                    "expired",
+                    "unknown",
+                }:
+                    return {
+                        "ok": False,
+                        "request_id": target,
+                        "result": {
+                            "success": False,
+                            "error_code": "ACQUISITION_RECOVERY_FAILED",
+                            "error": (
+                                "Acquisition transport was lost and the request "
+                                f"finished as {state}"
+                            ),
+                            "request_id": target,
+                            "status": last_status,
+                        },
+                    }
+                if state not in {
+                    "queued",
+                    "running",
+                    "running_after_timeout",
+                    "cancel_requested",
+                }:
+                    break
+            time.sleep(poll_interval_s)
+        if last_status is not None:
+            return {
+                "ok": False,
+                "request_id": target,
+                "result": {
+                    "success": False,
+                    "error_code": "ACQUISITION_RECOVERY_PENDING",
+                    "error": (
+                        "Acquisition transport was lost; poll get_request_status "
+                        "and claim_acquisition_result with the request_id"
+                    ),
+                    "request_id": target,
+                    "status": last_status,
+                },
+            }
+        return None
+
+    def _resolve_locked_error_handoff_pending(
+        self,
+        result: Mapping[str, Any],
+        *,
+        poll_interval_s: float = 0.5,
+        max_wait_s: float | None = None,
+    ) -> dict[str, Any]:
+        """Optional helper: poll control-lane status/claim after handoff detect.
+
+        Public ``adopt_dirty_document`` returns pending immediately; callers
+        should use ``get_request_status`` / ``claim_acquisition_result``. This
+        await is retained for tests and internal tooling only. It terminates on
+        disconnect, permanent auth failures, terminal status, or ``max_wait_s``.
+        """
+
+        if not isinstance(result, Mapping):
+            return dict(result) if result else {"success": False}
+        if result.get("error_code") != "LOCKED_ERROR_HANDOFF_PENDING":
+            return dict(result)
+        target = str(result.get("request_id") or "")
+        if not target:
+            return dict(result)
+        last_status: dict[str, Any] | None = None
+        deadline = (
+            None if max_wait_s is None else time.monotonic() + float(max_wait_s)
+        )
+        while True:
+            if getattr(self, "_disconnected", False):
+                return {
+                    "success": False,
+                    "error_code": "LOCKED_ERROR_HANDOFF_PENDING",
+                    "error": (
+                        "disconnected while automatic LOCKED_ERROR handoff "
+                        "was processing; resume with get_request_status / "
+                        "claim_acquisition_result"
+                    ),
+                    "request_id": target,
+                    "status": last_status,
+                    "confirmation_pending": False,
+                    "handoff_pending": True,
+                }
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            try:
+                last_status = self.get_request_status(target)
+            except Exception as exc:
+                message = str(exc).lower()
+                if any(
+                    token in message
+                    for token in (
+                        "unauthorized",
+                        "auth",
+                        "forbidden",
+                        "not authenticated",
+                        "session",
+                    )
+                ) and any(
+                    token in message
+                    for token in ("fail", "error", "denied", "invalid", "expired")
+                ):
+                    return {
+                        "success": False,
+                        "error_code": "LOCKED_ERROR_HANDOFF_FAILED",
+                        "error": str(exc),
+                        "request_id": target,
+                        "confirmation_pending": False,
+                        "handoff_pending": False,
+                    }
+                last_status = None
+            if isinstance(last_status, Mapping) and last_status.get("success"):
+                claimable = bool(
+                    last_status.get("result_claimable")
+                    or (
+                        isinstance(last_status.get("acquisition_claim"), Mapping)
+                        and last_status["acquisition_claim"].get("claimable")
+                    )
+                )
+                state = str(last_status.get("state") or "")
+                if claimable or (
+                    state == "completed" and last_status.get("result_claimable")
+                ):
+                    claimed = self.claim_acquisition_result(target)
+                    if (
+                        isinstance(claimed, Mapping)
+                        and claimed.get("success")
+                        and isinstance(claimed.get("credential"), Mapping)
+                        and claimed["credential"].get("token")
+                    ):
+                        return dict(claimed)
+                if state in {"failed", "cancelled", "expired", "unknown"}:
+                    continuation = last_status.get("handoff_continuation") or {}
+                    return {
+                        "success": False,
+                        "error_code": str(
+                            continuation.get("error_code")
+                            or "LOCKED_ERROR_HANDOFF_FAILED"
+                        ),
+                        "error": str(
+                            continuation.get("error")
+                            or last_status.get("error")
+                            or "LOCKED_ERROR handoff did not complete"
+                        ),
+                        "request_id": target,
+                        "status": last_status,
+                        "confirmation_pending": False,
+                        "handoff_pending": False,
+                    }
+                if not (
+                    last_status.get("confirmation_pending")
+                    or last_status.get("handoff_pending")
+                    or state
+                    in {
+                        "queued",
+                        "running",
+                        "running_after_timeout",
+                        "cancel_requested",
+                    }
+                ):
+                    break
+            time.sleep(poll_interval_s)
+        return {
+            "success": False,
+            "error_code": "LOCKED_ERROR_HANDOFF_PENDING",
+            "error": (
+                "Automatic LOCKED_ERROR handoff is still processing; continue "
+                "polling get_request_status / claim_acquisition_result"
+            ),
+            "request_id": target,
+            "status": last_status,
+            "confirmation_pending": False,
+            "handoff_pending": True,
+        }
 
     def heartbeat_document_locks_batch(
         self,
@@ -938,6 +1201,80 @@ class FreeCADConnection:
             }
         response = self.invoke_v2(
             "get_request_status",
+            {"request_id": target_request_id},
+            context,
+            control=True,
+        )
+        return self._unwrap_v2_response(
+            response,
+            additional_secrets=(context.session_token,),
+        )
+
+    def claim_acquisition_result(
+        self,
+        target_request_id: str,
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Claim a lost acquire/adopt/create credential exactly once."""
+
+        try:
+            parsed_target_request_id = uuid.UUID(str(target_request_id))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError("target_request_id must be a UUID") from exc
+        if parsed_target_request_id.int == 0:
+            raise ValueError("target_request_id must not be the nil UUID")
+        target_request_id = str(parsed_target_request_id)
+        context = self._build_v2_context(
+            operation_name="Claim acquisition result",
+            request_id=request_id,
+            require_credentials=False,
+        )
+        if context is None:
+            return {
+                "success": False,
+                "error_code": "LEASE_PROTOCOL_REQUIRED",
+                "error": "Acquisition claim requires authenticated RPC v2",
+            }
+        response = self.invoke_v2(
+            "claim_acquisition_result",
+            {"request_id": target_request_id},
+            context,
+            control=True,
+        )
+        return self._unwrap_v2_response(
+            response,
+            additional_secrets=(context.session_token,),
+        )
+
+    def acknowledge_acquisition_claim(
+        self,
+        target_request_id: str,
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Acknowledge custody of a claimed acquisition credential."""
+
+        try:
+            parsed_target_request_id = uuid.UUID(str(target_request_id))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise ValueError("target_request_id must be a UUID") from exc
+        if parsed_target_request_id.int == 0:
+            raise ValueError("target_request_id must not be the nil UUID")
+        target_request_id = str(parsed_target_request_id)
+        context = self._build_v2_context(
+            operation_name="Acknowledge acquisition claim",
+            request_id=request_id,
+            require_credentials=False,
+        )
+        if context is None:
+            return {
+                "success": False,
+                "error_code": "LEASE_PROTOCOL_REQUIRED",
+                "error": "Acquisition acknowledgement requires authenticated RPC v2",
+            }
+        response = self.invoke_v2(
+            "acknowledge_acquisition_claim",
             {"request_id": target_request_id},
             context,
             control=True,

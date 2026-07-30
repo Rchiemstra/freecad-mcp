@@ -220,14 +220,19 @@ def test_generated_operation_is_verified_then_replayed_with_refreshed_signature(
 
 
 @pytest.mark.unit
-def test_acquisition_token_is_returned_once_and_never_retained(_rpc_runtime):
-    runtime_id, _manager, replay = _rpc_runtime
+def test_acquisition_token_is_returned_once_and_claimable_after_response_loss(
+    _rpc_runtime, monkeypatch
+):
+    runtime_id, manager, replay = _rpc_runtime
     request_id = _uuid()
     raw_token = "one-time-acquisition-token-that-must-not-be-cached"
+    claim_store = addon_rpc.AcquisitionClaimStore()
+    monkeypatch.setattr(addon_rpc, "rpc_acquisition_claim_store", claim_store)
+    session_token = "A" * 43
     payload = _envelope(
         runtime_id,
         request_id=request_id,
-        session_token="A" * 43,
+        session_token=session_token,
         method="acquire_document_lock",
         params={
             "selector": {"document_name": "Model"},
@@ -244,16 +249,144 @@ def test_acquisition_token_is_returned_once_and_never_retained(_rpc_runtime):
                 "generation": 1,
                 "token": raw_token,
             },
+            "lease": {"state": "LOCKED_IDLE"},
         }
     )
 
     initial = rpc.invoke_v2(payload)
-    repeated = rpc.invoke_v2(payload)
+    document_lock.set_request_identity(
+        instance_id=runtime_id,
+        authenticated_session_id=manager.session_ids[session_token],
+    )
+    status = rpc.get_request_status(request_id)
+    claimed_again = rpc.invoke_v2(payload)
+    claimed_third = rpc.claim_acquisition_result(request_id)
+    ack = rpc.acknowledge_acquisition_claim(request_id)
+    after_ack = rpc.invoke_v2(payload)
 
     assert initial["result"]["credential"]["token"] == raw_token
-    assert repeated["error"]["code"] == "ACQUISITION_RESULT_NOT_REPLAYABLE"
+    assert status["success"] is True
+    assert status["result_claimable"] is True
+    assert "token" not in status["acquisition_claim"]
+    assert raw_token not in repr(status)
+    assert claimed_again["ok"] is True
+    assert claimed_again["claimed_acquisition_result"] is True
+    assert claimed_again["result"]["credential"]["token"] == raw_token
+    assert claimed_third["success"] is True
+    assert claimed_third["credential"]["token"] == raw_token
+    assert ack["acknowledged"] is True
+    assert after_ack["error"]["code"] == "ACQUISITION_RESULT_NOT_REPLAYABLE"
+    assert after_ack["error"].get("claimable") is False
     assert rpc.dispatch_count == 1
     assert raw_token not in repr(replay._entries)
+
+
+@pytest.mark.unit
+def test_acquisition_escrow_failure_blocks_success_response(_rpc_runtime, monkeypatch):
+    runtime_id, manager, _replay = _rpc_runtime
+    request_id = _uuid()
+    raw_token = "must-not-publish-when-escrow-fails"
+    claim_store = addon_rpc.AcquisitionClaimStore()
+
+    def boom_store(**_kwargs):
+        raise RuntimeError("vault unavailable")
+
+    monkeypatch.setattr(claim_store, "store", boom_store)
+    monkeypatch.setattr(addon_rpc, "rpc_acquisition_claim_store", claim_store)
+    session_token = "A" * 43
+    payload = _envelope(
+        runtime_id,
+        request_id=request_id,
+        session_token=session_token,
+        method="acquire_document_lock",
+        params={
+            "selector": {"document_name": "Model"},
+            "task_description": "escrow fail",
+        },
+        credentials=[],
+    )
+    rpc = _CountingRPC(
+        {
+            "success": True,
+            "credential": {
+                "lease_id": _uuid(),
+                "document_session_uuid": _uuid(),
+                "generation": 1,
+                "token": raw_token,
+            },
+            "lease": {"state": "LOCKED_IDLE"},
+        }
+    )
+
+    response = rpc.invoke_v2(payload)
+    document_lock.set_request_identity(
+        instance_id=runtime_id,
+        authenticated_session_id=manager.session_ids[session_token],
+    )
+    status = rpc.get_request_status(request_id)
+    claimed = rpc.claim_acquisition_result(request_id)
+
+    assert response["ok"] is False
+    assert response["result"]["success"] is False
+    assert response["result"]["error_code"] == "ACQUISITION_CREDENTIAL_ESCROW_FAILED"
+    assert response["result"].get("recovery_required") is True
+    assert "credential" not in response["result"]
+    assert raw_token not in repr(response)
+    assert status["result_claimable"] is False
+    assert claimed["success"] is False
+    assert claimed["error_code"] == "ACQUISITION_CLAIM_UNAVAILABLE"
+
+
+@pytest.mark.unit
+def test_claim_acquisition_result_is_durable_until_ack(_rpc_runtime, monkeypatch):
+    runtime_id, _manager, _replay = _rpc_runtime
+    request_id = _uuid()
+    raw_token = "private-claim-token"
+    claim_store = addon_rpc.AcquisitionClaimStore()
+    monkeypatch.setattr(addon_rpc, "rpc_acquisition_claim_store", claim_store)
+    lease_id = _uuid()
+    document_session_uuid = _uuid()
+    claim_store.store(
+        mcp_runtime_id=runtime_id,
+        request_id=request_id,
+        method="adopt_dirty_document",
+        credential={
+            "lease_id": lease_id,
+            "document_session_uuid": document_session_uuid,
+            "generation": 3,
+            "token": raw_token,
+        },
+        result={
+            "lease": {"state": "LOCKED_IDLE"},
+            "document": {"name": "Dirty"},
+        },
+    )
+    rpc = _CountingRPC()
+    document_lock.set_request_identity(
+        instance_id=runtime_id,
+        authenticated_session_id=_uuid(),
+    )
+
+    status = rpc.get_request_status(request_id)
+    first = rpc.claim_acquisition_result(request_id)
+    # Simulate lost claim response: no ack yet.
+    second = rpc.claim_acquisition_result(request_id)
+    ack = rpc.acknowledge_acquisition_claim(request_id)
+    third = rpc.claim_acquisition_result(request_id)
+
+    assert status["result_claimable"] is True
+    assert status["acquisition_claim"]["claimable"] is True
+    assert status["acquisition_claim"]["lease_id"] == lease_id
+    assert "token" not in status["acquisition_claim"]
+    assert raw_token not in repr(status)
+    assert first["success"] is True
+    assert first["credential"]["token"] == raw_token
+    assert second["success"] is True
+    assert second["credential"]["token"] == raw_token
+    assert ack["acknowledged"] is True
+    assert third["success"] is False
+    assert third["error_code"] == "ACQUISITION_CLAIM_UNAVAILABLE"
+    assert raw_token not in repr(third)
 
 
 @pytest.mark.unit

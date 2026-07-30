@@ -25,6 +25,7 @@ def test_public_lease_tools_exclude_control_and_local_recovery_helpers():
     assert {
         "acquire_document_lock",
         "adopt_dirty_document",
+        "claim_acquisition_result",
         "get_document_lock",
         "list_document_locks",
         "update_document_lock",
@@ -35,6 +36,7 @@ def test_public_lease_tools_exclude_control_and_local_recovery_helpers():
     } <= set(tools)
     assert "heartbeat_document_lock" not in tools
     assert "force_release_stale_lock" not in tools
+    assert "acknowledge_acquisition_claim" not in tools
 
 
 def test_public_lease_signatures_use_v2_with_deprecated_selector_aliases():
@@ -54,7 +56,8 @@ def test_public_lease_signatures_use_v2_with_deprecated_selector_aliases():
         "hash_policy",
     }
     assert adopt["hash_policy"].default == "sha256"
-    assert "local confirmation dialog" in inspect.getdoc(server.adopt_dirty_document)
+    assert "LOCKED_ERROR" in inspect.getdoc(server.adopt_dirty_document)
+    assert "auto-authorized" in inspect.getdoc(server.adopt_dirty_document)
 
     get = inspect.signature(server.get_document_lock).parameters
     assert "selector" in get

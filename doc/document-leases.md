@@ -34,9 +34,11 @@ active lease or recovery record exists.
 2. `acquire_document_lock` resolves a clean live FreeCAD document and returns a
    256-bit token once. The addon retains only its SHA-256 fingerprint. A
    document that was already dirty must instead use `adopt_dirty_document`;
-   FreeCAD asks the local user for confirmation and creates an owner-only
-   recovery `saveCopy` before returning the one-time credential. Adoption does
-   not save or recompute the live document.
+   the addon auto-authorizes adoption without a FreeCAD pop-up, including an
+   automatic handoff from another agent's dirty ``LOCKED_ERROR`` lease. The
+   handoff revalidates the live document before atomically rotating authority.
+   The addon creates an owner-only recovery `saveCopy` before returning the
+   one-time credential. Adoption does not save or recompute the live document.
 3. Every mutation declares the document session UUID and sends the lease ID,
    generation, and token in an immutable request envelope.
 4. Authorization is checked before queueing and again on FreeCAD's GUI thread

@@ -530,6 +530,25 @@ class InflightRequestRegistry:
                 request.token.request_cancel()
             return requests
 
+    def active_lifecycle_request_ids(
+        self,
+        methods: Iterable[str] = (
+            "acquire_document_lock",
+            "adopt_dirty_document",
+            "create_document",
+        ),
+    ) -> frozenset[str]:
+        """Return request IDs for non-terminal acquisition/adoption work."""
+
+        allowed = {str(method) for method in methods}
+        with self._lock:
+            return frozenset(
+                request.request_id
+                for request in self._active.values()
+                if request.method in allowed
+                and not request.token.snapshot().terminal
+            )
+
     @property
     def active_count(self) -> int:
         with self._lock:

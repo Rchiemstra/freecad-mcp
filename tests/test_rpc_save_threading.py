@@ -489,7 +489,7 @@ def test_finalize_rejects_unknown_save_mode_before_any_document_write():
     "selector_form",
     ["doc_name", "document_name", "document_session_uuid", "canonical_path"],
 )
-def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
+def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
     tmp_path, monkeypatch, selector_form
 ):
     model = tmp_path / "acquire.FCStd"
@@ -499,7 +499,6 @@ def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
     identities = DocumentIdentityService()
     identity = identities.register_document(document)
     sidecar = model.with_name(model.name + ".freecad-mcp.lock")
-    caller_thread = threading.get_ident()
     gui_thread_ids = []
     events = []
     lease_module = rpc_server._import_document_lease()
@@ -585,8 +584,13 @@ def test_saved_acquisition_reserves_before_caller_hash_and_gui_snapshot(
     assert result["success"] is True
     assert selectors == [expected_selector]
     event_threads = dict(events)
-    assert event_threads["hash"] == caller_thread
+    # Hash is bounded off-GUI (ThreadPoolExecutor); snapshot stays on GUI.
+    assert event_threads["hash"] not in gui_thread_ids
     assert event_threads["snapshot"] in gui_thread_ids
+    assert [name for name, _tid in events if name in {"hash", "snapshot"}] == [
+        "hash",
+        "snapshot",
+    ]
     assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
     assert result["document_state"]["snapshot_id"] == snapshot_id
     persisted = json.loads(sidecar.read_text(encoding="utf-8"))

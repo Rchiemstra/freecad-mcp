@@ -208,6 +208,7 @@ from .operations import (
     # Document lock
     acquire_document_lock_operation,
     adopt_dirty_document_operation,
+    claim_acquisition_result_operation,
     forget_legacy_document_key,
     get_document_lock_operation,
     list_document_locks_operation,
@@ -857,6 +858,25 @@ def get_request_status(ctx: Context, request_id: str) -> CallToolResult:
     )
 
 
+@mcp.tool()
+def claim_acquisition_result(ctx: Context, request_id: str) -> CallToolResult:
+    """Custody a lost or pending acquire/adopt/create lease credential.
+
+    Call after ``get_request_status`` reports ``result_claimable`` (for example
+    following an automatic ``LOCKED_ERROR_HANDOFF_PENDING`` handoff or a
+    transport-lost acquisition). This MCP process retains the one-time token;
+    the tool result never includes the raw credential secret.
+    """
+
+    return claim_acquisition_result_operation(
+        get_freecad_connection(),
+        request_id=request_id,
+        lease_manager=state.lease_manager,
+        document_sessions=state.document_sessions,
+        store_token=state.lease_tokens,
+    )
+
+
 class DocumentSelectorInput(TypedDict, total=False):
     """Exact public fields accepted by document lifecycle selectors."""
 
@@ -942,8 +962,15 @@ def adopt_dirty_document(
     """Adopt existing unsaved changes into the verified lease-v2 lifecycle.
 
     The selector must contain ``document_name``, ``document_session_uuid``, or
-    ``canonical_path``. FreeCAD presents a local confirmation dialog and creates
-    a recovery snapshot before this MCP process receives the lease credential.
+    ``canonical_path``. Initial adoption of an unlocked dirty document is
+    auto-authorized (no FreeCAD pop-up). Taking over another agent's dirty
+    ``LOCKED_ERROR`` lease is also auto-authorized without a FreeCAD pop-up.
+    The bounded handoff runs asynchronously while the tool returns a non-error
+    ``LOCKED_ERROR_HANDOFF_PENDING`` result with a ``request_id``. Resume with
+    ``get_request_status`` then
+    ``claim_acquisition_result`` (same path as transport loss).
+    ``cancel_request`` aborts the handoff before CAS. Adoption creates a
+    recovery snapshot before this MCP process receives the lease credential.
     The main FCStd is not saved by adoption.
     """
 

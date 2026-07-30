@@ -24,6 +24,7 @@ from freecad_mcp.operations.core import create_document_operation
 from freecad_mcp.operations.locking import (
     acquire_document_lock_operation,
     adopt_dirty_document_operation,
+    claim_acquisition_result_operation,
 )
 from freecad_mcp.server_state import ServerState
 
@@ -1232,3 +1233,432 @@ def test_disconnect_closes_both_lanes_and_sanitizes_close_failure(monkeypatch):
     control.assert_called_once_with()
     assert "rpc-session-secret" not in str(raised.value)
     assert manager.connected is False
+
+
+@pytest.mark.unit
+def test_adopt_transport_timeout_auto_claims_and_custodies_credential(
+    monkeypatch, tmp_path
+):
+    """Socket timeout after server-side success must reclaim via status/claim."""
+
+    _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="rpc-session")
+    connection.configure_lease_routing(manager, lambda _name: None)
+    model = tmp_path / "Recovered.FCStd"
+    request_id = _request_id("adopt-transport-loss")
+    token = "recovered-after-socket-timeout"
+    document_sessions: dict[str, str] = {}
+
+    def invoke_rpc(method, *args, control=False, timeout=None):
+        del timeout
+        if method == "invoke_v2" and not control:
+            raise TimeoutError("XML-RPC socket timed out after promote")
+        envelope = args[0] if args else {}
+        inner = envelope.get("method") if isinstance(envelope, dict) else None
+        if inner == "get_request_status":
+            return {
+                "ok": True,
+                "request_id": request_id,
+                "result": {
+                    "success": True,
+                    "state": "completed",
+                    "result_claimable": True,
+                    "acquisition_claim": {"claimable": True, "method": "adopt_dirty_document"},
+                },
+            }
+        if inner == "claim_acquisition_result":
+            return {
+                "ok": True,
+                "request_id": request_id,
+                "result": {
+                    "success": True,
+                    "request_id": request_id,
+                    "credential": {
+                        "lease_id": "lease-recovered",
+                        "document_session_uuid": "doc-recovered",
+                        "generation": 2,
+                        "token": token,
+                    },
+                    "document": {
+                        "name": "Recovered",
+                        "canonical_path": str(model),
+                    },
+                    "lease": {"state": "LOCKED_IDLE"},
+                },
+            }
+        if inner == "acknowledge_acquisition_claim":
+            return {
+                "ok": True,
+                "request_id": request_id,
+                "result": {"success": True, "acknowledged": True},
+            }
+        raise AssertionError(f"unexpected RPC {method=} {inner=} control={control}")
+
+    monkeypatch.setattr(connection, "invoke_rpc", invoke_rpc)
+    monkeypatch.setattr(
+        connection,
+        "_build_v2_context",
+        lambda **kwargs: RpcRequestContext(
+            request_id=kwargs.get("request_id") or request_id,
+            session_token="rpc-session",
+            lease_credentials=(),
+            operation_name=str(kwargs.get("operation_name") or "test"),
+            task_id="",
+        ),
+    )
+
+    response = adopt_dirty_document_operation(
+        connection,
+        selector={"document_name": "Recovered"},
+        lease_manager=manager,
+        document_sessions=document_sessions,
+    )
+    connection.disconnect()
+
+    assert response.isError is False
+    assert manager.require(document_session_uuid="doc-recovered").token == token
+    assert document_sessions == {"Recovered": "doc-recovered"}
+
+
+@pytest.mark.unit
+def test_adopt_unrecovered_transport_timeout_surfaces_request_id(monkeypatch):
+    _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="rpc-session")
+    connection.configure_lease_routing(manager, lambda _name: None)
+    request_id = _request_id("adopt-unrecovered")
+
+    def invoke_rpc(method, *args, control=False, timeout=None):
+        del args, control, timeout
+        if method == "invoke_v2":
+            raise TimeoutError("XML-RPC socket timed out")
+        raise TimeoutError("control lane unavailable")
+
+    monkeypatch.setattr(connection, "invoke_rpc", invoke_rpc)
+    monkeypatch.setattr(
+        connection,
+        "_build_v2_context",
+        lambda **kwargs: RpcRequestContext(
+            request_id=kwargs.get("request_id") or request_id,
+            session_token="rpc-session",
+            lease_credentials=(),
+            operation_name=str(kwargs.get("operation_name") or "test"),
+            task_id="",
+        ),
+    )
+    monkeypatch.setattr(
+        "freecad_mcp.freecad_client.time.sleep", lambda _seconds: None
+    )
+
+    response = adopt_dirty_document_operation(
+        connection,
+        selector={"document_name": "StillRunning"},
+    )
+    connection.disconnect()
+
+    assert response.isError is True
+    text = "".join(
+        getattr(block, "text", "") or str(block) for block in response.content
+    )
+    assert request_id in text
+    assert "get_request_status" in text
+    assert "claim_acquisition_result" in text
+
+
+@pytest.mark.unit
+def test_adopt_locked_error_handoff_pending_returns_immediately(monkeypatch):
+    """Public adopt returns pending without awaiting automatic handoff work."""
+
+    _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="rpc-session")
+    connection.configure_lease_routing(manager, lambda _name: None)
+    request_id = _request_id("adopt-handoff-pending")
+    status_calls = []
+
+    def invoke_v2(method, params, context, **kwargs):
+        del params, kwargs
+        assert method == "adopt_dirty_document"
+        assert context.request_id == request_id
+        return {
+            "ok": True,
+            "request_id": request_id,
+            "result": {
+                "success": False,
+                "error_code": "LOCKED_ERROR_HANDOFF_PENDING",
+                "error": "Automatic LOCKED_ERROR handoff is processing",
+                "request_id": request_id,
+                "confirmation_pending": False,
+                "handoff_pending": True,
+            },
+        }
+
+    def get_request_status(target):
+        status_calls.append(target)
+        raise AssertionError("adopt must not await automatic handoff work")
+
+    monkeypatch.setattr(connection, "invoke_v2", invoke_v2)
+    monkeypatch.setattr(connection, "get_request_status", get_request_status)
+    monkeypatch.setattr(
+        connection,
+        "_build_v2_context",
+        lambda **kwargs: RpcRequestContext(
+            request_id=kwargs.get("request_id") or request_id,
+            session_token="rpc-session",
+            lease_credentials=(),
+            operation_name=str(kwargs.get("operation_name") or "test"),
+            task_id="",
+        ),
+    )
+
+    client_result = connection.adopt_dirty_document(
+        selector={"document_name": "Dirty"},
+        request_id=request_id,
+    )
+    assert client_result["error_code"] == "LOCKED_ERROR_HANDOFF_PENDING"
+    assert client_result["request_id"] == request_id
+    assert status_calls == []
+    connection.disconnect()
+
+    freecad = mock.Mock()
+    freecad.adopt_dirty_document.return_value = {
+        "success": False,
+        "error_code": "LOCKED_ERROR_HANDOFF_PENDING",
+        "error": "Automatic LOCKED_ERROR handoff is processing",
+        "request_id": request_id,
+        "confirmation_pending": False,
+        "handoff_pending": True,
+    }
+    response = adopt_dirty_document_operation(
+        freecad,
+        selector={"document_name": "Dirty"},
+    )
+
+    assert response.isError is False
+    text = "".join(
+        getattr(block, "text", "") or str(block) for block in response.content
+    )
+    assert request_id in text
+    assert "get_request_status" in text
+    assert "claim_acquisition_result" in text
+    assert freecad.get_request_status.call_count == 0
+
+
+@pytest.mark.unit
+def test_claim_acquisition_result_tool_custodies_without_exporting_token():
+    request_id = _request_id("claim-custody")
+    token = "secret-claim-token"
+    freecad = mock.Mock()
+    freecad.claim_acquisition_result.return_value = {
+        "success": True,
+        "request_id": request_id,
+        "credential": {
+            "lease_id": "lease-claimed",
+            "document_session_uuid": "doc-claimed",
+            "generation": 4,
+            "token": token,
+        },
+        "document": {"name": "Claimed", "canonical_path": "C:/tmp/Claimed.FCStd"},
+        "lease": {"state": "LOCKED_IDLE"},
+    }
+    manager = LeaseClientManager(session_token="rpc-session")
+    document_sessions: dict[str, str] = {}
+
+    response = claim_acquisition_result_operation(
+        freecad,
+        request_id=request_id,
+        lease_manager=manager,
+        document_sessions=document_sessions,
+    )
+
+    assert response.isError is False
+    assert manager.require(document_session_uuid="doc-claimed").token == token
+    assert document_sessions == {"Claimed": "doc-claimed"}
+    freecad.acknowledge_acquisition_claim.assert_called_once_with(request_id)
+    text = "".join(
+        getattr(block, "text", "") or str(block) for block in response.content
+    )
+    assert token not in text
+    structured = response.structuredContent or {}
+    encoded = json.dumps(structured, default=str)
+    assert token not in encoded
+    assert "[REDACTED]" in encoded or structured.get("data", {}).get(
+        "token_exported"
+    ) is False
+
+
+@pytest.mark.unit
+def test_handoff_begin_claim_beats_cancel_race():
+    from addon.FreeCADMCP.rpc_server.handoff_continuations import (
+        HandoffContinuationStore,
+    )
+
+    store = HandoffContinuationStore()
+    runtime = "runtime-a"
+    request = _request_id("begin-claim-race")
+    store.begin(mcp_runtime_id=runtime, request_id=request)
+    store.update(runtime, request, state="claiming", stage="acquisition_claim")
+
+    assert store.begin_claim(runtime, request) is True
+    assert store.request_cancel(runtime, request) == "not_cancellable"
+    entry = store.get(runtime, request)
+    assert entry is not None
+    assert entry.state == "claim_committed"
+
+    store.update(runtime, request, state="claimable", stage="handoff_complete")
+    assert store.request_cancel(runtime, request) == "not_cancellable"
+    assert store.get(runtime, request).state == "claimable"
+
+
+@pytest.mark.unit
+def test_handoff_claim_committed_can_fail_without_escrow():
+    from addon.FreeCADMCP.rpc_server.handoff_continuations import (
+        HandoffContinuationStore,
+    )
+
+    store = HandoffContinuationStore()
+    runtime = "runtime-a"
+    request = _request_id("claim-committed-fail")
+    store.begin(mcp_runtime_id=runtime, request_id=request)
+    assert store.begin_claim(runtime, request) is True
+    updated = store.update(
+        runtime,
+        request,
+        state="failed",
+        stage="handoff_failed",
+        error_code="LEASE_CONFLICT",
+        error="CAS failed after begin_claim",
+    )
+    assert updated is not None
+    assert updated.state == "failed"
+    assert store.request_cancel(runtime, request) == "terminal_failed"
+
+
+@pytest.mark.unit
+def test_handoff_cancel_beats_begin_claim():
+    from addon.FreeCADMCP.rpc_server.handoff_continuations import (
+        HandoffContinuationStore,
+    )
+
+    store = HandoffContinuationStore()
+    runtime = "runtime-a"
+    request = _request_id("cancel-before-claim")
+    store.begin(mcp_runtime_id=runtime, request_id=request)
+    store.update(runtime, request, state="claiming", stage="acquisition_claim")
+
+    assert store.request_cancel(runtime, request) == "cancelled"
+    assert store.begin_claim(runtime, request) is False
+    assert store.get(runtime, request).state == "cancelled"
+
+
+@pytest.mark.unit
+def test_handoff_terminal_denied_cancel_returns_denied_status():
+    from addon.FreeCADMCP.rpc_server.handoff_continuations import (
+        HandoffContinuationStore,
+    )
+
+    store = HandoffContinuationStore()
+    runtime = "runtime-a"
+    request = _request_id("denied-cancel")
+    store.begin(mcp_runtime_id=runtime, request_id=request)
+    store.update(
+        runtime,
+        request,
+        state="denied",
+        stage="handoff_failed",
+        error_code="DIRTY_ADOPTION_PRECONDITION_FAILED",
+        error="LOCKED_ERROR handoff was not authorized",
+    )
+    assert store.request_cancel(runtime, request) == "terminal_denied"
+
+
+@pytest.mark.unit
+def test_handoff_claimed_state_is_terminal_and_not_cancellable_as_claimed():
+    from addon.FreeCADMCP.rpc_server.handoff_continuations import (
+        HandoffContinuationStore,
+    )
+
+    store = HandoffContinuationStore()
+    runtime = "runtime-a"
+    request = _request_id("claimed-state")
+    store.begin(mcp_runtime_id=runtime, request_id=request)
+    store.update(runtime, request, state="claimable", stage="handoff_complete")
+    store.update(runtime, request, state="claimed", stage="handoff_complete")
+    entry = store.get(runtime, request)
+    assert entry is not None
+    assert entry.state == "claimed"
+    assert store.request_cancel(runtime, request) == "already_claimed"
+
+
+@pytest.mark.unit
+def test_claim_local_storage_failure_keeps_escrow_and_hides_token():
+    request_id = _request_id("claim-store-fail")
+    token = "secret-claim-store-fail-token"
+    freecad = mock.Mock()
+    freecad.claim_acquisition_result.return_value = {
+        "success": True,
+        "request_id": request_id,
+        "credential": {
+            "lease_id": "lease-claimed",
+            "document_session_uuid": "doc-claimed",
+            "generation": 4,
+            "token": token,
+        },
+        "document": {"name": "Claimed"},
+    }
+    manager = mock.Mock()
+    manager.store.side_effect = RuntimeError("disk full")
+    manager.redact_value.side_effect = lambda value: {
+        **value,
+        "credential": {"token": "[REDACTED]"},
+    }
+
+    response = claim_acquisition_result_operation(
+        freecad,
+        request_id=request_id,
+        lease_manager=manager,
+    )
+
+    assert response.isError is False
+    freecad.acknowledge_acquisition_claim.assert_not_called()
+    structured = response.structuredContent or {}
+    encoded = json.dumps(structured, default=str)
+    assert token not in encoded
+    data = structured.get("data") or structured
+    assert data.get("credential_stored") is False
+
+
+@pytest.mark.unit
+def test_claim_ack_failure_reports_cleanup_pending_without_token():
+    request_id = _request_id("claim-ack-fail")
+    token = "secret-claim-ack-fail-token"
+    freecad = mock.Mock()
+    freecad.claim_acquisition_result.return_value = {
+        "success": True,
+        "request_id": request_id,
+        "credential": {
+            "lease_id": "lease-claimed",
+            "document_session_uuid": "doc-claimed-ack",
+            "generation": 5,
+            "token": token,
+        },
+        "document": {"name": "ClaimedAck"},
+    }
+    freecad.acknowledge_acquisition_claim.side_effect = RuntimeError("ack failed")
+    manager = LeaseClientManager(session_token="rpc-session")
+
+    response = claim_acquisition_result_operation(
+        freecad,
+        request_id=request_id,
+        lease_manager=manager,
+    )
+
+    assert response.isError is False
+    assert manager.require(document_session_uuid="doc-claimed-ack").token == token
+    structured = response.structuredContent or {}
+    encoded = json.dumps(structured, default=str)
+    assert token not in encoded
+    data = structured.get("data") or structured
+    assert data.get("credential_stored") is True
+    assert data.get("cleanup_pending") is True

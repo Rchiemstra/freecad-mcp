@@ -1958,6 +1958,8 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "lease_reconcile": (VerbKind.LIFECYCLE, _none_doc),
     "get_request_status": (VerbKind.LIFECYCLE, _none_doc),
     "cancel_request": (VerbKind.LIFECYCLE, _none_doc),
+    "claim_acquisition_result": (VerbKind.LIFECYCLE, _none_doc),
+    "acknowledge_acquisition_claim": (VerbKind.LIFECYCLE, _none_doc),
     "get_instance_info": (VerbKind.LIFECYCLE, _none_doc),
     "check_rpc_sync": (VerbKind.LIFECYCLE, _none_doc),
     "get_worker_status": (VerbKind.LIFECYCLE, _none_doc),

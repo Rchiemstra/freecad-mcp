@@ -15,6 +15,7 @@ from benchmarks.tasks import BENCHMARK_TASKS  # noqa: E402
 
 
 def test_required_twenty_task_catalog_and_quality_gates(tmp_path):
+    pytest.importorskip("Part")
     assert len(BENCHMARK_TASKS) == 20
     assert [task.task_id for task in BENCHMARK_TASKS] == [
         f"G3-{index:02d}" for index in range(1, 21)

@@ -265,6 +265,9 @@ class DocumentLeaseService:
         self._foreign_records: dict[str, ForeignRecoveryRecord] = {}
         self._closed_documents: dict[str, tuple[int, DocumentIdentity]] = {}
         self._effective_error_times: dict[tuple[str, str, int], str] = {}
+        # Process-local map: document session -> acquisition request id that
+        # published the current ACQUIRING reservation. Not persisted in sidecars.
+        self._acquiring_request_ids: dict[str, str] = {}
         self._local_runtime_identity = local_runtime_identity
         self._process_liveness_probe = process_liveness_probe
         self._lock = threading.RLock()
@@ -823,6 +826,8 @@ class DocumentLeaseService:
         *,
         task_summary: str = "",
         document_dirty: bool = False,
+        acquisition_request_id: str | None = None,
+        live_acquisition_request_ids: frozenset[str] | None = None,
     ) -> LeaseGrant:
         """Publish ACQUIRING before baseline hashing or snapshot creation."""
 
@@ -836,6 +841,8 @@ class DocumentLeaseService:
             task_summary=task_summary,
             document_dirty=False,
             replace_unreturned_reservation=True,
+            acquisition_request_id=acquisition_request_id,
+            live_acquisition_request_ids=live_acquisition_request_ids,
         )
 
     def begin_dirty_adoption(
@@ -846,6 +853,8 @@ class DocumentLeaseService:
         task_summary: str = "",
         document_dirty: bool,
         local_confirmation: bool,
+        acquisition_request_id: str | None = None,
+        live_acquisition_request_ids: frozenset[str] | None = None,
     ) -> LeaseGrant:
         """Reserve a locally confirmed, pre-existing dirty document."""
 
@@ -863,6 +872,8 @@ class DocumentLeaseService:
             task_summary=task_summary,
             document_dirty=True,
             replace_unreturned_reservation=True,
+            acquisition_request_id=acquisition_request_id,
+            live_acquisition_request_ids=live_acquisition_request_ids,
         )
 
     def _begin_acquisition_record(
@@ -873,6 +884,8 @@ class DocumentLeaseService:
         task_summary: str,
         document_dirty: bool,
         replace_unreturned_reservation: bool = False,
+        acquisition_request_id: str | None = None,
+        live_acquisition_request_ids: frozenset[str] | None = None,
     ) -> LeaseGrant:
         """Publish one clean acquisition or confirmed dirty-adoption record."""
 
@@ -916,7 +929,13 @@ class DocumentLeaseService:
                         details=existing.to_public_dict(),
                     )
                 if replace_unreturned_reservation and self._is_unreturned_reservation(
-                    existing
+                    existing,
+                    allow_active_acquiring=self._may_fence_local_active_acquiring(
+                        existing,
+                        owner,
+                        session_uuid=identity.session_uuid,
+                        live_acquisition_request_ids=live_acquisition_request_ids,
+                    ),
                 ):
                     return self._replace_unreturned_reservation(
                         existing,
@@ -924,6 +943,7 @@ class DocumentLeaseService:
                         owner,
                         task_summary=task_summary,
                         document_dirty=document_dirty,
+                        acquisition_request_id=acquisition_request_id,
                     )
                 raise LeaseConflictError(
                     "the live document already has a lease",
@@ -959,6 +979,7 @@ class DocumentLeaseService:
                         task_summary=task_summary,
                         document_dirty=document_dirty,
                         foreign=foreign,
+                        acquisition_request_id=acquisition_request_id,
                     )
                 if (
                     foreign_path is not None
@@ -1015,6 +1036,9 @@ class DocumentLeaseService:
             self._records[identity.session_uuid] = record
             self._generations[identity.session_uuid] = generation
             self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+            self._remember_acquiring_request(
+                identity.session_uuid, acquisition_request_id
+            )
             credential = LeaseCredential(
                 lease_id=record.lease_id,
                 document_session_uuid=identity.session_uuid,
@@ -1489,6 +1513,46 @@ class DocumentLeaseService:
             )
             return LeaseGrant(credential=credential, record=claimed)
 
+    def _remember_acquiring_request(
+        self, session_uuid: str, acquisition_request_id: str | None
+    ) -> None:
+        request_id = str(acquisition_request_id or "").strip()
+        if request_id:
+            self._acquiring_request_ids[session_uuid] = request_id
+        else:
+            self._acquiring_request_ids.pop(session_uuid, None)
+
+    def _clear_acquiring_request(self, session_uuid: str) -> None:
+        self._acquiring_request_ids.pop(session_uuid, None)
+
+    def _may_fence_local_active_acquiring(
+        self,
+        record: LeaseRecord,
+        owner: LeaseOwner,
+        *,
+        session_uuid: str,
+        live_acquisition_request_ids: frozenset[str] | None,
+    ) -> bool:
+        """Allow fencing of a same-MCP unreturned ACQUIRING reservation.
+
+        Matching ``mcp_instance_id`` alone is not enough: one MCP process may
+        have concurrent acquire/adopt requests. Immediate fencing is allowed
+        only when the reservation's recorded acquisition request ID is absent
+        from the live inflight set (terminal, abandoned, or never tracked).
+        """
+
+        existing_owner = str(record.owner.mcp_instance_id or "")
+        requesting_owner = str(owner.mcp_instance_id or "")
+        if not existing_owner or existing_owner != requesting_owner:
+            return False
+        recorded = str(self._acquiring_request_ids.get(session_uuid) or "")
+        if not recorded:
+            # Legacy/unknown publisher: refuse live ACQUIRING fencing; STALE
+            # and USER_INTERVENED shapes remain eligible without this flag.
+            return False
+        live = live_acquisition_request_ids or frozenset()
+        return recorded not in live
+
     @staticmethod
     def _is_unreturned_reservation(
         record: LeaseRecord,
@@ -1500,6 +1564,11 @@ class DocumentLeaseService:
         This narrow shape excludes every lease that could contain agent edits or
         a completed recovery snapshot. A clean acquisition or a freshly confirmed
         dirty adoption may therefore fence it without losing recovery authority.
+
+        Active ``ACQUIRING`` is only treated as unreturned when the caller opts
+        in via ``allow_active_acquiring`` after proving ownership/runtime safety
+        (same MCP instance with a non-live acquisition request id locally, or
+        dead FreeCAD owner for foreign records).
         """
 
         acquiring = (
@@ -1541,6 +1610,7 @@ class DocumentLeaseService:
         task_summary: str,
         document_dirty: bool,
         foreign: ForeignRecoveryRecord | None = None,
+        acquisition_request_id: str | None = None,
     ) -> LeaseGrant:
         """CAS-fence one local/foreign reservation whose credential was not returned."""
 
@@ -1611,6 +1681,9 @@ class DocumentLeaseService:
         self._closed_documents.pop(identity.session_uuid, None)
         self._generations[identity.session_uuid] = generation
         self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+        self._remember_acquiring_request(
+            identity.session_uuid, acquisition_request_id
+        )
         credential = LeaseCredential(
             lease_id=replacement.lease_id,
             document_session_uuid=identity.session_uuid,
@@ -1784,6 +1857,7 @@ class DocumentLeaseService:
                 # Keep ACQUIRING in memory and on disk. The token is still
                 # private, so only guarded recovery can resolve uncertainty.
                 raise
+            self._clear_acquiring_request(credential.document_session_uuid)
             return LeaseGrant(credential=credential, record=idle)
 
     def abort_acquisition(self, credential: LeaseCredential) -> dict[str, Any]:
@@ -1819,6 +1893,7 @@ class DocumentLeaseService:
                 credential.document_session_uuid,
                 None,
             )
+            self._clear_acquiring_request(credential.document_session_uuid)
             return {
                 "rolled_back": True,
                 "document_session_uuid": credential.document_session_uuid,

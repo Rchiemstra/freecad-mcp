@@ -18,11 +18,46 @@ After a timeout, call `get_request_status(request_id)`. States are `queued`,
 The response includes stage, execution/mutation start, cancellation,
 uncertainty, late-result availability, and `recovery_incident_id`.
 
+For acquire/adopt/create, status may also report `result_claimable` and a
+redacted `acquisition_claim` block. Raw lease tokens are never included.
+Reclaim a lost success with `claim_acquisition_result` (control lane) or by
+replaying the original authenticated request ID while the private claim vault
+still holds the credential; claims peek until `acknowledge_acquisition_claim`
+(or first authorized use) scrubs the vault. The MCP client auto-polls
+status/claim after an acquire/adopt/create transport timeout and surfaces
+`request_id` when recovery remains pending.
+
+Document acquisition deadline hierarchy:
+
+- Authorization (dirty adoption): all agent-start dirty adoption is
+  auto-authorized with no FreeCAD pop-up. Taking over another agent's dirty
+  ``LOCKED_ERROR`` lease returns a non-error `LOCKED_ERROR_HANDOFF_PENDING`
+  immediately with a `request_id`; bounded GUI revalidation and hash/CAS claim
+  then escrow the credential. Resume with
+  `get_request_status` then the public
+  `claim_acquisition_result` (public MCP tool) to custody the lease into this
+  process without exposing the raw token. Claim-phase GUI timeouts
+  leave the continuation `claiming_uncertain` until a late CAS escrows the
+  grant; they do not journal a terminal failure over a possible late success.
+- Each acquire GUI phase (`reserve`, `snapshot/promote`): `ACQUIRE_GUI_PHASE_TIMEOUT_S` (45s).
+- Off-GUI baseline hash: `ACQUIRE_HASH_TIMEOUT_S` (30s); on exceed, abort `ACQUIRING`.
+- Client lifecycle socket: `CLIENT_LIFECYCLE_TIMEOUT_S` (150s; `FreeCADConnection` default).
+- Required ordering: `2 × 45 + 30 + cleanup/response headroom <= 150`.
+- Stale watchdog (90s) is a last-resort fallback, not normal adoption recovery.
+- Same-MCP fencing of an unreturned `ACQUIRING` requires the recorded
+  `acquisition_request_id` to be absent from live acquire/adopt/create inflight IDs.
+
 `cancel_request` is cooperative. Before mutation it cancels queued work; after
 mutation begins it fences the affected lease and reports
-`REQUEST_CANCELLED_AFTER_MUTATION`. A timeout-during-execution creates a
-recovery incident. Late completion emits `recovery_completed` (or
-`recovery_failed`) and stays correlated to the original request.
+`REQUEST_CANCELLED_AFTER_MUTATION`. For async ``LOCKED_ERROR`` handoff,
+`cancel_request` also cancels the detached handoff continuation only
+before the atomic ``begin_claim`` gate (`state=cancelled`,
+`handoff_pending=false`); later queued handoff work does not rotate ownership. After
+``begin_claim`` or vault escrow, cancel returns ``REQUEST_NOT_CANCELLABLE`` and
+the credential remains claimable.
+A timeout-during-execution creates a recovery incident. Late completion emits
+`recovery_completed` (or `recovery_failed`) and stays correlated to the original
+request.
 
 Heavy tools accept the SDK's negotiated task-augmented calls. MCP task IDs are
 linked to existing request and worker IDs; status/result/list/cancel use the
