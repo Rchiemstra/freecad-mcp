@@ -32,6 +32,9 @@ class UnsupportedWorkerGuiError(ProtocolError):
 
 
 _SUBELEMENT_RE = re.compile(r"^(Face|Edge|Vertex)([1-9][0-9]*)$")
+_SKETCHER_PSEUDO_SUBELEMENTS = frozenset(
+    {"H_Axis", "V_Axis", "N_Axis", "RootPoint"}
+)
 
 
 def _is_null_subobject(value: Any) -> bool:
@@ -57,6 +60,23 @@ def _subelement_name_is_safe(name: str) -> bool:
     if ".." in name:
         return False
     return True
+
+
+def _is_sketcher_pseudo_subelement(target: Any, name: str) -> bool:
+    """Return whether FreeCAD defines ``name`` semantically on this sketch."""
+
+    if name not in _SKETCHER_PSEUDO_SUBELEMENTS:
+        return False
+    type_id = str(getattr(target, "TypeId", "") or "")
+    if type_id.startswith("Sketcher::SketchObject"):
+        return True
+    is_derived_from = getattr(target, "isDerivedFrom", None)
+    if not callable(is_derived_from):
+        return False
+    try:
+        return bool(is_derived_from("Sketcher::SketchObject"))
+    except Exception:
+        return False
 
 
 def _resolve_via_get_subobject(target: Any, name: str) -> Any | None:
@@ -89,8 +109,9 @@ def validate_subelement_reference(target: Any, subelement: str) -> None:
     """Resolve a shape or semantic subelement and reject nonexistent references.
 
     Indexed ``FaceN``/``EdgeN``/``VertexN`` names are validated against shape
-    collections. Other safe names (for example Sketcher ``H_Axis``) are resolved
-    via ``target.getSubObject``, with ``Shape.getElement`` as a fallback.
+    collections. Known Sketcher pseudo-subelements are accepted on sketch
+    targets; other safe names are resolved via ``target.getSubObject``, with
+    ``Shape.getElement`` as a fallback.
     """
     name = str(subelement)
     owner = getattr(target, "Name", "<unknown>")
@@ -111,6 +132,8 @@ def validate_subelement_reference(target: Any, subelement: str) -> None:
         return
     if not _subelement_name_is_safe(name):
         raise ProtocolError(f"{owner}.{name} does not exist")
+    if _is_sketcher_pseudo_subelement(target, name):
+        return
     if _resolve_via_get_subobject(target, name) is not None:
         return
     if shape is not None and _resolve_via_shape_element(shape, name) is not None:
