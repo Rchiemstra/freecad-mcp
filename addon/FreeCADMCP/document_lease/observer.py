@@ -418,6 +418,28 @@ class LeaseObserver:
             # bridge.  Do not fall back to touching the GUI synchronously.
             logger.warning("lease observer notification queue failed", exc_info=True)
 
+    @staticmethod
+    def _refresh_unleased_saved_identity(
+        service: Any,
+        identity: Any,
+        document: Any,
+    ) -> None:
+        """Refresh an exact registered proxy after an unleased GUI save."""
+
+        identities = getattr(service, "identity_service", None)
+        refresher = getattr(identities, "refresh_saved_document", None)
+        if not callable(refresher):
+            return
+        try:
+            refreshed = refresher(document)
+            if refreshed.session_uuid != identity.session_uuid:
+                raise RuntimeError("saved document identity changed its live session")
+        except Exception:
+            logger.warning(
+                "unable to refresh unleased GUI-saved document identity",
+                exc_info=True,
+            )
+
     def _handle(
         self,
         document: Any,
@@ -438,13 +460,6 @@ class LeaseObserver:
                 identity = self._identity_for_document(service, document)
                 if identity is None:
                     return None
-                # Attribution is accepted only on the executing GUI thread
-                # when this exact live-document identity intersects the
-                # active request's declared scope.  A mismatched nested
-                # request poisons the context, causing this check to fail and
-                # the owner to be fenced below.
-                if not force and self._is_agent_attributed(document, identity):
-                    return None
                 try:
                     current = service.get(identity.session_uuid)
                 except Exception:
@@ -453,6 +468,23 @@ class LeaseObserver:
                     )
                     return None
                 if current is None:
+                    if refresh_saved_identity:
+                        # A completed GUI save is authoritative evidence for
+                        # refresh_saved_document's narrow exact-proxy,
+                        # same-name, same-path file-identity update. Without a
+                        # lease record there is no recovery document to update.
+                        self._refresh_unleased_saved_identity(
+                            service,
+                            identity,
+                            document,
+                        )
+                    return None
+                # Attribution is accepted only on the executing GUI thread
+                # when this exact live-document identity intersects the
+                # active request's declared scope.  A mismatched nested
+                # request poisons the context, causing this check to fail and
+                # the owner to be fenced below.
+                if not force and self._is_agent_attributed(document, identity):
                     return None
                 dirty = _document_dirty(document)
                 if dirty is None:
@@ -559,7 +591,14 @@ class LeaseObserver:
                 if identity is None:
                     return None
                 current = service.get(identity.session_uuid)
-                if current is None or _record_state(current) not in {
+                if current is None:
+                    self._refresh_unleased_saved_identity(
+                        service,
+                        identity,
+                        document,
+                    )
+                    return None
+                if _record_state(current) not in {
                     "USER_INTERVENED",
                     "UNLOCKED_DIRTY",
                 }:

@@ -253,6 +253,39 @@ def test_finish_save_deferred_refresh_never_takes_over_attributed_owner(tmp_path
     assert service.identity_refreshes == []
 
 
+def test_finish_save_refreshes_registered_identity_without_lease(tmp_path):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.service import DocumentLeaseService
+
+    model = tmp_path / "Unleased.FCStd"
+    replacement = tmp_path / "Unleased.tmp"
+    model.write_bytes(b"original archive")
+    replacement.write_bytes(b"saved by the FreeCAD GUI")
+    document = FakeDocument("Unleased", str(model), modified=False)
+    identities = DocumentIdentityService()
+    original = identities.register_document(document)
+    service = DocumentLeaseService(identities)
+    observer = observer_mod.LeaseObserver(service_provider=lambda: service)
+
+    replacement.replace(model)
+    observed = identities.inspect_registered_document(
+        original.session_uuid,
+        document,
+    )
+    assert observed.file_identity != original.file_identity
+
+    assert observer.slotFinishSaveDocument(document, document.FileName) is None
+
+    refreshed, imported = observer_mod.register_live_document_recovery(
+        service,
+        document,
+    )
+    assert imported is None
+    assert refreshed.session_uuid == original.session_uuid
+    assert refreshed.file_identity == observed.file_identity
+    assert service.get(refreshed.session_uuid) is None
+
+
 def test_gui_edit_mode_resolves_view_provider_object(tmp_path):
     document = FakeDocument("Model", str(tmp_path / "Model.FCStd"), modified=False)
     observer, service, queued, _delivered = make_observer(document)
