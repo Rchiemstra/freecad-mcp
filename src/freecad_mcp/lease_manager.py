@@ -509,8 +509,10 @@ class StaleLeaseRecoveryOrchestrator:
     ) -> tuple[str, ...]:
         now = time.monotonic()
         stale = extract_stale_sessions_from_heartbeat(response)
-        for session_uuid in extract_active_sessions_from_heartbeat(response):
+        active = extract_active_sessions_from_heartbeat(response)
+        for session_uuid in active:
             self._heartbeat_active_at[session_uuid] = now
+            self._needs_recovery.discard(session_uuid)
         for session_uuid in stale:
             self._heartbeat_active_at.pop(session_uuid, None)
         self._needs_recovery.update(stale)
@@ -524,7 +526,7 @@ class StaleLeaseRecoveryOrchestrator:
         if duration_s < self._stale_after_seconds:
             return ()
         now = time.monotonic()
-        stale_deadline = now - duration_s + self._stale_after_seconds
+        freshness_deadline = now - self._stale_after_seconds
         affected: list[str] = []
         for session_uuid in dict.fromkeys(
             str(item) for item in session_uuids if item
@@ -533,7 +535,7 @@ class StaleLeaseRecoveryOrchestrator:
                 affected.append(session_uuid)
                 continue
             last_active = self._heartbeat_active_at.get(session_uuid)
-            if last_active is not None and last_active >= stale_deadline:
+            if last_active is not None and last_active >= freshness_deadline:
                 continue
             affected.append(session_uuid)
         self._needs_recovery.update(affected)

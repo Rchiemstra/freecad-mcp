@@ -648,6 +648,93 @@ def test_healthy_long_call_skips_post_tool_recovery_when_heartbeat_confirms_acti
 
 
 @pytest.mark.unit
+def test_healthy_heartbeat_clears_needs_recovery():
+    orchestrator = StaleLeaseRecoveryOrchestrator()
+    orchestrator.mark_needs_recovery("doc-a")
+
+    orchestrator.observe_heartbeat_batch(
+        {
+            "leases": [
+                {
+                    "document_session_uuid": "doc-a",
+                    "state": "LOCKED_IDLE",
+                    "success": True,
+                }
+            ]
+        }
+    )
+
+    assert orchestrator.sessions_needing_recovery(("doc-a",)) == ()
+
+
+@pytest.mark.unit
+def test_stale_heartbeat_still_marks_needs_recovery_after_healthy_clear():
+    orchestrator = StaleLeaseRecoveryOrchestrator()
+    orchestrator.mark_needs_recovery("doc-a")
+    orchestrator.observe_heartbeat_batch(
+        {
+            "leases": [
+                {
+                    "document_session_uuid": "doc-a",
+                    "state": "LOCKED_IDLE",
+                    "success": True,
+                }
+            ]
+        }
+    )
+    assert orchestrator.sessions_needing_recovery(("doc-a",)) == ()
+
+    stale = orchestrator.observe_heartbeat_batch(
+        {
+            "leases": [
+                {
+                    "document_session_uuid": "doc-a",
+                    "error_code": "LEASE_STATE_FORBIDS_OPERATION",
+                    "details": {"state": "STALE"},
+                }
+            ]
+        }
+    )
+
+    assert stale == ("doc-a",)
+    assert orchestrator.sessions_needing_recovery(("doc-a",)) == ("doc-a",)
+
+
+@pytest.mark.unit
+def test_post_tool_recovers_when_mid_window_renewal_stale_at_completion():
+    """duration > 2*stale_after with mid-window last_active must still recover."""
+    duration = 3.0
+    stale_after = 1.0
+    orchestrator = StaleLeaseRecoveryOrchestrator(stale_after_seconds=stale_after)
+    now = time.monotonic()
+    # Interior zone: now - duration + stale_after < last_active < now - stale_after
+    # (now-2 < last_active < now-1). Old formula skips; new formula recovers.
+    last_active = now - 1.5
+    orchestrator._heartbeat_active_at["doc-a"] = last_active
+
+    old_freshness_deadline = now - duration + stale_after
+    assert last_active > old_freshness_deadline
+    assert last_active < now - stale_after
+
+    affected = orchestrator.observe_tool_completion(duration, ("doc-a",))
+    assert affected == ("doc-a",)
+
+    reconcile_calls: list[str] = []
+
+    async def run() -> None:
+        results = await orchestrator.recover_sessions(
+            affected,
+            STALE_RECOVERY_TRIGGER_POST_TOOL,
+            lambda session_uuid: reconcile_calls.append(session_uuid)
+            or {"success": True},
+        )
+        assert reconcile_calls == ["doc-a"]
+        assert results["doc-a"].outcome == STALE_RECOVERY_OUTCOME_RECOVERED
+
+    asyncio.run(run())
+
+
+@pytest.mark.unit
 def test_post_tool_still_recovers_when_heartbeat_last_active_before_stale_deadline():
     orchestrator = StaleLeaseRecoveryOrchestrator(stale_after_seconds=1.0)
     orchestrator.observe_heartbeat_batch(
