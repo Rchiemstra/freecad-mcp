@@ -267,6 +267,8 @@ class FreeCADConnection:
         self._lease_manager: LeaseClientManager | None = None
         self._document_session_resolver: Callable[[str], str | None] | None = None
         self._session_refresher: Callable[[], None] | None = None
+        self._rpc_method_capabilities: dict[str, Any] = {}
+        self._rpc_method_capabilities_loaded = False
         # ContextVar keeps the deprecated header token isolated across threads
         # and asyncio tasks. New code must use RpcRequestContext/invoke_v2.
         self._legacy_lease_token: contextvars.ContextVar[str | None] = (
@@ -1377,7 +1379,48 @@ class FreeCADConnection:
 
     def get_instance_info(self) -> dict[str, Any]:
         """Identity of the FreeCAD addon answering on this port."""
-        return self.server.get_instance_info()
+        info = self.server.get_instance_info()
+        if isinstance(info, Mapping):
+            raw_capabilities = info.get("rpc_method_capabilities")
+            capabilities = (
+                dict(raw_capabilities)
+                if isinstance(raw_capabilities, Mapping)
+                else {}
+            )
+            identity_lock = getattr(self, "_identity_lock", None)
+            if identity_lock is None:
+                self._rpc_method_capabilities = capabilities
+                self._rpc_method_capabilities_loaded = True
+            else:
+                with identity_lock:
+                    self._rpc_method_capabilities = capabilities
+                    self._rpc_method_capabilities_loaded = True
+        return info
+
+    def supports_rpc_parameter(self, method: str, parameter: str) -> bool | None:
+        """Return advertised parameter support, or ``None`` if unobservable.
+
+        An addon that answers ``get_instance_info`` without the capability map
+        predates parameter advertisement. For newly introduced parameters that
+        is authoritative absence, allowing the caller to select a compatibility
+        path before starting a mutation.
+        """
+        with self._identity_lock:
+            loaded = self._rpc_method_capabilities_loaded
+        if not loaded:
+            try:
+                self.get_instance_info()
+            except Exception:  # noqa: BLE001 - optional legacy capability read
+                return None
+
+        with self._identity_lock:
+            method_capability = self._rpc_method_capabilities.get(method)
+        if not isinstance(method_capability, Mapping):
+            return False
+        parameters = method_capability.get("parameters")
+        if not isinstance(parameters, (list, tuple, set, frozenset)):
+            return False
+        return parameter in parameters
 
     def verify_instance(self) -> dict[str, Any]:
         """Confirm the addon on this port is the expected instance.
@@ -2057,15 +2100,34 @@ class FreeCADConnection:
             return routed
         return self.server.body_set_tip(doc_name, body_name, feature_name)
 
-    def sketch_attach(self, doc_name: str, sketch_name: str, support) -> dict[str, Any]:
+    def sketch_attach(
+        self,
+        doc_name: str,
+        sketch_name: str,
+        support,
+        attachment_offset: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "doc_name": doc_name,
+            "sketch_name": sketch_name,
+            "support": support,
+        }
+        # Omit the key entirely for older addons / XML-RPC signatures.
+        if attachment_offset is not None:
+            params["attachment_offset"] = attachment_offset
         routed = self._invoke_mutation_v2(
             "sketch_attach",
-            {"doc_name": doc_name, "sketch_name": sketch_name, "support": support},
+            params,
             document_names=(doc_name,),
             operation_name="Attach sketch",
         )
         if routed is not None:
             return routed
+        # Compatibility: do not pass a fourth positional arg when unused.
+        if attachment_offset is not None:
+            return self.server.sketch_attach(
+                doc_name, sketch_name, support, attachment_offset
+            )
         return self.server.sketch_attach(doc_name, sketch_name, support)
 
     def sketch_edit_constraint(

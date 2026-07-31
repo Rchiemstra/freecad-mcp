@@ -22,7 +22,7 @@ import traceback
 import uuid
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from xmlrpc.client import Fault, dumps as xmlrpc_dumps, loads as xmlrpc_loads
@@ -1597,100 +1597,14 @@ def _parse_allowed_ips(allowed_ips_str):
     return [ipaddress.ip_network(entry, strict=False) for entry in valid]
 
 
-@dataclass
-class Object:
-    name: str
-    type: str | None = None
-    analysis: str | None = None
-    properties: dict[str, Any] = field(default_factory=dict)
-
-
-def set_object_property(
-    doc: FreeCAD.Document, obj: FreeCAD.DocumentObject, properties: dict[str, Any]
-):
-    for prop, val in properties.items():
-        try:
-            if prop in obj.PropertiesList:
-                if prop == "Placement" and isinstance(val, dict):
-                    if "Base" in val:
-                        pos = val["Base"]
-                    elif "Position" in val:
-                        pos = val["Position"]
-                    else:
-                        pos = {}
-                    rot = val.get("Rotation", {})
-                    placement = FreeCAD.Placement(
-                        FreeCAD.Vector(
-                            pos.get("x", 0),
-                            pos.get("y", 0),
-                            pos.get("z", 0),
-                        ),
-                        FreeCAD.Rotation(
-                            FreeCAD.Vector(
-                                rot.get("Axis", {}).get("x", 0),
-                                rot.get("Axis", {}).get("y", 0),
-                                rot.get("Axis", {}).get("z", 1),
-                            ),
-                            rot.get("Angle", 0),
-                        ),
-                    )
-                    setattr(obj, prop, placement)
-
-                elif isinstance(getattr(obj, prop), FreeCAD.Vector) and isinstance(
-                    val, dict
-                ):
-                    vector = FreeCAD.Vector(
-                        val.get("x", 0), val.get("y", 0), val.get("z", 0)
-                    )
-                    setattr(obj, prop, vector)
-
-                elif prop in ["Base", "Tool", "Source", "Profile"] and isinstance(
-                    val, str
-                ):
-                    ref_obj = doc.getObject(val)
-                    if ref_obj:
-                        setattr(obj, prop, ref_obj)
-                    else:
-                        raise ValueError(f"Referenced object '{val}' not found.")
-
-                elif prop == "References" and isinstance(val, list):
-                    refs = []
-                    for ref_name, face in val:
-                        ref_obj = doc.getObject(ref_name)
-                        if ref_obj:
-                            refs.append((ref_obj, face))
-                        else:
-                            raise ValueError(
-                                f"Referenced object '{ref_name}' not found."
-                            )
-                    setattr(obj, prop, refs)
-
-                else:
-                    setattr(obj, prop, val)
-            # ShapeColor is a property of the ViewObject
-            elif prop == "ShapeColor" and isinstance(val, (list, tuple)):
-                setattr(
-                    obj.ViewObject,
-                    prop,
-                    (float(val[0]), float(val[1]), float(val[2]), float(val[3])),
-                )
-
-            elif prop == "ViewObject" and isinstance(val, dict):
-                for k, v in val.items():
-                    if k == "ShapeColor":
-                        setattr(
-                            obj.ViewObject,
-                            k,
-                            (float(v[0]), float(v[1]), float(v[2]), float(v[3])),
-                        )
-                    else:
-                        setattr(obj.ViewObject, k, v)
-
-            else:
-                setattr(obj, prop, val)
-
-        except Exception as e:
-            FreeCAD.Console.PrintError(f"Property '{prop}' assignment error: {e}\n")
+# Object / set_object_property live in property_mapper; Placement angle units
+# live in placement_codec (public Angle = degrees).
+try:
+    from .placement_codec import dict_to_placement, placement_to_dict
+    from .property_mapper import Object, set_object_property
+except ImportError:  # pragma: no cover - flat addon import path
+    from placement_codec import dict_to_placement, placement_to_dict
+    from property_mapper import Object, set_object_property
 
 
 class FreeCADRPC:
@@ -7630,6 +7544,9 @@ class FreeCADRPC:
                 if rpc_runtime_manifest is not None
                 else []
             ),
+            "rpc_method_capabilities": {
+                "sketch_attach": {"parameters": ["attachment_offset"]},
+            },
             "addon_version": addon_version,
             "addon_build_id": addon_build_id,
             "freecad_version": freecad_version,
@@ -9295,9 +9212,13 @@ class FreeCADRPC:
         )
         return res if isinstance(res, dict) else {"success": False, "error": res}
 
-    def sketch_attach(self, doc_name: str, sketch_name: str, support) -> dict:
+    def sketch_attach(
+        self, doc_name: str, sketch_name: str, support, attachment_offset=None
+    ) -> dict:
         res = self._dispatch_gui(
-            lambda: self._sketch_attach_gui(doc_name, sketch_name, support)
+            lambda: self._sketch_attach_gui(
+                doc_name, sketch_name, support, attachment_offset
+            )
         )
         return res if isinstance(res, dict) else {"success": False, "error": res}
 
@@ -10405,7 +10326,9 @@ class FreeCADRPC:
         except Exception as e:
             return str(e)
 
-    def _sketch_attach_gui(self, doc_name, sketch_name, support):
+    def _sketch_attach_gui(
+        self, doc_name, sketch_name, support, attachment_offset=None
+    ):
         try:
             doc = FreeCAD.getDocument(doc_name)
             if not doc:
@@ -10476,8 +10399,15 @@ class FreeCADRPC:
                 attached = {"object": ref.Name, "subname": sub, "kind": "dict_ref"}
             else:
                 return "support must be str or dict"
+            if attachment_offset is not None:
+                if not hasattr(sketch, "AttachmentOffset"):
+                    return f"Sketch '{sketch_name}' has no AttachmentOffset property."
+                sketch.AttachmentOffset = dict_to_placement(attachment_offset)
             doc.recompute()
-            return {"success": True, "sketch": sketch.Name, "attached": attached}
+            result = {"success": True, "sketch": sketch.Name, "attached": attached}
+            if attachment_offset is not None and hasattr(sketch, "AttachmentOffset"):
+                result["attachment_offset"] = placement_to_dict(sketch.AttachmentOffset)
+            return result
         except Exception as e:
             return str(e)
 

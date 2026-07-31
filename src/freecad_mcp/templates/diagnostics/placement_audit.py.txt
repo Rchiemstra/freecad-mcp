@@ -2,6 +2,7 @@
 # the cross-body datums that reference it. Surfaces P1 risk concentrations and
 # placement/geometry disagreements at a glance. Read-only; returns JSON.
 import json as _m3_json
+import math as _m3_math
 
 
 def _v(_x):
@@ -12,8 +13,10 @@ def _v(_x):
 
 def _rot(_r):
     try:
-        return {'x': round(float(_r.x), 6), 'y': round(float(_r.y), 6),
-                'z': round(float(_r.z), 6), 'angle_deg': round(float(_r.Angle), 6)}
+        # FreeCAD Rotation.Angle is radians; public angle_deg is degrees.
+        return {'x': round(float(_r.Axis.x), 6), 'y': round(float(_r.Axis.y), 6),
+                'z': round(float(_r.Axis.z), 6),
+                'angle_deg': round(float(_r.Angle) * (180.0 / _m3_math.pi), 6)}
     except Exception:
         return None
 

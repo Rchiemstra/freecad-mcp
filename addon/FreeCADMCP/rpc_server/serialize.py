@@ -1,5 +1,9 @@
 import FreeCAD as App
-import json
+
+try:
+    from .placement_codec import placement_to_dict, rotation_to_dict, vector_to_dict
+except ImportError:  # pragma: no cover - flat addon import path
+    from placement_codec import placement_to_dict, rotation_to_dict, vector_to_dict
 
 
 def _get_optional_app_type(name: str) -> type | tuple[type, ...] | None:
@@ -18,17 +22,12 @@ def serialize_value(value):
     if isinstance(value, (int, float, str, bool)):
         return value
     elif isinstance(value, App.Vector):
-        return {"x": value.x, "y": value.y, "z": value.z}
+        return vector_to_dict(value)
     elif isinstance(value, App.Rotation):
-        return {
-            "Axis": {"x": value.Axis.x, "y": value.Axis.y, "z": value.Axis.z},
-            "Angle": value.Angle,
-        }
+        # Public contract: Angle is degrees (FreeCAD's .Angle is radians).
+        return rotation_to_dict(value)
     elif isinstance(value, App.Placement):
-        return {
-            "Base": serialize_value(value.Base),
-            "Rotation": serialize_value(value.Rotation),
-        }
+        return placement_to_dict(value)
     elif isinstance(value, (list, tuple)):
         return [serialize_value(v) for v in value]
     elif _COLOR_TYPE is not None and isinstance(value, _COLOR_TYPE):

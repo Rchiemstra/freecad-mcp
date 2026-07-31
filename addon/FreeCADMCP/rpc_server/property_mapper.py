@@ -5,6 +5,11 @@ from typing import Any
 
 import FreeCAD
 
+try:
+    from .placement_codec import _as_vector, dict_to_placement
+except ImportError:  # pragma: no cover - flat addon import path
+    from placement_codec import _as_vector, dict_to_placement
+
 
 @dataclass
 class Object:
@@ -64,6 +69,10 @@ def resolve_references(doc: FreeCAD.Document, val: Any) -> list[tuple[Any, Any]]
     return refs
 
 
+def _is_placement_value(value: Any) -> bool:
+    return isinstance(value, FreeCAD.Placement)
+
+
 def set_object_property(
     doc: FreeCAD.Document, obj: FreeCAD.DocumentObject, properties: dict[str, Any]
 ):
@@ -71,38 +80,17 @@ def set_object_property(
     for prop, val in properties.items():
         try:
             if prop in obj.PropertiesList:
-                if prop == "Placement" and isinstance(val, dict):
-                    if "Base" in val:
-                        pos = val["Base"]
-                    elif "Position" in val:
-                        pos = val["Position"]
-                    else:
-                        pos = {}
-                    rot = val.get("Rotation", {})
-                    placement = FreeCAD.Placement(
-                        FreeCAD.Vector(
-                            pos.get("x", 0),
-                            pos.get("y", 0),
-                            pos.get("z", 0),
-                        ),
-                        FreeCAD.Rotation(
-                            FreeCAD.Vector(
-                                rot.get("Axis", {}).get("x", 0),
-                                rot.get("Axis", {}).get("y", 0),
-                                rot.get("Axis", {}).get("z", 1),
-                            ),
-                            rot.get("Angle", 0),
-                        ),
-                    )
-                    setattr(obj, prop, placement)
+                current = getattr(obj, prop)
+                # Placement AND AttachmentOffset (and any other Placement prop)
+                # arrive over JSON as dicts. Treating only the name "Placement"
+                # caused edit_object to report success while leaving
+                # AttachmentOffset unchanged (setattr(dict) raises, then the
+                # legacy RPC setter swallowed the error).
+                if _is_placement_value(current) and isinstance(val, dict):
+                    setattr(obj, prop, dict_to_placement(val))
 
-                elif isinstance(getattr(obj, prop), FreeCAD.Vector) and isinstance(
-                    val, dict
-                ):
-                    vector = FreeCAD.Vector(
-                        val.get("x", 0), val.get("y", 0), val.get("z", 0)
-                    )
-                    setattr(obj, prop, vector)
+                elif isinstance(current, FreeCAD.Vector) and isinstance(val, dict):
+                    setattr(obj, prop, _as_vector(val))
 
                 elif prop in ["Base", "Tool", "Source", "Profile"] and isinstance(
                     val, str
@@ -132,7 +120,7 @@ def set_object_property(
             else:
                 setattr(obj, prop, val)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - FreeCAD property setters raise broadly
             FreeCAD.Console.PrintError(f"Property '{prop}' assignment error: {e}\n")
             failures.append(f"{prop}: {e}")
 
@@ -141,3 +129,13 @@ def set_object_property(
             "Failed to set propert" + ("y" if len(failures) == 1 else "ies")
             + ": " + "; ".join(failures)
         )
+
+
+# Re-export for callers that historically imported from property_mapper.
+__all__ = [
+    "Object",
+    "dict_to_placement",
+    "parse_reference_entry",
+    "resolve_references",
+    "set_object_property",
+]

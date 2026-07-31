@@ -1343,6 +1343,7 @@ def create_object(
 
     Examples:
         If you want to create a cylinder with a height of 30 and a radius of 10, you can use the following data.
+        ``Placement.Rotation.Angle`` is in degrees.
         ```json
         {
             "doc_name": "MyCylinder",
@@ -1466,7 +1467,14 @@ def edit_object(
     Args:
         doc_name: The name of the document to edit the object in.
         obj_name: The name of the object to edit.
-        obj_properties: The properties of the object to edit.
+        obj_properties: The properties of the object to edit. Placement-typed
+            properties such as ``Placement`` and ``AttachmentOffset`` accept the
+            same dict form returned by ``get_object``. ``Rotation.Angle`` is in
+            **degrees** (FreeCAD's Python ``Rotation.Angle`` property is radians;
+            MCP converts on serialize/deserialize so get→edit round-trips)::
+
+                {"Base": {"x": 0, "y": 0, "z": 10},
+                 "Rotation": {"Axis": {"x": 0, "y": 0, "z": 1}, "Angle": 90}}
 
     Returns:
         A message indicating the success or failure of the object editing and a screenshot of the object.
@@ -3516,6 +3524,7 @@ def sketch_attach(
     doc_name: str,
     sketch_name: str,
     support: Any,
+    attachment_offset: dict[str, Any] | None = None,
 ) -> CallToolResult:
     """Attach a sketch to an origin plane or face support.
 
@@ -3523,6 +3532,10 @@ def sketch_attach(
     - ``\"XY_Plane\"`` / ``\"XZ_Plane\"`` / ``\"YZ_Plane\"``
     - ``\"ObjectName:FaceN\"``
     - ``{\"object\": \"Obj\", \"subname\": \"Face1\"}``
+
+    ``attachment_offset`` is optional and uses the same Placement dict form as
+    ``edit_object`` / ``get_object``. ``Rotation.Angle`` is in **degrees**.
+    Prefer this over rotating ``Placement`` on a deactivated attachment (P3 trap).
     """
     return sketch_attach_operation(
         get_freecad_connection(),
@@ -3530,6 +3543,7 @@ def sketch_attach(
         doc_name,
         sketch_name,
         support,
+        attachment_offset,
     )
 
 
