@@ -390,6 +390,47 @@ def test_claim_acquisition_result_is_durable_until_ack(_rpc_runtime, monkeypatch
 
 
 @pytest.mark.unit
+def test_unacknowledged_claim_never_expires_or_yields_soft_capacity():
+    now = [1.0]
+    store = addon_rpc.AcquisitionClaimStore(
+        max_entries=1,
+        ttl_seconds=1,
+        monotonic=lambda: now[0],
+    )
+    runtime_id = _uuid()
+    first_request_id = _uuid()
+    second_request_id = _uuid()
+    first_credential = _credential("first-private-claim-token")
+    second_credential = _credential("second-private-claim-token")
+    store.store(
+        mcp_runtime_id=runtime_id,
+        request_id=first_request_id,
+        method="acquire_document_lock",
+        credential=first_credential,
+        result={"lease": {"state": "LOCKED_IDLE"}},
+    )
+
+    now[0] += 10_000
+    assert store.claim(runtime_id, first_request_id)["credential"] == first_credential
+    store.store(
+        mcp_runtime_id=runtime_id,
+        request_id=second_request_id,
+        method="acquire_document_lock",
+        credential=second_credential,
+        result={"lease": {"state": "LOCKED_IDLE"}},
+    )
+    assert store.claim(runtime_id, first_request_id)["credential"] == first_credential
+    assert store.claim(runtime_id, second_request_id)["credential"] == (
+        second_credential
+    )
+
+    assert store.acknowledge(runtime_id, first_request_id) is True
+    assert store.claim(runtime_id, second_request_id)["credential"] == (
+        second_credential
+    )
+
+
+@pytest.mark.unit
 def test_post_dispatch_exception_is_process_pinned_and_never_reapplied(monkeypatch):
     runtime_id = _uuid()
     request_id = _uuid()

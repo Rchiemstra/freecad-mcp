@@ -22,8 +22,11 @@ For acquire/adopt/create, status may also report `result_claimable` and a
 redacted `acquisition_claim` block. Raw lease tokens are never included.
 Reclaim a lost success with `claim_acquisition_result` (control lane) or by
 replaying the original authenticated request ID while the private claim vault
-still holds the credential; claims peek until `acknowledge_acquisition_claim`
-(or first authorized use) scrubs the vault. The MCP client auto-polls
+holds the credential. An unacknowledged claim is not TTL-pruned or
+capacity-evicted, and the configured capacity is soft: a new raw credential is
+retained rather than rejected after authority may have published. Claims peek
+until `acknowledge_acquisition_claim` (or first authorized use) scrubs the
+vault. The MCP client auto-polls
 status/claim after an acquire/adopt/create transport timeout and surfaces
 `request_id` when recovery remains pending.
 
@@ -43,7 +46,9 @@ Document acquisition deadline hierarchy:
 - Off-GUI baseline hash: `ACQUIRE_HASH_TIMEOUT_S` (30s); on exceed, abort `ACQUIRING`.
 - Client lifecycle socket: `CLIENT_LIFECYCLE_TIMEOUT_S` (150s; `FreeCADConnection` default).
 - Required ordering: `2 × 45 + 30 + cleanup/response headroom <= 150`.
-- Stale watchdog (90s) is a last-resort fallback, not normal adoption recovery.
+- Heartbeat-expiry recovery (90s) remains a last-resort fallback. Positive
+  dead-MCP proof for an eligible clean lease may trigger guarded owner-exit
+  recovery sooner.
 - Same-MCP fencing of an unreturned `ACQUIRING` requires the recorded
   `acquisition_request_id` to be absent from live acquire/adopt/create inflight IDs.
 
@@ -55,6 +60,20 @@ before the atomic ``begin_claim`` gate (`state=cancelled`,
 `handoff_pending=false`); later queued handoff work does not rotate ownership. After
 ``begin_claim`` or vault escrow, cancel returns ``REQUEST_NOT_CANCELLABLE`` and
 the credential remains claimable.
+Same-runtime and cached-foreign orphan recovery likewise accept cancellation
+through snapshot and revalidation, then atomically close cancellation before
+sidecar/core handoff. Cached-foreign dirty state must enter through
+`adopt_dirty_document`; recovery never clears its live `Modified` state. The
+new credential enters the private claim vault before in-memory publication; a
+core or vault failure rolls back prior authority (or CAS-deletes the exact
+newly created sidecar), while a post-boundary GUI timeout leaves the successful
+credential claimable. If sidecar publication is reported uncertain after
+`os.replace` or atomic no-replace `os.link`, an exact guarded read proves the
+intended record when available. If the read itself is unavailable, the
+known-published record still receives matching core authority and an escrowed
+credential, and the result carries `SIDECAR_COMMIT_UNCERTAIN`. A readable
+mismatch or incomplete/uncertain core/sidecar rollback retains the recovery
+snapshot.
 A timeout-during-execution creates a recovery incident. Late completion emits
 `recovery_completed` (or `recovery_failed`) and stays correlated to the original
 request.

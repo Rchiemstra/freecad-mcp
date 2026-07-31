@@ -103,6 +103,66 @@ def test_request_attribution_is_visible_only_on_its_executing_thread():
     assert worker_result == [True]
 
 
+def test_internal_snapshot_scope_is_exact_thread_local_and_fail_closed(tmp_path):
+    _clear_context()
+    request_id = "33333333-3333-4333-8333-333333333333"
+    document = object()
+    other_document = object()
+    target = tmp_path / "snapshots" / "0001_Model.FCStd"
+    other_target = tmp_path / "snapshots" / "0002_Model.FCStd"
+    worker_result = []
+
+    assert document_lock.begin_internal_snapshot_save_scope(
+        request_id,
+        document,
+        target,
+    )
+    try:
+        assert document_lock.is_internal_snapshot_save(document, target)
+        assert not document_lock.is_internal_snapshot_save(other_document, target)
+        assert not document_lock.is_internal_snapshot_save(document, other_target)
+
+        thread = threading.Thread(
+            target=lambda: worker_result.append(
+                document_lock.is_internal_snapshot_save(document, target)
+            )
+        )
+        thread.start()
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+        assert worker_result == [False]
+
+        assert not document_lock.begin_internal_snapshot_save_scope(
+            request_id,
+            document,
+            other_target,
+        )
+        assert not document_lock.is_internal_snapshot_save(document, target)
+        assert not document_lock.end_internal_snapshot_save_scope(
+            request_id,
+            document,
+            other_target,
+        )
+    finally:
+        assert not document_lock.end_internal_snapshot_save_scope(
+            request_id,
+            document,
+            target,
+        )
+
+    assert not document_lock.is_internal_snapshot_save(document, target)
+    assert document_lock.begin_internal_snapshot_save_scope(
+        request_id,
+        document,
+        target,
+    )
+    assert document_lock.end_internal_snapshot_save_scope(
+        request_id,
+        document,
+        target,
+    )
+
+
 def test_legacy_per_key_facade_remains_thread_local_and_reference_counted():
     _clear_context()
     document_lock.begin_agent_mutation("Model")

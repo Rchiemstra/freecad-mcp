@@ -36,6 +36,7 @@ from .model import (
     utc_now,
 )
 from .sidecar import (
+    SidecarCommitUncertainError,
     SidecarError,
     SidecarStore,
     sidecar_path_for,
@@ -45,6 +46,11 @@ from .sidecar import (
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 10.0
 DEFAULT_SIDECAR_HEARTBEAT_INTERVAL_SECONDS = 30.0
 DEFAULT_STALE_AFTER_SECONDS = 90.0
+# MCP runtime identity currently records a timestamp produced *inside* the
+# process, which may be later than its OS creation time. A probed process that
+# started materially after that marker must therefore be a PID reuse. The
+# tolerance keeps small timestamp/precision differences fail-closed.
+MCP_PROCESS_START_FUTURE_TOLERANCE_SECONDS = 1.0
 
 
 class LeaseServiceError(RuntimeError):
@@ -107,6 +113,12 @@ class OrphanedForeignRecoveryRequired(ForeignRecoveryError):
     code = "ORPHANED_FOREIGN_RECOVERY_REQUIRED"
 
 
+class OrphanedLocalMcpRecoveryRequired(LeaseServiceError):
+    """A same-FreeCAD lease has safely recoverable inactive authority."""
+
+    code = "ORPHANED_LOCAL_MCP_RECOVERY_REQUIRED"
+
+
 class SavedForeignRecoveryRequired(ForeignRecoveryError):
     """A saved local-recovery sidecar needs off-GUI verification and fencing."""
 
@@ -123,6 +135,7 @@ class LockedErrorHandoffRequired(LeaseServiceError):
 class LeaseGrant:
     credential: LeaseCredential
     record: LeaseRecord
+    coordination_uncertain: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Acquisition is the sole serialization that contains the raw token."""
@@ -134,6 +147,9 @@ class LeaseGrant:
             "generation": self.credential.generation,
             "token": self.credential.token,
         }
+        if self.coordination_uncertain:
+            result["coordination_uncertain"] = True
+            result["warning_code"] = "SIDECAR_COMMIT_UNCERTAIN"
         return result
 
 
@@ -481,6 +497,137 @@ class DocumentLeaseService:
             )
         return "recorded FreeCAD PID now belongs to a different process"
 
+    def _prove_local_mcp_owner_dead(self, owner: LeaseOwner) -> str:
+        """Prove that a lease in this addon runtime lost its MCP process.
+
+        The addon/FreeCAD process is intentionally *not* the lease owner. Its
+        continued liveness cannot keep authority renewable after the private
+        credential-owning MCP process exits. Proof is fail-closed and uses the
+        recorded PID together with process-start identity to avoid confusing a
+        reused PID with the original owner.
+        """
+
+        local = self._local_runtime_identity
+        if local is None:
+            raise LocalRecoveryError("local runtime identity evidence is unavailable")
+        expected_runtime = (
+            local.addon_profile_id,
+            local.addon_runtime_id,
+            local.freecad_pid,
+            local.freecad_process_started_at,
+            local.boot_id,
+        )
+        recorded_runtime = (
+            owner.addon_profile_id,
+            owner.addon_runtime_id,
+            owner.freecad_pid,
+            owner.freecad_process_started_at,
+            owner.boot_id,
+        )
+        if recorded_runtime != expected_runtime:
+            raise LocalRecoveryError(
+                "lease authority does not belong to this FreeCAD runtime"
+            )
+        if (
+            not local.hostname
+            or not owner.hostname
+            or local.hostname.casefold() != owner.hostname.casefold()
+        ):
+            raise LocalRecoveryError(
+                "the lease does not belong to this FreeCAD host"
+            )
+        if (
+            not owner.mcp_hostname
+            or owner.mcp_hostname.casefold() != local.hostname.casefold()
+        ):
+            raise LocalRecoveryError(
+                "the credential-owning MCP process is not proven co-located"
+            )
+        if owner.mcp_pid < 1 or not owner.mcp_process_started_at:
+            raise LocalRecoveryError("MCP process identity evidence is incomplete")
+        owner_started = self._parse_timestamp(owner.mcp_process_started_at)
+        if owner_started is None:
+            raise LocalRecoveryError("MCP process-start identity evidence is invalid")
+        probe = self._process_liveness_probe
+        if probe is None:
+            raise LocalRecoveryError("MCP process liveness evidence is unavailable")
+        try:
+            evidence = probe(owner.mcp_pid)
+        except Exception as exc:
+            raise LocalRecoveryError(
+                f"MCP process liveness could not be established: {exc}"
+            ) from exc
+        if not isinstance(evidence, ProcessLivenessEvidence):
+            raise LocalRecoveryError("MCP process probe returned invalid evidence")
+        if evidence.exists is False:
+            return "recorded MCP process no longer exists on this boot"
+        if evidence.exists is None:
+            raise LocalRecoveryError("MCP process liveness is unknown")
+        if not evidence.process_started_at:
+            raise LocalRecoveryError(
+                "live MCP process start identity is unavailable"
+            )
+        evidence_started = self._parse_timestamp(evidence.process_started_at)
+        if evidence_started is None:
+            raise LocalRecoveryError("live MCP process start identity is invalid")
+        seconds_after_owner_marker = (
+            evidence_started - owner_started
+        ).total_seconds()
+        if seconds_after_owner_marker > MCP_PROCESS_START_FUTURE_TOLERANCE_SECONDS:
+            return "recorded MCP PID now belongs to a different process"
+        # The current client records module-import time, not exact OS creation
+        # time, so an earlier probed start remains compatible with the original
+        # live process even when the timestamps differ substantially.
+        raise LocalRecoveryError(
+            "the credential-owning MCP process may still be alive"
+        )
+
+    def _prove_local_mcp_recovery_authority_inactive(
+        self,
+        record: LeaseRecord,
+    ) -> str:
+        """Prove that the prior credential cannot race a guarded recovery."""
+
+        if self._is_misattributed_worker_snapshot_intervention(record):
+            # Local takeover rotates both generation and token digest using a
+            # discarded secret. The narrowly recognized legacy worker snapshot
+            # false-positive therefore has no credential that can race, even
+            # when its pre-fix record lacks MCP-host evidence.
+            return (
+                "previous credential was irrevocably fenced after a "
+                "misattributed worker snapshot"
+            )
+        return self._prove_local_mcp_owner_dead(record.owner)
+
+    @staticmethod
+    def _is_misattributed_worker_snapshot_intervention(
+        record: LeaseRecord,
+    ) -> bool:
+        """Recognize the pre-fix worker ``saveCopy`` observer signature."""
+
+        if (
+            record.state != LeaseState.USER_INTERVENED
+            or not record.user_intervened
+            or record.error is None
+            or record.error.code != "USER_INTERVENED"
+        ):
+            return False
+        message = str(record.error.message or "").replace("\\", "/").casefold()
+        prefix = "unscoped freecad save detected:"
+        if not message.startswith(prefix):
+            return False
+        target = message[len(prefix) :].strip()
+        filename = target.rsplit("/", 1)[-1]
+        sequence, separator, remainder = filename.partition("_")
+        return bool(
+            "freecad_mcp_workers/" in target
+            and "/snapshots/" in target
+            and separator
+            and len(sequence) == 4
+            and sequence.isdigit()
+            and remainder.endswith(".fcstd")
+        )
+
     def _prove_orphaned_foreign_authority_inactive(
         self, foreign: ForeignRecoveryRecord
     ) -> str:
@@ -541,6 +688,79 @@ class DocumentLeaseService:
             and record.baseline is not None
             and record.validation_complete
             and record.last_verified_save_revision == record.last_mutation_revision
+            and record.migration is None
+        )
+
+    @classmethod
+    def _is_missing_sidecar_foreign_recovery_candidate(
+        cls,
+        record: LeaseRecord,
+    ) -> bool:
+        """Recognize the only cached foreign records safe to re-fence.
+
+        The normal case is a fully validated clean lease.  The legacy exception
+        is deliberately narrower: older builds could mistake their own worker
+        ``saveCopy`` snapshot for a user save and rotate an otherwise verified
+        lease to ``USER_INTERVENED``.  That transition clears neither the saved
+        baseline nor the equality proving every recorded mutation had already
+        reached disk.  The live document's current ``Modified`` flag still
+        controls whether recovery must use dirty adoption; this predicate never
+        treats unsaved state as clean.
+        """
+
+        legacy_worker_snapshot = bool(
+            cls._is_misattributed_worker_snapshot_intervention(record)
+            and record.document.canonical_path is not None
+            and record.baseline is not None
+            and record.last_verified_save_revision
+            == record.last_mutation_revision
+            and record.migration is None
+        )
+        return bool(
+            cls._is_clean_orphaned_foreign_candidate(record)
+            or legacy_worker_snapshot
+        )
+
+    @staticmethod
+    def _is_recoverable_local_mcp_orphan_candidate(record: LeaseRecord) -> bool:
+        """Recognize local authority that fresh clean evidence can safely fence.
+
+        ``USER_INTERVENED`` is accepted only when the prior lease had already
+        verified every mutation at its saved baseline. A narrowly recognized
+        legacy worker ``saveCopy`` false-positive can rely on the credential
+        already irrevocably rotated by takeover even without an MCP hostname;
+        other intervention records still require dead-owner proof. The later
+        handoff always requires a clean live document and an independently
+        re-hashed, byte-identical saved file.
+        """
+
+        clean_idle = bool(
+            record.state == LeaseState.LOCKED_IDLE
+            and not record.dirty
+            and not record.user_intervened
+            and record.error is None
+            and record.validation_complete
+        )
+        clean_stale = bool(
+            record.state == LeaseState.STALE
+            and not record.dirty
+            and not record.user_intervened
+            and record.error is not None
+            and record.error.code in {"LEASE_STALE", "LEASE_OWNER_EXITED"}
+            and record.validation_complete
+        )
+        verified_intervention = bool(
+            record.state == LeaseState.USER_INTERVENED
+            and record.user_intervened
+            and record.error is not None
+            and record.error.code == "USER_INTERVENED"
+        )
+        return bool(
+            (clean_idle or clean_stale or verified_intervention)
+            and record.document.canonical_path is not None
+            and record.baseline is not None
+            and record.last_verified_save_revision
+            == record.last_mutation_revision
             and record.migration is None
         )
 
@@ -928,6 +1148,26 @@ class DocumentLeaseService:
                         "credential handoff",
                         details=existing.to_public_dict(),
                     )
+                if (
+                    not document_dirty
+                    and existing.owner.mcp_instance_id != owner.mcp_instance_id
+                    and self._is_recoverable_local_mcp_orphan_candidate(existing)
+                ):
+                    try:
+                        self._prove_local_mcp_recovery_authority_inactive(
+                            existing
+                        )
+                    except LocalRecoveryError:
+                        # A live, unknown, or foreign owner remains an ordinary
+                        # exclusive-lease conflict. Never turn incomplete
+                        # liveness evidence into takeover authority.
+                        pass
+                    else:
+                        raise OrphanedLocalMcpRecoveryRequired(
+                            "a saved local lease has inactive credential "
+                            "authority and requires verified in-process fencing",
+                            details=existing.to_public_dict(),
+                        )
                 if replace_unreturned_reservation and self._is_unreturned_reservation(
                     existing,
                     allow_active_acquiring=self._may_fence_local_active_acquiring(
@@ -958,13 +1198,14 @@ class DocumentLeaseService:
                 )
                 if (
                     replace_unreturned_reservation
-                    and not document_dirty
                     and foreign_path is not None
                     and not os.path.lexists(foreign_path)
-                    and self._is_clean_orphaned_foreign_candidate(foreign.persisted)
+                    and self._is_missing_sidecar_foreign_recovery_candidate(
+                        foreign.persisted
+                    )
                 ):
                     raise OrphanedForeignRecoveryRequired(
-                        "a clean foreign recovery record lost its sidecar and "
+                        "a recoverable foreign record lost its sidecar and "
                         "requires verified in-process fencing",
                         details=foreign.to_public_dict(),
                     )
@@ -1047,6 +1288,358 @@ class DocumentLeaseService:
                 mcp_instance_id=owner.mcp_instance_id,
             )
             return LeaseGrant(credential=credential, record=record)
+
+    def recover_orphaned_local_mcp_acquisition(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        validation: LiveDocumentValidation,
+        snapshot_id: str,
+        task_summary: str = "",
+        authority_handoff: Callable[[LeaseRecord], bool] | None = None,
+        authority_rollback: Callable[[], bool] | None = None,
+        credential_escrow: Callable[[LeaseGrant], bool] | None = None,
+    ) -> LeaseGrant:
+        """Atomically acquire a clean document with inactive prior authority.
+
+        The live addon is only the authority registry; it is not lease
+        liveness. The caller creates a recovery snapshot under the old core
+        fence first. Only then may this method rotate directly to completed
+        ``LOCKED_IDLE`` authority after the old process is proven dead or its
+        credential is already irrevocably revoked, and fresh GUI/file evidence
+        proves that no document state would be lost.
+        A snapshot failure therefore leaves the old registry and sidecar
+        authority unchanged. When a core-authority handoff callback is
+        supplied, the replacement is not published in memory and no credential
+        is returned until the sidecar CAS, exact core fence, and optional
+        private credential escrow all succeed.
+        """
+
+        if (authority_handoff is None) != (authority_rollback is None):
+            raise LeaseServiceError(
+                "core authority handoff and rollback callbacks must be supplied together"
+            )
+        if credential_escrow is not None and authority_rollback is None:
+            raise LeaseServiceError(
+                "credential escrow requires an authority rollback callback"
+            )
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            current = self._records.get(identity.session_uuid)
+            if current is None:
+                raise LeaseConflictError(
+                    "the selected document has no local lease to recover"
+                )
+            if current.document != identity:
+                raise CoordinationError(
+                    "the live document identity changed before orphan recovery"
+                )
+            if not self._is_recoverable_local_mcp_orphan_candidate(current):
+                raise LocalRecoveryError(
+                    "local lease authority lacks a fully verified saved baseline"
+                )
+            if current.owner.mcp_instance_id == owner.mcp_instance_id:
+                raise LocalRecoveryError(
+                    "orphan recovery requires a distinct replacement MCP runtime"
+                )
+            if identity.session_uuid in self._pending_save_as:
+                raise CoordinationError(
+                    "orphan recovery is blocked during Save As recovery"
+                )
+            self._assert_sidecar_matches(current)
+
+            local = self._local_runtime_identity
+            if local is None:
+                raise CoordinationError("local runtime identity is unavailable")
+            expected_runtime = (
+                local.addon_profile_id,
+                local.addon_runtime_id,
+                local.freecad_pid,
+                local.freecad_process_started_at,
+                local.boot_id,
+            )
+            replacement_runtime = (
+                owner.addon_profile_id,
+                owner.addon_runtime_id,
+                owner.freecad_pid,
+                owner.freecad_process_started_at,
+                owner.boot_id,
+            )
+            if replacement_runtime != expected_runtime:
+                raise CoordinationError(
+                    "replacement owner does not belong to this FreeCAD runtime"
+                )
+            if (
+                not local.hostname
+                or not owner.hostname
+                or local.hostname.casefold() != owner.hostname.casefold()
+            ):
+                raise CoordinationError(
+                    "replacement owner does not belong to this host"
+                )
+            self._prove_local_mcp_recovery_authority_inactive(current)
+
+            if not isinstance(validation, LiveDocumentValidation):
+                raise LiveDocumentValidationError(
+                    "fresh LiveDocumentValidation evidence is required"
+                )
+            if validation.document != identity:
+                raise LiveDocumentValidationError(
+                    "live document evidence does not match the registered document"
+                )
+            if validation.document_modified:
+                raise DirtyAcquisitionError(
+                    "orphan recovery requires a clean live document"
+                )
+            if (
+                validation.baseline_validated is not True
+                or not isinstance(validation.baseline, FileBaseline)
+            ):
+                raise LiveDocumentValidationError(
+                    "orphan recovery requires a validated saved-file baseline"
+                )
+            if validation.baseline != current.baseline:
+                raise LiveDocumentValidationError(
+                    "the saved file changed after the orphaned lease was verified"
+                )
+            self._assert_current_baseline(
+                identity,
+                validation.baseline,
+                error_type=LiveDocumentValidationError,
+            )
+            try:
+                normalized_snapshot = str(uuid.UUID(str(snapshot_id)))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise LeaseServiceError(
+                    "orphan recovery snapshot ID must be a UUID"
+                ) from exc
+
+            raw_token = self._token_factory()
+            if not raw_token:
+                raise LeaseServiceError("token factory returned an empty token")
+            replacement_fingerprint = token_fingerprint(raw_token)
+            if secrets.compare_digest(
+                replacement_fingerprint,
+                current.token_fingerprint,
+            ):
+                raise LeaseServiceError(
+                    "token factory did not rotate the fencing digest"
+                )
+            generation = (
+                max(
+                    current.generation,
+                    self._generations.get(identity.session_uuid, 0),
+                )
+                + 1
+            )
+            now = self._utc_clock()
+            now_mono = self._monotonic_ns()
+            replacement = LeaseRecord(
+                lease_id=str(self._uuid_factory()),
+                generation=generation,
+                token_fingerprint=replacement_fingerprint,
+                document=identity,
+                owner=owner,
+                state=LeaseState.LOCKED_IDLE,
+                record_revision=current.record_revision + 1,
+                state_revision=current.state_revision + 1,
+                acquired_at=now,
+                last_heartbeat_at=now,
+                monotonic_heartbeat_ns=now_mono,
+                heartbeat_sequence=0,
+                current_operation="",
+                task_summary=_bounded_text(task_summary, 1024),
+                dirty=False,
+                user_intervened=False,
+                last_mutation_revision=0,
+                last_successful_save_at=None,
+                last_verified_save_revision=0,
+                baseline=validation.baseline,
+                error=None,
+                validation_complete=True,
+                snapshot_id=normalized_snapshot,
+                migration=None,
+            )
+            path = self._sidecar_path(current)
+            if path is None:
+                raise CoordinationError(
+                    "local orphan recovery requires a saved document sidecar"
+                )
+
+            def exact_persisted_record(
+                persisted: LeaseRecord | None,
+                proposed: LeaseRecord,
+            ) -> bool:
+                if persisted is None:
+                    return False
+                include_task_summary = self.sidecar_store.persist_task_summary
+                return persisted.to_sidecar_dict(
+                    include_task_summary=include_task_summary
+                ) == proposed.to_sidecar_dict(
+                    include_task_summary=include_task_summary
+                )
+
+            sidecar_commit_uncertain = False
+            try:
+                self.sidecar_store.replace(path, replacement, expected=current)
+            except SidecarCommitUncertainError as exc:
+                # os.replace already published. Continue only when a strict
+                # read under the same native CAS guard proved that every
+                # persisted field is the intended successor. If the strict
+                # reread itself was unavailable, continue the core+escrow
+                # handoff with an explicit warning: os.replace is known to
+                # have published, and stopping here would strand its raw token.
+                if exc.persisted is not None and not exact_persisted_record(
+                    exc.persisted,
+                    replacement,
+                ):
+                    raise CoordinationError(
+                        "local orphan sidecar commit could not be proven",
+                        details={
+                            "commit_uncertain": True,
+                            "retain_snapshot": True,
+                        },
+                    ) from exc
+                sidecar_commit_uncertain = True
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"local orphan authority could not be fenced: {exc}"
+                ) from exc
+            except Exception as exc:
+                # A non-conforming store/backend error has unknown publication
+                # state. Preserve the snapshot rather than treating it as a
+                # proven pre-commit failure.
+                raise CoordinationError(
+                    "local orphan sidecar commit failed with unknown state",
+                    details={
+                        "commit_uncertain": True,
+                        "retain_snapshot": True,
+                    },
+                ) from exc
+
+            def rollback_cross_layer_commit(
+                failure_label: str,
+                failure: Exception | None,
+            ) -> None:
+                sidecar_restored = False
+                authority_restored = False
+                rollback_commit_uncertain = False
+                rollback_messages: list[str] = []
+                restored_record = replace(
+                    current,
+                    record_revision=replacement.record_revision + 1,
+                    state_revision=replacement.state_revision + 1,
+                )
+                try:
+                    # Re-publish the prior authority at strictly newer
+                    # revisions. Sidecar CAS history never moves backwards,
+                    # even when a cross-layer handoff is rolled back.
+                    try:
+                        self.sidecar_store.replace(
+                            path,
+                            restored_record,
+                            expected=replacement,
+                        )
+                    except SidecarCommitUncertainError as exc:
+                        if not exact_persisted_record(
+                            exc.persisted,
+                            restored_record,
+                        ):
+                            raise
+                        rollback_commit_uncertain = True
+                    sidecar_restored = True
+                    self._records[identity.session_uuid] = restored_record
+                except Exception as exc:
+                    rollback_messages.append(f"sidecar rollback failed: {exc}")
+                self._generations[identity.session_uuid] = max(
+                    self._generations.get(identity.session_uuid, 0),
+                    replacement.generation,
+                )
+                if authority_rollback is not None:
+                    try:
+                        authority_restored = bool(authority_rollback())
+                    except Exception as exc:
+                        authority_restored = False
+                        rollback_messages.append(
+                            f"core authority rollback raised: {exc}"
+                        )
+                    if not authority_restored and not any(
+                        message.startswith("core authority rollback")
+                        for message in rollback_messages
+                    ):
+                        rollback_messages.append(
+                            "core authority rollback could not be verified"
+                        )
+                detail = (
+                    "; ".join(rollback_messages)
+                    if rollback_messages
+                    else "prior sidecar and core authority were restored"
+                )
+                error = CoordinationError(
+                    failure_label + "; " + detail,
+                    details={
+                        "failure_stage": failure_label,
+                        "sidecar_restored": sidecar_restored,
+                        "core_authority_restored": authority_restored,
+                        # Any cross-layer disagreement may still require the
+                        # newly created recovery artifact for diagnosis or
+                        # confirmed recovery.
+                        "retain_snapshot": not (
+                            sidecar_restored and authority_restored
+                        )
+                        or rollback_commit_uncertain,
+                    },
+                )
+                if failure is not None:
+                    raise error from failure
+                raise error
+
+            handoff_error: Exception | None = None
+            handoff_complete = True
+            if authority_handoff is not None:
+                try:
+                    handoff_complete = bool(authority_handoff(replacement))
+                except Exception as exc:
+                    handoff_error = exc
+                    handoff_complete = False
+            if not handoff_complete:
+                rollback_cross_layer_commit(
+                    "core mutation authority handoff failed",
+                    handoff_error,
+                )
+            credential = LeaseCredential(
+                lease_id=replacement.lease_id,
+                document_session_uuid=identity.session_uuid,
+                generation=generation,
+                token=raw_token,
+                mcp_instance_id=owner.mcp_instance_id,
+            )
+            grant = LeaseGrant(
+                credential=credential,
+                record=replacement,
+                coordination_uncertain=sidecar_commit_uncertain,
+            )
+            escrow_error: Exception | None = None
+            escrow_complete = True
+            if credential_escrow is not None:
+                try:
+                    escrow_complete = bool(credential_escrow(grant))
+                except Exception as exc:
+                    escrow_error = exc
+                    escrow_complete = False
+            if not escrow_complete:
+                rollback_cross_layer_commit(
+                    "acquisition credential escrow failed",
+                    escrow_error,
+                )
+            self._records[identity.session_uuid] = replacement
+            self._closed_documents.pop(identity.session_uuid, None)
+            self._generations[identity.session_uuid] = generation
+            self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+            self._clear_effective_error_times(identity.session_uuid)
+            self._clear_acquiring_request(identity.session_uuid)
+            return grant
 
     def begin_orphaned_foreign_acquisition(
         self,
@@ -1176,6 +1769,356 @@ class DocumentLeaseService:
                 mcp_instance_id=owner.mcp_instance_id,
             )
             return LeaseGrant(credential=credential, record=replacement)
+
+    def recover_orphaned_foreign_acquisition(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        owner: LeaseOwner,
+        *,
+        validation: LiveDocumentValidation,
+        snapshot_id: str,
+        task_summary: str = "",
+        adopt_dirty: bool = False,
+        local_confirmation: bool = False,
+        authority_handoff: Callable[[LeaseRecord], bool] | None = None,
+        authority_rollback: Callable[[], bool] | None = None,
+        credential_escrow: Callable[[LeaseGrant], bool] | None = None,
+    ) -> LeaseGrant:
+        """Recover cached foreign authority after its sidecar disappeared.
+
+        The caller first snapshots the exact live document under the existing
+        core fence. This method then revalidates the cached saved baseline,
+        proves the recorded foreign FreeCAD authority inactive, atomically
+        creates completed replacement authority, verifies the core handoff,
+        and escrows the only raw credential before publishing it in memory.
+
+        Dirty live state is never inferred clean. It requires the normal local
+        adoption confirmation and is retained in both the replacement lease and
+        recovery snapshot. A sidecar that reappears wins the atomic-create race.
+        """
+
+        if (authority_handoff is None) != (authority_rollback is None):
+            raise LeaseServiceError(
+                "core authority handoff and rollback callbacks must be supplied together"
+            )
+        if credential_escrow is not None and authority_rollback is None:
+            raise LeaseServiceError(
+                "credential escrow requires an authority rollback callback"
+            )
+        if adopt_dirty and local_confirmation is not True:
+            raise DirtyAdoptionError(
+                "dirty-document recovery requires explicit local GUI confirmation"
+            )
+
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            foreign = self._foreign_records.get(identity.session_uuid)
+            if foreign is None:
+                raise LeaseConflictError(
+                    "the selected document has no foreign recovery record"
+                )
+            if foreign.local_document != identity:
+                raise ForeignRecoveryError(
+                    "the live document identity changed after foreign import"
+                )
+            previous = foreign.persisted
+            if not self._is_missing_sidecar_foreign_recovery_candidate(previous):
+                raise ForeignRecoveryError(
+                    "foreign authority lacks a verified recoverable saved baseline"
+                )
+            if identity.session_uuid in self._pending_save_as:
+                raise CoordinationError(
+                    "orphan recovery is blocked during Save As recovery"
+                )
+
+            path = (
+                sidecar_path_for(identity.canonical_path)
+                if identity.canonical_path
+                else None
+            )
+            if path is None:
+                raise ForeignRecoveryError(
+                    "orphan recovery requires a saved open document"
+                )
+            if os.path.lexists(path):
+                raise CoordinationError(
+                    "foreign recovery sidecar reappeared before fencing"
+                )
+
+            local = self._local_runtime_identity
+            if local is None:
+                raise CoordinationError("local runtime identity is unavailable")
+            expected_runtime = (
+                local.addon_profile_id,
+                local.addon_runtime_id,
+                local.freecad_pid,
+                local.freecad_process_started_at,
+                local.boot_id,
+            )
+            replacement_runtime = (
+                owner.addon_profile_id,
+                owner.addon_runtime_id,
+                owner.freecad_pid,
+                owner.freecad_process_started_at,
+                owner.boot_id,
+            )
+            if replacement_runtime != expected_runtime:
+                raise CoordinationError(
+                    "replacement owner does not belong to this FreeCAD runtime"
+                )
+            if (
+                not local.hostname
+                or not owner.hostname
+                or local.hostname.casefold() != owner.hostname.casefold()
+            ):
+                raise CoordinationError(
+                    "replacement owner does not belong to this host"
+                )
+            # Imported text is diagnostic data, not authority. Even the exact
+            # legacy worker signature must independently prove its recorded
+            # foreign FreeCAD process/runtime inactive.
+            self._prove_orphaned_foreign_authority_inactive(foreign)
+
+            if not isinstance(validation, LiveDocumentValidation):
+                raise LiveDocumentValidationError(
+                    "fresh LiveDocumentValidation evidence is required"
+                )
+            if validation.document != identity:
+                raise LiveDocumentValidationError(
+                    "live document evidence does not match the registered document"
+                )
+            if validation.document_modified and not adopt_dirty:
+                raise DirtyAcquisitionError(
+                    "a pre-existing dirty document requires local adoption"
+                )
+            if adopt_dirty and not validation.document_modified:
+                raise DirtyAdoptionError(
+                    "dirty-document recovery requires a currently dirty live document"
+                )
+            if validation.baseline_validated is not True:
+                raise LiveDocumentValidationError(
+                    "orphan recovery requires a validated saved-file baseline"
+                )
+            if not isinstance(validation.baseline, FileBaseline):
+                raise LiveDocumentValidationError(
+                    "orphan recovery requires a saved-file baseline"
+                )
+            if validation.baseline != previous.baseline:
+                raise LiveDocumentValidationError(
+                    "the saved file no longer matches the foreign recovery baseline"
+                )
+            self._assert_current_baseline(
+                identity,
+                validation.baseline,
+                error_type=LiveDocumentValidationError,
+            )
+            try:
+                normalized_snapshot = str(uuid.UUID(str(snapshot_id)))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise LeaseServiceError(
+                    "orphan recovery snapshot ID must be a UUID"
+                ) from exc
+
+            raw_token = self._token_factory()
+            if not raw_token:
+                raise LeaseServiceError("token factory returned an empty token")
+            replacement_fingerprint = token_fingerprint(raw_token)
+            if secrets.compare_digest(
+                replacement_fingerprint,
+                previous.token_fingerprint,
+            ):
+                raise LeaseServiceError(
+                    "token factory did not rotate the fencing digest"
+                )
+            generation = (
+                max(
+                    previous.generation,
+                    self._generations.get(identity.session_uuid, 0),
+                )
+                + 1
+            )
+            now = self._utc_clock()
+            now_mono = self._monotonic_ns()
+            replacement = LeaseRecord(
+                lease_id=str(self._uuid_factory()),
+                generation=generation,
+                token_fingerprint=replacement_fingerprint,
+                document=identity,
+                owner=owner,
+                state=LeaseState.LOCKED_IDLE,
+                record_revision=previous.record_revision + 1,
+                state_revision=previous.state_revision + 1,
+                acquired_at=now,
+                last_heartbeat_at=now,
+                monotonic_heartbeat_ns=now_mono,
+                heartbeat_sequence=0,
+                current_operation="",
+                task_summary=_bounded_text(task_summary, 1024),
+                dirty=bool(adopt_dirty),
+                user_intervened=False,
+                last_mutation_revision=1 if adopt_dirty else 0,
+                last_successful_save_at=None,
+                last_verified_save_revision=0,
+                baseline=validation.baseline,
+                error=None,
+                validation_complete=True,
+                snapshot_id=normalized_snapshot,
+                migration=None,
+            )
+
+            def exact_persisted_record(
+                persisted: LeaseRecord | None,
+                proposed: LeaseRecord,
+            ) -> bool:
+                if persisted is None:
+                    return False
+                include_task_summary = self.sidecar_store.persist_task_summary
+                return persisted.to_sidecar_dict(
+                    include_task_summary=include_task_summary
+                ) == proposed.to_sidecar_dict(
+                    include_task_summary=include_task_summary
+                )
+
+            sidecar_commit_uncertain = False
+            try:
+                self.sidecar_store.create(path, replacement)
+            except SidecarCommitUncertainError as exc:
+                # Atomic link publication succeeded. Continue only with the
+                # exact successor (or an unavailable guarded reread), then make
+                # the raw token recoverable through the private claim vault.
+                if exc.persisted is not None and not exact_persisted_record(
+                    exc.persisted,
+                    replacement,
+                ):
+                    raise CoordinationError(
+                        "orphaned foreign sidecar commit could not be proven",
+                        details={
+                            "commit_uncertain": True,
+                            "retain_snapshot": True,
+                        },
+                    ) from exc
+                sidecar_commit_uncertain = True
+            except SidecarError as exc:
+                raise CoordinationError(
+                    f"orphaned foreign authority could not be fenced: {exc}"
+                ) from exc
+            except Exception as exc:
+                raise CoordinationError(
+                    "orphaned foreign sidecar commit failed with unknown state",
+                    details={
+                        "commit_uncertain": True,
+                        "retain_snapshot": True,
+                    },
+                ) from exc
+
+            def rollback_cross_layer_commit(
+                failure_label: str,
+                failure: Exception | None,
+            ) -> None:
+                sidecar_restored = False
+                authority_restored = False
+                rollback_commit_uncertain = False
+                rollback_messages: list[str] = []
+                try:
+                    try:
+                        self.sidecar_store.delete(path, expected=replacement)
+                    except SidecarCommitUncertainError as exc:
+                        if exc.absent is not True:
+                            raise
+                        rollback_commit_uncertain = True
+                    sidecar_restored = True
+                except Exception as exc:
+                    rollback_messages.append(f"sidecar rollback failed: {exc}")
+                # Never reuse a generation whose token may have crossed a
+                # filesystem or core boundary, even when rollback succeeded.
+                self._generations[identity.session_uuid] = max(
+                    self._generations.get(identity.session_uuid, 0),
+                    replacement.generation,
+                )
+                if authority_rollback is not None:
+                    try:
+                        authority_restored = bool(authority_rollback())
+                    except Exception as exc:
+                        authority_restored = False
+                        rollback_messages.append(
+                            f"core authority rollback raised: {exc}"
+                        )
+                    if not authority_restored and not any(
+                        message.startswith("core authority rollback")
+                        for message in rollback_messages
+                    ):
+                        rollback_messages.append(
+                            "core authority rollback could not be verified"
+                        )
+                detail = (
+                    "; ".join(rollback_messages)
+                    if rollback_messages
+                    else "missing sidecar and prior core authority were restored"
+                )
+                error = CoordinationError(
+                    failure_label + "; " + detail,
+                    details={
+                        "failure_stage": failure_label,
+                        "sidecar_restored": sidecar_restored,
+                        "core_authority_restored": authority_restored,
+                        "retain_snapshot": not (
+                            sidecar_restored and authority_restored
+                        )
+                        or rollback_commit_uncertain,
+                    },
+                )
+                if failure is not None:
+                    raise error from failure
+                raise error
+
+            handoff_error: Exception | None = None
+            handoff_complete = True
+            if authority_handoff is not None:
+                try:
+                    handoff_complete = bool(authority_handoff(replacement))
+                except Exception as exc:
+                    handoff_error = exc
+                    handoff_complete = False
+            if not handoff_complete:
+                rollback_cross_layer_commit(
+                    "core mutation authority handoff failed",
+                    handoff_error,
+                )
+
+            credential = LeaseCredential(
+                lease_id=replacement.lease_id,
+                document_session_uuid=identity.session_uuid,
+                generation=generation,
+                token=raw_token,
+                mcp_instance_id=owner.mcp_instance_id,
+            )
+            grant = LeaseGrant(
+                credential=credential,
+                record=replacement,
+                coordination_uncertain=sidecar_commit_uncertain,
+            )
+            escrow_error: Exception | None = None
+            escrow_complete = True
+            if credential_escrow is not None:
+                try:
+                    escrow_complete = bool(credential_escrow(grant))
+                except Exception as exc:
+                    escrow_error = exc
+                    escrow_complete = False
+            if not escrow_complete:
+                rollback_cross_layer_commit(
+                    "acquisition credential escrow failed",
+                    escrow_error,
+                )
+
+            self._records[identity.session_uuid] = replacement
+            self._foreign_records.pop(identity.session_uuid, None)
+            self._closed_documents.pop(identity.session_uuid, None)
+            self._generations[identity.session_uuid] = generation
+            self._last_sidecar_heartbeat_ns[identity.session_uuid] = now_mono
+            self._clear_effective_error_times(identity.session_uuid)
+            self._clear_acquiring_request(identity.session_uuid)
+            return grant
 
     def begin_saved_foreign_recovery_acquisition(
         self,
@@ -3301,13 +4244,36 @@ class DocumentLeaseService:
                     LeaseState.UNLOCKED_DIRTY,
                 }:
                     continue
-                if now - record.monotonic_heartbeat_ns <= self._stale_after_ns:
+                owner_exit_proof = ""
+                if (
+                    record.state == LeaseState.LOCKED_IDLE
+                    and self._is_recoverable_local_mcp_orphan_candidate(record)
+                ):
+                    try:
+                        owner_exit_proof = self._prove_local_mcp_owner_dead(
+                            record.owner
+                        )
+                    except LocalRecoveryError:
+                        # Unknown or live owners continue to use heartbeat age.
+                        pass
+                heartbeat_expired = (
+                    now - record.monotonic_heartbeat_ns > self._stale_after_ns
+                )
+                if not owner_exit_proof and not heartbeat_expired:
                     continue
+                error_code = (
+                    "LEASE_OWNER_EXITED" if owner_exit_proof else "LEASE_STALE"
+                )
+                error_message = (
+                    "Credential-owning MCP process exited: " + owner_exit_proof
+                    if owner_exit_proof
+                    else "Lease heartbeat expired"
+                )
                 updated = record.transitioned(
                     LeaseState.STALE,
                     error=LeaseErrorInfo(
-                        code="LEASE_STALE",
-                        message="Lease heartbeat expired",
+                        code=error_code,
+                        message=error_message,
                         at=self._utc_clock(),
                     ),
                 )
@@ -3484,14 +4450,15 @@ class DocumentLeaseService:
     def refresh_orphaned_foreign_document_identity(
         self, *, document: Any
     ) -> DocumentIdentity:
-        """Repair exact-proxy identity drift for a clean missing-sidecar record.
+        """Repair exact-proxy identity drift for a recoverable missing sidecar.
 
         Registration can detect an identity mismatch before acquisition gets a
         chance to run its full hash. This bounded repair locates only the exact
         previously registered proxy, proves its foreign authority inactive,
-        and accepts a refresh only when the on-disk metadata still matches the
-        foreign record's validated clean baseline. The acquisition path repeats
-        the check with SHA-256 evidence before publishing new authority.
+        and accepts a refresh only when the on-disk metadata still matches its
+        saved baseline. The acquisition path repeats the check with SHA-256
+        evidence before publishing new authority. A legacy worker-snapshot
+        false-positive remains dirty when the live proxy says it is dirty.
         """
 
         session_uuid = self.identity_service.registered_session_uuid(document)
@@ -3502,9 +4469,9 @@ class DocumentLeaseService:
                     "the registered document has no foreign recovery record"
                 )
             previous = foreign.persisted
-            if not self._is_clean_orphaned_foreign_candidate(previous):
+            if not self._is_missing_sidecar_foreign_recovery_candidate(previous):
                 raise ForeignRecoveryError(
-                    "foreign authority does not prove a fully saved clean document"
+                    "foreign authority lacks a verified recoverable saved baseline"
                 )
             canonical_path = foreign.local_document.canonical_path
             if not canonical_path:

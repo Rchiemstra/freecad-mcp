@@ -5578,6 +5578,7 @@ class FreeCADRPC:
                         or addon_loaded_at
                     ),
                     hostname=document_lease_service.local_runtime_identity.hostname,
+                    mcp_hostname=request_identity.get("host") or "",
                     client=client or request_identity.get("client") or "",
                     agent_id=agent_id or request_identity.get("agent_id") or "",
                 )
@@ -5623,12 +5624,20 @@ class FreeCADRPC:
                             live_acquisition_request_ids=live_request_ids,
                         )
                 except lease.OrphanedForeignRecoveryRequired:
+                    # Full-file hashing deliberately runs off the GUI thread.
+                    # The second GUI pass snapshots the exact live state, then
+                    # atomically publishes, core-fences, and escrows completed
+                    # replacement authority. Dirty state remains an explicit
+                    # locally authorized adoption.
+                    phase["orphaned_foreign_recovery"] = True
+                except lease.OrphanedLocalMcpRecoveryRequired:
                     if adopt_dirty:
                         raise
-                    # Full-file hashing deliberately runs off the GUI thread.
-                    # The service atomically publishes replacement authority
-                    # only after the second GUI pass revalidates this document.
-                    phase["orphaned_foreign_recovery"] = True
+                    # A live addon cannot renew a dead MCP's credential, while
+                    # USER_INTERVENED may already have revoked it. Re-hash
+                    # off-GUI, snapshot under the old core fence, then rotate
+                    # the inactive local authority after revalidation.
+                    phase["orphaned_local_mcp_recovery"] = True
                 except lease.SavedForeignRecoveryRequired:
                     # Recover either an explicit UNLOCKED_DIRTY acknowledgement
                     # after a later save or a dirty LOCKED_ERROR stranded by a
@@ -5762,6 +5771,7 @@ class FreeCADRPC:
 
         def snapshot_and_promote_gui():
             snapshot_id = None
+            prior_core_authority_status = None
             marker_keys = []
             attribution_started = False
             credential = phase.get("credential")
@@ -5780,8 +5790,12 @@ class FreeCADRPC:
                     str(original_identity.canonical_path or ""),
                 } - {""}
                 dl = _import_document_lock()
-                dl.begin_agent_mutation_scope(request_id, marker_keys)
-                attribution_started = True
+                if not (
+                    phase.get("orphaned_local_mcp_recovery")
+                    or phase.get("orphaned_foreign_recovery")
+                ):
+                    dl.begin_agent_mutation_scope(request_id, marker_keys)
+                    attribution_started = True
                 lease = _import_document_lease()
                 observed = document_identity_service.inspect_registered_document(
                     original_identity.session_uuid, document
@@ -5842,26 +5856,7 @@ class FreeCADRPC:
                             "stale_after_seconds": 90,
                         },
                     }
-                if phase.get("orphaned_foreign_recovery"):
-                    reservation = (
-                        document_lease_service.begin_orphaned_foreign_acquisition(
-                            phase["exact_selector"],
-                            phase["owner"],
-                            validation=lease.LiveDocumentValidation(
-                                document=observed,
-                                document_modified=document_dirty,
-                                baseline=phase["baseline"],
-                                baseline_validated=bool(
-                                    original_identity.canonical_path
-                                ),
-                            ),
-                            task_summary=task_description,
-                        )
-                    )
-                    credential = reservation.credential
-                    phase["credential"] = credential
-                    self._retain_inflight_credential(credential)
-                elif phase.get("saved_foreign_recovery"):
+                if phase.get("saved_foreign_recovery"):
                     reservation = (
                         document_lease_service.begin_saved_foreign_recovery_acquisition(
                             phase["exact_selector"],
@@ -5888,18 +5883,46 @@ class FreeCADRPC:
                     phase["credential"] = credential
                     self._retain_inflight_credential(credential)
                 else:
-                    document_lease_service.authorize(
-                        credential,
-                        selector={
-                            "document_session_uuid": original_identity.session_uuid
-                        },
-                        allowed_states={lease.LeaseState.ACQUIRING},
-                    )
-                snapshot_id = create_lease_baseline_snapshot_gui(document)
-                document_lease_service.record_acquisition_snapshot(
-                    credential,
-                    snapshot_id=snapshot_id,
+                    if not (
+                        phase.get("orphaned_local_mcp_recovery")
+                        or phase.get("orphaned_foreign_recovery")
+                    ):
+                        document_lease_service.authorize(
+                            credential,
+                            selector={
+                                "document_session_uuid": (
+                                    original_identity.session_uuid
+                                )
+                            },
+                            allowed_states={lease.LeaseState.ACQUIRING},
+                        )
+                direct_orphan_recovery = bool(
+                    phase.get("orphaned_local_mcp_recovery")
+                    or phase.get("orphaned_foreign_recovery")
                 )
+                if direct_orphan_recovery:
+                    # The old core generation still fences saveCopy. Generation
+                    # zero asks core for that exact current generation and the
+                    # capability permits SaveAs only. The old sidecar remains
+                    # unchanged (or absent for cached foreign recovery) until
+                    # this snapshot succeeds.
+                    if lease.core_authority.core_owner_api_available(document):
+                        if lease.core_authority.authority_status(document) is None:
+                            raise lease.CoordinationError(
+                                "core mutation authority status is unavailable "
+                                "for verified orphan recovery"
+                            )
+                    with lease.core_authority.open_mutation_capability(
+                        document,
+                        generation=0,
+                        kinds=("SaveAs",),
+                    ):
+                        snapshot_id = create_lease_baseline_snapshot_gui(
+                            document,
+                            observer_request_id=request_id,
+                        )
+                else:
+                    snapshot_id = create_lease_baseline_snapshot_gui(document)
                 if inflight is not None:
                     inflight.token.checkpoint("acquisition_snapshot_complete")
                 document_dirty = require_document_modified(document)
@@ -5911,6 +5934,135 @@ class FreeCADRPC:
                     raise lease.DirtyAcquisitionError(
                         "document became dirty while its baseline snapshot was captured"
                     )
+                if direct_orphan_recovery:
+                    # Re-capture after saveCopy and its exact observer
+                    # callbacks. If any legitimate callback changed authority,
+                    # rollback must restore the core state from immediately
+                    # before the replacement authority transaction.
+                    if lease.core_authority.core_owner_api_available(document):
+                        prior_core_authority_status = (
+                            lease.core_authority.authority_status(document)
+                        )
+                        if prior_core_authority_status is None:
+                            raise lease.CoordinationError(
+                                "core mutation authority status changed or "
+                                "became unreadable during orphan recovery"
+                            )
+                    if inflight is not None:
+                        inflight.token.begin_irreversible(
+                            (
+                                "local_orphan_authority_handoff"
+                                if phase.get("orphaned_local_mcp_recovery")
+                                else "foreign_orphan_authority_handoff"
+                            )
+                        )
+
+                    def escrow_recovery_grant(recovery_grant):
+                        if rpc_acquisition_claim_store is None:
+                            return False
+                        escrow_result = {
+                            "success": True,
+                            **recovery_grant.to_dict(),
+                            "expiry_policy": {
+                                "heartbeat_interval_seconds": 10,
+                                "sidecar_flush_interval_seconds": 30,
+                                "stale_after_seconds": 90,
+                            },
+                        }
+                        rpc_acquisition_claim_store.store(
+                            mcp_runtime_id=phase["owner"].mcp_instance_id,
+                            request_id=request_id,
+                            method=(
+                                "adopt_dirty_document"
+                                if adopt_dirty
+                                else "acquire_document_lock"
+                            ),
+                            credential=escrow_result["credential"],
+                            result=escrow_result,
+                        )
+                        return True
+
+                    if phase.get("orphaned_local_mcp_recovery"):
+                        grant = (
+                            document_lease_service.recover_orphaned_local_mcp_acquisition(
+                                phase["exact_selector"],
+                                phase["owner"],
+                                validation=lease.LiveDocumentValidation(
+                                    document=observed,
+                                    document_modified=document_dirty,
+                                    baseline=phase["baseline"],
+                                    baseline_validated=bool(
+                                        original_identity.canonical_path
+                                    ),
+                                ),
+                                snapshot_id=snapshot_id,
+                                task_summary=task_description,
+                                authority_handoff=lambda replacement: (
+                                    lease.core_authority.sync_mcp_owner_verified(
+                                        document,
+                                        replacement,
+                                    )
+                                ),
+                                authority_rollback=lambda: (
+                                    lease.core_authority.restore_authority_status(
+                                        document,
+                                        prior_core_authority_status,
+                                    )
+                                ),
+                                credential_escrow=escrow_recovery_grant,
+                            )
+                        )
+                    else:
+                        grant = (
+                            document_lease_service.recover_orphaned_foreign_acquisition(
+                                phase["exact_selector"],
+                                phase["owner"],
+                                validation=lease.LiveDocumentValidation(
+                                    document=observed,
+                                    document_modified=document_dirty,
+                                    baseline=phase["baseline"],
+                                    baseline_validated=bool(
+                                        original_identity.canonical_path
+                                    ),
+                                ),
+                                snapshot_id=snapshot_id,
+                                task_summary=task_description,
+                                adopt_dirty=adopt_dirty,
+                                local_confirmation=bool(
+                                    phase.get("initial_dirty_adoption_authorized")
+                                ),
+                                authority_handoff=lambda replacement: (
+                                    lease.core_authority.sync_mcp_owner_verified(
+                                        document,
+                                        replacement,
+                                    )
+                                ),
+                                authority_rollback=lambda: (
+                                    lease.core_authority.restore_authority_status(
+                                        document,
+                                        prior_core_authority_status,
+                                    )
+                                ),
+                                credential_escrow=escrow_recovery_grant,
+                            )
+                        )
+                    credential = grant.credential
+                    phase["credential"] = credential
+                    phase["orphaned_authority_promoted"] = True
+                    self._retain_inflight_credential(credential)
+                    return {
+                        "success": True,
+                        **grant.to_dict(),
+                        "expiry_policy": {
+                            "heartbeat_interval_seconds": 10,
+                            "sidecar_flush_interval_seconds": 30,
+                            "stale_after_seconds": 90,
+                        },
+                    }
+                document_lease_service.record_acquisition_snapshot(
+                    credential,
+                    snapshot_id=snapshot_id,
+                )
                 completion = (
                     document_lease_service.complete_dirty_adoption
                     if adopt_dirty
@@ -5943,21 +6095,41 @@ class FreeCADRPC:
                 cancellation_events = self._complete_request_cancellation(
                     inflight, dirty=True, snapshot_id=snapshot_id
                 )
-                if snapshot_id and any(
+                rolled_back = any(
                     isinstance(event, dict) and event.get("rolled_back") is True
                     for event in cancellation_events
+                )
+                if snapshot_id and (
+                    rolled_back
+                    or (
+                        (
+                            phase.get("orphaned_local_mcp_recovery")
+                            or phase.get("orphaned_foreign_recovery")
+                        )
+                        and not phase.get("orphaned_authority_promoted")
+                    )
                 ):
                     discard_lease_baseline_snapshot(snapshot_id)
                 raise
             except Exception as exc:
-                if credential is not None:
+                promoted_orphan = bool(
+                    phase.get("orphaned_authority_promoted")
+                )
+                retain_recovery_snapshot = bool(
+                    getattr(exc, "details", {}).get("retain_snapshot")
+                )
+                if credential is not None and not promoted_orphan:
                     try:
                         document_lease_service.abort_acquisition(credential)
                     except Exception as rollback_exc:
                         # A failed CAS rollback is stricter than the triggering
                         # error. Keep both the sidecar and recovery artifact.
                         return _lease_service_error(rollback_exc, request_id=request_id)
-                if snapshot_id:
+                if (
+                    snapshot_id
+                    and not promoted_orphan
+                    and not retain_recovery_snapshot
+                ):
                     discard_lease_baseline_snapshot(snapshot_id)
                 return _lease_service_error(exc, request_id=request_id)
             finally:
@@ -5978,12 +6150,15 @@ class FreeCADRPC:
             # Prefer cancellation cleanup for pre-promotion ACQUIRING; a late
             # successful promote is recoverable via the private claim vault.
             if inflight is not None:
-                rpc_inflight_request_registry.request_cancel(
+                cancellation = rpc_inflight_request_registry.request_cancel(
                     inflight.session_id, inflight.request_id
                 )
-                self._complete_request_cancellation(
-                    inflight, dirty=True, snapshot_id=phase.get("snapshot_id")
-                )
+                if cancellation.status in {"requested", "already_requested"}:
+                    self._complete_request_cancellation(
+                        inflight,
+                        dirty=True,
+                        snapshot_id=phase.get("snapshot_id"),
+                    )
             elif phase.get("credential") is not None:
                 _abort_phase_reservation()
         return promoted
@@ -7562,6 +7737,7 @@ class FreeCADRPC:
                         hostname=(
                             document_lease_service.local_runtime_identity.hostname
                         ),
+                        mcp_hostname=identity.get("host") or "",
                         client=identity.get("client") or "",
                         agent_id=identity.get("agent_id") or "",
                     )

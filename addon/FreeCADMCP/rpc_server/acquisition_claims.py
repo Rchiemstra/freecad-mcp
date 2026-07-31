@@ -3,7 +3,10 @@
 Successful acquire/adopt/create responses deliberately omit the raw token from
 the replay cache. When the first XML-RPC response is lost, the authenticated
 MCP runtime that initiated the request may retrieve the credential repeatedly
-until it acknowledges custody. Public status never includes the token.
+until it acknowledges custody. Unacknowledged entries are never expired,
+evicted, or rejected at the configured soft capacity: preserving the only raw
+credential takes precedence over a process-local memory target. Public status
+never includes the token.
 """
 
 from __future__ import annotations
@@ -56,16 +59,17 @@ class AcquisitionClaimStore:
         return runtime, request
 
     def _prune_locked(self, now: float) -> None:
-        expired = [
+        # ``ttl_seconds`` remains a validated constructor option for backward
+        # compatibility, but it must never expire an unacknowledged credential.
+        # A lease may remain unresolved well beyond the old ten-minute TTL.
+        del now
+        acknowledged = [
             key
             for key, entry in self._entries.items()
             if entry.acknowledged
-            or (now - entry.created_monotonic) > self._ttl_seconds
         ]
-        for key in expired:
+        for key in acknowledged:
             self._entries.pop(key, None)
-        while len(self._entries) > self._max_entries:
-            self._entries.popitem(last=False)
 
     def store(
         self,
@@ -76,7 +80,7 @@ class AcquisitionClaimStore:
         credential: dict[str, Any],
         result: dict[str, Any],
     ) -> None:
-        """Retain one private credential until acknowledgement or TTL."""
+        """Retain one private credential until acknowledgement or exact use."""
 
         token = str((credential or {}).get("token") or "")
         if not token or token == "[REDACTED]":
@@ -85,6 +89,10 @@ class AcquisitionClaimStore:
         now = float(self._monotonic())
         with self._lock:
             self._prune_locked(now)
+            # ``max_entries`` is deliberately a soft capacity. A generic
+            # acquire/adopt/create may have already published authority by the
+            # time it reaches this vault; rejecting or evicting here would
+            # strand that authority without its only raw credential.
             self._entries[key] = _ClaimEntry(
                 mcp_runtime_id=key[0],
                 request_id=key[1],

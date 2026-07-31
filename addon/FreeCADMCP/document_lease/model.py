@@ -349,6 +349,7 @@ class LeaseOwner:
     mcp_pid: int
     mcp_process_started_at: str
     hostname: str
+    mcp_hostname: str = ""
     client: str = ""
     agent_id: str = ""
 
@@ -363,13 +364,19 @@ class LeaseOwner:
             "mcp_pid": self.mcp_pid,
             "mcp_process_started_at": self.mcp_process_started_at,
             "hostname": self.hostname,
+            "mcp_hostname": self.mcp_hostname,
             "client": self.client,
             "agent_id": self.agent_id,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> LeaseOwner:
-        return cls(**{name: data[name] for name in cls.__dataclass_fields__})
+        return cls(
+            **{
+                name: data.get(name, "") if name == "mcp_hostname" else data[name]
+                for name in cls.__dataclass_fields__
+            }
+        )
 
 
 @dataclass(frozen=True)

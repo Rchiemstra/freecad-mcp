@@ -74,6 +74,26 @@ def core_authority_available(document: Any | None = None) -> bool:
     return False
 
 
+def core_owner_api_available(document: Any) -> bool:
+    """Return True when any core owner/fence API is exposed on a document.
+
+    A partial API is treated as present so verified handoffs fail closed rather
+    than silently falling back to observer-only compatibility.
+    """
+
+    doc = resolve_document(document)
+    if doc is None:
+        return False
+    return any(
+        callable(getattr(doc, name, None))
+        for name in (
+            "setMutationOwner",
+            "mutationAuthorityStatus",
+            "openMutationCapability",
+        )
+    )
+
+
 def resolve_document(document_or_name: Any) -> Any | None:
     if document_or_name is None:
         return None
@@ -254,6 +274,87 @@ def sync_owner_from_lease_record(document: Any, record: Any) -> bool:
     if str(state) in {"USER_INTERVENED", "user_intervened"}:
         return bump_takeover(document) is not None
     return set_mcp_owner(document, generation=generation, provider_id=provider)
+
+
+def sync_mcp_owner_verified(document: Any, record: Any) -> bool:
+    """Install and verify the exact MCP fence represented by ``record``.
+
+    Stock FreeCAD builds have no core authority API and remain soft-compatible.
+    When the API is present, success requires a readable status reporting the
+    replacement owner, generation, and provider exactly; a swallowed Python
+    binding failure must never be mistaken for a completed lease handoff.
+    """
+
+    doc = resolve_document(document)
+    if doc is None:
+        return False
+    if not core_owner_api_available(doc):
+        return True
+    if record is None:
+        return False
+    generation = int(getattr(record, "generation", 0) or 0)
+    owner = getattr(record, "owner", None)
+    provider = str(
+        getattr(owner, "mcp_instance_id", None)
+        or getattr(owner, "agent_id", None)
+        or "freecad-mcp"
+    )
+    if generation <= 0:
+        return False
+    if not set_mcp_owner(
+        doc,
+        generation=generation,
+        provider_id=provider,
+    ):
+        return False
+    status = authority_status(doc)
+    return bool(
+        status
+        and str(status.get("owner") or "").casefold() == "mcp"
+        and status.get("restricted") is True
+        and int(status.get("generation") or 0) == generation
+        and str(status.get("provider_id") or "") == provider
+    )
+
+
+def restore_authority_status(document: Any, status: Mapping[str, Any] | None) -> bool:
+    """Best-effort restore of a previously captured core authority status."""
+
+    doc = resolve_document(document)
+    if doc is None:
+        return False
+    if not core_owner_api_available(doc):
+        return True
+    if not isinstance(status, Mapping):
+        return False
+    owner = str(status.get("owner") or "").casefold()
+    generation = int(status.get("generation") or 0)
+    provider = str(status.get("provider_id") or "")
+    try:
+        if owner == "unrestricted":
+            doc.clearMutationOwner()
+        elif owner in {"mcp", "user"}:
+            doc.setMutationOwner(owner, generation, provider)
+        else:
+            return False
+    except Exception:
+        logger.warning("restoring mutation authority status failed", exc_info=True)
+        return False
+    restored = authority_status(doc)
+    if not restored:
+        return False
+    if str(restored.get("owner") or "").casefold() != owner:
+        return False
+    if owner == "unrestricted":
+        return (
+            restored.get("restricted") is False
+            and int(restored.get("generation") or 0) == 0
+        )
+    return bool(
+        int(restored.get("generation") or 0) == generation
+        and str(restored.get("provider_id") or "") == provider
+        and restored.get("restricted") is (owner == "mcp")
+    )
 
 
 def sync_clear_from_release(document: Any) -> bool:

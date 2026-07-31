@@ -236,7 +236,7 @@ class _TrackingSaveService(SaveService):
         return super().revalidate_saved_document_gui(*args, **kwargs)
 
 
-def _threaded_gui_dispatcher(gui_thread_ids):
+def _threaded_gui_dispatcher(gui_thread_ids, gui_threads=None):
     def dispatch(task, timeout=None):
         del timeout
         result = []
@@ -244,6 +244,8 @@ def _threaded_gui_dispatcher(gui_thread_ids):
 
         def run():
             gui_thread_ids.append(threading.get_ident())
+            if gui_threads is not None:
+                gui_threads.append(threading.current_thread())
             try:
                 result.append(task())
             except BaseException as exc:  # propagate the mocked Qt failure
@@ -500,12 +502,13 @@ def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
     identity = identities.register_document(document)
     sidecar = model.with_name(model.name + ".freecad-mcp.lock")
     gui_thread_ids = []
+    gui_threads = []
     events = []
     lease_module = rpc_server._import_document_lease()
     original_capture = lease_module.capture_file_baseline
 
     def capture_after_reservation(path, *, platform=None):
-        events.append(("hash", threading.get_ident()))
+        events.append(("hash", threading.current_thread()))
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["lease"]["state"] == LeaseState.ACQUIRING.value
         return original_capture(path, platform=platform)
@@ -514,7 +517,7 @@ def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
 
     def snapshot_after_reservation(snapshot_document):
         assert snapshot_document is document
-        events.append(("snapshot", threading.get_ident()))
+        events.append(("snapshot", threading.current_thread()))
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["lease"]["state"] == LeaseState.ACQUIRING.value
         return snapshot_id
@@ -538,7 +541,11 @@ def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
         ),
     )
     rpc = rpc_server.FreeCADRPC()
-    monkeypatch.setattr(rpc, "_dispatch_gui", _threaded_gui_dispatcher(gui_thread_ids))
+    monkeypatch.setattr(
+        rpc,
+        "_dispatch_gui",
+        _threaded_gui_dispatcher(gui_thread_ids, gui_threads),
+    )
     monkeypatch.setattr(rpc_server, "document_lease_service", service)
     monkeypatch.setattr(rpc_server, "document_identity_service", identities)
     monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", manifest)
@@ -585,8 +592,8 @@ def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
     assert selectors == [expected_selector]
     event_threads = dict(events)
     # Hash is bounded off-GUI (ThreadPoolExecutor); snapshot stays on GUI.
-    assert event_threads["hash"] not in gui_thread_ids
-    assert event_threads["snapshot"] in gui_thread_ids
+    assert event_threads["hash"] not in gui_threads
+    assert event_threads["snapshot"] in gui_threads
     assert [name for name, _tid in events if name in {"hash", "snapshot"}] == [
         "hash",
         "snapshot",

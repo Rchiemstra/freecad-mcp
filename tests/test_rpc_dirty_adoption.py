@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,12 +18,15 @@ from addon.FreeCADMCP.document_lease import (
     LeaseState,
     LocalRuntimeIdentity,
     ProcessLivenessEvidence,
+    SidecarCommitUncertainError,
     SidecarStore,
     capture_file_baseline,
     sidecar_path_for,
 )
 from addon.FreeCADMCP.document_lease import observer as lease_observer
 from addon.FreeCADMCP.rpc_server import rpc_server
+from addon.FreeCADMCP.rpc_server import snapshot_service
+from addon.FreeCADMCP.rpc_server.acquisition_claims import AcquisitionClaimStore
 from addon.FreeCADMCP.rpc_server.inflight_requests import InflightRequestRegistry
 
 pytestmark = pytest.mark.unit
@@ -34,6 +38,54 @@ class _DirtyDocument:
         self.Label = "Dirty model"
         self.FileName = str(path)
         self.Modified = True
+        self._core_generation = 0
+        self._core_owner = "unrestricted"
+        self._core_provider = ""
+        self._core_restricted = False
+        self._save_as_capability = False
+        self.capability_calls = []
+        self.owner_calls = []
+        self.fail_snapshot = False
+        self.misreport_provider_for = None
+
+    def mutationAuthorityStatus(self):
+        return {
+            "owner": self._core_owner,
+            "generation": self._core_generation,
+            "provider_id": (
+                "misreported-provider"
+                if self._core_provider == self.misreport_provider_for
+                else self._core_provider
+            ),
+            "restricted": self._core_restricted,
+        }
+
+    def openMutationCapability(self, kinds=None, generation=0):
+        requested_generation = int(generation)
+        if (
+            not self._core_restricted
+            or requested_generation not in {0, self._core_generation}
+            or tuple(kinds or ()) != ("SaveAs",)
+        ):
+            raise RuntimeError("wrong owner, generation, or mutation kind")
+        self.capability_calls.append((tuple(kinds or ()), requested_generation))
+        self._save_as_capability = True
+        return object()
+
+    def setMutationOwner(self, mode, generation=0, provider_id=""):
+        self.owner_calls.append((mode, int(generation), provider_id))
+        self._core_owner = mode
+        self._core_provider = provider_id
+        self._core_restricted = mode == "mcp"
+        self._core_generation = int(generation)
+
+    def saveCopy(self, path):
+        if self._core_restricted and not self._save_as_capability:
+            raise RuntimeError("SaveAs denied by core mutation authority")
+        self._save_as_capability = False
+        if self.fail_snapshot:
+            raise RuntimeError("injected recovery snapshot failure")
+        Path(path).write_bytes(b"PK\x03\x04" + b"snapshot" * 4)
 
 
 class _DocumentLock:
@@ -51,6 +103,7 @@ class _DocumentLock:
             "instance_id": "11111111-1111-4111-8111-111111111111",
             "pid": 101,
             "mcp_process_started_at": "2026-07-28T00:00:01Z",
+            "host": rpc_server.platform.node(),
             "client": "pytest",
             "agent_id": "agent-a",
         }
@@ -107,6 +160,45 @@ def _configure_dirty_adoption(monkeypatch, tmp_path):
         rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
     )
     return rpc, document, model, original, service
+
+
+def _seed_dead_local_owner(document, service, *, mcp_hostname=None):
+    identity = service.identity_service.register_document(document)
+    runtime = rpc_server.rpc_runtime_manifest
+    abandoned_owner = LeaseOwner(
+        addon_profile_id=runtime.profile_id,
+        addon_runtime_id=runtime.addon_runtime_id,
+        freecad_pid=runtime.freecad_pid,
+        freecad_process_started_at=runtime.freecad_process_started_at,
+        boot_id=runtime.boot_id,
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-28T00:00:00Z",
+        hostname=rpc_server.platform.node(),
+        mcp_hostname=(
+            rpc_server.platform.node()
+            if mcp_hostname is None
+            else mcp_hostname
+        ),
+        client="exited-mcp",
+        agent_id="",
+    )
+    abandoned = service.acquire(
+        identity.session_uuid,
+        abandoned_owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+    service._process_liveness_probe = (
+        lambda pid: ProcessLivenessEvidence(exists=False)
+        if pid == abandoned_owner.mcp_pid
+        else ProcessLivenessEvidence(exists=None)
+    )
+    document.setMutationOwner(
+        "mcp",
+        abandoned.record.generation,
+        abandoned_owner.mcp_instance_id,
+    )
+    return identity, abandoned_owner, abandoned
 
 
 def test_dirty_adoption_rejects_when_confirmation_hook_returns_false(
@@ -192,6 +284,438 @@ def test_dirty_adoption_snapshots_then_returns_dirty_lease(tmp_path, monkeypatch
     assert sidecar_path_for(model).exists()
     assert model.read_bytes() == original
     assert document.Modified is True
+
+
+def test_clean_acquisition_self_heals_dead_mcp_owner_in_same_addon(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    _identity, abandoned_owner, abandoned = _seed_dead_local_owner(
+        document, service
+    )
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Continue after the previous MCP exited",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["credential"]["generation"] == abandoned.record.generation + 1
+    assert result["owner"]["mcp_instance_id"] == (
+        _DocumentLock.get_request_identity()["instance_id"]
+    )
+    new_snapshot = result["document_state"]["snapshot_id"]
+    assert (recovery / f"{new_snapshot}.FCStd").is_file()
+    assert document.capability_calls == [(("SaveAs",), 0)]
+    assert document.owner_calls[-1][1] == abandoned.record.generation + 1
+    with pytest.raises(AuthorizationError):
+        service.authorize(abandoned.credential)
+    assert model.read_bytes() == original
+    assert document.Modified is False
+
+
+def test_local_orphan_cancel_before_irreversible_handoff_preserves_old_authority(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    identity, abandoned_owner, abandoned = _seed_dead_local_owner(
+        document,
+        service,
+    )
+    sidecar = sidecar_path_for(model)
+    before = sidecar.read_bytes()
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+    registry = InflightRequestRegistry()
+    inflight = registry.register(
+        "rpc-session",
+        _DocumentLock.request_id,
+        "acquire_document_lock",
+        lease_affecting=True,
+    )
+    monkeypatch.setattr(rpc_server, "rpc_inflight_request_registry", registry)
+    original_status = document.mutationAuthorityStatus
+    status_calls = []
+
+    def cancel_at_post_snapshot_status():
+        status_calls.append(True)
+        if len(status_calls) == 3:
+            assert inflight.token.request_cancel()[0] is True
+        return original_status()
+
+    document.mutationAuthorityStatus = cancel_at_post_snapshot_status
+    rpc._inflight_context.value = inflight
+    try:
+        with pytest.raises(Exception) as failure:
+            rpc.acquire_document_lock(
+                selector={"document_name": document.Name},
+                task_description="Cancel just before orphan authority rotation",
+            )
+    finally:
+        del rpc._inflight_context.value
+
+    assert failure.value.__class__.__name__ == "RequestCancellationError"
+    assert len(status_calls) == 3
+    assert sidecar.read_bytes() == before
+    assert service.authorize(abandoned.credential).lease_id == (
+        abandoned.record.lease_id
+    )
+    assert document.mutationAuthorityStatus() == {
+        "owner": "mcp",
+        "generation": abandoned.record.generation,
+        "provider_id": abandoned_owner.mcp_instance_id,
+        "restricted": True,
+    }
+    assert list(recovery.iterdir()) == []
+    assert model.read_bytes() == original
+
+
+def test_local_orphan_cancel_after_irreversible_boundary_cannot_hide_credential(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    _identity, _abandoned_owner, abandoned = _seed_dead_local_owner(
+        document,
+        service,
+    )
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+    registry = InflightRequestRegistry()
+    inflight = registry.register(
+        "rpc-session",
+        _DocumentLock.request_id,
+        "acquire_document_lock",
+        lease_affecting=True,
+    )
+    monkeypatch.setattr(rpc_server, "rpc_inflight_request_registry", registry)
+    original_recover = service.recover_orphaned_local_mcp_acquisition
+    cancel_attempts = []
+
+    def attempt_late_cancel(*args, **kwargs):
+        cancel_attempts.append(inflight.token.request_cancel())
+        return original_recover(*args, **kwargs)
+
+    monkeypatch.setattr(
+        service,
+        "recover_orphaned_local_mcp_acquisition",
+        attempt_late_cancel,
+    )
+    rpc._inflight_context.value = inflight
+    try:
+        result = rpc.acquire_document_lock(
+            selector={"document_name": document.Name},
+            task_description="Finish after crossing the authority boundary",
+        )
+    finally:
+        del rpc._inflight_context.value
+
+    assert result["success"] is True, result
+    assert result["credential"]["token"]
+    assert cancel_attempts and cancel_attempts[0][0] is False
+    assert cancel_attempts[0][1].cancellation_requested is False
+    assert inflight.token.snapshot().phase == "local_orphan_authority_handoff"
+    assert rpc_server.rpc_acquisition_claim_store.claimable(
+        _DocumentLock.get_request_identity()["instance_id"],
+        _DocumentLock.request_id,
+    )
+    assert result["credential"]["generation"] == abandoned.record.generation + 1
+    assert model.read_bytes() == original
+
+
+def test_local_orphan_timeout_after_handoff_keeps_claimable_credential(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    _identity, _abandoned_owner, abandoned = _seed_dead_local_owner(
+        document,
+        service,
+    )
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+    registry = InflightRequestRegistry()
+    inflight = registry.register(
+        "rpc-session",
+        _DocumentLock.request_id,
+        "acquire_document_lock",
+        lease_affecting=True,
+    )
+    claims = AcquisitionClaimStore()
+    monkeypatch.setattr(rpc_server, "rpc_inflight_request_registry", registry)
+    monkeypatch.setattr(rpc_server, "rpc_acquisition_claim_store", claims)
+    dispatch_count = []
+
+    def report_timeout_after_task_completed(task, timeout=None, **_kwargs):
+        del timeout
+        dispatch_count.append(True)
+        value = task()
+        if len(dispatch_count) == 2:
+            assert value["success"] is True
+            return {
+                "success": False,
+                "completion_uncertain": True,
+                "request_id": _DocumentLock.request_id,
+            }
+        return value
+
+    monkeypatch.setattr(rpc, "_dispatch_gui", report_timeout_after_task_completed)
+    rpc._inflight_context.value = inflight
+    try:
+        result = rpc.acquire_document_lock(
+            selector={"document_name": document.Name},
+            task_description="Simulate a lost post-handoff GUI response",
+        )
+    finally:
+        del rpc._inflight_context.value
+
+    assert result["completion_uncertain"] is True
+    runtime_id = _DocumentLock.get_request_identity()["instance_id"]
+    assert claims.claimable(runtime_id, _DocumentLock.request_id)
+    claimed = claims.claim(runtime_id, _DocumentLock.request_id)
+    assert claimed["success"] is True
+    assert claimed["credential"]["token"]
+    assert claimed["credential"]["generation"] == abandoned.record.generation + 1
+    assert inflight.token.snapshot().cancellation_requested is False
+    assert service.list_records()[0]["owner"]["mcp_instance_id"] == runtime_id
+    assert model.read_bytes() == original
+
+
+def test_local_orphan_unreadable_post_publish_commit_returns_escrowed_warning(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    _identity, _abandoned_owner, abandoned = _seed_dead_local_owner(
+        document,
+        service,
+    )
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+    real_replace = service.sidecar_store.replace
+    injected = {"done": False}
+
+    def publish_then_make_reread_unavailable(path, record, *, expected):
+        real_replace(path, record, expected=expected)
+        if not injected["done"]:
+            injected["done"] = True
+            raise SidecarCommitUncertainError(
+                "simulated unavailable guarded reread",
+                persisted=None,
+            )
+
+    monkeypatch.setattr(
+        service.sidecar_store,
+        "replace",
+        publish_then_make_reread_unavailable,
+    )
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Complete an uncertain published orphan handoff",
+    )
+
+    runtime_id = _DocumentLock.get_request_identity()["instance_id"]
+    assert result["success"] is True
+    assert result["coordination_uncertain"] is True
+    assert result["warning_code"] == "SIDECAR_COMMIT_UNCERTAIN"
+    assert result["credential"]["generation"] == abandoned.record.generation + 1
+    assert rpc_server.rpc_acquisition_claim_store.claimable(
+        runtime_id,
+        _DocumentLock.request_id,
+    )
+    claimed = rpc_server.rpc_acquisition_claim_store.claim(
+        runtime_id,
+        _DocumentLock.request_id,
+    )
+    assert claimed["credential"]["token"] == result["credential"]["token"]
+    assert service.list_records()[0]["owner"]["mcp_instance_id"] == runtime_id
+    assert model.read_bytes() == original
+
+
+def test_clean_acquisition_repairs_legacy_worker_save_intervention(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    identity, abandoned_owner, abandoned = _seed_dead_local_owner(
+        document,
+        service,
+        mcp_hostname="",
+    )
+    intervened = service.takeover(
+        identity.session_uuid,
+        dirty=True,
+        reason=(
+            "Unscoped FreeCAD save detected: "
+            "freecad_mcp_workers/snapshots/0001_DirtyModel.FCStd"
+        ),
+    )
+    document._core_owner = "user"
+    document._core_provider = abandoned_owner.mcp_instance_id
+    document._core_restricted = False
+    document._core_generation = intervened.generation
+    service._process_liveness_probe = lambda _pid: pytest.fail(
+        "the already-revoked legacy credential needs no PID probe"
+    )
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Recover the misattributed worker snapshot",
+    )
+
+    assert result["success"] is True, result
+    assert result["credential"]["generation"] == intervened.generation + 1
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["document_state"]["dirty"] is False
+    assert result["document_state"]["user_intervened"] is False
+    assert result["owner"]["mcp_hostname"] == rpc_server.platform.node()
+    assert document.capability_calls == []
+    with pytest.raises(AuthorizationError):
+        service.authorize(abandoned.credential)
+    assert model.read_bytes() == original
+    assert document.Modified is False
+
+
+def test_legacy_recovery_rolls_back_sidecar_and_user_core_on_sync_mismatch(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    identity, abandoned_owner, abandoned = _seed_dead_local_owner(
+        document,
+        service,
+        mcp_hostname="",
+    )
+    intervened = service.takeover(
+        identity.session_uuid,
+        dirty=True,
+        reason=(
+            "Unscoped FreeCAD save detected: "
+            "freecad_mcp_workers/snapshots/0001_DirtyModel.FCStd"
+        ),
+    )
+    document._core_owner = "user"
+    document._core_provider = abandoned_owner.mcp_instance_id
+    document._core_restricted = False
+    document._core_generation = intervened.generation
+    document.misreport_provider_for = (
+        _DocumentLock.get_request_identity()["instance_id"]
+    )
+    service._process_liveness_probe = lambda _pid: pytest.fail(
+        "the already-revoked legacy credential needs no PID probe"
+    )
+    sidecar = sidecar_path_for(model)
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Retry a mismatched core handoff",
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "LEASE_COORDINATION_LOST"
+    assert "core mutation authority handoff failed" in result["error"]
+    persisted = service.sidecar_store.read(sidecar)
+    assert persisted.lease_id == intervened.lease_id
+    assert persisted.generation == intervened.generation
+    assert persisted.token_fingerprint == intervened.token_fingerprint
+    assert persisted.owner == intervened.owner
+    assert persisted.state == LeaseState.USER_INTERVENED
+    assert persisted.record_revision == intervened.record_revision + 2
+    assert persisted.state_revision == intervened.state_revision + 2
+    assert service.get(identity.session_uuid)["lease"]["state"] == (
+        LeaseState.USER_INTERVENED.value
+    )
+    assert document.mutationAuthorityStatus() == {
+        "owner": "user",
+        "generation": intervened.generation,
+        "provider_id": abandoned_owner.mcp_instance_id,
+        "restricted": False,
+    }
+    assert list(recovery.iterdir()) == []
+    with pytest.raises(AuthorizationError):
+        service.authorize(abandoned.credential)
+    assert model.read_bytes() == original
+    assert document.Modified is False
+
+
+def test_local_orphan_snapshot_failure_preserves_old_sidecar_and_core_fence(
+    tmp_path,
+    monkeypatch,
+):
+    rpc, document, model, original, service = _configure_dirty_adoption(
+        monkeypatch, tmp_path
+    )
+    document.Modified = False
+    identity, abandoned_owner, abandoned = _seed_dead_local_owner(
+        document, service
+    )
+    sidecar = sidecar_path_for(model)
+    before = sidecar.read_bytes()
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    monkeypatch.setattr(snapshot_service, "_recovery_root", lambda: recovery)
+    document.fail_snapshot = True
+
+    result = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Retry after the previous MCP exited",
+    )
+
+    assert result["success"] is False
+    assert "injected recovery snapshot failure" in result["error"]
+    assert sidecar.read_bytes() == before
+    assert service.get(identity.session_uuid)["lease"]["state"] == (
+        LeaseState.LOCKED_IDLE.value
+    )
+    assert service.authorize(abandoned.credential).generation == (
+        abandoned.record.generation
+    )
+    assert document.mutationAuthorityStatus() == {
+        "owner": "mcp",
+        "generation": abandoned.record.generation,
+        "provider_id": abandoned_owner.mcp_instance_id,
+        "restricted": True,
+    }
+    assert document.capability_calls == [(("SaveAs",), 0)]
+    assert list(recovery.iterdir()) == []
+    assert model.read_bytes() == original
 
 
 def test_automatic_dirty_adoption_handoffs_local_locked_error(
@@ -729,7 +1253,7 @@ def test_gui_save_then_clean_acquire_avoids_identity_registration_deadlock(
     monkeypatch.setattr(
         rpc_server,
         "create_lease_baseline_snapshot_gui",
-        lambda _document: str(uuid.uuid4()),
+        lambda _document, **_kwargs: str(uuid.uuid4()),
     )
 
     result = rpc.acquire_document_lock(
@@ -899,7 +1423,7 @@ def test_clean_acquire_self_recovers_missing_foreign_sidecar(
     monkeypatch.setattr(
         rpc_server,
         "create_lease_baseline_snapshot_gui",
-        lambda _document: str(uuid.uuid4()),
+        lambda _document, **_kwargs: str(uuid.uuid4()),
     )
 
     result = rpc.acquire_document_lock(
@@ -921,6 +1445,180 @@ def test_clean_acquire_self_recovers_missing_foreign_sidecar(
     assert persisted.document == local_document
     assert persisted.owner.addon_runtime_id == runtime.addon_runtime_id
     assert service.get_foreign_recovery(local_document.session_uuid) is None
+
+
+def test_dirty_adoption_self_recovers_cached_worker_intervention_without_close(
+    tmp_path,
+    monkeypatch,
+):
+    model = tmp_path / "HamaAdapter.FCStd"
+    original = b"validated saved Hama adapter"
+    model.write_bytes(original)
+    original_stat = model.stat()
+    document = _DirtyDocument(model)
+    document.Name = "HamaAdapter"
+    document.Label = "Hama Adapter"
+    document.Modified = True
+    owner = LeaseOwner(
+        addon_profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=42,
+        freecad_process_started_at="2026-07-30T00:00:00Z",
+        boot_id="test-boot",
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-30T00:00:01Z",
+        hostname=rpc_server.platform.node(),
+        client="Claude",
+        agent_id="claude-agent",
+    )
+    foreign_identities = DocumentIdentityService()
+    foreign_document = foreign_identities.register(
+        name=document.Name,
+        path=model,
+    )
+    foreign_service = DocumentLeaseService(foreign_identities)
+    foreign_grant = foreign_service.acquire(
+        foreign_document.session_uuid,
+        owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+    intervened = foreign_service.takeover(
+        foreign_document.session_uuid,
+        dirty=False,
+        reason=(
+            "Unscoped FreeCAD save detected: "
+            r"C:\Temp\freecad_mcp_workers\mcp_worker__legacy"
+            r"\snapshots\0001_HamaAdapter.FCStd"
+        ),
+    )
+    intervened = foreign_service.update_local_dirty(
+        intervened.document.session_uuid,
+        dirty=True,
+    )
+    assert intervened.validation_complete is False
+
+    identities = DocumentIdentityService()
+    local_document = identities.register_document(document)
+    runtime = SimpleNamespace(
+        profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=99,
+        freecad_process_started_at="2026-07-30T00:10:00Z",
+        boot_id=owner.boot_id,
+    )
+    service = DocumentLeaseService(
+        identities,
+        SidecarStore(network_detector=lambda _path: False),
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=runtime.profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            hostname=owner.hostname,
+        ),
+        process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+    )
+    service.import_adjacent_foreign_recovery(
+        local_document.session_uuid,
+        live_document=local_document,
+    )
+    sidecar = sidecar_path_for(model)
+    sidecar.unlink()
+
+    rpc = rpc_server.FreeCADRPC()
+    claims = AcquisitionClaimStore()
+    monkeypatch.setattr(
+        rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
+    )
+    monkeypatch.setattr(rpc_server, "_import_document_lock", lambda: _DocumentLock())
+    monkeypatch.setattr(rpc_server, "document_identity_service", identities)
+    monkeypatch.setattr(rpc_server, "document_lease_service", service)
+    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", runtime)
+    monkeypatch.setattr(rpc_server, "rpc_acquisition_claim_store", claims)
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "getDocument",
+        lambda name: document if name == document.Name else None,
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "listDocuments",
+        lambda: {document.Name: document},
+    )
+    snapshot_id = str(uuid.uuid4())
+    snapshots = []
+    monkeypatch.setattr(
+        rpc_server,
+        "create_lease_baseline_snapshot_gui",
+        lambda doc, **kwargs: snapshots.append((doc, kwargs)) or snapshot_id,
+    )
+    confirmations = []
+    monkeypatch.setattr(
+        rpc_server,
+        "_confirm_dirty_document_adoption_gui",
+        lambda doc, identity: confirmations.append((doc, identity)) or True,
+    )
+
+    _DocumentLock.request_id = str(uuid.uuid4())
+    clean_attempt = rpc.acquire_document_lock(
+        selector={"document_name": document.Name},
+        task_description="Must not relabel dirty state as clean",
+    )
+    assert clean_attempt["success"] is False
+    assert clean_attempt["error_code"] == "DIRTY_REQUIRES_LOCAL_ADOPTION"
+    assert not sidecar.exists()
+
+    _DocumentLock.request_id = str(uuid.uuid4())
+    request_id = _DocumentLock.request_id
+    result = rpc.adopt_dirty_document(
+        selector={"document_name": document.Name},
+        task_description="Self-heal cached foreign worker intervention",
+        client="GPT Sol",
+        agent_id="gpt-sol-agent",
+    )
+
+    assert result["success"] is True, result
+    assert result["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert result["document_state"]["dirty"] is True
+    assert result["document_state"]["user_intervened"] is False
+    assert result["document_state"]["last_mutation_revision"] == 1
+    assert result["document_state"]["last_verified_save_revision"] == 0
+    assert result["document_state"]["snapshot_id"] == snapshot_id
+    assert result["credential"]["generation"] == intervened.generation + 1
+    assert "FOREIGN_SIDECAR_INVALID" not in str(result)
+    assert snapshots == [
+        (document, {"observer_request_id": request_id})
+    ]
+    assert confirmations == [(document, local_document)]
+    assert document.Modified is True
+    assert document.mutationAuthorityStatus() == {
+        "owner": "mcp",
+        "generation": result["credential"]["generation"],
+        "provider_id": _DocumentLock.get_request_identity()["instance_id"],
+        "restricted": True,
+    }
+    assert claims.claimable(
+        _DocumentLock.get_request_identity()["instance_id"],
+        request_id,
+    )
+    claimed = claims.claim(
+        _DocumentLock.get_request_identity()["instance_id"],
+        request_id,
+    )
+    assert claimed["credential"]["token"] == result["credential"]["token"]
+    assert claimed["document_state"]["dirty"] is True
+    persisted = service.sidecar_store.read(sidecar)
+    assert persisted.document == local_document
+    assert persisted.state == LeaseState.LOCKED_IDLE
+    assert persisted.dirty is True
+    assert persisted.snapshot_id == snapshot_id
+    assert service.get_foreign_recovery(local_document.session_uuid) is None
+    assert model.read_bytes() == original
+    final_stat = model.stat()
+    assert final_stat.st_size == original_stat.st_size
+    assert final_stat.st_mtime_ns == original_stat.st_mtime_ns
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -223,3 +223,75 @@ def test_snapshot_save_copy_runs_inside_generation_scoped_capability(
     assert capability_calls == [([document], {"Model": 7}, ("SaveAs",))]
     assert not document_lock.is_agent_mutating("Model", request_id=request_id)
     assert Path(result["documents"][0]["snapshot_path"]).read_bytes() == b"snapshot"
+
+
+def test_nonowner_snapshot_marks_only_the_exact_internal_save(
+    tmp_path, monkeypatch
+):
+    request_id = "22222222-2222-4222-8222-222222222222"
+    capability_calls = []
+
+    class Document:
+        Name = "Model"
+        Label = "Model"
+        Uid = "uid"
+        Id = 1
+        FileName = ""
+        Modified = False
+        Objects = []
+        HasPendingTransaction = False
+        Transacting = False
+        LastModifiedDate = ""
+
+        @staticmethod
+        def getDependentDocuments():
+            return []
+
+        @staticmethod
+        def saveCopy(path):
+            assert document_lock.is_internal_snapshot_save(document, path)
+            assert not document_lock.is_agent_mutating(
+                "Model", request_id=request_id
+            )
+            Path(path).write_bytes(b"read-only snapshot")
+
+    document = Document()
+    monkeypatch.setattr(
+        snapshot_service.FreeCAD,
+        "getDocument",
+        lambda name: document if name == "Model" else None,
+    )
+    monkeypatch.setattr(
+        snapshot_service.FreeCAD,
+        "listDocuments",
+        lambda: {"Model": document},
+    )
+    monkeypatch.setattr(
+        snapshot_service.FreeCAD,
+        "ActiveDocument",
+        document,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        core_authority,
+        "open_documents_mutation_capability",
+        lambda documents, *, generations, kinds: (
+            capability_calls.append((documents, generations, tuple(kinds)))
+            or nullcontext([])
+        ),
+    )
+
+    result = snapshot_service.create_snapshot_bundle_gui(
+        "Model",
+        str(tmp_path),
+        mutation_generations={},
+        mutation_request_id=request_id,
+        mutation_document_keys=(),
+    )
+
+    assert result["ok"] is True
+    target = Path(result["documents"][0]["snapshot_path"])
+    assert target.read_bytes() == b"read-only snapshot"
+    assert capability_calls == [([document], {}, ("SaveAs",))]
+    assert not document_lock.is_internal_snapshot_save(document, target)
+    assert not document_lock.is_agent_mutating("Model", request_id=request_id)

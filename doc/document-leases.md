@@ -62,8 +62,29 @@ Normal modelling moves through `ACQUIRING`, `LOCKED_IDLE`,
 `STALE`, `USER_INTERVENED`, or `UNLOCKED_DIRTY` until it is resolved.
 
 Heartbeats run every 10 seconds with jitter, disk renewal is coalesced to 30
-seconds, and a 90-second gap becomes `STALE`. Stale never means automatically
-safe to delete or reuse.
+seconds, and a 90-second gap becomes `STALE`. A clean, fully save-verified
+`LOCKED_IDLE` lease may also become `STALE` with `LEASE_OWNER_EXITED` without
+waiting for that gap when host, boot, process-start, profile, addon-runtime, and
+FreeCAD-runtime evidence positively proves that its co-located,
+credential-owning MCP process exited. A replacement MCP in that same live
+runtime may acquire only after a core-authorized recovery snapshot, fresh
+clean-document validation, exact saved-baseline hash and identity verification,
+and guarded generation/credential rotation. When core authority is available,
+success also requires exact owner, generation, and provider read-back; a
+mismatch republishes the prior lease authority at newer revisions and returns
+no credential. Remote, live, or unknown owner evidence remains blocking. The
+narrowly recognized pre-fix worker-snapshot
+`USER_INTERVENED` signature does not need process-death proof because takeover
+already rotated its generation and digest to a discarded secret. Stale never
+means automatically safe to delete or reuse.
+
+If an imported foreign record was cached before its sidecar disappeared, that
+local worker-signature shortcut is not trusted. The addon must prove the
+recorded foreign FreeCAD authority inactive, independently re-hash the saved
+baseline, and snapshot the exact live proxy. Clean state can then self-recover
+through `acquire_document_lock`; dirty state must use `adopt_dirty_document`
+and remains dirty. Atomic sidecar creation, verified core fencing, and private
+credential escrow complete before the immutable foreign cache is replaced.
 
 The public lifecycle tools are `acquire_document_lock`,
 `adopt_dirty_document`, `get_document_lock`, `list_document_locks`,
@@ -91,7 +112,11 @@ not the live GUI document. Public arbitrary live mutation is disabled in
 enforce mode unless the explicit unsafe policy is enabled; that policy is a
 scope check, not a Python sandbox. The worker remains snapshot-only and never
 mutates a leased live document; see the
-[RPC worker architecture](freecad_rpc_worker_architecture_plan.md).
+[RPC worker architecture](freecad_rpc_worker_architecture_plan.md). Snapshot
+creation attributes only the exact synchronous `saveCopy` start and finish
+callbacks for its request, document proxy, and normalized target path. Other
+save paths and all non-save observer callbacks remain subject to normal
+intervention fencing.
 
 ## User intervention
 

@@ -415,6 +415,105 @@ def get_agent_mutation_context() -> dict[str, Any]:
     }
 
 
+@dataclass
+class _InternalSnapshotSaveState:
+    """Exact synchronous marker for one trusted worker ``saveCopy``."""
+
+    request_id: str = ""
+    document: Any = field(default=None, repr=False)
+    target_path: str = ""
+    depth: int = 0
+    violation: str = ""
+
+
+_internal_snapshot_save_ctx = threading.local()
+
+
+def _normalized_snapshot_target(path: Any) -> str:
+    value = os.fspath(path).strip()
+    if not value:
+        raise ValueError("internal snapshot target path must not be empty")
+    return os.path.normcase(os.path.realpath(value))
+
+
+def begin_internal_snapshot_save_scope(
+    request_id: str,
+    document: Any,
+    target_path: Any,
+) -> bool:
+    """Mark only exact save callbacks from one trusted internal ``saveCopy``."""
+
+    normalized_request_id = str(request_id or "").strip()
+    if not normalized_request_id:
+        raise ValueError("internal snapshot request_id must not be empty")
+    if document is None:
+        raise ValueError("internal snapshot document must not be empty")
+    normalized_target = _normalized_snapshot_target(target_path)
+    state = getattr(_internal_snapshot_save_ctx, "state", None)
+    if state is None:
+        state = _InternalSnapshotSaveState()
+        _internal_snapshot_save_ctx.state = state
+    if state.depth == 0:
+        state.request_id = normalized_request_id
+        state.document = document
+        state.target_path = normalized_target
+        state.violation = ""
+    elif (
+        state.request_id != normalized_request_id
+        or state.document is not document
+        or state.target_path != normalized_target
+    ):
+        state.violation = "nested internal snapshot save scope mismatch"
+    state.depth += 1
+    return not state.violation
+
+
+def is_internal_snapshot_save(document: Any, target_path: Any) -> bool:
+    """Return whether this exact synchronous save callback is internal."""
+
+    state = getattr(_internal_snapshot_save_ctx, "state", None)
+    if state is None or state.depth <= 0 or state.violation:
+        return False
+    try:
+        normalized_target = _normalized_snapshot_target(target_path)
+    except (TypeError, ValueError, OSError):
+        return False
+    return bool(
+        state.document is document
+        and state.target_path == normalized_target
+    )
+
+
+def end_internal_snapshot_save_scope(
+    request_id: str,
+    document: Any,
+    target_path: Any,
+) -> bool:
+    """End an exact internal snapshot marker, failing closed on mismatch."""
+
+    state = getattr(_internal_snapshot_save_ctx, "state", None)
+    if state is None or state.depth <= 0:
+        return False
+    try:
+        normalized_target = _normalized_snapshot_target(target_path)
+    except (TypeError, ValueError, OSError):
+        normalized_target = ""
+    if (
+        state.request_id != str(request_id or "").strip()
+        or state.document is not document
+        or state.target_path != normalized_target
+    ):
+        state.violation = "internal snapshot save scope teardown mismatch"
+    state.depth -= 1
+    valid = not state.violation
+    if state.depth == 0:
+        try:
+            delattr(_internal_snapshot_save_ctx, "state")
+        except AttributeError:
+            pass
+    return valid
+
+
 def set_request_identity(
     *,
     instance_id: str | None = None,
@@ -809,6 +908,8 @@ def reset_registry_for_tests() -> None:
     _runtime_lease_mode = None
     if hasattr(_agent_mutation_ctx, "state"):
         delattr(_agent_mutation_ctx, "state")
+    if hasattr(_internal_snapshot_save_ctx, "state"):
+        delattr(_internal_snapshot_save_ctx, "state")
     clear_request_identity()
 
 
@@ -2226,6 +2327,8 @@ class DocumentLockObserver:
         self._maybe_user_edit(getattr(obj, "Document", None))
 
     def slotStartSaveDocument(self, document, filename):  # noqa: N802
+        if is_internal_snapshot_save(document, filename):
+            return
         if not is_enabled():
             return
         if not filename or not _is_eligible_target(filename):
@@ -2253,6 +2356,8 @@ class DocumentLockObserver:
         _notify_gui()
 
     def slotFinishSaveDocument(self, document, filename):  # noqa: N802
+        if is_internal_snapshot_save(document, filename):
+            return
         if not is_enabled():
             return
         if not filename or not _is_eligible_target(filename):

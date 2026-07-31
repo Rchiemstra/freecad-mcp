@@ -112,6 +112,24 @@ def _default_agent_mutation_checker(key: str) -> bool:
         return False
 
 
+def _is_internal_snapshot_save(document: Any, filename: Any) -> bool:
+    """Recognize only the exact synchronous save callback of worker saveCopy."""
+
+    module = sys.modules.get("document_lock") or sys.modules.get(
+        "addon.FreeCADMCP.document_lock"
+    )
+    if module is None:
+        return False
+    checker = getattr(module, "is_internal_snapshot_save", None)
+    if not callable(checker):
+        return False
+    try:
+        return bool(checker(document, filename))
+    except Exception:
+        logger.debug("internal snapshot save attribution failed", exc_info=True)
+        return False
+
+
 def _default_selected_document_provider() -> Any | None:
     module = sys.modules.get("FreeCAD")
     if module is None:
@@ -792,9 +810,13 @@ class LeaseObserver:
         return self._handle_selected(action)
 
     def slotStartSaveDocument(self, document, filename):  # noqa: N802
+        if _is_internal_snapshot_save(document, filename):
+            return None
         return self._handle(document, "save", detail=str(filename or ""))
 
     def slotFinishSaveDocument(self, document, filename):  # noqa: N802
+        if _is_internal_snapshot_save(document, filename):
+            return None
         record = self._handle(
             document,
             "save",

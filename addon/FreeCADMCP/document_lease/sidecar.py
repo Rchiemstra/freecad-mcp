@@ -64,6 +64,21 @@ class SidecarAtomicityError(SidecarError):
     pass
 
 
+class SidecarCommitUncertainError(SidecarError):
+    """A filesystem mutation published but post-publication checks failed."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        persisted: LeaseRecord | None = None,
+        absent: bool | None = None,
+    ) -> None:
+        self.persisted = persisted
+        self.absent = absent
+        super().__init__(message)
+
+
 class SidecarNetworkPathError(SidecarError):
     pass
 
@@ -959,7 +974,12 @@ def validate_sidecar_payload(value: Any) -> Mapping[str, Any]:
         "client",
         "agent_id",
     }
-    owner = _expect_keys(data["owner"], name="owner", required=owner_fields)
+    owner = _expect_keys(
+        data["owner"],
+        name="owner",
+        required=owner_fields,
+        optional={"mcp_hostname"},
+    )
     _expect_uuid(owner["addon_profile_id"], "owner.addon_profile_id")
     _expect_uuid(owner["addon_runtime_id"], "owner.addon_runtime_id")
     _expect_uuid(owner["mcp_instance_id"], "owner.mcp_instance_id")
@@ -974,6 +994,8 @@ def validate_sidecar_payload(value: Any) -> Mapping[str, Any]:
     _expect_timestamp(
         owner["mcp_process_started_at"], "owner.mcp_process_started_at"
     )
+    if "mcp_hostname" in owner:
+        _expect_string(owner["mcp_hostname"], "owner.mcp_hostname", max_length=512)
 
     lease = _expect_keys(
         data["lease"],
@@ -1118,6 +1140,8 @@ def _assert_regular_not_symlink(
         info = path.lstat()
     except FileNotFoundError:
         raise SidecarNotFoundError(str(path)) from None
+    except OSError as exc:
+        raise SidecarError(f"unable to inspect sidecar {path}: {exc}") from exc
     reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
     file_attributes = int(getattr(info, "st_file_attributes", 0) or 0)
     if stat.S_ISLNK(info.st_mode) or file_attributes & reparse_flag:
@@ -1253,9 +1277,11 @@ class SidecarStore:
             temporary = _write_temp(
                 sidecar, payload, strict_permissions=self.strict_permissions
             )
+            published = False
             try:
                 try:
                     os.link(temporary, sidecar)
+                    published = True
                 except FileExistsError:
                     raise SidecarExistsError(str(sidecar)) from None
                 except OSError as exc:
@@ -1270,6 +1296,32 @@ class SidecarStore:
                     raise
                 _harden_permissions(sidecar, strict=self.strict_permissions)
                 _fsync_directory(sidecar.parent)
+            except Exception as exc:
+                persisted = None
+                if published:
+                    try:
+                        # Inspect while the native no-replace guard is still
+                        # held, exactly as replacement does.
+                        persisted = _read_record(
+                            sidecar,
+                            max_bytes=self.max_bytes,
+                            strict_permissions=self.strict_permissions,
+                        )
+                    except SidecarError:
+                        pass
+                    raise SidecarCommitUncertainError(
+                        "sidecar creation was published but its "
+                        "post-publication checks failed",
+                        persisted=persisted,
+                        absent=False,
+                    ) from exc
+                if isinstance(exc, SidecarError):
+                    raise
+                if isinstance(exc, OSError):
+                    raise SidecarError(
+                        f"unable to create sidecar {sidecar}: {exc}"
+                    ) from exc
+                raise
             finally:
                 try:
                     temporary.unlink()
@@ -1307,15 +1359,40 @@ class SidecarStore:
             temporary = _write_temp(
                 sidecar, payload, strict_permissions=self.strict_permissions
             )
+            published = False
             try:
                 os.replace(temporary, sidecar)
+                published = True
                 _harden_permissions(sidecar, strict=self.strict_permissions)
                 _fsync_directory(sidecar.parent)
-            except Exception:
+            except Exception as exc:
+                persisted = None
+                if published:
+                    try:
+                        # Inspect while the native CAS guard is still held.
+                        persisted = _read_record(
+                            sidecar,
+                            max_bytes=self.max_bytes,
+                            strict_permissions=self.strict_permissions,
+                        )
+                    except SidecarError:
+                        pass
                 try:
                     temporary.unlink()
                 except OSError:
                     pass
+                if published:
+                    raise SidecarCommitUncertainError(
+                        "sidecar replacement was published but its "
+                        "post-publication checks failed",
+                        persisted=persisted,
+                    ) from exc
+                if isinstance(exc, SidecarError):
+                    raise
+                if isinstance(exc, OSError):
+                    raise SidecarError(
+                        f"unable to replace sidecar {sidecar}: {exc}"
+                    ) from exc
                 raise
 
     def delete(
@@ -1333,10 +1410,30 @@ class SidecarStore:
             )
             if not _matches_cas(current, expected):
                 raise SidecarConflictError("sidecar changed before deletion")
+            deleted = False
             try:
                 sidecar.unlink()
+                deleted = True
+                _fsync_directory(sidecar.parent)
             except FileNotFoundError:
                 raise SidecarConflictError("sidecar disappeared before deletion") from None
             except OSError as exc:
+                if deleted:
+                    persisted = None
+                    absent = not os.path.lexists(sidecar)
+                    if not absent:
+                        try:
+                            persisted = _read_record(
+                                sidecar,
+                                max_bytes=self.max_bytes,
+                                strict_permissions=self.strict_permissions,
+                            )
+                        except SidecarError:
+                            pass
+                    raise SidecarCommitUncertainError(
+                        "sidecar deletion was published but its "
+                        "post-publication checks failed",
+                        persisted=persisted,
+                        absent=absent,
+                    ) from exc
                 raise SidecarError(f"unable to delete sidecar {sidecar}: {exc}") from exc
-            _fsync_directory(sidecar.parent)

@@ -9,6 +9,7 @@ from pathlib import Path
 import FreeCADGui
 import pytest
 
+from addon.FreeCADMCP import document_lock
 from addon.FreeCADMCP.document_lease import observer as observer_mod
 
 
@@ -133,6 +134,42 @@ def test_unknown_gui_modified_state_is_fenced_as_dirty(tmp_path, monkeypatch):
     observer.slotChangedObject(types.SimpleNamespace(Document=document), "Placement")
 
     assert service.takeovers[0]["dirty"] is True
+
+
+def test_internal_snapshot_ignores_only_its_exact_save_callbacks(tmp_path):
+    document = FakeDocument("Model", str(tmp_path / "Model.FCStd"), modified=False)
+    observer, service, queued, _delivered = make_observer(document)
+    snapshot = tmp_path / "worker" / "0001_Model.FCStd"
+    request_id = str(uuid.uuid4())
+
+    assert document_lock.begin_internal_snapshot_save_scope(
+        request_id,
+        document,
+        snapshot,
+    )
+    try:
+        assert observer.slotStartSaveDocument(document, str(snapshot)) is None
+        assert observer.slotFinishSaveDocument(document, str(snapshot)) is None
+        assert service.takeovers == []
+        assert service.dirty_updates == []
+        assert service.identity_refreshes == []
+        assert queued == []
+
+        # The narrow save marker grants no general observer attribution.
+        changed = observer.slotChangedObject(
+            types.SimpleNamespace(Document=document),
+            "Placement",
+        )
+        assert changed == {"state": "USER_INTERVENED", "generation": 8}
+        assert len(service.takeovers) == 1
+    finally:
+        assert document_lock.end_internal_snapshot_save_scope(
+            request_id,
+            document,
+            snapshot,
+        )
+
+    assert not document_lock.is_internal_snapshot_save(document, snapshot)
 
 
 @pytest.mark.parametrize("attributed_key", ["Model", "resolved-path"])
@@ -366,6 +403,114 @@ def test_missing_foreign_sidecar_repairs_exact_proxy_identity_error(tmp_path):
     effective = service.get_effective(repaired.session_uuid)
     assert effective["document_state"]["error"]["code"] == ("FOREIGN_SIDECAR_INVALID")
     assert "DOCUMENT_IDENTITY_ERROR" not in str(effective)
+
+
+def test_missing_worker_intervention_sidecar_repairs_dirty_exact_proxy_identity(
+    tmp_path,
+):
+    from addon.FreeCADMCP.document_lease.identity import DocumentIdentityService
+    from addon.FreeCADMCP.document_lease.model import LeaseOwner, LeaseState
+    from addon.FreeCADMCP.document_lease.service import (
+        DocumentLeaseService,
+        LocalRuntimeIdentity,
+        ProcessLivenessEvidence,
+    )
+    from addon.FreeCADMCP.document_lease.sidecar import sidecar_path_for
+
+    model = tmp_path / "HamaAdapter.FCStd"
+    model.write_bytes(b"validated saved Hama adapter")
+    owner = LeaseOwner(
+        addon_profile_id=str(uuid.uuid4()),
+        addon_runtime_id=str(uuid.uuid4()),
+        freecad_pid=101,
+        freecad_process_started_at="2026-07-30T00:00:00Z",
+        boot_id="test-boot",
+        mcp_instance_id=str(uuid.uuid4()),
+        mcp_pid=202,
+        mcp_process_started_at="2026-07-30T00:00:01Z",
+        hostname="localhost",
+        client="Claude",
+        agent_id="claude-agent",
+    )
+    foreign_identities = DocumentIdentityService()
+    foreign_document = foreign_identities.register(name="HamaAdapter", path=model)
+    foreign_service = DocumentLeaseService(foreign_identities)
+    grant = foreign_service.acquire(
+        foreign_document.session_uuid,
+        owner,
+        snapshot_id=str(uuid.uuid4()),
+    )
+    intervened = foreign_service.takeover(
+        foreign_document.session_uuid,
+        dirty=False,
+        reason=(
+            "Unscoped FreeCAD save detected: "
+            r"C:\Temp\freecad_mcp_workers\mcp_worker__legacy"
+            r"\snapshots\0001_HamaAdapter.FCStd"
+        ),
+    )
+    intervened = foreign_service.update_local_dirty(
+        intervened.document.session_uuid,
+        dirty=True,
+    )
+    assert intervened.state == LeaseState.USER_INTERVENED
+    assert intervened.validation_complete is False
+    assert (
+        intervened.last_verified_save_revision
+        == intervened.last_mutation_revision
+    )
+
+    document = FakeDocument("HamaAdapter", str(model), modified=True)
+    identities = DocumentIdentityService()
+    local_document = identities.register_document(document)
+    service = DocumentLeaseService(
+        identities,
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=str(uuid.uuid4()),
+            addon_runtime_id=str(uuid.uuid4()),
+            freecad_pid=303,
+            freecad_process_started_at="2026-07-30T00:05:00Z",
+            boot_id=owner.boot_id,
+            hostname=owner.hostname,
+        ),
+        process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+    )
+    service.import_adjacent_foreign_recovery(
+        local_document.session_uuid,
+        live_document=local_document,
+    )
+    sidecar_path_for(model).unlink()
+    identities._entries[local_document.session_uuid].identity = replace(  # noqa: SLF001
+        local_document,
+        file_identity=None,
+    )
+
+    repaired, imported = observer_mod.register_live_document_recovery(
+        service,
+        document,
+    )
+
+    assert imported is None
+    assert repaired == local_document
+    assert document.Modified is True
+    assert (
+        identities.inspect_registered_document(
+            repaired.session_uuid,
+            document,
+        )
+        == repaired
+    )
+    cached = service._foreign_records[repaired.session_uuid].persisted  # noqa: SLF001
+    assert cached.state == LeaseState.USER_INTERVENED
+    assert cached.dirty is True
+    assert cached.validation_complete is False
+    effective = service.get_effective(repaired.session_uuid)
+    assert effective["lease"]["state"] == LeaseState.LOCKED_ERROR.value
+    assert effective["document_state"]["error"]["code"] == (
+        "FOREIGN_SIDECAR_INVALID"
+    )
+    assert effective["coordination_lost"] is True
+    assert not sidecar_path_for(model).exists()
 
 
 def test_gui_edit_mode_resolves_view_provider_object(tmp_path):

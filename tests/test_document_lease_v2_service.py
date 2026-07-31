@@ -41,10 +41,12 @@ from addon.FreeCADMCP.document_lease.service import (
     LocalRecoveryError,
     LiveDocumentValidationError,
     OrphanedForeignRecoveryRequired,
+    OrphanedLocalMcpRecoveryRequired,
     ProcessLivenessEvidence,
     SavedForeignRecoveryRequired,
 )
 from addon.FreeCADMCP.document_lease.sidecar import (
+    SidecarCommitUncertainError,
     SidecarConflictError,
     SidecarStore,
     sidecar_path_for,
@@ -938,6 +940,766 @@ class TestDocumentLeaseAuthorization:
         assert sidecar.read_text(encoding="utf-8") == "malformed foreign record"
 
 
+def _local_mcp_orphan_setup(tmp_path, *, mcp_hostname=None):
+    model = tmp_path / "local-mcp-orphan.FCStd"
+    model.write_bytes(b"verified saved document")
+    owner = _owner()
+    owner = replace(
+        owner,
+        mcp_hostname=owner.hostname if mcp_hostname is None else mcp_hostname,
+    )
+    identities = DocumentIdentityService()
+    identity = identities.register(name="LocalOrphan", path=model)
+    evidence = {
+        "value": ProcessLivenessEvidence(
+            exists=True,
+            process_started_at=owner.mcp_process_started_at,
+        )
+    }
+
+    def probe(pid):
+        assert pid == owner.mcp_pid
+        return evidence["value"]
+
+    service = DocumentLeaseService(
+        identities,
+        local_runtime_identity=LocalRuntimeIdentity(
+            addon_profile_id=owner.addon_profile_id,
+            addon_runtime_id=owner.addon_runtime_id,
+            freecad_pid=owner.freecad_pid,
+            freecad_process_started_at=owner.freecad_process_started_at,
+            boot_id=owner.boot_id,
+            hostname=owner.hostname,
+        ),
+        process_liveness_probe=probe,
+    )
+    grant = service.acquire(
+        identity.session_uuid,
+        owner,
+        snapshot_id=_uuid(),
+    )
+    replacement_owner = replace(
+        owner,
+        mcp_instance_id=_uuid(),
+        mcp_pid=303,
+        mcp_process_started_at="2026-07-22T00:05:00Z",
+        client="replacement-mcp",
+    )
+    return (
+        model,
+        identities,
+        identity,
+        service,
+        grant,
+        replacement_owner,
+        evidence,
+    )
+
+
+@pytest.mark.unit
+class TestLocalMcpOrphanRecovery:
+    @pytest.mark.parametrize(
+        "starting_state",
+        ["LOCKED_IDLE", "STALE", "USER_INTERVENED"],
+    )
+    def test_dead_mcp_owner_rotates_clean_authority_atomically(
+        self,
+        tmp_path,
+        starting_state,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        if starting_state == "STALE":
+            current = service.mark_stale(identity.session_uuid)
+        elif starting_state == "USER_INTERVENED":
+            current = service.takeover(
+                identity.session_uuid,
+                dirty=True,
+                reason="Misattributed internal worker saveCopy",
+            )
+        else:
+            current = original.record
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+
+        with pytest.raises(OrphanedLocalMcpRecoveryRequired):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        completed = service.recover_orphaned_local_mcp_acquisition(
+            identity.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=identity,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            snapshot_id=_uuid(),
+            task_summary="Continue after MCP exit",
+        )
+
+        assert completed.record.state == LeaseState.LOCKED_IDLE
+        assert completed.record.owner == replacement_owner
+        assert completed.record.generation == current.generation + 1
+        assert completed.record.lease_id != current.lease_id
+        assert completed.record.token_fingerprint != current.token_fingerprint
+        assert completed.record.dirty is False
+        assert completed.record.user_intervened is False
+        with pytest.raises(AuthorizationError):
+            service.authorize(original.credential)
+        persisted = service.sidecar_store.read(sidecar_path_for(model))
+        assert service._authority_equal(completed.record, persisted)
+
+    def test_core_handoff_failure_restores_prior_sidecar_before_publication(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        sidecar = sidecar_path_for(model)
+        proposed = []
+        rollbacks = []
+
+        with pytest.raises(
+            CoordinationError,
+            match="core mutation authority handoff failed",
+        ) as failure:
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                authority_handoff=lambda record: proposed.append(record) or False,
+                authority_rollback=lambda: rollbacks.append(True) or True,
+            )
+
+        assert failure.value.details == {
+            "failure_stage": "core mutation authority handoff failed",
+            "sidecar_restored": True,
+            "core_authority_restored": True,
+            "retain_snapshot": False,
+        }
+        assert len(proposed) == 1
+        assert proposed[0].generation == original.record.generation + 1
+        assert rollbacks == [True]
+        persisted = service.sidecar_store.read(sidecar)
+        assert persisted.lease_id == original.record.lease_id
+        assert persisted.generation == original.record.generation
+        assert persisted.token_fingerprint == original.record.token_fingerprint
+        assert persisted.owner == original.record.owner
+        assert persisted.state == original.record.state
+        assert persisted.record_revision == proposed[0].record_revision + 1
+        assert persisted.state_revision == proposed[0].state_revision + 1
+        restored = service.authorize(original.credential)
+        assert restored.record_revision == persisted.record_revision
+        assert restored.state_revision == persisted.state_revision
+        assert service.get(identity.session_uuid)["owner"]["mcp_instance_id"] == (
+            original.record.owner.mcp_instance_id
+        )
+
+    def test_exact_post_publish_sidecar_read_continues_atomic_handoff(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        real_replace = service.sidecar_store.replace
+        injected = {"done": False}
+
+        def publish_then_report_uncertain(path, record, *, expected):
+            real_replace(path, record, expected=expected)
+            if not injected["done"]:
+                injected["done"] = True
+                raise SidecarCommitUncertainError(
+                    "simulated post-publication check failure",
+                    persisted=service.sidecar_store.read(path),
+                )
+
+        monkeypatch.setattr(
+            service.sidecar_store,
+            "replace",
+            publish_then_report_uncertain,
+        )
+        completed = service.recover_orphaned_local_mcp_acquisition(
+            identity.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=identity,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            snapshot_id=_uuid(),
+            authority_handoff=lambda _record: True,
+            authority_rollback=lambda: True,
+            credential_escrow=lambda _grant: True,
+        )
+
+        assert completed.record.owner == replacement_owner
+        assert completed.record.generation == original.record.generation + 1
+        assert completed.coordination_uncertain is True
+        assert completed.to_dict()["warning_code"] == "SIDECAR_COMMIT_UNCERTAIN"
+        assert service.sidecar_store.read(sidecar_path_for(model)).lease_id == (
+            completed.record.lease_id
+        )
+
+    def test_unreadable_post_publish_sidecar_commit_completes_escrowed_handoff(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+
+        escrowed = []
+
+        def uncertain_replace(path, record, *, expected):
+            assert expected.lease_id == original.record.lease_id
+            service.sidecar_store.__class__.replace(
+                service.sidecar_store,
+                path,
+                record,
+                expected=expected,
+            )
+            raise SidecarCommitUncertainError(
+                "simulated unreadable publication",
+                persisted=None,
+            )
+
+        monkeypatch.setattr(service.sidecar_store, "replace", uncertain_replace)
+        completed = service.recover_orphaned_local_mcp_acquisition(
+            identity.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=identity,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            snapshot_id=_uuid(),
+            authority_handoff=lambda _record: True,
+            authority_rollback=lambda: True,
+            credential_escrow=lambda grant: escrowed.append(grant) or True,
+        )
+
+        assert completed.coordination_uncertain is True
+        assert completed.to_dict()["warning_code"] == "SIDECAR_COMMIT_UNCERTAIN"
+        assert escrowed == [completed]
+        assert service.authorize(completed.credential).lease_id == (
+            completed.record.lease_id
+        )
+        with pytest.raises(AuthorizationError):
+            service.authorize(original.credential)
+
+    def test_incomplete_core_rollback_retains_recovery_snapshot(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            _original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+
+        with pytest.raises(CoordinationError) as failure:
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                authority_handoff=lambda _record: False,
+                authority_rollback=lambda: False,
+            )
+
+        assert failure.value.details["sidecar_restored"] is True
+        assert failure.value.details["core_authority_restored"] is False
+        assert failure.value.details["retain_snapshot"] is True
+
+    def test_sidecar_rollback_os_error_still_rolls_back_core_and_retains_snapshot(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            _original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        real_replace = service.sidecar_store.replace
+        replace_calls = {"count": 0}
+        core_rollbacks = []
+
+        def fail_second_replace(path, record, *, expected):
+            replace_calls["count"] += 1
+            if replace_calls["count"] == 2:
+                raise PermissionError("simulated rollback publication denial")
+            return real_replace(path, record, expected=expected)
+
+        monkeypatch.setattr(service.sidecar_store, "replace", fail_second_replace)
+        with pytest.raises(CoordinationError) as failure:
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                authority_handoff=lambda _record: False,
+                authority_rollback=lambda: core_rollbacks.append(True) or True,
+            )
+
+        assert core_rollbacks == [True]
+        assert failure.value.details["sidecar_restored"] is False
+        assert failure.value.details["core_authority_restored"] is True
+        assert failure.value.details["retain_snapshot"] is True
+        assert (
+            service.sidecar_store.read(sidecar_path_for(model)).owner
+            == replacement_owner
+        )
+
+    def test_uncertain_exact_sidecar_rollback_retains_recovery_snapshot(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            _original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        real_replace = service.sidecar_store.replace
+        replace_calls = {"count": 0}
+
+        def uncertain_second_replace(path, record, *, expected):
+            replace_calls["count"] += 1
+            real_replace(path, record, expected=expected)
+            if replace_calls["count"] == 2:
+                raise SidecarCommitUncertainError(
+                    "simulated rollback directory-sync failure",
+                    persisted=service.sidecar_store.read(path),
+                )
+
+        monkeypatch.setattr(
+            service.sidecar_store,
+            "replace",
+            uncertain_second_replace,
+        )
+        with pytest.raises(CoordinationError) as failure:
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                authority_handoff=lambda _record: False,
+                authority_rollback=lambda: True,
+            )
+
+        assert failure.value.details["sidecar_restored"] is True
+        assert failure.value.details["core_authority_restored"] is True
+        assert failure.value.details["retain_snapshot"] is True
+
+    def test_credential_escrow_failure_rolls_back_completed_core_handoff(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        handoffs = []
+        rollbacks = []
+        escrowed = []
+
+        with pytest.raises(
+            CoordinationError,
+            match="acquisition credential escrow failed",
+        ) as failure:
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=False,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                authority_handoff=lambda record: handoffs.append(record) or True,
+                authority_rollback=lambda: rollbacks.append(True) or True,
+                credential_escrow=lambda grant: escrowed.append(grant) or False,
+            )
+
+        assert failure.value.details["failure_stage"] == (
+            "acquisition credential escrow failed"
+        )
+        assert failure.value.details["sidecar_restored"] is True
+        assert failure.value.details["core_authority_restored"] is True
+        assert len(handoffs) == len(escrowed) == 1
+        assert escrowed[0].record == handoffs[0]
+        assert rollbacks == [True]
+        restored = service.authorize(original.credential)
+        assert restored.lease_id == original.record.lease_id
+        assert restored.generation == original.record.generation
+        persisted = service.sidecar_store.read(sidecar_path_for(model))
+        assert persisted.lease_id == original.record.lease_id
+        assert persisted.generation == original.record.generation
+
+    def test_watchdog_fences_dead_mcp_even_with_fresh_heartbeat(self, tmp_path):
+        (
+            _model,
+            _identities,
+            identity,
+            service,
+            grant,
+            _replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        fresh = service.heartbeat(grant.credential)
+        assert fresh["lease"]["heartbeat_sequence"] == 1
+
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        assert service.mark_expired_stale() == [identity.session_uuid]
+        stale = service.get(identity.session_uuid)
+        assert stale["lease"]["state"] == LeaseState.STALE.value
+        assert stale["document_state"]["error"]["code"] == "LEASE_OWNER_EXITED"
+        with pytest.raises(LeaseStateError):
+            service.heartbeat(grant.credential)
+
+    @pytest.mark.parametrize(
+        "owner_evidence",
+        [
+            ProcessLivenessEvidence(
+                exists=True,
+                process_started_at="2026-07-22T00:00:01Z",
+            ),
+            ProcessLivenessEvidence(exists=None),
+        ],
+        ids=["alive", "unknown"],
+    )
+    def test_live_or_unknown_mcp_owner_remains_exclusive(
+        self,
+        tmp_path,
+        owner_evidence,
+    ):
+        (
+            model,
+            _identities,
+            identity,
+            service,
+            _grant,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = owner_evidence
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(LeaseConflictError):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+        assert service.get(identity.session_uuid)["owner"]["mcp_instance_id"] != (
+            replacement_owner.mcp_instance_id
+        )
+
+    def test_remote_mcp_pid_is_never_probed_as_local_death_evidence(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            _identities,
+            identity,
+            service,
+            _grant,
+            replacement_owner,
+            _evidence,
+        ) = _local_mcp_orphan_setup(
+            tmp_path,
+            mcp_hostname="remote-mcp-host",
+        )
+        service._process_liveness_probe = lambda _pid: pytest.fail(
+            "a remote MCP PID must not be probed on the FreeCAD host"
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        assert service.mark_expired_stale() == []
+        with pytest.raises(LeaseConflictError):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+        assert service.get(identity.session_uuid)["lease"]["state"] == (
+            LeaseState.LOCKED_IDLE.value
+        )
+
+    def test_legacy_intervention_recovers_from_already_revoked_authority(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            original,
+            replacement_owner,
+            _evidence,
+        ) = _local_mcp_orphan_setup(tmp_path, mcp_hostname="")
+        replacement_owner = replace(
+            replacement_owner,
+            mcp_hostname=original.record.owner.hostname,
+        )
+        intervened = service.takeover(
+            identity.session_uuid,
+            dirty=True,
+            reason=(
+                "Unscoped FreeCAD save detected: "
+                "freecad_mcp_workers/request/snapshots/0001_Model.FCStd"
+            ),
+        )
+        service._process_liveness_probe = lambda _pid: pytest.fail(
+            "an already-revoked USER_INTERVENED credential needs no PID probe"
+        )
+
+        with pytest.raises(OrphanedLocalMcpRecoveryRequired):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+        baseline = capture_file_baseline(model, platform=identities.platform)
+        recovered = service.recover_orphaned_local_mcp_acquisition(
+            identity.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=identity,
+                document_modified=False,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            snapshot_id=_uuid(),
+        )
+
+        assert recovered.record.state == LeaseState.LOCKED_IDLE
+        assert recovered.record.generation == intervened.generation + 1
+        assert recovered.record.owner.mcp_hostname == intervened.owner.hostname
+        with pytest.raises(AuthorizationError):
+            service.authorize(original.credential)
+
+    def test_intentional_intervention_with_live_owner_remains_exclusive(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            _identities,
+            identity,
+            service,
+            _original,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        service.takeover(
+            identity.session_uuid,
+            dirty=False,
+            reason="Local user intentionally took over the document",
+        )
+        evidence["value"] = ProcessLivenessEvidence(
+            exists=True,
+            process_started_at="2026-07-22T00:00:01Z",
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(LeaseConflictError):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+
+    def test_reused_mcp_pid_is_proof_that_recorded_owner_exited(self, tmp_path):
+        (
+            _model,
+            _identities,
+            identity,
+            service,
+            _grant,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(
+            exists=True,
+            process_started_at="2026-07-22T00:10:00Z",
+        )
+
+        with pytest.raises(OrphanedLocalMcpRecoveryRequired):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+    def test_earlier_os_start_remains_compatible_with_live_legacy_owner(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            _identities,
+            identity,
+            service,
+            _grant,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(
+            exists=True,
+            process_started_at="2026-07-21T23:55:00Z",
+        )
+        before = sidecar_path_for(model).read_bytes()
+
+        with pytest.raises(LeaseConflictError):
+            service.begin_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+            )
+
+        assert sidecar_path_for(model).read_bytes() == before
+
+    def test_orphan_recovery_refuses_changed_file_or_dirty_live_document(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            identities,
+            identity,
+            service,
+            _grant,
+            replacement_owner,
+            evidence,
+        ) = _local_mcp_orphan_setup(tmp_path)
+        evidence["value"] = ProcessLivenessEvidence(exists=False)
+        original_baseline = capture_file_baseline(model, platform=identities.platform)
+
+        with pytest.raises(DirtyAcquisitionError, match="clean live document"):
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=True,
+                    baseline=original_baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+            )
+
+        model.write_bytes(b"externally changed after owner exit")
+        changed = capture_file_baseline(model, platform=identities.platform)
+        with pytest.raises(LiveDocumentValidationError, match="saved file changed"):
+            service.recover_orphaned_local_mcp_acquisition(
+                identity.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=identity,
+                    document_modified=False,
+                    baseline=changed,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+            )
+        assert service.get(identity.session_uuid)["owner"]["mcp_instance_id"] != (
+            replacement_owner.mcp_instance_id
+        )
+
+
 @pytest.mark.unit
 class TestForeignRecoveryImport:
     def test_clean_missing_sidecar_self_recovers_dead_document_session(
@@ -1015,6 +1777,266 @@ class TestForeignRecoveryImport:
         assert service.get_foreign_recovery(local_document.session_uuid) is None
         persisted = service.sidecar_store.read(sidecar)
         assert service._authority_equal(completed.record, persisted)
+
+    def test_dirty_legacy_worker_intervention_self_recovers_missing_sidecar(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        original = model.read_bytes()
+        intervened = foreign_service.takeover(
+            foreign_grant.credential.document_session_uuid,
+            dirty=False,
+            reason=(
+                "Unscoped FreeCAD save detected: "
+                r"C:\Temp\freecad_mcp_workers\mcp_worker__old"
+                r"\snapshots\0001_Foreign.FCStd"
+            ),
+        )
+        intervened = foreign_service.update_local_dirty(
+            intervened.document.session_uuid,
+            dirty=True,
+        )
+        assert intervened.validation_complete is False
+        assert (
+            intervened.last_verified_save_revision
+            == intervened.last_mutation_revision
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        sidecar.unlink()
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        runtime = service.local_runtime_identity
+        replacement_owner = replace(
+            owner,
+            addon_profile_id=runtime.addon_profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            hostname=runtime.hostname,
+            mcp_instance_id=_uuid(),
+            mcp_pid=303,
+            mcp_process_started_at="2026-07-22T00:05:00Z",
+            client="GPT Sol",
+            agent_id="gpt-sol-agent",
+        )
+
+        with pytest.raises(OrphanedForeignRecoveryRequired):
+            service.begin_dirty_adoption(
+                local_document.session_uuid,
+                replacement_owner,
+                document_dirty=True,
+                local_confirmation=True,
+            )
+        with pytest.raises(
+            DirtyAdoptionError,
+            match="explicit local GUI confirmation",
+        ):
+            service.recover_orphaned_foreign_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=True,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                adopt_dirty=True,
+                local_confirmation=False,
+            )
+        assert not sidecar.exists()
+
+        failed_handoffs = []
+        failed_rollbacks = []
+        with pytest.raises(
+            CoordinationError,
+            match="core mutation authority handoff failed",
+        ) as failure:
+            service.recover_orphaned_foreign_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=True,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                adopt_dirty=True,
+                local_confirmation=True,
+                authority_handoff=(
+                    lambda record: failed_handoffs.append(record) or False
+                ),
+                authority_rollback=(
+                    lambda: failed_rollbacks.append(True) or True
+                ),
+            )
+        assert failure.value.details == {
+            "failure_stage": "core mutation authority handoff failed",
+            "sidecar_restored": True,
+            "core_authority_restored": True,
+            "retain_snapshot": False,
+        }
+        assert len(failed_handoffs) == 1
+        assert failed_rollbacks == [True]
+        assert not sidecar.exists()
+        assert service.get(local_document.session_uuid) is None
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
+
+        snapshot_id = _uuid()
+        handoffs = []
+        escrows = []
+        rollbacks = []
+        real_create = service.sidecar_store.create
+
+        def publish_then_report_uncertain(path, record):
+            real_create(path, record)
+            raise SidecarCommitUncertainError(
+                "simulated post-publication check failure",
+                persisted=service.sidecar_store.read(path),
+                absent=False,
+            )
+
+        monkeypatch.setattr(
+            service.sidecar_store,
+            "create",
+            publish_then_report_uncertain,
+        )
+        completed = service.recover_orphaned_foreign_acquisition(
+            local_document.session_uuid,
+            replacement_owner,
+            validation=LiveDocumentValidation(
+                document=local_document,
+                document_modified=True,
+                baseline=baseline,
+                baseline_validated=True,
+            ),
+            snapshot_id=snapshot_id,
+            task_summary="Continue without closing the dirty document",
+            adopt_dirty=True,
+            local_confirmation=True,
+            authority_handoff=lambda record: handoffs.append(record) or True,
+            authority_rollback=lambda: rollbacks.append(True) or True,
+            credential_escrow=lambda grant: escrows.append(grant) or True,
+        )
+
+        assert completed.record.state == LeaseState.LOCKED_IDLE
+        assert completed.record.dirty is True
+        assert completed.record.user_intervened is False
+        assert completed.record.last_mutation_revision == 1
+        assert completed.record.last_verified_save_revision == 0
+        assert completed.record.validation_complete is True
+        assert completed.record.snapshot_id == snapshot_id
+        assert completed.record.generation == intervened.generation + 2
+        assert completed.record.document == local_document
+        assert completed.record.owner == replacement_owner
+        assert completed.coordination_uncertain is True
+        assert completed.to_dict()["warning_code"] == "SIDECAR_COMMIT_UNCERTAIN"
+        assert service.get_foreign_recovery(local_document.session_uuid) is None
+        assert service._authority_equal(
+            completed.record,
+            service.sidecar_store.read(sidecar),
+        )
+        assert handoffs == [completed.record]
+        assert escrows == [completed]
+        assert rollbacks == []
+        with pytest.raises(AuthorizationError):
+            service.authorize(foreign_grant.credential)
+        assert model.read_bytes() == original
+
+    def test_missing_sidecar_rejects_unrelated_user_intervention(
+        self,
+        tmp_path,
+    ):
+        (
+            model,
+            owner,
+            foreign_grant,
+            foreign_service,
+            local_document,
+            service,
+        ) = _foreign_recovery_setup(
+            tmp_path,
+            process_liveness_probe=lambda _pid: ProcessLivenessEvidence(False),
+        )
+        intervened = foreign_service.takeover(
+            foreign_grant.credential.document_session_uuid,
+            dirty=False,
+            reason="Local user intentionally took over the document",
+        )
+        intervened = foreign_service.update_local_dirty(
+            intervened.document.session_uuid,
+            dirty=True,
+        )
+        service.import_adjacent_foreign_recovery(
+            local_document.session_uuid,
+            live_document=local_document,
+        )
+        sidecar = sidecar_path_for(model)
+        sidecar.unlink()
+        baseline = capture_file_baseline(
+            model,
+            platform=service.identity_service.platform,
+        )
+        runtime = service.local_runtime_identity
+        replacement_owner = replace(
+            owner,
+            addon_profile_id=runtime.addon_profile_id,
+            addon_runtime_id=runtime.addon_runtime_id,
+            freecad_pid=runtime.freecad_pid,
+            freecad_process_started_at=runtime.freecad_process_started_at,
+            boot_id=runtime.boot_id,
+            hostname=runtime.hostname,
+            mcp_instance_id=_uuid(),
+        )
+
+        with pytest.raises(LeaseConflictError, match="foreign recovery"):
+            service.begin_dirty_adoption(
+                local_document.session_uuid,
+                replacement_owner,
+                document_dirty=True,
+                local_confirmation=True,
+            )
+        with pytest.raises(
+            ForeignRecoveryError,
+            match="lacks a verified recoverable saved baseline",
+        ):
+            service.recover_orphaned_foreign_acquisition(
+                local_document.session_uuid,
+                replacement_owner,
+                validation=LiveDocumentValidation(
+                    document=local_document,
+                    document_modified=True,
+                    baseline=baseline,
+                    baseline_validated=True,
+                ),
+                snapshot_id=_uuid(),
+                adopt_dirty=True,
+                local_confirmation=True,
+            )
+
+        assert not sidecar.exists()
+        assert service.get(local_document.session_uuid) is None
+        assert service.get_foreign_recovery(local_document.session_uuid) is not None
 
     def test_saved_clean_document_self_recovers_acknowledged_dirty_sidecar(
         self,

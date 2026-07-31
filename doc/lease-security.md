@@ -18,6 +18,9 @@ and do not make arbitrary code inside FreeCAD trustworthy.
   while the request fingerprint remains authoritative.
 - Raw lease tokens remain in MCP/addon memory. Only SHA-256 fingerprints enter
   sidecars; public status and logs omit both token and fingerprint.
+  Unacknowledged acquisition claims remain pinned until acknowledgement or
+  exact credential use. The vault's configured capacity is soft; it neither
+  evicts nor rejects an unresolved raw credential.
 - Task descriptions remain process-local by default. Sidecars contain an empty
   task summary unless `persist_task_summary_in_sidecar=true` explicitly opts
   into a sanitized, single-line, 256-character diagnostic summary.
@@ -27,7 +30,8 @@ and do not make arbitrary code inside FreeCAD trustworthy.
   Registry/sidecar disagreement blocks instead of selecting the more
   permissive state.
 - Dirty, uncertain, stale, malformed, and save-failed states remain visible and
-  locked until explicitly resolved.
+  fenced until credentialed reconciliation, guarded evidence-based authority
+  rotation, or explicit local recovery.
 
 ## Non-goals and residual risk
 
@@ -41,8 +45,17 @@ and do not make arbitrary code inside FreeCAD trustworthy.
 - Sidecars cannot discover every hardlink alias on every host. Canonical paths
   and filesystem identities reduce this risk.
 - FreeCAD mutation and filesystem metadata cannot form one atomic transaction.
-  Crash handling therefore prefers leftover locks over an unsafe unlocked
-  interval.
+  Guarded orphan handoff CAS-publishes the sidecar, verifies exact core-fence
+  read-back before releasing a credential, and logically restores prior
+  authority on mismatch. A post-publication sidecar error uses an exact guarded
+  read when available; if the read itself fails after a known successful
+  `os.replace` or atomic no-replace `os.link`, core handoff and token escrow
+  complete with an explicit uncertainty warning instead of stranding
+  credentialless authority. Exact rollback deletion likewise records whether
+  absence was observed under the guard. A readable mismatch or
+  incomplete/uncertain rollback preserves the recovery snapshot. Crash
+  handling therefore prefers a recoverable leftover lock over an unsafe
+  unlocked interval.
 
 ## Secret and transport handling
 

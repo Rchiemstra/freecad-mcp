@@ -27,6 +27,7 @@ from addon.FreeCADMCP.document_lease.model import (
 )
 from addon.FreeCADMCP.document_lease.sidecar import (
     MAX_SIDECAR_BYTES,
+    SidecarCommitUncertainError,
     SidecarConflictError,
     SidecarExistsError,
     SidecarMalformedError,
@@ -56,6 +57,7 @@ def _owner() -> LeaseOwner:
         mcp_pid=200,
         mcp_process_started_at="2026-07-22T00:00:01Z",
         hostname="host",
+        mcp_hostname="host",
         client="pytest",
         agent_id="agent",
     )
@@ -232,6 +234,14 @@ class TestSidecarSchema:
 
         assert parsed.migration is None
 
+    def test_parser_keeps_pre_mcp_hostname_records_fail_closed(self, tmp_path):
+        payload = _record(tmp_path / "model.FCStd").to_sidecar_dict()
+        payload["owner"].pop("mcp_hostname")
+
+        parsed = parse_sidecar_bytes(json.dumps(payload).encode())
+
+        assert parsed.owner.mcp_hostname == ""
+
     def test_parser_rejects_oversized_json_before_decoding(self):
         with pytest.raises(SidecarTooLargeError):
             parse_sidecar_bytes(b"{" + b"x" * MAX_SIDECAR_BYTES)
@@ -339,6 +349,151 @@ class TestSidecarStore:
         skipped = replace(current, record_revision=current.record_revision + 2)
         with pytest.raises(SidecarConflictError):
             store.replace(path, skipped, expected=current)
+
+    def test_replace_reports_exact_record_after_post_publish_failure(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        store = SidecarStore()
+        path = tmp_path / "model.FCStd.freecad-mcp.lock"
+        current = _record(tmp_path / "model.FCStd")
+        successor = current.revised(current_operation="Recover orphan")
+        store.create(path, current)
+
+        def fail_directory_sync(_directory):
+            raise OSError("simulated post-publication fsync failure")
+
+        monkeypatch.setattr(sidecar_mod, "_fsync_directory", fail_directory_sync)
+        with pytest.raises(SidecarCommitUncertainError) as failure:
+            store.replace(path, successor, expected=current)
+
+        assert failure.value.persisted == successor
+        assert store.read(path) == successor
+
+    def test_create_reports_exact_record_after_post_publish_failure(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        store = SidecarStore()
+        path = tmp_path / "created.FCStd.freecad-mcp.lock"
+        record = _record(tmp_path / "created.FCStd")
+
+        def fail_directory_sync(_directory):
+            raise OSError("simulated post-publication fsync failure")
+
+        monkeypatch.setattr(sidecar_mod, "_fsync_directory", fail_directory_sync)
+        with pytest.raises(SidecarCommitUncertainError) as failure:
+            store.create(path, record)
+
+        assert failure.value.persisted == record
+        assert failure.value.absent is False
+        assert store.read(path) == record
+
+    def test_create_wraps_unreadable_postpublication_record(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        store = SidecarStore()
+        path = tmp_path / "unreadable-created.FCStd.freecad-mcp.lock"
+        record = _record(tmp_path / "unreadable-created.FCStd")
+        real_read = sidecar_mod._read_record
+
+        def fail_postpublication_read(*_args, **_kwargs):
+            raise sidecar_mod.SidecarError(
+                "simulated unreadable published sidecar"
+            )
+
+        def fail_directory_sync(_directory):
+            raise OSError("simulated post-publication fsync failure")
+
+        monkeypatch.setattr(sidecar_mod, "_read_record", fail_postpublication_read)
+        monkeypatch.setattr(sidecar_mod, "_fsync_directory", fail_directory_sync)
+        with pytest.raises(SidecarCommitUncertainError) as failure:
+            store.create(path, record)
+
+        assert failure.value.persisted is None
+        assert failure.value.absent is False
+        assert real_read(
+            path,
+            max_bytes=store.max_bytes,
+            strict_permissions=store.strict_permissions,
+        ) == record
+
+    def test_delete_reports_absence_after_post_publish_failure(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        store = SidecarStore()
+        path = tmp_path / "deleted.FCStd.freecad-mcp.lock"
+        record = _record(tmp_path / "deleted.FCStd")
+        store.create(path, record)
+
+        def fail_directory_sync(_directory):
+            raise OSError("simulated deletion fsync failure")
+
+        monkeypatch.setattr(sidecar_mod, "_fsync_directory", fail_directory_sync)
+        with pytest.raises(SidecarCommitUncertainError) as failure:
+            store.delete(path, expected=record)
+
+        assert failure.value.persisted is None
+        assert failure.value.absent is True
+        assert not path.exists()
+
+    def test_replace_wraps_unreadable_postpublication_record(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        store = SidecarStore()
+        path = tmp_path / "model.FCStd.freecad-mcp.lock"
+        current = _record(tmp_path / "model.FCStd")
+        successor = current.revised(current_operation="Recover orphan")
+        store.create(path, current)
+        real_read = sidecar_mod._read_record
+        reads = {"count": 0}
+
+        def fail_postpublication_read(*args, **kwargs):
+            reads["count"] += 1
+            if reads["count"] == 2:
+                raise sidecar_mod.SidecarError(
+                    "simulated unreadable published sidecar"
+                )
+            return real_read(*args, **kwargs)
+
+        def fail_directory_sync(_directory):
+            raise OSError("simulated post-publication fsync failure")
+
+        monkeypatch.setattr(sidecar_mod, "_read_record", fail_postpublication_read)
+        monkeypatch.setattr(sidecar_mod, "_fsync_directory", fail_directory_sync)
+        with pytest.raises(SidecarCommitUncertainError) as failure:
+            store.replace(path, successor, expected=current)
+
+        assert failure.value.persisted is None
+        assert real_read(
+            path,
+            max_bytes=store.max_bytes,
+            strict_permissions=store.strict_permissions,
+        ) == successor
+
+    def test_replace_wraps_prepublication_os_error(self, tmp_path, monkeypatch):
+        store = SidecarStore()
+        path = tmp_path / "model.FCStd.freecad-mcp.lock"
+        current = _record(tmp_path / "model.FCStd")
+        successor = current.revised(current_operation="Recover orphan")
+        store.create(path, current)
+
+        def deny_replace(_source, _destination):
+            raise PermissionError("simulated publication denial")
+
+        monkeypatch.setattr(sidecar_mod.os, "replace", deny_replace)
+        with pytest.raises(sidecar_mod.SidecarError, match="unable to replace"):
+            store.replace(path, successor, expected=current)
+
+        assert store.read(path) == current
 
     def test_existing_malformed_record_is_never_deleted_or_overwritten(self, tmp_path):
         store = SidecarStore()

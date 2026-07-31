@@ -47,6 +47,36 @@ Starting an MCP agent implies write intent, so dirty adoption never opens a
 FreeCAD confirmation dialog. A live dirty ``LOCKED_ERROR`` handoff is
 auto-authorized, then revalidated and CAS-rotated asynchronously.
 
+## Cached foreign record after sidecar loss
+
+Older builds could misattribute their own worker `saveCopy` as a user save.
+When that exact verified `USER_INTERVENED` record was imported before its
+sidecar disappeared, closing the document is no longer required:
+
+```mermaid
+sequenceDiagram
+    participant Client as Replacement MCP
+    participant RPC as FreeCAD MCP
+    participant GUI as Live FreeCAD document
+    participant Lease as Lease service
+    participant Disk as FCStd + sidecar
+
+    Client->>RPC: adopt_dirty_document
+    RPC->>Disk: hash saved FCStd off-GUI
+    RPC->>GUI: verify exact proxy + preserve Modified=true
+    RPC->>GUI: create recovery saveCopy
+    Lease->>Lease: prove foreign FreeCAD authority inactive
+    Lease->>Disk: atomic no-replace create, generation+1
+    Lease->>GUI: install and read back exact core fence
+    Lease->>Lease: escrow raw credential
+    Lease-->>Client: dirty LOCKED_IDLE credential
+```
+
+`acquire_document_lock` still returns `DIRTY_REQUIRES_LOCAL_ADOPTION` for this
+case; it never silently treats revision equality as proof that the live
+document is clean. A wrong intervention signature, changed baseline,
+live/unknown foreign owner, identity drift, or reappearing sidecar fails closed.
+
 ## GUI save while acquisition response is unavailable
 
 This is the path that previously produced the three-way deadlock:
@@ -217,7 +247,11 @@ sequenceDiagram
 | Any | Promoted lease is closed/reopened | Exact same saved file | Acquire | Proxy rebind succeeds; recovery block remains | `test_close_reopen_rebinds_promoted_lease_but_keeps_recovery_block` |
 | Any | Recovery document is closed/reopened | File identity changed while closed | Open/acquire | Rebind refused; authority retained | `test_close_reopen_refuses_changed_file_identity` |
 | Any | Foreign recovery document is closed/reopened | Exact same saved file | Open/acquire | Foreign authority retained and rebound | `test_close_reopen_preserves_foreign_recovery_then_dead_owner_retry` |
-| Any | Promoted `STALE` or `USER_INTERVENED` lease | Any | Acquire/adopt | Refused; explicit recovery required | promoted stale/intervened refusal tests |
+| Clean | Fully save-verified local `LOCKED_IDLE` or eligible `STALE` | Same live addon/FreeCAD runtime; recorded MCP positively co-located and proven dead | Acquire | Core-authorized recovery snapshot, fresh live/file validation, higher-generation sidecar CAS plus verified core-fence read-back, and a new credential; mismatch returns no credential and restores the proven-inactive prior authority | `TestLocalMcpOrphanRecovery` / `test_clean_acquisition_self_heals_dead_mcp_owner_in_same_addon` |
+| Clean | Fully save-verified `USER_INTERVENED` | Pre-fix worker-snapshot signature with already-revoked credential, or co-located dead-MCP proof | Acquire | Guarded snapshot/validation and verified new sidecar/core authority; intentional takeover with a live owner stays blocked | `test_legacy_intervention_recovers_from_already_revoked_authority` / `test_clean_acquisition_repairs_legacy_worker_save_intervention` / `test_legacy_recovery_rolls_back_sidecar_and_user_core_on_sync_mismatch` / `test_intentional_intervention_with_live_owner_remains_exclusive` |
+| Clean | Same-runtime orphan recovery at cancellation/timeout boundary | Cancel before handoff, or GUI response lost after handoff | Acquire/cancel/claim | Pre-boundary cancel preserves prior authority; post-boundary cancel is rejected and the already escrowed credential remains privately claimable | `test_local_orphan_cancel_before_irreversible_handoff_preserves_old_authority` / `test_local_orphan_cancel_after_irreversible_boundary_cannot_hide_credential` / `test_local_orphan_timeout_after_handoff_keeps_claimable_credential` |
+| Any | `STALE` or `USER_INTERVENED` lacking exact clean-baseline and inactive-authority proof | Any | Acquire/adopt | Refused; explicit recovery required | local-MCP-orphan negative tests |
+| Any | Read-only worker snapshot | Exact request/document/snapshot target | Internal `saveCopy` | Only matching save start/finish callbacks are attributed; unrelated callbacks remain fenced and only a core `SaveAs` capability is opened | `test_nonowner_snapshot_marks_only_the_exact_internal_save` / `test_internal_snapshot_ignores_only_its_exact_save_callbacks` |
 | Any | Active lease from another MCP instance | Any | Acquire | `LEASE_CONFLICT` | `test_clients_share_one_cas_fenced_acquisition_authority` |
 | Any | Claude, GPT Sol, and Cursor acquire simultaneously | Same FreeCAD process | Acquire | Exactly one winner and two conflicts | `test_simultaneous_claude_gpt_sol_cursor_race_has_one_winner` |
 | Any | Old credential after takeover/retry | Any | Authorize/mutate | Rejected by lease ID/generation/token fencing | authorization and multi-client tests |

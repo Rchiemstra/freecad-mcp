@@ -65,6 +65,8 @@ class _FakeDoc:
 def test_core_authority_available_detects_api():
     assert core_authority.core_authority_available(_FakeDoc()) is True
     assert core_authority.core_authority_available(SimpleNamespace()) is False
+    assert core_authority.core_owner_api_available(_FakeDoc()) is True
+    assert core_authority.core_owner_api_available(SimpleNamespace()) is False
 
 
 def test_set_and_clear_owner_soft_compat():
@@ -114,7 +116,10 @@ def test_kinds_for_rpc_method():
     assert "StructuralProperty" in core_authority.LIVE_MUTATION_KINDS
 
 
-def test_sync_gui_lease_takeover_without_service_returns_true():
+def test_sync_gui_lease_takeover_without_service_returns_true(monkeypatch):
+    from addon.FreeCADMCP.document_lease import observer
+
+    monkeypatch.setattr(observer, "_default_service_provider", lambda: None)
     doc = _FakeDoc()
     # No FreeCADMCP runtime service in unit tests → soft success.
     assert core_authority.sync_gui_lease_takeover(doc) is True
@@ -138,6 +143,54 @@ def test_sync_owner_from_lease_record_and_takeover():
     )
     assert core_authority.sync_owner_from_lease_record(doc, intervened)
     assert doc.takeovers == 1
+
+
+def test_verified_mcp_owner_sync_is_strict_when_core_api_is_present():
+    doc = _FakeDoc()
+    record = SimpleNamespace(
+        generation=11,
+        owner=SimpleNamespace(mcp_instance_id="inst-9", agent_id=""),
+    )
+
+    assert core_authority.sync_mcp_owner_verified(doc, record) is True
+
+    doc.mutationAuthorityStatus = lambda: {
+        **doc._status,
+        "provider_id": "unexpected-provider",
+    }
+    assert core_authority.sync_mcp_owner_verified(doc, record) is False
+
+
+def test_verified_mcp_owner_sync_is_soft_compatible_only_without_core_api():
+    stock = SimpleNamespace(Name="Stock", Objects=[])
+    record = SimpleNamespace(
+        generation=4,
+        owner=SimpleNamespace(mcp_instance_id="inst-4", agent_id=""),
+    )
+
+    assert core_authority.sync_mcp_owner_verified(stock, record) is True
+
+    partial = SimpleNamespace(
+        Name="Partial",
+        Objects=[],
+        setMutationOwner=lambda *_args: None,
+    )
+    assert core_authority.sync_mcp_owner_verified(partial, record) is False
+
+
+def test_restore_authority_status_preserves_user_owner_generation_and_provider():
+    doc = _FakeDoc()
+    doc.setMutationOwner("user", 12, "local-user")
+    previous = doc.mutationAuthorityStatus()
+    doc.setMutationOwner("mcp", 13, "replacement")
+
+    assert core_authority.restore_authority_status(doc, previous) is True
+    assert doc.mutationAuthorityStatus() == {
+        "owner": "user",
+        "generation": 12,
+        "provider_id": "local-user",
+        "restricted": False,
+    }
 
 
 def test_open_documents_mutation_capability_multi_doc():

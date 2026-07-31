@@ -60,7 +60,11 @@ def recovery_snapshot_path(snapshot_id: str) -> Path:
     return _recovery_root() / f"{normalized}.FCStd"
 
 
-def create_lease_baseline_snapshot_gui(document) -> str:
+def create_lease_baseline_snapshot_gui(
+    document,
+    *,
+    observer_request_id: str = "",
+) -> str:
     """Persist an owner-only recovery saveCopy and return only its opaque ID."""
     snapshot_id = str(uuid.uuid4())
     target = recovery_snapshot_path(snapshot_id)
@@ -74,7 +78,12 @@ def create_lease_baseline_snapshot_gui(document) -> str:
     if os.path.lexists(temporary):
         raise RuntimeError("recovery snapshot temporary path already exists")
     try:
-        document.saveCopy(str(temporary))
+        with _internal_snapshot_save_observer_scope(
+            document,
+            temporary,
+            observer_request_id,
+        ):
+            document.saveCopy(str(temporary))
         _harden_permissions(temporary, strict=True)
         with temporary.open("r+b") as handle:
             handle.flush()
@@ -476,6 +485,43 @@ def _snapshot_save_context(
             )
 
 
+@contextmanager
+def _internal_snapshot_save_observer_scope(
+    document: Any,
+    target_path: Path,
+    request_id: str,
+):
+    """Attribute only exact save callbacks from this trusted ``saveCopy``."""
+
+    if not request_id:
+        yield
+        return
+    try:
+        from addon.FreeCADMCP import document_lock
+    except ImportError:
+        import document_lock
+    entered = document_lock.begin_internal_snapshot_save_scope(
+        request_id,
+        document,
+        target_path,
+    )
+    if not entered:
+        document_lock.end_internal_snapshot_save_scope(
+            request_id,
+            document,
+            target_path,
+        )
+        raise RuntimeError("internal snapshot save attribution was rejected")
+    try:
+        yield
+    finally:
+        document_lock.end_internal_snapshot_save_scope(
+            request_id,
+            document,
+            target_path,
+        )
+
+
 def create_snapshot_bundle_gui(
     document_name: str | None,
     workspace: str,
@@ -583,7 +629,12 @@ def create_snapshot_bundle_gui(
             for index, item in enumerate(documents, 1):
                 canonical = snapshots / f"{index:04d}_{item.Name}.FCStd"
                 load_path = load / f"{item.Name}.FCStd"
-                item.saveCopy(str(canonical))
+                with _internal_snapshot_save_observer_scope(
+                    item,
+                    canonical,
+                    mutation_request_id,
+                ):
+                    item.saveCopy(str(canonical))
                 entries.append({
                     **states_before[item.Name],
                     "snapshot_filename": canonical.name,

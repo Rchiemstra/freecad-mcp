@@ -51,12 +51,14 @@ from .service import (  # noqa: F401 - public package re-exports
     LeaseStateError,
     LiveDocumentValidationError,
     OrphanedForeignRecoveryRequired,
+    OrphanedLocalMcpRecoveryRequired,
     ProcessLivenessEvidence,
     SavedForeignRecoveryRequired,
 )
 from .sidecar import (  # noqa: F401 - public package re-exports
     MAX_SIDECAR_BYTES,
     SidecarAtomicityError,
+    SidecarCommitUncertainError,
     SidecarConflictError,
     SidecarError,
     SidecarExistsError,
