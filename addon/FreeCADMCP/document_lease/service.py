@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 import threading
@@ -23,6 +24,7 @@ from .model import (
     DocumentIdentity,
     DocumentSelector,
     FileBaseline,
+    FileIdentity,
     LeaseCredential,
     LeaseErrorInfo,
     LiveDocumentValidation,
@@ -196,6 +198,60 @@ class ForeignRecoveryRecord:
 
 
 @dataclass(frozen=True)
+class DocumentIdentityRefreshEvent:
+    """Token-free audit record for an automatic same-path identity refresh."""
+
+    at: str
+    trigger: str
+    document_session_uuid: str
+    document_name: str
+    canonical_path: str | None
+    lease_state: str
+    lease_id: str
+    generation: int
+    previous_file_identity: dict[str, Any] | None
+    refreshed_file_identity: dict[str, Any] | None
+    baseline_sha256: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "at": self.at,
+            "trigger": self.trigger,
+            "document_session_uuid": self.document_session_uuid,
+            "document_name": self.document_name,
+            "canonical_path": self.canonical_path,
+            "lease_state": self.lease_state,
+            "lease_id": self.lease_id,
+            "generation": self.generation,
+            "previous_file_identity": self.previous_file_identity,
+            "refreshed_file_identity": self.refreshed_file_identity,
+            "baseline_sha256": self.baseline_sha256,
+        }
+
+
+_IDENTITY_REFRESHABLE_STATES = frozenset(
+    {
+        LeaseState.ACQUIRING,
+        LeaseState.LOCKED_IDLE,
+        LeaseState.LOCKED_EDITING,
+        LeaseState.LOCKED_RECOMPUTING,
+        LeaseState.LOCKED_SAVING,
+        LeaseState.LOCKED_ERROR,
+        LeaseState.STALE,
+        LeaseState.USER_INTERVENED,
+        LeaseState.UNLOCKED_DIRTY,
+    }
+)
+
+_RECOVERY_IDENTITY_REFRESHABLE_STATES = frozenset(
+    {
+        LeaseState.USER_INTERVENED,
+        LeaseState.UNLOCKED_DIRTY,
+    }
+)
+
+
+@dataclass(frozen=True)
 class _CancellationContext:
     request_id: str
     previous_state: LeaseState
@@ -286,7 +342,14 @@ class DocumentLeaseService:
         self._acquiring_request_ids: dict[str, str] = {}
         self._local_runtime_identity = local_runtime_identity
         self._process_liveness_probe = process_liveness_probe
+        self._identity_refresh_events: list[DocumentIdentityRefreshEvent] = []
         self._lock = threading.RLock()
+
+    def list_identity_refresh_events(self) -> list[dict[str, Any]]:
+        """Return token-free records of every automatic identity refresh."""
+
+        with self._lock:
+            return [event.to_dict() for event in self._identity_refresh_events]
 
     @property
     def local_runtime_identity(self) -> LocalRuntimeIdentity | None:
@@ -843,6 +906,248 @@ class DocumentLeaseService:
             raise error_type(
                 "the saved document changed during orphan recovery: "
                 + "; ".join(failures)
+            )
+
+    def _assert_on_disk_matches_accepted_baseline(
+        self,
+        path: str,
+        baseline: FileBaseline,
+        *,
+        error_type: type[LeaseServiceError] = CoordinationError,
+        allow_file_identity_change: bool = False,
+        chunk_size: int = 1024 * 1024,
+    ) -> None:
+        """Require the saved file to still match the lease's accepted baseline."""
+
+        if not os.path.isfile(path):
+            raise error_type(
+                "the saved document path is missing or is not a regular file"
+            )
+        try:
+            info = os.stat(path)
+            current_identity = file_identity_for_path(
+                path, platform=self.identity_service.platform
+            )
+        except (DocumentIdentityError, OSError) as exc:
+            raise error_type(
+                f"the saved document identity cannot be revalidated: {exc}"
+            ) from exc
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            while chunk := handle.read(chunk_size):
+                digest.update(chunk)
+        sha256 = digest.hexdigest()
+        failures: list[str] = []
+        if int(info.st_size) != baseline.size:
+            failures.append("size changed")
+        # Atomic replace-over-save rewrites the file at the same path and
+        # changes mtime while size and SHA-256 stay identical.  Content
+        # continuity for baseline-preserving identity repair is proven by
+        # size + SHA-256, not exact mtime_ns equality.
+        if not allow_file_identity_change and int(info.st_mtime_ns) != baseline.mtime_ns:
+            failures.append("modification time changed")
+        if sha256 != baseline.sha256:
+            failures.append("content hash changed")
+        if not allow_file_identity_change and baseline.file_identity is not None:
+            if current_identity != baseline.file_identity:
+                failures.append("file identity changed")
+        if failures:
+            raise error_type(
+                "the saved document no longer matches the accepted baseline: "
+                + "; ".join(failures)
+            )
+
+    def _record_identity_refresh_event(
+        self,
+        record: LeaseRecord,
+        *,
+        trigger: str,
+        previous_file_identity: FileIdentity | None,
+        refreshed_file_identity: FileIdentity | None,
+    ) -> None:
+        baseline = record.baseline
+        baseline_sha256 = baseline.sha256 if isinstance(baseline, FileBaseline) else ""
+        self._identity_refresh_events.append(
+            DocumentIdentityRefreshEvent(
+                at=self._utc_clock(),
+                trigger=_bounded_text(trigger, 128),
+                document_session_uuid=record.document.session_uuid,
+                document_name=record.document.name,
+                canonical_path=record.document.canonical_path,
+                lease_state=record.state.value,
+                lease_id=record.lease_id,
+                generation=record.generation,
+                previous_file_identity=(
+                    previous_file_identity.to_dict()
+                    if previous_file_identity is not None
+                    else None
+                ),
+                refreshed_file_identity=(
+                    refreshed_file_identity.to_dict()
+                    if refreshed_file_identity is not None
+                    else None
+                ),
+                baseline_sha256=baseline_sha256,
+            )
+        )
+
+    def _refresh_exact_proxy_file_identity(
+        self,
+        session_uuid: str,
+        document: Any,
+        record: LeaseRecord,
+        *,
+        trigger: str,
+    ) -> LeaseRecord:
+        """Refresh file identity metadata without revalidating file content."""
+
+        if record.state not in _RECOVERY_IDENTITY_REFRESHABLE_STATES:
+            raise LeaseStateError(
+                "saved-file identity can refresh only after takeover",
+                details={"state": record.state.value},
+            )
+        self._assert_sidecar_matches(record)
+        observed = self.identity_service.inspect_registered_document(
+            session_uuid, document
+        )
+        expected = record.document
+        if observed.name != expected.name or observed.comparison_key != expected.comparison_key:
+            raise CoordinationError(
+                "GUI save changed the document name or canonical path"
+            )
+        if observed.file_identity == expected.file_identity:
+            return record
+        refreshed = self.identity_service.refresh_saved_document(document)
+        if refreshed.session_uuid != session_uuid:
+            raise CoordinationError(
+                "saved document identity changed its live session"
+            )
+        if refreshed == record.document:
+            return record
+        updated = record.revised(document=refreshed)
+        committed = self._commit(record, updated)
+        self._record_identity_refresh_event(
+            committed,
+            trigger=trigger,
+            previous_file_identity=expected.file_identity,
+            refreshed_file_identity=refreshed.file_identity,
+        )
+        return committed
+
+    def _apply_baseline_preserving_identity_refresh(
+        self,
+        session_uuid: str,
+        document: Any,
+        record: LeaseRecord,
+        *,
+        trigger: str,
+    ) -> LeaseRecord:
+        """Refresh registry and lease metadata after a baseline-preserving save."""
+
+        if record.state not in _IDENTITY_REFRESHABLE_STATES:
+            raise LeaseStateError(
+                "saved-file identity cannot refresh in the current lease state",
+                details={"state": record.state.value},
+            )
+        self._assert_sidecar_matches(record)
+        baseline = record.baseline
+        if not isinstance(baseline, FileBaseline):
+            raise CoordinationError("accepted saved-file baseline is missing")
+        observed = self.identity_service.inspect_registered_document(
+            session_uuid, document
+        )
+        expected = record.document
+        if observed.name != expected.name or observed.comparison_key != expected.comparison_key:
+            raise CoordinationError(
+                "GUI save changed the document name or canonical path"
+            )
+        path = observed.canonical_path
+        if not path:
+            raise CoordinationError(
+                "an unsaved document has no saved-file identity to refresh"
+            )
+        if observed.file_identity == expected.file_identity:
+            return record
+        self._assert_on_disk_matches_accepted_baseline(
+            path,
+            baseline,
+            allow_file_identity_change=True,
+        )
+        refreshed = self.identity_service.refresh_saved_document(document)
+        if refreshed.session_uuid != session_uuid:
+            raise CoordinationError(
+                "saved document identity changed its live session"
+            )
+        if (
+            refreshed.name != observed.name
+            or refreshed.comparison_key != observed.comparison_key
+            or refreshed.file_identity != observed.file_identity
+        ):
+            raise CoordinationError(
+                "saved document identity refresh changed the live document binding"
+            )
+        if refreshed == record.document:
+            return record
+        post_rewrite_mtime_ns = int(os.stat(path).st_mtime_ns)
+        refreshed_baseline = replace(
+            baseline,
+            file_identity=refreshed.file_identity,
+            mtime_ns=post_rewrite_mtime_ns,
+        )
+        updated = record.revised(document=refreshed, baseline=refreshed_baseline)
+        committed = self._commit(record, updated)
+        self._record_identity_refresh_event(
+            committed,
+            trigger=trigger,
+            previous_file_identity=expected.file_identity,
+            refreshed_file_identity=refreshed.file_identity,
+        )
+        return committed
+
+    def try_baseline_preserving_document_identity_refresh(
+        self,
+        selector: DocumentSelector | Mapping[str, Any] | str,
+        *,
+        document: Any,
+        trigger: str = "gui_save_finish",
+    ) -> LeaseRecord | None:
+        """Repair a leased document in place when only file identity changed."""
+
+        identity = self.identity_service.resolve(selector)
+        with self._lock:
+            record = self._records.get(identity.session_uuid)
+            if record is None:
+                return None
+            try:
+                return self._apply_baseline_preserving_identity_refresh(
+                    identity.session_uuid,
+                    document,
+                    record,
+                    trigger=trigger,
+                )
+            except LeaseServiceError:
+                return None
+
+    def repair_registered_document_identity(
+        self, *, document: Any
+    ) -> DocumentIdentity:
+        """Repair exact-proxy identity drift for a registered leased document."""
+
+        session_uuid = self.identity_service.registered_session_uuid(document)
+        with self._lock:
+            record = self._records.get(session_uuid)
+            if record is None:
+                raise LeaseConflictError(
+                    "the registered document has no local lease record"
+                )
+            self._apply_baseline_preserving_identity_refresh(
+                session_uuid,
+                document,
+                record,
+                trigger="registration_recovery",
+            )
+            return self.identity_service.inspect_registered_document(
+                session_uuid, document
             )
 
     def _validate_live_evidence(
@@ -3846,11 +4151,11 @@ class DocumentLeaseService:
         *,
         document: Any,
     ) -> LeaseRecord:
-        """Refresh a GUI-saved file identity for an already-fenced document.
+        """Refresh a GUI-saved file identity after takeover or intervention.
 
-        A normal FreeCAD save may atomically replace the archive at the same
-        path. This token-less repair is intentionally restricted to local
-        recovery states and the exact registered live proxy.
+        After user intervention the saved file content may differ from the
+        lease baseline. This path updates only exact-proxy file-identity
+        metadata and deliberately skips baseline revalidation.
         """
 
         identity = self.identity_service.resolve(selector)
@@ -3858,24 +4163,17 @@ class DocumentLeaseService:
             record = self._records.get(identity.session_uuid)
             if record is None:
                 raise LeaseConflictError("the selected document has no recovery record")
-            if record.state not in {
-                LeaseState.USER_INTERVENED,
-                LeaseState.UNLOCKED_DIRTY,
-            }:
+            if record.state not in _RECOVERY_IDENTITY_REFRESHABLE_STATES:
                 raise LeaseStateError(
                     "saved-file identity can refresh only after takeover",
                     details={"state": record.state.value},
                 )
-            self._assert_sidecar_matches(record)
-            refreshed = self.identity_service.refresh_saved_document(document)
-            if refreshed.session_uuid != identity.session_uuid:
-                raise CoordinationError(
-                    "saved document identity changed its live session"
-                )
-            if refreshed == record.document:
-                return record
-            updated = record.revised(document=refreshed)
-            return self._commit(record, updated)
+            return self._refresh_exact_proxy_file_identity(
+                identity.session_uuid,
+                document,
+                record,
+                trigger="local_recovery_refresh",
+            )
 
     def handle_document_closed(
         self,

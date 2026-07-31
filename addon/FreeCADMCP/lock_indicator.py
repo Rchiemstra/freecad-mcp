@@ -8,6 +8,7 @@ hides the permanent status-bar indicator.
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import threading
 import time
@@ -277,6 +278,7 @@ def _lease_view(lease: Mapping[str, Any]) -> dict[str, Any]:
         "instance_id": owner.get("mcp_instance_id") or safe.get("instance_id") or "",
         "pid": owner.get("mcp_pid") or safe.get("pid"),
         "host": owner.get("hostname") or safe.get("host") or "",
+        "mcp_hostname": str(owner.get("mcp_hostname") or ""),
         "current_operation": (
             lease_meta.get("current_operation") or safe.get("current_operation") or ""
         ),
@@ -294,6 +296,161 @@ def _lease_view(lease: Mapping[str, Any]) -> dict[str, Any]:
         "snapshot_id": str(snapshot_id or ""),
         "error": error if isinstance(error, Mapping) else None,
     }
+
+
+def _lease_error_code(view: Mapping[str, Any]) -> str:
+    error = view.get("error")
+    if isinstance(error, Mapping):
+        return str(error.get("code") or "").upper()
+    return ""
+
+
+def _local_hostname() -> str:
+    try:
+        return socket.gethostname()
+    except OSError:
+        return ""
+
+
+def _credential_owning_mcp_process_alive(view: Mapping[str, Any]) -> bool:
+    """Return True when public owner fields show a co-located MCP process is alive."""
+
+    pid = view.get("pid")
+    try:
+        pid_value = int(pid)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    if pid_value <= 0:
+        return False
+    local_host = _local_hostname().casefold()
+    if not local_host:
+        return False
+    owner_host = str(view.get("mcp_hostname") or "").casefold()
+    if not owner_host or owner_host != local_host:
+        return False
+    try:
+        from document_lock import pid_alive
+    except ImportError:
+        from addon.FreeCADMCP.document_lock import pid_alive
+    return pid_alive(pid_value)
+
+
+def _is_eligible_exact_owner_stale_timeout(view: Mapping[str, Any]) -> bool:
+    """Return True when STALE is a heartbeat timeout the owning MCP runtime repairs.
+
+    Eligible only when public owner evidence shows the credential-owning MCP
+    process is still alive on this host (``mcp_hostname`` + ``mcp_pid`` via
+    ``pid_alive``).  Heartbeat expiry with a dead MCP still presents as
+    ``LEASE_STALE`` but must remain operator-recoverable via takeover.
+
+    These leases must not be relabelled as user-intervention or abandoned-owner
+    recovery.  The GUI must never suggest restart, sidecar deletion, or a normal
+    GUI save as a prerequisite for recovery.
+    """
+
+    if str(view.get("state") or "").upper() != "STALE":
+        return False
+    if view.get("user_intervened"):
+        return False
+    if view.get("source") not in {"local", ""}:
+        return False
+    if not view.get("is_v2"):
+        return False
+    if _lease_error_code(view) != "LEASE_STALE":
+        return False
+    return _credential_owning_mcp_process_alive(view)
+
+
+def _requires_local_recovery_intervention(view: Mapping[str, Any]) -> bool:
+    """Return True when the operator must use dock recovery, not automatic reconcile."""
+
+    if _is_eligible_exact_owner_stale_timeout(view):
+        return False
+    state = str(view.get("state") or "").upper()
+    source = str(view.get("source") or "local")
+    if state in {"USER_INTERVENED", "UNLOCKED_DIRTY", "LOCKED_ERROR"}:
+        return True
+    if state == "STALE" and view.get("user_intervened"):
+        return True
+    if state == "STALE" and _lease_error_code(view) == "LEASE_STALE":
+        return True
+    if source in {"foreign_sidecar", "unknown_sidecar", "foreign_recovery"}:
+        return True
+    if state == "STALE" and _lease_error_code(view) == "LEASE_OWNER_EXITED":
+        return True
+    if any(marker in state for marker in ("SIDECAR", "MALFORMED", "FOREIGN")):
+        return True
+    return False
+
+
+def _local_recovery_guidance_lines(view: Mapping[str, Any]) -> list[str]:
+    """Return token-free GUI guidance separated by recovery class."""
+
+    if _is_eligible_exact_owner_stale_timeout(view):
+        return [
+            "Automatic recovery: the owning MCP runtime will reconcile this "
+            "heartbeat timeout.",
+            "Do not restart FreeCAD, delete the .freecad-mcp.lock sidecar, or "
+            "save from the normal GUI.",
+            "Unsaved agent work does not need a save first; retry the agent "
+            "operation after recovery completes.",
+        ]
+
+    if not _requires_local_recovery_intervention(view):
+        return []
+
+    state = str(view.get("state") or "").upper()
+    source = str(view.get("source") or "local")
+    lines = ["Local recovery required:"]
+    if source in {"foreign_sidecar", "unknown_sidecar"}:
+        lines.append(
+            "A foreign or unvalidated sidecar blocks this document. Confirm "
+            "the previous owner is dead before takeover."
+        )
+    elif source == "foreign_recovery":
+        lines.append(
+            "Imported foreign authority requires confirmed takeover before "
+            "local recovery actions."
+        )
+    elif state == "STALE" and _lease_error_code(view) == "LEASE_OWNER_EXITED":
+        lines.append(
+            "The recorded MCP owner exited. Use Take over to fence the "
+            "document, then save and clear, restore baseline, or acknowledge "
+            "dirty state."
+        )
+    elif state in {"USER_INTERVENED", "UNLOCKED_DIRTY"}:
+        lines.append(
+            "User intervention rotated ownership. Use the dock recovery "
+            "actions below to save and clear, restore baseline, or acknowledge "
+            "dirty state."
+        )
+    elif state == "STALE" and view.get("user_intervened"):
+        lines.append(
+            "User intervention occurred while the lease was stale. Use the dock "
+            "recovery actions below to take over, save and clear, restore "
+            "baseline, or acknowledge dirty state."
+        )
+    elif state == "STALE" and _lease_error_code(view) == "LEASE_STALE":
+        lines.append(
+            "The recorded MCP owner is not proven alive. Use the dock recovery "
+            "actions below to take over, save and clear, restore baseline, or "
+            "acknowledge dirty state."
+        )
+    elif state == "LOCKED_ERROR":
+        lines.append(
+            "The agent lease is in error. Confirm whether a handoff "
+            "continuation is pending before using takeover."
+        )
+    else:
+        lines.append(
+            "Use the dock recovery actions below to take over, save and clear, "
+            "restore baseline, or acknowledge dirty state."
+        )
+    lines.append(
+        "Preserve the FCStd and sidecar files; do not delete .freecad-mcp.lock "
+        "manually."
+    )
+    return lines
 
 
 def _state_presentation(state: str) -> tuple[str, str, str]:
@@ -358,6 +515,13 @@ def _lease_lines(lease: Mapping[str, Any]) -> tuple[str, str]:
 
     view = _lease_view(lease)
     _icon, _color, state_label = _state_presentation(view["state"])
+    if _is_eligible_exact_owner_stale_timeout(view):
+        state_label = "Stale lease (auto-recovering)"
+    elif (
+        view["state"].upper() == "STALE"
+        and _requires_local_recovery_intervention(view)
+    ):
+        state_label = "Stale lease (recovery required)"
     operation = _bounded_text(view["current_operation"])
     text = f"{state_label} {view['filename']}"
     if operation:
@@ -393,6 +557,10 @@ def _lease_lines(lease: Mapping[str, Any]) -> tuple[str, str]:
                 view["error"].get("code") or view["error"].get("message") or "unknown"
             )
         )
+    guidance = _local_recovery_guidance_lines(view)
+    if guidance:
+        tip_lines.append("")
+        tip_lines.extend(guidance)
     return text, "\n".join(tip_lines)
 
 
@@ -811,9 +979,11 @@ def _local_recovery_capabilities(
     imported_foreign = view["source"] == "foreign_recovery"
     live = document is not None
     v2_local = local and view["is_v2"] and live
+    eligible_auto_stale = _is_eligible_exact_owner_stale_timeout(view)
     return {
         "takeover": bool(
-            (local or imported_foreign)
+            not eligible_auto_stale
+            and (local or imported_foreign)
             and (live or (local and not view["is_v2"]))
             and state in _AGENT_OWNED_STATES
         ),
@@ -1914,11 +2084,17 @@ def install_lock_indicator() -> None:
         keep_dirty_btn.setEnabled(
             capabilities["keep_dirty"] and not local_recovery_busy
         )
-        takeover_btn.setToolTip(
-            "Revokes the selected local or proven-dead imported owner and increments its fencing generation."
-            if capabilities["takeover"]
-            else "Takeover requires live selected-document identity and locally provable owner death."
-        )
+        if _is_eligible_exact_owner_stale_timeout(selected_view):
+            takeover_btn.setToolTip(
+                "Disabled while the owning MCP runtime automatically recovers "
+                "a heartbeat timeout."
+            )
+        else:
+            takeover_btn.setToolTip(
+                "Revokes the selected local or proven-dead imported owner and increments its fencing generation."
+                if capabilities["takeover"]
+                else "Takeover requires live selected-document identity and locally provable owner death."
+            )
         save_clear_btn.setToolTip(
             "Same-path save with hash, archive, matching-worker validation, and CAS release."
             if capabilities["save_and_clear"]
@@ -1961,6 +2137,17 @@ def install_lock_indicator() -> None:
             keep_dirty_btn.setEnabled(
                 capabilities["keep_dirty"] and not local_recovery_busy
             )
+            if _is_eligible_exact_owner_stale_timeout(view):
+                takeover_btn.setToolTip(
+                    "Disabled while the owning MCP runtime automatically recovers "
+                    "a heartbeat timeout."
+                )
+            else:
+                takeover_btn.setToolTip(
+                    "Revokes the selected local or proven-dead imported owner and increments its fencing generation."
+                    if capabilities["takeover"]
+                    else "Takeover requires live selected-document identity and locally provable owner death."
+                )
 
     selector.currentIndexChanged.connect(_refresh_selected_detail)
     dock.refresh_from_leases = refresh_from_leases  # type: ignore[attr-defined]

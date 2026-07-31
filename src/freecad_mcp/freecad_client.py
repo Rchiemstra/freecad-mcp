@@ -15,6 +15,14 @@ from .lease_manager import (
     LeaseClientManager,
     LeaseNotFoundError,
     RpcRequestContext,
+    STALE_RECOVERY_EXEMPT_RPC_METHODS,
+    STALE_RECOVERY_RETRY_ERROR_CODE,
+    STALE_RECOVERY_TRIGGER_PRE_OPERATION,
+    STALE_RECOVERY_TRIGGER_RPC_REFUSAL,
+    StaleLeaseRecoveryOrchestrator,
+    StaleRecoveryResult,
+    rpc_response_indicates_stale_refusal,
+    summarize_stale_recovery_results,
 )
 from .template_resources import read_template_text
 from .telemetry import emit_event
@@ -287,6 +295,7 @@ class FreeCADConnection:
         # reached into the connection's default transport.
         self._transport = self.server.transport
         self._disconnected = False
+        self._stale_recovery: StaleLeaseRecoveryOrchestrator | None = None
 
     def _refresh_headers(self) -> None:
         with self._identity_lock:
@@ -447,6 +456,115 @@ class FreeCADConnection:
         """Install a synchronized handshake refresh used only after auth rejection."""
         with self._identity_lock:
             self._session_refresher = refresher
+
+    def configure_stale_recovery(
+        self, orchestrator: StaleLeaseRecoveryOrchestrator
+    ) -> None:
+        """Install automatic stale-lease recovery orchestration for protected RPC."""
+
+        with self._identity_lock:
+            self._stale_recovery = orchestrator
+
+    def stale_recovery_status(self) -> dict[str, Any]:
+        orchestrator = self._stale_recovery
+        if orchestrator is None:
+            return summarize_stale_recovery_results({})
+        return orchestrator.recovery_status_snapshot()
+
+    def _reconcile_stale_session(self, document_session_uuid: str) -> dict[str, Any]:
+        return self.reconcile_document_lease(document_session_uuid)
+
+    def _maybe_recover_stale_before_protected_rpc(
+        self,
+        method: str,
+        context: RpcRequestContext,
+    ) -> None:
+        orchestrator = self._stale_recovery
+        if orchestrator is None or method in STALE_RECOVERY_EXEMPT_RPC_METHODS:
+            return
+        if not context.lease_credentials:
+            return
+        session_uuids = tuple(
+            item.document_session_uuid for item in context.lease_credentials
+        )
+        orchestrator.recover_sessions_blocking(
+            session_uuids,
+            STALE_RECOVERY_TRIGGER_PRE_OPERATION,
+            self._reconcile_stale_session,
+        )
+
+    def _retryable_stale_recovery_response(
+        self,
+        *,
+        method: str,
+        request_id: str,
+        outcomes: Mapping[str, StaleRecoveryResult],
+    ) -> dict[str, Any]:
+        recovery = summarize_stale_recovery_results(outcomes)
+        recovered = recovery["succeeded"]
+        return {
+            "ok": False,
+            "success": False,
+            "error": {
+                "code": STALE_RECOVERY_RETRY_ERROR_CODE,
+                "message": (
+                    "Protected operation was refused because the document lease "
+                    "was stale; automatic exact-owner recovery recovered the "
+                    "lease and the operation was not replayed — retry the same "
+                    "protected call"
+                    if recovered
+                    else (
+                        "Protected operation was refused because the document "
+                        "lease is stale; automatic exact-owner recovery has not "
+                        "completed yet — retry the protected call after recovery "
+                        "succeeds"
+                    )
+                ),
+            },
+            "error_code": STALE_RECOVERY_RETRY_ERROR_CODE,
+            "retryable": True,
+            "mutation_replayed": False,
+            "stale_recovery_attempted": recovery["attempted"],
+            "stale_recovery_succeeded": recovered,
+            "stale_recovery_refused": recovery["refused"],
+            "stale_recovery_unnecessary": recovery["unnecessary"],
+            "stale_recovery": recovery,
+            "request_id": request_id,
+            "method": method,
+        }
+
+    def _handle_stale_rpc_refusal(
+        self,
+        response: Mapping[str, Any],
+        *,
+        method: str,
+        context: RpcRequestContext,
+    ) -> dict[str, Any] | None:
+        if method in STALE_RECOVERY_EXEMPT_RPC_METHODS:
+            return None
+        if not context.lease_credentials:
+            return None
+        if not rpc_response_indicates_stale_refusal(response):
+            return None
+
+        orchestrator = self._stale_recovery
+        session_uuids = tuple(
+            item.document_session_uuid for item in context.lease_credentials
+        )
+        outcomes: dict[str, StaleRecoveryResult] = {}
+        if orchestrator is not None:
+            for session_uuid in session_uuids:
+                orchestrator.mark_needs_recovery(session_uuid)
+            outcomes = orchestrator.recover_sessions_blocking(
+                session_uuids,
+                STALE_RECOVERY_TRIGGER_RPC_REFUSAL,
+                self._reconcile_stale_session,
+            )
+        return self._retryable_stale_recovery_response(
+            method=method,
+            request_id=context.request_id,
+            outcomes=outcomes,
+        )
 
     def _v2_lease_manager(self) -> LeaseClientManager | None:
         """Return the connected manager, if authenticated v2 is available."""
@@ -811,6 +929,7 @@ class FreeCADConnection:
         wire_params = _sign_generated_execute_params(method, params, context)
         envelope = context.to_envelope(method, wire_params)
         transport_method = "invoke_v2_control" if control else "invoke_v2"
+        self._maybe_recover_stale_before_protected_rpc(method, context)
         try:
             response = self.invoke_rpc(
                 transport_method,
@@ -838,6 +957,13 @@ class FreeCADConnection:
             raise RpcInvocationError(
                 method, exc, request_id=context.request_id
             ) from None
+        stale_retry = self._handle_stale_rpc_refusal(
+            response if isinstance(response, Mapping) else {},
+            method=method,
+            context=context,
+        )
+        if stale_retry is not None:
+            return stale_retry
         error = response.get("error") if isinstance(response, Mapping) else None
         error_code = error.get("code") if isinstance(error, Mapping) else None
         if isinstance(response, Mapping):

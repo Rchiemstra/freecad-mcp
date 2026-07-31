@@ -254,42 +254,173 @@ def _record_generation(record: Any) -> int | None:
         return None
 
 
+def _has_accepted_baseline(record: Any) -> bool:
+    if not isinstance(record, Mapping):
+        return False
+    document_state = record.get("document_state")
+    if not isinstance(document_state, Mapping):
+        return False
+    baseline = document_state.get("baseline")
+    return isinstance(baseline, Mapping) and bool(baseline.get("sha256"))
+
+
+IDENTITY_REGISTRATION_BRANCH_REGISTRATION_FAILED = "registration_failed"
+IDENTITY_REGISTRATION_BRANCH_POST_INSPECTION_FAILED = (
+    "post_registration_inspection_failed"
+)
+
+
+@dataclass(frozen=True)
+class IdentityRegistrationFailure:
+    """Token-free diagnostics when live document registration returns None."""
+
+    document_name: str
+    failure_branch: str
+    drifted_fields: tuple[str, ...] = ()
+    identity_refresh_attempted: bool = False
+    identity_refresh_refused_reason: str = ""
+
+    def to_details(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "document_name": self.document_name,
+            "failure_branch": self.failure_branch,
+            "identity_refresh_attempted": self.identity_refresh_attempted,
+        }
+        if self.drifted_fields:
+            payload["drifted_fields"] = list(self.drifted_fields)
+        if (
+            self.identity_refresh_attempted
+            and self.identity_refresh_refused_reason
+        ):
+            payload["identity_refresh_refused_reason"] = (
+                self.identity_refresh_refused_reason
+            )
+        return payload
+
+
+def _document_display_name(document: Any) -> str:
+    name = getattr(document, "Name", None) or getattr(document, "Label", None)
+    return str(name or "<unknown>")
+
+
+def _identity_refresh_refusal_code(exc: BaseException) -> str:
+    message = str(exc).lower()
+    if "content hash" in message:
+        return "IDENTITY_REFRESH_CONTENT_HASH_CHANGED"
+    if "name or canonical path" in message or "name or path" in message:
+        return "IDENTITY_REFRESH_NAME_OR_PATH_CHANGED"
+    if "baseline is missing" in message or (
+        "baseline" in message and "missing" in message
+    ):
+        return "IDENTITY_REFRESH_BASELINE_MISSING"
+    if (
+        "not a registered live document proxy" in message
+        or "replacement proxy" in message
+    ):
+        return "IDENTITY_REFRESH_REPLACEMENT_PROXY"
+    if "lease state" in message or "current lease state" in message:
+        return "IDENTITY_REFRESH_LEASE_STATE_FORBIDS"
+    code = str(getattr(exc, "code", "") or "").strip()
+    if code:
+        return code
+    return "IDENTITY_REFRESH_REFUSED"
+
+
+def _collect_identity_drift_fields(identities: Any, document: Any) -> tuple[str, ...]:
+    registered_session_uuid = getattr(identities, "registered_session_uuid", None)
+    if not callable(registered_session_uuid):
+        return ()
+    try:
+        session_uuid = registered_session_uuid(document)
+    except Exception as exc:
+        # Identity modules may be loaded under both `document_lease` and
+        # `addon.FreeCADMCP.document_lease`, so catch by message/name instead of
+        # a single UnknownDocumentError class object.
+        if (
+            type(exc).__name__ == "UnknownDocumentError"
+            or "not a registered live document proxy" in str(exc).casefold()
+        ):
+            return ("unregistered_proxy",)
+        raise
+    try:
+        observed = identities.inspect_registered_document(session_uuid, document)
+    except Exception as exc:
+        if "not the registered live document proxy" in str(exc):
+            return ("replacement_proxy",)
+        return ("live_proxy_inspection_failed",)
+    try:
+        expected = identities.resolve(session_uuid)
+    except Exception:
+        return ("registered_identity_unavailable",)
+    drifted: list[str] = []
+    if observed.name != expected.name:
+        drifted.append("name")
+    if observed.comparison_key != expected.comparison_key:
+        drifted.append("comparison_key")
+    if observed.file_identity != expected.file_identity:
+        drifted.append("file_identity")
+    return tuple(drifted)
+
+
 def register_live_document_recovery(
     service: Any, document: Any
-) -> tuple[Any, Mapping[str, Any] | None]:
+) -> tuple[Any, Mapping[str, Any] | None, IdentityRegistrationFailure | None]:
     """Register one live proxy, then conservatively import its v2 sidecar."""
 
     identities = getattr(service, "identity_service", None)
     if identities is None:
         raise RuntimeError("document identity service is unavailable")
+    document_name = _document_display_name(document)
+    drifted_fields = _collect_identity_drift_fields(identities, document)
+    identity_refresh_attempted = False
+    identity_refresh_refused_reason = ""
     registration_failed = False
     try:
         identity = identities.register_document(document)
     except Exception:
         registration_failed = True
-        # A locally observed close leaves its exact identity and sidecar
-        # authoritative. Rebind only through the service's one-shot close
-        # marker; never classify registration errors by import-sensitive
-        # exception identity or resolve by name into an arbitrary proxy.
-        rebinder = getattr(
+        repairer = getattr(
             service,
-            "rebind_closed_recovery_document",
+            "repair_registered_document_identity",
             None,
         )
-        if not callable(rebinder):
-            logger.debug(
-                "live document registration failed; skip recovery import",
-                exc_info=True,
-            )
-        else:
+        if callable(repairer):
+            identity_refresh_attempted = True
             try:
-                identity = rebinder(document=document)
+                identity = repairer(document=document)
                 registration_failed = False
-            except Exception:
+            except Exception as repair_exc:
+                identity_refresh_refused_reason = _identity_refresh_refusal_code(
+                    repair_exc
+                )
                 logger.debug(
-                    "closed live document rebind failed; try orphan repair",
+                    "baseline-preserving identity repair was not applicable",
                     exc_info=True,
                 )
+        if registration_failed:
+            # A locally observed close leaves its exact identity and sidecar
+            # authoritative. Rebind only through the service's one-shot close
+            # marker; never classify registration errors by import-sensitive
+            # exception identity or resolve by name into an arbitrary proxy.
+            rebinder = getattr(
+                service,
+                "rebind_closed_recovery_document",
+                None,
+            )
+            if not callable(rebinder):
+                logger.debug(
+                    "live document registration failed; skip recovery import",
+                    exc_info=True,
+                )
+            else:
+                try:
+                    identity = rebinder(document=document)
+                    registration_failed = False
+                except Exception:
+                    logger.debug(
+                        "closed live document rebind failed; try orphan repair",
+                        exc_info=True,
+                    )
     orphan_refresher = getattr(
         service,
         "refresh_orphaned_foreign_document_identity",
@@ -317,7 +448,17 @@ def register_live_document_recovery(
                 exc_info=True,
             )
     if registration_failed:
-        return None, None
+        return (
+            None,
+            None,
+            IdentityRegistrationFailure(
+                document_name=document_name,
+                failure_branch=IDENTITY_REGISTRATION_BRANCH_REGISTRATION_FAILED,
+                drifted_fields=drifted_fields,
+                identity_refresh_attempted=identity_refresh_attempted,
+                identity_refresh_refused_reason=identity_refresh_refused_reason,
+            ),
+        )
     # This second, non-mutating inspection is the evidence passed to the
     # recovery service; a stale/replaced proxy or unexpected path fails here.
     try:
@@ -329,22 +470,34 @@ def register_live_document_recovery(
             "registered live proxy mismatch; skip recovery import",
             exc_info=True,
         )
-        return None, None
+        return (
+            None,
+            None,
+            IdentityRegistrationFailure(
+                document_name=document_name,
+                failure_branch=IDENTITY_REGISTRATION_BRANCH_POST_INSPECTION_FAILED,
+                drifted_fields=_collect_identity_drift_fields(identities, document)
+                or drifted_fields
+                or ("live_proxy_inspection_failed",),
+                identity_refresh_attempted=identity_refresh_attempted,
+                identity_refresh_refused_reason=identity_refresh_refused_reason,
+            ),
+        )
     if not live_identity.canonical_path:
-        return live_identity, None
+        return live_identity, None, None
     sidecar = Path(f"{live_identity.canonical_path}.freecad-mcp.lock")
     if not os.path.lexists(sidecar):
-        return live_identity, None
+        return live_identity, None, None
     if service.get(live_identity.session_uuid) is not None:
-        return live_identity, None
+        return live_identity, None, None
     get_foreign = getattr(service, "get_foreign_recovery", None)
     if callable(get_foreign):
         existing = get_foreign(live_identity.session_uuid)
         if existing is not None:
-            return live_identity, None
+            return live_identity, None, None
     importer = getattr(service, "import_adjacent_foreign_recovery", None)
     if not callable(importer):
-        return live_identity, None
+        return live_identity, None, None
     try:
         imported = importer(
             live_identity.session_uuid,
@@ -358,8 +511,8 @@ def register_live_document_recovery(
             "unable to import adjacent document recovery sidecar",
             exc_info=True,
         )
-        return live_identity, None
-    return live_identity, imported
+        return live_identity, None, None
+    return live_identity, imported, None
 
 
 class LeaseObserver:
@@ -384,6 +537,7 @@ class LeaseObserver:
         self._notification_callback = notification_callback
         self._notification_queue = notification_queue or _qt_or_direct_queue
         self._event_lock = threading.RLock()
+        self._pending_unscoped_gui_save: dict[str, int] = {}
 
     def _is_agent_attributed(self, document: Any, identity: Any | None = None) -> bool:
         for key in _document_keys(document, identity):
@@ -488,6 +642,82 @@ class LeaseObserver:
                 exc_info=True,
             )
 
+    def _takeover_unscoped_change(
+        self,
+        service: Any,
+        identity: Any,
+        document: Any,
+        *,
+        kind: str,
+        detail: str,
+        dirty: bool | None,
+    ) -> Any:
+        reason = f"Unscoped FreeCAD {kind} detected"
+        if detail:
+            clean_detail = " ".join(str(detail).split())[:512]
+            if clean_detail:
+                reason += f": {clean_detail}"
+        reason = reason[:2048]
+        record = service.takeover(
+            identity.session_uuid,
+            dirty=dirty,
+            reason=reason,
+        )
+        try:
+            from document_lease import core_authority
+
+            core_authority.bump_takeover(document)
+        except Exception:
+            logger.debug("core mutation takeover sync failed", exc_info=True)
+        self._notify(
+            kind=kind,
+            identity=identity,
+            reason=reason,
+            dirty=dirty,
+            record=record,
+        )
+        return record
+
+    def _preserve_or_fence_after_gui_save(
+        self,
+        service: Any,
+        identity: Any,
+        document: Any,
+        *,
+        kind: str,
+        detail: str,
+        dirty: bool | None,
+        trigger: str,
+    ) -> Any:
+        inplace_refresher = getattr(
+            service,
+            "try_baseline_preserving_document_identity_refresh",
+            None,
+        )
+        refreshed = None
+        if callable(inplace_refresher):
+            try:
+                refreshed = inplace_refresher(
+                    identity.session_uuid,
+                    document=document,
+                    trigger=trigger,
+                )
+            except Exception:
+                logger.debug(
+                    "baseline-preserving save refresh failed",
+                    exc_info=True,
+                )
+        if refreshed is not None:
+            return refreshed
+        return self._takeover_unscoped_change(
+            service,
+            identity,
+            document,
+            kind=kind,
+            detail=detail,
+            dirty=dirty,
+        )
+
     def _handle(
         self,
         document: Any,
@@ -540,11 +770,20 @@ class LeaseObserver:
                     # unreadable GUI dirty flag can never be persisted as
                     # clean evidence after an unscoped mutation.
                     dirty = True
-                if _record_state(current) in {
+                recovery_state = _record_state(current)
+                is_recovery_state = recovery_state in {
                     "USER_INTERVENED",
                     "UNLOCKED_DIRTY",
-                }:
-                    record = current
+                }
+                is_save_start = kind == "save" and not refresh_saved_identity
+                is_save_finish = kind == "save" and refresh_saved_identity
+                pending_close_save = (
+                    kind == "document close"
+                    and refresh_saved_identity
+                    and identity.session_uuid in self._pending_unscoped_gui_save
+                )
+                record = current
+                if is_recovery_state:
                     updater = getattr(service, "update_local_dirty", None)
                     if callable(updater):
                         try:
@@ -554,54 +793,79 @@ class LeaseObserver:
                                 "unable to refresh local recovery dirty state",
                                 exc_info=True,
                             )
-                else:
-                    reason = f"Unscoped FreeCAD {kind} detected"
-                    if detail:
-                        clean_detail = " ".join(str(detail).split())[:512]
-                        if clean_detail:
-                            reason += f": {clean_detail}"
-                    reason = reason[:2048]
-                    record = service.takeover(
-                        identity.session_uuid,
-                        dirty=dirty,
-                        reason=reason,
-                    )
-                    try:
-                        from document_lease import core_authority
-
-                        core_authority.bump_takeover(document)
-                    except Exception:
-                        logger.debug(
-                            "core mutation takeover sync failed", exc_info=True
+                elif is_save_start:
+                    # Fence immediately when finish-save cannot yet prove a
+                    # baseline-preserving rewrite: no accepted baseline, or the
+                    # live document is still dirty and content may change.
+                    if _has_accepted_baseline(current) and dirty is False:
+                        self._pending_unscoped_gui_save[identity.session_uuid] = (
+                            id(document)
                         )
-                    self._notify(
+                    else:
+                        self._pending_unscoped_gui_save.pop(
+                            identity.session_uuid, None
+                        )
+                        record = self._takeover_unscoped_change(
+                            service,
+                            identity,
+                            document,
+                            kind=kind,
+                            detail=detail,
+                            dirty=dirty,
+                        )
+                elif is_save_finish or pending_close_save:
+                    self._pending_unscoped_gui_save.pop(
+                        identity.session_uuid, None
+                    )
+                    trigger = (
+                        "gui_save_finish"
+                        if is_save_finish
+                        else "gui_save_close_without_finish"
+                    )
+                    record = self._preserve_or_fence_after_gui_save(
+                        service,
+                        identity,
+                        document,
                         kind=kind,
-                        identity=identity,
-                        reason=reason,
+                        detail=detail,
                         dirty=dirty,
-                        record=record,
+                        trigger=trigger,
+                    )
+                else:
+                    record = self._takeover_unscoped_change(
+                        service,
+                        identity,
+                        document,
+                        kind=kind,
+                        detail=detail,
+                        dirty=dirty,
                     )
                 if refresh_saved_identity:
-                    refresher = getattr(
-                        service,
-                        "refresh_local_recovery_document_identity",
-                        None,
-                    )
-                    if callable(refresher):
-                        try:
-                            record = refresher(
-                                identity.session_uuid,
-                                document=document,
-                            )
-                        except Exception:
-                            # Keep the takeover fence authoritative. A later
-                            # RPC or restart must still fail closed rather than
-                            # treating an unverified replacement as the same
-                            # file.
-                            logger.warning(
-                                "unable to refresh GUI-saved document identity",
-                                exc_info=True,
-                            )
+                    recovery_state = _record_state(record)
+                    if recovery_state in {
+                        "USER_INTERVENED",
+                        "UNLOCKED_DIRTY",
+                    }:
+                        refresher = getattr(
+                            service,
+                            "refresh_local_recovery_document_identity",
+                            None,
+                        )
+                        if callable(refresher):
+                            try:
+                                record = refresher(
+                                    identity.session_uuid,
+                                    document=document,
+                                )
+                            except Exception:
+                                # Keep the takeover fence authoritative. A later
+                                # RPC or restart must still fail closed rather than
+                                # treating an unverified replacement as the same
+                                # file.
+                                logger.warning(
+                                    "unable to refresh GUI-saved document identity",
+                                    exc_info=True,
+                                )
                 return record
         except Exception:
             # FreeCAD catches observer exceptions, but logging and containing
@@ -646,27 +910,57 @@ class LeaseObserver:
                         document,
                     )
                     return None
-                if _record_state(current) not in {
+                recovery_state = _record_state(current)
+                is_recovery_state = recovery_state in {
                     "USER_INTERVENED",
                     "UNLOCKED_DIRTY",
-                }:
-                    return None
+                }
                 dirty = _document_dirty(document)
                 record = current
                 if dirty is not None:
-                    updater = getattr(service, "update_local_dirty", None)
-                    if callable(updater):
-                        record = updater(identity.session_uuid, dirty=dirty)
-                refresher = getattr(
-                    service,
-                    "refresh_local_recovery_document_identity",
-                    None,
-                )
-                if callable(refresher):
-                    record = refresher(
-                        identity.session_uuid,
-                        document=document,
+                    if is_recovery_state:
+                        updater = getattr(service, "update_local_dirty", None)
+                        if callable(updater):
+                            record = updater(identity.session_uuid, dirty=dirty)
+                    elif recovery_state in {
+                        "LOCKED_IDLE",
+                        "LOCKED_EDITING",
+                        "LOCKED_RECOMPUTING",
+                        "LOCKED_SAVING",
+                        "LOCKED_ERROR",
+                        "ACQUIRING",
+                        "STALE",
+                    }:
+                        inplace_refresher = getattr(
+                            service,
+                            "try_baseline_preserving_document_identity_refresh",
+                            None,
+                        )
+                        if callable(inplace_refresher):
+                            try:
+                                refreshed = inplace_refresher(
+                                    identity.session_uuid,
+                                    document=document,
+                                    trigger="gui_save_finish_deferred",
+                                )
+                                if refreshed is not None:
+                                    record = refreshed
+                            except Exception:
+                                logger.debug(
+                                    "deferred baseline-preserving refresh failed",
+                                    exc_info=True,
+                                )
+                if is_recovery_state:
+                    refresher = getattr(
+                        service,
+                        "refresh_local_recovery_document_identity",
+                        None,
                     )
+                    if callable(refresher):
+                        record = refresher(
+                            identity.session_uuid,
+                            document=document,
+                        )
                 return record
         except Exception:
             logger.warning(
@@ -692,7 +986,9 @@ class LeaseObserver:
         if not str(getattr(document, "FileName", "") or "").strip():
             return None
         try:
-            identity, imported = register_live_document_recovery(service, document)
+            identity, imported, _failure = register_live_document_recovery(
+                service, document
+            )
             if imported is not None:
                 self._notify(
                     kind="foreign recovery import",

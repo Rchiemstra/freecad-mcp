@@ -100,7 +100,7 @@ def test_live_unlocked_close_reopen_gets_fresh_session_identity(tmp_path):
             identities.resolve(original.session_uuid)
 
         reopened = FreeCAD.openDocument(str(model))
-        fresh, imported = register_live_document_recovery(service, reopened)
+        fresh, imported, _failure = register_live_document_recovery(service, reopened)
 
         assert imported is None
         assert fresh.session_uuid != original.session_uuid
@@ -173,7 +173,7 @@ def test_live_gui_save_close_reopen_rebinds_and_allows_clean_retry(
 
         FreeCAD.closeDocument(document.Name)
         reopened = FreeCAD.openDocument(str(model))
-        rebound, imported = register_live_document_recovery(service, reopened)
+        rebound, imported, _failure = register_live_document_recovery(service, reopened)
 
         assert imported is None
         assert rebound.session_uuid == identity.session_uuid

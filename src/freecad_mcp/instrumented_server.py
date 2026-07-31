@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+import contextvars
+from concurrent.futures import ThreadPoolExecutor
 import inspect
 import time
-from typing import Any, Callable
+from typing import Any
 import uuid
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.lowlevel.server import Server
 from mcp.types import CallToolResult
 
 from .outcomes import NORMALIZED_STATUSES, OutcomeStatus, extract_error_code
 from .mcp_tasks import HEAVY_TASK_TOOLS, finish, get as get_task_link, register
 from .telemetry import bind_context, emit_event
+from .telemetry.context import TelemetryContext, get_context, update_context
 
 
 _LOW_LEVEL_ACCEPTS_CALL_TOOL_RESULT = (
@@ -90,8 +94,121 @@ def execution_category(tool_name: str) -> str:
     return "typed_direct_rpc"
 
 
+# Bounded MCP tools that must not queue behind long-running synchronous work.
+# D6 requires cancel_request on an isolated lane so in-flight work can be
+# interrupted without waiting behind execute_code / acquire / release. Custody
+# tools such as claim_acquisition_result mutate shared session/token state and
+# must stay on the general serialized lane to avoid racing those operations.
+CONTROL_LANE_TOOLS = frozenset(
+    {
+        "cancel_request",
+        "get_request_status",
+    }
+)
+
+
+def _worker_context_updates(
+    parent: TelemetryContext, worker: TelemetryContext
+) -> dict[str, Any]:
+    """Return telemetry fields the worker thread updated via update_context."""
+
+    updates: dict[str, Any] = {}
+    for field in TelemetryContext.__dataclass_fields__:
+        if field == "session_id":
+            continue
+        worker_value = getattr(worker, field)
+        if worker_value == getattr(parent, field):
+            continue
+        if field == "attempt_number":
+            if worker_value is not None:
+                updates[field] = worker_value
+        elif worker_value not in ("", None):
+            updates[field] = worker_value
+    return updates
+
+
+class _SerializedWorkerLane:
+    """Single-thread executor that keeps sync tool bodies off the event loop."""
+
+    def __init__(self, *, thread_name_prefix: str) -> None:
+        self._executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix=thread_name_prefix,
+        )
+
+    async def run(self, func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+        parent_ctx = get_context()
+        ctx = contextvars.copy_context()
+        loop = asyncio.get_running_loop()
+
+        def _invoke() -> tuple[Any, TelemetryContext, BaseException | None]:
+            worker_ctx = parent_ctx
+            result: Any = None
+            exc: BaseException | None = None
+
+            def _run_in_copied_context() -> None:
+                nonlocal worker_ctx, result, exc
+                try:
+                    result = func(*args, **kwargs)
+                except BaseException as raised:
+                    exc = raised
+                finally:
+                    worker_ctx = get_context()
+
+            ctx.run(_run_in_copied_context)
+            return result, worker_ctx, exc
+
+        result, worker_ctx, exc = await loop.run_in_executor(self._executor, _invoke)
+        updates = _worker_context_updates(parent_ctx, worker_ctx)
+        if updates:
+            update_context(**updates)
+        if exc is not None:
+            raise exc
+        return result
+
+
+def _invoke_sync_tool(tool: Any, arguments: dict[str, Any], context: Any) -> Any:
+    """Run one synchronous tool with the MCP SDK's argument validation."""
+
+    metadata = tool.fn_metadata
+    context_kwargs = (
+        {tool.context_kwarg: context}
+        if tool.context_kwarg is not None
+        else None
+    )
+    arguments_pre_parsed = metadata.pre_parse_json(arguments)
+    arguments_parsed_model = metadata.arg_model.model_validate(
+        arguments_pre_parsed
+    )
+    arguments_parsed_dict = arguments_parsed_model.model_dump_one_level()
+    arguments_parsed_dict |= context_kwargs or {}
+    return tool.fn(**arguments_parsed_dict)
+
+
 class InstrumentedFastMCP(FastMCP):
     task_request_canceller: Callable[[str], Any] | None = None
+    post_tool_completed_hook: Callable[[float, str], Any] | None = None
+    _sync_worker_lane: _SerializedWorkerLane | None = None
+    _control_worker_lane: _SerializedWorkerLane | None = None
+
+    def _sync_lane(self) -> _SerializedWorkerLane:
+        lane = self._sync_worker_lane
+        if lane is None:
+            lane = _SerializedWorkerLane(thread_name_prefix="mcp-sync-tool")
+            self._sync_worker_lane = lane
+        return lane
+
+    def _control_lane(self) -> _SerializedWorkerLane:
+        lane = self._control_worker_lane
+        if lane is None:
+            lane = _SerializedWorkerLane(thread_name_prefix="mcp-control-tool")
+            self._control_worker_lane = lane
+        return lane
+
+    def _worker_lane_for_tool(self, name: str) -> _SerializedWorkerLane:
+        if name in CONTROL_LANE_TOOLS:
+            return self._control_lane()
+        return self._sync_lane()
 
     def add_tool(
         self,
@@ -175,24 +292,46 @@ class InstrumentedFastMCP(FastMCP):
         FastMCP's conversion path is used, while newer SDKs pass it through.
         Calling the registered tool without conversion gives both versions the
         same authoritative result for telemetry and wire adaptation.
+
+        Synchronous tool bodies run on a serialized worker lane so the asyncio
+        event loop stays responsive for lease heartbeats and other scheduled
+        coroutines. Bounded control tools use a separate lane so cancellation
+        and status polling are not queued behind long-running work.
         """
 
         context = self.get_context()
-        try:
-            return await self._tool_manager.call_tool(
-                name,
-                arguments,
-                context=context,
-                convert_result=False,
-            )
-        except TypeError:
-            # Compatibility with older SDK managers that predate the explicit
-            # conversion flag.
-            return await self._tool_manager.call_tool(
-                name,
-                arguments,
-                context=context,
-            )
+        tool = self._tool_manager.get_tool(name)
+        if tool is None:
+            raise ToolError(f"Unknown tool: {name}")
+
+        if tool.is_async:
+            try:
+                return await self._tool_manager.call_tool(
+                    name,
+                    arguments,
+                    context=context,
+                    convert_result=False,
+                )
+            except TypeError:
+                return await self._tool_manager.call_tool(
+                    name,
+                    arguments,
+                    context=context,
+                )
+
+        lane = self._worker_lane_for_tool(name)
+
+        def _run_sync() -> Any:
+            try:
+                return _invoke_sync_tool(tool, arguments, context)
+            except ToolError:
+                raise
+            except Exception as exc:
+                raise ToolError(
+                    f"Error executing tool {name}: {exc}"
+                ) from exc
+
+        return await lane.run(_run_sync)
 
     @staticmethod
     def _wire_result(result: Any) -> Any:
@@ -204,6 +343,30 @@ class InstrumentedFastMCP(FastMCP):
                 return (result.content, result.structuredContent)
             return result.content
         return result
+
+    async def _run_post_tool_completed_hook(
+        self, duration_s: float, tool_name: str
+    ) -> None:
+        """Best-effort stale recovery hook; never fail the tool outcome."""
+
+        hook = self.post_tool_completed_hook
+        if hook is None:
+            return
+        try:
+            hook_result = hook(duration_s, tool_name)
+            if inspect.isawaitable(hook_result):
+                await hook_result
+        except Exception as exc:
+            emit_event(
+                "mcp",
+                "post_tool_recovery_failed",
+                status=OutcomeStatus.WARNING.value,
+                error_code=type(exc).__name__.upper(),
+                payload={
+                    "tool": tool_name,
+                    "exception_type": type(exc).__name__,
+                },
+            )
 
     async def call_tool(self, name: str, arguments: dict[str, Any]):
         context = self.get_context()
@@ -289,6 +452,8 @@ class InstrumentedFastMCP(FastMCP):
                     duration_ms=(time.monotonic() - validation_started) * 1000.0,
                     payload={"tool": name},
                 )
+            result = None
+            tool_exc: BaseException | None = None
             try:
                 experimental = getattr(
                     getattr(context, "request_context", None),
@@ -364,74 +529,108 @@ class InstrumentedFastMCP(FastMCP):
                     )
                 else:
                     result = await self._call_registered_tool(name, arguments)
-            except Exception as exc:
-                duration_ms = (time.monotonic() - started) * 1000.0
-                code = extract_error_code(exc) or type(exc).__name__.upper()
-                emit_event(
-                    "mcp",
-                    "tool_call_completed",
-                    status=OutcomeStatus.FAILED.value,
-                    duration_ms=duration_ms,
-                    error_code=code,
-                    payload={"tool": name, "exception_type": type(exc).__name__},
-                )
-                raise
-
-            duration_ms = (time.monotonic() - started) * 1000.0
-            status = OutcomeStatus.SUCCEEDED.value
-            code = None
-            completion_payload: dict[str, Any] = {
-                "tool": name,
-                "execution_category": category,
-            }
-            if isinstance(result, CallToolResult):
-                structured = result.structuredContent
-                if isinstance(structured, Mapping):
-                    status = str(
-                        structured.get("status") or OutcomeStatus.UNKNOWN.value
-                    )
-                    code = extract_error_code(structured)
-                    data = structured.get("data")
-                    actual_category = structured.get("execution_category")
-                    if (
-                        actual_category is None
-                        and isinstance(data, Mapping)
-                    ):
-                        actual_category = data.get("execution_category")
-                    if actual_category:
-                        completion_payload["execution_category"] = str(
-                            actual_category
+            except BaseException as exc:
+                tool_exc = exc
+            finally:
+                duration_s = time.monotonic() - started
+                duration_ms = duration_s * 1000.0
+                if tool_exc is not None:
+                    if isinstance(tool_exc, asyncio.CancelledError):
+                        emit_event(
+                            "mcp",
+                            "tool_call_completed",
+                            status=OutcomeStatus.CANCELLED.value,
+                            duration_ms=duration_ms,
+                            error_code="CANCELLED",
+                            payload={
+                                "tool": name,
+                                "exception_type": type(tool_exc).__name__,
+                            },
                         )
-                    analysis = structured.get("code_analysis")
-                    if (
-                        analysis is None
-                        and isinstance(data, Mapping)
-                    ):
-                        analysis = data.get("code_analysis")
-                    if isinstance(analysis, Mapping):
-                        completion_payload["analysis"] = dict(analysis)
-                elif result.isError:
-                    status = OutcomeStatus.FAILED.value
-            if status == OutcomeStatus.REJECTED.value:
-                emit_event(
-                    "mcp",
-                    "policy_rejected",
-                    status=status,
-                    error_code=code,
-                    payload={
+                    elif isinstance(tool_exc, Exception):
+                        code = (
+                            extract_error_code(tool_exc)
+                            or type(tool_exc).__name__.upper()
+                        )
+                        emit_event(
+                            "mcp",
+                            "tool_call_completed",
+                            status=OutcomeStatus.FAILED.value,
+                            duration_ms=duration_ms,
+                            error_code=code,
+                            payload={
+                                "tool": name,
+                                "exception_type": type(tool_exc).__name__,
+                            },
+                        )
+                else:
+                    status = OutcomeStatus.SUCCEEDED.value
+                    code = None
+                    completion_payload: dict[str, Any] = {
                         "tool": name,
                         "execution_category": category,
-                    },
-                )
-            emit_event(
-                "mcp",
-                "tool_call_completed",
-                status=status,
-                duration_ms=duration_ms,
-                error_code=code,
-                payload=completion_payload,
-            )
+                    }
+                    if isinstance(result, CallToolResult):
+                        structured = result.structuredContent
+                        if isinstance(structured, Mapping):
+                            status = str(
+                                structured.get("status")
+                                or OutcomeStatus.UNKNOWN.value
+                            )
+                            code = extract_error_code(structured)
+                            data = structured.get("data")
+                            actual_category = structured.get(
+                                "execution_category"
+                            )
+                            if (
+                                actual_category is None
+                                and isinstance(data, Mapping)
+                            ):
+                                actual_category = data.get(
+                                    "execution_category"
+                                )
+                            if actual_category:
+                                completion_payload["execution_category"] = str(
+                                    actual_category
+                                )
+                            analysis = structured.get("code_analysis")
+                            if (
+                                analysis is None
+                                and isinstance(data, Mapping)
+                            ):
+                                analysis = data.get("code_analysis")
+                            if isinstance(analysis, Mapping):
+                                completion_payload["analysis"] = dict(analysis)
+                        elif result.isError:
+                            status = OutcomeStatus.FAILED.value
+                    if status == OutcomeStatus.REJECTED.value:
+                        emit_event(
+                            "mcp",
+                            "policy_rejected",
+                            status=status,
+                            error_code=code,
+                            payload={
+                                "tool": name,
+                                "execution_category": category,
+                            },
+                        )
+                    emit_event(
+                        "mcp",
+                        "tool_call_completed",
+                        status=status,
+                        duration_ms=duration_ms,
+                        error_code=code,
+                        payload=completion_payload,
+                    )
+                await self._run_post_tool_completed_hook(duration_s, name)
+
+            if tool_exc is not None:
+                raise tool_exc
             return self._wire_result(result)
 
 
-__all__ = ["InstrumentedFastMCP", "execution_category"]
+__all__ = [
+    "CONTROL_LANE_TOOLS",
+    "InstrumentedFastMCP",
+    "execution_category",
+]

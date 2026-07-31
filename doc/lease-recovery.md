@@ -11,7 +11,7 @@ been inspected and resolved.
 |---|---|---|
 | `LOCKED_IDLE` | Exclusive while the owner is live | A replacement MCP in the same live addon/FreeCAD runtime may recover only when the recorded MCP is positively co-located and proven dead, and the clean live document plus saved FCStd exactly match the fully verified baseline |
 | `LOCKED_ERROR` | Fenced, but resumable | The credential owner may correct or retry through health-checked typed tools. A different MCP process may automatically continue a dirty document in the same FreeCAD runtime after live revalidation atomically rotates the credential; no agent-start pop-up is shown. After that FreeCAD runtime exits, a clean reopen may self-recover only when the saved FCStd still exactly matches the original baseline |
-| `STALE` | Blocked | If the exact authenticated runtime returns unchanged, reconcile. An eligible clean local lease with co-located dead-MCP proof may use the guarded acquisition handoff; otherwise inspect and confirm local takeover |
+| `STALE` | Blocked | An exact-owner heartbeat timeout is repaired automatically by the owning MCP runtime (heartbeat, post-tool, and pre-operation reconcile); do not restart FreeCAD or delete the sidecar. If the exact authenticated runtime returns unchanged, reconcile may also succeed on demand. An eligible clean local lease with co-located dead-MCP proof may use the guarded acquisition handoff; otherwise inspect and confirm local takeover |
 | `USER_INTERVENED` | Old credential permanently revoked | A replacement MCP may self-recover only when all prior mutations were save-verified and fresh live/file validation is exact. A clean document uses acquire; a dirty document uses confirmed adoption and remains dirty. Local records require dead-MCP proof or the narrow pre-fix worker-snapshot signature; imported records independently require inactive foreign-FreeCAD proof. Intentional takeover with a live or unknown owner remains blocked |
 | `UNLOCKED_DIRTY` | Blocked until current state is verified | After restart, a clean acquire or explicitly confirmed dirty adoption may self-recover only with exact document/file validation and proof that the recorded FreeCAD owner is dead |
 | Missing/replaced sidecar | Blocked by default | A clean acquire may self-recover from a fully verified imported `LOCKED_IDLE` record. The exact legacy worker-snapshot `USER_INTERVENED` record may also self-recover: clean through acquire or dirty through confirmed adoption. Both require an unchanged baseline and proven-inactive foreign authority; arbitrary missing authority remains blocked |
@@ -158,10 +158,9 @@ been inspected and resolved.
   adoption is auto-authorized with no FreeCAD pop-up. A live ``LOCKED_ERROR``
   handoff returns `LOCKED_ERROR_HANDOFF_PENDING` immediately while a background
   continuation performs bounded GUI authorization/revalidation and hash/CAS
-  claim. It escrows the credential for control-lane polling via
-  `get_request_status` then the public
-  `claim_acquisition_result` tool (custodies locally; never returns the raw
-  token). Cancel the pre-CAS continuation with `cancel_request` only before the
+  claim. It escrows the credential for status polling via `get_request_status`
+  (control lane) then the public `claim_acquisition_result` tool (general
+  serialized sync-tool lane; custodies locally; never returns the raw token). Cancel the pre-CAS continuation with `cancel_request` only before the
   atomic `begin_claim` gate; after that boundary cancel is not-cancellable and
   the credential stays claimable when escrowed. Post-gate CAS/validation failure
   still becomes terminal `failed` (no credential). A claim-phase GUI timeout
@@ -215,6 +214,8 @@ linkage paths, roles, and migration ID, never tokens or fingerprints.
 
 ```text
 STALE
+├─ exact owner + heartbeat timeout only + unchanged authority/document/baseline
+│  └─ MCP runtime automatic reconcile (no restart, no sidecar deletion)
 ├─ exact runtime + token + generation + document + baseline still match
 │  └─ authenticated reconcile, then continue or finalize
 └─ anything differs or ownership cannot be proven

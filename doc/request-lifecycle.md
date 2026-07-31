@@ -20,9 +20,11 @@ uncertainty, late-result availability, and `recovery_incident_id`.
 
 For acquire/adopt/create, status may also report `result_claimable` and a
 redacted `acquisition_claim` block. Raw lease tokens are never included.
-Reclaim a lost success with `claim_acquisition_result` (control lane) or by
-replaying the original authenticated request ID while the private claim vault
-holds the credential. An unacknowledged claim is not TTL-pruned or
+Reclaim a lost success with `claim_acquisition_result` (general serialized
+sync-tool lane) or by replaying the original authenticated request ID while the
+private claim vault holds the credential. The MCP control lane is
+`cancel_request` and `get_request_status` only; custody via
+`claim_acquisition_result` is isolated from cancel on the sync-tool lane (D6). An unacknowledged claim is not TTL-pruned or
 capacity-evicted, and the configured capacity is soft: a new raw credential is
 retained rather than rejected after authority may have published. Claims peek
 until `acknowledge_acquisition_claim` (or first authorized use) scrubs the
@@ -36,10 +38,9 @@ Document acquisition deadline hierarchy:
   auto-authorized with no FreeCAD pop-up. Taking over another agent's dirty
   ``LOCKED_ERROR`` lease returns a non-error `LOCKED_ERROR_HANDOFF_PENDING`
   immediately with a `request_id`; bounded GUI revalidation and hash/CAS claim
-  then escrow the credential. Resume with
-  `get_request_status` then the public
-  `claim_acquisition_result` (public MCP tool) to custody the lease into this
-  process without exposing the raw token. Claim-phase GUI timeouts
+  then escrow the credential. Resume with `get_request_status` (control lane)
+  then the public `claim_acquisition_result` (general serialized sync-tool lane)
+  to custody the lease into this process without exposing the raw token. Claim-phase GUI timeouts
   leave the continuation `claiming_uncertain` until a late CAS escrows the
   grant; they do not journal a terminal failure over a possible late success.
 - Each acquire GUI phase (`reserve`, `snapshot/promote`): `ACQUIRE_GUI_PHASE_TIMEOUT_S` (45s).

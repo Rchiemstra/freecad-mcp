@@ -54,13 +54,17 @@ def ensure_freecad_stub() -> None:
 
 def ensure_freecad_gui_stub() -> None:
     try:
-        import FreeCADGui  # noqa: F401
+        import FreeCADGui
     except ModuleNotFoundError:
         gui = types.ModuleType("FreeCADGui")
         gui.addCommand = lambda *_args, **_kwargs: None
         gui.Selection = MagicMock()
         gui.activeDocument = MagicMock(return_value=None)
         sys.modules["FreeCADGui"] = gui
+    else:
+        # Headless FreeCADCmd exposes FreeCADGui without GUI command registration.
+        if not hasattr(FreeCADGui, "addCommand"):
+            FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 
 def ensure_objects_fem_stub() -> None:

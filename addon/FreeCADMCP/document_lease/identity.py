@@ -20,7 +20,13 @@ from .model import (
 
 
 class DocumentIdentityError(ValueError):
-    pass
+    code = "DOCUMENT_IDENTITY_ERROR"
+
+    def __init__(
+        self, message: str, *, details: Mapping[str, Any] | None = None
+    ) -> None:
+        self.details = dict(details or {})
+        super().__init__(message)
 
 
 class UnknownDocumentError(DocumentIdentityError):

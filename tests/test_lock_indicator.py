@@ -12,7 +12,19 @@ from addon.FreeCADMCP import lock_indicator
 from addon.FreeCADMCP.document_lease.model import FileBaseline
 
 
-def _v2_record(*, name: str = "Part", state: str = "LOCKED_IDLE") -> dict:
+def _v2_record(
+    *,
+    name: str = "Part",
+    state: str = "LOCKED_IDLE",
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> dict:
+    error = None
+    if error_code is not None:
+        error = {
+            "code": error_code,
+            "message": error_message or error_code,
+        }
     return {
         "schema_version": 2,
         "record_kind": "freecad-mcp-document-lease",
@@ -44,7 +56,7 @@ def _v2_record(*, name: str = "Part", state: str = "LOCKED_IDLE") -> dict:
             "dirty": True,
             "user_intervened": state == "USER_INTERVENED",
             "baseline": {"sha256": "file-content-hash"},
-            "error": None,
+            "error": error,
         },
     }
 
@@ -1097,3 +1109,169 @@ def test_async_baseline_restore_emits_one_background_outcome(monkeypatch, fails)
     assert len(emitted) == 1
     assert emitted[0][0] != caller_thread
     assert emitted[0][1]["ok"] is (not fails)
+
+
+def _rendered_guidance(lease: dict) -> str:
+    status, tooltip = lock_indicator._lease_lines(lease)
+    return f"{status}\n{tooltip}"
+
+
+@pytest.fixture
+def live_owning_mcp(monkeypatch):
+    monkeypatch.setattr(
+        lock_indicator,
+        "_credential_owning_mcp_process_alive",
+        lambda _view: True,
+    )
+
+
+def test_eligible_stale_timeout_guidance_avoids_restart_and_sidecar_delete(
+    live_owning_mcp,
+):
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_STALE",
+        error_message="Lease heartbeat expired",
+    )
+    view = lock_indicator._lease_view(lease)
+    rendered = _rendered_guidance(lease)
+    folded = rendered.casefold()
+
+    assert lock_indicator._is_eligible_exact_owner_stale_timeout(view)
+    assert "auto-recovering" in folded
+    assert "do not restart freecad" in folded
+    assert "do not restart freecad, delete the .freecad-mcp.lock sidecar" in folded
+    for bad in (
+        "restart freecad to recover",
+        "restart freecad or delete",
+        "delete the .freecad-mcp.lock sidecar and restart",
+    ):
+        assert bad not in folded
+
+
+def test_eligible_stale_timeout_guidance_does_not_require_gui_save(live_owning_mcp):
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_STALE",
+        error_message="Lease heartbeat expired",
+    )
+    rendered = _rendered_guidance(lease)
+
+    assert "does not need a save first" in rendered
+    assert "Do not restart FreeCAD" in rendered
+    assert "save from the normal GUI" in rendered
+
+
+def test_eligible_stale_timeout_disables_takeover_recovery_action(live_owning_mcp):
+    document = SimpleNamespace(Modified=True)
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_STALE",
+        error_message="Lease heartbeat expired",
+    )
+
+    capabilities = lock_indicator._local_recovery_capabilities(lease, document)
+
+    assert capabilities == {
+        "takeover": False,
+        "keep_dirty": False,
+        "save_and_clear": False,
+        "restore_baseline": False,
+    }
+
+
+def test_stale_timeout_without_live_mcp_owner_allows_takeover(monkeypatch):
+    document = SimpleNamespace(Modified=True)
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_STALE",
+        error_message="Lease heartbeat expired",
+    )
+    monkeypatch.setattr(
+        lock_indicator,
+        "_credential_owning_mcp_process_alive",
+        lambda _view: False,
+    )
+    view = lock_indicator._lease_view(lease)
+    rendered = _rendered_guidance(lease)
+
+    assert not lock_indicator._is_eligible_exact_owner_stale_timeout(view)
+    assert "recovery required" in rendered.casefold()
+    assert "auto-recovering" not in rendered.casefold()
+    assert lock_indicator._local_recovery_capabilities(lease, document) == {
+        "takeover": True,
+        "keep_dirty": False,
+        "save_and_clear": False,
+        "restore_baseline": False,
+    }
+
+
+def test_foreign_owner_exited_guidance_matches_disabled_takeover():
+    document = SimpleNamespace(Modified=True)
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_OWNER_EXITED",
+        error_message="Credential-owning MCP process exited",
+    )
+    lease["source"] = "foreign_sidecar"
+    rendered = _rendered_guidance(lease)
+    capabilities = lock_indicator._local_recovery_capabilities(lease, document)
+
+    assert capabilities["takeover"] is False
+    assert "Take over" not in rendered
+    assert "foreign or unvalidated sidecar" in rendered.casefold()
+
+
+def test_stale_with_user_intervention_requires_local_recovery_guidance():
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_STALE",
+        error_message="Lease heartbeat expired",
+    )
+    lease["document_state"]["user_intervened"] = True
+    view = lock_indicator._lease_view(lease)
+    rendered = _rendered_guidance(lease)
+
+    assert not lock_indicator._is_eligible_exact_owner_stale_timeout(view)
+    assert lock_indicator._requires_local_recovery_intervention(view)
+    assert "Local recovery required:" in rendered
+    assert "User intervention occurred while the lease was stale" in rendered
+
+
+def test_abandoned_owner_stale_shows_intervention_guidance_with_takeover():
+    document = SimpleNamespace(Modified=True)
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_OWNER_EXITED",
+        error_message="Credential-owning MCP process exited",
+    )
+    rendered = _rendered_guidance(lease)
+
+    assert "recovery required" in rendered.casefold()
+    assert "Take over" in rendered
+    assert lock_indicator._local_recovery_capabilities(lease, document)["takeover"] is True
+
+
+def test_user_intervened_shows_local_recovery_guidance():
+    lease = _v2_record(state="USER_INTERVENED", error_code="USER_INTERVENED")
+    rendered = _rendered_guidance(lease)
+
+    assert "Local recovery required:" in rendered
+    assert "save and clear" in rendered
+    assert "restore baseline" in rendered
+    assert "do not delete .freecad-mcp.lock manually" in rendered.casefold()
+
+
+def test_foreign_stale_remains_intervention_not_auto_recovery():
+    lease = _v2_record(
+        state="STALE",
+        error_code="LEASE_STALE",
+        error_message="Lease heartbeat expired",
+    )
+    lease["source"] = "foreign_sidecar"
+    view = lock_indicator._lease_view(lease)
+    rendered = _rendered_guidance(lease)
+
+    assert not lock_indicator._is_eligible_exact_owner_stale_timeout(view)
+    assert "Local recovery required:" in rendered
+    assert "foreign or unvalidated sidecar" in rendered.casefold()

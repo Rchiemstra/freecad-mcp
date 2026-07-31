@@ -975,6 +975,28 @@ def _lease_service_error(exc, *, request_id=None):
     return result
 
 
+def _format_identity_registration_error(failure) -> str:
+    """Build a self-describing identity-registration failure message."""
+
+    message = (
+        f"live document identity for {failure.document_name!r} could not be "
+        f"registered ({failure.failure_branch})"
+    )
+    if failure.drifted_fields:
+        message += "; drifted field(s): " + ", ".join(failure.drifted_fields)
+    if failure.identity_refresh_attempted:
+        if failure.identity_refresh_refused_reason:
+            message += (
+                "; automatic identity refresh was attempted and refused "
+                f"({failure.identity_refresh_refused_reason})"
+            )
+        else:
+            message += "; automatic identity refresh was attempted"
+    else:
+        message += "; automatic identity refresh was not attempted"
+    return message
+
+
 def _ensure_v2_document(document):
     if document_identity_service is None:
         raise RuntimeError("document lease service is not initialized")
@@ -986,13 +1008,17 @@ def _ensure_v2_document(document):
         from addon.FreeCADMCP.document_lease.observer import (
             register_live_document_recovery,
         )
-    identity, imported = register_live_document_recovery(
+    identity, imported, failure = register_live_document_recovery(
         document_lease_service, document
     )
     if identity is None:
         lease = _import_document_lease()
+        details = failure.to_details() if failure is not None else {}
         raise lease.DocumentIdentityError(
-            "live document identity could not be registered"
+            _format_identity_registration_error(failure)
+            if failure is not None
+            else "live document identity could not be registered",
+            details=details,
         )
     if imported is not None:
         try:
@@ -1004,6 +1030,38 @@ def _ensure_v2_document(document):
                 "Could not queue foreign recovery status refresh", exc_info=True
             )
     return identity
+
+
+def _candidate_matches_selector_target(candidate, selector):
+    """Return True when an open document is the selector's intended target."""
+    if document_identity_service is None:
+        return False
+    lease = _import_document_lease()
+    session_uuid = str(selector.get("document_session_uuid") or "")
+    if session_uuid:
+        try:
+            registered = document_identity_service.registered_session_uuid(
+                candidate
+            )
+        except (lease.UnknownDocumentError, lease.DocumentIdentityError):
+            registered = None
+        if registered == session_uuid:
+            return True
+    try:
+        expected = document_identity_service.resolve(selector)
+    except (lease.UnknownDocumentError, lease.DocumentIdentityError):
+        return False
+    name = getattr(candidate, "Name", None) or getattr(candidate, "Label", None)
+    if name and str(name) == expected.name:
+        return True
+    path = str(getattr(candidate, "FileName", "") or "").strip()
+    if path and expected.comparison_key:
+        _, comparison = lease.canonicalize_path(
+            path, platform=document_identity_service.platform
+        )
+        if comparison == expected.comparison_key:
+            return True
+    return False
 
 
 def _live_document_from_selector(selector):
@@ -1036,8 +1094,16 @@ def _live_document_from_selector(selector):
     else:
         document = None
         identity = None
+        lease = _import_document_lease()
         for candidate in FreeCAD.listDocuments().values():
-            candidate_identity = _ensure_v2_document(candidate)
+            try:
+                candidate_identity = _ensure_v2_document(candidate)
+            except Exception as exc:
+                if isinstance(exc, lease.DocumentIdentityError):
+                    if _candidate_matches_selector_target(candidate, selector):
+                        raise
+                    continue
+                raise
             if session_uuid and candidate_identity.session_uuid == session_uuid:
                 document, identity = candidate, candidate_identity
                 break
@@ -1257,6 +1323,103 @@ def _assert_mutation_file_metadata_unchanged(record):
         raise lease.LiveDocumentValidationError(
             "leased document modification time changed externally"
         )
+
+
+def _recovery_snapshot_intact(snapshot_id: str | None) -> bool:
+    if not snapshot_id:
+        return False
+    try:
+        path = recovery_snapshot_path(snapshot_id)
+    except Exception:
+        return False
+    return path.is_file()
+
+
+def _stale_reconcile_saved_baseline_ready(record) -> bool:
+    """Return whether *record* has an on-disk baseline for stale reconcile."""
+
+    return bool(record.document.canonical_path and record.baseline is not None)
+
+
+def _stale_reconcile_never_saved_ready(record) -> bool:
+    """Return whether *record* is a never-saved lease eligible for D5 reconcile."""
+
+    return bool(
+        not record.document.canonical_path
+        and record.baseline is None
+        and not record.validation_complete
+    )
+
+
+def _stale_reconcile_classify(record):
+    """Classify stale reconcile evidence as saved-baseline or never-saved D5."""
+
+    lease = _import_document_lease()
+    if _stale_reconcile_saved_baseline_ready(record):
+        return "saved"
+    if _stale_reconcile_never_saved_ready(record):
+        return "never_saved"
+    if record.document.canonical_path and record.baseline is None:
+        raise lease.LiveDocumentValidationError(
+            "stale reconciliation requires a saved verified baseline"
+        )
+    raise lease.LiveDocumentValidationError(
+        "stale reconciliation evidence is incomplete or inconsistent"
+    )
+
+
+def _assert_never_saved_stale_continuity(record, document, parsed, live_identity):
+    """Prove in-memory continuity for a never-saved dirty stale lease (D5)."""
+
+    lease = _import_document_lease()
+    if not _stale_reconcile_never_saved_ready(record):
+        raise lease.LiveDocumentValidationError(
+            "stale reconciliation record is not a never-saved lease"
+        )
+    if record.user_intervened:
+        raise lease.LiveDocumentValidationError(
+            "stale reconciliation refused after user intervention"
+        )
+    if record.dirty is not True:
+        raise lease.LiveDocumentValidationError(
+            "never-saved stale reconciliation requires a dirty lease record"
+        )
+    if record.last_mutation_revision < 1:
+        raise lease.LiveDocumentValidationError(
+            "never-saved stale reconciliation has no recorded mutation"
+        )
+    document_modified = require_document_modified(document)
+    if document_modified != record.dirty:
+        raise lease.LiveDocumentValidationError(
+            "live GUI document modified state no longer matches the stale record"
+        )
+    if live_identity.name != record.document.name:
+        raise lease.LiveDocumentValidationError(
+            "live document name changed during stale reconciliation"
+        )
+    if not _recovery_snapshot_intact(record.snapshot_id):
+        raise lease.LiveDocumentValidationError(
+            "never-saved stale reconciliation requires an intact recovery snapshot"
+        )
+    bound_session = document_identity_service.registered_session_uuid(document)
+    if bound_session != parsed.document_session_uuid:
+        raise lease.LiveDocumentValidationError(
+            "live document proxy is not registered to this lease session"
+        )
+
+
+def _stale_reconcile_already_recovered(parsed):
+    """Return the lease record when reconcile already succeeded for *parsed*."""
+
+    lease = _import_document_lease()
+    try:
+        return document_lease_service.authorize(
+            parsed,
+            selector={"document_session_uuid": parsed.document_session_uuid},
+            allowed_states={lease.LeaseState.LOCKED_IDLE},
+        )
+    except Exception:
+        return None
 
 
 def _discard_terminal_snapshot(terminal):
@@ -4023,6 +4186,13 @@ class FreeCADRPC:
                 if inflight is not None:
                     inflight.token.checkpoint("lease_reconcile_prepare_gui")
                 parsed = _credential_from_wire(credential, captured_identity)
+                already = _stale_reconcile_already_recovered(parsed)
+                if already is not None:
+                    return {
+                        "success": True,
+                        "idempotent": True,
+                        "lease": already.to_public_dict(),
+                    }
                 document, identity = _live_document_from_selector(
                     {"document_session_uuid": parsed.document_session_uuid}
                 )
@@ -4038,27 +4208,21 @@ class FreeCADRPC:
                     raise lease.LiveDocumentValidationError(
                         "live document identity does not match the stale lease"
                     )
-                if not record.document.canonical_path or record.baseline is None:
+                if record.user_intervened:
                     raise lease.LiveDocumentValidationError(
-                        "stale reconciliation requires a saved verified baseline"
+                        "stale reconciliation refused after user intervention"
                     )
-                if (
-                    not record.validation_complete
-                    or record.last_verified_save_revision
-                    < record.last_mutation_revision
-                ):
-                    raise lease.LiveDocumentValidationError(
-                        "stale reconciliation requires a baseline verified after "
-                        "the final mutation"
-                    )
+                reconcile_kind = _stale_reconcile_classify(record)
                 phase.update(
                     credential=parsed,
                     document=document,
                     identity=live_identity,
                     record=record,
-                    baseline=record.baseline,
-                    canonical_path=record.document.canonical_path,
+                    reconcile_kind=reconcile_kind,
                 )
+                if reconcile_kind == "saved":
+                    phase["baseline"] = record.baseline
+                    phase["canonical_path"] = record.document.canonical_path
                 return {"success": True}
             except Exception as exc:
                 return _lease_service_error(
@@ -4069,26 +4233,30 @@ class FreeCADRPC:
         prepared = self._dispatch_gui(prepare_gui_phase)
         if not isinstance(prepared, dict) or not prepared.get("success"):
             return prepared
+        if prepared.get("idempotent"):
+            return {"success": True, "lease": prepared["lease"]}
 
-        try:
-            self._request_checkpoint("lease_reconcile_hash")
-            # Full SHA-256 plus stat-before/stat-after capture can be expensive.
-            # It intentionally runs on the XML-RPC handler thread between two
-            # short GUI-thread authority checks.
-            fresh_baseline = lease.capture_file_baseline(
-                phase["canonical_path"],
-                platform=document_identity_service.platform,
-            )
-            self._request_checkpoint("lease_reconcile_hash_complete")
-        except RequestCancellationError:
-            raise
-        except Exception as exc:
-            return _lease_service_error(
-                lease.LiveDocumentValidationError(
-                    f"unable to capture a stable reconciliation baseline: {exc}"
-                ),
-                request_id=captured_identity.get("request_id"),
-            )
+        fresh_baseline = None
+        if phase["reconcile_kind"] == "saved":
+            try:
+                self._request_checkpoint("lease_reconcile_hash")
+                # Full SHA-256 plus stat-before/stat-after capture can be expensive.
+                # It intentionally runs on the XML-RPC handler thread between two
+                # short GUI-thread authority checks.
+                fresh_baseline = lease.capture_file_baseline(
+                    phase["canonical_path"],
+                    platform=document_identity_service.platform,
+                )
+                self._request_checkpoint("lease_reconcile_hash_complete")
+            except RequestCancellationError:
+                raise
+            except Exception as exc:
+                return _lease_service_error(
+                    lease.LiveDocumentValidationError(
+                        f"unable to capture a stable reconciliation baseline: {exc}"
+                    ),
+                    request_id=captured_identity.get("request_id"),
+                )
 
         def reconcile_gui_phase():
             try:
@@ -4122,25 +4290,38 @@ class FreeCADRPC:
                     raise lease.LiveDocumentValidationError(
                         "live document identity changed during baseline capture"
                     )
-                # Close the ordinary hash-to-GUI race with an immediate stat
-                # check. Deliberate same-user metadata forgery remains outside
-                # the cooperative threat model.
-                _assert_mutation_file_metadata_unchanged(record)
-                baseline_matches = bool(
-                    fresh_baseline == phase["baseline"]
-                    and fresh_baseline == record.baseline
-                )
-                if not baseline_matches:
-                    raise lease.LiveDocumentValidationError(
-                        "fresh reconciliation baseline does not exactly match "
-                        "the persisted accepted baseline"
+                reconcile_kind = phase["reconcile_kind"]
+                if reconcile_kind == "saved":
+                    _assert_mutation_file_metadata_unchanged(record)
+                    baseline_matches = bool(
+                        fresh_baseline == phase["baseline"]
+                        and fresh_baseline == record.baseline
                     )
-                evidence = lease.LiveDocumentValidation(
-                    document=live_identity,
-                    document_modified=require_document_modified(document),
-                    baseline=fresh_baseline,
-                    baseline_validated=True,
-                )
+                    if not baseline_matches:
+                        raise lease.LiveDocumentValidationError(
+                            "fresh reconciliation baseline does not exactly match "
+                            "the persisted accepted baseline"
+                        )
+                    evidence = lease.LiveDocumentValidation(
+                        document=live_identity,
+                        document_modified=require_document_modified(document),
+                        baseline=fresh_baseline,
+                        baseline_validated=True,
+                    )
+                elif reconcile_kind == "never_saved":
+                    _assert_never_saved_stale_continuity(
+                        record, document, parsed, live_identity
+                    )
+                    evidence = lease.LiveDocumentValidation(
+                        document=live_identity,
+                        document_modified=require_document_modified(document),
+                        baseline=None,
+                        baseline_validated=True,
+                    )
+                else:
+                    raise lease.LiveDocumentValidationError(
+                        f"unsupported stale reconcile kind: {reconcile_kind!r}"
+                    )
                 self._touch_inflight_credential(parsed, inflight)
                 if inflight is not None:
                     inflight.token.begin_irreversible("lease_reconcile_state_commit")

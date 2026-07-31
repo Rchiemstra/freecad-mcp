@@ -314,7 +314,7 @@ def test_finish_save_refreshes_registered_identity_without_lease(tmp_path):
 
     assert observer.slotFinishSaveDocument(document, document.FileName) is None
 
-    refreshed, imported = observer_mod.register_live_document_recovery(
+    refreshed, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         document,
     )
@@ -386,7 +386,7 @@ def test_missing_foreign_sidecar_repairs_exact_proxy_identity_error(tmp_path):
         file_identity=None,
     )
 
-    repaired, imported = observer_mod.register_live_document_recovery(
+    repaired, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         document,
     )
@@ -485,7 +485,7 @@ def test_missing_worker_intervention_sidecar_repairs_dirty_exact_proxy_identity(
         file_identity=None,
     )
 
-    repaired, imported = observer_mod.register_live_document_recovery(
+    repaired, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         document,
     )
@@ -558,7 +558,7 @@ def test_unlocked_close_unregisters_identity_for_fresh_reopen(tmp_path):
         identities.resolve(original.session_uuid)
 
     reopened = FakeDocument("Unlocked", str(model), modified=False)
-    fresh, imported = observer_mod.register_live_document_recovery(
+    fresh, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -613,7 +613,7 @@ def test_close_reopen_rebinds_unreturned_reservation_then_allows_retry(tmp_path)
     assert closed_record.state == LeaseState.USER_INTERVENED
 
     reopened = FakeDocument("Reopened", str(model), modified=False)
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -681,7 +681,7 @@ def test_save_start_then_close_refreshes_identity_without_finish_callback(tmp_pa
     assert closed_record.state == LeaseState.USER_INTERVENED
     assert closed_record.document.file_identity != original.file_identity
     reopened = FakeDocument("CloseAfterSave", str(model), modified=False)
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -729,7 +729,7 @@ def test_deferred_save_refresh_ignores_closed_proxy_after_reopen(tmp_path):
     closed.Modified = False
     observer.slotDeletedDocument(closed)
     reopened = FakeDocument("DeferredAfterReopen", str(model), modified=False)
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -776,7 +776,7 @@ def test_stale_closed_proxy_callback_cannot_fence_reopened_owner(tmp_path):
     observer = observer_mod.LeaseObserver(service_provider=lambda: service)
     observer.slotDeletedDocument(closed)
     reopened = FakeDocument("StaleProxy", str(model), modified=False)
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -837,7 +837,7 @@ def test_close_reopen_rebinds_promoted_lease_but_keeps_recovery_block(tmp_path):
     observer.slotDeletedDocument(closed)
     reopened = FakeDocument("PromotedReopen", str(model), modified=False)
 
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -884,7 +884,7 @@ def test_close_reopen_refuses_changed_file_identity(tmp_path):
     replacement.replace(model)
 
     reopened = FakeDocument("Changed", str(model), modified=False)
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         service,
         reopened,
     )
@@ -958,7 +958,7 @@ def test_close_reopen_preserves_foreign_recovery_then_dead_owner_retry(tmp_path)
     assert closed_status["source"] == "foreign_recovery"
 
     reopened = FakeDocument("ForeignReopen", str(model), modified=False)
-    rebound, imported = observer_mod.register_live_document_recovery(
+    rebound, imported, _failure = observer_mod.register_live_document_recovery(
         restarted,
         reopened,
     )
@@ -1317,7 +1317,7 @@ def test_register_live_document_recovery_skips_name_resolve_mismatch():
     with pytest.raises(DuplicateDocumentError):
         identities.register_document(second)
 
-    identity, imported = observer_mod.register_live_document_recovery(
+    identity, imported, _failure = observer_mod.register_live_document_recovery(
         _Service(), second
     )
     assert identity is None

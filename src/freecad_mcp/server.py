@@ -25,6 +25,11 @@ from .build_info import (
 )
 from .freecad_client import FreeCADConnection
 from .instrumented_server import InstrumentedFastMCP
+from .lease_manager import (
+    STALE_RECOVERY_TRIGGER_HEARTBEAT,
+    STALE_RECOVERY_TRIGGER_POST_TOOL,
+    StaleLeaseRecoveryOrchestrator,
+)
 from .outcomes import OutcomeStatus
 from .rpc_auth import (
     REQUIRED_PROTOCOL_FEATURES,
@@ -234,6 +239,51 @@ _connection_lock = threading.RLock()
 _LEASE_HEARTBEAT_INTERVAL_S = 10.0
 _DIAGNOSTIC_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
+stale_recovery = StaleLeaseRecoveryOrchestrator()
+
+
+async def _reconcile_stale_sessions(
+    session_uuids: tuple[str, ...] | list[str],
+    trigger: str,
+) -> None:
+    if not session_uuids:
+        return
+    conn = state.freecad_connection
+    if conn is None or not state.lease_manager.connected:
+        return
+    try:
+        await stale_recovery.recover_sessions(
+            session_uuids,
+            trigger,
+            conn.reconcile_document_lease,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Stale lease recovery orchestration failed (%s)",
+            type(exc).__name__,
+        )
+
+
+async def _post_tool_stale_recovery(duration_s: float, tool_name: str) -> None:
+    del tool_name
+    try:
+        if duration_s < stale_recovery.stale_after_seconds:
+            return
+        sessions = tuple(
+            credential.document_session_uuid
+            for credential in state.lease_manager.credentials_snapshot()
+        )
+        affected = stale_recovery.observe_tool_completion(duration_s, sessions)
+        if affected:
+            await _reconcile_stale_sessions(
+                affected, STALE_RECOVERY_TRIGGER_POST_TOOL
+            )
+    except Exception as exc:
+        logger.warning(
+            "Post-tool stale lease recovery failed (%s)",
+            type(exc).__name__,
+        )
+
 
 def _safe_diagnostic_code(value: Any, fallback: str) -> str:
     candidate = str(value or "")
@@ -361,6 +411,7 @@ def _authenticate_connection(conn: FreeCADConnection, *, force: bool = False) ->
         conn.configure_session_refresher(
             lambda: _refresh_authenticated_connection(conn)
         )
+        conn.configure_stale_recovery(stale_recovery)
         compatibility = _compatibility_for_manifest(verified.manifest)
         state.compatibility_warnings = compatibility["warnings"]
         emit_event(
@@ -450,6 +501,11 @@ async def _lease_heartbeat_once() -> bool:
         result = response.get("result", response)
         if isinstance(result, dict):
             state.lease_manager.apply_heartbeat_response(result)
+            stale_sessions = stale_recovery.observe_heartbeat_batch(result)
+            if stale_sessions:
+                await _reconcile_stale_sessions(
+                    stale_sessions, STALE_RECOVERY_TRIGGER_HEARTBEAT
+                )
         successful = bool(
             response.get(
                 "ok",
@@ -518,6 +574,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         # established lazily on first tool use via get_freecad_connection().
         logger.info("FreeCAD connection deferred until first tool use")
         heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
+        stale_recovery.bind_event_loop(asyncio.get_running_loop())
         yield {}
     finally:
         # Fence session refresh and new credential storage before cancelling
@@ -575,6 +632,7 @@ mcp = InstrumentedFastMCP(
     instructions="FreeCAD integration through the Model Context Protocol",
     lifespan=server_lifespan,
 )
+mcp.post_tool_completed_hook = _post_tool_stale_recovery
 
 # The SDK negotiates this capability only with clients that advertise
 # task-augmented tool calls. Ordinary clients keep the synchronous path.
@@ -1152,6 +1210,18 @@ def release_document_lock(
 
 
 def _lifecycle_tool_result(result: dict[str, Any]) -> CallToolResult:
+    if not result.get("success") and "stale_recovery" not in result:
+        session_uuid = str(
+            result.get("document_session_uuid")
+            or (result.get("aliases") or {}).get("document_session_uuid")
+            or ""
+        )
+        if session_uuid:
+            snapshot = stale_recovery.recovery_status_snapshot_for(
+                (session_uuid,)
+            )
+            if snapshot.get("sessions"):
+                result = {**result, "stale_recovery_health": snapshot}
     if result.get("success"):
         return json_response(result)
     return tool_fail(
