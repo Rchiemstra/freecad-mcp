@@ -22,6 +22,7 @@ from freecad_mcp.lease_manager import (
     STALE_RECOVERY_OUTCOME_REFUSED_TERMINAL,
     STALE_RECOVERY_OUTCOME_SKIPPED_BACKOFF,
     STALE_RECOVERY_OUTCOME_SKIPPED_TERMINAL,
+    STALE_RECOVERY_OUTCOME_SKIPPED_UNNECESSARY,
     STALE_RECOVERY_RETRY_ERROR_CODE,
     STALE_RECOVERY_TRIGGER_HEARTBEAT,
     STALE_RECOVERY_TRIGGER_POST_TOOL,
@@ -29,9 +30,13 @@ from freecad_mcp.lease_manager import (
     LeaseCredential,
     RpcRequestContext,
     StaleLeaseRecoveryOrchestrator,
+    StaleRecoveryResult,
     extract_stale_sessions_from_heartbeat,
     is_timeout_stale_heartbeat_item,
     reconcile_refusal_is_terminal,
+    reconcile_response_is_idempotent,
+    stale_recovery_result_to_dict,
+    summarize_stale_recovery_results,
 )
 from freecad_mcp import server
 from freecad_mcp.instrumented_server import InstrumentedFastMCP
@@ -581,5 +586,164 @@ def test_post_tool_hook_schedules_recovery_for_long_calls():
             state_mock.freecad_connection = connection
             await server._post_tool_stale_recovery(0.5, "execute_code")
         connection.reconcile_document_lease.assert_called_once_with("doc-a")
+
+    asyncio.run(run())
+
+
+@pytest.mark.unit
+def test_reconcile_response_is_idempotent_detects_no_op_success():
+    assert reconcile_response_is_idempotent(
+        {"success": True, "idempotent": True, "lease": {"state": "LOCKED_IDLE"}}
+    )
+    assert reconcile_response_is_idempotent(
+        {"success": True, "already_active": True}
+    )
+    assert not reconcile_response_is_idempotent({"success": True})
+    assert not reconcile_response_is_idempotent(
+        {"success": False, "idempotent": True}
+    )
+
+
+@pytest.mark.unit
+def test_idempotent_reconcile_classified_as_unnecessary_not_recovered():
+    orchestrator = StaleLeaseRecoveryOrchestrator()
+    orchestrator.mark_needs_recovery("doc-a")
+
+    async def run() -> None:
+        results = await orchestrator.recover_sessions(
+            ("doc-a",),
+            STALE_RECOVERY_TRIGGER_POST_TOOL,
+            lambda _session_uuid: {
+                "success": True,
+                "idempotent": True,
+                "lease": {"state": "LOCKED_IDLE"},
+            },
+        )
+        assert results["doc-a"].outcome == STALE_RECOVERY_OUTCOME_SKIPPED_UNNECESSARY
+        assert results["doc-a"].to_dict()["succeeded"] is False
+        assert results["doc-a"].to_dict()["attempted"] is False
+        assert results["doc-a"].to_dict()["unnecessary"] is True
+
+    asyncio.run(run())
+
+
+@pytest.mark.unit
+def test_healthy_long_call_skips_post_tool_recovery_when_heartbeat_confirms_active():
+    orchestrator = StaleLeaseRecoveryOrchestrator(stale_after_seconds=1.0)
+    orchestrator.observe_heartbeat_batch(
+        {
+            "leases": [
+                {
+                    "document_session_uuid": "doc-a",
+                    "state": "LOCKED_IDLE",
+                    "success": True,
+                }
+            ]
+        }
+    )
+
+    affected = orchestrator.observe_tool_completion(2.0, ("doc-a",))
+    assert affected == ()
+    assert orchestrator.sessions_needing_recovery(("doc-a",)) == ()
+
+
+@pytest.mark.unit
+def test_post_tool_still_recovers_when_heartbeat_last_active_before_stale_deadline():
+    orchestrator = StaleLeaseRecoveryOrchestrator(stale_after_seconds=1.0)
+    orchestrator.observe_heartbeat_batch(
+        {
+            "leases": [
+                {
+                    "document_session_uuid": "doc-a",
+                    "state": "LOCKED_IDLE",
+                    "success": True,
+                }
+            ]
+        }
+    )
+    orchestrator._heartbeat_active_at["doc-a"] = 0.0
+
+    affected = orchestrator.observe_tool_completion(2.0, ("doc-a",))
+    assert affected == ("doc-a",)
+
+    reconcile_calls: list[str] = []
+
+    async def run() -> None:
+        results = await orchestrator.recover_sessions(
+            affected,
+            STALE_RECOVERY_TRIGGER_POST_TOOL,
+            lambda session_uuid: reconcile_calls.append(session_uuid)
+            or {"success": True},
+        )
+        assert reconcile_calls == ["doc-a"]
+        assert results["doc-a"].outcome == STALE_RECOVERY_OUTCOME_RECOVERED
+
+    asyncio.run(run())
+
+
+@pytest.mark.unit
+def test_idempotent_post_tool_does_not_overwrite_prior_recovered_evidence():
+    orchestrator = StaleLeaseRecoveryOrchestrator()
+    orchestrator.mark_needs_recovery("doc-a")
+    orchestrator._last_results["doc-a"] = StaleRecoveryResult(
+        document_session_uuid="doc-a",
+        trigger=STALE_RECOVERY_TRIGGER_HEARTBEAT,
+        outcome=STALE_RECOVERY_OUTCOME_RECOVERED,
+    )
+
+    async def run() -> None:
+        results = await orchestrator.recover_sessions(
+            ("doc-a",),
+            STALE_RECOVERY_TRIGGER_POST_TOOL,
+            lambda _session_uuid: {
+                "success": True,
+                "idempotent": True,
+                "lease": {"state": "LOCKED_IDLE"},
+            },
+        )
+        assert results["doc-a"].outcome == STALE_RECOVERY_OUTCOME_SKIPPED_UNNECESSARY
+        assert (
+            orchestrator.last_recovery_results()["doc-a"].outcome
+            == STALE_RECOVERY_OUTCOME_RECOVERED
+        )
+
+    asyncio.run(run())
+
+
+@pytest.mark.unit
+def test_healthy_long_call_post_tool_hook_avoids_false_recovered_status():
+    orchestrator = StaleLeaseRecoveryOrchestrator(stale_after_seconds=0.01)
+    manager = LeaseClientManager(session_token="rpc-session")
+    manager.store(_credential("doc-a", "secret-a"))
+    connection = mock.Mock()
+    connection.reconcile_document_lease.return_value = {
+        "success": True,
+        "idempotent": True,
+        "lease": {"state": "LOCKED_IDLE"},
+    }
+
+    async def run() -> None:
+        with mock.patch.object(server, "state") as state_mock, mock.patch.object(
+            server, "stale_recovery", orchestrator
+        ):
+            state_mock.lease_manager = manager
+            state_mock.freecad_connection = connection
+            orchestrator.observe_heartbeat_batch(
+                {
+                    "leases": [
+                        {
+                            "document_session_uuid": "doc-a",
+                            "state": "LOCKED_IDLE",
+                            "success": True,
+                        }
+                    ]
+                }
+            )
+            await server._post_tool_stale_recovery(0.5, "execute_code")
+
+        connection.reconcile_document_lease.assert_not_called()
+        summary = summarize_stale_recovery_results(orchestrator.last_recovery_results())
+        assert summary["succeeded"] is False
+        assert summary["attempted"] is False
 
     asyncio.run(run())

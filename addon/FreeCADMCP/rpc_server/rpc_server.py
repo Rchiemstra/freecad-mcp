@@ -4234,7 +4234,11 @@ class FreeCADRPC:
         if not isinstance(prepared, dict) or not prepared.get("success"):
             return prepared
         if prepared.get("idempotent"):
-            return {"success": True, "lease": prepared["lease"]}
+            return {
+                "success": True,
+                "idempotent": True,
+                "lease": prepared["lease"],
+            }
 
         fresh_baseline = None
         if phase["reconcile_kind"] == "saved":

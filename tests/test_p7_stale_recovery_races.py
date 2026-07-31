@@ -596,7 +596,7 @@ def test_never_saved_dirty_d5_end_to_end_via_client_orchestration():
 def test_accelerated_timeout_sync_tool_heartbeat_and_post_tool_recovery(
     monkeypatch,
 ):
-    """Long sync tool exceeds stale TTL while real heartbeats run; hook recovers."""
+    """Long sync tool exceeds stale TTL while heartbeats stay healthy; no false recovery."""
 
     stale_after_s = 0.05
     orchestrator = StaleLeaseRecoveryOrchestrator(stale_after_seconds=stale_after_s)
@@ -605,7 +605,16 @@ def test_accelerated_timeout_sync_tool_heartbeat_and_post_tool_recovery(
     connection = mock.Mock()
     connection.heartbeat_document_locks_batch.return_value = {
         "ok": True,
-        "result": {"success": True, "leases": []},
+        "result": {
+            "success": True,
+            "leases": [
+                {
+                    "document_session_uuid": "doc-a",
+                    "state": "LOCKED_IDLE",
+                    "success": True,
+                }
+            ],
+        },
     }
     connection.reconcile_document_lease.return_value = _lease_reconcile_wire_result(
         mode="dirty_saved",
@@ -673,7 +682,7 @@ def test_accelerated_timeout_sync_tool_heartbeat_and_post_tool_recovery(
             release.set()
             await asyncio.wait_for(tool_task, timeout=2.0)
 
-        connection.reconcile_document_lease.assert_called_once_with("doc-a")
+        connection.reconcile_document_lease.assert_not_called()
         assert connection.heartbeat_document_locks_batch.call_count >= 2
         assert heartbeat_calls >= 2
 

@@ -281,10 +281,8 @@ def is_timeout_stale_heartbeat_item(item: Mapping[str, Any]) -> bool:
     return heartbeat_item_lease_state(item) == "STALE"
 
 
-def extract_stale_sessions_from_heartbeat(
-    response: Mapping[str, Any],
-) -> tuple[str, ...]:
-    """Collect held document session UUIDs reported as STALE by heartbeat."""
+def _heartbeat_lease_items(response: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """Return normalized lease items from one heartbeat batch response."""
 
     raw_results: Any = response.get("leases", response.get("results", ()))
     if isinstance(raw_results, Mapping):
@@ -295,11 +293,35 @@ def extract_stale_sessions_from_heartbeat(
         results = raw_results
     else:
         results = ()
+    items: list[Mapping[str, Any]] = []
+    for item in results:
+        if isinstance(item, Mapping):
+            items.append(item)
+    return tuple(items)
+
+
+def heartbeat_item_confirms_active_lease(item: Mapping[str, Any]) -> bool:
+    """True when a heartbeat item proves the lease is still active (not STALE)."""
+
+    if is_timeout_stale_heartbeat_item(item):
+        return False
+    if item.get("success") is False:
+        return False
+    state = heartbeat_item_lease_state(item)
+    if not state:
+        return item.get("success") is True
+    if state == "STALE":
+        return False
+    return state.startswith("LOCKED_") or state == "ACQUIRING"
+
+
+def extract_stale_sessions_from_heartbeat(
+    response: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Collect held document session UUIDs reported as STALE by heartbeat."""
 
     stale: list[str] = []
-    for item in results:
-        if not isinstance(item, Mapping):
-            continue
+    for item in _heartbeat_lease_items(response):
         if not is_timeout_stale_heartbeat_item(item):
             continue
         session_uuid = str(
@@ -308,6 +330,35 @@ def extract_stale_sessions_from_heartbeat(
         if session_uuid:
             stale.append(session_uuid)
     return tuple(stale)
+
+
+def extract_active_sessions_from_heartbeat(
+    response: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Collect session UUIDs whose heartbeat item proves an active lease."""
+
+    active: list[str] = []
+    for item in _heartbeat_lease_items(response):
+        if not heartbeat_item_confirms_active_lease(item):
+            continue
+        session_uuid = str(
+            item.get("document_session_uuid") or item.get("session_uuid") or ""
+        )
+        if session_uuid:
+            active.append(session_uuid)
+    return tuple(active)
+
+
+def reconcile_response_is_idempotent(response: Mapping[str, Any]) -> bool:
+    """True when lease_reconcile succeeded without a STALE->LOCKED transition."""
+
+    if not isinstance(response, Mapping) or not response.get("success"):
+        return False
+    if response.get("idempotent") is True:
+        return True
+    if response.get("already_active") is True:
+        return True
+    return False
 
 
 def rpc_response_indicates_stale_refusal(response: Mapping[str, Any]) -> bool:
@@ -439,6 +490,7 @@ class StaleLeaseRecoveryOrchestrator:
         self._stale_after_seconds = stale_after_seconds
         self._blocking_timeout_s = blocking_timeout_s
         self._needs_recovery: set[str] = set()
+        self._heartbeat_active_at: dict[str, float] = {}
         self._attempts: dict[str, _RecoveryAttemptState] = {}
         self._last_results: dict[str, StaleRecoveryResult] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -455,7 +507,12 @@ class StaleLeaseRecoveryOrchestrator:
     def observe_heartbeat_batch(
         self, response: Mapping[str, Any]
     ) -> tuple[str, ...]:
+        now = time.monotonic()
         stale = extract_stale_sessions_from_heartbeat(response)
+        for session_uuid in extract_active_sessions_from_heartbeat(response):
+            self._heartbeat_active_at[session_uuid] = now
+        for session_uuid in stale:
+            self._heartbeat_active_at.pop(session_uuid, None)
         self._needs_recovery.update(stale)
         return stale
 
@@ -466,9 +523,21 @@ class StaleLeaseRecoveryOrchestrator:
     ) -> tuple[str, ...]:
         if duration_s < self._stale_after_seconds:
             return ()
-        affected = tuple(dict.fromkeys(str(item) for item in session_uuids if item))
+        now = time.monotonic()
+        stale_deadline = now - duration_s + self._stale_after_seconds
+        affected: list[str] = []
+        for session_uuid in dict.fromkeys(
+            str(item) for item in session_uuids if item
+        ):
+            if session_uuid in self._needs_recovery:
+                affected.append(session_uuid)
+                continue
+            last_active = self._heartbeat_active_at.get(session_uuid)
+            if last_active is not None and last_active >= stale_deadline:
+                continue
+            affected.append(session_uuid)
         self._needs_recovery.update(affected)
-        return affected
+        return tuple(affected)
 
     def sessions_needing_recovery(
         self, session_uuids: Iterable[str]
@@ -505,6 +574,13 @@ class StaleLeaseRecoveryOrchestrator:
         return summarize_stale_recovery_results(filtered)
 
     def _record_recovery_result(self, result: StaleRecoveryResult) -> None:
+        existing = self._last_results.get(result.document_session_uuid)
+        if (
+            existing is not None
+            and existing.outcome == STALE_RECOVERY_OUTCOME_RECOVERED
+            and result.outcome == STALE_RECOVERY_OUTCOME_SKIPPED_UNNECESSARY
+        ):
+            return
         self._last_results[result.document_session_uuid] = result
 
     async def _lock_for(self, session_uuid: str) -> asyncio.Lock:
@@ -583,7 +659,17 @@ class StaleLeaseRecoveryOrchestrator:
         )
         if isinstance(response, Mapping) and response.get("success"):
             self._needs_recovery.discard(session_uuid)
+            if reconcile_response_is_idempotent(response):
+                result = StaleRecoveryResult(
+                    document_session_uuid=session_uuid,
+                    trigger=trigger,
+                    outcome=STALE_RECOVERY_OUTCOME_SKIPPED_UNNECESSARY,
+                    reason_code="ALREADY_ACTIVE",
+                )
+                self._record_recovery_result(result)
+                return result
             self._attempts.pop(session_uuid, None)
+            self._heartbeat_active_at[session_uuid] = now
             result = StaleRecoveryResult(
                 document_session_uuid=session_uuid,
                 trigger=trigger,
