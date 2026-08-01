@@ -22,34 +22,34 @@ from .model import (  # noqa: F401 - public package re-exports
     InvalidTransitionError,
     LeaseCredential,
     LeaseErrorInfo,
-    LiveDocumentValidation,
     LeaseOwner,
     LeaseRecord,
     LeaseState,
+    LiveDocumentValidation,
     SaveAsMigration,
     SaveAsMigrationRole,
+    sanitize_persisted_task_summary,
     token_fingerprint,
     token_matches,
-    sanitize_persisted_task_summary,
     validate_transition,
 )
 from .service import (  # noqa: F401 - public package re-exports
     AuthorizationError,
     CleanReleaseError,
     CoordinationError,
-    DirtyAdoptionError,
     DirtyAcquisitionError,
+    DirtyAdoptionError,
     DocumentLeaseService,
     ForeignRecoveryError,
     ForeignRecoveryRecord,
     LeaseConflictError,
     LeaseGrant,
-    LockedErrorHandoffRequired,
-    LocalRuntimeIdentity,
-    LocalRecoveryError,
     LeaseServiceError,
     LeaseStateError,
     LiveDocumentValidationError,
+    LocalRecoveryError,
+    LocalRuntimeIdentity,
+    LockedErrorHandoffRequired,
     OrphanedForeignRecoveryRequired,
     OrphanedLocalMcpRecoveryRequired,
     ProcessLivenessEvidence,
@@ -77,7 +77,7 @@ from .sidecar import (  # noqa: F401 - public package re-exports
 
 # Soft bridge to FreeCAD core mutation authority (optional import for callers).
 try:
-    from . import core_authority as core_authority  # noqa: F401
+    from . import core_authority as core_authority
 except Exception:  # pragma: no cover - keep package importable without FreeCAD
     core_authority = None  # type: ignore
 

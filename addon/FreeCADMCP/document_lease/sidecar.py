@@ -9,9 +9,10 @@ import os
 import stat
 import tempfile
 import threading
+from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any
 from uuid import UUID
 
 from .model import (
@@ -21,7 +22,6 @@ from .model import (
     LeaseRecord,
     LeaseState,
 )
-
 
 MAX_SIDECAR_BYTES = 64 * 1024
 SIDECAR_SUFFIX = ".freecad-mcp.lock"
@@ -932,7 +932,8 @@ def validate_sidecar_payload(value: Any) -> Mapping[str, Any]:
             )
         if bool(source["canonical_path"]) != bool(source["comparison_key"]):
             raise SidecarMalformedError(
-                "migration source canonical_path and comparison_key must both be set or both be null"
+                "migration source canonical_path and comparison_key must "
+                "both be set or both be null"
             )
         if not destination["canonical_path"] or not destination["comparison_key"]:
             raise SidecarMalformedError(
@@ -1197,10 +1198,8 @@ def _write_temp(
     except Exception:
         if fd >= 0:
             os.close(fd)
-        try:
+        with contextlib.suppress(OSError):
             temp_path.unlink()
-        except OSError:
-            pass
         raise
 
 
@@ -1299,7 +1298,7 @@ class SidecarStore:
             except Exception as exc:
                 persisted = None
                 if published:
-                    try:
+                    with contextlib.suppress(SidecarError):
                         # Inspect while the native no-replace guard is still
                         # held, exactly as replacement does.
                         persisted = _read_record(
@@ -1307,8 +1306,6 @@ class SidecarStore:
                             max_bytes=self.max_bytes,
                             strict_permissions=self.strict_permissions,
                         )
-                    except SidecarError:
-                        pass
                     raise SidecarCommitUncertainError(
                         "sidecar creation was published but its "
                         "post-publication checks failed",
@@ -1323,10 +1320,8 @@ class SidecarStore:
                     ) from exc
                 raise
             finally:
-                try:
+                with contextlib.suppress(OSError):
                     temporary.unlink()
-                except OSError:
-                    pass
 
     def replace(
         self,
@@ -1368,19 +1363,15 @@ class SidecarStore:
             except Exception as exc:
                 persisted = None
                 if published:
-                    try:
+                    with contextlib.suppress(SidecarError):
                         # Inspect while the native CAS guard is still held.
                         persisted = _read_record(
                             sidecar,
                             max_bytes=self.max_bytes,
                             strict_permissions=self.strict_permissions,
                         )
-                    except SidecarError:
-                        pass
-                try:
+                with contextlib.suppress(OSError):
                     temporary.unlink()
-                except OSError:
-                    pass
                 if published:
                     raise SidecarCommitUncertainError(
                         "sidecar replacement was published but its "
@@ -1422,14 +1413,12 @@ class SidecarStore:
                     persisted = None
                     absent = not os.path.lexists(sidecar)
                     if not absent:
-                        try:
+                        with contextlib.suppress(SidecarError):
                             persisted = _read_record(
                                 sidecar,
                                 max_bytes=self.max_bytes,
                                 strict_permissions=self.strict_permissions,
                             )
-                        except SidecarError:
-                            pass
                     raise SidecarCommitUncertainError(
                         "sidecar deletion was published but its "
                         "post-publication checks failed",

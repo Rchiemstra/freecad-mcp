@@ -10,21 +10,22 @@ sidecars are written, and callers should treat this module as inert.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
 import os
+import secrets
 import sys
 import tempfile
 import threading
 import time
 import uuid
-import secrets
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 # FreeCAD adds this addon directory directly to ``sys.path`` and imports this
 # file as ``document_lock``.  Package-aware callers (including the test suite)
@@ -167,9 +168,7 @@ def _is_eligible_target(filename: str) -> bool:
             if pattern in name_lower:
                 return False
         parts = {p.lower() for p in path.parts}
-        if parts & {"fc_recovery_files", "recovery", "autosave", "snapshots", "snapshot"}:
-            return False
-        return True
+        return not parts & {"fc_recovery_files", "recovery", "autosave", "snapshots", "snapshot"}
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +179,7 @@ LEASE_TTL_SECONDS = 90.0
 SIDECAR_SUFFIX = ".freecad-mcp.lock"
 
 
-class LeaseState(str, Enum):
+class LeaseState(StrEnum):
     ACQUIRING = "ACQUIRING"
     LOCKED_IDLE = "LOCKED_IDLE"
     LOCKED_EDITING = "LOCKED_EDITING"
@@ -242,7 +241,7 @@ class LeaseRecord:
         return payload
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LeaseRecord":
+    def from_dict(cls, data: dict[str, Any]) -> LeaseRecord:
         known = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
         values = {k: v for k, v in data.items() if k in known}
         raw_token = str(values.get("token") or "")
@@ -370,10 +369,8 @@ def end_agent_mutation_scope(request_id: str, document_keys) -> bool:
         state.document_keys = frozenset()
         state.violation = ""
         if not state.legacy_counts:
-            try:
+            with contextlib.suppress(AttributeError):
                 delattr(_agent_mutation_ctx, "state")
-            except AttributeError:
-                pass
     return valid
 
 
@@ -507,10 +504,8 @@ def end_internal_snapshot_save_scope(
     state.depth -= 1
     valid = not state.violation
     if state.depth == 0:
-        try:
+        with contextlib.suppress(AttributeError):
             delattr(_internal_snapshot_save_ctx, "state")
-        except AttributeError:
-            pass
     return valid
 
 
@@ -627,10 +622,8 @@ def end_agent_mutation(doc_key: str) -> None:
     else:
         state.legacy_counts[key] = count - 1
     if not state.legacy_counts and state.depth == 0:
-        try:
+        with contextlib.suppress(AttributeError):
             delattr(_agent_mutation_ctx, "state")
-        except AttributeError:
-            pass
 
 
 def is_agent_mutating(doc_key: str, *, request_id: str | None = None) -> bool:
@@ -684,10 +677,8 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
             os.fsync(handle.fileno())
         os.replace(tmp_name, path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(tmp_name)
-        except OSError:
-            pass
         raise
 
 
@@ -1142,17 +1133,20 @@ def acquire_lease(
                     side_rec = LeaseRecord.from_dict(existing_side)
                 except TypeError:
                     side_rec = None
-                if side_rec and not _is_stale(side_rec, now=now):
-                    if side_rec.instance_id != instance_id:
-                        return {
-                            "success": False,
-                            "error_code": "document_locked_by_other",
-                            "error": (
-                                f"Sidecar lock held by instance {side_rec.instance_id} "
-                                f"(pid={side_rec.pid})"
-                            ),
-                            "lease": side_rec.to_dict(),
-                        }
+                if (
+                    side_rec
+                    and not _is_stale(side_rec, now=now)
+                    and side_rec.instance_id != instance_id
+                ):
+                    return {
+                        "success": False,
+                        "error_code": "document_locked_by_other",
+                        "error": (
+                            f"Sidecar lock held by instance {side_rec.instance_id} "
+                            f"(pid={side_rec.pid})"
+                        ),
+                        "lease": side_rec.to_dict(),
+                    }
                 # Staleness is never permission to delete or overwrite.
                 if side_rec is None or _is_stale(side_rec, now=now):
                     return {
@@ -1176,10 +1170,9 @@ def acquire_lease(
                 }
 
         _registry[doc_key] = record
-        if doc_name:
+        if doc_name and not is_path_key:
             # Keep session map if this is a UUID key
-            if not is_path_key:
-                _session_ids[doc_name] = doc_key
+            _session_ids[doc_name] = doc_key
 
     return {"success": True, "token": token, "lease": record.to_dict()}
 
@@ -1623,10 +1616,8 @@ def force_release_stale_lock(doc_key: str) -> dict[str, Any]:
         side = sidecar_path_for(doc_key)
         side_data = _read_sidecar(side)
         if side_data:
-            try:
+            with contextlib.suppress(TypeError):
                 record = LeaseRecord.from_dict(side_data)
-            except TypeError:
-                pass
 
     if record is None:
         return {
@@ -2025,7 +2016,7 @@ def annotate_read_result(result: Any, doc_key: str | None) -> Any:
 # Verb classification (fail-closed)
 # ---------------------------------------------------------------------------
 
-class VerbKind(str, Enum):
+class VerbKind(StrEnum):
     MUTATING = "MUTATING"
     READ_ONLY = "READ_ONLY"
     LIFECYCLE = "LIFECYCLE"
@@ -2162,16 +2153,22 @@ def extract_referenced_documents_from_code(code: str) -> set[str]:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if isinstance(func, ast.Attribute) and func.attr == "getDocument":
-            if node.args and isinstance(node.args[0], ast.Constant) and isinstance(
-                node.args[0].value, str
-            ):
-                names.add(node.args[0].value)
-        if isinstance(func, ast.Name) and func.id == "getDocument":
-            if node.args and isinstance(node.args[0], ast.Constant) and isinstance(
-                node.args[0].value, str
-            ):
-                names.add(node.args[0].value)
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "getDocument"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            names.add(node.args[0].value)
+        if (
+            isinstance(func, ast.Name)
+            and func.id == "getDocument"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            names.add(node.args[0].value)
     return names
 
 
@@ -2289,10 +2286,8 @@ def set_gui_update_callback(callback: Callable[[], None] | None) -> None:
 def _notify_gui() -> None:
     cb = _gui_update_callback
     if cb is not None:
-        try:
+        with contextlib.suppress(Exception):
             cb()
-        except Exception:
-            pass
 
 
 def _doc_key_for_document(document) -> str | None:
@@ -2317,16 +2312,16 @@ def _doc_key_for_document(document) -> str | None:
 class DocumentLockObserver:
     """Detects user edits on locked docs and migrates leases on save."""
 
-    def slotChangedObject(self, obj, prop):  # noqa: N802
+    def slotChangedObject(self, obj, prop):
         self._maybe_user_edit(getattr(obj, "Document", None))
 
-    def slotCreatedObject(self, obj):  # noqa: N802
+    def slotCreatedObject(self, obj):
         self._maybe_user_edit(getattr(obj, "Document", None))
 
-    def slotDeletedObject(self, obj):  # noqa: N802
+    def slotDeletedObject(self, obj):
         self._maybe_user_edit(getattr(obj, "Document", None))
 
-    def slotStartSaveDocument(self, document, filename):  # noqa: N802
+    def slotStartSaveDocument(self, document, filename):
         if is_internal_snapshot_save(document, filename):
             return
         if not is_enabled():
@@ -2355,7 +2350,7 @@ class DocumentLockObserver:
                 _registry[old_key].current_operation = f"saving:{dest}"
         _notify_gui()
 
-    def slotFinishSaveDocument(self, document, filename):  # noqa: N802
+    def slotFinishSaveDocument(self, document, filename):
         if is_internal_snapshot_save(document, filename):
             return
         if not is_enabled():
@@ -2396,7 +2391,7 @@ class DocumentLockObserver:
                 )
         _notify_gui()
 
-    def slotDeletedDocument(self, document):  # noqa: N802
+    def slotDeletedDocument(self, document):
         if not is_enabled():
             return
         key = _doc_key_for_document(document)

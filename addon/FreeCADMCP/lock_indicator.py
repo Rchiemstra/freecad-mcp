@@ -7,15 +7,17 @@ hides the permanent status-bar indicator.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import socket
 import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 try:
     from document_state import (
@@ -196,7 +198,7 @@ def _timestamp_age(value: Any, *, now: float | None = None) -> float:
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
+                parsed = parsed.replace(tzinfo=UTC)
             return max(0.0, current - parsed.timestamp())
         except (TypeError, ValueError, OverflowError):
             pass
@@ -378,9 +380,7 @@ def _requires_local_recovery_intervention(view: Mapping[str, Any]) -> bool:
         return True
     if state == "STALE" and _lease_error_code(view) == "LEASE_OWNER_EXITED":
         return True
-    if any(marker in state for marker in ("SIDECAR", "MALFORMED", "FOREIGN")):
-        return True
-    return False
+    return bool(any(marker in state for marker in ("SIDECAR", "MALFORMED", "FOREIGN")))
 
 
 def _local_recovery_guidance_lines(view: Mapping[str, Any]) -> list[str]:
@@ -1307,12 +1307,8 @@ def _start_verified_local_save_and_clear_async(
             }
         else:
             outcome = {"ok": True, "result": result}
-        try:
+        with contextlib.suppress(RuntimeError):
             completion_emit(outcome)
-        except RuntimeError:
-            # Qt may destroy the bridge while FreeCAD is closing.  The lease
-            # lifecycle itself has already completed or failed conservatively.
-            pass
 
     worker = thread_factory(
         target=run,
@@ -1497,10 +1493,8 @@ def _restore_local_baseline(
             if restore_started:
                 # A failed Document.load can have partially changed memory.
                 # Keep the already-fenced recovery record conservatively dirty.
-                try:
+                with contextlib.suppress(Exception):
                     service.update_local_dirty(selector, dirty=True)
-                except Exception:
-                    pass
             raise
 
         public = _record_public_dict(updated)
@@ -1518,7 +1512,7 @@ def _restore_local_baseline(
             "lease": _redact_secrets(public),
         }
 
-    submit = getattr(gui_dispatcher, "submit")
+    submit = gui_dispatcher.submit
     return submit(
         restore_gui,
         timeout=_LOCAL_SAVE_GUI_TIMEOUT,
@@ -1556,10 +1550,8 @@ def _start_local_baseline_restore_async(
             }
         else:
             outcome = {"ok": True, "result": result}
-        try:
+        with contextlib.suppress(RuntimeError):
             completion_emit(outcome)
-        except RuntimeError:
-            pass
 
     worker = thread_factory(
         target=run,
@@ -1621,11 +1613,9 @@ def refresh_lock_indicator() -> None:
     # The one-second GUI timer is the safe fallback during startup/shutdown.
     bridge = _refresh_bridge
     if bridge is not None:
-        try:
-            bridge.refresh_requested.emit()
-        except RuntimeError:
+        with contextlib.suppress(RuntimeError):
             # Qt may already have destroyed the bridge during application exit.
-            pass
+            bridge.refresh_requested.emit()
 
 
 def install_lock_indicator() -> None:
@@ -2091,9 +2081,15 @@ def install_lock_indicator() -> None:
             )
         else:
             takeover_btn.setToolTip(
-                "Revokes the selected local or proven-dead imported owner and increments its fencing generation."
+                (
+                    "Revokes the selected local or proven-dead imported owner "
+                    "and increments its fencing generation."
+                )
                 if capabilities["takeover"]
-                else "Takeover requires live selected-document identity and locally provable owner death."
+                else (
+                    "Takeover requires live selected-document identity and "
+                    "locally provable owner death."
+                )
             )
         save_clear_btn.setToolTip(
             "Same-path save with hash, archive, matching-worker validation, and CAS release."
@@ -2144,9 +2140,15 @@ def install_lock_indicator() -> None:
                 )
             else:
                 takeover_btn.setToolTip(
-                    "Revokes the selected local or proven-dead imported owner and increments its fencing generation."
+                    (
+                        "Revokes the selected local or proven-dead imported owner "
+                        "and increments its fencing generation."
+                    )
                     if capabilities["takeover"]
-                    else "Takeover requires live selected-document identity and locally provable owner death."
+                    else (
+                        "Takeover requires live selected-document identity and "
+                        "locally provable owner death."
+                    )
                 )
 
     selector.currentIndexChanged.connect(_refresh_selected_detail)

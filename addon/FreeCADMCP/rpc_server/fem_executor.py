@@ -25,7 +25,13 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         if analysis is None:
             return {"success": False, "error": f"Analysis '{analysis_name}' not found."}
         if analysis.TypeId not in ("Fem::FemAnalysis", "Fem::FemAnalysisPython"):
-            return {"success": False, "error": f"'{analysis_name}' is not a FEM analysis (TypeId={analysis.TypeId})."}
+            return {
+                "success": False,
+                "error": (
+                    f"'{analysis_name}' is not a FEM analysis "
+                    f"(TypeId={analysis.TypeId})."
+                ),
+            }
 
         stage = "solver resolution"
         solver = None
@@ -58,7 +64,11 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         stage = "prerequisite check"
         prereq_msg = fea.check_prerequisites()
         if prereq_msg:
-            return {"success": False, "error": f"Prerequisites failed: {prereq_msg}", "working_dir": work_dir}
+            return {
+                "success": False,
+                "error": f"Prerequisites failed: {prereq_msg}",
+                "working_dir": work_dir,
+            }
 
         stage = "solver execution"
         fea.purge_results()
@@ -68,7 +78,10 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         if fea.run() is False:
             return {
                 "success": False,
-                "error": "CalculiX solver run failed (fea.run() returned False); inspect the .dat/.frd output in working_dir.",
+                "error": (
+                    "CalculiX solver run failed (fea.run() returned False); "
+                    "inspect the .dat/.frd output in working_dir."
+                ),
                 "working_dir": work_dir,
             }
 
@@ -81,7 +94,11 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
                 result_obj = member
                 break
         if result_obj is None:
-            return {"success": False, "error": "Solver ran but no result object was produced.", "working_dir": work_dir}
+            return {
+                "success": False,
+                "error": "Solver ran but no result object was produced.",
+                "working_dir": work_dir,
+            }
 
         stage = "result extraction"
         # vonMises / DisplacementLengths can be None on a degenerate run.

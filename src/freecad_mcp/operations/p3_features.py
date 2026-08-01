@@ -8,7 +8,7 @@ import logging
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse, tool_fail
 from ..template_resources import render_template_lines
-from .core import _build_assertion_code, _run_code, _partdesign_pattern_helper_code
+from .core import _build_assertion_code, _partdesign_pattern_helper_code, _run_code
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -236,13 +236,25 @@ def _boolean_operation(
                      f"Failed to create boolean {bool_type}", document=doc_name)
 
 
-def boolean_union_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name):
-    return _boolean_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "union")
+def boolean_union_operation(
+    freecad, only_text_feedback, doc_name, shape1, shape2, result_name,
+):
+    return _boolean_operation(
+        freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "union",
+    )
 
 
-def boolean_difference_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name):
-    return _boolean_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "difference")
+def boolean_difference_operation(
+    freecad, only_text_feedback, doc_name, shape1, shape2, result_name,
+):
+    return _boolean_operation(
+        freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "difference",
+    )
 
 
-def boolean_intersection_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name):
-    return _boolean_operation(freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "intersection")
+def boolean_intersection_operation(
+    freecad, only_text_feedback, doc_name, shape1, shape2, result_name,
+):
+    return _boolean_operation(
+        freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "intersection",
+    )

@@ -7,11 +7,10 @@ import logging
 from typing import Any
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, json_response, tool_fail, tool_ok
+from ..responses import ToolResponse, json_response, tool_fail
 from ..template_resources import render_template_text
 from .diagnostics import _diff_states, _response_text
 from .p7_assembly import _doc_preamble, _run_json_code
-
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -113,7 +112,7 @@ def diagnose_pocket_operation(
     doc_name: str,
     pocket_name: str,
 ) -> ToolResponse:
-    code = _doc_preamble(doc_name) + [
+    code = [*_doc_preamble(doc_name),
         render_template_text(
             "diagnostics/diagnose_pocket.py.txt",
             pocket_name=repr(pocket_name),
@@ -136,7 +135,7 @@ def diagnose_helix_operation(
     doc_name: str,
     helix_name: str,
 ) -> ToolResponse:
-    code = _doc_preamble(doc_name) + [
+    code = [*_doc_preamble(doc_name),
         render_template_text(
             "diagnostics/diagnose_helix.py.txt",
             helix_name=repr(helix_name),
@@ -163,7 +162,7 @@ def compare_documents_operation(
     """Compare two open documents (e.g. V7 vs V8) via paired capture_state."""
 
     def _capture(doc_name: str, names: list[str] | None) -> dict:
-        code = _doc_preamble(doc_name) + [
+        code = [*_doc_preamble(doc_name),
             render_template_text(
                 "diagnostics/capture_state.py.txt",
                 object_names=repr(names),

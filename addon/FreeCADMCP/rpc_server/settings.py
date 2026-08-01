@@ -6,8 +6,9 @@ defaults in ``rpc_server.py`` which made isolated profiles especially easy to
 misconfigure.
 """
 
-import json
+import contextlib
 import ipaddress
+import json
 import os
 import secrets
 import tempfile
@@ -15,7 +16,6 @@ import uuid
 from pathlib import Path
 
 import FreeCAD
-
 
 _SETTINGS_FILENAME = "freecad_mcp_settings.json"
 
@@ -238,16 +238,12 @@ def _atomic_write_settings(path, settings):
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(temporary, 0o600)
-        except OSError:
-            pass
         os.replace(temporary, path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(temporary)
-        except OSError:
-            pass
         raise
 
 
@@ -255,7 +251,7 @@ def load_settings():
     path = _get_settings_path()
     if os.path.exists(path):
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 settings = json.load(f)
             if not isinstance(settings, dict):
                 raise SettingsPolicyError("settings root must be a JSON object")
@@ -326,10 +322,8 @@ def ensure_profile_secret(settings=None):
         _harden_permissions(secret_path, strict=True)
     except Exception:
         if created:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(secret_path)
-            except OSError:
-                pass
         raise
     current["auth_secret_file"] = str(secret_path)
     save_settings(current)

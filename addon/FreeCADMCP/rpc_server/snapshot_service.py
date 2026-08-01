@@ -8,9 +8,10 @@ import shutil
 import stat
 import time
 import uuid
-from contextlib import contextmanager, nullcontext
+from collections.abc import Mapping
+from contextlib import contextmanager, nullcontext, suppress
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import FreeCAD
 import FreeCADGui
@@ -91,20 +92,16 @@ def create_lease_baseline_snapshot_gui(
         os.replace(temporary, target)
         _harden_permissions(target, strict=True)
     except Exception:
-        try:
+        with suppress(OSError):
             temporary.unlink()
-        except OSError:
-            pass
         raise
     return snapshot_id
 
 
 def discard_lease_baseline_snapshot(snapshot_id: str) -> None:
     target = recovery_snapshot_path(snapshot_id)
-    try:
+    with suppress(FileNotFoundError):
         target.unlink()
-    except FileNotFoundError:
-        pass
 
 
 def _validated_snapshot_file(path: str | os.PathLike[str]) -> Path:
@@ -199,7 +196,9 @@ def restore_snapshot_in_place_gui(
             "snapshot load changed FileName and the source path could not be restored"
         ) from exc
     if load_error is not None:
-        raise SnapshotRestoreError(f"FreeCAD could not load the snapshot: {load_error}") from load_error
+        raise SnapshotRestoreError(
+            f"FreeCAD could not load the snapshot: {load_error}"
+        ) from load_error
     if str(getattr(document, "Name", "") or "") != original_name:
         raise SnapshotRestoreError("snapshot restore changed the document name")
     restored_path = str(getattr(document, "FileName", "") or "")
@@ -248,10 +247,8 @@ def _selection_state() -> list[tuple[str, str, tuple[str, ...]]]:
 
 def _document_state(doc) -> dict[str, Any]:
     dependencies = []
-    try:
+    with suppress(Exception):
         dependencies = sorted(item.Name for item in doc.getDependentDocuments())
-    except Exception:
-        pass
     return {
         "document_name": doc.Name,
         "document_label": getattr(doc, "Label", doc.Name),
@@ -399,10 +396,8 @@ def _dependency_closure(primary) -> list[Any]:
     while pending:
         current = pending.pop()
         candidates = []
-        try:
+        with suppress(Exception):
             candidates.extend(current.getDependentDocuments())
-        except Exception:
-            pass
         for obj in current.Objects:
             for prop in getattr(obj, "PropertiesList", []):
                 try:

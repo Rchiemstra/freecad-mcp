@@ -7,6 +7,7 @@ have all of its link properties repaired before FreeCAD evaluates dependants.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import FreeCAD
@@ -132,7 +133,10 @@ def inspect_references_gui(
     for obj in objects:
         for property_name in getattr(obj, "PropertiesList", []):
             prop_type = _property_type(obj, property_name)
-            is_app_link = getattr(obj, "TypeId", "") == "App::Link" and property_name == "LinkedObject"
+            is_app_link = (
+                getattr(obj, "TypeId", "") == "App::Link"
+                and property_name == "LinkedObject"
+            )
             if not _is_link_property(prop_type) and not is_app_link:
                 continue
             item = _serialize_property(obj, property_name, validate)
@@ -287,10 +291,8 @@ def repair_references_gui(
             doc.commitTransaction()
     except Exception as exc:
         if opened_transaction:
-            try:
+            with contextlib.suppress(Exception):
                 doc.abortTransaction()
-            except Exception:
-                pass
         return {
             "ok": False,
             "repair_committed": False,

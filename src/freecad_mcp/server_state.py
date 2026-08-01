@@ -1,6 +1,6 @@
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
-import uuid
 
 from .freecad_client import FreeCADConnection
 from .lease_manager import LeaseClientManager

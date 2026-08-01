@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from enum import Enum
+from enum import StrEnum
 from typing import Any
-
 
 RESULT_SCHEMA_VERSION = 1
 
 
-class OutcomeStatus(str, Enum):
+class OutcomeStatus(StrEnum):
     SUCCEEDED = "succeeded"
     CONDITION_FALSE = "condition_false"
     WARNING = "warning"
@@ -22,7 +21,7 @@ class OutcomeStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
-class LayerStatus(str, Enum):
+class LayerStatus(StrEnum):
     SUCCEEDED = "succeeded"
     CONDITION_FALSE = "condition_false"
     WARNING = "warning"
@@ -207,10 +206,10 @@ def make_result_envelope(
 __all__ = [
     "COMMON_ERROR_CODES",
     "LAYER_NAMES",
-    "LayerStatus",
     "NORMALIZED_STATUSES",
-    "OutcomeStatus",
     "RESULT_SCHEMA_VERSION",
+    "LayerStatus",
+    "OutcomeStatus",
     "extract_error_code",
     "is_result_envelope",
     "make_result_envelope",

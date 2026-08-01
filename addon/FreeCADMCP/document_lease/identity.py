@@ -8,8 +8,9 @@ import os
 import posixpath
 import threading
 import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from .model import (
     DocumentIdentity,

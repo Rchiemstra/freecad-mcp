@@ -277,7 +277,9 @@ def _joint_type_index(jointType, jointTypes):
 
     if jointType not in jointTypes:
         expected = ", ".join(jointTypes)
-        raise JointCreationError(f"Unsupported joint type '{jointType}'. Expected one of: {expected}")
+        raise JointCreationError(
+            f"Unsupported joint type '{jointType}'. Expected one of: {expected}"
+        )
 
     return jointTypes.index(jointType)
 

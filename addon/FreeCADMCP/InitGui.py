@@ -1,5 +1,11 @@
-import sys as _sys
 import os as _os
+import sys as _sys
+
+from PySide import QtCore
+
+# FreeCAD injects FreeCAD, Gui, and Workbench into InitGui's namespace at load
+# time. Do not import them here — that breaks FreeCAD's InitGui exec model and
+# the split-exec test harness (F821 names are intentional; noqa where used).
 
 try:
     _addon_dir = _os.path.dirname(_os.path.abspath(__file__))
@@ -13,12 +19,13 @@ if _addon_dir not in _sys.path:
     _sys.path.insert(0, _addon_dir)
 
 
-class FreeCADMCPAddonWorkbench(Workbench):
+class FreeCADMCPAddonWorkbench(Workbench):  # noqa: F821
     MenuText = "MCP Addon"
     ToolTip = "Addon for MCP Communication"
 
     def Initialize(self):
-        from rpc_server import rpc_server
+        # Import registers workbench commands before toolbar/menu append.
+        from rpc_server import rpc_server  # noqa: F401
 
         commands = [
             "Start_RPC_Server",
@@ -43,7 +50,7 @@ class FreeCADMCPAddonWorkbench(Workbench):
         return "Gui::PythonWorkbench"
 
 
-Gui.addWorkbench(FreeCADMCPAddonWorkbench())
+Gui.addWorkbench(FreeCADMCPAddonWorkbench())  # noqa: F821
 
 
 def _auto_start_mcp():
@@ -55,12 +62,10 @@ def _auto_start_mcp():
             return
 
         msg = rpc_server.start_rpc_server()
-        FreeCAD.Console.PrintMessage(f"[MCP] Auto-start: {msg}\n")
+        FreeCAD.Console.PrintMessage(f"[MCP] Auto-start: {msg}\n")  # noqa: F821
     except Exception as e:
-        FreeCAD.Console.PrintWarning(f"[MCP] Auto-start failed: {e}\n")
+        FreeCAD.Console.PrintWarning(f"[MCP] Auto-start failed: {e}\n")  # noqa: F821
 
-
-from PySide import QtCore
 
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
 
@@ -98,7 +103,7 @@ def _initialize_document_lease_runtime(
         rpc_server.initialize_document_lease_runtime()
         _connect_shutdown(rpc_server)
     except Exception as e:
-        FreeCAD.Console.PrintWarning(
+        FreeCAD.Console.PrintWarning(  # noqa: F821
             f"[MCP] Document lease runtime not initialized: {e}\n"
         )
 
@@ -112,7 +117,7 @@ def _register_git_sidecar_observer():
 
         register_observer()
     except Exception as e:
-        FreeCAD.Console.PrintWarning(
+        FreeCAD.Console.PrintWarning(  # noqa: F821
             f"[MCP] Git sidecar observer not registered: {e}\n"
         )
 
@@ -151,7 +156,7 @@ def _register_document_lease_observer(
             app.aboutToQuit.connect(unregister_observer)
             _shutdown_state["connected"] = True
     except Exception as e:
-        FreeCAD.Console.PrintWarning(
+        FreeCAD.Console.PrintWarning(  # noqa: F821
             f"[MCP] Document lease observer not registered: {e}\n"
         )
 
@@ -168,7 +173,7 @@ def _register_document_lock():
 
         register_lock_feature()
     except Exception as e:
-        FreeCAD.Console.PrintWarning(
+        FreeCAD.Console.PrintWarning(  # noqa: F821
             f"[MCP] Document lock feature not registered: {e}\n"
         )
 

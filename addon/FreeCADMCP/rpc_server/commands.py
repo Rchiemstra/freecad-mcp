@@ -101,7 +101,10 @@ class ConfigureAllowedIPsCommand:
     def GetResources(self):
         return {
             "MenuText": "Configure Allowed IPs",
-            "ToolTip": "Set which IP addresses or subnets are allowed to connect to the RPC server.",
+            "ToolTip": (
+                "Set which IP addresses or subnets are allowed to connect "
+                "to the RPC server."
+            ),
         }
 
     def Activated(self):

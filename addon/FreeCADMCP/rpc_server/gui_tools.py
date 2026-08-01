@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import FreeCAD
 import FreeCADGui
 
 from .gui_dispatch import _flush_gui_events
-
 
 _VIEW_ALIASES = {
     "Rear": "Back",
@@ -217,10 +217,8 @@ def set_section_view(
             angle = float(rot.get("angle", rot.get("angle_deg", 0)))
             pla.Rotation = FreeCAD.Rotation(axis, angle)
         elif rot is not None:
-            try:
+            with contextlib.suppress(Exception):
                 pla.Rotation = FreeCAD.Rotation(rot)
-            except Exception:
-                pass
     elif base is not None or normal is not None:
         b = FreeCAD.Vector(*(float(x) for x in (base or (0, 0, 0))))
         n = FreeCAD.Vector(*(float(x) for x in (normal or (0, 0, 1))))
@@ -246,7 +244,11 @@ def set_section_view(
         view.toggleClippingPlane(toggle, False, bool(no_manip), pla)
 
     _flush_gui_events()
-    has_after = bool(view.hasClippingPlane()) if hasattr(view, "hasClippingPlane") else bool(enabled)
+    has_after = (
+        bool(view.hasClippingPlane())
+        if hasattr(view, "hasClippingPlane")
+        else bool(enabled)
+    )
     return {
         "ok": True,
         "enabled": has_after,

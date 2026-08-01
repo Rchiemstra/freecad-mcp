@@ -2,22 +2,21 @@ import json
 import logging
 from typing import Any
 
+from ..execute_options import ExecuteOptions
 from ..freecad_client import FreeCADConnection
 from ..responses import (
     ToolResponse,
     add_screenshot_if_available,
     from_execute_result,
     json_response,
-    text_response,
     tool_fail,
     tool_ok,
 )
-from ..execute_options import ExecuteOptions
 from ..template_resources import read_template_lines, render_template_lines, render_template_text
+
 # _run_json_code lives in p7_assembly (which does not import core, so this is
 # cycle-free); reused here so pad/pocket return a structured JSON workflow result.
 from .p7_assembly import _run_json_code
-
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -141,8 +140,8 @@ def create_document_operation(
             error_code=res.get("error_code"),
         )
     except Exception as e:
-        logger.error(f"Failed to create document: {str(e)}")
-        return tool_fail(f"Failed to create document: {str(e)}")
+        logger.error(f"Failed to create document: {e!s}")
+        return tool_fail(f"Failed to create document: {e!s}")
 
 
 def create_object_operation(
@@ -176,8 +175,8 @@ def create_object_operation(
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
-        logger.error(f"Failed to create object: {str(e)}")
-        return tool_fail(f"Failed to create object: {str(e)}")
+        logger.error(f"Failed to create object: {e!s}")
+        return tool_fail(f"Failed to create object: {e!s}")
 
 
 def edit_object_operation(
@@ -203,8 +202,8 @@ def edit_object_operation(
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
-        logger.error(f"Failed to edit object: {str(e)}")
-        return tool_fail(f"Failed to edit object: {str(e)}")
+        logger.error(f"Failed to edit object: {e!s}")
+        return tool_fail(f"Failed to edit object: {e!s}")
 
 
 def inspect_references_operation(
@@ -326,8 +325,8 @@ def delete_object_operation(
             )
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
-        logger.error(f"Failed to delete object: {str(e)}")
-        return tool_fail(f"Failed to delete object: {str(e)}")
+        logger.error(f"Failed to delete object: {e!s}")
+        return tool_fail(f"Failed to delete object: {e!s}")
 
 
 def execute_code_operation(
@@ -384,8 +383,8 @@ def execute_code_operation(
             capture_view=False,
         )
     except Exception as e:
-        logger.error(f"Failed to execute code: {str(e)}")
-        return tool_fail(f"Failed to execute code: {str(e)}")
+        logger.error(f"Failed to execute code: {e!s}")
+        return tool_fail(f"Failed to execute code: {e!s}")
 
 
 def execute_code_async_operation(
@@ -408,9 +407,9 @@ def execute_code_async_operation(
             error_code=res.get("error_code"),
         )
     except Exception as e:
-        logger.error(f"Failed to start async code execution: {str(e)}")
+        logger.error(f"Failed to start async code execution: {e!s}")
         return tool_fail(
-            f"Failed to start async code execution: {str(e)}",
+            f"Failed to start async code execution: {e!s}",
             error_code=type(e).__name__.upper(),
         )
 
@@ -437,8 +436,8 @@ def get_view_operation(
             yaw_deg=yaw_deg,
         )
     except Exception as e:
-        logger.error(f"Failed to get view: {str(e)}")
-        return tool_fail(f"Failed to get view: {str(e)}")
+        logger.error(f"Failed to get view: {e!s}")
+        return tool_fail(f"Failed to get view: {e!s}")
     if screenshot is not None:
         focus_bits = []
         if focus_object:
@@ -481,7 +480,10 @@ def get_view_operation(
             return tool_ok(note + "\n" + output, structured=res)
     except Exception as e:
         logger.error(f"get_view fallback failed: {e}")
-    return tool_fail("Cannot get screenshot in the current view type (such as TechDraw or Spreadsheet)")
+    return tool_fail(
+        "Cannot get screenshot in the current view type "
+        "(such as TechDraw or Spreadsheet)"
+    )
 
 
 def save_view_sequence_operation(
@@ -556,8 +558,8 @@ def insert_part_from_library_operation(
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
-        logger.error(f"Failed to insert part from library: {str(e)}")
-        return tool_fail(f"Failed to insert part from library: {str(e)}")
+        logger.error(f"Failed to insert part from library: {e!s}")
+        return tool_fail(f"Failed to insert part from library: {e!s}")
 
 
 def get_objects_operation(
@@ -570,8 +572,8 @@ def get_objects_operation(
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
-        logger.error(f"Failed to get objects: {str(e)}")
-        return tool_fail(f"Failed to get objects: {str(e)}")
+        logger.error(f"Failed to get objects: {e!s}")
+        return tool_fail(f"Failed to get objects: {e!s}")
 
 
 def get_object_operation(
@@ -585,17 +587,17 @@ def get_object_operation(
         screenshot = None if only_text_feedback else freecad.get_active_screenshot()
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
-        logger.error(f"Failed to get object: {str(e)}")
-        return tool_fail(f"Failed to get object: {str(e)}")
+        logger.error(f"Failed to get object: {e!s}")
+        return tool_fail(f"Failed to get object: {e!s}")
 
 
 def get_parts_list_operation(freecad: FreeCADConnection) -> ToolResponse:
     try:
         parts = freecad.get_parts_list()
     except Exception as e:
-        logger.error(f"Failed to get parts list: {str(e)}")
+        logger.error(f"Failed to get parts list: {e!s}")
         return tool_fail(
-            f"Failed to get parts list: {str(e)}",
+            f"Failed to get parts list: {e!s}",
             error_code=type(e).__name__.upper(),
         )
     if parts:
@@ -755,7 +757,12 @@ def _geom_line(code: str, geom: dict) -> str:
             construction=c,
         ).strip()
     if t == "rectangle":
-        x1, y1, x2, y2 = geom.get("x1", 0), geom.get("y1", 0), geom.get("x2", 10), geom.get("y2", 10)
+        x1, y1, x2, y2 = (
+            geom.get("x1", 0),
+            geom.get("y1", 0),
+            geom.get("x2", 10),
+            geom.get("y2", 10),
+        )
         return render_template_text(
             "core/geom_rectangle.py.txt",
             x1=repr(x1),
@@ -790,7 +797,10 @@ def _constraint_line(c: dict) -> str:
     t = c.get("type", "")
     name = c.get("name")
     if t == "Coincident":
-        return _constraint_stmt(f"'Coincident',{c['geo1']},{c['pos1']},{c['geo2']},{c['pos2']}", name)
+        return _constraint_stmt(
+            f"'Coincident',{c['geo1']},{c['pos1']},{c['geo2']},{c['pos2']}",
+            name,
+        )
     if t == "Horizontal":
         return _constraint_stmt(f"'Horizontal',{c['geo']}", name)
     if t == "Vertical":
@@ -1240,9 +1250,14 @@ def create_spur_gear_operation(
         extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
     )
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Spur gear '{gear_name}' sketch and pad created", "Failed to create spur gear",
-                     document=doc_name)
+    return _run_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        f"Spur gear '{gear_name}' sketch and pad created",
+        "Failed to create spur gear",
+        document=doc_name,
+    )
 
 
 def recompute_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
@@ -1392,8 +1407,19 @@ def sketch_constrain_coincident_operation(
     doc_name: str, sketch_name: str,
     geo1: int, pos1: int, geo2: int, pos2: int,
 ) -> ToolResponse:
-    return _run_constraint(freecad, only_text_feedback, doc_name, sketch_name,
-                           {"type": "Coincident", "geo1": geo1, "pos1": pos1, "geo2": geo2, "pos2": pos2})
+    return _run_constraint(
+        freecad,
+        only_text_feedback,
+        doc_name,
+        sketch_name,
+        {
+            "type": "Coincident",
+            "geo1": geo1,
+            "pos1": pos1,
+            "geo2": geo2,
+            "pos2": pos2,
+        },
+    )
 
 
 def sketch_constrain_horizontal_operation(
@@ -1568,9 +1594,9 @@ def run_fem_analysis_operation(
             **res,
         })
     except Exception as e:
-        logger.error(f"Failed to run FEM analysis: {str(e)}")
+        logger.error(f"Failed to run FEM analysis: {e!s}")
         return tool_fail(
-            f"Failed to run FEM analysis: {str(e)}",
+            f"Failed to run FEM analysis: {e!s}",
             error_code=type(e).__name__.upper(),
         )
 
@@ -1595,8 +1621,8 @@ def reload_document_operation(
             error_code=res.get("error_code"),
         )
     except Exception as e:
-        logger.error(f"Failed to reload document: {str(e)}")
+        logger.error(f"Failed to reload document: {e!s}")
         return tool_fail(
-            f"Failed to reload document: {str(e)}",
+            f"Failed to reload document: {e!s}",
             error_code=type(e).__name__.upper(),
         )

@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import os
 import threading
 import time
-from typing import Any, Callable, Iterable, Mapping, Sequence
 import uuid
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 
 class LeaseManagerError(RuntimeError):
@@ -112,7 +113,7 @@ class LeaseRevocation:
     reason: str
     user_intervened: bool = False
     revoked_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
 
@@ -356,9 +357,7 @@ def reconcile_response_is_idempotent(response: Mapping[str, Any]) -> bool:
         return False
     if response.get("idempotent") is True:
         return True
-    if response.get("already_active") is True:
-        return True
-    return False
+    return response.get("already_active") is True
 
 
 def rpc_response_indicates_stale_refusal(response: Mapping[str, Any]) -> bool:
@@ -788,7 +787,7 @@ class LeaseClientManager:
             self._connected = False
             self._session_token = None
             self._disconnect_reason = safe_reason
-            self._disconnected_at = datetime.now(timezone.utc).isoformat()
+            self._disconnected_at = datetime.now(UTC).isoformat()
 
     def mark_disconnected(self, reason: str = "connection closed") -> None:
         """Fence new wire work but retain redacted recovery/lease knowledge.
@@ -805,7 +804,7 @@ class LeaseClientManager:
             safe_reason = self._redact_text_locked(reason or "connection closed")
             self._session_token = None
             self._disconnect_reason = safe_reason
-            self._disconnected_at = datetime.now(timezone.utc).isoformat()
+            self._disconnected_at = datetime.now(UTC).isoformat()
 
     def store(
         self,

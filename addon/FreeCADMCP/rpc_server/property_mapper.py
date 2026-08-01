@@ -120,7 +120,7 @@ def set_object_property(
             else:
                 setattr(obj, prop, val)
 
-        except Exception as e:  # noqa: BLE001 - FreeCAD property setters raise broadly
+        except Exception as e:
             FreeCAD.Console.PrintError(f"Property '{prop}' assignment error: {e}\n")
             failures.append(f"{prop}: {e}")
 

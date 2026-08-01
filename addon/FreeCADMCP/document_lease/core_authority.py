@@ -11,8 +11,9 @@ cooperative observer fencing remains the fallback.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any
 
 logger = logging.getLogger("FreeCADMCP.document_lease.core_authority")
 
@@ -97,14 +98,18 @@ def core_owner_api_available(document: Any) -> bool:
 def resolve_document(document_or_name: Any) -> Any | None:
     if document_or_name is None:
         return None
-    if hasattr(document_or_name, "openMutationCapability") or hasattr(
-        document_or_name, "Name"
+    if (
+        (
+            hasattr(document_or_name, "openMutationCapability")
+            or hasattr(document_or_name, "Name")
+        )
+        and (
+            callable(getattr(document_or_name, "openMutationCapability", None))
+            or hasattr(document_or_name, "Objects")
+        )
     ):
         # Prefer objects that look like FreeCAD documents.
-        if callable(getattr(document_or_name, "openMutationCapability", None)) or hasattr(
-            document_or_name, "Objects"
-        ):
-            return document_or_name
+        return document_or_name
     try:
         import FreeCAD  # type: ignore
 

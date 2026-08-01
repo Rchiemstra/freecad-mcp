@@ -5,7 +5,7 @@ create_involute_gear uses the correct mathematical involute parametrization:
     x(t) = r_b * (cos(t) + t * sin(t))
     y(t) = r_b * (sin(t) - t * cos(t))
 
-Polar angle at parameter t: θ(t) = t − atan(t)
+Polar angle at parameter t: θ(t) = t - atan(t)
 
 This replaces the broken star/flower profile from create_spur_gear.
 """
@@ -14,9 +14,13 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, text_response
+from ..responses import ToolResponse
 from ..template_resources import read_template_lines, render_template_lines
-from .core import _run_code, _partdesign_extrusion_helper_code, _partdesign_bool_property_helper_code
+from .core import (
+    _partdesign_bool_property_helper_code,
+    _partdesign_extrusion_helper_code,
+    _run_code,
+)
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -199,10 +203,8 @@ def check_gear_pair_operation(
     pressure_angle: float = 20.0,
     center_distance: float | None = None,
 ) -> ToolResponse:
-    import math
     from ..responses import json_response
     same_module = abs(module1 - module2) < 1e-6
-    α = math.radians(pressure_angle)
     r1 = module1 * teeth1 / 2.0
     r2 = module2 * teeth2 / 2.0
     theo_cd = r1 + r2
@@ -214,7 +216,10 @@ def check_gear_pair_operation(
     if center_distance is not None:
         cd_err = abs(center_distance - theo_cd)
         if cd_err > 0.01:
-            notes.append(f"Center distance {center_distance:.4f} differs from theoretical {theo_cd:.4f} by {cd_err:.4f} mm")
+            notes.append(
+                f"Center distance {center_distance:.4f} differs from "
+                f"theoretical {theo_cd:.4f} by {cd_err:.4f} mm"
+            )
     return json_response({
         "meshes":              meshing_ok,
         "gear_ratio":          round(ratio, 6),

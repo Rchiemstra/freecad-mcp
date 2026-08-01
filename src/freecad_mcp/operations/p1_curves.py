@@ -44,7 +44,7 @@ def sketch_add_polyline_operation(
     segment_lines = []
     pts = [(p["x"], p["y"]) for p in points]
     if closed and pts[-1] != pts[0]:
-        pts = pts + [pts[0]]
+        pts = [*pts, pts[0]]
     for i in range(len(pts) - 1):
         x1, y1 = pts[i]
         x2, y2 = pts[i + 1]
@@ -85,7 +85,10 @@ def sketch_add_bspline_operation(
     if knots and multiplicities:
         k_str = repr(knots)
         m_str = repr(multiplicities)
-        build_line = f"_bsp.buildFromPolesMultsKnots(_poles, {m_str}, {k_str}, _periodic, _degree, _weights)"
+        build_line = (
+            f"_bsp.buildFromPolesMultsKnots(_poles, {m_str}, {k_str}, "
+            f"_periodic, _degree, _weights)"
+        )
     else:
         build_line = "_bsp.buildFromPoles(_poles, _periodic, _degree)"
     lines = _sk_preamble(doc_name, sketch_name) + render_template_lines(

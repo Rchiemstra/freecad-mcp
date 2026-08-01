@@ -25,12 +25,12 @@ Robustness and performance guarantees:
 import queue
 import time
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import FreeCAD
 import FreeCADGui
 from PySide import QtCore, QtWidgets
-
 
 _rpc_request_queue: "queue.Queue[Any]" = queue.Queue()
 _SHUTDOWN = object()
@@ -168,7 +168,7 @@ def dispatch_to_gui(task: Callable[[], Any], timeout: float = 60) -> Any:
     Returns the task's return value on success, an error string if the task
     raises, or ``{"success": False, "error": ...}`` on timeout.
     """
-    response_queue: "queue.Queue[Any]" = queue.Queue(maxsize=1)
+    response_queue: queue.Queue[Any] = queue.Queue(maxsize=1)
 
     def _wrapped() -> None:
         try:

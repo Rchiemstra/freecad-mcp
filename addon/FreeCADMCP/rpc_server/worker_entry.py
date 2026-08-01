@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import builtins
+import contextlib
 import os
 import re
 import sys
@@ -15,26 +15,26 @@ import FreeCAD
 
 try:
     from worker_protocol import (
-        CappedTextWriter,
         MAX_ARTIFACT_BYTES,
         MAX_ARTIFACTS_TOTAL_BYTES,
+        CappedTextWriter,
         UnsupportedWorkerGuiError,
         read_json_limited,
-        validate_subelement_reference,
         validate_job,
         validate_snapshot_manifest,
+        validate_subelement_reference,
         write_json_atomic,
     )
 except ImportError:  # direct package import in tests
     from .worker_protocol import (
-        CappedTextWriter,
         MAX_ARTIFACT_BYTES,
         MAX_ARTIFACTS_TOTAL_BYTES,
+        CappedTextWriter,
         UnsupportedWorkerGuiError,
         read_json_limited,
-        validate_subelement_reference,
         validate_job,
         validate_snapshot_manifest,
+        validate_subelement_reference,
         write_json_atomic,
     )
 
@@ -125,17 +125,13 @@ class ArtifactEmitter:
             self.artifacts.append(metadata)
             return metadata
         except Exception:
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink()
-            except OSError:
-                pass
             raise
         finally:
             if temporary is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self.document.removeObject(temporary.Name)
-                except Exception:
-                    pass
 
 
 def _reference_entries(value):
@@ -225,8 +221,10 @@ def _read_property_reference_entries(
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
     try:
         return _reference_entries(getattr(owner, property_name)), label
-    except Exception:
-        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    except Exception as exc:
+        raise ExternalLinkUnresolved(
+            f"Snapshot links did not resolve: {label}"
+        ) from exc
 
 
 def _ignored_links_for_property(
@@ -519,8 +517,10 @@ def _validate_property_group_post_recompute(
         raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
     try:
         refs = _reference_entries(getattr(owner, key[2]))
-    except Exception:
-        raise ExternalLinkUnresolved(f"Snapshot links did not resolve: {label}")
+    except Exception as exc:
+        raise ExternalLinkUnresolved(
+            f"Snapshot links did not resolve: {label}"
+        ) from exc
     property_type = _property_type_for_key(snapshot, key)
     refs = _normalize_reference_entries_for_property(
         refs, property_type=property_type, label=label
@@ -573,7 +573,7 @@ def _validate_property_group_post_recompute(
             if current_kept_subs != kept_subs:
                 remap = ", ".join(
                     f"{before} -> {after}"
-                    for before, after in zip(kept_subs, current_kept_subs)
+                    for before, after in zip(kept_subs, current_kept_subs, strict=False)
                 )
                 warnings.append(f"subelement_remapped:{entry_label}: {remap}")
             continue
@@ -606,7 +606,7 @@ def _validate_property_group_post_recompute(
         if current_subs != expected_subs:
             remap = ", ".join(
                 f"{before} -> {after}"
-                for before, after in zip(expected_subs, current_subs)
+                for before, after in zip(expected_subs, current_subs, strict=False)
             )
             warnings.append(f"subelement_remapped:{entry_label}: {remap}")
     if expected_by_ref or authenticated_ignored_by_ref:
@@ -715,7 +715,9 @@ def run_job(job_path: str) -> int:
         result["status"] = "ok"
         result["artifacts"] = emitter.artifacts
         session = {
-            "active_document_after": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None,
+            "active_document_after": (
+                FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
+            ),
             "documents": sorted(FreeCAD.listDocuments().keys()),
             "worker_read_only_snapshot": True,
         }
@@ -735,10 +737,8 @@ def run_job(job_path: str) -> int:
         result["stdout_truncated"] = writer.truncated
         result["metrics"]["worker_duration_ms"] = (time.monotonic() - started) * 1000.0
         for name in reversed(opened):
-            try:
+            with contextlib.suppress(Exception):
                 FreeCAD.closeDocument(name)
-            except Exception:
-                pass
         if result_path:
             write_json_atomic(result_path, result)
     return 0 if result["status"] == "ok" else 1

@@ -1,3 +1,5 @@
+import contextlib
+
 import FreeCAD as App
 
 try:
@@ -56,10 +58,8 @@ def serialize_view_object(view):
         return None
     result = {}
     for attr in ("ShapeColor", "Transparency", "Visibility"):
-        try:
+        with contextlib.suppress(Exception):
             result[attr] = serialize_value(getattr(view, attr))
-        except Exception:
-            pass
     return result
 
 
@@ -88,7 +88,7 @@ def serialize_object(obj):
             try:
                 result["Properties"][prop] = serialize_value(getattr(obj, prop))
             except Exception as e:
-                result["Properties"][prop] = f"<error: {str(e)}>"
+                result["Properties"][prop] = f"<error: {e!s}>"
 
         try:
             if hasattr(obj, "ViewObject") and obj.ViewObject is not None:

@@ -24,11 +24,11 @@ import secrets
 import socket
 import stat
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping, Sequence
-
+from typing import Any
 
 PROTOCOL_NAME = "freecad-mcp-rpc"
 PROTOCOL_VERSION = 2
@@ -59,7 +59,7 @@ MIN_SECRET_BYTES = 32
 MAX_JSON_DEPTH = 32
 MAX_ACCEPTED_SESSION_LIFETIME_SECONDS = 60 * 60 + 30
 
-_PROCESS_STARTED_AT = datetime.now(timezone.utc)
+_PROCESS_STARTED_AT = datetime.now(UTC)
 _SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+\-=]{0,255}$")
 _NONCE_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{32,512}$")
@@ -223,7 +223,7 @@ def _parse_utc(value: Any, field_name: str) -> datetime:
         ) from exc
     if parsed.tzinfo is None:
         raise RpcAuthError("INVALID_TIMESTAMP", f"{field_name} must include a timezone")
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _format_utc(value: datetime) -> str:
@@ -232,7 +232,7 @@ def _format_utc(value: datetime) -> str:
             "INVALID_TIMESTAMP", "Runtime timestamps must include a timezone"
         )
     return (
-        value.astimezone(timezone.utc)
+        value.astimezone(UTC)
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
@@ -472,12 +472,14 @@ class InstanceManifest:
             )
         if self.expected_boot_id is not None:
             _require_identifier(self.expected_boot_id, "expected_boot_id")
-        if self.expected_protocol_version is not None:
-            if self.expected_protocol_version != PROTOCOL_VERSION:
-                raise RpcAuthError(
-                    "UNSUPPORTED_PROTOCOL",
-                    "Instance manifest protocol version is unsupported",
-                )
+        if (
+            self.expected_protocol_version is not None
+            and self.expected_protocol_version != PROTOCOL_VERSION
+        ):
+            raise RpcAuthError(
+                "UNSUPPORTED_PROTOCOL",
+                "Instance manifest protocol version is unsupported",
+            )
         if self.expected_protocol_features is not None:
             features = _normalize_features(
                 self.expected_protocol_features, "expected_protocol_features"
@@ -540,7 +542,7 @@ class InstanceManifest:
             )
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "InstanceManifest":
+    def from_dict(cls, payload: Mapping[str, Any]) -> InstanceManifest:
         if not isinstance(payload, Mapping):
             raise RpcAuthError(
                 "MALFORMED_INSTANCE_MANIFEST", "Instance manifest must be an object"
@@ -737,7 +739,7 @@ class RuntimeManifest:
         return f"{host}:{self.rpc_port}"
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "RuntimeManifest":
+    def from_dict(cls, payload: Mapping[str, Any]) -> RuntimeManifest:
         if not isinstance(payload, Mapping):
             raise RpcAuthError(
                 "MALFORMED_MANIFEST", "Runtime manifest must be an object"
@@ -994,7 +996,7 @@ def verify_handshake_response(
     session_id = _require_uuid(payload["session_id"], "session_id")
     session_token = _validate_token(payload["session_token"], "session_token")
     session_expiry = _parse_utc(payload["session_expires_at"], "session_expires_at")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if session_expiry <= now:
         raise RpcAuthError(
             "INVALID_SESSION_EXPIRY", "Handshake returned an expired RPC session"

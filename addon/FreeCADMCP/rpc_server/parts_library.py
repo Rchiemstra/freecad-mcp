@@ -3,7 +3,6 @@ import os
 import FreeCAD
 import FreeCADGui
 
-
 _parts_lib_path: str | None = None
 
 

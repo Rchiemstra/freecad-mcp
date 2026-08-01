@@ -1,33 +1,35 @@
-import FreeCAD
-import FreeCADGui
-import ObjectsFem
-
+import base64
 import contextlib
 import hashlib
 import hmac
-import ipaddress
 import inspect
+import io
+import ipaddress
 import json
 import logging
+import os
 import platform
 import re
-import base64
-import io
-import os
 import sys
 import tempfile
 import threading
 import time
 import traceback
 import uuid
-from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from xmlrpc.client import Fault, dumps as xmlrpc_dumps, loads as xmlrpc_loads
+from xmlrpc.client import Fault
+from xmlrpc.client import dumps as xmlrpc_dumps
+from xmlrpc.client import loads as xmlrpc_loads
 from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
 
+import FreeCAD
+import FreeCADGui
+import ObjectsFem
 from PySide import QtCore, QtWidgets
 
 try:
@@ -46,14 +48,15 @@ except ImportError:
         require_document_modified,
     )
 
-from .execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
+from .acquisition_claims import AcquisitionClaimStore
 from .execute_code_analysis import analyze_execute_code, typed_tool_warning
+from .execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
+from .fem_executor import run_fem_analysis as _run_fem_analysis
 from .gui_dispatcher import (
+    GuiDispatcher,
     GuiDispatchError,
     GuiDispatchTimeout,
-    GuiDispatcher,
 )
-from .acquisition_claims import AcquisitionClaimStore
 from .handoff_continuations import HandoffContinuationStore
 from .inflight_requests import (
     InflightLeaseCredential,
@@ -66,7 +69,11 @@ from .lease_protocol import (
     SessionManager,
     load_profile_secret,
     make_runtime_manifest,
+)
+from .lease_protocol import (
     public_error as lease_protocol_public_error,
+)
+from .lease_protocol import (
     redact_sensitive as redact_lease_protocol_details,
 )
 from .mutation_guard import (
@@ -80,20 +87,29 @@ from .mutation_guard import (
     make_method_spec,
     validate_document_invariants,
 )
-from .telemetry import emit as emit_telemetry
 from .parts_library import (
     configure_parts_library_path,
     get_parts_list,
     insert_part_from_library,
 )
 from .reference_repair import inspect_references_gui, repair_references_gui
+from .save_service import (
+    DomainValidationError,
+    SaveService,
+    SaveServiceError,
+    compare_file_to_baseline,
+)
 from .serialize import serialize_object
 from .settings import (
     DEFAULT_SETTINGS as _DEFAULT_SETTINGS,  # noqa: F401 - compatibility export
+)
+from .settings import (
     SettingsPolicyError,
-    get_settings_path as _get_settings_path,  # noqa: F401 - compatibility export
     load_settings,
     resolve_rpc_bind_host,
+)
+from .settings import (
+    get_settings_path as _get_settings_path,  # noqa: F401 - compatibility export
 )
 from .snapshot_service import (
     create_lease_baseline_snapshot_gui,
@@ -102,22 +118,16 @@ from .snapshot_service import (
     recovery_snapshot_path,
     restore_snapshot_in_place_gui,
 )
-from .save_service import (
-    DomainValidationError,
-    SaveService,
-    SaveServiceError,
-    compare_file_to_baseline,
-)
+from .telemetry import emit as emit_telemetry
 from .view_manager import (
     animate_object_placement,
     build_orbit_frames,
-    repair_placements_and_refresh,
     refresh_active_view,
+    repair_placements_and_refresh,
     save_active_screenshot,
     save_view_sequence,
 )
 from .worker_manager import WorkerManager, WorkerRuntime
-from .fem_executor import run_fem_analysis as _run_fem_analysis
 
 rpc_server_thread = None
 rpc_server_instance = None
@@ -205,7 +215,7 @@ def _generated_operation_method_spec(base_spec, operation_id):
 
 shutdown_requested = threading.Event()
 logger = logging.getLogger("FreeCADMCP.rpc_server")
-addon_loaded_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+addon_loaded_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 # One runtime identity belongs to the FreeCAD/addon process, not to a listener
 # restart.  Restarting XML-RPC issues new authenticated sessions but must not
 # impersonate a different FreeCAD runtime in sidecars or instance manifests.
@@ -401,7 +411,7 @@ def initialize_document_lease_runtime(settings=None):
 
 def _utc_timestamp(value):
     return (
-        datetime.fromtimestamp(value, timezone.utc)
+        datetime.fromtimestamp(value, UTC)
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
@@ -789,7 +799,9 @@ for obj in doc.Objects:
         if tip is not None and tip not in members:
             errors.append("body_tip_not_member:" + obj.Name + ":" + tip)
         bodies[obj.Name] = {{"members": members, "tip": tip}}
-print({_SAVE_VALIDATION_MARKER!r} + json.dumps({{"objects": objects, "bodies": bodies, "errors": errors}}, sort_keys=True))
+_marker = {_SAVE_VALIDATION_MARKER!r}
+_payload = json.dumps({{"objects": objects, "bodies": bodies, "errors": errors}}, sort_keys=True)
+print(_marker + _payload)
 """
     result = manager.execute(
         code,
@@ -1565,10 +1577,8 @@ class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):
         try:
             return super().do_POST()
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 _import_document_lock().clear_request_identity()
-            except Exception:
-                pass
 
 
 # --- IP-filtered XML-RPC server ---
@@ -2605,10 +2615,10 @@ class FreeCADRPC:
             validate_unsafe_execute_scope = dl.validate_unsafe_execute_scope
             is_enforcement_enabled = dl.is_enforcement_enabled
             resolve_doc_key = dl.resolve_doc_key
-        except ImportError:
+        except ImportError as exc:
             func = getattr(self, method, None)
             if func is None or method.startswith("_"):
-                raise Exception(f'method "{method}" is not supported')
+                raise Exception(f'method "{method}" is not supported') from exc
             return func(*params)
 
         kind, extractor = classify_verb(method)
@@ -2988,10 +2998,8 @@ class FreeCADRPC:
                         return allowed
                 keys = []
                 for name in declared:
-                    try:
+                    with contextlib.suppress(Exception):
                         keys.append(resolve_doc_key(doc_name=name))
-                    except Exception:
-                        pass
                 return self._call_with_mutation_context(
                     func,
                     params,
@@ -3556,22 +3564,25 @@ class FreeCADRPC:
                 )
             logger.error("RPC GUI dispatch failed: %s", exc)
             recovery = None
-            if isinstance(exc, GuiDispatchTimeout) and exc.completion_uncertain:
-                if inflight is not None:
-                    recovery = inflight.token.mark_uncertain("gui_completion_uncertain")
-                    emit_telemetry(
-                        "recovery",
-                        "recovery_started",
-                        status="warning",
-                        error_code="GUI_COMPLETION_UNCERTAIN",
-                        request_id=inflight.request_id,
-                        execution_id=inflight.request_id,
-                        recovery_incident_id=recovery.recovery_incident_id,
-                        payload={
-                            "stage": "gui_execution",
-                            "mutation_started": recovery.mutation_started,
-                        },
-                    )
+            if (
+                isinstance(exc, GuiDispatchTimeout)
+                and exc.completion_uncertain
+                and inflight is not None
+            ):
+                recovery = inflight.token.mark_uncertain("gui_completion_uncertain")
+                emit_telemetry(
+                    "recovery",
+                    "recovery_started",
+                    status="warning",
+                    error_code="GUI_COMPLETION_UNCERTAIN",
+                    request_id=inflight.request_id,
+                    execution_id=inflight.request_id,
+                    recovery_incident_id=recovery.recovery_incident_id,
+                    payload={
+                        "stage": "gui_execution",
+                        "mutation_started": recovery.mutation_started,
+                    },
+                )
             if (
                 context
                 and document_lease_service is not None
@@ -3666,12 +3677,14 @@ class FreeCADRPC:
                     "INVALID_METHOD_PARAMS",
                     "Authenticated RPC target has unsupported keyword-only parameters",
                 )
-            elif parameter.kind == inspect.Parameter.VAR_KEYWORD:
-                if bound.arguments.get(parameter.name):
-                    raise LeaseProtocolError(
-                        "INVALID_METHOD_PARAMS",
-                        "Authenticated RPC target does not accept arbitrary fields",
-                    )
+            elif (
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                and bound.arguments.get(parameter.name)
+            ):
+                raise LeaseProtocolError(
+                    "INVALID_METHOD_PARAMS",
+                    "Authenticated RPC target does not accept arbitrary fields",
+                )
         return tuple(ordered)
 
     def invoke_v2(self, payload):
@@ -4405,9 +4418,7 @@ class FreeCADRPC:
                         state = "claim_committed"
                     else:
                         state = "running"
-                elif continuation.state == "claimable":
-                    state = "completed"
-                elif continuation.state == "claimed":
+                elif continuation.state == "claimable" or continuation.state == "claimed":
                     state = "completed"
                 elif continuation.state == "cancelled":
                     state = "cancelled"
@@ -5494,20 +5505,23 @@ class FreeCADRPC:
                     return
                 if getattr(outcome, "ok", False):
                     value = getattr(outcome, "value", None)
-                    if isinstance(value, dict) and value.get("success"):
-                        # claim_handoff_gui already escrows; keep as belt/suspenders
-                        # for callers that might return success without store.
-                        if (
+                    if (
+                        isinstance(value, dict)
+                        and value.get("success")
+                        and (
                             rpc_acquisition_claim_store is None
                             or not rpc_acquisition_claim_store.claimable(
                                 mcp_runtime_id, request_id
                             )
-                        ):
-                            self._escrow_locked_error_handoff_claim(
-                                mcp_runtime_id=mcp_runtime_id,
-                                request_id=request_id,
-                                claimed=value,
-                            )
+                        )
+                    ):
+                        # claim_handoff_gui already escrows; keep as belt/suspenders
+                        # for callers that might return success without store.
+                        self._escrow_locked_error_handoff_claim(
+                            mcp_runtime_id=mcp_runtime_id,
+                            request_id=request_id,
+                            claimed=value,
+                        )
                     return
                 # Late failure: only journal denied/failed when vault is empty.
                 if (
@@ -6005,12 +6019,14 @@ class FreeCADRPC:
                     # capability permits SaveAs only. The old sidecar remains
                     # unchanged (or absent for cached foreign recovery) until
                     # this snapshot succeeds.
-                    if lease.core_authority.core_owner_api_available(document):
-                        if lease.core_authority.authority_status(document) is None:
-                            raise lease.CoordinationError(
-                                "core mutation authority status is unavailable "
-                                "for verified orphan recovery"
-                            )
+                    if (
+                        lease.core_authority.core_owner_api_available(document)
+                        and lease.core_authority.authority_status(document) is None
+                    ):
+                        raise lease.CoordinationError(
+                            "core mutation authority status is unavailable "
+                            "for verified orphan recovery"
+                        )
                     with lease.core_authority.open_mutation_capability(
                         document,
                         generation=0,
@@ -6049,11 +6065,11 @@ class FreeCADRPC:
                             )
                     if inflight is not None:
                         inflight.token.begin_irreversible(
-                            (
+                            
                                 "local_orphan_authority_handoff"
                                 if phase.get("orphaned_local_mcp_recovery")
                                 else "foreign_orphan_authority_handoff"
-                            )
+                            
                         )
 
                     def escrow_recovery_grant(recovery_grant):
@@ -7906,14 +7922,12 @@ class FreeCADRPC:
                     raise
                 except Exception as exc:
                     if reservation is not None:
-                        try:
+                        with contextlib.suppress(Exception):
+                            # A failed exact-CAS rollback intentionally keeps a
+                            # local recovery record and the document open.
                             document_lease_service.abort_acquisition(
                                 reservation.credential
                             )
-                        except Exception:
-                            # A failed exact-CAS rollback intentionally keeps a
-                            # local recovery record and the document open.
-                            pass
                     retained = None
                     if selector is not None:
                         try:
@@ -7923,10 +7937,8 @@ class FreeCADRPC:
                     if retained is None:
                         if snapshot_id:
                             discard_lease_baseline_snapshot(snapshot_id)
-                        try:
+                        with contextlib.suppress(Exception):
                             FreeCAD.closeDocument(name)
-                        except Exception:
-                            pass
                     return _lease_service_error(
                         exc, request_id=identity.get("request_id")
                     )
@@ -7988,7 +8000,7 @@ class FreeCADRPC:
         obj = Object(
             name=obj_data.get("Name", "New_Object"),
             type=obj_data["Type"],
-            analysis=obj_data.get("Analysis", None),
+            analysis=obj_data.get("Analysis"),
             properties=obj_data.get("Properties", {}),
         )
         res = self._dispatch_gui(lambda: self._create_object_gui(doc_name, obj))
@@ -8397,25 +8409,19 @@ class FreeCADRPC:
                 FreeCAD.Console.PrintError(f"Error executing Python code: {exc}\n")
             finally:
                 for doc, attr, original in saved_hooks:
-                    try:
+                    with contextlib.suppress(Exception):
                         setattr(doc, attr, original)
-                    except Exception:
-                        pass
 
                 if recompute_mode == "all":
                     for doc in FreeCAD.listDocuments().values():
-                        try:
+                        with contextlib.suppress(Exception):
                             doc.recompute()
-                        except Exception:
-                            pass
                 elif recompute_mode == "target" and recompute_docs:
                     for doc_name in recompute_docs:
                         doc = FreeCAD.getDocument(doc_name)
                         if doc:
-                            try:
+                            with contextlib.suppress(Exception):
                                 doc.recompute()
-                            except Exception:
-                                pass
 
                 if restore_active and active_before:
                     try:
@@ -9000,14 +9006,10 @@ class FreeCADRPC:
                         ).decode("utf-8")
                 encoded_frames.append(payload)
             for name in os.listdir(tmp_dir):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(os.path.join(tmp_dir, name))
-                except OSError:
-                    pass
-            try:
+            with contextlib.suppress(OSError):
                 os.rmdir(tmp_dir)
-            except OSError:
-                pass
             ok_count = sum(
                 1 for frame in encoded_frames if frame["ok"] and frame["image_base64"]
             )
@@ -9830,6 +9832,7 @@ class FreeCADRPC:
     def _sketch_add_geometry_gui(self, doc_name, sketch_name, geometry):
         try:
             import math
+
             import Part
 
             doc = FreeCAD.getDocument(doc_name)
@@ -10038,10 +10041,8 @@ class FreeCADRPC:
                 else:
                     return f"Unknown constraint type: '{t}'"
                 if name and idx is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         sketch.renameConstraint(idx, str(name))
-                    except Exception:
-                        pass
 
             doc.recompute()
             return True
@@ -10231,10 +10232,8 @@ class FreeCADRPC:
             deleted = []
             for index in target_indices:
                 construction = None
-                try:
+                with contextlib.suppress(Exception):
                     construction = bool(sketch.getConstruction(index))
-                except Exception:
-                    pass
                 deleted.append(
                     {
                         "index": index,
@@ -10916,10 +10915,8 @@ class FreeCADRPC:
             try:
                 doc.saveCopy(path)
             except Exception as e:
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(path)
-                except Exception:
-                    pass
                 return {"ok": False, "error": f"Failed to save snapshot: {e}"}
             sid = "snap-" + str(int(time.time() * 1000))
             FreeCAD._mcp_snapshots.append(
@@ -10927,10 +10924,8 @@ class FreeCADRPC:
             )
             while len(FreeCAD._mcp_snapshots) > 5:
                 old = FreeCAD._mcp_snapshots.pop(0)
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(old["path"])
-                except Exception:
-                    pass
             return {
                 "ok": True,
                 "snapshot_id": sid,
@@ -11101,10 +11096,8 @@ class FreeCADRPC:
                         "ok": False,
                         "error": f"solve_assembly failed: {error} | {e}",
                     }
-            try:
+            with contextlib.suppress(Exception):
                 doc.recompute()
-            except Exception:
-                pass
             return {
                 "ok": True,
                 "assembly": asm.Name,
@@ -11194,7 +11187,7 @@ def start_rpc_server(port=None):
     rpc_server_actual_endpoint = {"host": actual_host, "port": int(actual_port)}
     rpc_server_runtime_id = _ADDON_RUNTIME_ID
     rpc_server_started_at = (
-        datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        datetime.now(UTC).isoformat().replace("+00:00", "Z")
     )
 
     profile_id = str(
@@ -11405,7 +11398,6 @@ def stop_rpc_server():
 
 
 from .commands import register_commands, schedule_toggle_sync  # noqa: E402
-
 
 register_commands()
 schedule_toggle_sync()

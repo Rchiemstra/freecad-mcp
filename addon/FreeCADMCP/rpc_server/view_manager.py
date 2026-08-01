@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import FreeCAD
 import FreeCADGui
 
 from .gui_dispatch import _flush_gui_events
-
 
 _VIEW_DISPATCH = {
     "Isometric": "viewIsometric",
@@ -130,7 +130,7 @@ def _apply_yaw(view: Any, yaw_deg: float | None) -> None:
             view.setCameraOrientation((extra * FreeCAD.Rotation(*current)).Q)
         elif hasattr(view, "viewRotateLeft"):
             # Approximate: FreeCAD's rotate-left is ~10° per call.
-            steps = int(round(float(yaw_deg) / 10.0)) % 36
+            steps = round(float(yaw_deg) / 10.0) % 36
             for _ in range(max(0, steps)):
                 view.viewRotateLeft()
     except Exception as exc:

@@ -12,6 +12,7 @@ tunnel or TLS proxy.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import hmac
@@ -23,11 +24,11 @@ import stat
 import threading
 import time
 import uuid
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
-
+from typing import Any
 
 PROTOCOL_NAME = "freecad-mcp-rpc"
 PROTOCOL_VERSION = 2
@@ -62,7 +63,7 @@ MAX_LEASE_CREDENTIALS = 32
 MAX_PARAMS_DEPTH = 32
 MAX_HANDSHAKE_NONCES = 65_536
 
-_PROCESS_STARTED_AT = datetime.now(timezone.utc)
+_PROCESS_STARTED_AT = datetime.now(UTC)
 _METHOD_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 _SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+\-=]{0,255}$")
 _NONCE_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")
@@ -229,7 +230,7 @@ def _format_utc(value: datetime) -> str:
         raise LeaseProtocolError(
             "INVALID_TIMESTAMP", "Runtime timestamps must include a timezone"
         )
-    normalized = value.astimezone(timezone.utc)
+    normalized = value.astimezone(UTC)
     return normalized.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
@@ -248,7 +249,7 @@ def _parse_utc(value: Any, field_name: str) -> datetime:
         raise LeaseProtocolError(
             "INVALID_TIMESTAMP", f"{field_name} must include a timezone"
         )
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _require_identifier(value: Any, field_name: str) -> str:
@@ -369,7 +370,9 @@ def _validate_nonce(value: Any, field_name: str) -> str:
 
 
 def _validate_secret(secret: bytes) -> bytes:
-    if not isinstance(secret, bytes) or not MIN_SECRET_BYTES <= len(secret) <= MAX_SECRET_FILE_BYTES:
+    if not isinstance(secret, bytes) or not (
+        MIN_SECRET_BYTES <= len(secret) <= MAX_SECRET_FILE_BYTES
+    ):
         raise LeaseProtocolError(
             "INVALID_PROFILE_SECRET",
             f"Profile secret must contain {MIN_SECRET_BYTES}-{MAX_SECRET_FILE_BYTES} bytes",
@@ -467,10 +470,8 @@ def create_profile_secret(
         if os.name != "nt":
             os.chmod(target, 0o600)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             target.unlink()
-        except OSError:
-            pass
         raise
     return value
 
@@ -550,7 +551,7 @@ class RuntimeManifest:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "RuntimeManifest":
+    def from_dict(cls, payload: Mapping[str, Any]) -> RuntimeManifest:
         if not isinstance(payload, Mapping):
             raise LeaseProtocolError(
                 "MALFORMED_MANIFEST", "Runtime manifest must be an object"
@@ -665,7 +666,7 @@ class McpRuntimeIdentity:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "McpRuntimeIdentity":
+    def from_dict(cls, payload: Mapping[str, Any]) -> McpRuntimeIdentity:
         if not isinstance(payload, Mapping):
             raise LeaseProtocolError(
                 "MALFORMED_HANDSHAKE", "MCP runtime identity must be an object"
@@ -1011,7 +1012,10 @@ def verify_handshake_response(
     unsigned = dict(payload)
     presented_proof = unsigned.pop("proof")
     _verify_proof(secret, _RESPONSE_PROOF_DOMAIN, unsigned, presented_proof)
-    if payload["kind"] != HANDSHAKE_RESPONSE_KIND or payload["protocol_version"] != PROTOCOL_VERSION:
+    if (
+        payload["kind"] != HANDSHAKE_RESPONSE_KIND
+        or payload["protocol_version"] != PROTOCOL_VERSION
+    ):
         raise LeaseProtocolError(
             "UNSUPPORTED_PROTOCOL", "Returned RPC protocol version is unsupported"
         )
@@ -1123,7 +1127,7 @@ class SessionManager:
         secret: bytes,
         session_ttl_seconds: float = DEFAULT_SESSION_TTL_SECONDS,
         monotonic: Callable[[], float] = time.monotonic,
-        utcnow: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        utcnow: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         if not 1 <= session_ttl_seconds <= MAX_SESSION_TTL_SECONDS:
             raise LeaseProtocolError(
@@ -1168,7 +1172,7 @@ class SessionManager:
                 raise LeaseProtocolError(
                     "INVALID_TIMESTAMP", "Session clock must include a timezone"
                 )
-            issued_dt = issued_dt.astimezone(timezone.utc)
+            issued_dt = issued_dt.astimezone(UTC)
             expires_dt = issued_dt + timedelta(seconds=self._session_ttl)
             negotiated = tuple(
                 sorted(set(verified.requested_features).intersection(self.manifest.features))
@@ -1227,10 +1231,10 @@ class SessionManager:
 
     def authenticate_envelope(
         self,
-        payload: Mapping[str, Any] | "RequestEnvelope",
+        payload: Mapping[str, Any] | RequestEnvelope,
         *,
         transport_mcp_runtime_id: str | None = None,
-    ) -> tuple[SessionContext, "RequestEnvelope"]:
+    ) -> tuple[SessionContext, RequestEnvelope]:
         envelope = (
             payload if isinstance(payload, RequestEnvelope) else RequestEnvelope.from_dict(payload)
         )
@@ -1314,7 +1318,7 @@ class LeaseCredential:
     token: str = field(repr=False)
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "LeaseCredential":
+    def from_dict(cls, payload: Mapping[str, Any]) -> LeaseCredential:
         if not isinstance(payload, Mapping):
             raise LeaseProtocolError(
                 "MALFORMED_LEASE_CREDENTIAL", "Lease credential must be an object"
@@ -1358,7 +1362,7 @@ class OperationContext:
     task_id: str | None = None
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "OperationContext":
+    def from_dict(cls, payload: Mapping[str, Any]) -> OperationContext:
         if not isinstance(payload, Mapping):
             raise LeaseProtocolError(
                 "MALFORMED_ENVELOPE", "Operation metadata must be an object"
@@ -1388,7 +1392,7 @@ class RequestEnvelope:
     protocol_version: int = PROTOCOL_VERSION
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "RequestEnvelope":
+    def from_dict(cls, payload: Mapping[str, Any]) -> RequestEnvelope:
         if not isinstance(payload, Mapping):
             raise LeaseProtocolError(
                 "MALFORMED_ENVELOPE", "Authenticated RPC envelope must be an object"

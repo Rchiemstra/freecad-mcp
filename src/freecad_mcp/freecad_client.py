@@ -5,30 +5,29 @@ import json
 import logging
 import threading
 import time
-import xmlrpc.client
 import uuid
+import xmlrpc.client
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from .execute_options import ExecuteOptions
 from .lease_manager import (
-    LeaseClientManager,
-    LeaseNotFoundError,
-    RpcRequestContext,
     STALE_RECOVERY_EXEMPT_RPC_METHODS,
     STALE_RECOVERY_RETRY_ERROR_CODE,
     STALE_RECOVERY_TRIGGER_PRE_OPERATION,
     STALE_RECOVERY_TRIGGER_RPC_REFUSAL,
+    LeaseClientManager,
+    LeaseNotFoundError,
+    RpcRequestContext,
     StaleLeaseRecoveryOrchestrator,
     StaleRecoveryResult,
     rpc_response_indicates_stale_refusal,
     summarize_stale_recovery_results,
 )
-from .template_resources import read_template_text
+from .mcp_tasks import link_runtime
 from .telemetry import emit_event
 from .telemetry.context import get_context, update_context
-from .mcp_tasks import link_runtime
-
+from .template_resources import read_template_text
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -338,7 +337,8 @@ class FreeCADConnection:
         )
         if direct_read:
             context = manager.build_request_context(operation_name=method or "RPC read")
-            return headers + (
+            return (
+                *headers,
                 ("X-MCP-Session-Token", context.session_token),
                 ("X-MCP-Request-Id", context.request_id),
                 ("X-MCP-Lease-Credentials", "[]"),
@@ -346,7 +346,7 @@ class FreeCADConnection:
         token_var = getattr(self, "_legacy_lease_token", None)
         token = token_var.get() if token_var is not None else None
         if token:
-            return headers + (("X-MCP-Lease-Token", str(token)),)
+            return (*headers, ("X-MCP-Lease-Token", str(token)))
         if manager is not None and manager.connected:
             document_names: list[str] = []
             if (
@@ -412,7 +412,8 @@ class FreeCADConnection:
                     operation_name=method or "RPC request"
                 )
             credential_payload = [item.to_wire() for item in context.lease_credentials]
-            routed = headers + (
+            routed = (
+                *headers,
                 ("X-MCP-Session-Token", context.session_token),
                 ("X-MCP-Request-Id", context.request_id),
                 (
@@ -1536,7 +1537,7 @@ class FreeCADConnection:
         if not loaded:
             try:
                 self.get_instance_info()
-            except Exception:  # noqa: BLE001 - optional legacy capability read
+            except Exception:
                 return None
 
         with self._identity_lock:

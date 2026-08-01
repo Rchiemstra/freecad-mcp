@@ -7,9 +7,9 @@ import json
 import logging
 from typing import Any
 
+from ..execute_options import ExecuteOptions
 from ..freecad_client import FreeCADConnection
 from ..responses import ToolResponse, add_screenshot_if_available, tool_fail, tool_ok
-from ..execute_options import ExecuteOptions
 from ..template_resources import render_template_lines, render_template_text
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -246,7 +246,14 @@ def get_document_tree_operation(
         include_properties=repr(include_properties),
         selected_nodes=repr(selected_nodes),
     )
-    return _run_json_code(freecad, True, "\n".join(lines), "Failed to get document tree", document=doc_name, read_only=True)
+    return _run_json_code(
+        freecad,
+        True,
+        "\n".join(lines),
+        "Failed to get document tree",
+        document=doc_name,
+        read_only=True,
+    )
 
 
 def create_part_container_operation(
@@ -290,7 +297,14 @@ def move_object_operation(
         target_container=repr(target_container),
         remove_from_old_parent=repr(remove_from_old_parent),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to move object", screenshot=True, document=doc_name)
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to move object",
+        screenshot=True,
+        document=doc_name,
+    )
 
 
 def create_subshape_binder_operation(
@@ -320,10 +334,23 @@ def create_subshape_binder_operation(
         sync_placement=repr(sync_placement),
         if_exists=repr(if_exists),
     )
-    lines = _doc_preamble(doc_name) + _shared_helpers() + binder_code.strip().splitlines() + render_template_lines(
-        "diagnostics/cross_body_preflight.py.txt", obj_name=repr(binder_name),
+    lines = [
+        *_doc_preamble(doc_name),
+        *_shared_helpers(),
+        *binder_code.strip().splitlines(),
+        *render_template_lines(
+            "diagnostics/cross_body_preflight.py.txt",
+            obj_name=repr(binder_name),
+        ),
+    ]
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to create subshape binder",
+        screenshot=True,
+        document=doc_name,
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create subshape binder", screenshot=True, document=doc_name)
 
 
 def create_datum_plane_operation(
@@ -343,21 +370,34 @@ def create_datum_plane_operation(
     invalid = _validate_if_exists(if_exists)
     if invalid:
         return invalid
-    lines = _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
-        "p7_assembly/create_datum_plane.py.txt",
-        plane_name=repr(plane_name),
-        body_name=repr(body_name),
-        mode=repr(mode),
-        source_ref=repr(source_ref),
-        face_a=repr(face_a),
-        face_b=repr(face_b),
-        offset_along_normal=repr(offset_along_normal),
-        map_mode=repr(map_mode),
-        if_exists=repr(if_exists),
-    ) + render_template_lines(
-        "diagnostics/cross_body_preflight.py.txt", obj_name=repr(plane_name),
+    lines = [
+        *_doc_preamble(doc_name),
+        *_shared_helpers(),
+        *render_template_lines(
+            "p7_assembly/create_datum_plane.py.txt",
+            plane_name=repr(plane_name),
+            body_name=repr(body_name),
+            mode=repr(mode),
+            source_ref=repr(source_ref),
+            face_a=repr(face_a),
+            face_b=repr(face_b),
+            offset_along_normal=repr(offset_along_normal),
+            map_mode=repr(map_mode),
+            if_exists=repr(if_exists),
+        ),
+        *render_template_lines(
+            "diagnostics/cross_body_preflight.py.txt",
+            obj_name=repr(plane_name),
+        ),
+    ]
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to create datum plane",
+        screenshot=True,
+        document=doc_name,
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to create datum plane", screenshot=True, document=doc_name)
 
 
 def solve_assembly_operation(
@@ -397,7 +437,14 @@ def get_sketch_geometry_operation(
         include_external=repr(include_external),
         global_coords=repr(global_coords),
     )
-    return _run_json_code(freecad, True, "\n".join(lines), "Failed to get sketch geometry", document=doc_name, read_only=True)
+    return _run_json_code(
+        freecad,
+        True,
+        "\n".join(lines),
+        "Failed to get sketch geometry",
+        document=doc_name,
+        read_only=True,
+    )
 
 
 def sketch_add_external_projection_operation(
@@ -455,7 +502,14 @@ def build_path_wire_operation(
         container=repr(container),
         if_exists=repr(if_exists),
     )
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to build path wire", screenshot=True, document=doc_name)
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to build path wire",
+        screenshot=True,
+        document=doc_name,
+    )
 
 
 def sweep_pipe_operation(
@@ -483,5 +537,16 @@ def sweep_pipe_operation(
         container_name=repr(container),
         if_exists=repr(if_exists),
     )
-    lines = _doc_preamble(doc_name) + _shared_helpers() + sweep_code.strip().splitlines()
-    return _run_json_code(freecad, only_text_feedback, "\n".join(lines), "Failed to sweep pipe", screenshot=True, document=doc_name)
+    lines = [
+        *_doc_preamble(doc_name),
+        *_shared_helpers(),
+        *sweep_code.strip().splitlines(),
+    ]
+    return _run_json_code(
+        freecad,
+        only_text_feedback,
+        "\n".join(lines),
+        "Failed to sweep pipe",
+        screenshot=True,
+        document=doc_name,
+    )

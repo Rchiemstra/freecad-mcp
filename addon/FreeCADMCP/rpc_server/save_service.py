@@ -18,8 +18,10 @@ import hmac
 import os
 import re
 import zipfile
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from typing import Any, Callable, ContextManager, Mapping
+from typing import Any
 
 try:
     from document_state import (
@@ -244,16 +246,15 @@ def _baseline_differences(
             }
     expected_identity = expected.file_identity
     actual_identity = actual.file_identity
-    if expected_identity is not None:
-        if (
-            actual_identity is None
-            or expected_identity.comparison_tuple()
-            != actual_identity.comparison_tuple()
-        ):
-            differences["file_identity"] = {
-                "expected": _identity_dict(expected_identity),
-                "actual": _identity_dict(actual_identity),
-            }
+    if expected_identity is not None and (
+        actual_identity is None
+        or expected_identity.comparison_tuple()
+        != actual_identity.comparison_tuple()
+    ):
+        differences["file_identity"] = {
+            "expected": _identity_dict(expected_identity),
+            "actual": _identity_dict(actual_identity),
+        }
     return differences
 
 
@@ -399,7 +400,7 @@ def _clear_document_modified_after_save(document: Any) -> None:
 
 
 DomainValidator = Callable[[str, str], Mapping[str, Any] | bool | None]
-DestinationGuardFactory = Callable[[str], ContextManager[Any]]
+DestinationGuardFactory = Callable[[str], AbstractContextManager[Any]]
 
 
 class SaveService:
@@ -1307,8 +1308,8 @@ __all__ = [
     "FinalizeResult",
     "InvalidSaveRequestError",
     "LifecycleCallbackError",
-    "SaveInvocationError",
     "SaveInvocation",
+    "SaveInvocationError",
     "SavePreflight",
     "SaveResult",
     "SaveService",

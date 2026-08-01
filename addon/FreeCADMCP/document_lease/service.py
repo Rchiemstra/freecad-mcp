@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import secrets
 import threading
 import time
 import uuid
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any
 
 from .identity import (
     DocumentIdentityError,
@@ -27,10 +29,10 @@ from .model import (
     FileIdentity,
     LeaseCredential,
     LeaseErrorInfo,
-    LiveDocumentValidation,
     LeaseOwner,
     LeaseRecord,
     LeaseState,
+    LiveDocumentValidation,
     SaveAsMigration,
     SaveAsMigrationRole,
     token_fingerprint,
@@ -43,7 +45,6 @@ from .sidecar import (
     SidecarStore,
     sidecar_path_for,
 )
-
 
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 10.0
 DEFAULT_SIDECAR_HEARTBEAT_INTERVAL_SECONDS = 30.0
@@ -948,9 +949,12 @@ class DocumentLeaseService:
             failures.append("modification time changed")
         if sha256 != baseline.sha256:
             failures.append("content hash changed")
-        if not allow_file_identity_change and baseline.file_identity is not None:
-            if current_identity != baseline.file_identity:
-                failures.append("file identity changed")
+        if (
+            not allow_file_identity_change
+            and baseline.file_identity is not None
+            and current_identity != baseline.file_identity
+        ):
+            failures.append("file identity changed")
         if failures:
             raise error_type(
                 "the saved document no longer matches the accepted baseline: "
@@ -1432,13 +1436,11 @@ class DocumentLeaseService:
                     or identity.session_uuid in self._foreign_records
                 )
             if not known:
-                try:
+                with contextlib.suppress(LeaseServiceError):
                     self.import_adjacent_foreign_recovery(
                         identity.session_uuid,
                         live_document=identity,
                     )
-                except LeaseServiceError:
-                    pass
         with self._lock:
             existing = self._records.get(identity.session_uuid)
             if existing is not None:
@@ -4547,13 +4549,10 @@ class DocumentLeaseService:
                     record.state == LeaseState.LOCKED_IDLE
                     and self._is_recoverable_local_mcp_orphan_candidate(record)
                 ):
-                    try:
+                    with contextlib.suppress(LocalRecoveryError):
                         owner_exit_proof = self._prove_local_mcp_owner_dead(
                             record.owner
                         )
-                    except LocalRecoveryError:
-                        # Unknown or live owners continue to use heartbeat age.
-                        pass
                 heartbeat_expired = (
                     now - record.monotonic_heartbeat_ns > self._stale_after_ns
                 )

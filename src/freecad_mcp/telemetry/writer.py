@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 import threading
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from datetime import UTC
+from pathlib import Path
+from typing import Any
 
 from .context import get_context
 from .events import build_event
 from .redaction import redact_payload
-
 
 logger = logging.getLogger("FreeCADMCPserver.telemetry")
 
@@ -47,9 +48,9 @@ def _default_path() -> Path:
         or "debug_logs"
     )
     context = get_context()
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date = datetime.now(UTC).strftime("%Y-%m-%d")
     short_session = context.session_id.replace("-", "")[:12]
     return directory / f"mcp_debug_{date}_{os.getpid()}_{short_session}.jsonl"
 

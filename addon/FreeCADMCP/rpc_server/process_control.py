@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import os
 import signal
 import subprocess
 import sys
-import time
 from ctypes import wintypes
-
 
 CREATE_NEW_PROCESS_GROUP = 0x00000200
 CREATE_NO_WINDOW = 0x08000000
@@ -95,10 +94,8 @@ def terminate_process_tree(
         return True
     if sys.platform == "win32":
         if job_object is not None:
-            try:
+            with contextlib.suppress(Exception):
                 job_object.terminate(1)
-            except Exception:
-                pass
         try:
             process.wait(timeout=grace)
             return True
@@ -111,23 +108,17 @@ def terminate_process_tree(
                 check=False,
             )
     else:
-        try:
+        with contextlib.suppress(OSError):
             os.killpg(process.pid, signal.SIGTERM)
-        except OSError:
-            pass
         try:
             process.wait(timeout=grace)
             return True
         except subprocess.TimeoutExpired:
-            try:
+            with contextlib.suppress(OSError):
                 os.killpg(process.pid, signal.SIGKILL)
-            except OSError:
-                pass
     try:
         process.wait(timeout=grace)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(OSError):
             process.kill()
-        except OSError:
-            pass
     return process.poll() is not None

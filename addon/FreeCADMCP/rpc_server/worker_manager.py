@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import contextlib
 import os
 import queue
 import re
@@ -38,7 +38,6 @@ from .worker_protocol import (
     validate_job,
     write_json_atomic,
 )
-
 
 _VERSION_RE = re.compile(
     r"FreeCAD\s+(\d+)\.(\d+)\.(\d+)(?:[^\r\n]*?Revision:\s*([^\r\n]+))?"
@@ -469,13 +468,11 @@ class WorkerManager:
                 return self._error(
                     "worker_cancelled", "Worker job was cancelled", job_id=job_id
                 )
-            try:
+            with contextlib.suppress(Exception):
                 _console_message(
                     f"FreeCADMCP: worker ACTIVE job={job_id} "
                     f"(timeout={timeout:g}s, snapshot={snapshot.get('primary_document')})"
                 )
-            except Exception:
-                pass
             with log_path.open("wb") as log:
                 process = subprocess.Popen(
                     command,
@@ -551,10 +548,18 @@ class WorkerManager:
                     job_id=job_id,
                 )
             if result_path.stat().st_size > MAX_RESULT_BYTES:
-                return self._error("worker_protocol_error", "Worker result exceeds 8 MiB", job_id=job_id)
+                return self._error(
+                    "worker_protocol_error",
+                    "Worker result exceeds 8 MiB",
+                    job_id=job_id,
+                )
             result = read_json_limited(result_path)
             if result.get("job_id") != job_id or result.get("schema_version") != 1:
-                return self._error("worker_protocol_error", "Worker result identity mismatch", job_id=job_id)
+                return self._error(
+                    "worker_protocol_error",
+                    "Worker result identity mismatch",
+                    job_id=job_id,
+                )
             result.setdefault("metrics", {})["snapshot_duration_ms"] = snapshot.get(
                 "snapshot_duration_ms", 0.0
             )
@@ -574,7 +579,10 @@ class WorkerManager:
                     return self._error("resource_limit_exceeded", str(exc), job_id=job_id)
                 payload = {
                     "success": True,
-                    "message": "Python code execution completed.\nOutput: " + result.get("stdout", ""),
+                    "message": (
+                        "Python code execution completed.\nOutput: "
+                        + result.get("stdout", "")
+                    ),
                     "recompute_errors": [],
                     "session": result.get("session", {}),
                     "structured": result.get("session", {}),
@@ -816,10 +824,8 @@ class WorkerManager:
                     target.write(data)
                     retained += len(data)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 stream.close()
-            except Exception:
-                pass
 
     def _sweep_stale_workspaces(self) -> None:
         cutoff = time.time() - 24 * 60 * 60

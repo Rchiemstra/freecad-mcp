@@ -12,8 +12,9 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 
 class RequestCancellationError(RuntimeError):
@@ -21,7 +22,7 @@ class RequestCancellationError(RuntimeError):
 
     code = "REQUEST_CANCELLED"
 
-    def __init__(self, snapshot: "InflightSnapshot") -> None:
+    def __init__(self, snapshot: InflightSnapshot) -> None:
         self.snapshot = snapshot
         suffix = (
             " after document mutation may have begun"

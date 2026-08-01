@@ -405,7 +405,7 @@ def sketch_attach_operation(
                 offset_supported = capability_probe(
                     "sketch_attach", "attachment_offset"
                 )
-            except Exception as exc:  # noqa: BLE001 - optional compatibility read
+            except Exception as exc:
                 logger.warning(
                     "Could not inspect sketch_attach capabilities: %s", exc
                 )
@@ -423,7 +423,7 @@ def sketch_attach_operation(
                 res = typed(doc_name, sketch_name, support)
             else:
                 res = typed(doc_name, sketch_name, support, attachment_offset)
-        except Exception as exc:  # noqa: BLE001 - XML-RPC faults vary by transport
+        except Exception as exc:
             if not _typed_rpc_unavailable(exc):
                 logger.error("Typed sketch_attach failed: %s", exc)
                 return tool_fail(f"Failed to attach sketch: {exc}")

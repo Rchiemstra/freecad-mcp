@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Iterable, Mapping
+from enum import StrEnum
+from typing import Any
 
 from .telemetry import emit as emit_telemetry
 
 
-class RpcMutationKind(str, Enum):
+class RpcMutationKind(StrEnum):
     READ_ONLY = "read_only"
     LIVE_MUTATION = "live_mutation"
     SAVE = "save"
@@ -18,14 +19,14 @@ class RpcMutationKind(str, Enum):
     CONTROL = "control"
 
 
-class ValidationProfile(str, Enum):
+class ValidationProfile(StrEnum):
     NONE = "none"
     MINIMAL = "minimal"
     DEFAULT = "default"
     FULL = "full"
 
 
-class DocumentHealthVerdict(str, Enum):
+class DocumentHealthVerdict(StrEnum):
     HEALTHY = "healthy"
     WARNING = "warning"
     DEGRADED = "degraded"
@@ -33,7 +34,7 @@ class DocumentHealthVerdict(str, Enum):
     UNKNOWN = "unknown"
 
 
-class RollbackCoverage(str, Enum):
+class RollbackCoverage(StrEnum):
     COMPLETE = "complete"
     DOCUMENT_ONLY = "document_only"
     PARTIAL = "partial"
@@ -547,7 +548,7 @@ class GuiMutationTransaction:
         """Enable FreeCAD transaction recording when a headless doc disabled it."""
 
         try:
-            mode = getattr(document, "UndoMode")
+            mode = document.UndoMode
         except (AttributeError, RuntimeError):
             # Test doubles and some legacy proxies expose transaction methods
             # without an UndoMode property.
@@ -559,7 +560,7 @@ class GuiMutationTransaction:
         if not disabled:
             return
         try:
-            setattr(document, "UndoMode", 1)
+            document.UndoMode = 1
         except Exception as exc:
             raise RuntimeError(
                 f"cannot enable transaction recording for "
@@ -571,7 +572,7 @@ class GuiMutationTransaction:
         while self._original_undo_modes:
             document, mode = self._original_undo_modes.pop()
             try:
-                setattr(document, "UndoMode", mode)
+                document.UndoMode = mode
             except Exception as exc:
                 self.abort_errors.append(
                     {

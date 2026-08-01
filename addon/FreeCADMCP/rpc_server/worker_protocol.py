@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import json
 import os
 import re
 import tempfile
 from pathlib import Path
 from typing import Any
-
 
 SCHEMA_VERSION = 1
 MAX_CODE_BYTES = 1 * 1024 * 1024
@@ -57,9 +57,7 @@ def _subelement_name_is_safe(name: str) -> bool:
         return False
     if "/" in name or "\\" in name:
         return False
-    if ".." in name:
-        return False
-    return True
+    return ".." not in name
 
 
 def _is_sketcher_pseudo_subelement(target: Any, name: str) -> bool:
@@ -299,10 +297,8 @@ def write_json_atomic(path: str | Path, payload: dict[str, Any]) -> None:
             os.fsync(handle.fileno())
         os.replace(tmp_name, target)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(tmp_name)
-        except OSError:
-            pass
         raise
 
 

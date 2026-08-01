@@ -11,11 +11,11 @@ import hashlib
 import hmac
 import re
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Mapping
-
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 SCHEMA_VERSION = 2
 RECORD_KIND = "freecad-mcp-document-lease"
@@ -52,7 +52,7 @@ def sanitize_persisted_task_summary(value: str | None) -> str:
     return "".join(characters).rstrip()
 
 
-class LeaseState(str, Enum):
+class LeaseState(StrEnum):
     ACQUIRING = "ACQUIRING"
     LOCKED_IDLE = "LOCKED_IDLE"
     LOCKED_EDITING = "LOCKED_EDITING"
@@ -67,7 +67,7 @@ class LeaseState(str, Enum):
     STALE = "STALE"
 
 
-class SaveAsMigrationRole(str, Enum):
+class SaveAsMigrationRole(StrEnum):
     """The side of an in-flight Save As represented by one sidecar."""
 
     SOURCE = "source"
@@ -192,7 +192,7 @@ def validate_transition(current: LeaseState, target: LeaseState) -> None:
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace(
         "+00:00", "Z"
     )
 

@@ -1,14 +1,15 @@
 import logging
-import json
 import os
 import random
 import re
 import threading
 import uuid
 import warnings
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, Dict, Literal
+from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
+from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import CallToolResult
@@ -16,6 +17,8 @@ from typing_extensions import TypedDict
 
 from .build_info import (
     as_dict as build_info_dict,
+)
+from .build_info import (
     build_id,
     event_schema_version,
     git_commit,
@@ -30,7 +33,189 @@ from .lease_manager import (
     STALE_RECOVERY_TRIGGER_POST_TOOL,
     StaleLeaseRecoveryOrchestrator,
 )
+from .operations import (
+    # Document lock
+    acquire_document_lock_operation,
+    activate_document_operation,
+    adopt_dirty_document_operation,
+    animate_placement_operation,
+    audit_hardcoded_dimensions_operation,
+    body_create_operation,
+    body_set_tip_operation,
+    boolean_difference_operation,
+    boolean_intersection_operation,
+    boolean_union_operation,
+    bounding_box_operation,
+    # P7 — Assembly references, sketch geometry, path wires
+    build_path_wire_operation,
+    # Diagnostics — read-only P1/P8/P10 guards
+    capture_state_operation,
+    center_of_mass_operation,
+    chamfer_feature_operation,
+    check_gear_pair_operation,
+    claim_acquisition_result_operation,
+    clear_expression_operation,
+    # Core
+    close_document_operation,
+    common_volume_along_path_operation,
+    compare_documents_operation,
+    compute_gear_geometry_operation,
+    create_assembly_grounded_joint_operation,
+    create_assembly_joint_operation,
+    create_assembly_operation,
+    create_datum_plane_operation,
+    create_document_operation,
+    create_helical_gear_operation,
+    # P4 — Gear library
+    create_involute_gear_operation,
+    create_object_operation,
+    create_part_container_operation,
+    create_placement_binder_operation,
+    create_placement_datum_operation,
+    create_spur_gear_operation,
+    create_subshape_binder_operation,
+    delete_object_operation,
+    diagnose_helix_operation,
+    diagnose_parametric_operation,
+    diagnose_pocket_operation,
+    edge_axis_operation,
+    edit_object_operation,
+    encode_view_video_operation,
+    execute_code_async_operation,
+    execute_code_operation,
+    export_brep_operation,
+    # P6 — IO
+    export_step_operation,
+    export_stl_operation,
+    face_normal_operation,
+    fillet_feature_operation,
+    find_edges_operation,
+    find_faces_operation,
+    force_release_stale_lock_operation,
+    forget_legacy_document_key,
+    geometric_diff_operation,
+    get_dependency_graph_operation,
+    get_document_lock_operation,
+    get_document_tree_operation,
+    get_global_shape_operation,
+    get_gui_state_operation,
+    get_object_operation,
+    get_objects_operation,
+    get_parts_list_operation,
+    get_recompute_log_operation,
+    get_selection_operation,
+    get_sketch_diagnostics_operation,
+    get_sketch_geometry_operation,
+    get_view_operation,
+    heartbeat_document_lock_operation,
+    helical_sweep_feature_operation,
+    import_brep_operation,
+    import_step_operation,
+    insert_part_from_library_operation,
+    inspect_geometry_operation,
+    inspect_references_operation,
+    legacy_selector_doc_key,
+    linear_pattern_feature_operation,
+    list_document_locks_operation,
+    list_documents_operation,
+    list_expressions_operation,
+    loft_feature_operation,
+    match_subshape_operation,
+    measure_angle_operation,
+    measure_area_operation,
+    # P5 — Measurement & transforms
+    measure_distance_operation,
+    measure_volume_operation,
+    mirror_feature_operation,
+    move_object_operation,
+    # Interactive GUI
+    open_document_operation,
+    pad_feature_operation,
+    placement_audit_operation,
+    pocket_feature_operation,
+    polar_pattern_feature_operation,
+    preview_attachment_operation,
+    recompute_and_wait_operation,
+    recompute_document_operation,
+    redo_operation,
+    refresh_view_operation,
+    release_document_lock_operation,
+    relink_references_operation,
+    reload_document_operation,
+    repair_references_operation,
+    repair_view_placements_operation,
+    # Snapshot — I7 in-process document copies (P12)
+    restore_operation,
+    # P3 — 3-D features
+    revolve_feature_operation,
+    rotate_operation,
+    run_fem_analysis_operation,
+    run_transaction_operation,
+    save_view_sequence_operation,
+    scale_operation,
+    select_subshapes_operation,
+    set_color_operation,
+    set_expression_operation,
+    set_section_view_operation,
+    set_tree_expanded_operation,
+    sketch_add_arc_of_ellipse_operation,
+    sketch_add_arc_operation,
+    sketch_add_bezier_operation,
+    sketch_add_bspline_operation,
+    sketch_add_bspline_through_points_operation,
+    sketch_add_circle_operation,
+    sketch_add_constraint_operation,
+    sketch_add_ellipse_operation,
+    sketch_add_external_projection_operation,
+    sketch_add_geometry_operation,
+    sketch_add_line_operation,
+    sketch_add_parametric_curve_operation,
+    # P1 — Sketch curves
+    sketch_add_polyline_operation,
+    sketch_add_rectangle_operation,
+    sketch_add_regular_polygon_operation,
+    sketch_add_slot_operation,
+    sketch_attach_operation,
+    sketch_constrain_coincident_operation,
+    sketch_constrain_distance_operation,
+    sketch_constrain_equal_operation,
+    sketch_constrain_horizontal_operation,
+    sketch_constrain_parallel_operation,
+    sketch_constrain_perpendicular_operation,
+    sketch_constrain_radius_operation,
+    sketch_constrain_tangent_operation,
+    sketch_constrain_vertical_operation,
+    sketch_create_operation,
+    sketch_delete_constraint_operation,
+    sketch_delete_geometry_operation,
+    sketch_edit_constraint_operation,
+    sketch_extend_operation,
+    sketch_fillet_operation,
+    sketch_import_points_operation,
+    sketch_split_operation,
+    sketch_symmetry_operation,
+    sketch_toggle_construction_operation,
+    # P2 — Sketch editing
+    sketch_trim_operation,
+    snapshot_operation,
+    solve_assembly_operation,
+    # Parametric — Spreadsheet / expressions / Body / named constraints
+    spreadsheet_create_operation,
+    spreadsheet_get_cells_operation,
+    spreadsheet_list_aliases_operation,
+    spreadsheet_set_alias_operation,
+    spreadsheet_set_cells_operation,
+    sweep_feature_operation,
+    sweep_pipe_operation,
+    translate_operation,
+    undo_operation,
+    update_document_lock_operation,
+    validate_geometry_operation,
+    validate_movement_follow_operation,
+)
 from .outcomes import OutcomeStatus
+from .prompt_text import ASSET_CREATION_STRATEGY
+from .responses import json_response, tool_fail
 from .rpc_auth import (
     REQUIRED_PROTOCOL_FEATURES,
     RpcAuthError,
@@ -40,192 +225,8 @@ from .rpc_auth import (
     make_mcp_runtime_identity,
     verify_handshake_response_from_manifest,
 )
-from .responses import json_response, tool_fail
-from .telemetry import close_default_writer, emit_event
-from .telemetry.context import get_context, update_context
-from .operations import (
-    # Core
-    close_document_operation,
-    create_document_operation,
-    create_object_operation,
-    delete_object_operation,
-    edit_object_operation,
-    execute_code_async_operation,
-    execute_code_operation,
-    get_object_operation,
-    get_objects_operation,
-    inspect_references_operation,
-    get_parts_list_operation,
-    get_recompute_log_operation,
-    get_sketch_diagnostics_operation,
-    get_view_operation,
-    save_view_sequence_operation,
-    encode_view_video_operation,
-    animate_placement_operation,
-    refresh_view_operation,
-    repair_view_placements_operation,
-    insert_part_from_library_operation,
-    list_documents_operation,
-    sketch_create_operation,
-    sketch_add_geometry_operation,
-    sketch_add_constraint_operation,
-    sketch_delete_constraint_operation,
-    sketch_delete_geometry_operation,
-    sketch_add_line_operation,
-    sketch_add_circle_operation,
-    sketch_add_arc_operation,
-    sketch_add_rectangle_operation,
-    sketch_constrain_coincident_operation,
-    sketch_constrain_horizontal_operation,
-    sketch_constrain_vertical_operation,
-    sketch_constrain_distance_operation,
-    sketch_constrain_radius_operation,
-    sketch_constrain_equal_operation,
-    sketch_constrain_parallel_operation,
-    sketch_constrain_perpendicular_operation,
-    sketch_constrain_tangent_operation,
-    pad_feature_operation,
-    pocket_feature_operation,
-    linear_pattern_feature_operation,
-    polar_pattern_feature_operation,
-    mirror_feature_operation,
-    create_spur_gear_operation,
-    recompute_document_operation,
-    undo_operation,
-    redo_operation,
-    repair_references_operation,
-    # P1 — Sketch curves
-    sketch_add_polyline_operation,
-    sketch_add_bspline_operation,
-    sketch_add_bspline_through_points_operation,
-    sketch_add_bezier_operation,
-    sketch_add_ellipse_operation,
-    sketch_add_arc_of_ellipse_operation,
-    sketch_add_slot_operation,
-    sketch_add_regular_polygon_operation,
-    sketch_add_parametric_curve_operation,
-    sketch_import_points_operation,
-    sketch_toggle_construction_operation,
-    # P2 — Sketch editing
-    sketch_trim_operation,
-    sketch_extend_operation,
-    sketch_split_operation,
-    sketch_fillet_operation,
-    sketch_symmetry_operation,
-    # P3 — 3-D features
-    revolve_feature_operation,
-    loft_feature_operation,
-    sweep_feature_operation,
-    helical_sweep_feature_operation,
-    fillet_feature_operation,
-    chamfer_feature_operation,
-    boolean_union_operation,
-    boolean_difference_operation,
-    boolean_intersection_operation,
-    # P4 — Gear library
-    create_involute_gear_operation,
-    create_helical_gear_operation,
-    compute_gear_geometry_operation,
-    check_gear_pair_operation,
-    # P5 — Measurement & transforms
-    measure_distance_operation,
-    measure_angle_operation,
-    measure_area_operation,
-    measure_volume_operation,
-    bounding_box_operation,
-    get_global_shape_operation,
-    common_volume_along_path_operation,
-    center_of_mass_operation,
-    validate_geometry_operation,
-    translate_operation,
-    rotate_operation,
-    scale_operation,
-    # P6 — IO
-    export_step_operation,
-    import_step_operation,
-    export_stl_operation,
-    export_brep_operation,
-    import_brep_operation,
-    set_color_operation,
-    # P7 — Assembly references, sketch geometry, path wires
-    build_path_wire_operation,
-    create_assembly_grounded_joint_operation,
-    create_assembly_joint_operation,
-    create_assembly_operation,
-    create_datum_plane_operation,
-    create_part_container_operation,
-    create_subshape_binder_operation,
-    get_document_tree_operation,
-    get_sketch_geometry_operation,
-    move_object_operation,
-    sketch_add_external_projection_operation,
-    solve_assembly_operation,
-    sweep_pipe_operation,
-    # Diagnostics — read-only P1/P8/P10 guards
-    capture_state_operation,
-    edge_axis_operation,
-    face_normal_operation,
-    find_edges_operation,
-    find_faces_operation,
-    geometric_diff_operation,
-    placement_audit_operation,
-    preview_attachment_operation,
-    relink_references_operation,
-    create_placement_binder_operation,
-    create_placement_datum_operation,
-    run_transaction_operation,
-    validate_movement_follow_operation,
-    audit_hardcoded_dimensions_operation,
-    inspect_geometry_operation,
-    get_dependency_graph_operation,
-    match_subshape_operation,
-    # Interactive GUI
-    open_document_operation,
-    activate_document_operation,
-    set_tree_expanded_operation,
-    select_subshapes_operation,
-    get_selection_operation,
-    get_gui_state_operation,
-    recompute_and_wait_operation,
-    set_section_view_operation,
-    diagnose_pocket_operation,
-    diagnose_helix_operation,
-    compare_documents_operation,
-    # Snapshot — I7 in-process document copies (P12)
-    restore_operation,
-    snapshot_operation,
-    reload_document_operation,
-    run_fem_analysis_operation,
-    # Parametric — Spreadsheet / expressions / Body / named constraints
-    spreadsheet_create_operation,
-    spreadsheet_set_cells_operation,
-    spreadsheet_get_cells_operation,
-    spreadsheet_set_alias_operation,
-    spreadsheet_list_aliases_operation,
-    set_expression_operation,
-    clear_expression_operation,
-    list_expressions_operation,
-    body_create_operation,
-    body_set_tip_operation,
-    sketch_attach_operation,
-    sketch_edit_constraint_operation,
-    diagnose_parametric_operation,
-    # Document lock
-    acquire_document_lock_operation,
-    adopt_dirty_document_operation,
-    claim_acquisition_result_operation,
-    forget_legacy_document_key,
-    get_document_lock_operation,
-    list_document_locks_operation,
-    heartbeat_document_lock_operation,
-    legacy_selector_doc_key,
-    release_document_lock_operation,
-    update_document_lock_operation,
-    force_release_stale_lock_operation,
-)
-from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_state import ServerState
-
+from .telemetry import close_default_writer, emit_event
 
 logging.basicConfig(
     level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -297,10 +298,10 @@ def _session_needs_refresh(*, margin_seconds: float = 60.0) -> bool:
     try:
         expires = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
     except (TypeError, ValueError):
         return True
-    return expires <= datetime.now(timezone.utc) + timedelta(seconds=margin_seconds)
+    return expires <= datetime.now(UTC) + timedelta(seconds=margin_seconds)
 
 
 def _path_identity(value: str) -> str:
@@ -541,7 +542,7 @@ async def _lease_heartbeat_once() -> bool:
 
 
 @asynccontextmanager
-async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
+async def server_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     import asyncio
 
     heartbeat_task = None
@@ -938,7 +939,7 @@ def claim_acquisition_result(ctx: Context, request_id: str) -> CallToolResult:
 class DocumentSelectorInput(TypedDict, total=False):
     """Exact public fields accepted by document lifecycle selectors."""
 
-    __pydantic_config__ = {"extra": "forbid"}
+    __pydantic_config__ = MappingProxyType({"extra": "forbid"})
 
     document_name: str
     document_session_uuid: str
@@ -1390,7 +1391,7 @@ def create_object(
     obj_type: str,
     obj_name: str,
     analysis_name: str | None = None,
-    obj_properties: dict[str, Any] = None,
+    obj_properties: dict[str, Any] | None = None,
 ) -> CallToolResult:
     """Create a new object in FreeCAD.
     Object type is starts with "Part::" or "Draft::" or "PartDesign::" or "Fem::".
@@ -1404,15 +1405,18 @@ def create_object(
 
     Args:
         doc_name: The name of the document to create the object in.
-        obj_type: The type of the object to create (e.g. 'Part::Box', 'Part::Cylinder', 'Draft::Circle', 'PartDesign::Body', etc.).
+        obj_type: The type of the object to create (e.g. 'Part::Box', 'Part::Cylinder',
+            'Draft::Circle', 'PartDesign::Body', etc.).
         obj_name: The name of the object to create.
         obj_properties: The properties of the object to create.
 
     Returns:
-        A message indicating the success or failure of the object creation and a screenshot of the object.
+        A message indicating the success or failure of the object creation and a
+        screenshot of the object.
 
     Examples:
-        If you want to create a cylinder with a height of 30 and a radius of 10, you can use the following data.
+        If you want to create a cylinder with a height of 30 and a radius of 10,
+        you can use the following data.
         ``Placement.Rotation.Angle`` is in degrees.
         ```json
         {
@@ -1547,7 +1551,8 @@ def edit_object(
                  "Rotation": {"Axis": {"x": 0, "y": 0, "z": 1}, "Angle": 90}}
 
     Returns:
-        A message indicating the success or failure of the object editing and a screenshot of the object.
+        A message indicating the success or failure of the object editing and a
+        screenshot of the object.
     """
     return edit_object_operation(
         get_freecad_connection(),
@@ -1862,8 +1867,10 @@ def get_view(
         (plus Rear, Side, SideRight, SideLeft aliases).
         width: The width of the screenshot in pixels. If not specified, uses the viewport width.
         height: The height of the screenshot in pixels. If not specified, uses the viewport height.
-        focus_object: Optional single object name to frame. Comma-separated names are also accepted.
-        focus_objects: Optional list of object names to frame together (preferred for stations/assemblies).
+        focus_object: Optional single object name to frame. Comma-separated names are
+            also accepted.
+        focus_objects: Optional list of object names to frame together (preferred for
+            stations/assemblies).
         yaw_deg: Optional extra camera yaw in degrees after framing.
 
     Returns:
@@ -2060,7 +2067,8 @@ def insert_part_from_library(
         relative_path: The relative path of the part to insert.
 
     Returns:
-        A message indicating the success or failure of the part insertion and a screenshot of the object.
+        A message indicating the success or failure of the part insertion and a
+        screenshot of the object.
     """
     return insert_part_from_library_operation(
         get_freecad_connection(),
@@ -2280,7 +2288,8 @@ def diagnose_helix(
     doc_name: str,
     helix_name: str,
 ) -> CallToolResult:
-    """Diagnose a helix/helical-sweep: axis, placement, profile, handedness, pitch/height, result."""
+    """Diagnose a helix/helical-sweep: axis, placement, profile, handedness, pitch/height,
+    result."""
     return diagnose_helix_operation(
         get_freecad_connection(),
         state.only_text_feedback,
@@ -2375,7 +2384,8 @@ def sketch_add_geometry(
 
     - **line**: `{"type": "line", "start": {"x": 0, "y": 0}, "end": {"x": 10, "y": 0}}`
     - **circle**: `{"type": "circle", "center": {"x": 0, "y": 0}, "radius": 5}`
-    - **arc**: `{"type": "arc", "center": {"x": 0, "y": 0}, "radius": 5, "start_angle": 0, "end_angle": 90}`
+    - **arc**: `{"type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,
+      "start_angle": 0, "end_angle": 90}`
       (angles in degrees, counter-clockwise)
     - **rectangle**: `{"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}`
       (expands to 4 connected line segments)
@@ -2393,7 +2403,7 @@ def sketch_add_geometry(
         A message with the assigned geometry indices and a screenshot.
 
     Examples:
-        Add a 20×10 rectangle and a circle of radius 3:
+        Add a 20x10 rectangle and a circle of radius 3:
         ```json
         {
           "doc_name": "Part",
@@ -3036,7 +3046,8 @@ def pad_feature(
     Examples:
         Pad "Sketch" by 15 mm inside "Body":
         ```json
-        {"doc_name": "Part", "sketch_name": "Sketch", "pad_name": "Pad", "length": 15, "body_name": "Body"}
+        {"doc_name": "Part", "sketch_name": "Sketch", "pad_name": "Pad", "length": 15,
+         "body_name": "Body"}
         ```
     """
     return pad_feature_operation(
@@ -3095,7 +3106,8 @@ def pocket_feature(
     Examples:
         Pocket "HoleSketch" by 5 mm:
         ```json
-        {"doc_name": "Part", "sketch_name": "HoleSketch", "pocket_name": "Pocket", "length": 5, "body_name": "Body"}
+        {"doc_name": "Part", "sketch_name": "HoleSketch", "pocket_name": "Pocket",
+         "length": 5, "body_name": "Body"}
         ```
     """
     return pocket_feature_operation(
@@ -3146,7 +3158,8 @@ def linear_pattern_feature(
     Examples:
         Pattern a pocket 5 times over 40 mm along X:
         ```json
-        {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "PocketArray", "length": 40, "occurrences": 5}
+        {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "PocketArray",
+         "length": 40, "occurrences": 5}
         ```
     """
     return linear_pattern_feature_operation(
@@ -3197,7 +3210,8 @@ def polar_pattern_feature(
     Examples:
         Pattern a pocket 6 times around the Z axis:
         ```json
-        {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "BoltCircle", "occurrences": 6}
+        {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "BoltCircle",
+         "occurrences": 6}
         ```
     """
     return polar_pattern_feature_operation(
@@ -3242,7 +3256,8 @@ def mirror_feature(
     Examples:
         Mirror a pocket across the YZ plane:
         ```json
-        {"doc_name": "Part", "feature_name": "Pocket", "mirror_name": "PocketMirror", "plane": "YZ_Plane"}
+        {"doc_name": "Part", "feature_name": "Pocket", "mirror_name": "PocketMirror",
+         "plane": "YZ_Plane"}
         ```
     """
     return mirror_feature_operation(
@@ -4060,7 +4075,7 @@ def sketch_add_parametric_curve(
         y_expr: Python expression for Y coordinate. Example: ``"r_b*(math.sin(t)-t*math.cos(t))"``
         t_start: Start value of parameter t.
         t_end: End value of parameter t (must be > t_start).
-        samples: Number of sample points (10–2000, default 100).
+        samples: Number of sample points (10-2000, default 100).
         construction: If true, add as a construction curve.
 
     Returns:
@@ -4669,7 +4684,7 @@ def create_involute_gear(
         doc_name: Document to create the gear in.
         gear_name: Name for the Pad feature.
         teeth: Number of teeth (minimum 3).
-        module: Gear module in mm. Pitch diameter = module × teeth.
+        module: Gear module in mm. Pitch diameter = module x teeth.
         width: Face width (pad length) in mm.
         pressure_angle: Pressure angle in degrees (default 20).
         bore_diameter: Optional centre bore diameter in mm.
@@ -5292,10 +5307,10 @@ def set_color(
     Args:
         doc_name: Document containing the object.
         obj_name: Name of the object.
-        r: Red channel 0.0–1.0.
-        g: Green channel 0.0–1.0.
-        b: Blue channel 0.0–1.0.
-        transparency: Transparency 0.0 (opaque) – 1.0 (fully transparent).
+        r: Red channel 0.0-1.0.
+        g: Green channel 0.0-1.0.
+        b: Blue channel 0.0-1.0.
+        transparency: Transparency 0.0 (opaque) - 1.0 (fully transparent).
 
     Returns:
         Success message and a screenshot.

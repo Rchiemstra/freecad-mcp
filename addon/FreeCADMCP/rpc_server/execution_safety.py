@@ -6,7 +6,6 @@ import ast
 from dataclasses import dataclass
 from enum import Enum
 
-
 _BOOLEAN_METHODS = frozenset({"cut", "common", "fuse", "multiCut", "multiFuse"})
 _GEOMETRY_TRANSFORM_METHODS = frozenset({"mirror", "transformGeometry"})
 _WORKER_ONLY_LOOP_METHODS = frozenset({"isInside"})
@@ -65,15 +64,18 @@ def classify_execute_code(code: str, *, read_only: bool) -> RequestClass:
     for node in ast.walk(tree):
         if isinstance(node, (ast.Delete, ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
             return RequestClass.UNKNOWN
-        if isinstance(node, ast.Assign):
-            if any(isinstance(target, (ast.Attribute, ast.Subscript)) for target in node.targets):
-                return RequestClass.UNKNOWN
-        if isinstance(node, ast.Import):
-            if any(item.name.split(".")[0] not in _LIGHTWEIGHT_IMPORTS for item in node.names):
-                return RequestClass.UNKNOWN
-        if isinstance(node, ast.ImportFrom):
-            if not node.module or node.module.split(".")[0] not in _LIGHTWEIGHT_IMPORTS:
-                return RequestClass.UNKNOWN
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, (ast.Attribute, ast.Subscript)) for target in node.targets
+        ):
+            return RequestClass.UNKNOWN
+        if isinstance(node, ast.Import) and any(
+            item.name.split(".")[0] not in _LIGHTWEIGHT_IMPORTS for item in node.names
+        ):
+            return RequestClass.UNKNOWN
+        if isinstance(node, ast.ImportFrom) and (
+            not node.module or node.module.split(".")[0] not in _LIGHTWEIGHT_IMPORTS
+        ):
+            return RequestClass.UNKNOWN
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 if node.func.id not in _LIGHTWEIGHT_CALLS:
@@ -159,7 +161,8 @@ def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
         for node in ast.walk(tree)
         if isinstance(
             node,
-            (ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp),
+            (ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp,
+             ast.GeneratorExp),
         )
     )
     if expensive_calls and loops:

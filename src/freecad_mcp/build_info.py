@@ -9,10 +9,9 @@ explicit ``unknown`` fallback.
 
 from __future__ import annotations
 
-from importlib import metadata
 import os
+from importlib import metadata
 from typing import Any
-
 
 PACKAGE_NAME = "freecad-mcp"
 PROTOCOL_VERSION = 2

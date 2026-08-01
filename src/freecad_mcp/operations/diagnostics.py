@@ -22,9 +22,13 @@ def _response_text(resp: ToolResponse) -> str:
 
 
 def _diag_preamble(doc_name: str) -> list[str]:
-    return _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
-        "diagnostics/body_subpath_helpers.py.txt"
-    )
+    return [
+        *_doc_preamble(doc_name),
+        *_shared_helpers(),
+        *render_template_lines(
+            "diagnostics/body_subpath_helpers.py.txt",
+        ),
+    ]
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -45,7 +49,7 @@ def preview_attachment_operation(
     Read-only. Saves the agent from rebuilding the whole model to discover that
     a cross-body datum dropped the source body's placement.
     """
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/preview_attachment.py.txt",
         datum_name=repr(datum_name),
     )]
@@ -76,7 +80,7 @@ def _find_subshapes_operation(
 ) -> ToolResponse:
     """I4 — find_faces / find_edges by geometry. See ``find_faces_operation``."""
     kind_singular = "Face" if kind == "Faces" else "Edge"
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/find_subshapes.py.txt",
         object_name=repr(object_name),
         kind=repr(kind),
@@ -165,7 +169,7 @@ def _subshape_pose_operation(
 ) -> ToolResponse:
     """M6 — shared face_normal / edge_axis implementation. Returns the global
     centre, global normal/direction, type and radius of a single subshape."""
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/subshape_pose.py.txt",
         object_name=repr(object_name),
         subshape=repr(subshape),
@@ -223,7 +227,7 @@ def placement_audit_operation(
     ``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,
     global_placement_base, cross_body_datums}]}``.
     """
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/placement_audit.py.txt",
     )]
     return _run_json_code(
@@ -244,7 +248,7 @@ def relink_references_operation(
     across all link-type properties of all document objects. Makes rebuilds
     non-destructive. Returns JSON ``{ok, from, to, relinked, count}``.
     """
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/relink_references.py.txt",
         from_obj=repr(from_obj),
         to_obj=repr(to_obj),
@@ -266,7 +270,7 @@ def capture_state_operation(
     be passed to ``geometric_diff`` to produce a text-only diff when a viewable
     image can't be returned (P10 fallback).
     """
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/capture_state.py.txt",
         object_names=repr(object_names),
     )]
@@ -334,7 +338,7 @@ def geometric_diff_operation(
     ``{ok, doc, diffs: [{name, bbox_before/after, placement_before/after,
     faces_added/removed, changed}]}`` when a viewable image can't be returned.
     """
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/capture_state.py.txt",
         object_names=repr(object_names),
     )]
@@ -364,7 +368,7 @@ def create_placement_binder_operation(
     relative: bool = True,
     bind_mode: str = "Synchronized",
 ) -> ToolResponse:
-    code = _diag_preamble(doc_name) + [render_template_text(
+    code = [*_diag_preamble(doc_name), render_template_text(
         "diagnostics/create_placement_binder.py.txt",
         owner_body=repr(owner_body),
         binder_name=repr(name),
@@ -391,7 +395,7 @@ def create_placement_datum_operation(
     relative: bool = True,
     offset: list[float] | None = None,
 ) -> ToolResponse:
-    code = _diag_preamble(doc_name) + [render_template_text(
+    code = [*_diag_preamble(doc_name), render_template_text(
         "diagnostics/create_placement_datum.py.txt",
         owner_body=repr(owner_body),
         datum_name=repr(name),
@@ -446,7 +450,7 @@ def validate_movement_follow_operation(
     restore: bool = True,
     tolerance: float = 1e-7,
 ) -> ToolResponse:
-    code = _diag_preamble(doc_name) + [render_template_text(
+    code = [*_diag_preamble(doc_name), render_template_text(
         "diagnostics/validate_movement_follow.py.txt",
         source=repr(source),
         dependents=repr(dependents),
@@ -472,7 +476,7 @@ def audit_hardcoded_dimensions_operation(
     body_name: str,
     flag_aliases: bool = True,
 ) -> ToolResponse:
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/audit_hardcoded_dimensions.py.txt",
         body_name=repr(body_name),
         flag_aliases=repr(flag_aliases),
@@ -506,7 +510,7 @@ def inspect_geometry_operation(
         except Exception as exc:
             logger.warning("inspect_geometry select_subshapes failed: %s", exc)
 
-    code = _diag_preamble(doc_name) + [render_template_text(
+    code = [*_diag_preamble(doc_name), render_template_text(
         "diagnostics/inspect_geometry.py.txt",
         object_name=repr(object_name),
         subshape=repr(subshape),
@@ -526,7 +530,7 @@ def get_dependency_graph_operation(
     doc_name: str,
     root: str,
 ) -> ToolResponse:
-    code = _doc_preamble(doc_name) + [render_template_text(
+    code = [*_doc_preamble(doc_name), render_template_text(
         "diagnostics/get_dependency_graph.py.txt",
         root=repr(root),
     )]
@@ -549,7 +553,7 @@ def match_subshape_operation(
     limit: int = 10,
     tolerance: float = 1.0,
 ) -> ToolResponse:
-    code = _diag_preamble(doc_name) + [render_template_text(
+    code = [*_diag_preamble(doc_name), render_template_text(
         "diagnostics/match_subshape.py.txt",
         source_object=repr(source_object),
         source_subshape=repr(source_subshape),

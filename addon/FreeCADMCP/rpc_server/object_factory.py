@@ -29,7 +29,11 @@ def _create_fem_mesh(doc: FreeCAD.Document, obj: Object) -> None:
         "ElementSizeMax": "CharacteristicLengthMax",
         "ElementSizeMin": "CharacteristicLengthMin",
     }
-    geom_key = "Part" if "Part" in obj.properties else ("Shape" if "Shape" in obj.properties else None)
+    geom_key = (
+        "Part"
+        if "Part" in obj.properties
+        else ("Shape" if "Shape" in obj.properties else None)
+    )
     if geom_key is None:
         raise ValueError("'Part' (or 'Shape') property not found in properties.")
     target_obj = doc.getObject(obj.properties[geom_key])

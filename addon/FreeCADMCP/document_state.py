@@ -20,7 +20,7 @@ def _modified_attribute(target: Any) -> bool | None:
     if target is None:
         return None
     try:
-        return bool(getattr(target, "Modified"))
+        return bool(target.Modified)
     except (AttributeError, RuntimeError, TypeError):
         return None
 
@@ -111,7 +111,7 @@ def set_document_modified(document: Any, modified: bool) -> None:
             "FreeCAD did not expose writable Gui::Document.Modified state"
         )
     try:
-        setattr(target, "Modified", bool(modified))
+        target.Modified = bool(modified)
     except Exception as exc:
         raise DocumentDirtyStateUnavailable(
             "FreeCAD rejected the GUI document modified-state update"
@@ -137,7 +137,7 @@ def mark_document_modified(document: Any) -> bool:
     app_state = _modified_attribute(document)
     if app_state is not None:
         try:
-            setattr(document, "Modified", True)
+            document.Modified = True
         except Exception as exc:
             raise DocumentDirtyStateUnavailable(
                 "legacy App document modified state could not be updated"

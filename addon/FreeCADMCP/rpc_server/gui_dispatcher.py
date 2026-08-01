@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from PySide import QtCore, QtWidgets
 
@@ -159,10 +161,8 @@ class GuiRequest:
             outcome = self.outcome
             callback = self.on_complete
         if callback is not None:
-            try:
+            with contextlib.suppress(Exception):
                 callback(self.request_id, outcome)
-            except Exception:
-                pass
         if before_wake is not None:
             before_wake()
         # The waiting handler must never observe completion before attribution,
@@ -212,11 +212,9 @@ class GuiRequest:
             payload={"previous_state": previous_state},
         )
         if callback is not None:
-            try:
-                callback(self.request_id, outcome)
-            except Exception:
+            with contextlib.suppress(Exception):
                 # Completion reporting must never destabilize the GUI queue.
-                pass
+                callback(self.request_id, outcome)
         if before_wake is not None:
             before_wake()
         self.completion.set()
@@ -343,10 +341,8 @@ class GuiDispatcher(QtCore.QObject):
         if not completed:
             def forget_cancelled_request() -> None:
                 with self._queue_lock:
-                    try:
+                    with contextlib.suppress(ValueError):
                         self._requests.remove(request)
-                    except ValueError:
-                        pass
                     self._forget_request_locked(request)
 
             pending_cancelled = request.cancel_if_pending(forget_cancelled_request)
@@ -431,10 +427,8 @@ class GuiDispatcher(QtCore.QObject):
             if request is None:
                 return "not_queued"
             def forget_pending() -> None:
-                try:
+                with contextlib.suppress(ValueError):
                     self._requests.remove(request)
-                except ValueError:
-                    pass
                 self._forget_request_locked(request)
 
             if request.cancel_if_pending(forget_pending):

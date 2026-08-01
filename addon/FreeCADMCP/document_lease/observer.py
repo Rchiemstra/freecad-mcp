@@ -19,14 +19,16 @@ audit/UI fallback and as the sole fence on stock FreeCAD builds.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import logging
 import os
 import sys
 import threading
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 try:
     from document_state import document_modified_state
@@ -183,13 +185,12 @@ def _document_from_subject(subject: Any) -> Any | None:
             document = get_document()
         except Exception:
             document = None
-        if document is not None:
+        if document is not None and not isinstance(document, str):
             # Gui::Document.getDocument() may return either the App document or
             # a name depending on the FreeCAD build.  A name alone cannot be
             # resolved here without importing FreeCAD, so leave that case to
             # the active-document fallback.
-            if not isinstance(document, str):
-                return document
+            return document
     return None
 
 
@@ -208,9 +209,8 @@ def _document_keys(document: Any, identity: Any | None = None) -> tuple[str, ...
             if value and value not in values:
                 values.append(value)
     name = str(getattr(document, "Name", "") or "").strip()
-    if name:
-        if name not in values:
-            values.append(name)
+    if name and name not in values:
+        values.append(name)
     filename = str(getattr(document, "FileName", "") or "").strip()
     if filename:
         values.append(filename)
@@ -973,7 +973,7 @@ class LeaseObserver:
     # intentionally both present: availability and ordering vary across
     # supported FreeCAD builds, while takeover itself is idempotent.
 
-    def slotCreatedDocument(self, document):  # noqa: N802
+    def slotCreatedDocument(self, document):
         service = get_runtime_service(self._service_provider)
         if service is None:
             return None
@@ -1007,19 +1007,19 @@ class LeaseObserver:
             )
             return None
 
-    def slotBeforeChangeObject(self, obj, prop):  # noqa: N802
+    def slotBeforeChangeObject(self, obj, prop):
         return self._handle(obj, "object property change", detail=str(prop))
 
-    def slotChangedObject(self, obj, prop):  # noqa: N802
+    def slotChangedObject(self, obj, prop):
         return self._handle(obj, "object property change", detail=str(prop))
 
-    def slotCreatedObject(self, obj):  # noqa: N802
+    def slotCreatedObject(self, obj):
         return self._handle(obj, "object creation")
 
-    def slotDeletedObject(self, obj):  # noqa: N802
+    def slotDeletedObject(self, obj):
         return self._handle(obj, "object deletion")
 
-    def slotAppendDynamicProperty(self, container, prop):  # noqa: N802
+    def slotAppendDynamicProperty(self, container, prop):
         # DocumentObserverPython supplies the owning PropertyContainer and
         # property name, not the App::Property instance itself.
         return self._handle(
@@ -1028,21 +1028,21 @@ class LeaseObserver:
             detail=str(prop),
         )
 
-    def slotRemoveDynamicProperty(self, container, prop):  # noqa: N802
+    def slotRemoveDynamicProperty(self, container, prop):
         return self._handle(
             container,
             "dynamic property removal",
             detail=str(prop),
         )
 
-    def slotChangePropertyEditor(self, container, prop):  # noqa: N802
+    def slotChangePropertyEditor(self, container, prop):
         return self._handle(
             container,
             "property editor change",
             detail=str(prop),
         )
 
-    def slotBeforeAddingDynamicExtension(  # noqa: N802
+    def slotBeforeAddingDynamicExtension(
         self, container, extension
     ):
         return self._handle(
@@ -1051,66 +1051,66 @@ class LeaseObserver:
             detail=str(extension),
         )
 
-    def slotAddedDynamicExtension(self, container, extension):  # noqa: N802
+    def slotAddedDynamicExtension(self, container, extension):
         return self._handle(
             container,
             "dynamic extension addition",
             detail=str(extension),
         )
 
-    def slotBeforeChangeDocument(self, document, prop):  # noqa: N802
+    def slotBeforeChangeDocument(self, document, prop):
         return self._handle(document, "document property change", detail=str(prop))
 
-    def slotChangedDocument(self, document, prop):  # noqa: N802
+    def slotChangedDocument(self, document, prop):
         return self._handle(document, "document property change", detail=str(prop))
 
-    def slotRelabelDocument(self, document):  # noqa: N802
+    def slotRelabelDocument(self, document):
         return self._handle(document, "document relabel")
 
-    def slotUndoDocument(self, document):  # noqa: N802
+    def slotUndoDocument(self, document):
         return self._handle(document, "undo")
 
-    def slotRedoDocument(self, document):  # noqa: N802
+    def slotRedoDocument(self, document):
         return self._handle(document, "redo")
 
-    def slotUndo(self):  # noqa: N802
+    def slotUndo(self):
         return self._handle_selected("undo")
 
-    def slotRedo(self):  # noqa: N802
+    def slotRedo(self):
         return self._handle_selected("redo")
 
-    def slotBeforeRecomputeDocument(self, document):  # noqa: N802
+    def slotBeforeRecomputeDocument(self, document):
         return self._handle(document, "recompute")
 
-    def slotRecomputedDocument(self, document):  # noqa: N802
+    def slotRecomputedDocument(self, document):
         return self._handle(document, "recompute")
 
-    def slotRecomputedObject(self, obj):  # noqa: N802
+    def slotRecomputedObject(self, obj):
         return self._handle(obj, "object recompute")
 
-    def slotOpenTransaction(self, document, name):  # noqa: N802
+    def slotOpenTransaction(self, document, name):
         return self._handle(document, "transaction open", detail=str(name))
 
-    def slotCommitTransaction(self, document):  # noqa: N802
+    def slotCommitTransaction(self, document):
         return self._handle(document, "transaction commit")
 
-    def slotAbortTransaction(self, document):  # noqa: N802
+    def slotAbortTransaction(self, document):
         return self._handle(document, "transaction abort")
 
-    def slotBeforeCloseTransaction(self, abort):  # noqa: N802
+    def slotBeforeCloseTransaction(self, abort):
         action = "transaction abort" if abort else "transaction commit"
         return self._handle_selected(action)
 
-    def slotCloseTransaction(self, abort):  # noqa: N802
+    def slotCloseTransaction(self, abort):
         action = "transaction abort" if abort else "transaction commit"
         return self._handle_selected(action)
 
-    def slotStartSaveDocument(self, document, filename):  # noqa: N802
+    def slotStartSaveDocument(self, document, filename):
         if _is_internal_snapshot_save(document, filename):
             return None
         return self._handle(document, "save", detail=str(filename or ""))
 
-    def slotFinishSaveDocument(self, document, filename):  # noqa: N802
+    def slotFinishSaveDocument(self, document, filename):
         if _is_internal_snapshot_save(document, filename):
             return None
         record = self._handle(
@@ -1132,7 +1132,7 @@ class LeaseObserver:
                 )
         return record
 
-    def slotDeletedDocument(self, document):  # noqa: N802
+    def slotDeletedDocument(self, document):
         # A leased document retains one-shot reopen authority; an unlocked
         # document is unregistered so opening it again gets a fresh identity.
         document = _document_from_subject(document)
@@ -1181,10 +1181,10 @@ class LeaseGuiObserver:
     def __init__(self, app_observer: LeaseObserver) -> None:
         self._app_observer = app_observer
 
-    def slotInEdit(self, view_provider):  # noqa: N802
+    def slotInEdit(self, view_provider):
         return self._app_observer._handle(view_provider, "GUI edit-mode entry")
 
-    def slotResetEdit(self, view_provider):  # noqa: N802
+    def slotResetEdit(self, view_provider):
         return self._app_observer._handle(view_provider, "GUI edit-mode exit")
 
 
@@ -1234,10 +1234,8 @@ def register_observer(
         add_observer(observer)
         _app_observer = observer
         _registered_freecad = freecad_module
-        try:
-            setattr(freecad_module, "_mcp_document_lease_observer", observer)
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            freecad_module._mcp_document_lease_observer = observer
 
         if freecad_gui_module is None:
             try:
@@ -1255,14 +1253,8 @@ def register_observer(
                 add_gui_observer(gui_observer)
                 _gui_observer = gui_observer
                 _registered_freecad_gui = freecad_gui_module
-                try:
-                    setattr(
-                        freecad_gui_module,
-                        "_mcp_document_lease_gui_observer",
-                        gui_observer,
-                    )
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    freecad_gui_module._mcp_document_lease_gui_observer = gui_observer
             except Exception:
                 logger.warning("unable to register GUI lease observer", exc_info=True)
         return observer
