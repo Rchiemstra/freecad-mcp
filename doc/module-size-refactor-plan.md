@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 1 **complete** (next: Phase 2) |
+| Current phase | Phase 2 **done** |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `f2ea1bd` — `refactor(mcp): phase 1 extract leaf types for ARCH002` |
-| ARCH001 / ARCH002 / Ruff (actual) | 36 / 13 / 112 (C901 112) |
+| Last phase commit (submodule) | `e48ce0c` — `refactor(mcp): phase 2 split document_lease modules` |
+| ARCH001 / ARCH002 / Ruff (actual) | 31 / 12 / 88 (C901 88) |
 | Blockers | none |
-| Resume hint | Start Phase 2 Wave 1 (2A–2D) |
+| Resume hint | Phase 3 Wave 1 (3A–3C) — coordinator launches workers separately |
 
 ### 11.2 Phase ceilings and status
 
@@ -1160,7 +1160,7 @@ the short commit hash in Notes when a phase completes.
 |------:|--------|-------------|---------|----------------------------|----------:|----------:|-------:|--------|-------|
 | 0 | `refactor(mcp): phase 0 ruff hygiene on package trees` | 0A, 0B | cleared | pass | 37 | 26 | 112 | **done** | actual 37/26/112; `259b9aa` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 1 | `refactor(mcp): phase 1 extract leaf types for ARCH002` | 1A-1G | cleared | pass | 36 | 13 | 117 | **done** | actual 36/13/112; `f2ea1bd` (doc hash may drift on doc-only amend; `git log -1` canonical) |
-| 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | pending | pending | 31 | 12 | 92 | pending | |
+| 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | cleared | pass | 31 | 12 | 92 | **done** | actual 31/12/88; `e48ce0c` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | pending | pending | 18 | 6 | 71 | pending | |
 | 4 | `refactor(mcp): phase 4 carve rpc_server façade` | 4A–4H waves | pending | pending | 17 | 5 | 26 | pending | |
 | 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | pending | pending | 15 | 3 | 12 | pending | |
@@ -1186,6 +1186,30 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 — Phase 2 phase commit
+- Done: merged 2E worker diff into `service_ops/` (36 modules); `service.py` thin façade (246 lines) with §3.3 error/DTO shims + `facade_bindings` late-bind; Wave 1 packages retained (`identity_helpers/` 16, `sidecar_ops/` 23, `observer_ops/` 14, `core_authority_ops/` 5); `document_lease/__init__.py` unchanged (composed `__all__` still valid); §11.1/§11.2 updated
+- In flight / next: Phase 3 Wave 1 (3A–3C) — coordinator launches workers separately
+- Reviews: Wave 1 merge-fix2 + 2E-fix2 approved
+- Docker / lint: tier-1 `document_lease/` exit 0 (172 files); global 31 / 12 / 88 vs Phase 2 ceilings 31 / 12 / 92 — **ceilings met**; image rebuild; unit 1647 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: none; non-blocking nit — `save_as_ops.py` still binds `capture_file_baseline` from identity rather than service façade; do not push from integrator session
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 2 / Wave 2 start (2E)
+- Done: Wave 1 merge-fix2 approved; launched 2E (`document_lease/service.py` split)
+- In flight / next: 2E service.py split (single worker; parallelization unsafe)
+- Reviews: Wave 1 merge-fix2 approved
+- Docker / lint: unchanged from Wave 1 integrator merge (32 / 12 / 104)
+- Blockers / decisions: none; single worker for 2E — no parallelization
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 2 / Wave 1 integrator merge
+- Done: merged 2A–2D worker diffs into `identity_helpers/` (16 modules), `sidecar_ops/` (23 modules), `observer_ops/` (14 modules), `core_authority_ops/` (5 modules); façades shrunk (`identity.py` 96, `sidecar.py` 153, `observer.py` 54, `core_authority.py` 66 lines); integrator barrels (`identity_helpers/__init__.py`, `sidecar_ops/__init__.py`, `observer_ops/__init__.py`; `core_authority_ops/__init__.py` pre-existing); §3.3 shim `observer._default_service_provider`; test hygiene (`test_document_lease_v2_observer.py`, `test_identity_types_surface.py`); §11.1 updated
+- In flight / next: Grok merge review of Wave 1 diff → launch Wave 2 (2E) after approve; no phase commit until 2E + full phase gate
+- Reviews: workers 2A–2D approved pre-merge; integrator merge review pending
+- Docker / lint: tier-1 addon paths exit 0 (66 files); global 32 / 12 / 104 vs Phase 2 ceilings 31 / 12 / 92 — ARCH001 −4 from Phase 1 (36→32), ARCH002 −1 (13→12), Ruff/C901 −8 (112→104); mid-wave ceilings expected until 2E; Docker image rebuild; unit 1647 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: none; `document_lease/__init__.py` unchanged (composed `__all__` still valid); do not start 2E or phase commit from this session
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 - Phase 1 phase commit
 - Done: integrator staged leaf-type packages (addon `*_types/`, `document_lease/errors/`, `sidecar_winapi/`, src `outcomes_types/`, `rpc_auth_types/`), tests, and plan §11; commit `refactor(mcp): phase 1 extract leaf types for ARCH002`

@@ -11,6 +11,14 @@ import pytest
 
 from addon.FreeCADMCP import document_lock
 from addon.FreeCADMCP.document_lease import observer as observer_mod
+from addon.FreeCADMCP.document_lease.observer_ops.identity_registration_failure import (
+    IdentityRegistrationFailure as _IdentityRegistrationFailure,
+)
+
+
+def test_observer_surface_exports_identity_registration_failure():
+    assert observer_mod.IdentityRegistrationFailure is _IdentityRegistrationFailure
+    assert "IdentityRegistrationFailure" in observer_mod.__all__
 
 
 class FakeDocument:
@@ -381,7 +389,7 @@ def test_missing_foreign_sidecar_repairs_exact_proxy_identity_error(tmp_path):
 
     # Reproduce the stacked in-memory fault: exact proxy/path still identify
     # the clean file, but the registry entry can no longer pass registration.
-    identities._entries[local_document.session_uuid].identity = replace(  # noqa: SLF001
+    identities._entries[local_document.session_uuid].identity = replace(
         local_document,
         file_identity=None,
     )
@@ -435,7 +443,7 @@ def test_missing_worker_intervention_sidecar_repairs_dirty_exact_proxy_identity(
     foreign_identities = DocumentIdentityService()
     foreign_document = foreign_identities.register(name="HamaAdapter", path=model)
     foreign_service = DocumentLeaseService(foreign_identities)
-    grant = foreign_service.acquire(
+    foreign_service.acquire(
         foreign_document.session_uuid,
         owner,
         snapshot_id=str(uuid.uuid4()),
@@ -480,7 +488,7 @@ def test_missing_worker_intervention_sidecar_repairs_dirty_exact_proxy_identity(
         live_document=local_document,
     )
     sidecar_path_for(model).unlink()
-    identities._entries[local_document.session_uuid].identity = replace(  # noqa: SLF001
+    identities._entries[local_document.session_uuid].identity = replace(
         local_document,
         file_identity=None,
     )
@@ -500,7 +508,7 @@ def test_missing_worker_intervention_sidecar_repairs_dirty_exact_proxy_identity(
         )
         == repaired
     )
-    cached = service._foreign_records[repaired.session_uuid].persisted  # noqa: SLF001
+    cached = service._foreign_records[repaired.session_uuid].persisted
     assert cached.state == LeaseState.USER_INTERVENED
     assert cached.dirty is True
     assert cached.validation_complete is False
