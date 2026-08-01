@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 2 **done** |
+| Current phase | Phase 3 **done** |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `e48ce0c` — `refactor(mcp): phase 2 split document_lease modules` |
-| ARCH001 / ARCH002 / Ruff (actual) | 31 / 12 / 88 (C901 88) |
+| Last phase commit (submodule) | `b0318f5` — `refactor(mcp): phase 3 split rpc_server satellite modules` |
+| ARCH001 / ARCH002 / Ruff (actual) | 18 / 6 / 69 (C901 69) |
 | Blockers | none |
-| Resume hint | Phase 3 Wave 1 (3A–3C) — coordinator launches workers separately |
+| Resume hint | Phase 4 Wave A+B — coordinator launches workers separately |
 
 ### 11.2 Phase ceilings and status
 
@@ -1160,8 +1160,8 @@ the short commit hash in Notes when a phase completes.
 |------:|--------|-------------|---------|----------------------------|----------:|----------:|-------:|--------|-------|
 | 0 | `refactor(mcp): phase 0 ruff hygiene on package trees` | 0A, 0B | cleared | pass | 37 | 26 | 112 | **done** | actual 37/26/112; `259b9aa` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 1 | `refactor(mcp): phase 1 extract leaf types for ARCH002` | 1A-1G | cleared | pass | 36 | 13 | 117 | **done** | actual 36/13/112; `f2ea1bd` (doc hash may drift on doc-only amend; `git log -1` canonical) |
-| 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | cleared | pass | 31 | 12 | 92 | **done** | actual 31/12/88; `e48ce0c` (doc hash may drift on doc-only amend; `git log -1` canonical) |
-| 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | pending | pending | 18 | 6 | 71 | pending | |
+| 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | cleared | pass | 31 | 12 | 92 | **done** | actual 31/12/88; `397877d` (doc hash may drift on doc-only amend; `git log -1` canonical) |
+| 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | cleared | pass | 18 | 6 | 71 | **done** | actual 18/6/69; `b0318f5` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 4 | `refactor(mcp): phase 4 carve rpc_server façade` | 4A–4H waves | pending | pending | 17 | 5 | 26 | pending | |
 | 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | pending | pending | 15 | 3 | 12 | pending | |
 | 6 | `refactor(mcp): phase 6 split MCP client stack` | 6A–6D | pending | pending | 11 | 0 | 5 | pending | |
@@ -1186,6 +1186,14 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 — Phase 3 phase commit
+- Done: merged Waves 1–3 worker diffs into `*_ops/` packages (gui/inflight/mutation/snapshot/settings/view/reference/property, worker/process/entry/protocol, save_service_ops, lease_protocol_ops); thin façades retained §3.3 shims; `SessionManager` imports handshake helpers from `lease_protocol_ops` (not façade); integrator late-bind surfaces (`_worker_environment`, `_promote_artifacts`, `_temp_usage`); `worker_entry` flat-import bootstrap for FCMacro probe; stale `lease_protocol` comment removed; test hygiene (`test_isolated_interactive.py` I001); §11.1/§11.2 updated; Phase 2 hash synced to `397877d`
+- In flight / next: Phase 4 Wave A+B — coordinator launches workers separately
+- Reviews: Waves 1–3 + merge-fix cleared
+- Docker / lint: tier-1 rpc_server satellite paths exit 0 (172 files); global 18 / 6 / 69 vs Phase 3 ceilings 18 / 6 / 71 — **ceilings met**; image rebuild; unit 1647 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: none; `worker_entry_backup_check.py` left untracked (local scratch); do not push from integrator session
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 2 phase commit
 - Done: merged 2E worker diff into `service_ops/` (36 modules); `service.py` thin façade (246 lines) with §3.3 error/DTO shims + `facade_bindings` late-bind; Wave 1 packages retained (`identity_helpers/` 16, `sidecar_ops/` 23, `observer_ops/` 14, `core_authority_ops/` 5); `document_lease/__init__.py` unchanged (composed `__all__` still valid); §11.1/§11.2 updated

@@ -11,7 +11,8 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ..lease_protocol import sign_handshake_response, verify_handshake_request
+from ..lease_protocol_ops.handshake_request import verify_handshake_request
+from ..lease_protocol_ops.handshake_response import sign_handshake_response
 from ._session_record import _SessionRecord
 from .constants import (
     DEFAULT_SESSION_TTL_SECONDS,

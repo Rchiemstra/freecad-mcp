@@ -572,8 +572,8 @@ class TestInspectGeometryActivate:
 class TestGuiToolsSelectionParsing:
     def test_select_subshapes_string_and_dict_forms(self, monkeypatch):
         """Exercise select_subshapes parsing with stub FreeCAD modules."""
-        import types
         import sys
+        import types
 
         selected = []
 
@@ -618,38 +618,15 @@ class TestGuiToolsSelectionParsing:
         monkeypatch.setitem(sys.modules, "FreeCAD", fake_fc)
         monkeypatch.setitem(sys.modules, "FreeCADGui", fake_gui)
 
-        # Reload gui_tools against stubs
-        import importlib
+        from addon.FreeCADMCP.rpc_server.gui_tools_ops import selection_ops
 
-        # Import from addon path
-        addon_rpc = (
-            Path(__file__).resolve().parents[1] / "addon" / "FreeCADMCP" / "rpc_server"
+        monkeypatch.setattr(selection_ops, "FreeCAD", fake_fc)
+        monkeypatch.setattr(selection_ops, "FreeCADGui", fake_gui)
+        monkeypatch.setattr(
+            selection_ops, "_flush_gui_events", lambda delay_ms=20: None
         )
-        sys.path.insert(0, str(addon_rpc.parent))
-        # gui_tools imports .gui_dispatch — stub that too
-        gui_dispatch = types.ModuleType("rpc_server.gui_dispatch")
-        gui_dispatch._flush_gui_events = lambda delay_ms=20: None
-        rpc_pkg = types.ModuleType("rpc_server")
-        rpc_pkg.gui_dispatch = gui_dispatch
-        monkeypatch.setitem(sys.modules, "rpc_server", rpc_pkg)
-        monkeypatch.setitem(sys.modules, "rpc_server.gui_dispatch", gui_dispatch)
 
-        # Load gui_tools as a free module with patched relatives
-        path = addon_rpc / "gui_tools.py"
-        spec = importlib.util.spec_from_file_location("gui_tools_under_test", path)
-        mod = importlib.util.module_from_spec(spec)
-        # Patch package-relative import by injecting before exec
-        sys.modules["gui_tools_under_test"] = mod
-
-        # Rewrite: exec with fake relative import support
-        source = path.read_text(encoding="utf-8")
-        source = source.replace(
-            "from .gui_dispatch import _flush_gui_events",
-            "def _flush_gui_events(delay_ms=20):\n    pass",
-        )
-        exec(compile(source, str(path), "exec"), mod.__dict__)
-
-        result = mod.select_subshapes(
+        result = selection_ops.select_subshapes(
             "Doc",
             ["Box:Face1", {"object": "Body", "sub": "Edge2"}],
             clear=True,
