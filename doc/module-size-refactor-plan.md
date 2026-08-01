@@ -1145,7 +1145,7 @@ Refresh these fields in place; do not append.
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `6c98eef` |
+| Last phase commit (submodule) | `259b9aa` — `refactor(mcp): phase 0 ruff hygiene on package trees` |
 | ARCH001 / ARCH002 / Ruff (actual) | 37 / 26 / 112 (C901 112) |
 | Blockers | none |
 | Resume hint | Start Phase 1 Wave 1 (1A–1D) |
@@ -1158,7 +1158,7 @@ the short commit hash in Notes when a phase completes.
 
 | Phase | Commit | Workstreams | Reviews | Docker unit/e2e/core/bench | ARCH001 ≤ | ARCH002 ≤ | Ruff ≤ | Status | Notes |
 |------:|--------|-------------|---------|----------------------------|----------:|----------:|-------:|--------|-------|
-| 0 | `refactor(mcp): phase 0 ruff hygiene on package trees` | 0A, 0B | cleared | pass | 37 | 26 | 112 | **done** | actual 37/26/112; `6c98eef` |
+| 0 | `refactor(mcp): phase 0 ruff hygiene on package trees` | 0A, 0B | cleared | pass | 37 | 26 | 112 | **done** | actual 37/26/112; `259b9aa` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 1 | `refactor(mcp): phase 1 extract leaf types for ARCH002` | 1A–1G | pending | pending | 36 | 13 | 117 | pending | |
 | 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | pending | pending | 31 | 12 | 92 | pending | |
 | 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | pending | pending | 18 | 6 | 71 | pending | |
@@ -1192,7 +1192,7 @@ Log:
 - In flight / next: Phase 1 Wave 1 (1A–1D) — do not start until planned
 - Reviews: cleared (0A/0B + merge + telemetry Important)
 - Docker / lint: unit/e2e/core/bench pass; global 37 / 26 / 112 (C901 112) vs ceilings 37 / 26 / 117
-- Blockers / decisions: none; phase commit `6c98eef`
+- Blockers / decisions: none; phase commit `259b9aa` (doc hash sync only; `git log -1` canonical if HEAD moves)
 - §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 0 / integrator merge
