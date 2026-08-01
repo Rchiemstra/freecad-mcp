@@ -1,4 +1,4 @@
-"""GUI selection operations."""
+"""Selection helpers for GUI-thread tools."""
 
 from __future__ import annotations
 
@@ -74,3 +74,6 @@ def get_selection() -> dict[str, Any]:
                 }
             )
     return {"ok": True, "selection": items, "count": len(items)}
+
+
+__all__ = ["get_selection", "select_subshapes"]

@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 3 **done** |
+| Current phase | Phase 4 **done** |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `b0318f5` — `refactor(mcp): phase 3 split rpc_server satellite modules` |
-| ARCH001 / ARCH002 / Ruff (actual) | 18 / 6 / 69 (C901 69) |
+| Last phase commit (submodule) | pending — `refactor(mcp): phase 4 carve rpc_server façade and methods` |
+| ARCH001 / ARCH002 / Ruff (actual) | 17 / 5 / 25 (C901 25) |
 | Blockers | none |
-| Resume hint | Phase 4 Wave A+B — coordinator launches workers separately |
+| Resume hint | Phase 5 — launch 5A/5B workers in parallel |
 
 ### 11.2 Phase ceilings and status
 
@@ -1161,8 +1161,8 @@ the short commit hash in Notes when a phase completes.
 | 0 | `refactor(mcp): phase 0 ruff hygiene on package trees` | 0A, 0B | cleared | pass | 37 | 26 | 112 | **done** | actual 37/26/112; `259b9aa` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 1 | `refactor(mcp): phase 1 extract leaf types for ARCH002` | 1A-1G | cleared | pass | 36 | 13 | 117 | **done** | actual 36/13/112; `f2ea1bd` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | cleared | pass | 31 | 12 | 92 | **done** | actual 31/12/88; `397877d` (doc hash may drift on doc-only amend; `git log -1` canonical) |
-| 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | cleared | pass | 18 | 6 | 71 | **done** | actual 18/6/69; `b0318f5` (doc hash may drift on doc-only amend; `git log -1` canonical) |
-| 4 | `refactor(mcp): phase 4 carve rpc_server façade` | 4A–4H waves | pending | pending | 17 | 5 | 26 | pending | |
+| 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | cleared | pass | 18 | 6 | 71 | **done** | actual 18/6/69; `b6c23e0` (doc hash may drift on doc-only amend; `git log -1` canonical) |
+| 4 | `refactor(mcp): phase 4 carve rpc_server façade and methods` | 4A–4H waves | cleared | pass | 17 | 5 | 26 | **done** | actual 17/5/25; hash at commit |
 | 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | pending | pending | 15 | 3 | 12 | pending | |
 | 6 | `refactor(mcp): phase 6 split MCP client stack` | 6A–6D | pending | pending | 11 | 0 | 5 | pending | |
 | 7 | `refactor(mcp): phase 7 split server and operations` | 7A–7E | pending | pending | 0 | 0 | 0 | pending | |
@@ -1186,6 +1186,14 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 — Phase 4 phase commit
+- Done: merged Waves 4A–4H into thin `rpc_server.py` façade (163 lines) + `rpc_server_ops/facade_bindings.py` §3.1 late-binds; `methods/` (v2, lease, cad, gui, lifecycle, dispatch_helpers) + `*_ops/` slices; `lease_runtime`, `server_lifecycle`, `rpc_helpers`, `xmlrpc_identity_handler`, `filtered_xmlrpc_server`; contract snapshot tests; integrator §3.3 shims (`platform`, `QtCore`, `load_settings`, `addon_build_id`, `_snapshot_gui`/`_restore_gui`); `FreeCAD` proxy in `dispatch_helpers_ops/_support.py` for test monkeypatch; `object_factory` relative import fix for typed `create_object`; §11.1/§11.2 updated; Phase 3 hash synced to `b6c23e0`
+- In flight / next: Phase 5 (5A document_lock, 5B lock_indicator) — coordinator launches workers in parallel
+- Reviews: Waves 4A–4H + integrator merge-fix cleared
+- Docker / lint: tier-1 Phase 4 touched paths exit 0 (184 files); global 17 / 5 / 25 vs Phase 4 ceilings 17 / 5 / 26 — **ceilings met**; live-mount Docker; unit 1649 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: scratch scripts left untracked; do not push from integrator session
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 3 phase commit
 - Done: merged Waves 1–3 worker diffs into `*_ops/` packages (gui/inflight/mutation/snapshot/settings/view/reference/property, worker/process/entry/protocol, save_service_ops, lease_protocol_ops); thin façades retained §3.3 shims; `SessionManager` imports handshake helpers from `lease_protocol_ops` (not façade); integrator late-bind surfaces (`_worker_environment`, `_promote_artifacts`, `_temp_usage`); `worker_entry` flat-import bootstrap for FCMacro probe; stale `lease_protocol` comment removed; test hygiene (`test_isolated_interactive.py` I001); §11.1/§11.2 updated; Phase 2 hash synced to `397877d`

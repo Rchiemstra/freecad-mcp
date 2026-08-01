@@ -1,4 +1,4 @@
-"""Read-only GUI context snapshot."""
+"""Read-only GUI context snapshot helpers."""
 
 from __future__ import annotations
 
@@ -68,3 +68,6 @@ def get_gui_state() -> dict[str, Any]:
         state["selection_error"] = str(exc)
 
     return state
+
+
+__all__ = ["get_gui_state"]

@@ -1,0 +1,340 @@
+{
+  "public_methods": {
+    "acknowledge_acquisition_claim": {
+      "docstring": "Scrub a durable acquisition claim after the client custodied it.",
+      "signature": "(self, request_id)"
+    },
+    "acquire_document_lock": {
+      "docstring": "Acquire an exclusive renewable write lease for a document.",
+      "signature": "(self, doc_name: str = '', file_path: str = '', session_id: str = '', task_description: str = '', client: str = '', selector: dict[str, typing.Any] | None = None, agent_id: str = '', hash_policy: str = 'sha256') -> dict[str, typing.Any]"
+    },
+    "activate_document": {
+      "docstring": "",
+      "signature": "(self, doc_name: 'str') -> 'dict[str, Any]'"
+    },
+    "adopt_dirty_document": {
+      "docstring": "Locally confirm and adopt an already-dirty document into lease v2.",
+      "signature": "(self, selector: dict[str, typing.Any] | None = None, task_description: str = '', client: str = '', agent_id: str = '', hash_policy: str = 'sha256') -> dict[str, typing.Any]"
+    },
+    "animate_placement": {
+      "docstring": "",
+      "signature": "(self, doc_name: 'str', obj_name: 'str', keyframes: 'list[dict[str, Any]] | None' = None, path_object: 'str | None' = None, sample_count: 'int' = 12, view_name: 'str' = 'Isometric', focus_objects: 'list[str] | None' = None, width: 'int | None' = None, height: 'int | None' = None, encode_video: 'bool' = False, fps: 'float' = 8.0, output_path: 'str | None' = None) -> 'dict[str, Any]'"
+    },
+    "body_create": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, body_name: str) -> dict"
+    },
+    "body_set_tip": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, body_name: str, feature_name: str) -> dict"
+    },
+    "cancel_request": {
+      "docstring": "Cancel one request owned by this authenticated RPC session.\n\nThis is a reserved control-plane operation.  It is intentionally not\nregistered as a FastMCP/model-facing tool.\n\nFor async LOCKED_ERROR handoff, the continuation state overrides an\ninflight tombstone: irreversible/claimable states always return\n``REQUEST_NOT_CANCELLABLE``, while terminal failed/denied return their\nactual details (never claim advice).",
+      "signature": "(self, target_request_id)"
+    },
+    "cancel_worker_job": {
+      "docstring": "",
+      "signature": "(self, job_id: str) -> dict[str, typing.Any]"
+    },
+    "capture_view_sequence": {
+      "docstring": "Capture multiple framed screenshots and return base64 PNG payloads.",
+      "signature": "(self, frames: 'list[dict[str, Any]] | None' = None, width: 'int | None' = None, height: 'int | None' = None, orbit: 'dict[str, Any] | None' = None) -> 'dict[str, Any]'"
+    },
+    "capture_view_sequence_to_disk": {
+      "docstring": "Capture frames to a directory and return PNG paths (for ffmpeg).",
+      "signature": "(self, frames: 'list[dict[str, Any]] | None' = None, width: 'int | None' = None, height: 'int | None' = None, orbit: 'dict[str, Any] | None' = None, frame_dir: 'str | None' = None) -> 'dict[str, Any]'"
+    },
+    "check_rpc_sync": {
+      "docstring": "Round-trip a nonce through the GUI queue to prove call correlation.",
+      "signature": "(self, nonce)"
+    },
+    "claim_acquisition_result": {
+      "docstring": "Return a lost acquire/adopt/create credential exactly once.\n\nPublic status never includes the token. Only the authenticated MCP\nruntime that initiated the request may claim it. Handoff continuations\nare authoritative when present: running/terminal states are reported\nbefore the vault is consulted.",
+      "signature": "(self, request_id)"
+    },
+    "clear_expression": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, object_name: str, prop_path: str) -> dict"
+    },
+    "close_document": {
+      "docstring": "",
+      "signature": "(self, doc_name: str) -> dict"
+    },
+    "create_document": {
+      "docstring": "",
+      "signature": "(self, name='New_Document')"
+    },
+    "create_object": {
+      "docstring": "",
+      "signature": "(self, doc_name, obj_data: dict[str, typing.Any])"
+    },
+    "delete_object": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, obj_name: str)"
+    },
+    "diagnose_parametric": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, object_name=None) -> dict"
+    },
+    "edit_object": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, obj_name: str, properties: dict[str, typing.Any]) -> dict[str, typing.Any]"
+    },
+    "execute_code": {
+      "docstring": "",
+      "signature": "(self, code: str, options: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]"
+    },
+    "execute_code_async": {
+      "docstring": "Start code execution in a background thread and return immediately.\n\nUse for long-running OCCT operations (fuse/cut/loft) that would otherwise\nexceed the MCP timeout. The caller should poll a document object for\ncompletion status (e.g. check SessionState.Label via get_object).",
+      "signature": "(self, code: str) -> dict[str, typing.Any]"
+    },
+    "finalize_document_edit": {
+      "docstring": "",
+      "signature": "(self, selector, save_mode='save', destination='', overwrite=False, expected_destination_sha256='', validation_profile='default')"
+    },
+    "force_release_stale_lock": {
+      "docstring": "Reject remote force release; recovery is a confirmed local GUI action.\n\nThe method remains as a compatibility tombstone so an older client\nreceives an explicit safe failure instead of an XML-RPC unknown-method\nfault.  In particular it must not become usable merely by switching a\nprofile to observe/off mode.",
+      "signature": "(self, doc_key: str) -> dict[str, typing.Any]"
+    },
+    "get_active_screenshot": {
+      "docstring": "Get a screenshot of the active view.\n\nReturns a base64-encoded string of the screenshot or None if a screenshot\ncannot be captured (e.g., when in TechDraw or Spreadsheet view).",
+      "signature": "(self, view_name: 'str | None' = 'Isometric', width: 'int | None' = None, height: 'int | None' = None, focus_object: 'str | None' = None, focus_objects: 'list[str] | None' = None, yaw_deg: 'float | None' = None) -> 'str'"
+    },
+    "get_document_lock": {
+      "docstring": "",
+      "signature": "(self, doc_name: str = '', file_path: str = '', session_id: str = '', selector: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]"
+    },
+    "get_gui_state": {
+      "docstring": "",
+      "signature": "(self) -> 'dict[str, Any]'"
+    },
+    "get_instance_info": {
+      "docstring": "Report this addon instance's identity (lightweight, no GUI dispatch).\n\nLets a client confirm it reached the intended FreeCAD when several\nisolated instances listen on nearby ports. ``instance_id`` comes from the\nper-profile settings (empty on the default profile).",
+      "signature": "(self)"
+    },
+    "get_object": {
+      "docstring": "",
+      "signature": "(self, doc_name, obj_name)"
+    },
+    "get_objects": {
+      "docstring": "",
+      "signature": "(self, doc_name)"
+    },
+    "get_parts_list": {
+      "docstring": "",
+      "signature": "(self)"
+    },
+    "get_recompute_log": {
+      "docstring": "Return recompute state for every object in a document (read-only).",
+      "signature": "(self, doc_name: str) -> list"
+    },
+    "get_request_status": {
+      "docstring": "",
+      "signature": "(self, request_id)"
+    },
+    "get_selection": {
+      "docstring": "",
+      "signature": "(self) -> 'dict[str, Any]'"
+    },
+    "get_sketch_diagnostics": {
+      "docstring": "Return solver diagnostics for a Sketcher sketch (read-only).",
+      "signature": "(self, doc_name: str, sketch_name: str) -> dict"
+    },
+    "get_worker_status": {
+      "docstring": "",
+      "signature": "(self) -> dict[str, typing.Any]"
+    },
+    "handshake_v2": {
+      "docstring": "Authenticate one exact MCP runtime before any lease operation.",
+      "signature": "(self, payload)"
+    },
+    "heartbeat_document_lock": {
+      "docstring": "",
+      "signature": "(self, doc_key: str, token: str, current_operation: str = '', state: str = '', document_dirty: bool | None = None) -> dict[str, typing.Any]"
+    },
+    "insert_part_from_library": {
+      "docstring": "",
+      "signature": "(self, doc_name, relative_path)"
+    },
+    "inspect_references": {
+      "docstring": "Inspect link properties without serializing shapes or recomputing.",
+      "signature": "(self, doc_name: str, object_names: list[str] | None = None, only_invalid: bool = False, validate: bool = False) -> dict[str, typing.Any]"
+    },
+    "invoke_v2": {
+      "docstring": "Authenticate, de-duplicate, and dispatch one immutable RPC envelope.",
+      "signature": "(self, payload)"
+    },
+    "invoke_v2_control": {
+      "docstring": "Authenticated v2 entrypoint admitted only on the control lane.",
+      "signature": "(self, payload)"
+    },
+    "lease_heartbeat_batch": {
+      "docstring": "Renew a batch on the reserved control lane; state remains server-owned.",
+      "signature": "(self, leases, client_monotonic_ns='')"
+    },
+    "lease_reconcile": {
+      "docstring": "",
+      "signature": "(self, credential)"
+    },
+    "list_document_locks": {
+      "docstring": "",
+      "signature": "(self) -> dict[str, typing.Any]"
+    },
+    "list_documents": {
+      "docstring": "",
+      "signature": "(self)"
+    },
+    "list_expressions": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, object_name: str) -> dict"
+    },
+    "open_document": {
+      "docstring": "",
+      "signature": "(self, path: 'str') -> 'dict[str, Any]'"
+    },
+    "pad_feature": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, pad_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict"
+    },
+    "ping": {
+      "docstring": "",
+      "signature": "(self)"
+    },
+    "pocket_feature": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, pocket_name: str, length: float, body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False) -> dict"
+    },
+    "recompute_and_wait": {
+      "docstring": "",
+      "signature": "(self, doc_name: str) -> dict[str, typing.Any]"
+    },
+    "recompute_document": {
+      "docstring": "",
+      "signature": "(self, doc_name: str) -> dict"
+    },
+    "redo": {
+      "docstring": "",
+      "signature": "(self, doc_name: str) -> dict"
+    },
+    "refresh_view": {
+      "docstring": "",
+      "signature": "(self, focus_objects: 'list[str] | None' = None, focus_object: 'str | None' = None, touch_objects: 'list[str] | None' = None, fit: 'bool' = False, capture: 'bool' = False, view_name: 'str' = 'Isometric', width: 'int | None' = None, height: 'int | None' = None) -> 'dict[str, Any]'"
+    },
+    "release_document_lock": {
+      "docstring": "",
+      "signature": "(self, doc_key: str = '', token: str = '', selector: dict[str, typing.Any] | None = None, disposition: str = 'saved') -> dict[str, typing.Any]"
+    },
+    "reload_document": {
+      "docstring": "",
+      "signature": "(self, doc_name: 'str') -> 'dict[str, Any]'"
+    },
+    "repair_references": {
+      "docstring": "Atomically rewrite link properties, deferring recompute by default.",
+      "signature": "(self, doc_name: str, repairs: list[dict[str, typing.Any]], recompute: bool = False, validate: bool = False) -> dict[str, typing.Any]"
+    },
+    "repair_view_placements": {
+      "docstring": "",
+      "signature": "(self, doc_name: 'str', touch_objects: 'list[str]', fit: 'bool' = False) -> 'dict[str, Any]'"
+    },
+    "restore": {
+      "docstring": "I7 — restore a snapshot in place (closes the current doc and reopens\nthe snapshot file). Latest snapshot when snapshot_id is None. Shares the\nFreeCAD._mcp_snapshots ring buffer with the execute_code restore tool.",
+      "signature": "(self, doc_name: str, snapshot_id: str | None = None) -> dict"
+    },
+    "run_fem_analysis": {
+      "docstring": "Run the CalculiX solver on an existing Fem::FemAnalysis and return summary results.",
+      "signature": "(self, doc_name: str, analysis_name: str, timeout: int = 600) -> dict[str, typing.Any]"
+    },
+    "save_document": {
+      "docstring": "",
+      "signature": "(self, selector, validation_profile='default')"
+    },
+    "save_document_as": {
+      "docstring": "",
+      "signature": "(self, selector, destination, overwrite=False, expected_destination_sha256='', validation_profile='default')"
+    },
+    "select_subshapes": {
+      "docstring": "",
+      "signature": "(self, doc_name: 'str', selections: 'list | None' = None, clear: 'bool' = True) -> 'dict[str, Any]'"
+    },
+    "set_expression": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, object_name: str, prop_path: str, expression: str) -> dict"
+    },
+    "set_section_view": {
+      "docstring": "",
+      "signature": "(self, enabled: 'bool | None' = None, placement: 'dict | None' = None, base: 'list | None' = None, normal: 'list | None' = None, no_manip: 'bool' = True) -> 'dict[str, Any]'"
+    },
+    "set_tree_expanded": {
+      "docstring": "",
+      "signature": "(self, doc_name: 'str', object_names: 'list | None' = None, mode: 'str' = 'expand') -> 'dict[str, Any]'"
+    },
+    "shutdown_rpc_server": {
+      "docstring": "Admit shutdown through the reserved control lane and respond first.",
+      "signature": "(self) -> dict[str, typing.Any]"
+    },
+    "sketch_add_constraint": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, constraints: list) -> dict"
+    },
+    "sketch_add_geometry": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, geometry: list) -> dict"
+    },
+    "sketch_attach": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, support, attachment_offset=None) -> dict"
+    },
+    "sketch_create": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, body_name: str | None = None, attach_to: str | None = None) -> dict"
+    },
+    "sketch_delete_constraint": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, constraint_indices=None, constraint_names=None) -> dict"
+    },
+    "sketch_delete_geometry": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, geometry_indices: list) -> dict"
+    },
+    "sketch_edit_constraint": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sketch_name: str, value=None, name=None, index=None) -> dict"
+    },
+    "snapshot": {
+      "docstring": "I7 — save the current document into a ring buffer of the last 5\nsnapshots kept on the FreeCAD module (shared with the execute_code\nsnapshot tool). Returns {ok, snapshot_id, doc, count}.",
+      "signature": "(self, doc_name: str) -> dict"
+    },
+    "solve_assembly": {
+      "docstring": "I9 — re-solve an Assembly via the real internal solver. Tries\nassembly.solve() (C++), then JointObject.solveIfAllowed, then recompute.",
+      "signature": "(self, doc_name: str, assembly_name: str) -> dict"
+    },
+    "spreadsheet_create": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sheet_name: str) -> dict"
+    },
+    "spreadsheet_get_cells": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sheet_name: str, addresses: list) -> dict"
+    },
+    "spreadsheet_list_aliases": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sheet_name: str) -> dict"
+    },
+    "spreadsheet_set_alias": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sheet_name: str, address: str, alias: str) -> dict"
+    },
+    "spreadsheet_set_cells": {
+      "docstring": "",
+      "signature": "(self, doc_name: str, sheet_name: str, cells: list) -> dict"
+    },
+    "undo": {
+      "docstring": "",
+      "signature": "(self, doc_name: str) -> dict"
+    },
+    "update_document_lock": {
+      "docstring": "Update bounded diagnostics only; state and dirty flags are authoritative.",
+      "signature": "(self, selector, task_description='', progress_detail='')"
+    }
+  }
+}

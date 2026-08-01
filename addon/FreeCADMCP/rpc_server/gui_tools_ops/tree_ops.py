@@ -1,4 +1,4 @@
-"""Model tree expand/collapse operations."""
+"""Model-tree expand/collapse helpers (GUI thread)."""
 
 from __future__ import annotations
 
@@ -32,12 +32,15 @@ def set_tree_expanded(
             if mode_norm == "expand_document"
             else "Std_TreeCollapseDocument"
         )
-        # Prefer document-level collapse command when available.
         if mode_norm == "collapse_document":
             try:
                 FreeCADGui.runCommand("Std_TreeCollapseDocument")
                 _flush_gui_events()
-                return {"ok": True, "mode": mode_norm, "command": "Std_TreeCollapseDocument"}
+                return {
+                    "ok": True,
+                    "mode": mode_norm,
+                    "command": "Std_TreeCollapseDocument",
+                }
             except Exception:
                 cmd = "Std_TreeCollapse"
         FreeCADGui.runCommand(cmd)
@@ -57,10 +60,8 @@ def set_tree_expanded(
         selected.append(name)
 
     if not selected and not names:
-        # Operate on whatever is already selected.
         selected = [
-            getattr(o, "Name", str(o))
-            for o in FreeCADGui.Selection.getSelection()
+            getattr(o, "Name", str(o)) for o in FreeCADGui.Selection.getSelection()
         ]
 
     if not selected:
@@ -70,7 +71,11 @@ def set_tree_expanded(
             "missing": missing,
         }
 
-    cmd = "Std_TreeExpand" if mode_norm in ("expand", "expanded", "open") else "Std_TreeCollapse"
+    cmd = (
+        "Std_TreeExpand"
+        if mode_norm in ("expand", "expanded", "open")
+        else "Std_TreeCollapse"
+    )
     FreeCADGui.runCommand(cmd)
     _flush_gui_events()
     return {
@@ -80,3 +85,6 @@ def set_tree_expanded(
         "selected": selected,
         "missing": missing,
     }
+
+
+__all__ = ["set_tree_expanded"]

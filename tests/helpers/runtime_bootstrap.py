@@ -74,6 +74,27 @@ def ensure_objects_fem_stub() -> None:
         sys.modules["ObjectsFem"] = types.ModuleType("ObjectsFem")
 
 
+def ensure_part_stub() -> None:
+    try:
+        import Part  # noqa: F401
+    except ModuleNotFoundError:
+        part = types.ModuleType("Part")
+        part.LineSegment = MagicMock()
+        part.Circle = MagicMock()
+        part.ArcOfCircle = MagicMock()
+        part.Point = MagicMock()
+        sys.modules["Part"] = part
+
+
+def ensure_sketcher_stub() -> None:
+    try:
+        import Sketcher  # noqa: F401
+    except ModuleNotFoundError:
+        sketcher = types.ModuleType("Sketcher")
+        sketcher.Constraint = MagicMock()
+        sys.modules["Sketcher"] = sketcher
+
+
 def ensure_pyside_shim() -> None:
     if "PySide" in sys.modules:
         return
@@ -111,6 +132,8 @@ def bootstrap_unit_test_runtime() -> None:
     ensure_freecad_stub()
     ensure_freecad_gui_stub()
     ensure_objects_fem_stub()
+    ensure_part_stub()
+    ensure_sketcher_stub()
     ensure_pyside_shim()
 
 

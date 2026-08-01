@@ -1,4 +1,4 @@
-"""Section view (clipping plane) operations."""
+"""Section / clipping-plane helpers (GUI thread)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 import FreeCAD
 
 from ..gui_dispatch import _flush_gui_events
-from .view_aliases import active_view
+from .view_helpers import active_view
 
 
 def set_section_view(
@@ -59,14 +59,11 @@ def set_section_view(
             pla=pla,
         )
     except TypeError:
-        # Older signatures may be positional-only.
         view.toggleClippingPlane(toggle, False, bool(no_manip), pla)
 
     _flush_gui_events()
     has_after = (
-        bool(view.hasClippingPlane())
-        if hasattr(view, "hasClippingPlane")
-        else bool(enabled)
+        bool(view.hasClippingPlane()) if hasattr(view, "hasClippingPlane") else bool(enabled)
     )
     return {
         "ok": True,
@@ -74,3 +71,6 @@ def set_section_view(
         "requested_enabled": enabled,
         "placement_base": [pla.Base.x, pla.Base.y, pla.Base.z],
     }
+
+
+__all__ = ["set_section_view"]

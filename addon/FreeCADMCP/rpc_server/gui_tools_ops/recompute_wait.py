@@ -1,4 +1,4 @@
-"""Document recompute with GUI idle barrier."""
+"""GUI-thread recompute-and-wait barrier."""
 
 from __future__ import annotations
 
@@ -14,9 +14,6 @@ def recompute_and_wait(doc_name: str) -> dict[str, Any]:
 
     Runs ``doc.recompute()`` on the GUI thread, drains the queued Qt events so
     the tree/3D view reflect the result, then reports per-object recompute state.
-    An explicit recompute-complete + GUI-idle barrier: after this returns a
-    follow-up model check sees a settled document, complementing the
-    ``check_rpc_sync`` nonce probe (which only proves the queue is live).
     """
     doc = FreeCAD.getDocument(doc_name)
     if doc is None:
@@ -51,3 +48,6 @@ def recompute_and_wait(doc_name: str) -> dict[str, Any]:
         "settled": not pending,
         "idle": True,
     }
+
+
+__all__ = ["recompute_and_wait"]

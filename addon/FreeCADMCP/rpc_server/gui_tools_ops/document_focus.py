@@ -1,4 +1,4 @@
-"""Document open and activation on the GUI thread."""
+"""Document open/activate helpers (GUI thread)."""
 
 from __future__ import annotations
 
@@ -37,3 +37,6 @@ def activate_document(doc_name: str) -> dict[str, Any]:
         return {"ok": False, "error": f"Activated App doc but GUI failed: {exc}"}
     _flush_gui_events()
     return {"ok": True, "document": doc.Name, "label": doc.Label}
+
+
+__all__ = ["activate_document", "open_document"]

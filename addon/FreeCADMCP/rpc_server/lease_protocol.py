@@ -67,6 +67,9 @@ from .lease_protocol_types.validation import (
 from .lease_protocol_types.verified_handshake import VerifiedHandshake
 from .lease_protocol_types.verified_handshake_response import VerifiedHandshakeResponse
 
+# §3.3 compatibility aliases — keep extracted helper import paths working.
+lease_protocol_public_error = public_error
+
 __all__ = [
     "DEFAULT_REPLAY_RESPONSE_MAX_BYTES",
     "DEFAULT_REPLAY_TTL_SECONDS",
@@ -101,6 +104,7 @@ __all__ = [
     "build_handshake_request",
     "canonical_json_bytes",
     "create_profile_secret",
+    "lease_protocol_public_error",
     "load_profile_secret",
     "make_runtime_manifest",
     "public_error",

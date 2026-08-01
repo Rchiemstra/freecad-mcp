@@ -1,8 +1,8 @@
-"""View name normalization and active view access."""
+"""View-name normalization helpers for GUI tools."""
 
 from __future__ import annotations
 
-import FreeCADGui
+from .view_helpers import active_view
 
 _VIEW_ALIASES = {
     "Rear": "Back",
@@ -17,11 +17,4 @@ def normalize_view_name(view_name: str) -> str:
     return _VIEW_ALIASES.get(name, name)
 
 
-def active_view():
-    gui_doc = FreeCADGui.ActiveDocument
-    if gui_doc is None:
-        raise RuntimeError("No active GUI document")
-    view = gui_doc.activeView()
-    if view is None:
-        raise RuntimeError("No active 3D view")
-    return view
+__all__ = ["active_view", "normalize_view_name"]
