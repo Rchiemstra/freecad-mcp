@@ -5,6 +5,7 @@ import threading
 from typing import Any
 
 from .agent_mutation_ops import _agent_mutation_ctx, _mutation_state
+from .module_aliases import install_module_aliases
 
 _request_ctx = threading.local()
 
@@ -154,3 +155,6 @@ def is_agent_mutating(doc_key: str, *, request_id: str | None = None) -> bool:
         # Legacy markers have no authenticated request identity.
         return False
     return state.legacy_counts.get(key, 0) > 0
+
+
+install_module_aliases(__name__)

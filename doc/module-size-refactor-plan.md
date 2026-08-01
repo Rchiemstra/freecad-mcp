@@ -1043,7 +1043,7 @@ Integrator checklist:
 - [ ] No renamed XML-RPC methods or MCP tool names
 - [ ] Phase 4+: `FreeCADRPC` uses §3.1 bindings (no wrapper forest, no `__getattr__`)
 - [ ] Phase 4+: RPC contract snapshot tests green
-- [ ] Phase 5: every `document_lock` / `lock_indicator` submodule aliased under both names, identity-tested
+- [x] Phase 5: every `document_lock` / `lock_indicator` submodule aliased under both names, identity-tested
 - [ ] Phase 7: tool-registry snapshot green; `operations/__init__.py` ≤300 via §3.2 composition
 - [ ] Re-exports updated by integrator with **explicit** `__all__` (§3.2; no `globals()`)
 - [ ] Internal modules import defining modules, not package barrels
@@ -1145,7 +1145,7 @@ Refresh these fields in place; do not append.
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `7a52994` — `refactor(mcp): phase 5 split document_lock and lock_indicator` (git log -1 canonical) |
+| Last phase commit (submodule) | `5d05135` — `refactor(mcp): phase 5 split document_lock and lock_indicator` (git log -1 canonical) |
 | ARCH001 / ARCH002 / Ruff (actual) | 15 / 3 / 12 (C901 11, E501 1) |
 | Blockers | none |
 | Resume hint | Phase 6 — launch 6A/6B/6C workers in parallel |
@@ -1163,7 +1163,7 @@ the short commit hash in Notes when a phase completes.
 | 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | cleared | pass | 31 | 12 | 92 | **done** | actual 31/12/88; `397877d` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | cleared | pass | 18 | 6 | 71 | **done** | actual 18/6/69; `b6c23e0` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 4 | `refactor(mcp): phase 4 carve rpc_server façade and methods` | 4A–4H waves | cleared | pass | 17 | 5 | 26 | **done** | actual 17/5/25; `bae159a` |
-| 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | cleared | pass | 15 | 3 | 12 | **done** | actual 15/3/12; `7a52994` (doc hash may drift on doc-only amend; git log -1 canonical) |
+| 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | cleared | pass | 15 | 3 | 12 | **done** | actual 15/3/12; `5d05135` (doc hash may drift on doc-only amend; git log -1 canonical) |
 | 6 | `refactor(mcp): phase 6 split MCP client stack` | 6A–6D | pending | pending | 11 | 0 | 5 | pending | |
 | 7 | `refactor(mcp): phase 7 split server and operations` | 7A–7E | pending | pending | 0 | 0 | 0 | pending | |
 | 8 | `refactor(mcp): phase 8 full ARCH lint gate` | integrator | pending | pending | 0 | 0 | 0 | pending | full lint exit 0 |
@@ -1187,8 +1187,16 @@ Template:
 
 Log:
 
+### 2026-08-01 — Phase 5 alias-identity review fix
+- Done: expanded alias identity suite — every `document_lock_ops` / `lock_indicator_ops` submodule flat↔package `is` checks; `lock_indicator` ↔ `addon.FreeCADMCP.lock_indicator` dual-name identity; `install_module_aliases(__name__)` on state-bearing ops (`agent_mutation_ops`, `request_identity`, `internal_snapshot_save_ops`, `gui_callback`, `registration`, `lock_indicator_ops.state`); duplicate `_internal_snapshot_save_ctx` assignment removed; §11 hash synced to amended `5d05135`
+- In flight / next: Phase 6 (6A freecad_client, 6B lease_manager, 6C instrumented_server)
+- Reviews: merge-review alias-identity gaps addressed
+- Docker / lint: live-mount Docker; alias suites + `test_document_lock` + `test_lock_indicator` unit 129 pass
+- Blockers / decisions: amend `ea0ba34` (not pushed); do not force-push
+- §3.4 diagrams: not touched
+
 ### 2026-08-01 — Phase 5 phase commit
-- Done: merged Waves 5A–5B into thin `document_lock.py` (250 lines) + `document_lock_ops/` (34 modules) and `lock_indicator.py` (218 lines) + `lock_indicator_ops/` (23 modules); §3.3 dual-name aliases (`document_lock`/`lock_indicator` + `*_ops` flat/package trees); façade late-bind via `facade_surfaces`; C901 decomposed in lock paths; integrator duplicate-assignment cleanup (`gui_callback`, `agent_mutation_ops`); alias identity test (`test_document_lock_ops_aliases.py`); §11.1/§11.2 updated; Phase 4 hash synced to `bae159a`
+- Done: merged Waves 5A–5B into thin `document_lock.py` (250 lines) + `document_lock_ops/` (34 modules) and `lock_indicator.py` (218 lines) + `lock_indicator_ops/` (23 modules); §3.3 dual-name aliases (`document_lock`/`lock_indicator` + `*_ops` flat/package trees); façade late-bind via `facade_surfaces`; C901 decomposed in lock paths; integrator duplicate-assignment cleanup (`gui_callback`, `agent_mutation_ops`); alias identity tests (`test_document_lock_ops_aliases.py`, `test_lock_indicator_ops_aliases.py`); §11.1/§11.2 updated; Phase 4 hash synced to `bae159a`
 - In flight / next: Phase 6 (6A freecad_client, 6B lease_manager, 6C instrumented_server) — coordinator launches workers in parallel
 - Reviews: Waves 5A–5B + integrator merge cleared
 - Docker / lint: tier-1 Phase 5 touched paths exit 0 (60 files); global 15 / 3 / 12 vs Phase 5 ceilings 15 / 3 / 12 — **ceilings met**; live-mount Docker; unit 1651 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass

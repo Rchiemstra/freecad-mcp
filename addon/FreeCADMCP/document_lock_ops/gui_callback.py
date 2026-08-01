@@ -3,6 +3,8 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable
 
+from .module_aliases import install_module_aliases
+
 _gui_update_callback: Callable[[], None] | None = None
 
 _observer_registered = False
@@ -18,3 +20,6 @@ def _notify_gui() -> None:
     if cb is not None:
         with contextlib.suppress(Exception):
             cb()
+
+
+install_module_aliases(__name__)

@@ -6,8 +6,7 @@ import threading
 from typing import Any
 
 from .internal_snapshot_save_state import _InternalSnapshotSaveState
-
-_internal_snapshot_save_ctx = threading.local()
+from .module_aliases import install_module_aliases
 
 _internal_snapshot_save_ctx = threading.local()
 
@@ -93,3 +92,6 @@ def end_internal_snapshot_save_scope(
         with contextlib.suppress(AttributeError):
             delattr(_internal_snapshot_save_ctx, "state")
     return valid
+
+
+install_module_aliases(__name__)

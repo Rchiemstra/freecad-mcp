@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .document_lock_observer import DocumentLockObserver
+from .module_aliases import install_module_aliases
 from .settings import is_enabled
 
 _observer_registered = False
@@ -40,3 +41,6 @@ def register_lock_feature() -> None:
             FreeCAD.Console.PrintWarning(f"[MCP] Lock indicator not installed: {exc}\n")
         except ImportError:
             pass
+
+
+install_module_aliases(__name__)

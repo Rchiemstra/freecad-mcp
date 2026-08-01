@@ -5,6 +5,7 @@ import threading
 from typing import Any
 
 from .agent_mutation_state import _AgentMutationState
+from .module_aliases import install_module_aliases
 
 _agent_mutation_ctx = threading.local()
 
@@ -134,3 +135,6 @@ def get_agent_mutation_context() -> dict[str, Any]:
         "thread_id": threading.get_ident(),
         "legacy": legacy_active and not strict_active,
     }
+
+
+install_module_aliases(__name__)
