@@ -63,3 +63,9 @@ def restore_operation(
             f"Failed to restore snapshot: {exc}",
             error_code=type(exc).__name__.upper(),
         )
+
+
+__all__ = [
+    "restore_operation",
+    "snapshot_operation",
+]

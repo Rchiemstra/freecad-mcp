@@ -173,3 +173,13 @@ def set_color_operation(
     return _run_code(freecad, only_text_feedback, "\n".join(lines),
                      f"Color applied to '{obj_name}'", "Failed to set color",
                      document=doc_name)
+
+
+__all__ = [
+    "export_brep_operation",
+    "export_step_operation",
+    "export_stl_operation",
+    "import_brep_operation",
+    "import_step_operation",
+    "set_color_operation",
+]

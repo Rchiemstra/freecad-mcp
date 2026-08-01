@@ -225,3 +225,18 @@ def compare_documents_operation(
         "diff": diff,
     }
     return json_response(payload)
+
+
+__all__ = [
+    "activate_document_operation",
+    "compare_documents_operation",
+    "diagnose_helix_operation",
+    "diagnose_pocket_operation",
+    "get_gui_state_operation",
+    "get_selection_operation",
+    "open_document_operation",
+    "recompute_and_wait_operation",
+    "select_subshapes_operation",
+    "set_section_view_operation",
+    "set_tree_expanded_operation",
+]

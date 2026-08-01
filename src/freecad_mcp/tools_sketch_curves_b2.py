@@ -1,0 +1,270 @@
+"""MCP tool registration — sketch curves b2 (Phase 7 / 7D)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from mcp.server.fastmcp import Context
+from mcp.types import CallToolResult
+
+from .operations import (
+    sketch_extend_operation,
+    sketch_fillet_operation,
+    sketch_split_operation,
+    sketch_symmetry_operation,
+    sketch_trim_operation,
+)
+from .tools_server_surfaces import server_connection, server_state
+
+if TYPE_CHECKING:
+    from .freecad_client import FreeCADConnection
+    from .instrumented_server import InstrumentedFastMCP
+    from .lease_manager import StaleLeaseRecoveryOrchestrator
+    from .server_state import ServerState
+def _register_sketch_trim(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def sketch_trim(
+        ctx: Context,
+        doc_name: str,
+        sketch_name: str,
+        geo_index: int,
+        point_x: float,
+        point_y: float,
+    ) -> CallToolResult:
+        """Trim a sketch curve at the given point (nearest intersection).
+
+        Args:
+            doc_name: Document containing the sketch.
+            sketch_name: Name of the target sketch.
+            geo_index: Index of the geometry element to trim.
+            point_x: X coordinate on the curve near the desired cut point.
+            point_y: Y coordinate on the curve near the desired cut point.
+
+        Returns:
+            Success message and a screenshot.
+        """
+        return sketch_trim_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            sketch_name,
+            geo_index,
+            point_x,
+            point_y,
+        )
+
+    exports['sketch_trim'] = sketch_trim
+def _register_sketch_extend(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def sketch_extend(
+        ctx: Context,
+        doc_name: str,
+        sketch_name: str,
+        geo_index: int,
+        increment: float,
+        end_point: int = 2,
+    ) -> CallToolResult:
+        """Extend a sketch curve by a given increment.
+
+        Args:
+            doc_name: Document containing the sketch.
+            sketch_name: Name of the target sketch.
+            geo_index: Index of the geometry element to extend.
+            increment: Extension amount in mm.
+            end_point: Which end to extend: 1 = start, 2 = end (default).
+
+        Returns:
+            Success message and a screenshot.
+        """
+        return sketch_extend_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            sketch_name,
+            geo_index,
+            increment,
+            end_point,
+        )
+
+    exports['sketch_extend'] = sketch_extend
+def _register_sketch_split(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def sketch_split(
+        ctx: Context,
+        doc_name: str,
+        sketch_name: str,
+        geo_index: int,
+        point_x: float,
+        point_y: float,
+    ) -> CallToolResult:
+        """Split a sketch curve into two pieces at the given point.
+
+        Args:
+            doc_name: Document containing the sketch.
+            sketch_name: Name of the target sketch.
+            geo_index: Index of the geometry element to split.
+            point_x: X coordinate of the split point.
+            point_y: Y coordinate of the split point.
+
+        Returns:
+            Success message and a screenshot.
+        """
+        return sketch_split_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            sketch_name,
+            geo_index,
+            point_x,
+            point_y,
+        )
+
+    exports['sketch_split'] = sketch_split
+def _register_sketch_fillet(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def sketch_fillet(
+        ctx: Context,
+        doc_name: str,
+        sketch_name: str,
+        geo1: int,
+        geo2: int,
+        radius: float,
+    ) -> CallToolResult:
+        """Add a fillet arc between two sketch curves.
+
+        Args:
+            doc_name: Document containing the sketch.
+            sketch_name: Name of the target sketch.
+            geo1: Index of the first geometry element.
+            geo2: Index of the second geometry element.
+            radius: Fillet radius in mm (must be > 0).
+
+        Returns:
+            Success message and a screenshot.
+        """
+        return sketch_fillet_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            sketch_name,
+            geo1,
+            geo2,
+            radius,
+        )
+
+    exports['sketch_fillet'] = sketch_fillet
+def _register_sketch_symmetry(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def sketch_symmetry(
+        ctx: Context,
+        doc_name: str,
+        sketch_name: str,
+        geo_indices: list[int],
+        symmetry_geo: int,
+        copy: bool = True,
+    ) -> CallToolResult:
+        """Apply symmetry to a set of sketch elements about a symmetry axis.
+
+        Args:
+            doc_name: Document containing the sketch.
+            sketch_name: Name of the target sketch.
+            geo_indices: Indices of the elements to mirror.
+            symmetry_geo: Index of the symmetry axis geometry element.
+            copy: If true, keep the original elements (default).
+
+        Returns:
+            Success message and a screenshot.
+        """
+        return sketch_symmetry_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            sketch_name,
+            geo_indices,
+            symmetry_geo,
+            copy,
+        )
+
+    exports['sketch_symmetry'] = sketch_symmetry
+
+def register(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+) -> dict[str, object]:
+    """Register sketch_curves_b2 MCP tools; return exports for §3.3 façade shims."""
+    exports: dict[str, object] = {}
+    _register_sketch_trim(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_sketch_extend(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_sketch_split(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_sketch_fillet(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_sketch_symmetry(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    return exports

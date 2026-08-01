@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 6 **done** |
+| Current phase | Phase 8 pending |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `7183f05` — `refactor(mcp): phase 6 split MCP client modules` (git log -1 canonical) |
-| ARCH001 / ARCH002 / Ruff (actual) | 11 / 0 / 5 (C901 5) |
+| Last phase commit (submodule) | `refactor(mcp): phase 7 split server and operations modules` (git log -1 canonical) |
+| ARCH001 / ARCH002 / Ruff (actual) | 0 / 0 / 0 |
 | Blockers | none |
-| Resume hint | Phase 7 — launch 7A/7B/7C workers in parallel |
+| Resume hint | Phase 8 — full-tree lint gate (integrator only) |
 
 ### 11.2 Phase ceilings and status
 
@@ -1164,8 +1164,8 @@ the short commit hash in Notes when a phase completes.
 | 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | cleared | pass | 18 | 6 | 71 | **done** | actual 18/6/69; `b6c23e0` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 4 | `refactor(mcp): phase 4 carve rpc_server façade and methods` | 4A–4H waves | cleared | pass | 17 | 5 | 26 | **done** | actual 17/5/25; `bae159a` |
 | 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | cleared | pass | 15 | 3 | 12 | **done** | actual 15/3/12; `17e139c` (doc hash may drift on doc-only amend; git log -1 canonical) |
-| 6 | `refactor(mcp): phase 6 split MCP client modules` | 6A–6D | cleared | pass | 11 | 0 | 5 | **done** | actual 11/0/5; `7183f05` (doc hash may drift on doc-only amend; git log -1 canonical) |
-| 7 | `refactor(mcp): phase 7 split server and operations` | 7A–7E | pending | pending | 0 | 0 | 0 | pending | |
+| 6 | `refactor(mcp): phase 6 split MCP client modules` | 6A–6D | cleared | pass | 11 | 0 | 5 | **done** | actual 11/0/5; `e6fdc5e` (git log -1 canonical) |
+| 7 | `refactor(mcp): phase 7 split server and operations modules` | 7A–7E | cleared | pass | 0 | 0 | 0 | **done** | actual 0/0/0; git log -1 canonical (merge-fix §3.3 `responses` shim) |
 | 8 | `refactor(mcp): phase 8 full ARCH lint gate` | integrator | pending | pending | 0 | 0 | 0 | pending | full lint exit 0 |
 
 ### 11.3 Progress log
@@ -1186,6 +1186,22 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 — Phase 7 merge fix (§3.3 `responses` shim)
+- Done: restored full legacy `freecad_mcp.responses` surface (`OutcomeStatus`, envelope helpers, telemetry context re-exports); §11.2 Phase 7 note; `server.py` façade line count corrected to 124 in prior log entry
+- In flight / next: re-review
+- Reviews: addresses blocking merge-review §3.3 gap
+- Docker / lint: import smoke + `test_execution_banner` / `test_spoolcase_feedback` / `test_mcp_tasks` (17 pass) with workspace mount
+- Blockers / decisions: amended phase 7 commit; do not push
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 7 phase commit
+- Done: merged Waves 7A–7E — `operations/*` thin façades + `*_ops/` (core, locking, diagnostics, parametric, p1/p5/p7 curves/measure/assembly); `server.py` 124-line façade + `server_ops/` + `tools_*.py` registration modules + MCP tool-registry contract snapshot; `responses/` + `assembly_api_bootstrap/` packages; integrator composed `operations/__init__.py` (50 lines, §3.2 public-only `__all__` + `solve_assembly_operation` shim); §3.3 server shims (`_post_tool_stale_recovery`, `_LEASE_HEARTBEAT_INTERVAL_S`, heartbeat/connection → `server._authenticate_connection`); `json_response` envelope message sync; lifecycle test `_json_tool_result` structuredContent fallback; §11.1/§11.2 updated; Phase 6 hash synced to `e6fdc5e`
+- In flight / next: Phase 8 full-tree lint gate (integrator only)
+- Reviews: Waves 7A–7E + integrator merge cleared
+- Docker / lint: tier-1 `addon/FreeCADMCP` + `src/freecad_mcp` lint exit 0 (888 files); global 0 / 0 / 0 vs Phase 7 ceilings 0 / 0 / 0 — **ceilings met**; image rebuild; unit 1710 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: scratch `scripts/phase7_*.py` deleted; other integrator scratch scripts left untracked; do not push from integrator session
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 6 phase commit
 - Done: merged Waves 6A–6D into thin `freecad_client.py` + `freecad_client_ops/` (transport/invoke/connection slices), `lease_manager.py` + `lease_manager_ops/` (orchestrator/status/recovery), `instrumented_server.py` + `instrumented_server_ops/` (call-tool/telemetry lanes), `rpc_auth.py` + `rpc_auth_ops/` (handshake request/response); §3.1 façade late-binds; C901 decomposed in client stack paths; integrator nit fixes (`_parse_utc` context string in `handshake_response`, `worker_entry` E501 wrap); §11.1/§11.2 updated; Phase 5 hash synced to `17e139c`

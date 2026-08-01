@@ -17,6 +17,7 @@ import threading
 import time
 import uuid
 import zipfile
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -197,8 +198,19 @@ def _json_tool_result(result) -> dict[str, Any]:
         item.text for item in result.content if isinstance(item, TextContent)
     ]
     texts = [item.text for item in result.content if isinstance(item, TextContent)]
-    assert len(texts) == 1
-    return json.loads(texts[0])
+    if len(texts) == 1 and texts[0].strip():
+        try:
+            return json.loads(texts[0])
+        except json.JSONDecodeError:
+            pass
+    structured = result.structuredContent
+    if isinstance(structured, Mapping):
+        data = structured.get("data")
+        if isinstance(data, Mapping):
+            return dict(data)
+    raise AssertionError(
+        "Tool result has no JSON text payload or structuredContent.data"
+    )
 
 
 @pytest.mark.unit

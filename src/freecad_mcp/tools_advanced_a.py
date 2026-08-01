@@ -1,0 +1,263 @@
+"""MCP tool registration — advanced a (Phase 7 / 7D)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from mcp.server.fastmcp import Context
+from mcp.types import CallToolResult
+
+from .operations import (
+    audit_hardcoded_dimensions_operation,
+    get_dependency_graph_operation,
+    inspect_geometry_operation,
+    match_subshape_operation,
+    run_transaction_operation,
+    validate_movement_follow_operation,
+)
+from .responses import tool_fail
+from .tools_server_surfaces import server_connection, server_state
+
+if TYPE_CHECKING:
+    from .freecad_client import FreeCADConnection
+    from .instrumented_server import InstrumentedFastMCP
+    from .lease_manager import StaleLeaseRecoveryOrchestrator
+    from .server_state import ServerState
+def _register_run_transaction(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def run_transaction(
+        ctx: Context,
+        doc_name: str,
+        label: str,
+        code: str,
+        dry_run: bool = False,
+        commit_on_success: bool = True,
+    ) -> CallToolResult:
+        """Run code inside ``openTransaction`` with automatic rollback on failure (M5).
+
+        Authenticated lease mode rejects this legacy nested-code helper because
+        its inner ``exec`` cannot be independently scoped by the addon's mutation
+        guard. Use typed modelling tools, or the explicitly enabled unsafe
+        ``execute_code`` route with ``affected_documents``.
+        """
+        if server_state().lease_manager.connected:
+            return tool_fail(
+                "run_transaction is disabled in authenticated lease mode because "
+                "nested arbitrary code cannot be proven to stay within its declared "
+                "document scope"
+            )
+        return run_transaction_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            label,
+            code,
+            dry_run=dry_run,
+            commit_on_success=commit_on_success,
+        )
+
+    exports['run_transaction'] = run_transaction
+def _register_validate_movement_follow(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def validate_movement_follow(
+        ctx: Context,
+        doc_name: str,
+        source: str,
+        dependents: list[str],
+        translation: list[float],
+        axis: list[float],
+        angle_deg: float,
+        restore: bool = True,
+        tolerance: float = 1e-7,
+    ) -> CallToolResult:
+        """Validate that dependents follow a source body under an arbitrary rigid transform (M7)."""
+        return validate_movement_follow_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            source,
+            dependents,
+            translation,
+            axis,
+            angle_deg,
+            restore=restore,
+            tolerance=tolerance,
+        )
+
+    exports['validate_movement_follow'] = validate_movement_follow
+def _register_audit_hardcoded_dimensions(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def audit_hardcoded_dimensions(
+        ctx: Context,
+        doc_name: str,
+        body_name: str,
+        flag_aliases: bool = True,
+    ) -> CallToolResult:
+        """Report driving dimensions in a body that lack expressions (M8)."""
+        return audit_hardcoded_dimensions_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            body_name,
+            flag_aliases=flag_aliases,
+        )
+
+    exports['audit_hardcoded_dimensions'] = audit_hardcoded_dimensions
+def _register_inspect_geometry(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def inspect_geometry(
+        ctx: Context,
+        doc_name: str,
+        object_name: str,
+        subshape: str | None = None,
+        activate: bool = False,
+        restore_active_document: bool = True,
+    ) -> CallToolResult:
+        """Normalized local/global geometry inspection for any object type (M10/M11)."""
+        return inspect_geometry_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            object_name,
+            subshape=subshape,
+            activate=activate,
+            restore_active_document=restore_active_document,
+        )
+
+    exports['inspect_geometry'] = inspect_geometry
+def _register_get_dependency_graph(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def get_dependency_graph(
+        ctx: Context,
+        doc_name: str,
+        root: str,
+    ) -> CallToolResult:
+        """Property-annotated dependency graph from a root object (M13)."""
+        return get_dependency_graph_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            root,
+        )
+
+    exports['get_dependency_graph'] = get_dependency_graph
+def _register_match_subshape(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def match_subshape(
+        ctx: Context,
+        doc_name: str,
+        source_object: str,
+        source_subshape: str,
+        target_object: str,
+        limit: int = 10,
+        tolerance: float = 1.0,
+    ) -> CallToolResult:
+        """Rank target subshapes by semantic similarity to a source subshape (M14)."""
+        return match_subshape_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            source_object,
+            source_subshape,
+            target_object,
+            limit=limit,
+            tolerance=tolerance,
+        )
+
+    exports['match_subshape'] = match_subshape
+
+def register(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+) -> dict[str, object]:
+    """Register advanced_a MCP tools; return exports for §3.3 façade shims."""
+    exports: dict[str, object] = {}
+    _register_run_transaction(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_validate_movement_follow(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_audit_hardcoded_dimensions(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_inspect_geometry(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_get_dependency_graph(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_match_subshape(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    return exports

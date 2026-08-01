@@ -258,3 +258,16 @@ def boolean_intersection_operation(
     return _boolean_operation(
         freecad, only_text_feedback, doc_name, shape1, shape2, result_name, "intersection",
     )
+
+
+__all__ = [
+    "boolean_difference_operation",
+    "boolean_intersection_operation",
+    "boolean_union_operation",
+    "chamfer_feature_operation",
+    "fillet_feature_operation",
+    "helical_sweep_feature_operation",
+    "loft_feature_operation",
+    "revolve_feature_operation",
+    "sweep_feature_operation",
+]

@@ -1,0 +1,201 @@
+"""MCP tool registration — measure b (Phase 7 / 7D)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+from mcp.server.fastmcp import Context
+from mcp.types import CallToolResult
+
+from .operations import (
+    center_of_mass_operation,
+    common_volume_along_path_operation,
+    get_global_shape_operation,
+    validate_geometry_operation,
+)
+from .tools_server_surfaces import server_connection
+
+if TYPE_CHECKING:
+    from .freecad_client import FreeCADConnection
+    from .instrumented_server import InstrumentedFastMCP
+    from .lease_manager import StaleLeaseRecoveryOrchestrator
+    from .server_state import ServerState
+def _register_get_global_shape(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def get_global_shape(
+        ctx: Context,
+        doc_name: str,
+        obj_name: str,
+    ) -> CallToolResult:
+        """Resolve a world-frame shape summary for solids and App::Link objects.
+
+        Use this when you need bbox/volume/COM without baking Placement twice.
+        Follows broken/null Link proxy shapes to ``LinkedObject`` when possible.
+
+        Args:
+            doc_name: Document containing the object.
+            obj_name: Object or Link name.
+
+        Returns:
+            JSON with frame=world metrics, bbox, volume, COM, and placement metadata.
+        """
+        return get_global_shape_operation(server_connection(), doc_name, obj_name)
+
+    exports['get_global_shape'] = get_global_shape
+def _register_common_volume_along_path(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def common_volume_along_path(
+        ctx: Context,
+        doc_name: str,
+        moving_object: str,
+        obstacle_objects: list[str],
+        path_object: str | None = None,
+        sample_count: int = 12,
+        samples: list[dict[str, Any]] | None = None,
+        volume_threshold_mm3: float = 1e-6,
+        stop_on_first_hit: bool = False,
+    ) -> CallToolResult:
+        """Sweep a moving solid along a path and report common volumes with obstacles.
+
+        Provide either:
+        - ``path_object`` + ``sample_count`` to sample a wire/edge path, or
+        - ``samples`` as ``[{x,y,z, yaw_deg?}, ...]`` world positions for the moving
+          object's global placement origin.
+
+        Runs read-only in the isolated worker.
+
+        Args:
+            doc_name: Document containing the objects.
+            moving_object: Object/Link that moves along the path.
+            obstacle_objects: Objects/Links to intersect against.
+            path_object: Optional wire/edge object to sample.
+            sample_count: Samples along ``path_object`` (ignored when ``samples`` is set).
+            samples: Explicit world-space sample points.
+            volume_threshold_mm3: Minimum common volume counted as a collision.
+            stop_on_first_hit: Stop sampling after the first colliding sample.
+
+        Returns:
+            JSON with per-sample common volumes and collision flags.
+        """
+        return common_volume_along_path_operation(
+            server_connection(),
+            doc_name,
+            moving_object,
+            obstacle_objects,
+            path_object=path_object,
+            sample_count=sample_count,
+            samples=samples,
+            volume_threshold_mm3=volume_threshold_mm3,
+            stop_on_first_hit=stop_on_first_hit,
+        )
+
+    exports['common_volume_along_path'] = common_volume_along_path
+def _register_center_of_mass(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def center_of_mass(
+        ctx: Context,
+        doc_name: str,
+        obj_name: str,
+    ) -> CallToolResult:
+        """Compute the centre of mass of a solid shape.
+
+        Args:
+            doc_name: Document containing the object.
+            obj_name: Name of the shape object.
+
+        Returns:
+            JSON with ``x``, ``y``, ``z`` coordinates in mm.
+        """
+        return center_of_mass_operation(server_connection(), doc_name, obj_name)
+
+    exports['center_of_mass'] = center_of_mass
+def _register_validate_geometry(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def validate_geometry(
+        ctx: Context,
+        doc_name: str,
+        obj_name: str,
+    ) -> CallToolResult:
+        """Validate the geometry of a shape and return diagnostic information.
+
+        Checks whether the shape is null, valid, closed, and reports face/edge/vertex
+        counts along with a BRep analysis result.
+
+        Args:
+            doc_name: Document containing the object.
+            obj_name: Name of the shape object.
+
+        Returns:
+            JSON with validity flags, counts, volume/area, and BRep analysis output.
+        """
+        return validate_geometry_operation(server_connection(), doc_name, obj_name)
+
+    exports['validate_geometry'] = validate_geometry
+
+def register(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+) -> dict[str, object]:
+    """Register measure_b MCP tools; return exports for §3.3 façade shims."""
+    exports: dict[str, object] = {}
+    _register_get_global_shape(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_common_volume_along_path(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_center_of_mass(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_validate_geometry(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    return exports

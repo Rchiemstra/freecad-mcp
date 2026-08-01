@@ -1,0 +1,213 @@
+"""MCP tool registration — measure a (Phase 7 / 7D)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from mcp.server.fastmcp import Context
+from mcp.types import CallToolResult
+
+from .operations import (
+    bounding_box_operation,
+    measure_angle_operation,
+    measure_area_operation,
+    measure_distance_operation,
+    measure_volume_operation,
+)
+from .tools_server_surfaces import server_connection
+
+if TYPE_CHECKING:
+    from .freecad_client import FreeCADConnection
+    from .instrumented_server import InstrumentedFastMCP
+    from .lease_manager import StaleLeaseRecoveryOrchestrator
+    from .server_state import ServerState
+def _register_measure_distance(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def measure_distance(
+        ctx: Context,
+        doc_name: str,
+        shape1_ref: str,
+        shape2_ref: str,
+    ) -> CallToolResult:
+        """Measure the minimum distance between two shapes.
+
+        Args:
+            doc_name: Document containing both shapes.
+            shape1_ref: Name of the first shape object.
+            shape2_ref: Name of the second shape object.
+
+        Returns:
+            JSON with ``distance`` in mm.
+        """
+        return measure_distance_operation(
+            server_connection(), doc_name, shape1_ref, shape2_ref
+        )
+
+    exports['measure_distance'] = measure_distance
+def _register_measure_angle(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def measure_angle(
+        ctx: Context,
+        doc_name: str,
+        edge1_ref: str,
+        edge2_ref: str,
+    ) -> CallToolResult:
+        """Measure the angle between two edges or objects.
+
+        Refs can be ``"ObjectName"`` or ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``).
+
+        Args:
+            doc_name: Document containing the objects.
+            edge1_ref: First edge reference.
+            edge2_ref: Second edge reference.
+
+        Returns:
+            JSON with ``angle_deg`` in degrees.
+        """
+        return measure_angle_operation(
+            server_connection(), doc_name, edge1_ref, edge2_ref
+        )
+
+    exports['measure_angle'] = measure_angle
+def _register_measure_area(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def measure_area(
+        ctx: Context,
+        doc_name: str,
+        obj_name: str,
+    ) -> CallToolResult:
+        """Measure the total surface area of a shape.
+
+        Args:
+            doc_name: Document containing the object.
+            obj_name: Name of the shape object.
+
+        Returns:
+            JSON with ``area_mm2`` and ``area_cm2``.
+        """
+        return measure_area_operation(server_connection(), doc_name, obj_name)
+
+    exports['measure_area'] = measure_area
+def _register_measure_volume(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def measure_volume(
+        ctx: Context,
+        doc_name: str,
+        obj_name: str,
+    ) -> CallToolResult:
+        """Measure the volume of a solid shape.
+
+        Args:
+            doc_name: Document containing the object.
+            obj_name: Name of the shape object.
+
+        Returns:
+            JSON with ``volume_mm3`` and ``volume_cm3``.
+        """
+        return measure_volume_operation(server_connection(), doc_name, obj_name)
+
+    exports['measure_volume'] = measure_volume
+def _register_bounding_box(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def bounding_box(
+        ctx: Context,
+        doc_name: str,
+        obj_name: str,
+    ) -> CallToolResult:
+        """Return the world-frame axis-aligned bounding box of a shape.
+
+        Link-safe: follows ``App::Link`` to the linked solid when needed and applies
+        ``getGlobalPlacement()`` once (no Placement double-counting).
+
+        Args:
+            doc_name: Document containing the object.
+            obj_name: Name of the shape object or Link.
+
+        Returns:
+            JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, and shape-source metadata.
+        """
+        return bounding_box_operation(server_connection(), doc_name, obj_name)
+
+    exports['bounding_box'] = bounding_box
+
+def register(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+) -> dict[str, object]:
+    """Register measure_a MCP tools; return exports for §3.3 façade shims."""
+    exports: dict[str, object] = {}
+    _register_measure_distance(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_measure_angle(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_measure_area(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_measure_volume(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_bounding_box(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    return exports

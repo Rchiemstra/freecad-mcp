@@ -1,0 +1,130 @@
+"""MCP tool registration — diagnostics (Phase 7 / 7D)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+from mcp.server.fastmcp import Context
+from mcp.types import CallToolResult
+
+from .operations import (
+    compare_documents_operation,
+    diagnose_helix_operation,
+    diagnose_pocket_operation,
+)
+from .tools_server_surfaces import server_connection, server_state
+
+if TYPE_CHECKING:
+    from .freecad_client import FreeCADConnection
+    from .instrumented_server import InstrumentedFastMCP
+    from .lease_manager import StaleLeaseRecoveryOrchestrator
+    from .server_state import ServerState
+def _register_diagnose_pocket(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def diagnose_pocket(
+        ctx: Context,
+        doc_name: str,
+        pocket_name: str,
+    ) -> CallToolResult:
+        """Diagnose a PartDesign Pocket: support/profile, direction, reversed, length, geometry."""
+        return diagnose_pocket_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            pocket_name,
+        )
+
+    exports['diagnose_pocket'] = diagnose_pocket
+def _register_diagnose_helix(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def diagnose_helix(
+        ctx: Context,
+        doc_name: str,
+        helix_name: str,
+    ) -> CallToolResult:
+        """Diagnose a helix/helical-sweep: axis, placement, profile, handedness, pitch/height,
+        result."""
+        return diagnose_helix_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            helix_name,
+        )
+
+    exports['diagnose_helix'] = diagnose_helix
+def _register_compare_documents(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def compare_documents(
+        ctx: Context,
+        doc_a: str,
+        doc_b: str,
+        object_pairs: list[Any] | None = None,
+    ) -> CallToolResult:
+        """Compare two open documents (e.g. V7 vs V8) via paired geometric state diffs.
+
+        ``object_pairs`` optional list of ``{\"a\": \"Body\", \"b\": \"Body\"}`` or
+        ``[\"BodyV7\", \"BodyV8\"]``. When omitted, compares all objects by name.
+        """
+        return compare_documents_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_a,
+            doc_b,
+            object_pairs=object_pairs,
+        )
+
+    exports['compare_documents'] = compare_documents
+
+def register(
+    mcp: InstrumentedFastMCP,
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], FreeCADConnection],
+    stale_recovery: StaleLeaseRecoveryOrchestrator,
+) -> dict[str, object]:
+    """Register diagnostics MCP tools; return exports for §3.3 façade shims."""
+    exports: dict[str, object] = {}
+    _register_diagnose_pocket(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_diagnose_helix(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    _register_compare_documents(
+        mcp,
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        stale_recovery=stale_recovery,
+        exports=exports,
+    )
+    return exports

@@ -230,3 +230,11 @@ def check_gear_pair_operation(
         "pressure_angle_deg":  pressure_angle,
         "notes":               notes,
     })
+
+
+__all__ = [
+    "check_gear_pair_operation",
+    "compute_gear_geometry_operation",
+    "create_helical_gear_operation",
+    "create_involute_gear_operation",
+]

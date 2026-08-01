@@ -1,0 +1,734 @@
+{
+  "tool_count": 170,
+  "register_order": [
+    "tools_runtime_info",
+    "tools_runtime_control",
+    "tools_lease_acquire_a",
+    "tools_lease_acquire_b",
+    "tools_lease_lifecycle",
+    "tools_core_document",
+    "tools_core_objects",
+    "tools_core_execute",
+    "tools_worker",
+    "tools_gui_view_a",
+    "tools_gui_view_b",
+    "tools_gui_document_a",
+    "tools_gui_document_b",
+    "tools_diagnostics",
+    "tools_sketch_create_1",
+    "tools_sketch_create_2",
+    "tools_sketch_primitives",
+    "tools_sketch_constraints_1",
+    "tools_sketch_constraints_2",
+    "tools_features_basic_1",
+    "tools_features_basic_2",
+    "tools_document_history",
+    "tools_parametric_sheet_a",
+    "tools_parametric_sheet_b",
+    "tools_parametric_body",
+    "tools_sketch_curves_a",
+    "tools_sketch_curves_a2",
+    "tools_sketch_curves_b",
+    "tools_sketch_curves_b2",
+    "tools_features_advanced_a",
+    "tools_features_advanced_b",
+    "tools_features_boolean",
+    "tools_gear_1",
+    "tools_gear_2",
+    "tools_measure_a",
+    "tools_measure_b",
+    "tools_transform",
+    "tools_io_export",
+    "tools_io_import",
+    "tools_assembly",
+    "tools_partdesign_a",
+    "tools_partdesign_a2",
+    "tools_partdesign_b",
+    "tools_partdesign_b2",
+    "tools_advanced_a",
+    "tools_advanced_b",
+    "tools_advanced_b2"
+  ],
+  "tools": {
+    "acquire_document_lock": {
+      "signature": "(ctx: 'Context', doc_name: 'str' = '', file_path: 'str' = '', session_id: 'str' = '', task_description: 'str' = '', selector: 'DocumentSelectorInput | None' = None, agent_id: 'str' = '', hash_policy: \"Literal['sha256']\" = 'sha256') -> 'CallToolResult'",
+      "docstring": "Acquire an exclusive renewable write lease for a FreeCAD document.\n\nPrefer ``selector`` with an addon-issued ``document_session_uuid`` plus\noptional name/path assertions. All supplied selector fields must resolve to\nthe same open document; ActiveDocument is never used. The one-time private\ncredential is retained by this MCP process for later calls.\n\n``doc_name``, ``file_path``, and ``session_id`` are deprecated selector\naliases. They still acquire through the authenticated protocol-v2 service\nand produce the same canonical schema-v2 sidecar as ``selector``."
+    },
+    "activate_document": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Make an already-open document the active GUI document."
+    },
+    "adopt_dirty_document": {
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', task_description: 'str' = '', agent_id: 'str' = '', hash_policy: \"Literal['sha256']\" = 'sha256') -> 'CallToolResult'",
+      "docstring": "Adopt existing unsaved changes into the verified lease-v2 lifecycle.\n\nThe selector must contain ``document_name``, ``document_session_uuid``, or\n``canonical_path``. Initial adoption of an unlocked dirty document is\nauto-authorized (no FreeCAD pop-up). Taking over another agent's dirty\n``LOCKED_ERROR`` lease is also auto-authorized without a FreeCAD pop-up.\nThe bounded handoff runs asynchronously while the tool returns a non-error\n``LOCKED_ERROR_HANDOFF_PENDING`` result with a ``request_id``. Resume with\n``get_request_status`` then\n``claim_acquisition_result`` (same path as transport loss).\n``cancel_request`` aborts the handoff before CAS. Adoption creates a\nrecovery snapshot before this MCP process receives the lease credential.\nThe main FCStd is not saved by adoption."
+    },
+    "animate_placement": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', keyframes: 'list[dict[str, Any]] | None' = None, path_object: 'str | None' = None, sample_count: 'int' = 12, view_name: \"Literal['Isometric', 'Front', 'Top', 'Right', 'Back', 'Left', 'Bottom', 'Dimetric', 'Trimetric']\" = 'Isometric', focus_objects: 'list[str] | None' = None, width: 'int | None' = None, height: 'int | None' = None, encode_video: 'bool' = False, fps: 'float' = 8.0, output_path: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Animate an object's Placement along keyframes or a path wire, capture frames, restore.\n\nPrefer this over Shape edits for App::Link visibility. Optionally encodes MP4\nvia system ffmpeg when ``encode_video=True``."
+    },
+    "audit_hardcoded_dimensions": {
+      "signature": "(ctx: 'Context', doc_name: 'str', body_name: 'str', flag_aliases: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Report driving dimensions in a body that lack expressions (M8)."
+    },
+    "body_create": {
+      "signature": "(ctx: 'Context', doc_name: 'str', body_name: 'str') -> 'CallToolResult'",
+      "docstring": "Create a PartDesign::Body.\n\nRecommended pattern: Body → Sketch on XY_Plane → Pad → Pocket."
+    },
+    "body_set_tip": {
+      "signature": "(ctx: 'Context', doc_name: 'str', body_name: 'str', feature_name: 'str') -> 'CallToolResult'",
+      "docstring": "Set a Body's Tip to a feature (keeps the PartDesign history tip correct)."
+    },
+    "boolean_difference": {
+      "signature": "(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'",
+      "docstring": "Subtract shape2 from shape1 (Part::Cut).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the base shape.\n    shape2: Name of the tool shape to subtract.\n    result_name: Name for the resulting cut shape.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "boolean_intersection": {
+      "signature": "(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'",
+      "docstring": "Compute the Boolean intersection (common) of two shapes (Part::Common).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the first shape.\n    shape2: Name of the second shape.\n    result_name: Name for the resulting common shape.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "boolean_union": {
+      "signature": "(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'",
+      "docstring": "Compute the Boolean union (fuse) of two shapes (Part::Fuse).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the first shape object.\n    shape2: Name of the second shape object.\n    result_name: Name for the resulting fused shape.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "bounding_box": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Return the world-frame axis-aligned bounding box of a shape.\n\nLink-safe: follows ``App::Link`` to the linked solid when needed and applies\n``getGlobalPlacement()`` once (no Placement double-counting).\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object or Link.\n\nReturns:\n    JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, and shape-source metadata."
+    },
+    "build_path_wire": {
+      "signature": "(ctx: 'Context', doc_name: 'str', wire_name: 'str', segments: 'list[dict[str, Any]]', tolerance_mm: 'float' = 0.5, container: 'str | None' = None, if_exists: \"Literal['error', 'skip', 'replace']\" = 'error') -> 'CallToolResult'",
+      "docstring": "Build a Part wire from sketch geometry and optional bridge segments."
+    },
+    "cancel_request": {
+      "signature": "(ctx: 'Context', request_id: 'str') -> 'CallToolResult'",
+      "docstring": "Request cooperative cancellation for an authenticated RPC request."
+    },
+    "cancel_worker_job": {
+      "signature": "(ctx: 'Context', job_id: 'str') -> 'CallToolResult'",
+      "docstring": "Cancel a pending worker job or terminate the active worker process tree."
+    },
+    "capture_state": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_names: 'list[str] | None' = None) -> 'CallToolResult'",
+      "docstring": "Capture a compact geometric state for a set of objects (I10 / P10).\n\nRecords each object's placement, bounding box and face/edge counts. Pass the\nreturned JSON to ``geometric_diff`` to produce a text-only diff when a\nviewable image can't be returned.\n\nArgs:\n    doc_name: The document to capture.\n    object_names: Optional list of object names; all objects when None."
+    },
+    "center_of_mass": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Compute the centre of mass of a solid shape.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``x``, ``y``, ``z`` coordinates in mm."
+    },
+    "chamfer_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', base_feature: 'str', chamfer_name: 'str', size: 'float', edge_refs: 'list[str] | None' = None, body_name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Add a chamfer to edges of an existing solid (PartDesign::Chamfer).\n\nArgs:\n    doc_name: Document containing the body and feature.\n    base_feature: Name of the feature to chamfer.\n    chamfer_name: Name for the resulting Chamfer feature.\n    size: Chamfer size in mm (must be > 0).\n    edge_refs: Optional list of edge references like ``[\"Edge1\",\"Edge3\"]``.\n        If omitted, all edges are chamfered.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "check_gear_pair": {
+      "signature": "(ctx: 'Context', teeth1: 'int', module1: 'float', teeth2: 'int', module2: 'float', pressure_angle: 'float' = 20.0, center_distance: 'float | None' = None) -> 'CallToolResult'",
+      "docstring": "Verify that two gears form a valid meshing pair.\n\nChecks module compatibility, computes gear ratio and theoretical centre\ndistance. Optionally validates a specified centre distance.\n\nArgs:\n    teeth1: Teeth count of the first gear (driver).\n    module1: Module of the first gear in mm.\n    teeth2: Teeth count of the second gear (driven).\n    module2: Module of the second gear in mm.\n    pressure_angle: Shared pressure angle in degrees.\n    center_distance: Optional measured centre distance to validate in mm.\n\nReturns:\n    JSON with ``meshes`` (bool), ``gear_ratio``, ``theoretical_cd_mm``, and notes."
+    },
+    "check_rpc_sync": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Verify that the next FreeCAD GUI response belongs to this exact call.\n\nA unique nonce is round-tripped through FreeCAD's GUI task queue. Use this\nafter an execute timeout or before relying on model inspection results. A\ntimeout or nonce mismatch means the queue is not safe for further work."
+    },
+    "claim_acquisition_result": {
+      "signature": "(ctx: 'Context', request_id: 'str') -> 'CallToolResult'",
+      "docstring": "Custody a lost or pending acquire/adopt/create lease credential.\n\nCall after ``get_request_status`` reports ``result_claimable`` (for example\nfollowing an automatic ``LOCKED_ERROR_HANDOFF_PENDING`` handoff or a\ntransport-lost acquisition). This MCP process retains the one-time token;\nthe tool result never includes the raw credential secret."
+    },
+    "clear_expression": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', prop_path: 'str') -> 'CallToolResult'",
+      "docstring": "Clear an expression binding on an object property."
+    },
+    "close_document": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Close an open FreeCAD document and free its memory.\n\nUse this for session hygiene when a document is no longer needed.\nUnsaved changes will be lost. Under a document lease, use\n``finalize_document_edit`` for verified save and release before closing.\n\nArgs:\n    doc_name: The document to close.\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    ```json\n    {\"doc_name\": \"Part\"}\n    ```"
+    },
+    "common_volume_along_path": {
+      "signature": "(ctx: 'Context', doc_name: 'str', moving_object: 'str', obstacle_objects: 'list[str]', path_object: 'str | None' = None, sample_count: 'int' = 12, samples: 'list[dict[str, Any]] | None' = None, volume_threshold_mm3: 'float' = 1e-06, stop_on_first_hit: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Sweep a moving solid along a path and report common volumes with obstacles.\n\nProvide either:\n- ``path_object`` + ``sample_count`` to sample a wire/edge path, or\n- ``samples`` as ``[{x,y,z, yaw_deg?}, ...]`` world positions for the moving\n  object's global placement origin.\n\nRuns read-only in the isolated worker.\n\nArgs:\n    doc_name: Document containing the objects.\n    moving_object: Object/Link that moves along the path.\n    obstacle_objects: Objects/Links to intersect against.\n    path_object: Optional wire/edge object to sample.\n    sample_count: Samples along ``path_object`` (ignored when ``samples`` is set).\n    samples: Explicit world-space sample points.\n    volume_threshold_mm3: Minimum common volume counted as a collision.\n    stop_on_first_hit: Stop sampling after the first colliding sample.\n\nReturns:\n    JSON with per-sample common volumes and collision flags."
+    },
+    "compare_documents": {
+      "signature": "(ctx: 'Context', doc_a: 'str', doc_b: 'str', object_pairs: 'list[Any] | None' = None) -> 'CallToolResult'",
+      "docstring": "Compare two open documents (e.g. V7 vs V8) via paired geometric state diffs.\n\n``object_pairs`` optional list of ``{\"a\": \"Body\", \"b\": \"Body\"}`` or\n``[\"BodyV7\", \"BodyV8\"]``. When omitted, compares all objects by name."
+    },
+    "compute_gear_geometry": {
+      "signature": "(ctx: 'Context', teeth: 'int', module: 'float', pressure_angle: 'float' = 20.0, clearance: 'float' = 0.0, backlash: 'float' = 0.0, helix_angle: 'float' = 0.0) -> 'CallToolResult'",
+      "docstring": "Compute standard gear geometry parameters without creating geometry.\n\nReturns pitch diameter, base diameter, addendum, dedendum, circular pitch,\nand base pitch for the specified gear.\n\nArgs:\n    teeth: Number of teeth.\n    module: Gear module in mm.\n    pressure_angle: Pressure angle in degrees (default 20).\n    clearance: Extra root clearance in mm.\n    backlash: Tooth backlash in mm.\n    helix_angle: Helix angle in degrees (0 = spur gear).\n\nReturns:\n    JSON with all standard gear parameters."
+    },
+    "create_assembly": {
+      "signature": "(ctx: 'Context', doc_name: 'str', assembly_name: 'str' = 'Assembly', create_joint_group: 'bool' = True, recompute: 'bool' = False, if_exists: \"Literal['error', 'skip', 'replace']\" = 'error') -> 'CallToolResult'",
+      "docstring": "Create a built-in Assembly workbench assembly object."
+    },
+    "create_assembly_grounded_joint": {
+      "signature": "(ctx: 'Context', doc_name: 'str', assembly_name: 'str', component_name: 'str', label: 'str | None' = None, recompute: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Ground an assembly component through the headless Assembly API."
+    },
+    "create_assembly_joint": {
+      "signature": "(ctx: 'Context', doc_name: 'str', assembly_name: 'str', joint_type: \"Literal['Fixed', 'Revolute', 'Cylindrical', 'Slider', 'Ball', 'Distance', 'Parallel', 'Perpendicular', 'Angle', 'RackPinion', 'Screw', 'Gears', 'Belt']\", ref1_component: 'str', ref2_component: 'str', ref1_element: 'str' = '', ref2_element: 'str' = '', ref1_vertex: 'str | None' = None, ref2_vertex: 'str | None' = None, label: 'str | None' = None, solve: 'bool' = True, presolve: 'bool' = True, recompute: 'bool' = True, properties: 'dict[str, Any] | None' = None) -> 'CallToolResult'",
+      "docstring": "Create a built-in Assembly joint from two component subelement references."
+    },
+    "create_datum_plane": {
+      "signature": "(ctx: 'Context', doc_name: 'str', plane_name: 'str', body_name: 'str', mode: \"Literal['midpoint_between_faces', 'through_point', 'offset_from_face', 'between_parallel_planes', 'plane_from_binder_face']\", source_ref: 'str | None' = None, face_a: 'str | None' = None, face_b: 'str | None' = None, offset_along_normal: 'list[float] | None' = None, map_mode: 'str' = 'FlatFace', if_exists: \"Literal['error', 'skip', 'replace']\" = 'error') -> 'CallToolResult'",
+      "docstring": "Create a PartDesign datum plane for assembly reference workflows.\n\nRecipes (avoid the silent P1/P3 traps):\n  * **XY_Plane + AttachmentOffset instead of a rotated datum.** Prefer\n    attaching to an origin ``XY_Plane``/``XZ_Plane``/``YZ_Plane`` and using\n    ``offset_along_normal`` + ``AttachmentOffset`` to position the plane,\n    rather than creating a datum on a default axis and then rotating its\n    Placement. A rotated ``Deactivated`` datum can drop the rotation (P3).\n  * **Identity-body rebuild for cross-body datums.** When a datum in Body A\n    must reference a face in Body B, keep Body B at an identity placement\n    (move the geometry into Body B via a pad/transform instead of moving the\n    body). FreeCAD's attacher can drop a non-identity source-body placement\n    (P1). Use ``preview_attachment`` to confirm, and ``placement_audit`` to\n    find risk concentrations."
+    },
+    "create_document": {
+      "signature": "(ctx: 'Context', name: 'str') -> 'CallToolResult'",
+      "docstring": "Create a new document in FreeCAD.\n\nArgs:\n    name: The name of the document to create.\n\nReturns:\n    A message indicating the success or failure of the document creation.\n\nExamples:\n    If you want to create a document named \"MyDocument\", you can use the following data.\n    ```json\n    {\n        \"name\": \"MyDocument\"\n    }\n    ```"
+    },
+    "create_helical_gear": {
+      "signature": "(ctx: 'Context', doc_name: 'str', gear_name: 'str', teeth: 'int', module: 'float', width: 'float', helix_angle: 'float' = 15.0, pressure_angle: 'float' = 20.0, bore_diameter: 'float' = 0.0, clearance: 'float' = 0.0, backlash: 'float' = 0.0, samples_per_flank: 'int' = 12, body_name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Create a helical gear (involute profile + AdditiveHelix twist).\n\nArgs:\n    doc_name: Document to create the gear in.\n    gear_name: Name for the feature.\n    teeth: Number of teeth.\n    module: Gear module in mm (normal module).\n    width: Face width in mm.\n    helix_angle: Helix angle in degrees (default 15).\n    pressure_angle: Normal pressure angle in degrees (default 20).\n    bore_diameter: Optional centre bore diameter in mm.\n    clearance: Extra root clearance in mm.\n    backlash: Tooth backlash in mm.\n    samples_per_flank: Points per involute flank.\n    body_name: Optional existing PartDesign Body.\n\nReturns:\n    Success message with gear metadata and an isometric screenshot."
+    },
+    "create_involute_gear": {
+      "signature": "(ctx: 'Context', doc_name: 'str', gear_name: 'str', teeth: 'int', module: 'float', width: 'float', pressure_angle: 'float' = 20.0, bore_diameter: 'float' = 0.0, clearance: 'float' = 0.0, backlash: 'float' = 0.0, samples_per_flank: 'int' = 12, body_name: 'str | None' = None, sketch_name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Create an involute spur gear using the correct mathematical involute profile.\n\nThe tooth flanks follow the true involute of the base circle:\n    x(t) = r_b*(cos(t) + t*sin(t))\n    y(t) = r_b*(sin(t) - t*cos(t))\n\nThis produces correct meshing geometry (replaces the deprecated\n``create_spur_gear`` which used a smoothstep approximation).\n\nArgs:\n    doc_name: Document to create the gear in.\n    gear_name: Name for the Pad feature.\n    teeth: Number of teeth (minimum 3).\n    module: Gear module in mm. Pitch diameter = module x teeth.\n    width: Face width (pad length) in mm.\n    pressure_angle: Pressure angle in degrees (default 20).\n    bore_diameter: Optional centre bore diameter in mm.\n    clearance: Extra root clearance in mm (added to standard 1.25m dedendum).\n    backlash: Tooth backlash in mm at the pitch circle.\n    samples_per_flank: Points per involute flank (higher = smoother, slower).\n    body_name: Optional existing PartDesign Body.\n    sketch_name: Optional sketch name (default: ``<gear_name>_Sketch``).\n\nReturns:\n    Success message with gear metadata and an isometric screenshot.\n\nExamples:\n    24-tooth module-2 gear with 6 mm bore:\n    ```json\n    {\"doc_name\":\"GearDoc\",\"gear_name\":\"Gear24\",\"teeth\":24,\"module\":2,\"width\":10,\"bore_diameter\":6}\n    ```"
+    },
+    "create_object": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_type: 'str', obj_name: 'str', analysis_name: 'str | None' = None, obj_properties: 'dict[str, Any] | None' = None) -> 'CallToolResult'",
+      "docstring": "Create a new object in FreeCAD.\nObject type is starts with \"Part::\" or \"Draft::\" or \"PartDesign::\" or \"Fem::\".\n\nNOTE: For mechanical parts the default workflow is a parametric PartDesign feature\nhistory (body_create -> sketch_create/sketch_attach -> constraints ->\nget_sketch_diagnostics -> pad_feature/pocket_feature), not generic primitives. Use\nthis tool for reference/non-parametric geometry, imported assets, temporary validation\nsolids, or when a specific primitive is explicitly requested. See the\nasset_creation_strategy prompt.\n\nArgs:\n    doc_name: The name of the document to create the object in.\n    obj_type: The type of the object to create (e.g. 'Part::Box', 'Part::Cylinder',\n        'Draft::Circle', 'PartDesign::Body', etc.).\n    obj_name: The name of the object to create.\n    obj_properties: The properties of the object to create.\n\nReturns:\n    A message indicating the success or failure of the object creation and a\n    screenshot of the object.\n\nExamples:\n    If you want to create a cylinder with a height of 30 and a radius of 10,\n    you can use the following data.\n    ``Placement.Rotation.Angle`` is in degrees.\n    ```json\n    {\n        \"doc_name\": \"MyCylinder\",\n        \"obj_name\": \"Cylinder\",\n        \"obj_type\": \"Part::Cylinder\",\n        \"obj_properties\": {\n            \"Height\": 30,\n            \"Radius\": 10,\n            \"Placement\": {\n                \"Base\": {\n                    \"x\": 10,\n                    \"y\": 10,\n                    \"z\": 0\n                },\n                \"Rotation\": {\n                    \"Axis\": {\n                        \"x\": 0,\n                        \"y\": 0,\n                        \"z\": 1\n                    },\n                    \"Angle\": 45\n                }\n            },\n            \"ViewObject\": {\n                \"ShapeColor\": [0.5, 0.5, 0.5, 1.0]\n            }\n        }\n    }\n    ```\n\n    If you want to create a circle with a radius of 10, you can use the following data.\n    ```json\n    {\n        \"doc_name\": \"MyCircle\",\n        \"obj_name\": \"Circle\",\n        \"obj_type\": \"Draft::Circle\",\n    }\n    ```\n\n    If you want to create a FEM analysis, you can use the following data.\n    ```json\n    {\n        \"doc_name\": \"MyFEMAnalysis\",\n        \"obj_name\": \"FemAnalysis\",\n        \"obj_type\": \"Fem::AnalysisPython\",\n    }\n    ```\n\n    If you want to create a FEM constraint, you can use the following data.\n    ```json\n    {\n        \"doc_name\": \"MyFEMConstraint\",\n        \"obj_name\": \"FemConstraint\",\n        \"obj_type\": \"Fem::ConstraintFixed\",\n        \"analysis_name\": \"MyFEMAnalysis\",\n        \"obj_properties\": {\n            \"References\": [\n                {\n                    \"object_name\": \"MyObject\",\n                    \"face\": \"Face1\"\n                }\n            ]\n        }\n    }\n    ```\n\n    If you want to create a FEM mechanical material, you can use the following data.\n    ```json\n    {\n        \"doc_name\": \"MyFEMAnalysis\",\n        \"obj_name\": \"FemMechanicalMaterial\",\n        \"obj_type\": \"Fem::MaterialCommon\",\n        \"analysis_name\": \"MyFEMAnalysis\",\n        \"obj_properties\": {\n            \"Material\": {\n                \"Name\": \"MyMaterial\",\n                \"Density\": \"7900 kg/m^3\",\n                \"YoungModulus\": \"210 GPa\",\n                \"PoissonRatio\": 0.3\n            }\n        }\n    }\n    ```\n\n    If you want to create a FEM mesh, you can use the following data.\n    The `Shape` property is required (legacy `Part` is also accepted).\n    On FreeCAD 1.x the size limits are `CharacteristicLengthMax/Min`;\n    the legacy `ElementSizeMax/Min` keys are also accepted.\n    ```json\n    {\n        \"doc_name\": \"MyFEMMesh\",\n        \"obj_name\": \"FemMesh\",\n        \"obj_type\": \"Fem::FemMeshGmsh\",\n        \"analysis_name\": \"MyFEMAnalysis\",\n        \"obj_properties\": {\n            \"Shape\": \"MyObject\",\n            \"CharacteristicLengthMax\": 10,\n            \"CharacteristicLengthMin\": 0.1\n        }\n    }\n    ```"
+    },
+    "create_part_container": {
+      "signature": "(ctx: 'Context', doc_name: 'str', part_name: 'str', parent_container: 'str | None' = None, if_exists: \"Literal['error', 'skip', 'replace']\" = 'error') -> 'CallToolResult'",
+      "docstring": "Create an App::Part assembly container."
+    },
+    "create_placement_binder": {
+      "signature": "(ctx: 'Context', doc_name: 'str', owner_body: 'str', name: 'str', source: 'str', relative: 'bool' = True, bind_mode: 'str' = 'Synchronized') -> 'CallToolResult'",
+      "docstring": "Create a SubShapeBinder using a body subpath with placement diagnostics (M6).\n\n``source`` should be a body subpath such as ``MG996RHornRef.HornHubPad.Face3``.\nReturns resolved source/binder local and global centers/normals and whether\nparent-body placement was dropped."
+    },
+    "create_placement_datum": {
+      "signature": "(ctx: 'Context', doc_name: 'str', owner_body: 'str', name: 'str', source: 'str', relative: 'bool' = True, offset: 'list[float] | None' = None) -> 'CallToolResult'",
+      "docstring": "Create a datum plane from a body subpath with local/global diagnostics (M6)."
+    },
+    "create_spur_gear": {
+      "signature": "(ctx: 'Context', doc_name: 'str', gear_name: 'str', teeth: 'int', module: 'float', width: 'float', pressure_angle: 'float' = 20.0, bore_diameter: 'float' = 0.0, clearance: 'float' = 0.0, backlash: 'float' = 0.0, samples_per_flank: 'int' = 8, body_name: 'str | None' = None, sketch_name: 'str | None' = None, tooth_profile: 'str' = 'involute') -> 'CallToolResult'",
+      "docstring": "Create a spur gear from a Sketcher tooth profile and Pad.\n\nThis tool generates the selected tooth profile in a Sketcher sketch, adds\npractical coincident and construction-circle constraints, then creates the\n3-D solid with a PartDesign Pad. It does not require the external Gear\nworkbench.\n\nArgs:\n    doc_name: The document to create the gear in.\n    gear_name: Name for the resulting Pad feature.\n    teeth: Number of teeth. Must be at least 3.\n    module: Gear module in mm.\n    width: Pad length in mm.\n    pressure_angle: Involute pressure angle in degrees. Defaults to 20.\n    bore_diameter: Optional center bore diameter in mm.\n    clearance: Extra root clearance in mm.\n    backlash: Tooth backlash in mm, applied at the pitch circle.\n    samples_per_flank: Approximation samples per tooth flank/profile side.\n    body_name: Optional existing PartDesign Body. If omitted, a new body is created.\n    sketch_name: Optional sketch name. Defaults to `<gear_name>_Sketch`.\n    tooth_profile: Tooth profile type. Supported values:\n        `involute` for normal real gears, `cycloidal` for clock-like\n        profiles, `trapezoid` for angled flat-sided visual gears,\n        `straight` / `straight_teeth` for square radial-sided teeth,\n        `circular_arc` / `novikov` for continuous circular-arc teeth, and\n        `pin` / `lantern` for hub-and-pin style gears.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Create a 24-tooth, module 2 gear with a 6 mm bore:\n    ```json\n    {\n      \"doc_name\": \"GearDoc\",\n      \"gear_name\": \"Gear24\",\n      \"teeth\": 24,\n      \"module\": 2,\n      \"width\": 10,\n      \"bore_diameter\": 6\n    }\n    ```"
+    },
+    "create_subshape_binder": {
+      "signature": "(ctx: 'Context', doc_name: 'str', binder_name: 'str', source_object: 'str', sub_elements: 'list[str] | None' = None, target_body: 'str | None' = None, target_container: 'str | None' = None, relative: 'bool' = False, sync_placement: 'bool' = True, if_exists: \"Literal['error', 'skip', 'replace']\" = 'error') -> 'CallToolResult'",
+      "docstring": "Create a PartDesign SubShapeBinder with placement validation."
+    },
+    "delete_object": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', recursive: 'bool' = False, force: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Delete an object without silently orphaning its dependents (I5 / P6).\n\nFreeCAD's delete deliberately does not remove an object's dependents, leaving\nthem Invalid. To avoid silent orphans this tool:\n  * ``recursive=True`` -> remove dependents (leaves first) then the object;\n  * ``force=True``      -> remove only the object and report the orphans left;\n  * otherwise           -> refuse and list the dependents so the agent decides.\n\nArgs:\n    doc_name: The name of the document to delete the object from.\n    obj_name: The name of the object to delete.\n    recursive: If True, delete the object's dependents first (no orphans).\n    force: If True, delete only the object even if it has dependents (orphans\n        remain and are reported).\n\nReturns:\n    JSON ``{ok, object, deleted, refused, dependents|orphans_left, ...}``\n    plus a recompute log of any non-clean objects, and a screenshot."
+    },
+    "diagnose_helix": {
+      "signature": "(ctx: 'Context', doc_name: 'str', helix_name: 'str') -> 'CallToolResult'",
+      "docstring": "Diagnose a helix/helical-sweep: axis, placement, profile, handedness, pitch/height,\nresult."
+    },
+    "diagnose_parametric": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Diagnose parametric / expression / sketch issues.\n\nReports invalid objects, expression bind issues, and sketch constraint\nconflict/redundant/malformed summaries. Scope to one object or the whole doc."
+    },
+    "diagnose_pocket": {
+      "signature": "(ctx: 'Context', doc_name: 'str', pocket_name: 'str') -> 'CallToolResult'",
+      "docstring": "Diagnose a PartDesign Pocket: support/profile, direction, reversed, length, geometry."
+    },
+    "edge_axis": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', edge: 'str') -> 'CallToolResult'",
+      "docstring": "Return the global axis/direction (and centre) of an edge (M6 / P8 guard).\n\nDerives the vector from the curve geometry rotated by the object's global\nplacement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose edge to inspect.\n    edge: The edge name, e.g. ``\"Edge2\"``."
+    },
+    "edit_object": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', obj_properties: 'dict[str, Any]') -> 'CallToolResult'",
+      "docstring": "Edit an object in FreeCAD.\nThis tool is used when the `create_object` tool cannot handle the object creation.\n\nArgs:\n    doc_name: The name of the document to edit the object in.\n    obj_name: The name of the object to edit.\n    obj_properties: The properties of the object to edit. Placement-typed\n        properties such as ``Placement`` and ``AttachmentOffset`` accept the\n        same dict form returned by ``get_object``. ``Rotation.Angle`` is in\n        **degrees** (FreeCAD's Python ``Rotation.Angle`` property is radians;\n        MCP converts on serialize/deserialize so get→edit round-trips)::\n\n            {\"Base\": {\"x\": 0, \"y\": 0, \"z\": 10},\n             \"Rotation\": {\"Axis\": {\"x\": 0, \"y\": 0, \"z\": 1}, \"Angle\": 90}}\n\nReturns:\n    A message indicating the success or failure of the object editing and a\n    screenshot of the object."
+    },
+    "encode_view_video": {
+      "signature": "(ctx: 'Context', frames: 'list[dict[str, Any]] | None' = None, orbit: 'dict[str, Any] | None' = None, frame_paths: 'list[str] | None' = None, output_path: 'str | None' = None, fps: 'float' = 8.0, width: 'int | None' = None, height: 'int | None' = None) -> 'CallToolResult'",
+      "docstring": "Encode a view sequence to MP4 using system ffmpeg (not a git submodule).\n\nProvide existing ``frame_paths`` and/or capture via ``frames``/``orbit``\n(same shape as ``save_view_sequence``). Resolves ffmpeg from\n``FREECAD_MCP_FFMPEG`` or PATH."
+    },
+    "execute_code": {
+      "signature": "(ctx: 'Context', code: 'str', document: 'str | None' = None, recompute: 'str' = 'none', recompute_documents: 'list[str] | None' = None, affected_documents: 'list[str] | None' = None, read_only: 'bool' = False, restore_active_document: 'bool' = True, activate_document: 'bool' = False, capture_view: 'bool' = False, execution_mode: \"Literal['gui', 'worker', 'auto']\" = 'auto', timeout_seconds: 'float | None' = None, link_policy: \"Literal['strict', 'warn']\" = 'strict', allow_gui_geometry_loop: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Execute arbitrary Python code in FreeCAD.\n\nCHOOSING A MODE — expensive geometry loops must not run on the GUI thread.\nAny iteration (for/while/comprehension) containing an expensive OCCT call\n(``distToShape``/``isInside``/``common``/``cut``/``fuse``/``section``/\n``removeSplitter``/``isValid``/``check``) MUST use ``read_only=true`` +\n``execution_mode=\"worker\"``\n+ ``timeout_seconds``. Such loops are non-interruptible on the GUI thread and\nwill freeze FreeCAD (a timeout cannot stop them). They are blocked in ``gui``\nmode unless you pass ``allow_gui_geometry_loop=true``, which is reserved for a\ngenuine, bounded live-document mutation that cannot run against a worker\nsnapshot. ``isInside`` sampling loops are worker-only and cannot use that\noverride. Split large sweeps into small batches, and after a GUI timeout do not\nresubmit GUI work until a liveness check (e.g. ``get_worker_status``) passes.\n``read_only=true`` may temporarily rotate/recompute geometry in the worker\nsnapshot; it only forbids modifying the live GUI documents.\n\nArgs:\n    code: The Python code to execute.\n    document: Target document name for scoped recompute/error reporting.\n    recompute: ``none`` (default for inspection), ``target``, or ``all``.\n    recompute_documents: Explicit document list to recompute when recompute is ``target``.\n    affected_documents: Complete declared write scope for mutating code.\n    read_only: Run only against an immutable FreeCADCmd snapshot. This never\n        executes arbitrary code against a live GUI document in any lease mode.\n    restore_active_document: Restore the active document after execution.\n    activate_document: Activate ``document`` before running code.\n    capture_view: Include a viewport screenshot (default false).\n    execution_mode: Conservative ``auto`` (default), explicit ``gui``, or\n        isolated ``worker``. ``read_only=True`` always selects the worker,\n        even if ``gui`` is requested.\n    timeout_seconds: Hard worker timeout from 1 to 900 seconds.\n    link_policy: Worker snapshot policy for broken joint/link refs. ``strict``\n        fails the snapshot; ``warn`` continues and returns ``link_warnings``.\n        Only meaningful with ``execution_mode=\"worker\"``.\n    allow_gui_geometry_loop: Last-resort opt-in to run an expensive-geometry\n        loop on the GUI thread (``execution_mode=\"gui\"``, ``read_only=false``)\n        for a genuine, bounded live-document mutation. Default false; prefer\n        read-only worker mode for any analysis.\n\nReturns:\n    Execution output with structured session/recompute metadata, or an error with traceback."
+    },
+    "execute_code_async": {
+      "signature": "(ctx: 'Context', code: 'str') -> 'CallToolResult'",
+      "docstring": "Deprecated legacy background execution; blocked in lease enforcement.\n\nThis compatibility tool is unavailable in ``enforce`` mode because it has\nno explicit document scope or GUI-thread lease revalidation. Use snapshot\nworker analysis for read-only work and typed leased mutations to apply a\nresult. In off/observe compatibility mode, use this ONLY for long-running\nbackground computations that do NOT touch the\nFreeCAD GUI or mutate the FreeCAD document tree directly.\n\nThis tool runs the submitted code in a background thread and returns\nimmediately. Because it does not run on FreeCAD's main GUI thread, the code\nmust NOT call FreeCADGui APIs, manipulate the active view or selection, create\nor edit document objects, change object properties, call doc.recompute(), or\nsave documents.\n\nFor code that touches FreeCAD documents, document objects, FreeCADGui, the\nactive view, selection, or document objects, use typed RPC tools. Public\n``execute_code(read_only=True)`` runs only in an isolated snapshot worker;\nlive mutating execution is a separately enabled compatibility path and is\ndisabled by default in lease enforcement mode.\n\nUse execute_code_async only for background-safe work such as long-running\npure OCCT geometry calculations (e.g. fuse/cut/loft on already-fetched shapes)\nor other CPU-bound computations that do not interact with the document or GUI.\n\nTypical usage pattern:\n1. Fetch shapes into local variables first (via execute_code on the GUI thread).\n2. Store intermediate results in a module-level Python variable (not in the\n   FreeCAD document) so execute_code can read them later.\n3. Run the heavy computation via execute_code_async.\n4. After the expected computation time has elapsed, apply results to the\n   document via execute_code (which runs on the GUI thread).\n\nArgs:\n    code: Background-safe Python code to execute.\n\nReturns:\n    A message confirming that background execution has started."
+    },
+    "export_brep": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', file_path: 'str') -> 'CallToolResult'",
+      "docstring": "Export a shape to a BREP file (OpenCASCADE native format).\n\nBREP preserves exact geometry and is lossless for round-tripping.\n\nArgs:\n    doc_name: Document containing the shape.\n    obj_name: Name of the shape object to export.\n    file_path: Absolute path to the output BREP file.\n\nReturns:\n    JSON confirming success and the file path."
+    },
+    "export_step": {
+      "signature": "(ctx: 'Context', doc_name: 'str', file_path: 'str', obj_names: 'list[str] | None' = None) -> 'CallToolResult'",
+      "docstring": "Export shapes to a STEP file.\n\nArgs:\n    doc_name: Document containing the shapes.\n    file_path: Absolute path to the output STEP file.\n    obj_names: Optional list of object names to export. If omitted,\n        all objects with a Shape are exported.\n\nReturns:\n    JSON with the count of exported objects and the file path."
+    },
+    "export_stl": {
+      "signature": "(ctx: 'Context', doc_name: 'str', file_path: 'str', obj_names: 'list[str] | None' = None, mesh_deviation: 'float' = 0.1) -> 'CallToolResult'",
+      "docstring": "Export shapes to an STL file (tessellated mesh).\n\nArgs:\n    doc_name: Document containing the shapes.\n    file_path: Absolute path to the output STL file.\n    obj_names: Optional list of object names. If omitted, all shapes exported.\n    mesh_deviation: Tessellation accuracy in mm (smaller = finer, default 0.1).\n\nReturns:\n    JSON with the count of exported objects, facet count, and file path."
+    },
+    "face_normal": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', face: 'str') -> 'CallToolResult'",
+      "docstring": "Return the global normal (and centre) of a face (M6 / P8 guard).\n\nDerives the vector from the face geometry via ``normalAt`` rotated by the\nobject's global placement, avoiding the Direction-vs-Axis trap. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose face to inspect.\n    face: The face name, e.g. ``\"Face3\"``."
+    },
+    "fillet_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', base_feature: 'str', fillet_name: 'str', radius: 'float', edge_refs: 'list[str] | None' = None, body_name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Add a fillet to edges of an existing solid (PartDesign::Fillet).\n\nArgs:\n    doc_name: Document containing the body and feature.\n    base_feature: Name of the feature to fillet.\n    fillet_name: Name for the resulting Fillet feature.\n    radius: Fillet radius in mm (must be > 0).\n    edge_refs: Optional list of edge references like ``[\"Edge1\",\"Edge3\"]``.\n        If omitted, all edges are filleted.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "finalize_document_edit": {
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', save_mode: \"Literal['save', 'save_as', 'first_save']\" = 'save', destination: 'str' = '', overwrite: 'bool' = False, expected_destination_sha256: 'str' = '', validation_profile: 'str' = 'default') -> 'CallToolResult'",
+      "docstring": "Validate, Save/Save As, reopen-verify, then CAS-release the lease.\n\nAny validation, save, or sidecar-removal failure retains a visible locked\nerror/recovery record instead of presenting a clean release."
+    },
+    "find_edges": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', type: 'str | None' = None, direction_approx: 'dict | list | None' = None, center_approx: 'dict | list | None' = None, radius: 'float | None' = None, tol: 'float' = 0.001, center_tol: 'float' = 1.0, limit: 'int' = 10) -> 'CallToolResult'",
+      "docstring": "Find edges of an object by geometry — removes edge-index fragility (I4).\n\nReturns a ranked JSON list of edges matching the criteria, each with its\nglobal centre, global direction, length and radius. E.g. find the circular\nedge of radius 5 on top of a cylinder with\n``type='Circle', radius=5, center_approx={'x':0,'y':0,'z':10}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose edges to search.\n    type: Optional curve type filter: 'Line', 'Circle', 'Ellipse',\n        'BSplineCurve'.\n    direction_approx: Optional vector; edges whose axis is parallel to this\n        within ``tol`` are kept (use for line edges).\n    center_approx: Optional point; edges whose global centre is within\n        ``center_tol`` mm are kept, results ranked by closeness.\n    radius: Optional radius; circular/elliptical edges within ``tol`` are kept.\n    tol: Parallelism and radius tolerance (default 1e-3).\n    center_tol: Centre proximity tolerance in mm (default 1.0).\n    limit: Maximum number of results (default 10)."
+    },
+    "find_faces": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', type: 'str | None' = None, normal_approx: 'dict | list | None' = None, center_approx: 'dict | list | None' = None, radius: 'float | None' = None, tol: 'float' = 0.001, center_tol: 'float' = 1.0, limit: 'int' = 10) -> 'CallToolResult'",
+      "docstring": "Find faces of an object by geometry — removes face-index fragility (I4).\n\nReturns a ranked JSON list of faces matching the criteria, each with its\nglobal centre, global normal, area and radius. Ask for \"the top planar face\"\n(``type='Plane', normal_approx={'x':0,'y':0,'z':1}``) instead of guessing\n``Face6``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose faces to search.\n    type: Optional surface type filter: 'Plane', 'Cylinder', 'Cone',\n        'Sphere', 'Toroid'.\n    normal_approx: Optional {'x','y','z'} (or [x,y,z]) vector; faces whose\n        normal is parallel to this within ``tol`` are kept.\n    center_approx: Optional point; faces whose global centre is within\n        ``center_tol`` mm of it are kept, and results are ranked by closeness.\n    radius: Optional radius; cylindrical/spherical faces within ``tol`` are kept.\n    tol: Parallelism and radius tolerance (default 1e-3).\n    center_tol: Centre proximity tolerance in mm (default 1.0).\n    limit: Maximum number of results (default 10)."
+    },
+    "geometric_diff": {
+      "signature": "(ctx: 'Context', doc_name: 'str', before: 'dict', object_names: 'list[str] | None' = None) -> 'CallToolResult'",
+      "docstring": "Structured geometric diff between a captured ``before`` state and now (I10).\n\nThe P10 text-only fallback: returns JSON\n``{ok, doc, diffs: [{name, bbox_before/after, placement_before/after,\nfaces_added/removed, changed}]}`` when a viewable image can't be returned.\n\nArgs:\n    doc_name: The document to diff against.\n    before: A state dict previously returned by ``capture_state``.\n    object_names: Optional list of object names; all objects when None."
+    },
+    "get_dependency_graph": {
+      "signature": "(ctx: 'Context', doc_name: 'str', root: 'str') -> 'CallToolResult'",
+      "docstring": "Property-annotated dependency graph from a root object (M13)."
+    },
+    "get_document_lock": {
+      "signature": "(ctx: 'Context', doc_name: 'str' = '', file_path: 'str' = '', session_id: 'str' = '', selector: 'DocumentSelectorInput | None' = None) -> 'CallToolResult'",
+      "docstring": "Return redacted effective local/foreign lease state for one document.\n\nPrefer ``selector``. The legacy identity arguments remain temporarily for\noff/observe migration compatibility. Status never includes the bearer token\nor its fingerprint; malformed or conflicting sidecars report locked/unknown."
+    },
+    "get_document_tree": {
+      "signature": "(ctx: 'Context', doc_name: 'str', root_filter: 'str | None' = None, max_depth: 'int' = 4, include: 'list[str] | None' = None, include_properties: 'list[str] | None' = None, selected_nodes: 'list[str] | None' = None) -> 'CallToolResult'",
+      "docstring": "Return a compact document/container tree.\n\nArgs:\n    doc_name: Document to inspect.\n    root_filter: Optional Name/Label substring used to select tree roots.\n    max_depth: Maximum container depth to include.\n    include: Fields to include, defaulting to Name/Label/TypeId/Visibility/State.\n    include_properties: Optional object properties to include.\n    selected_nodes: Names/labels whose properties should be included.\n\nReturns:\n    JSON tree for compact agent inspection."
+    },
+    "get_global_shape": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Resolve a world-frame shape summary for solids and App::Link objects.\n\nUse this when you need bbox/volume/COM without baking Placement twice.\nFollows broken/null Link proxy shapes to ``LinkedObject`` when possible.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Object or Link name.\n\nReturns:\n    JSON with frame=world metrics, bbox, volume, COM, and placement metadata."
+    },
+    "get_gui_state": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Report the active GUI context (read-only).\n\nReturns JSON with the active document, active PartDesign Body, active\nworkbench, the object currently in edit-mode, and the current selection.\nUse it to orient before editing -- e.g. confirm the right Body is active\nbefore adding a sketch/feature, or check whether a Sketch is open for edit."
+    },
+    "get_object": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Get an object from a document.\nYou can use this tool to get the properties of an object to see what you can check or edit.\n\nArgs:\n    doc_name: The name of the document to get the object from.\n    obj_name: The name of the object to get.\n\nReturns:\n    The object and a screenshot of the object."
+    },
+    "get_objects": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Get all objects in a document.\nYou can use this tool to get the objects in a document to see what you can check or edit.\n\nArgs:\n    doc_name: The name of the document to get the objects from.\n\nReturns:\n    A list of objects in the document and a screenshot of the document."
+    },
+    "get_parts_list": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Get the list of parts in the parts library addon."
+    },
+    "get_recompute_log": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Return the recompute state of every object in a document.\n\nUse this after a failed pad/pocket/pattern to find out which object is\n'Invalid' or 'Error' without triggering a full recompute. This is a\ncheap read-only query.\n\nArgs:\n    doc_name: The document to inspect.\n\nReturns:\n    JSON list of objects with their name, label, TypeId, state flags,\n    and a 'valid' boolean. Objects with state 'Invalid' or 'Error'\n    are highlighted so you know exactly what needs fixing.\n\nExamples:\n    ```json\n    {\"doc_name\": \"Part\"}\n    ```"
+    },
+    "get_request_status": {
+      "signature": "(ctx: 'Context', request_id: 'str') -> 'CallToolResult'",
+      "docstring": "Query a timed-out or long-running authenticated request without replaying it."
+    },
+    "get_runtime_info": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Report exact MCP, addon, FreeCAD, RPC, and isolated-profile identity."
+    },
+    "get_selection": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Return the current FreeCADGui selection (document/object/sub)."
+    },
+    "get_sketch_diagnostics": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str') -> 'CallToolResult'",
+      "docstring": "Return solver diagnostics for a Sketcher sketch.\n\nCall this before pad_feature to verify the sketch is fully constrained and\nclosed. Returns degrees of freedom, constraint counts, conflicting /\nredundant constraint indices, solver message, and whether the sketch wire\nis closed.\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the sketch to inspect.\n\nReturns:\n    JSON dict with:\n    - geometry_count: number of geometry elements\n    - constraint_count: number of constraints\n    - state: object state flags (e.g. ['Up-to-date'])\n    - conflicting_constraints: list of conflicting constraint indices\n    - redundant_constraints: list of redundant constraint indices\n    - malformed_constraints: list of malformed constraint indices\n    - solver_message: solver status string (if available)\n    - is_closed: whether the sketch wire forms a closed profile\n\nExamples:\n    ```json\n    {\"doc_name\": \"Part\", \"sketch_name\": \"Sketch\"}\n    ```"
+    },
+    "get_sketch_geometry": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', include_constraints: 'bool' = True, include_external: 'bool' = True, global_coords: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Return sketch geometry endpoints, construction flags, constraints, and external refs."
+    },
+    "get_view": {
+      "signature": "(ctx: 'Context', view_name: \"Literal['Isometric', 'Front', 'Top', 'Right', 'Back', 'Left', 'Bottom', 'Dimetric', 'Trimetric', 'Rear', 'Side', 'SideRight', 'SideLeft']\", width: 'int | None' = None, height: 'int | None' = None, focus_object: 'str | None' = None, focus_objects: 'list[str] | None' = None, yaw_deg: 'float | None' = None) -> 'CallToolResult'",
+      "docstring": "Get a screenshot of the active view.\n\nArgs:\n    view_name: Standard view preset. Aliases: Rear→Back, Side/SideRight→Right, SideLeft→Left.\n    Available: Isometric, Front, Top, Right, Back, Left, Bottom, Dimetric, Trimetric\n    (plus Rear, Side, SideRight, SideLeft aliases).\n    width: The width of the screenshot in pixels. If not specified, uses the viewport width.\n    height: The height of the screenshot in pixels. If not specified, uses the viewport height.\n    focus_object: Optional single object name to frame. Comma-separated names are\n        also accepted.\n    focus_objects: Optional list of object names to frame together (preferred for\n        stations/assemblies).\n    yaw_deg: Optional extra camera yaw in degrees after framing.\n\nReturns:\n    A screenshot of the active view."
+    },
+    "get_worker_status": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Report isolated FreeCADCmd availability and whether a worker job is active.\n\nReturns JSON with:\n- ``state``: ``idle`` | ``busy`` | ``unavailable``\n- ``busy``: true while a FreeCADCmd job is running\n- ``active_job_id`` / ``pending_job_ids`` / ``queue_depth``\n- ``available``, ``version``, ``executable``, ``last_error``"
+    },
+    "helical_sweep_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', profile_sketch: 'str', helix_name: 'str', pitch: 'float', height: 'float', radius: 'float', body_name: 'str | None' = None, left_handed: 'bool' = False, reversed_dir: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Sweep a profile along a helix (PartDesign::AdditiveHelix).\n\nUse this to create springs, screw threads, worm gear blanks, etc.\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    profile_sketch: Name of the cross-section sketch.\n    helix_name: Name for the resulting Helix feature.\n    pitch: Distance between successive turns in mm.\n    height: Total height of the helix in mm.\n    radius: Helix radius in mm.\n    body_name: Optional explicit PartDesign Body name.\n    left_handed: If true, produce a left-handed helix.\n    reversed_dir: If true, reverse the helix direction.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "import_brep": {
+      "signature": "(ctx: 'Context', doc_name: 'str', file_path: 'str', obj_name: 'str' = 'BRepImport') -> 'CallToolResult'",
+      "docstring": "Import a BREP file into an existing FreeCAD document.\n\nArgs:\n    doc_name: Target document name.\n    file_path: Absolute path to the BREP file to import.\n    obj_name: Name for the imported Part::Feature object.\n\nReturns:\n    JSON confirming success and the object name."
+    },
+    "import_step": {
+      "signature": "(ctx: 'Context', doc_name: 'str', file_path: 'str') -> 'CallToolResult'",
+      "docstring": "Import a STEP file into an existing FreeCAD document.\n\nArgs:\n    doc_name: Target document name.\n    file_path: Absolute path to the STEP file to import.\n\nReturns:\n    JSON confirming success and the file path."
+    },
+    "insert_part_from_library": {
+      "signature": "(ctx: 'Context', doc_name: 'str', relative_path: 'str') -> 'CallToolResult'",
+      "docstring": "Insert a part from the parts library into an explicit leased document.\n\nArgs:\n    doc_name: Target FreeCAD document name.\n    relative_path: The relative path of the part to insert.\n\nReturns:\n    A message indicating the success or failure of the part insertion and a\n    screenshot of the object."
+    },
+    "inspect_geometry": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', subshape: 'str | None' = None, activate: 'bool' = False, restore_active_document: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Normalized local/global geometry inspection for any object type (M10/M11)."
+    },
+    "inspect_references": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_names: 'list[str] | None' = None, only_invalid: 'bool' = False, validate: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Inspect link/subelement properties without evaluating their owner shapes.\n\nThis is the recovery-safe alternative to ``get_object`` for a document that\ncontains stale ``EdgeNNN``, ``FaceNNN``, or ``VertexNNN`` references. It\nscans link properties such as ``Support``, ``AttachmentSupport``, and a\nsketch's ordered ``ExternalGeometry`` list. It never recomputes the document.\n\nArgs:\n    doc_name: Open FreeCAD document name.\n    object_names: Optional owner objects to inspect; omit to scan the document.\n    only_invalid: Return only properties containing invalid subelements.\n    validate: Resolve referenced subelements on their target shapes. Leave\n        false for circularly broken documents; validity is then reported as\n        unevaluated instead of reading ``Shape``.\n\nReturns:\n    Structured link properties, preserving target and subelement order."
+    },
+    "linear_pattern_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', feature_name: 'str', pattern_name: 'str', length: 'float', occurrences: 'int', direction: 'str' = 'X_Axis', body_name: 'str | None' = None, reversed_dir: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Repeat an existing PartDesign feature along a straight direction.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting LinearPattern feature.\n    length: Total pattern length in mm.\n    occurrences: Number of repeated instances, including the original.\n    direction: Axis or reference edge. Examples: `X_Axis`, `Y_Axis`,\n        `Z_Axis`, or `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the pattern direction.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Pattern a pocket 5 times over 40 mm along X:\n    ```json\n    {\"doc_name\": \"Part\", \"feature_name\": \"Pocket\", \"pattern_name\": \"PocketArray\",\n     \"length\": 40, \"occurrences\": 5}\n    ```"
+    },
+    "list_document_locks": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "List redacted local, foreign, stale, error, and dirty-recovery records.\n\nThe response contains no bearer tokens or token fingerprints."
+    },
+    "list_documents": {
+      "signature": "(ctx: 'Context') -> 'CallToolResult'",
+      "docstring": "Get the list of open documents in FreeCAD.\n\nReturns:\n    A list of document names."
+    },
+    "list_expressions": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str') -> 'CallToolResult'",
+      "docstring": "List ExpressionEngine bindings on an object."
+    },
+    "loft_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_names: 'list[str]', loft_name: 'str', body_name: 'str | None' = None, ruled: 'bool' = False, closed: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Loft through two or more sketch sections (PartDesign::AdditiveLoft).\n\nArgs:\n    doc_name: Document containing the sketches and body.\n    sketch_names: Ordered list of sketch names to loft through (minimum 2).\n    loft_name: Name for the resulting Loft feature.\n    body_name: Optional explicit PartDesign Body name.\n    ruled: If true, use straight (ruled) lofting instead of smooth.\n    closed: If true, close the loft back to the first section.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "match_subshape": {
+      "signature": "(ctx: 'Context', doc_name: 'str', source_object: 'str', source_subshape: 'str', target_object: 'str', limit: 'int' = 10, tolerance: 'float' = 1.0) -> 'CallToolResult'",
+      "docstring": "Rank target subshapes by semantic similarity to a source subshape (M14)."
+    },
+    "measure_angle": {
+      "signature": "(ctx: 'Context', doc_name: 'str', edge1_ref: 'str', edge2_ref: 'str') -> 'CallToolResult'",
+      "docstring": "Measure the angle between two edges or objects.\n\nRefs can be ``\"ObjectName\"`` or ``\"ObjectName:EdgeN\"`` (e.g. ``\"Box:Edge1\"``).\n\nArgs:\n    doc_name: Document containing the objects.\n    edge1_ref: First edge reference.\n    edge2_ref: Second edge reference.\n\nReturns:\n    JSON with ``angle_deg`` in degrees."
+    },
+    "measure_area": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Measure the total surface area of a shape.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``area_mm2`` and ``area_cm2``."
+    },
+    "measure_distance": {
+      "signature": "(ctx: 'Context', doc_name: 'str', shape1_ref: 'str', shape2_ref: 'str') -> 'CallToolResult'",
+      "docstring": "Measure the minimum distance between two shapes.\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1_ref: Name of the first shape object.\n    shape2_ref: Name of the second shape object.\n\nReturns:\n    JSON with ``distance`` in mm."
+    },
+    "measure_volume": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Measure the volume of a solid shape.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``volume_mm3`` and ``volume_cm3``."
+    },
+    "mirror_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', feature_name: 'str', mirror_name: 'str', plane: 'str' = 'YZ_Plane', body_name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Mirror an existing PartDesign feature across a plane.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to mirror, for example `Pocket` or `Pad`.\n    mirror_name: Name for the resulting Mirrored feature.\n    plane: Mirror plane. Examples: `YZ_Plane`, `XZ_Plane`, `XY_Plane`,\n        or `ObjectName:Face1`.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Mirror a pocket across the YZ plane:\n    ```json\n    {\"doc_name\": \"Part\", \"feature_name\": \"Pocket\", \"mirror_name\": \"PocketMirror\",\n     \"plane\": \"YZ_Plane\"}\n    ```"
+    },
+    "move_object": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', target_container: 'str', remove_from_old_parent: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Move an object into a PartDesign Body or App::Part container."
+    },
+    "open_document": {
+      "signature": "(ctx: 'Context', path: 'str') -> 'CallToolResult'",
+      "docstring": "Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.\n\nUse this to load V7 and V8 into the same FreeCAD session for comparison."
+    },
+    "pad_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', pad_name: 'str', length: 'float', body_name: 'str | None' = None, symmetric: 'bool' = False, reversed_dir: 'bool' = False, strict: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Extrude (pad) a closed sketch profile into a 3-D solid (PartDesign::Pad).\n\nStrict PartDesign: the Pad is always created inside a PartDesign Body. If\n`body_name` is given it must resolve; otherwise the Body that owns the sketch\nis auto-detected. If no owning Body can be found the tool FAILS -- it never\nfalls back to a loose, non-parametric feature in the document. Before building,\nthe sketch is checked for conflicting/malformed constraints and a closed\nprofile; after building, Body membership, Body.Tip, and a non-null solid are\nverified. The whole build is wrapped in a transaction, so a failed check leaves\nno partial feature behind.\n\nArgs:\n    doc_name: The document containing the sketch and body.\n    sketch_name: Name of the sketch to extrude.\n    pad_name: Name for the resulting Pad feature.\n    length: Extrusion distance in mm.\n    body_name: Optional explicit PartDesign Body name.\n    symmetric: If true, extrude equally in both directions (length/2 each).\n    reversed_dir: If true, reverse the extrusion direction.\n    strict: If true, require an explicit `body_name` (owning-Body auto-detect\n        is disabled). Recommended for a deterministic PartDesign history.\n\nReturns:\n    A structured JSON workflow result (document, body, sketch, feature,\n    attachment, tip, solid_count, state, bbox, diagnostics) plus an isometric\n    screenshot, or a clear failure.\n\nExamples:\n    Pad \"Sketch\" by 15 mm inside \"Body\":\n    ```json\n    {\"doc_name\": \"Part\", \"sketch_name\": \"Sketch\", \"pad_name\": \"Pad\", \"length\": 15,\n     \"body_name\": \"Body\"}\n    ```"
+    },
+    "placement_audit": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Audit placements per Body/Part (M3).\n\nLists each Body/Part's ``Placement``, ``getGlobalPlacement()`` base, and the\ncross-body datums that reference it. Use to spot P1 risk concentrations and\nplacement/geometry disagreements. Returns JSON\n``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,\nglobal_placement_base, cross_body_datums}]}``.\n\nArgs:\n    doc_name: The document to audit."
+    },
+    "pocket_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', pocket_name: 'str', length: 'float', body_name: 'str | None' = None, symmetric: 'bool' = False, reversed_dir: 'bool' = False, strict: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Cut (pocket) a closed sketch profile into an existing solid (PartDesign::Pocket).\n\nStrict PartDesign: the Pocket is always created inside a PartDesign Body. If\n`body_name` is given it must resolve; otherwise the Body that owns the sketch\nis auto-detected. If no owning Body can be found the tool FAILS -- it never\nfalls back to a loose feature in the document. Before building, the sketch is\nchecked for conflicting/malformed constraints and a closed profile; after\nbuilding, Body membership, Body.Tip, and a non-null solid are verified. The\nwhole build is wrapped in a transaction, so a failed check leaves no partial\nfeature behind.\n\nArgs:\n    doc_name: The document containing the sketch and body.\n    sketch_name: Name of the sketch to use as the cut profile.\n    pocket_name: Name for the resulting Pocket feature.\n    length: Cut depth in mm.\n    body_name: Optional explicit PartDesign Body name.\n    symmetric: If true, cut equally in both directions.\n    reversed_dir: If true, reverse the cut direction.\n    strict: If true, require an explicit `body_name` (owning-Body auto-detect\n        is disabled). Recommended for a deterministic PartDesign history.\n\nReturns:\n    A structured JSON workflow result (document, body, sketch, feature,\n    attachment, tip, solid_count, state, bbox, diagnostics) plus an isometric\n    screenshot, or a clear failure.\n\nExamples:\n    Pocket \"HoleSketch\" by 5 mm:\n    ```json\n    {\"doc_name\": \"Part\", \"sketch_name\": \"HoleSketch\", \"pocket_name\": \"Pocket\",\n     \"length\": 5, \"body_name\": \"Body\"}\n    ```"
+    },
+    "polar_pattern_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', feature_name: 'str', pattern_name: 'str', occurrences: 'int', angle: 'float' = 360.0, axis: 'str' = 'Z_Axis', body_name: 'str | None' = None, reversed_dir: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Repeat an existing PartDesign feature around an axis.\n\nUse this for circular hole patterns or radial repeats of sketch-based Pads\nand Pockets. The source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting PolarPattern feature.\n    occurrences: Number of repeated instances, including the original.\n    angle: Total angular span in degrees. Defaults to 360.\n    axis: Axis or reference edge. Examples: `Z_Axis`, `X_Axis`, or\n        `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the angular direction.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Pattern a pocket 6 times around the Z axis:\n    ```json\n    {\"doc_name\": \"Part\", \"feature_name\": \"Pocket\", \"pattern_name\": \"BoltCircle\",\n     \"occurrences\": 6}\n    ```"
+    },
+    "preview_attachment": {
+      "signature": "(ctx: 'Context', doc_name: 'str', datum_name: 'str') -> 'CallToolResult'",
+      "docstring": "Preview an existing datum's attachment — a read-only P1 diagnostic.\n\nReports the support reference, the support face/edge global centre and\nnormal, the datum's global base/normal, the owning bodies and their\nplacements, ``source_body_placement_dropped`` (True when the support lives\nin a different body with a non-identity placement — the cross-body\nattachment drop risk), and a signed distance + normal-angle diff between the\ndatum and its support.\n\nUse this BEFORE building geometry on a cross-body datum, and to debug a\ndatum that landed in the wrong place, instead of rebuilding the model.\n\nArgs:\n    doc_name: The document containing the datum.\n    datum_name: The name of the datum (PartDesign::Plane/Line/Point, or any\n        object with an AttachmentSupport) to inspect."
+    },
+    "recompute_and_wait": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Recompute a document and block until the GUI is idle, then report state.\n\nAn explicit recompute-complete + GUI-idle barrier: runs the recompute on the\nGUI thread, drains queued Qt events, and returns per-object recompute state\n(errors, still-Touched objects, whether the document settled). Run it after a\nbatch of edits, or after an execute_code that may have left async work, before\ntrusting follow-up model checks. Complements ``check_rpc_sync`` (which only\nproves the RPC queue is live, not that a recompute finished)."
+    },
+    "recompute_document": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Force FreeCAD to recompute all objects in a document.\n\nUseful after a sequence of property edits that did not trigger an automatic\nrecompute, or after resolving a dependency cycle.\n\nArgs:\n    doc_name: The document to recompute.\n\nReturns:\n    A message indicating success or failure."
+    },
+    "redo": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Redo the previously undone operation in a FreeCAD document.\n\nArgs:\n    doc_name: The document to redo in.\n\nReturns:\n    A message indicating success or failure."
+    },
+    "refresh_view": {
+      "signature": "(ctx: 'Context', focus_objects: 'list[str] | None' = None, focus_object: 'str | None' = None, touch_objects: 'list[str] | None' = None, fit: 'bool' = False, capture: 'bool' = False, view_name: \"Literal['Isometric', 'Front', 'Top', 'Right', 'Back', 'Left', 'Bottom', 'Dimetric', 'Trimetric']\" = 'Isometric') -> 'CallToolResult'",
+      "docstring": "Force a GUI redraw after Link/shape edits; optionally touch Placement and frame."
+    },
+    "release_document_lock": {
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput | None' = None, disposition: \"Literal['saved', 'restored']\" = 'saved', doc_key: 'str' = '', token: 'str' = '') -> 'CallToolResult'",
+      "docstring": "CAS-release only a clean, verified saved/restored document lease.\n\nPrefer ``selector``; its credential is selected from private MCP memory.\n``doc_key`` and ``token`` are deprecated protocol-v1 compatibility fields\nfor off/observe migration only and are rejected for enforce-mode mutation.\nAgents cannot use this tool for dirty abandonment."
+    },
+    "relink_references": {
+      "signature": "(ctx: 'Context', doc_name: 'str', from_obj: 'str', to_obj: 'str') -> 'CallToolResult'",
+      "docstring": "Re-point every reference to ``from_obj`` so it points to ``to_obj`` (M5).\n\nScans all link-type properties (AttachmentSupport, Support, Profile, Base,\nTool, Source, Group, ...) of all document objects and re-points them, making\nrebuilds non-destructive. Subshape names are preserved; mismatches surface\nvia the recompute log. Returns JSON ``{ok, from, to, relinked, count}``.\n\nArgs:\n    doc_name: The document to edit.\n    from_obj: The object whose references are being redirected away from.\n    to_obj: The object references should now point to."
+    },
+    "reload_document": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Close and re-open a document to pick up external file changes.\n\nUse this AFTER the document's .FCStd file has been modified by\nsomething outside of FreeCAD's GUI process — for example, a\nheadless `freecadcmd` script that edited and saved the file. The\nopen GUI document is otherwise unaware of on-disk changes; this\ntool closes the stale in-memory copy and reopens the file from\ndisk so the GUI shows current geometry.\n\nArgs:\n    doc_name: The name of the open document to reload. Must match\n        the name shown by ``list_documents``.\n\nReturns:\n    A message confirming the document was reloaded, or describing\n    the failure (document not loaded, no associated file, etc).\n\nExamples:\n    ```json\n    {\n        \"doc_name\": \"chassis\"\n    }\n    ```"
+    },
+    "repair_references": {
+      "signature": "(ctx: 'Context', doc_name: 'str', repairs: 'list[dict[str, Any]]', recompute: 'bool' = False, validate: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Atomically replace broken link/subelement properties without recomputing.\n\nUse this when stale external geometry prevents normal MCP write/evaluate\ncalls. Each repair replaces one complete link property. Keeping the same\nreference-list order preserves Sketcher external-geometry indices.\n\nExample ``repairs`` value::\n\n    [{\n      \"object\": \"ServoEdgeBinder\",\n      \"property\": \"Support\",\n      \"references\": [{\n        \"document\": \"Model\",\n        \"object\": \"ServoBody\",\n        \"subelements\": [\"Edge42\"]\n      }]\n    }]\n\nBatch every known broken property into one call. The batch is preflighted\nand applied in a FreeCAD transaction. Recompute defaults to false so all\ncircularly broken links can be repaired before dependent geometry evaluates.\nThis tool does not save the document.\n\nArgs:\n    doc_name: Open FreeCAD document containing the owner objects.\n    repairs: Complete replacement references for each owner property.\n    recompute: Recompute once after committing the entire batch.\n    validate: Confirm proposed subelements exist before writing. This reads\n        target shapes, so leave false for the circular-recovery path and\n        validate with an explicit recompute after the complete batch.\n\nReturns:\n    Applied properties, commit state, deferred/attempted recompute state,\n    and any invalid links remaining on the repaired owner objects."
+    },
+    "repair_view_placements": {
+      "signature": "(ctx: 'Context', doc_name: 'str', touch_objects: 'list[str]', fit: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Reassign selected Placement values under the document's active lease."
+    },
+    "restore": {
+      "signature": "(ctx: 'Context', doc_name: 'str', snapshot_id: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Restore a snapshot, replacing the current document in place (I7).\n\nIf ``snapshot_id`` is omitted, the most recent snapshot is restored. The\ncurrent document is closed and the snapshot file is reopened, so the\ndocument is restored in place. Returns JSON\n``{ok, restored_id, doc, new_doc, count}``.\n\nArgs:\n    doc_name: The document to restore into (replaced in place).\n    snapshot_id: Optional snapshot id returned by ``snapshot``; latest if omitted."
+    },
+    "revolve_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', revolve_name: 'str', angle: 'float' = 360.0, axis: 'str' = 'Z_Axis', body_name: 'str | None' = None, symmetric: 'bool' = False, reversed_dir: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Revolve a closed sketch profile around an axis (PartDesign::Revolution).\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    sketch_name: Name of the sketch to revolve.\n    revolve_name: Name for the resulting Revolution feature.\n    angle: Revolution angle in degrees (default 360 = full solid of revolution).\n    axis: Revolution axis. Examples: ``Z_Axis``, ``X_Axis``, ``ObjectName:Edge1``.\n    body_name: Optional explicit PartDesign Body name.\n    symmetric: If true, revolve symmetrically about the sketch plane.\n    reversed_dir: If true, reverse the revolution direction.\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "rotate": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', axis_x: 'float', axis_y: 'float', axis_z: 'float', angle_deg: 'float', center_x: 'float' = 0.0, center_y: 'float' = 0.0, center_z: 'float' = 0.0) -> 'CallToolResult'",
+      "docstring": "Rotate an object around a specified axis.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the object to rotate.\n    axis_x: X component of the rotation axis vector.\n    axis_y: Y component of the rotation axis vector.\n    axis_z: Z component of the rotation axis vector.\n    angle_deg: Rotation angle in degrees (positive = CCW by right-hand rule).\n    center_x: X coordinate of the rotation centre (default 0).\n    center_y: Y coordinate of the rotation centre (default 0).\n    center_z: Z coordinate of the rotation centre (default 0).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "run_fem_analysis": {
+      "signature": "(ctx: 'Context', doc_name: 'str', analysis_name: 'str', timeout: 'int' = 600) -> 'CallToolResult'",
+      "docstring": "Run the CalculiX solver on an existing Fem::FemAnalysis container and return summary results.\n\nPrerequisites in the document:\n- A Part-derived solid (e.g. Part::Box, PartDesign::Body) acting as the geometry.\n- A Fem::AnalysisPython container created via `create_object`.\n- A Fem::MaterialCommon assigned to the geometry, added to the analysis.\n- A Fem::FemMeshGmsh referencing the geometry, added to the analysis (the\n  mesh is generated automatically when created via `create_object`).\n- At least one Fem::ConstraintFixed and one Fem::ConstraintForce (or\n  ConstraintPressure) bound to faces of the geometry, added to the analysis.\n\nA SolverCcxTools is auto-created if the analysis has none.\n\nThe solver runs synchronously on the FreeCAD GUI thread and blocks all\nother RPC calls for its duration; do not fan out parallel requests.\n\nReturns max von Mises stress (MPa), max/min displacement (mm), node count,\nand the working directory CalculiX wrote to. On failure, returns the\nprerequisite-check or solver error along with the working directory for\ntriage.\n\nArgs:\n    doc_name: Name of the FreeCAD document.\n    analysis_name: Name of the Fem::AnalysisPython object.\n    timeout: Seconds to wait for the solver (default 600)."
+    },
+    "run_transaction": {
+      "signature": "(ctx: 'Context', doc_name: 'str', label: 'str', code: 'str', dry_run: 'bool' = False, commit_on_success: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Run code inside ``openTransaction`` with automatic rollback on failure (M5).\n\nAuthenticated lease mode rejects this legacy nested-code helper because\nits inner ``exec`` cannot be independently scoped by the addon's mutation\nguard. Use typed modelling tools, or the explicitly enabled unsafe\n``execute_code`` route with ``affected_documents``."
+    },
+    "save_document": {
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', validation_profile: 'str' = 'default') -> 'CallToolResult'",
+      "docstring": "Compare, save, hash, reopen-verify, and retain the renewable lease.\n\nSelect the open document with ``document_name``,\n``document_session_uuid``, or ``canonical_path``. If more than one field is\nsupplied, every field must identify the same live document."
+    },
+    "save_document_as": {
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', destination: 'str', overwrite: 'bool' = False, expected_destination_sha256: 'str' = '', validation_profile: 'str' = 'default') -> 'CallToolResult'",
+      "docstring": "Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases.\n\nSelect the open document with ``document_name``,\n``document_session_uuid``, or ``canonical_path``. If more than one field is\nsupplied, every field must identify the same live document."
+    },
+    "save_view_sequence": {
+      "signature": "(ctx: 'Context', frames: 'list[dict[str, Any]] | None' = None, width: 'int | None' = None, height: 'int | None' = None, orbit: 'dict[str, Any] | None' = None) -> 'CallToolResult'",
+      "docstring": "Capture multiple framed screenshots for motion/station review.\n\nProvide ``frames`` and/or ``orbit``.\n\nFrame dict fields:\n- ``view_name`` (default ``Isometric``)\n- ``focus_object`` / ``focus_objects``\n- ``yaw_deg``\n- ``label``\n\nOrbit dict fields:\n- ``focus_object`` / ``focus_objects``\n- ``steps`` (default 8)\n- ``view_name`` (default ``Isometric``)\n- ``yaw_start_deg`` (default 0)\n\nReturns text metadata plus one PNG image per successful frame."
+    },
+    "scale": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', sx: 'float', sy: 'float', sz: 'float') -> 'CallToolResult'",
+      "docstring": "Scale an object non-uniformly along the three axes.\n\nNote: scaling a PartDesign solid converts it to a dumb Part::Feature.\nUse for Part workbench shapes or final geometry only.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the object to scale.\n    sx: Scale factor along X.\n    sy: Scale factor along Y.\n    sz: Scale factor along Z.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "select_subshapes": {
+      "signature": "(ctx: 'Context', doc_name: 'str', selections: 'list[Any]', clear: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Select GUI-visible objects or sub-shapes (FaceN/EdgeN/VertexN).\n\nEach selection may be ``\"Box\"``, ``\"Box:Face1\"``, or\n``{\"object\": \"Box\", \"sub\": \"Face1\"}``. Prefer ``find_faces`` to\ndiscover indices, then this tool to highlight them in the GUI."
+    },
+    "set_color": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', r: 'float', g: 'float', b: 'float', transparency: 'float' = 0.0) -> 'CallToolResult'",
+      "docstring": "Set the display colour and transparency of an object.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the object.\n    r: Red channel 0.0-1.0.\n    g: Green channel 0.0-1.0.\n    b: Blue channel 0.0-1.0.\n    transparency: Transparency 0.0 (opaque) - 1.0 (fully transparent).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "set_expression": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', prop_path: 'str', expression: 'str') -> 'CallToolResult'",
+      "docstring": "Bind a FreeCAD expression to an object property.\n\nCommon ``prop_path`` values:\n- Sketch dimensional constraints: ``Constraints[3]``\n- Pad/Pocket: ``Length``, ``Length2``\n\nExpression examples: ``<<Dims>>.Wall``, ``<<Dims>>.PadH``.\n\nReturns structured JSON; on parse/bind failure returns an error (not a\nsilent Invalid object)."
+    },
+    "set_section_view": {
+      "signature": "(ctx: 'Context', enabled: 'bool | None' = None, base: 'list[float] | None' = None, normal: 'list[float] | None' = None, placement: 'dict[str, Any] | None' = None, no_manip: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Enable, disable, or query the active view clipping (section) plane.\n\nPass ``enabled=True/False`` to toggle. Optionally set plane ``base`` +\n``normal`` (or a full ``placement`` dict). Omit args to query status."
+    },
+    "set_tree_expanded": {
+      "signature": "(ctx: 'Context', doc_name: 'str', object_names: 'list[str] | None' = None, mode: \"Literal['expand', 'collapse', 'expand_document', 'collapse_document']\" = 'expand') -> 'CallToolResult'",
+      "docstring": "Expand or collapse model-tree items in the FreeCAD GUI.\n\nSelects ``object_names`` then runs Std_TreeExpand / Std_TreeCollapse.\nModes ``expand_document`` / ``collapse_document`` operate on the whole tree."
+    },
+    "sketch_add_arc": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', start_angle: 'float', end_angle: 'float', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a circular arc to a sketch.\n\nAngles are in degrees, measured counter-clockwise from the positive X axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the arc centre.\n    cy: Y coordinate of the arc centre.\n    radius: Arc radius in mm.\n    start_angle: Start angle in degrees (0 = right, 90 = up).\n    end_angle: End angle in degrees (must be > start_angle for CCW arc).\n    construction: If true, add as a construction arc.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_arc_of_ellipse": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', major_radius: 'float', minor_radius: 'float', start_angle: 'float', end_angle: 'float', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add an arc of an ellipse to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of ellipse centre.\n    cy: Y coordinate of ellipse centre.\n    major_radius: Semi-major axis length in mm.\n    minor_radius: Semi-minor axis length in mm.\n    start_angle: Start angle on the ellipse in degrees.\n    end_angle: End angle on the ellipse in degrees.\n    angle: Rotation of major axis from X axis in degrees.\n    construction: If true, add as a construction arc.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_bezier": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', poles: 'list[dict[str, float]]', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a Bezier curve defined by control poles to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    poles: Control points as ``{\"x\": …, \"y\": …}`` dicts.\n        Degree = len(poles) - 1.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_bspline": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', poles: 'list[dict[str, float]]', degree: 'int' = 3, weights: 'list[float] | None' = None, knots: 'list[float] | None' = None, multiplicities: 'list[int] | None' = None, periodic: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a B-spline defined by control points (poles) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    poles: Control points as ``{\"x\": …, \"y\": …}`` dicts.\n    degree: Polynomial degree (default 3 = cubic).\n    weights: Optional rational weights (uniform if omitted).\n    knots: Optional knot vector.\n    multiplicities: Optional knot multiplicities.\n    periodic: If true, generate a closed periodic spline.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_bspline_through_points": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', degree: 'int' = 3, periodic: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a B-spline that interpolates (passes through) a set of points.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: Points to interpolate as ``{\"x\": …, \"y\": …}`` dicts.\n    degree: Polynomial degree (default 3).\n    periodic: If true, close the spline back to the first point.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_circle": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a full circle to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the centre.\n    cy: Y coordinate of the centre.\n    radius: Circle radius in mm.\n    construction: If true, add as a construction circle.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_constraint": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', constraints: 'list[dict[str, Any]]') -> 'CallToolResult'",
+      "docstring": "Add constraints to an existing Sketcher sketch.\n\nEach constraint is a dict with a \"type\" key. Geometry indices refer to the\norder in which geometry was added (0-based). Point positions: 1 = start,\n2 = end, 3 = centre (circles/arcs).\n\nSupported constraint types and required keys:\n\n| type | keys |\n|------|------|\n| Coincident | geo1, pos1, geo2, pos2 |\n| Horizontal | geo |\n| Vertical | geo |\n| Distance | geo, value  **or**  geo1, pos1, geo2, pos2, value |\n| DistanceX | geo, value  **or**  geo, pos, value |\n| DistanceY | geo, value  **or**  geo, pos, value |\n| Radius | geo, value |\n| Diameter | geo, value |\n| Angle | geo, value  **or**  geo1, pos1, geo2, pos2, value |\n| Parallel | geo1, geo2 |\n| Perpendicular | geo1, geo2 |\n| Equal | geo1, geo2 |\n| Tangent | geo1, geo2 |\n| PointOnObject | geo1, pos1, geo2 |\n| Symmetric | geo1, pos1, geo2, pos2, geo3 |\n| Block | geo |\n\nOptional key on any dimensional constraint: ``name`` — stable identity for\nlater ``sketch_edit_constraint`` / expression binding (prefer over geo index\nafter trim/fillet).\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the target sketch.\n    constraints: List of constraint descriptors (see table above).\n\nReturns:\n    A message indicating success or failure and a screenshot.\n\nExamples:\n    Constrain a rectangle at the origin with width=20, height=10:\n    ```json\n    {\n      \"doc_name\": \"Part\",\n      \"sketch_name\": \"Sketch\",\n      \"constraints\": [\n        {\"type\": \"Coincident\", \"geo1\": 0, \"pos1\": 1, \"geo2\": -1, \"pos2\": 1},\n        {\"type\": \"Horizontal\", \"geo\": 0},\n        {\"type\": \"Horizontal\", \"geo\": 2},\n        {\"type\": \"Vertical\", \"geo\": 1},\n        {\"type\": \"Vertical\", \"geo\": 3},\n        {\"type\": \"Distance\", \"geo\": 0, \"value\": 20},\n        {\"type\": \"Distance\", \"geo\": 1, \"value\": 10}\n      ]\n    }\n    ```"
+    },
+    "sketch_add_ellipse": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', major_radius: 'float', minor_radius: 'float', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a full ellipse to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of ellipse centre.\n    cy: Y coordinate of ellipse centre.\n    major_radius: Semi-major axis length in mm.\n    minor_radius: Semi-minor axis length in mm.\n    angle: Rotation of the major axis from the X axis, in degrees.\n    construction: If true, add as a construction ellipse.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_external_projection": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', source_ref: 'str', projection_mode: \"Literal['auto', 'edge', 'face', 'point']\" = 'auto', defining: 'bool' = False, allow_gui_geometry_loop: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add external geometry to a sketch with assembly-aware preflight checks.\n\nSet ``allow_gui_geometry_loop=True`` to explicitly run the bounded preflight\nand projection mutation on FreeCAD's GUI thread. The default is false\nbecause the static geometry-loop guard cannot prove this generated\npreflight is bounded."
+    },
+    "sketch_add_geometry": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geometry: 'list[dict[str, Any]]') -> 'CallToolResult'",
+      "docstring": "Add geometry elements to an existing Sketcher sketch.\n\nEach element in `geometry` is a dict with a \"type\" key. Supported types:\n\n- **line**: `{\"type\": \"line\", \"start\": {\"x\": 0, \"y\": 0}, \"end\": {\"x\": 10, \"y\": 0}}`\n- **circle**: `{\"type\": \"circle\", \"center\": {\"x\": 0, \"y\": 0}, \"radius\": 5}`\n- **arc**: `{\"type\": \"arc\", \"center\": {\"x\": 0, \"y\": 0}, \"radius\": 5,\n  \"start_angle\": 0, \"end_angle\": 90}`\n  (angles in degrees, counter-clockwise)\n- **rectangle**: `{\"type\": \"rectangle\", \"x1\": 0, \"y1\": 0, \"x2\": 10, \"y2\": 10}`\n  (expands to 4 connected line segments)\n- **point**: `{\"type\": \"point\", \"x\": 5, \"y\": 5}`\n\nAll geometry can carry an optional `\"construction\": true` key to mark it as a\nconstruction (helper) line.\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geometry: List of geometry descriptors (see above).\n\nReturns:\n    A message with the assigned geometry indices and a screenshot.\n\nExamples:\n    Add a 20x10 rectangle and a circle of radius 3:\n    ```json\n    {\n      \"doc_name\": \"Part\",\n      \"sketch_name\": \"Sketch\",\n      \"geometry\": [\n        {\"type\": \"rectangle\", \"x1\": -10, \"y1\": -5, \"x2\": 10, \"y2\": 5},\n        {\"type\": \"circle\", \"center\": {\"x\": 0, \"y\": 0}, \"radius\": 3}\n      ]\n    }\n    ```"
+    },
+    "sketch_add_line": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x1: 'float', y1: 'float', x2: 'float', y2: 'float', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a line segment to a sketch.\n\nAll coordinates are in the sketch's local 2-D plane (mm).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the start point.\n    y1: Y coordinate of the start point.\n    x2: X coordinate of the end point.\n    y2: Y coordinate of the end point.\n    construction: If true, add as a construction (helper) line.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot."
+    },
+    "sketch_add_parametric_curve": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x_expr: 'str', y_expr: 'str', t_start: 'float', t_end: 'float', samples: 'int' = 100, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a parametric curve to a sketch by sampling Python expressions.\n\nThe expressions ``x_expr`` and ``y_expr`` are evaluated as Python\nexpressions where ``t`` is the parameter and ``math`` is available.\nThe sampled points are interpolated into a B-spline and added to the\nsketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x_expr: Python expression for X coordinate. Example: ``\"r_b*(math.cos(t)+t*math.sin(t))\"``\n    y_expr: Python expression for Y coordinate. Example: ``\"r_b*(math.sin(t)-t*math.cos(t))\"``\n    t_start: Start value of parameter t.\n    t_end: End value of parameter t (must be > t_start).\n    samples: Number of sample points (10-2000, default 100).\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the geometry index and sample count.\n\nExamples:\n    Involute of a base circle of radius 10:\n    ```json\n    {\n      \"doc_name\": \"GearDoc\", \"sketch_name\": \"Sketch\",\n      \"x_expr\": \"10*(math.cos(t)+t*math.sin(t))\",\n      \"y_expr\": \"10*(math.sin(t)-t*math.cos(t))\",\n      \"t_start\": 0.0, \"t_end\": 1.5\n    }\n    ```"
+    },
+    "sketch_add_polyline": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', closed: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a polyline (connected line segments) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{\"x\": …, \"y\": …}`` dicts.\n    closed: If true, close the polyline back to the first point.\n    construction: If true, add all segments as construction lines.\n\nReturns:\n    Success message with assigned geometry indices and a screenshot."
+    },
+    "sketch_add_rectangle": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x1: 'float', y1: 'float', x2: 'float', y2: 'float', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add an axis-aligned rectangle to a sketch (4 connected line segments).\n\nReturns the 4 geometry indices in order: bottom, right, top, left.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the first corner.\n    y1: Y coordinate of the first corner.\n    x2: X coordinate of the opposite corner.\n    y2: Y coordinate of the opposite corner.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the 4 assigned geometry indices and a screenshot."
+    },
+    "sketch_add_regular_polygon": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', sides: 'int', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a regular polygon to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the circumscribed circle centre.\n    cy: Y coordinate of the circumscribed circle centre.\n    radius: Circumradius in mm (vertex-to-centre distance).\n    sides: Number of sides (minimum 3).\n    angle: Rotation offset for the first vertex in degrees.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the assigned geometry indices and a screenshot."
+    },
+    "sketch_add_slot": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x1: 'float', y1: 'float', x2: 'float', y2: 'float', width: 'float', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Add a slot (oblong) shape to a sketch.\n\nThe slot is defined by its two end-cap centres (x1,y1) and (x2,y2) and\na total width (diameter of end caps).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X of the left end-cap centre.\n    y1: Y of the left end-cap centre.\n    x2: X of the right end-cap centre.\n    y2: Y of the right end-cap centre.\n    width: Total width of the slot (diameter of end caps) in mm.\n    construction: If true, add all geometry as construction lines.\n\nReturns:\n    Success message with 4 geometry indices (2 lines + 2 arcs)."
+    },
+    "sketch_attach": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', support: 'Any', attachment_offset: 'dict[str, Any] | None' = None) -> 'CallToolResult'",
+      "docstring": "Attach a sketch to an origin plane or face support.\n\n``support`` may be:\n- ``\"XY_Plane\"`` / ``\"XZ_Plane\"`` / ``\"YZ_Plane\"``\n- ``\"ObjectName:FaceN\"``\n- ``{\"object\": \"Obj\", \"subname\": \"Face1\"}``\n\n``attachment_offset`` is optional and uses the same Placement dict form as\n``edit_object`` / ``get_object``. ``Rotation.Angle`` is in **degrees**.\nPrefer this over rotating ``Placement`` on a deactivated attachment (P3 trap)."
+    },
+    "sketch_constrain_coincident": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', pos1: 'int', geo2: 'int', pos2: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain two sketch points to be coincident (share the same position).\n\nPoint positions: 1 = start/first endpoint, 2 = end/second endpoint,\n3 = centre (circles/arcs). Use index -1 for the sketch origin point,\n-2 for a point on the Y axis, -3 for a point on the X axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    pos1: Point position on geo1 (1, 2, or 3).\n    geo2: Index of the second geometry element.\n    pos2: Point position on geo2 (1, 2, or 3).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_distance": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int', value: 'float', pos: 'int | None' = None, name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Add a distance (length) constraint to a line or between two points.\n\nFor a line, omit `pos` to constrain its full length.\nTo constrain the distance from a specific point to the origin, provide\n`pos` (1 = start point, 2 = end point).\n\nPrefer `name` over geo index for later edits (geo indices shift after\ntrim/fillet). Use `sketch_edit_constraint(name=...)` to change the value.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the geometry element.\n    value: Required distance in mm.\n    pos: Optional point position (1 or 2) for point-to-origin distance.\n    name: Optional stable constraint name (recommended for parametric edits).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_equal": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain two geometry elements to have equal length or radius.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_horizontal": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain a line to be horizontal.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the line geometry element.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_parallel": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain two lines to be parallel.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first line.\n    geo2: Index of the second line.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_perpendicular": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain two lines to be perpendicular (90°).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first line.\n    geo2: Index of the second line.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_radius": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int', value: 'float', name: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Constrain the radius of a circle or arc.\n\nPrefer `name` over geo index for later edits. Bind live values with\n`set_expression` on `Constraints[i]` or edit via `sketch_edit_constraint`.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the circle or arc geometry element.\n    value: Required radius in mm.\n    name: Optional stable constraint name (recommended for parametric edits).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_tangent": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain two curves (or a curve and a line) to be tangent.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_constrain_vertical": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int') -> 'CallToolResult'",
+      "docstring": "Constrain a line to be vertical.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the line geometry element.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_create": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', body_name: 'str | None' = None, attach_to: 'str | None' = None) -> 'CallToolResult'",
+      "docstring": "Create a new Sketcher sketch in FreeCAD.\n\nArgs:\n    doc_name: The document to create the sketch in.\n    sketch_name: Name for the new sketch object.\n    body_name: Optional PartDesign Body to attach the sketch to. If omitted the\n        sketch is added directly to the document.\n    attach_to: Optional attachment target. Accepted values:\n        - \"XY_Plane\", \"XZ_Plane\", \"YZ_Plane\" — attach to a coordinate plane.\n        - \"ObjectName:FaceN\" — attach to a specific face of an existing object\n          (e.g. \"Box:Face1\").\n\nReturns:\n    A message indicating success or failure and a screenshot.\n\nRecipe (avoid the silent P3 trap):\n  Prefer ``attach_to`` an origin plane (\"XY_Plane\"/\"XZ_Plane\"/\"YZ_Plane\")\n  and use ``AttachmentOffset`` to position the sketch, rather than creating\n  a sketch on a default axis and then rotating its Placement. A rotated\n  \"Deactivated\" attachment can drop the rotation (P3). For cross-body\n  supports, keep the source body at an identity placement (P1) and verify\n  with ``preview_attachment``.\n\nExamples:\n    Create a sketch on the XY plane inside a Body:\n    ```json\n    {\"doc_name\": \"Part\", \"sketch_name\": \"Sketch\", \"body_name\": \"Body\", \"attach_to\": \"XY_Plane\"}\n    ```\n\n    Create a standalone sketch on Face1 of Box:\n    ```json\n    {\"doc_name\": \"Part\", \"sketch_name\": \"Sketch\", \"attach_to\": \"Box:Face1\"}\n    ```"
+    },
+    "sketch_delete_constraint": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', constraint_indices: 'list[int] | None' = None, constraint_names: 'list[str] | None' = None) -> 'CallToolResult'",
+      "docstring": "Delete one or more constraints from a Sketcher sketch.\n\nAll selectors are resolved and validated before the sketch changes. The\nselected constraints are then deleted in one transaction, so constraint\nindices cannot shift between deletions. Names and indices may be combined;\nduplicate selections are deleted only once.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    constraint_indices: Zero-based constraint indices to delete.\n    constraint_names: Stable constraint names to delete.\n\nReturns:\n    Deleted constraint descriptors and the remaining constraint count."
+    },
+    "sketch_delete_geometry": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geometry_indices: 'list[int]') -> 'CallToolResult'",
+      "docstring": "Delete one or more geometry items from a Sketcher sketch.\n\nGeometry indices are zero-based and are validated before mutation. FreeCAD\nalso removes constraints that depend on deleted geometry; the result\nreports how many dependent constraints were removed.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geometry_indices: Non-empty list of zero-based geometry indices.\n\nReturns:\n    Deleted geometry descriptors, remaining counts, and the number of\n    dependent constraints removed by FreeCAD."
+    },
+    "sketch_edit_constraint": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', value: 'float | None' = None, name: 'str | None' = None, index: 'int | None' = None) -> 'CallToolResult'",
+      "docstring": "Edit a dimensional constraint by stable ``name`` (preferred) or index.\n\nAfter trim/fillet, geo indices shift — always prefer ``name``."
+    },
+    "sketch_extend": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', increment: 'float', end_point: 'int' = 2) -> 'CallToolResult'",
+      "docstring": "Extend a sketch curve by a given increment.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to extend.\n    increment: Extension amount in mm.\n    end_point: Which end to extend: 1 = start, 2 = end (default).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_fillet": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int', radius: 'float') -> 'CallToolResult'",
+      "docstring": "Add a fillet arc between two sketch curves.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n    radius: Fillet radius in mm (must be > 0).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_import_points": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', construction: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Import a list of 2-D points as individual point geometry elements.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{\"x\": …, \"y\": …}`` dicts.\n    construction: If true, add as construction points.\n\nReturns:\n    Success message with the assigned geometry indices."
+    },
+    "sketch_split": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', point_x: 'float', point_y: 'float') -> 'CallToolResult'",
+      "docstring": "Split a sketch curve into two pieces at the given point.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to split.\n    point_x: X coordinate of the split point.\n    point_y: Y coordinate of the split point.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_symmetry": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', symmetry_geo: 'int', copy: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Apply symmetry to a set of sketch elements about a symmetry axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the elements to mirror.\n    symmetry_geo: Index of the symmetry axis geometry element.\n    copy: If true, keep the original elements (default).\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_toggle_construction": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', construction: 'bool' = True) -> 'CallToolResult'",
+      "docstring": "Toggle one or more sketch geometry elements between normal and construction mode.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: List of 0-based geometry indices to toggle.\n    construction: Target state — True for construction, False for normal.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "sketch_trim": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', point_x: 'float', point_y: 'float') -> 'CallToolResult'",
+      "docstring": "Trim a sketch curve at the given point (nearest intersection).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to trim.\n    point_x: X coordinate on the curve near the desired cut point.\n    point_y: Y coordinate on the curve near the desired cut point.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "snapshot": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Snapshot the current document into a ring buffer of the last 5 states (I7).\n\nCheap, in-process document copy so a risky step can be undone with one\n``restore`` call. Returns JSON ``{ok, snapshot_id, doc, count}``.\n\nArgs:\n    doc_name: The document to snapshot."
+    },
+    "solve_assembly": {
+      "signature": "(ctx: 'Context', doc_name: 'str', assembly_name: 'str') -> 'CallToolResult'",
+      "docstring": "Re-solve an Assembly after editing a joint or a referenced face (I9 / P9).\n\nTries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a\nplain recompute, and reports which method succeeded. Returns JSON\n``{ok, assembly, method, status}`` plus a screenshot.\n\nArgs:\n    doc_name: The document containing the assembly.\n    assembly_name: The name of the Assembly::AssemblyObject to solve."
+    },
+    "spreadsheet_create": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sheet_name: 'str') -> 'CallToolResult'",
+      "docstring": "Create a Spreadsheet::Sheet for parametric dimensions.\n\nRecipe: create sheet → set cells/aliases → bind sketch constraints and\nPad/Pocket Length via ``set_expression`` using ``<<Sheet>>.Alias``.\n\nArgs:\n    doc_name: Document to create the sheet in.\n    sheet_name: Name for the new spreadsheet object (e.g. ``Dims``)."
+    },
+    "spreadsheet_get_cells": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sheet_name: 'str', addresses: 'list[Any]') -> 'CallToolResult'",
+      "docstring": "Read spreadsheet cell contents and evaluated values.\n\n``addresses`` entries may be address strings (``A1``) or dicts with\n``address`` / ``alias``."
+    },
+    "spreadsheet_list_aliases": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sheet_name: 'str') -> 'CallToolResult'",
+      "docstring": "List all aliases on a spreadsheet as ``{alias: address}``."
+    },
+    "spreadsheet_set_alias": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sheet_name: 'str', address: 'str', alias: 'str') -> 'CallToolResult'",
+      "docstring": "Set a spreadsheet cell alias (e.g. A1 → Wall)."
+    },
+    "spreadsheet_set_cells": {
+      "signature": "(ctx: 'Context', doc_name: 'str', sheet_name: 'str', cells: 'list[dict[str, Any]]') -> 'CallToolResult'",
+      "docstring": "Set spreadsheet cell values (and optional aliases) in batch.\n\nEach cell dict accepts:\n- ``address`` (e.g. ``A1``) and/or ``alias`` to resolve an existing alias\n- ``value`` — number or formula string\n- ``alias`` with ``address`` — also sets the alias on that address\n- ``set_alias`` — set alias when addressing by address alone\n\nArgs:\n    doc_name: Document containing the sheet.\n    sheet_name: Spreadsheet object name.\n    cells: List of cell update dicts."
+    },
+    "sweep_feature": {
+      "signature": "(ctx: 'Context', doc_name: 'str', profile_sketch: 'str', path_sketch: 'str', sweep_name: 'str', body_name: 'str | None' = None, frenet: 'bool' = False) -> 'CallToolResult'",
+      "docstring": "Sweep a profile sketch along a path sketch (PartDesign::AdditivePipe).\n\nArgs:\n    doc_name: Document containing the sketches and body.\n    profile_sketch: Name of the cross-section sketch.\n    path_sketch: Name of the path sketch.\n    sweep_name: Name for the resulting Sweep feature.\n    body_name: Optional explicit PartDesign Body name.\n    frenet: If true, use Frenet-Serret frame (avoids twisting on curved paths).\n\nReturns:\n    Success message and an isometric screenshot."
+    },
+    "sweep_pipe": {
+      "signature": "(ctx: 'Context', doc_name: 'str', path_wire: 'str', diameter_mm: 'float', solid_name: 'str', profile_mode: 'str' = 'frenet', color: 'list[float] | None' = None, container: 'str | None' = None, if_exists: \"Literal['error', 'skip', 'replace']\" = 'error') -> 'CallToolResult'",
+      "docstring": "Sweep a circular solid pipe along a wire path."
+    },
+    "translate": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', dx: 'float', dy: 'float', dz: 'float') -> 'CallToolResult'",
+      "docstring": "Translate (move) an object by a displacement vector.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the object to translate.\n    dx: X displacement in mm.\n    dy: Y displacement in mm.\n    dz: Z displacement in mm.\n\nReturns:\n    Success message and a screenshot."
+    },
+    "undo": {
+      "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+      "docstring": "Undo the last operation in a FreeCAD document.\n\nArgs:\n    doc_name: The document to undo in.\n\nReturns:\n    A message indicating success or failure."
+    },
+    "update_document_lock": {
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', task_description: 'str' = '', progress_detail: 'str' = '') -> 'CallToolResult'",
+      "docstring": "Update bounded task/progress metadata without changing authority.\n\nState, heartbeat, dirty status, errors, and mutation revisions remain\nserver-owned and cannot be supplied through this tool."
+    },
+    "validate_geometry": {
+      "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
+      "docstring": "Validate the geometry of a shape and return diagnostic information.\n\nChecks whether the shape is null, valid, closed, and reports face/edge/vertex\ncounts along with a BRep analysis result.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with validity flags, counts, volume/area, and BRep analysis output."
+    },
+    "validate_movement_follow": {
+      "signature": "(ctx: 'Context', doc_name: 'str', source: 'str', dependents: 'list[str]', translation: 'list[float]', axis: 'list[float]', angle_deg: 'float', restore: 'bool' = True, tolerance: 'float' = 1e-07) -> 'CallToolResult'",
+      "docstring": "Validate that dependents follow a source body under an arbitrary rigid transform (M7)."
+    }
+  }
+}

@@ -210,3 +210,11 @@ def animate_placement_operation(
         only_text_feedback=only_text_feedback,
         structured=summary,
     )
+
+
+__all__ = [
+    "animate_placement_operation",
+    "encode_view_video_operation",
+    "refresh_view_operation",
+    "repair_view_placements_operation",
+]
