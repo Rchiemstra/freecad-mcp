@@ -1020,13 +1020,13 @@ paths.
 
 Integrator checklist:
 
-- [ ] Full lint exit 0 on both package trees
-- [ ] `unit` / `e2e` / `core` / `benchmark` green
-- [ ] §4.1 map walked file-by-file: no ownerless violation remains (incl. C901)
-- [ ] §3.3 shims intact; no test file needed an import rewrite
-- [ ] Grok 4.5 High review of final diff vs main/phase-7 baseline
-- [ ] Update §11 Progress; fix doc links if import paths changed; optionally refresh §3.4 WIP diagrams
-- [ ] Create phase 8 commit (submodule only); prepare the parent-repo gitlink bump as a separate commit
+- [x] Full lint exit 0 on both package trees
+- [x] `unit` / `e2e` / `core` / `benchmark` green
+- [x] §4.1 map walked file-by-file: no ownerless violation remains (incl. C901)
+- [x] §3.3 shims intact; no test file needed an import rewrite
+- [x] Grok 4.5 High review of final diff vs main/phase-7 baseline
+- [x] Update §11 Progress; fix doc links if import paths changed; optionally refresh §3.4 WIP diagrams
+- [x] Create phase 8 commit (submodule only); prepare the parent-repo gitlink bump as a separate commit
 
 ---
 
@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 8 pending |
+| Current phase | **complete** (Phases 0–8) |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `refactor(mcp): phase 7 split server and operations modules` (git log -1 canonical) |
+| Last phase commit (submodule) | `refactor(mcp): phase 8 full ARCH lint gate` (git log -1 canonical) |
 | ARCH001 / ARCH002 / Ruff (actual) | 0 / 0 / 0 |
 | Blockers | none |
-| Resume hint | Phase 8 — full-tree lint gate (integrator only) |
+| Resume hint | Plan complete — optional parent-repo gitlink bump (separate commit) |
 
 ### 11.2 Phase ceilings and status
 
@@ -1166,7 +1166,7 @@ the short commit hash in Notes when a phase completes.
 | 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | cleared | pass | 15 | 3 | 12 | **done** | actual 15/3/12; `17e139c` (doc hash may drift on doc-only amend; git log -1 canonical) |
 | 6 | `refactor(mcp): phase 6 split MCP client modules` | 6A–6D | cleared | pass | 11 | 0 | 5 | **done** | actual 11/0/5; `e6fdc5e` (git log -1 canonical) |
 | 7 | `refactor(mcp): phase 7 split server and operations modules` | 7A–7E | cleared | pass | 0 | 0 | 0 | **done** | actual 0/0/0; git log -1 canonical (merge-fix §3.3 `responses` shim) |
-| 8 | `refactor(mcp): phase 8 full ARCH lint gate` | integrator | pending | pending | 0 | 0 | 0 | pending | full lint exit 0 |
+| 8 | `refactor(mcp): phase 8 full ARCH lint gate` | integrator | cleared | pass | 0 | 0 | 0 | **done** | actual 0/0/0; git log -1 canonical |
 
 ### 11.3 Progress log
 
@@ -1186,6 +1186,14 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 — Phase 8 phase commit
+- Done: integrator verification — full lint exit 0 on `addon/FreeCADMCP` + `src/freecad_mcp` (888 files); §4.1 ownerless violations none; §3.3 shims intact (Docker import surface green); §11.1/§11.2 updated; plan **complete**
+- In flight / next: optional parent-repo gitlink bump (separate commit per §5.7)
+- Reviews: integrator gate (no code diff beyond §11)
+- Docker / lint: full lint 0 / 0 / 0; unit 1710 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: scratch `scripts/*` left untracked; pushed phase 8 commit
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 7 merge fix (§3.3 `responses` shim)
 - Done: restored full legacy `freecad_mcp.responses` surface (`OutcomeStatus`, envelope helpers, telemetry context re-exports); §11.2 Phase 7 note; `server.py` façade line count corrected to 124 in prior log entry
