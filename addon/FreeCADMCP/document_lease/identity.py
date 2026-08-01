@@ -9,37 +9,21 @@ import posixpath
 import threading
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any
 
+# §3.3 compatibility shims — moved types keep their legacy import path.
+from .identity_types.document_identity_error import DocumentIdentityError
+from .identity_types.duplicate_document_error import DuplicateDocumentError
+from .identity_types.entry import _Entry
+from .identity_types.identity_mismatch_error import IdentityMismatchError
+from .identity_types.unknown_document_error import UnknownDocumentError
 from .model import (
     DocumentIdentity,
     DocumentSelector,
     FileBaseline,
     FileIdentity,
 )
-
-
-class DocumentIdentityError(ValueError):
-    code = "DOCUMENT_IDENTITY_ERROR"
-
-    def __init__(
-        self, message: str, *, details: Mapping[str, Any] | None = None
-    ) -> None:
-        self.details = dict(details or {})
-        super().__init__(message)
-
-
-class UnknownDocumentError(DocumentIdentityError):
-    pass
-
-
-class DuplicateDocumentError(DocumentIdentityError):
-    pass
-
-
-class IdentityMismatchError(DocumentIdentityError):
-    pass
 
 
 def _platform_name(platform: str | None = None) -> str:
@@ -83,19 +67,7 @@ def _windows_file_identity(path: str) -> FileIdentity | None:
         import ctypes
         from ctypes import wintypes
 
-        class BY_HANDLE_FILE_INFORMATION(ctypes.Structure):
-            _fields_ = [
-                ("dwFileAttributes", wintypes.DWORD),
-                ("ftCreationTime", wintypes.FILETIME),
-                ("ftLastAccessTime", wintypes.FILETIME),
-                ("ftLastWriteTime", wintypes.FILETIME),
-                ("dwVolumeSerialNumber", wintypes.DWORD),
-                ("nFileSizeHigh", wintypes.DWORD),
-                ("nFileSizeLow", wintypes.DWORD),
-                ("nNumberOfLinks", wintypes.DWORD),
-                ("nFileIndexHigh", wintypes.DWORD),
-                ("nFileIndexLow", wintypes.DWORD),
-            ]
+        from .identity_types.by_handle_file_information import BY_HANDLE_FILE_INFORMATION
 
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         create_file = kernel32.CreateFileW
@@ -194,13 +166,6 @@ def capture_file_baseline(
         sha256=digest.hexdigest(),
         file_identity=file_identity_for_path(canonical, platform=platform),
     )
-
-
-@dataclass
-class _Entry:
-    identity: DocumentIdentity
-    object_key: int | None
-    aliases: set[str]
 
 
 class DocumentIdentityService:

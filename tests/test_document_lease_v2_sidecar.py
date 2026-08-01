@@ -22,8 +22,8 @@ from addon.FreeCADMCP.document_lease.model import (
     LeaseState,
     SaveAsMigration,
     SaveAsMigrationRole,
-    token_fingerprint,
     sanitize_persisted_task_summary,
+    token_fingerprint,
 )
 from addon.FreeCADMCP.document_lease.sidecar import (
     MAX_SIDECAR_BYTES,
@@ -35,9 +35,9 @@ from addon.FreeCADMCP.document_lease.sidecar import (
     SidecarPermissionError,
     SidecarStore,
     SidecarTooLargeError,
+    _assert_regular_not_symlink,
     _harden_directory_permissions,
     _harden_permissions,
-    _assert_regular_not_symlink,
     parse_sidecar_bytes,
 )
 
@@ -702,3 +702,68 @@ class TestSidecarStore:
 
         assert artifact.stat().st_mode & 0o777 == 0o600
         assert recovery.stat().st_mode & 0o777 == 0o700
+
+
+def test_sidecar_public_import_surface() -> None:
+    """Sidecar re-exports errors without publishing WinAPI ctypes structs."""
+    import importlib
+    import sys
+
+    public_errors = (
+        "SidecarError",
+        "SidecarAtomicityError",
+        "SidecarCommitUncertainError",
+        "SidecarConflictError",
+        "SidecarExistsError",
+        "SidecarLockError",
+        "SidecarMalformedError",
+        "SidecarNetworkPathError",
+        "SidecarNotFoundError",
+        "SidecarPermissionError",
+        "SidecarTooLargeError",
+    )
+    for name in public_errors:
+        assert hasattr(sidecar_mod, name), name
+        error_type = getattr(sidecar_mod, name)
+        assert error_type.__module__ == "document_lease.sidecar", name
+
+    for leaked in (
+        "AccessAllowedAce",
+        "AclSizeInformation",
+        "SidAndAttributes",
+        "AceHeader",
+        "OverlappedStruct",
+        "_WindowsOverlapped",
+    ):
+        assert not hasattr(sidecar_mod, leaked), leaked
+
+    sidecar_import = "addon.FreeCADMCP.document_lease.sidecar"
+    winapi_prefixes = (
+        "addon.FreeCADMCP.document_lease.sidecar_winapi",
+        "document_lease.sidecar_winapi",
+    )
+
+    def _loaded_winapi_modules() -> list[str]:
+        return sorted(
+            name
+            for name in sys.modules
+            if any(
+                name == prefix or name.startswith(f"{prefix}.")
+                for prefix in winapi_prefixes
+            )
+        )
+
+    evicted = {
+        name: sys.modules.pop(name)
+        for name in list(sys.modules)
+        if name == sidecar_import
+        or any(
+            name == prefix or name.startswith(f"{prefix}.")
+            for prefix in winapi_prefixes
+        )
+    }
+    try:
+        importlib.import_module(sidecar_import)
+        assert _loaded_winapi_modules() == []
+    finally:
+        sys.modules.update(evicted)

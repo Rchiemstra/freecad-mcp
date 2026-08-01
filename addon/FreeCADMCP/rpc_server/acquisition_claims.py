@@ -15,19 +15,9 @@ import copy
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
 from typing import Any
 
-
-@dataclass
-class _ClaimEntry:
-    mcp_runtime_id: str
-    request_id: str
-    method: str
-    credential: dict[str, Any] = field(repr=False)
-    result: dict[str, Any] = field(repr=False)
-    created_monotonic: float
-    acknowledged: bool = False
+from .acquisition_claims_types.claim_entry import ClaimEntry
 
 
 class AcquisitionClaimStore:
@@ -47,7 +37,7 @@ class AcquisitionClaimStore:
         self._max_entries = int(max_entries)
         self._ttl_seconds = float(ttl_seconds)
         self._monotonic = monotonic
-        self._entries: OrderedDict[tuple[str, str], _ClaimEntry] = OrderedDict()
+        self._entries: OrderedDict[tuple[str, str], ClaimEntry] = OrderedDict()
         self._lock = threading.RLock()
 
     @staticmethod
@@ -93,7 +83,7 @@ class AcquisitionClaimStore:
             # acquire/adopt/create may have already published authority by the
             # time it reaches this vault; rejecting or evicting here would
             # strand that authority without its only raw credential.
-            self._entries[key] = _ClaimEntry(
+            self._entries[key] = ClaimEntry(
                 mcp_runtime_id=key[0],
                 request_id=key[1],
                 method=str(method),

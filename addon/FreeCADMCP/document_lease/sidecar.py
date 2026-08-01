@@ -12,8 +12,11 @@ import threading
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from .sidecar_winapi.windows_overlapped import _WindowsOverlapped
 
 from .model import (
     RECORD_KIND,
@@ -22,65 +25,21 @@ from .model import (
     LeaseRecord,
     LeaseState,
 )
+from .sidecar_types.sidecar_atomicity_error import SidecarAtomicityError
+from .sidecar_types.sidecar_commit_uncertain_error import SidecarCommitUncertainError
+from .sidecar_types.sidecar_conflict_error import SidecarConflictError
+from .sidecar_types.sidecar_error import SidecarError
+from .sidecar_types.sidecar_exists_error import SidecarExistsError
+from .sidecar_types.sidecar_lock_error import SidecarLockError
+from .sidecar_types.sidecar_malformed_error import SidecarMalformedError
+from .sidecar_types.sidecar_network_path_error import SidecarNetworkPathError
+from .sidecar_types.sidecar_not_found_error import SidecarNotFoundError
+from .sidecar_types.sidecar_permission_error import SidecarPermissionError
+from .sidecar_types.sidecar_too_large_error import SidecarTooLargeError
 
 MAX_SIDECAR_BYTES = 64 * 1024
 SIDECAR_SUFFIX = ".freecad-mcp.lock"
 GUARD_SUFFIX = ".guard"
-
-
-class SidecarError(RuntimeError):
-    pass
-
-
-class SidecarNotFoundError(SidecarError):
-    pass
-
-
-class SidecarExistsError(SidecarError):
-    pass
-
-
-class SidecarMalformedError(SidecarError):
-    pass
-
-
-class SidecarTooLargeError(SidecarMalformedError):
-    pass
-
-
-class SidecarConflictError(SidecarError):
-    pass
-
-
-class SidecarPermissionError(SidecarError):
-    pass
-
-
-class SidecarLockError(SidecarError):
-    pass
-
-
-class SidecarAtomicityError(SidecarError):
-    pass
-
-
-class SidecarCommitUncertainError(SidecarError):
-    """A filesystem mutation published but post-publication checks failed."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        persisted: LeaseRecord | None = None,
-        absent: bool | None = None,
-    ) -> None:
-        self.persisted = persisted
-        self.absent = absent
-        super().__init__(message)
-
-
-class SidecarNetworkPathError(SidecarError):
-    pass
 
 
 def sidecar_path_for(document_path: str | os.PathLike[str]) -> Path:
@@ -196,32 +155,12 @@ def _open_guard(path: Path, *, strict_permissions: bool) -> int:
     return fd
 
 
-class _WindowsOverlapped:
-    """Lazy ctypes OVERLAPPED holder, kept alive for LockFileEx."""
-
-    def __init__(self) -> None:
-        import ctypes
-        from ctypes import wintypes
-
-        class _OVERLAPPED(ctypes.Structure):
-            _fields_ = [
-                # ctypes.wintypes does not expose ULONG_PTR on every Python
-                # distribution; c_size_t is the ABI-equivalent pointer-sized
-                # unsigned value used by OVERLAPPED.
-                ("Internal", ctypes.c_size_t),
-                ("InternalHigh", ctypes.c_size_t),
-                ("Offset", wintypes.DWORD),
-                ("OffsetHigh", wintypes.DWORD),
-                ("hEvent", wintypes.HANDLE),
-            ]
-
-        self.value = _OVERLAPPED()
-
-
 def _lock_windows(fd: int) -> _WindowsOverlapped:
     import ctypes
     import msvcrt
     from ctypes import wintypes
+
+    from .sidecar_winapi.windows_overlapped import _WindowsOverlapped
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     lock_file_ex = kernel32.LockFileEx
@@ -404,32 +343,13 @@ def _inspect_windows_owner_only(path: Path) -> tuple[bool, str]:
         import ctypes
         from ctypes import wintypes
 
-        class _AclSizeInformation(ctypes.Structure):
-            _fields_ = [
-                ("AceCount", wintypes.DWORD),
-                ("AclBytesInUse", wintypes.DWORD),
-                ("AclBytesFree", wintypes.DWORD),
-            ]
-
-        class _AceHeader(ctypes.Structure):
-            _fields_ = [
-                ("AceType", wintypes.BYTE),
-                ("AceFlags", wintypes.BYTE),
-                ("AceSize", wintypes.WORD),
-            ]
-
-        class _AccessAllowedAce(ctypes.Structure):
-            _fields_ = [
-                ("Header", _AceHeader),
-                ("Mask", wintypes.DWORD),
-                ("SidStart", wintypes.DWORD),
-            ]
-
-        class _SidAndAttributes(ctypes.Structure):
-            _fields_ = [
-                ("Sid", wintypes.LPVOID),
-                ("Attributes", wintypes.DWORD),
-            ]
+        from .sidecar_winapi.access_allowed_ace import (
+            AccessAllowedAce as _AccessAllowedAce,
+        )
+        from .sidecar_winapi.acl_size_information import (
+            AclSizeInformation as _AclSizeInformation,
+        )
+        from .sidecar_winapi.sid_and_attributes import SidAndAttributes as _SidAndAttributes
 
         advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)

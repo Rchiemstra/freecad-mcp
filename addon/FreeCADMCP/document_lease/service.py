@@ -10,11 +10,32 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .errors.authorization_error import AuthorizationError
+from .errors.cancellation_context import _CancellationContext
+from .errors.clean_release_error import CleanReleaseError
+from .errors.coordination_error import CoordinationError
+from .errors.dirty_acquisition_error import DirtyAcquisitionError
+from .errors.dirty_adoption_error import DirtyAdoptionError
+from .errors.document_identity_refresh_event import DocumentIdentityRefreshEvent
+from .errors.foreign_recovery_error import ForeignRecoveryError
+from .errors.foreign_recovery_record import ForeignRecoveryRecord
+from .errors.lease_conflict_error import LeaseConflictError
+from .errors.lease_grant import LeaseGrant
+from .errors.lease_service_error import LeaseServiceError
+from .errors.lease_state_error import LeaseStateError
+from .errors.live_document_validation_error import LiveDocumentValidationError
+from .errors.local_recovery_error import LocalRecoveryError
+from .errors.local_runtime_identity import LocalRuntimeIdentity
+from .errors.locked_error_handoff_required import LockedErrorHandoffRequired
+from .errors.orphaned_foreign_recovery_required import OrphanedForeignRecoveryRequired
+from .errors.orphaned_local_mcp_recovery_required import OrphanedLocalMcpRecoveryRequired
+from .errors.process_liveness_evidence import ProcessLivenessEvidence
+from .errors.saved_foreign_recovery_required import SavedForeignRecoveryRequired
 from .identity import (
     DocumentIdentityError,
     DocumentIdentityService,
@@ -56,180 +77,6 @@ DEFAULT_STALE_AFTER_SECONDS = 90.0
 MCP_PROCESS_START_FUTURE_TOLERANCE_SECONDS = 1.0
 
 
-class LeaseServiceError(RuntimeError):
-    code = "LEASE_SERVICE_ERROR"
-
-    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
-        self.details = dict(details or {})
-        super().__init__(message)
-
-
-class LeaseConflictError(LeaseServiceError):
-    code = "LEASE_CONFLICT"
-
-
-class AuthorizationError(LeaseServiceError):
-    code = "LEASE_AUTHORIZATION_FAILED"
-
-
-class LeaseStateError(LeaseServiceError):
-    code = "LEASE_STATE_FORBIDS_OPERATION"
-
-
-class CoordinationError(LeaseServiceError):
-    code = "LEASE_COORDINATION_LOST"
-
-
-class DirtyAcquisitionError(LeaseServiceError):
-    code = "DIRTY_REQUIRES_LOCAL_ADOPTION"
-
-
-class DirtyAdoptionError(LeaseServiceError):
-    code = "DIRTY_ADOPTION_PRECONDITION_FAILED"
-
-
-class CleanReleaseError(LeaseServiceError):
-    code = "CLEAN_RELEASE_PRECONDITION_FAILED"
-
-
-class LiveDocumentValidationError(CleanReleaseError):
-    """The live document or saved file no longer matches lease authority."""
-
-    code = "LIVE_DOCUMENT_VALIDATION_FAILED"
-
-
-class LocalRecoveryError(LeaseServiceError):
-    """A confirmed local GUI recovery action could not complete safely."""
-
-    code = "LOCAL_RECOVERY_FAILED"
-
-
-class ForeignRecoveryError(LocalRecoveryError):
-    """A persisted foreign record could not be imported or fenced safely."""
-
-    code = "FOREIGN_RECOVERY_UNSAFE"
-
-
-class OrphanedForeignRecoveryRequired(ForeignRecoveryError):
-    """A clean missing-sidecar record needs off-GUI verification."""
-
-    code = "ORPHANED_FOREIGN_RECOVERY_REQUIRED"
-
-
-class OrphanedLocalMcpRecoveryRequired(LeaseServiceError):
-    """A same-FreeCAD lease has safely recoverable inactive authority."""
-
-    code = "ORPHANED_LOCAL_MCP_RECOVERY_REQUIRED"
-
-
-class SavedForeignRecoveryRequired(ForeignRecoveryError):
-    """A saved local-recovery sidecar needs off-GUI verification and fencing."""
-
-    code = "SAVED_FOREIGN_RECOVERY_REQUIRED"
-
-
-class LockedErrorHandoffRequired(LeaseServiceError):
-    """A confirmed new MCP owner must fence an errored local credential."""
-
-    code = "LOCKED_ERROR_HANDOFF_REQUIRED"
-
-
-@dataclass(frozen=True)
-class LeaseGrant:
-    credential: LeaseCredential
-    record: LeaseRecord
-    coordination_uncertain: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        """Acquisition is the sole serialization that contains the raw token."""
-
-        result = self.record.to_public_dict()
-        result["credential"] = {
-            "lease_id": self.credential.lease_id,
-            "document_session_uuid": self.credential.document_session_uuid,
-            "generation": self.credential.generation,
-            "token": self.credential.token,
-        }
-        if self.coordination_uncertain:
-            result["coordination_uncertain"] = True
-            result["warning_code"] = "SIDECAR_COMMIT_UNCERTAIN"
-        return result
-
-
-@dataclass(frozen=True)
-class ProcessLivenessEvidence:
-    """Result of a trusted same-host process identity probe.
-
-    ``exists=None`` means the probe could not establish either liveness or
-    death. A live process must include its observed start timestamp so PID
-    reuse can be distinguished from the recorded owner.
-    """
-
-    exists: bool | None
-    process_started_at: str | None = None
-
-
-@dataclass(frozen=True)
-class LocalRuntimeIdentity:
-    """Service-owned identity of the currently running FreeCAD addon."""
-
-    addon_profile_id: str
-    addon_runtime_id: str
-    freecad_pid: int
-    freecad_process_started_at: str
-    boot_id: str
-    hostname: str
-
-
-@dataclass(frozen=True)
-class ForeignRecoveryRecord:
-    """Immutable association between a local open document and foreign authority."""
-
-    local_document: DocumentIdentity
-    persisted: LeaseRecord
-    imported_at: str
-
-    def to_public_dict(self) -> dict[str, Any]:
-        payload = self.persisted.to_public_dict()
-        payload["source"] = "foreign_recovery"
-        payload["immutable"] = True
-        payload["foreign_document_session_uuid"] = self.persisted.document.session_uuid
-        payload["local_document"] = self.local_document.to_dict()
-        return payload
-
-
-@dataclass(frozen=True)
-class DocumentIdentityRefreshEvent:
-    """Token-free audit record for an automatic same-path identity refresh."""
-
-    at: str
-    trigger: str
-    document_session_uuid: str
-    document_name: str
-    canonical_path: str | None
-    lease_state: str
-    lease_id: str
-    generation: int
-    previous_file_identity: dict[str, Any] | None
-    refreshed_file_identity: dict[str, Any] | None
-    baseline_sha256: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "at": self.at,
-            "trigger": self.trigger,
-            "document_session_uuid": self.document_session_uuid,
-            "document_name": self.document_name,
-            "canonical_path": self.canonical_path,
-            "lease_state": self.lease_state,
-            "lease_id": self.lease_id,
-            "generation": self.generation,
-            "previous_file_identity": self.previous_file_identity,
-            "refreshed_file_identity": self.refreshed_file_identity,
-            "baseline_sha256": self.baseline_sha256,
-        }
-
-
 _IDENTITY_REFRESHABLE_STATES = frozenset(
     {
         LeaseState.ACQUIRING,
@@ -250,14 +97,6 @@ _RECOVERY_IDENTITY_REFRESHABLE_STATES = frozenset(
         LeaseState.UNLOCKED_DIRTY,
     }
 )
-
-
-@dataclass(frozen=True)
-class _CancellationContext:
-    request_id: str
-    previous_state: LeaseState
-    previous_operation: str
-    mutation_may_have_begun: bool = False
 
 
 _OWNER_AUTHORIZABLE_STATES = frozenset(

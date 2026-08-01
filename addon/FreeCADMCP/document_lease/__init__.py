@@ -1,5 +1,7 @@
 """FreeCAD-independent version-2 document lease core."""
 
+from .errors import *  # noqa: F403
+from .errors import __all__ as _error_exports
 from .identity import (  # noqa: F401 - public package re-exports
     DocumentIdentityError,
     DocumentIdentityService,
@@ -10,53 +12,17 @@ from .identity import (  # noqa: F401 - public package re-exports
     capture_file_baseline,
     file_identity_for_path,
 )
-from .model import (  # noqa: F401 - public package re-exports
-    ALLOWED_TRANSITIONS,
-    MAX_PERSISTED_TASK_SUMMARY_CHARS,
-    RECORD_KIND,
-    SCHEMA_VERSION,
-    DocumentIdentity,
-    DocumentSelector,
-    FileBaseline,
-    FileIdentity,
-    InvalidTransitionError,
-    LeaseCredential,
-    LeaseErrorInfo,
-    LeaseOwner,
-    LeaseRecord,
-    LeaseState,
-    LiveDocumentValidation,
-    SaveAsMigration,
-    SaveAsMigrationRole,
-    sanitize_persisted_task_summary,
-    token_fingerprint,
-    token_matches,
-    validate_transition,
-)
-from .service import (  # noqa: F401 - public package re-exports
-    AuthorizationError,
-    CleanReleaseError,
-    CoordinationError,
-    DirtyAcquisitionError,
-    DirtyAdoptionError,
-    DocumentLeaseService,
-    ForeignRecoveryError,
-    ForeignRecoveryRecord,
-    LeaseConflictError,
-    LeaseGrant,
-    LeaseServiceError,
-    LeaseStateError,
-    LiveDocumentValidationError,
-    LocalRecoveryError,
-    LocalRuntimeIdentity,
-    LockedErrorHandoffRequired,
-    OrphanedForeignRecoveryRequired,
-    OrphanedLocalMcpRecoveryRequired,
-    ProcessLivenessEvidence,
-    SavedForeignRecoveryRequired,
-)
+from .model import LeaseRecord
+from .service import DocumentLeaseService
 from .sidecar import (  # noqa: F401 - public package re-exports
     MAX_SIDECAR_BYTES,
+    SidecarStore,
+    guard_path_for,
+    parse_sidecar_bytes,
+    sidecar_path_for,
+    validate_sidecar_payload,
+)
+from .sidecar_types import (  # noqa: F401 - public package re-exports
     SidecarAtomicityError,
     SidecarCommitUncertainError,
     SidecarConflictError,
@@ -67,13 +33,11 @@ from .sidecar import (  # noqa: F401 - public package re-exports
     SidecarNetworkPathError,
     SidecarNotFoundError,
     SidecarPermissionError,
-    SidecarStore,
     SidecarTooLargeError,
-    guard_path_for,
-    parse_sidecar_bytes,
-    sidecar_path_for,
-    validate_sidecar_payload,
 )
+from .sidecar_types import __all__ as _sidecar_type_exports
+from .types import *  # noqa: F403
+from .types import __all__ as _type_exports
 
 # Soft bridge to FreeCAD core mutation authority (optional import for callers).
 try:
@@ -81,4 +45,33 @@ try:
 except Exception:  # pragma: no cover - keep package importable without FreeCAD
     core_authority = None  # type: ignore
 
-__all__ = [name for name in globals() if not name.startswith("_")]
+_identity_exports = [
+    "DocumentIdentityError",
+    "DocumentIdentityService",
+    "DuplicateDocumentError",
+    "IdentityMismatchError",
+    "UnknownDocumentError",
+    "canonicalize_path",
+    "capture_file_baseline",
+    "file_identity_for_path",
+]
+
+_sidecar_exports = [
+    "MAX_SIDECAR_BYTES",
+    "SidecarStore",
+    "guard_path_for",
+    "parse_sidecar_bytes",
+    "sidecar_path_for",
+    "validate_sidecar_payload",
+]
+
+__all__ = [
+    *_identity_exports,
+    *_type_exports,
+    "LeaseRecord",
+    "DocumentLeaseService",
+    *_error_exports,
+    *_sidecar_type_exports,
+    *_sidecar_exports,
+    "core_authority",
+]

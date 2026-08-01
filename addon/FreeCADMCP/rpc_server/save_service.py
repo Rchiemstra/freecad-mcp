@@ -20,8 +20,29 @@ import re
 import zipfile
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
 from typing import Any
+
+from .save_types.archive_verification import (
+    DEFAULT_REQUIRED_MEMBERS as _DEFAULT_REQUIRED_MEMBERS,
+)
+from .save_types.archive_verification import (
+    ArchiveVerification,
+)
+from .save_types.baseline_mismatch_error import BaselineMismatchError
+from .save_types.baseline_required_error import BaselineRequiredError
+from .save_types.destination_conflict_error import DestinationConflictError
+from .save_types.document_dirty_error import DocumentDirtyError
+from .save_types.domain_validation_error import DomainValidationError
+from .save_types.fcstd_verification_error import FcstdVerificationError
+from .save_types.finalize_result import FinalizeResult
+from .save_types.invalid_save_request_error import InvalidSaveRequestError
+from .save_types.lifecycle_callback_error import LifecycleCallbackError
+from .save_types.save_invocation import SaveInvocation
+from .save_types.save_invocation_error import SaveInvocationError
+from .save_types.save_preflight import SavePreflight
+from .save_types.save_result import SaveResult
+from .save_types.save_service_error import SaveServiceError
+from .save_types.saved_file_unstable_error import SavedFileUnstableError
 
 try:
     from document_state import (
@@ -59,170 +80,6 @@ except ImportError:  # Repository/unit-test namespace import.
 
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-_DEFAULT_REQUIRED_MEMBERS = ("Document.xml",)
-
-
-class SaveServiceError(RuntimeError):
-    """Structured save failure suitable for an RPC error response."""
-
-    code = "SAVE_SERVICE_ERROR"
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        stage: str,
-        path: str | None = None,
-        mutation_may_have_occurred: bool = False,
-        details: Mapping[str, Any] | None = None,
-    ) -> None:
-        self.stage = stage
-        self.path = path
-        self.mutation_may_have_occurred = bool(mutation_may_have_occurred)
-        self.details = dict(details or {})
-        super().__init__(message)
-
-    def to_dict(self, *, request_id: str | None = None) -> dict[str, Any]:
-        error: dict[str, Any] = {
-            "code": self.code,
-            "message": str(self),
-            "stage": self.stage,
-            "mutation_may_have_occurred": self.mutation_may_have_occurred,
-            "details": dict(self.details),
-        }
-        if self.path is not None:
-            error["path"] = self.path
-        if request_id:
-            error["request_id"] = request_id
-        return error
-
-
-class InvalidSaveRequestError(SaveServiceError):
-    code = "INVALID_SAVE_REQUEST"
-
-
-class BaselineRequiredError(SaveServiceError):
-    code = "BASELINE_REQUIRED"
-
-
-class BaselineMismatchError(SaveServiceError):
-    code = "BASELINE_MISMATCH"
-
-
-class DestinationConflictError(SaveServiceError):
-    code = "SAVE_AS_DESTINATION_CONFLICT"
-
-
-class SaveInvocationError(SaveServiceError):
-    code = "FREECAD_SAVE_FAILED"
-
-
-class DocumentDirtyError(SaveServiceError):
-    code = "DOCUMENT_REMAINS_DIRTY"
-
-
-class SavedFileUnstableError(SaveServiceError):
-    code = "SAVED_FILE_UNSTABLE"
-
-
-class FcstdVerificationError(SaveServiceError):
-    code = "FCSTD_VERIFICATION_FAILED"
-
-
-class DomainValidationError(SaveServiceError):
-    code = "SAVE_DOMAIN_VALIDATION_FAILED"
-
-
-class LifecycleCallbackError(SaveServiceError):
-    code = "SAVE_LIFECYCLE_CALLBACK_FAILED"
-
-
-@dataclass(frozen=True)
-class ArchiveVerification:
-    member_count: int
-    uncompressed_size: int
-    required_members: tuple[str, ...] = _DEFAULT_REQUIRED_MEMBERS
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "member_count": self.member_count,
-            "uncompressed_size": self.uncompressed_size,
-            "required_members": list(self.required_members),
-        }
-
-
-@dataclass(frozen=True)
-class SaveResult:
-    """Authoritative result returned only after the saved FCStd was verified."""
-
-    mode: str
-    path: str
-    previous_path: str | None
-    baseline: FileBaseline
-    archive: ArchiveVerification
-    validation_profile: str = "default"
-    domain_validation: Mapping[str, Any] = field(default_factory=dict)
-    destination_preexisted: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "ok": True,
-            "mode": self.mode,
-            "path": self.path,
-            "previous_path": self.previous_path,
-            "baseline": self.baseline.to_dict(),
-            "archive": self.archive.to_dict(),
-            "validation_profile": self.validation_profile,
-            "domain_validation": dict(self.domain_validation),
-            "destination_preexisted": self.destination_preexisted,
-        }
-
-
-@dataclass(frozen=True)
-class SaveInvocation:
-    """GUI-thread result captured immediately after FreeCAD writes the file."""
-
-    mode: str
-    path: str
-    comparison_key: str
-    previous_path: str | None
-    validation_profile: str = "default"
-    destination_preexisted: bool = False
-
-
-@dataclass(frozen=True)
-class SavePreflight:
-    """Filesystem evidence captured outside FreeCAD's GUI thread."""
-
-    mode: str
-    path: str
-    comparison_key: str
-    previous_path: str | None
-    previous_comparison_key: str | None
-    source_baseline: FileBaseline | None
-    validation_profile: str = "default"
-    destination_preexisted: bool = False
-    destination_baseline: FileBaseline | None = None
-
-
-@dataclass(frozen=True)
-class FinalizeResult:
-    save: SaveResult
-    verified_state: Any = None
-    release_result: Any = None
-    released: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        result = {
-            "ok": True,
-            "save": self.save.to_dict(),
-            "released": self.released,
-        }
-        if isinstance(self.verified_state, Mapping):
-            result["verified_state"] = dict(self.verified_state)
-        if isinstance(self.release_result, Mapping):
-            result["release"] = dict(self.release_result)
-        return result
 
 
 def _identity_dict(identity: FileIdentity | None) -> dict[str, Any] | None:

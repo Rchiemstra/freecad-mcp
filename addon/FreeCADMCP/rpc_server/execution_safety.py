@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
-from enum import Enum
+
+from .execution_safety_types.gui_blocking_risk import GuiBlockingRisk
+from .execution_safety_types.gui_geometry_loop_risk import GuiGeometryLoopRisk
+from .execution_safety_types.request_class import RequestClass
 
 _BOOLEAN_METHODS = frozenset({"cut", "common", "fuse", "multiCut", "multiFuse"})
 _GEOMETRY_TRANSFORM_METHODS = frozenset({"mirror", "transformGeometry"})
@@ -24,28 +26,6 @@ _LIGHTWEIGHT_METHODS = frozenset({
     "isNull", "isClosed", "dumps", "keys", "values", "items", "get",
 })
 _LIGHTWEIGHT_IMPORTS = frozenset({"FreeCAD", "json", "math"})
-
-
-class RequestClass(Enum):
-    GUI_MUTATION = "gui_mutation"
-    GUI_LIGHTWEIGHT_READ = "gui_lightweight_read"
-    WORKER_ANALYSIS = "worker_analysis"
-    UNKNOWN = "unknown"
-
-
-@dataclass(frozen=True)
-class GuiBlockingRisk:
-    boolean_calls: int
-    transform_calls: int
-    reason: str
-
-
-@dataclass(frozen=True)
-class GuiGeometryLoopRisk:
-    expensive_calls: int
-    worker_only_calls: int
-    loops: int
-    reason: str
 
 
 def classify_execute_code(code: str, *, read_only: bool) -> RequestClass:

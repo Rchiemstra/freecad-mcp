@@ -2,27 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
-import sys
 
-
-_MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "addon"
-    / "FreeCADMCP"
-    / "rpc_server"
-    / "execution_safety.py"
+from addon.FreeCADMCP.rpc_server.execution_safety import (
+    RequestClass,
+    classify_execute_code,
+    find_gui_blocking_risk,
+    find_gui_geometry_loop_risk,
 )
-_SPEC = importlib.util.spec_from_file_location("freecad_mcp_execution_safety", _MODULE_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-_MODULE = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = _MODULE
-_SPEC.loader.exec_module(_MODULE)
-find_gui_blocking_risk = _MODULE.find_gui_blocking_risk
-find_gui_geometry_loop_risk = _MODULE.find_gui_geometry_loop_risk
-classify_execute_code = _MODULE.classify_execute_code
-RequestClass = _MODULE.RequestClass
+
 SWEEP45_1_CODE = (
     Path(__file__).resolve().parent / "fixtures" / "sweep45_1_payload.py.txt"
 ).read_text(encoding="utf-8")

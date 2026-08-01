@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 0 complete (next: Phase 1) |
+| Current phase | Phase 1 **complete** (next: Phase 2) |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `259b9aa` — `refactor(mcp): phase 0 ruff hygiene on package trees` |
-| ARCH001 / ARCH002 / Ruff (actual) | 37 / 26 / 112 (C901 112) |
+| Last phase commit (submodule) | `f2ea1bd` — `refactor(mcp): phase 1 extract leaf types for ARCH002` |
+| ARCH001 / ARCH002 / Ruff (actual) | 36 / 13 / 112 (C901 112) |
 | Blockers | none |
-| Resume hint | Start Phase 1 Wave 1 (1A–1D) |
+| Resume hint | Start Phase 2 Wave 1 (2A–2D) |
 
 ### 11.2 Phase ceilings and status
 
@@ -1159,7 +1159,7 @@ the short commit hash in Notes when a phase completes.
 | Phase | Commit | Workstreams | Reviews | Docker unit/e2e/core/bench | ARCH001 ≤ | ARCH002 ≤ | Ruff ≤ | Status | Notes |
 |------:|--------|-------------|---------|----------------------------|----------:|----------:|-------:|--------|-------|
 | 0 | `refactor(mcp): phase 0 ruff hygiene on package trees` | 0A, 0B | cleared | pass | 37 | 26 | 112 | **done** | actual 37/26/112; `259b9aa` (doc hash may drift on doc-only amend; `git log -1` canonical) |
-| 1 | `refactor(mcp): phase 1 extract leaf types for ARCH002` | 1A–1G | pending | pending | 36 | 13 | 117 | pending | |
+| 1 | `refactor(mcp): phase 1 extract leaf types for ARCH002` | 1A-1G | cleared | pass | 36 | 13 | 117 | **done** | actual 36/13/112; `f2ea1bd` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | pending | pending | 31 | 12 | 92 | pending | |
 | 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | pending | pending | 18 | 6 | 71 | pending | |
 | 4 | `refactor(mcp): phase 4 carve rpc_server façade` | 4A–4H waves | pending | pending | 17 | 5 | 26 | pending | |
@@ -1186,6 +1186,54 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 - Phase 1 phase commit
+- Done: integrator staged leaf-type packages (addon `*_types/`, `document_lease/errors/`, `sidecar_winapi/`, src `outcomes_types/`, `rpc_auth_types/`), tests, and plan §11; commit `refactor(mcp): phase 1 extract leaf types for ARCH002`
+- In flight / next: Phase 2 Wave 1 (2A–2D) — coordinator launches workers separately
+- Reviews: Wave 1/2 + merge-fix + C901-fix cleared
+- Docker / lint: global 36 / 13 / 112 vs Phase 1 ceilings — **ceilings met**; Docker unit/e2e/core/bench pass
+- Blockers / decisions: none; do not push from integrator session
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 1 / Wave 2 merge-fix
+- Done: restored §3.3 `lease_protocol` shims (`RequestEnvelope`, `SessionContext`, `ReplayCheck`, `redact_sensitive`, `canonical_json_bytes`, `SessionManager`, `RequestReplayCache`); I001 fix `commands_types/*` + `rpc_auth.py`; strengthened `test_handshake_type_shims.py`; EOF circular-import comment for `SessionManager`
+- In flight / next: merge re-review → phase commit if approved → Phase 2 Wave 1 (2A–2D)
+- Reviews: merge-fix addresses blocking §3.3 shim gaps from merge review
+- Docker / lint: tier-1 leaf paths exit 0 (I001 cleared; `rpc_auth.py`/`lease_protocol.py` ARCH001 pre-existing); global 36 / 13 / 112 vs Phase 1 ceilings — **ceilings met**; image rebuild; unit 1644 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: no commit until re-review approves; Phase 0 hash note unchanged (`259b9aa` doc drift allowed)
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 1 / Wave 2 integrator
+- Done: integrator barrels (`document_lease/errors/__init__.py`, `identity_types/__init__.py`, `lease_protocol_types/__init__.py`, `rpc_auth_types/__init__.py`); composed `document_lease/__init__.py` `__all__` from `errors` + `types` + `sidecar_types`; ARCH002 gap fixes (`BY_HANDLE_FILE_INFORMATION` → `identity_types/`, `_CancellationContext` → `errors/`, `SessionManager`/`RequestReplayCache` → `lease_protocol_types/`); §11.1/§11.2 updated
+- In flight / next: Grok merge review of full Phase 1 diff → phase commit if approved → Phase 2 Wave 1 (2A–2D)
+- Reviews: workers 1E–1G approved pre-merge; integrator merge review pending
+- Docker / lint: integrator barrels exit 0; global 36 / 13 / 112 (C901 112) vs Phase 1 ceilings 36 / 13 / 117 — **ceilings met**; unit 1641 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: no commit until merge review approves; `replay_cache_helpers.py` integrator-owned helper split keeps `request_replay_cache.py` ≤300
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 1 / Wave 2 start
+- Done: Wave 1 merge-fix review approved; launched parallel workers 1E–1G (Wave 2 leaf extraction per §6 Phase 1)
+- In flight / next: 1E (`document_lease/service.py` errors/DTO preamble → `document_lease/errors/**`), 1F (`identity_types/**`), 1G (`lease_protocol_types/**` + `rpc_auth_types/**`); after worker reports → per-WS Grok reviews → integrator merge → Phase 1 Docker gate + commit
+- Reviews: Wave 1 integrator merge-fix approved
+- Docker / lint: unchanged from Wave 1 merge (36 / 17 / 112); tier-1 gate after Wave 2 merge
+- Blockers / decisions: none
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 1 / Wave 1 integrator merge
+- Done: merged 1A–1D worker diffs; integrator-owned barrels (`document_lease/types/__init__.py`, `sidecar_types/__init__.py`, `save_types/__init__.py`); explicit `document_lease/__init__.py` `__all__` (no `globals()`); §3.3 shim restore (`commands.save_settings` / `commands.FreeCAD` + lazy `commands` import in remote toggle); test import hygiene (I001); Docker image rebuild
+- In flight / next: Wave 2 (1E–1G); phase commit deferred until Wave 2 + full phase gate
+- Reviews: workers 1A–1D approved pre-merge; integrator hygiene fix for `test_addon_settings` remote-toggle monkeypatch surface
+- Docker / lint: unit 1637 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass; global 36 / 17 / 112 (C901 112) vs Phase 1 ceilings 36 / 13 / 117 — ARCH002 still above ceiling (17>13); Wave 2 expected to close gap
+- Blockers / decisions: none; `sidecar_winapi/` intentionally no public barrel (internal lazy WinAPI only)
+- §3.4 diagrams: not touched
+
+### 2026-08-01 — Phase 1 / Wave 1 start
+- Done: launched parallel workers 1A–1D (leaf type extraction per §6 Phase 1)
+- In flight / next: 1A (`document_lease/model.py` → `types/`), 1B (`sidecar.py` → `sidecar_types/` + `sidecar_winapi/`), 1C (`save_service.py` → `save_types/`), 1D (small multi-class leaves); after worker reports → per-WS Grok reviews → integrator merge → Wave 2 (1E–1G)
+- Reviews: pending (awaiting worker reports)
+- Docker / lint: unchanged from Phase 0 baseline (37 / 26 / 112); tier-1 gate after merge
+- Blockers / decisions: none
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 0 phase commit
 - Done: single phase commit `refactor(mcp): phase 0 ruff hygiene on package trees`; §11.2 Phase 0 status **done**
