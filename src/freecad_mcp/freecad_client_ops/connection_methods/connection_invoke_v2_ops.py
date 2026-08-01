@@ -1,0 +1,81 @@
+"""FreeCADConnection method implementations."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Mapping
+from typing import Any
+
+from ...lease_manager import (
+    RpcRequestContext,
+)
+from .connection_invoke_v2_helpers import (
+    _SESSION_EXPIRED_CODES,
+    invoke_v2_execution_category,
+    invoke_v2_prepare_telemetry,
+    invoke_v2_retry_expired_session,
+    invoke_v2_session_error_code,
+    invoke_v2_transport,
+    invoke_v2_update_runtime_links,
+)
+
+logger = logging.getLogger("FreeCADMCPserver")
+
+
+def invoke_v2(
+    conn,
+    method: str,
+    params: Mapping[str, Any] | None,
+    context: RpcRequestContext,
+    *,
+    control: bool = False,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """Send one immutable v2 envelope without shared credential headers."""
+
+    category = invoke_v2_execution_category(method, params)
+    task_context_id = invoke_v2_prepare_telemetry(
+        context,
+        method=method,
+        control=control,
+        category=category,
+    )
+    response = invoke_v2_transport(
+        conn,
+        method,
+        params,
+        context,
+        control=control,
+        timeout=timeout,
+    )
+    stale_retry = conn._handle_stale_rpc_refusal(
+        response if isinstance(response, Mapping) else {},
+        method=method,
+        context=context,
+    )
+    if stale_retry is not None:
+        return stale_retry
+    if isinstance(response, Mapping):
+        invoke_v2_update_runtime_links(
+            response,
+            task_context_id=task_context_id,
+            request_id=context.request_id,
+        )
+    error_code = (
+        invoke_v2_session_error_code(response)
+        if isinstance(response, Mapping)
+        else None
+    )
+    if error_code not in _SESSION_EXPIRED_CODES:
+        return response
+    transport_method = "invoke_v2_control" if control else "invoke_v2"
+    return invoke_v2_retry_expired_session(
+        conn,
+        method,
+        params,
+        context,
+        response=response,
+        transport_method=transport_method,
+        control=control,
+        timeout=timeout,
+    )

@@ -1141,14 +1141,14 @@ Refresh these fields in place; do not append.
 
 | Field | Value |
 |-------|-------|
-| Current phase | Phase 5 **done** |
+| Current phase | Phase 6 **done** |
 | Current wave | — |
 | In flight | — |
 | Last updated | 2026-08-01 |
-| Last phase commit (submodule) | `5d05135` — `refactor(mcp): phase 5 split document_lock and lock_indicator` (git log -1 canonical) |
-| ARCH001 / ARCH002 / Ruff (actual) | 15 / 3 / 12 (C901 11, E501 1) |
+| Last phase commit (submodule) | `7183f05` — `refactor(mcp): phase 6 split MCP client modules` (git log -1 canonical) |
+| ARCH001 / ARCH002 / Ruff (actual) | 11 / 0 / 5 (C901 5) |
 | Blockers | none |
-| Resume hint | Phase 6 — launch 6A/6B/6C workers in parallel |
+| Resume hint | Phase 7 — launch 7A/7B/7C workers in parallel |
 
 ### 11.2 Phase ceilings and status
 
@@ -1163,8 +1163,8 @@ the short commit hash in Notes when a phase completes.
 | 2 | `refactor(mcp): phase 2 split document_lease modules` | 2A–2E | cleared | pass | 31 | 12 | 92 | **done** | actual 31/12/88; `397877d` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 3 | `refactor(mcp): phase 3 split rpc_server satellites` | 3A–3F | cleared | pass | 18 | 6 | 71 | **done** | actual 18/6/69; `b6c23e0` (doc hash may drift on doc-only amend; `git log -1` canonical) |
 | 4 | `refactor(mcp): phase 4 carve rpc_server façade and methods` | 4A–4H waves | cleared | pass | 17 | 5 | 26 | **done** | actual 17/5/25; `bae159a` |
-| 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | cleared | pass | 15 | 3 | 12 | **done** | actual 15/3/12; `5d05135` (doc hash may drift on doc-only amend; git log -1 canonical) |
-| 6 | `refactor(mcp): phase 6 split MCP client stack` | 6A–6D | pending | pending | 11 | 0 | 5 | pending | |
+| 5 | `refactor(mcp): phase 5 split document_lock and lock_indicator` | 5A, 5B | cleared | pass | 15 | 3 | 12 | **done** | actual 15/3/12; `17e139c` (doc hash may drift on doc-only amend; git log -1 canonical) |
+| 6 | `refactor(mcp): phase 6 split MCP client modules` | 6A–6D | cleared | pass | 11 | 0 | 5 | **done** | actual 11/0/5; `7183f05` (doc hash may drift on doc-only amend; git log -1 canonical) |
 | 7 | `refactor(mcp): phase 7 split server and operations` | 7A–7E | pending | pending | 0 | 0 | 0 | pending | |
 | 8 | `refactor(mcp): phase 8 full ARCH lint gate` | integrator | pending | pending | 0 | 0 | 0 | pending | full lint exit 0 |
 
@@ -1186,6 +1186,14 @@ Template:
 ```
 
 Log:
+
+### 2026-08-01 — Phase 6 phase commit
+- Done: merged Waves 6A–6D into thin `freecad_client.py` + `freecad_client_ops/` (transport/invoke/connection slices), `lease_manager.py` + `lease_manager_ops/` (orchestrator/status/recovery), `instrumented_server.py` + `instrumented_server_ops/` (call-tool/telemetry lanes), `rpc_auth.py` + `rpc_auth_ops/` (handshake request/response); §3.1 façade late-binds; C901 decomposed in client stack paths; integrator nit fixes (`_parse_utc` context string in `handshake_response`, `worker_entry` E501 wrap); §11.1/§11.2 updated; Phase 5 hash synced to `17e139c`
+- In flight / next: Phase 7 (7A operations/core, 7B locking/diagnostics, 7C parametric curves/measure/assembly) — coordinator launches workers in parallel
+- Reviews: Waves 6A–6D + integrator merge cleared
+- Docker / lint: tier-1 Phase 6 touched paths exit 0 (74 files); global 11 / 0 / 5 vs Phase 6 ceilings 11 / 0 / 5 — **ceilings met**; image rebuild; unit 1706 pass / e2e 115 pass / core 4 pass (7 xfail) / benchmark 1 pass
+- Blockers / decisions: scratch scripts left untracked; do not push from integrator session
+- §3.4 diagrams: not touched
 
 ### 2026-08-01 — Phase 5 alias-identity review fix
 - Done: expanded alias identity suite — every `document_lock_ops` / `lock_indicator_ops` submodule flat↔package `is` checks; `lock_indicator` ↔ `addon.FreeCADMCP.lock_indicator` dual-name identity; `install_module_aliases(__name__)` on state-bearing ops (`agent_mutation_ops`, `request_identity`, `internal_snapshot_save_ops`, `gui_callback`, `registration`, `lock_indicator_ops.state`); duplicate `_internal_snapshot_save_ctx` assignment removed; §11 hash synced to amended `5d05135`

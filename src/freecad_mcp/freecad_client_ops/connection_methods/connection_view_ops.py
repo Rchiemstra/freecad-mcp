@@ -1,0 +1,228 @@
+"""FreeCADConnection method implementations."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+logger = logging.getLogger("FreeCADMCPserver")
+
+
+
+def get_active_screenshot(
+        conn,
+        view_name: str | None = "Isometric",
+        width: int | None = None,
+        height: int | None = None,
+        focus_object: str | None = None,
+        focus_objects: list[str] | None = None,
+        yaw_deg: float | None = None,
+    ) -> str | None:
+        try:
+            return conn.server.get_active_screenshot(
+                view_name,
+                width,
+                height,
+                focus_object,
+                focus_objects,
+                yaw_deg,
+            )
+        except Exception as e:
+            logger.error(f"Error getting screenshot: {e}")
+            return None
+
+
+def capture_view_sequence(
+        conn,
+        frames: list[dict[str, Any]] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        orbit: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return conn.server.capture_view_sequence(frames, width, height, orbit)
+        except Exception as e:
+            logger.error(f"Error capturing view sequence: {e}")
+            return {"ok": False, "error": str(e), "frames": []}
+
+
+def capture_view_sequence_to_disk(
+        conn,
+        frames: list[dict[str, Any]] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        orbit: dict[str, Any] | None = None,
+        frame_dir: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return conn.server.capture_view_sequence_to_disk(
+                frames, width, height, orbit, frame_dir
+            )
+        except Exception as e:
+            logger.error(f"Error capturing view sequence to disk: {e}")
+            return {"ok": False, "error": str(e), "frame_paths": []}
+
+
+def refresh_view(
+        conn,
+        focus_objects: list[str] | None = None,
+        focus_object: str | None = None,
+        touch_objects: list[str] | None = None,
+        fit: bool = False,
+        capture: bool = False,
+        view_name: str = "Isometric",
+        width: int | None = None,
+        height: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return conn.server.refresh_view(
+                focus_objects,
+                focus_object,
+                touch_objects,
+                fit,
+                capture,
+                view_name,
+                width,
+                height,
+            )
+        except Exception as e:
+            logger.error(f"Error refreshing view: {e}")
+            return {"ok": False, "error": str(e)}
+
+
+def repair_view_placements(
+        conn, doc_name: str, touch_objects: list[str], fit: bool = False
+    ) -> dict[str, Any]:
+        routed = conn._invoke_mutation_v2(
+            "repair_view_placements",
+            {
+                "doc_name": doc_name,
+                "touch_objects": touch_objects,
+                "fit": fit,
+            },
+            document_names=(doc_name,),
+            operation_name="Repair view placements",
+        )
+        if routed is not None:
+            return routed
+        return conn.server.repair_view_placements(doc_name, touch_objects, fit)
+
+
+def animate_placement(
+        conn,
+        doc_name: str,
+        obj_name: str,
+        keyframes: list[dict[str, Any]] | None = None,
+        path_object: str | None = None,
+        sample_count: int = 12,
+        view_name: str = "Isometric",
+        focus_objects: list[str] | None = None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> dict[str, Any]:
+        try:
+            routed = conn._invoke_mutation_v2(
+                "animate_placement",
+                {
+                    "doc_name": doc_name,
+                    "obj_name": obj_name,
+                    "keyframes": keyframes,
+                    "path_object": path_object,
+                    "sample_count": sample_count,
+                    "view_name": view_name,
+                    "focus_objects": focus_objects,
+                    "width": width,
+                    "height": height,
+                },
+                document_names=(doc_name,),
+                operation_name="Animate placement",
+            )
+            if routed is not None:
+                return routed
+            return conn.server.animate_placement(
+                doc_name,
+                obj_name,
+                keyframes,
+                path_object,
+                sample_count,
+                view_name,
+                focus_objects,
+                width,
+                height,
+            )
+        except Exception as e:
+            logger.error(f"Error animating placement: {e}")
+            return {"ok": False, "error": str(e)}
+
+
+def get_objects(conn, doc_name: str) -> list[dict[str, Any]]:
+        return conn.server.get_objects(doc_name)
+
+
+def get_object(conn, doc_name: str, obj_name: str) -> dict[str, Any]:
+        return conn.server.get_object(doc_name, obj_name)
+
+
+def get_parts_list(conn) -> list[str]:
+        return conn.server.get_parts_list()
+
+
+def list_documents(conn) -> list[str]:
+        return conn.server.list_documents()
+
+
+def open_document(conn, path: str) -> dict[str, Any]:
+        return conn.server.open_document(path)
+
+
+def activate_document(conn, doc_name: str) -> dict[str, Any]:
+        return conn.server.activate_document(doc_name)
+
+
+def set_tree_expanded(
+        conn,
+        doc_name: str,
+        object_names: list[str] | None = None,
+        mode: str = "expand",
+    ) -> dict[str, Any]:
+        return conn.server.set_tree_expanded(doc_name, object_names, mode)
+
+
+def select_subshapes(
+        conn,
+        doc_name: str,
+        selections: list | None = None,
+        clear: bool = True,
+    ) -> dict[str, Any]:
+        return conn.server.select_subshapes(doc_name, selections, clear)
+
+
+def get_selection(conn) -> dict[str, Any]:
+        return conn.server.get_selection()
+
+
+def get_gui_state(conn) -> dict[str, Any]:
+        return conn.server.get_gui_state()
+
+
+def recompute_and_wait(conn, doc_name: str) -> dict[str, Any]:
+        routed = conn._invoke_mutation_v2(
+            "recompute_and_wait",
+            {"doc_name": doc_name},
+            document_names=(doc_name,),
+            operation_name="Recompute document",
+        )
+        if routed is not None:
+            return routed
+        return conn.server.recompute_and_wait(doc_name)
+
+
+def set_section_view(
+        conn,
+        enabled: bool | None = None,
+        placement: dict[str, Any] | None = None,
+        base: list[float] | None = None,
+        normal: list[float] | None = None,
+        no_manip: bool = True,
+    ) -> dict[str, Any]:
+        return conn.server.set_section_view(enabled, placement, base, normal, no_manip)

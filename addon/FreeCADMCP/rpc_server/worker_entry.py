@@ -111,7 +111,7 @@ except ImportError:  # FreeCADCmd script execution without a package context
             from addon.FreeCADMCP.rpc_server.worker_entry_types.external_link_unresolved import (
                 ExternalLinkUnresolved,
             )
-            from addon.FreeCADMCP.rpc_server.worker_entry_types.external_subelement_unresolved import (
+            from addon.FreeCADMCP.rpc_server.worker_entry_types.external_subelement_unresolved import (  # noqa: E501
                 ExternalSubelementUnresolved,
             )
         except ImportError:
