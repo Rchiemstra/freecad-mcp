@@ -352,46 +352,38 @@ cannot be resolved by re-scoping.
 
 ## 5. Multitask operating model
 
+This refactor is executed with Cursor Multitask. Maximize parallel workers
+**only** when file ownership is disjoint. Default to one worker when fewer than
+two safe independent workstreams exist, and state why. Roles and hard rules
+match [`module-size-refactor-plan.md`](module-size-refactor-plan.md) §5.1–§5.2.
+
 ### 5.1 Roles
 
-This plan adopts the prerequisite's Codex subagent policy
-(`freecad_document_collaboration_plan.md` §5.1–§5.2). The earlier Composer/Cursor
-policy in this document is superseded; the two plans run in one program and must
-not use divergent worker policies.
+| Role | Model | Responsibilities |
+|------|-------|------------------|
+| **Worker** (implementation subagent) | **Composer 2.5 only** — never Composer 2.5 Fast | Implements one workstream under exclusive file ownership. Does not edit shared files. |
+| **Integrator** (parent / dedicated agent) | Same session orchestrator | Owns all shared files, merges worker outputs, runs Docker suites, updates §11 Progress in this doc, creates the **single phase commit**. Waits for all workers in a wave before combining. |
+| **Reviewer** (read-only subagent) | **Cursor Grok 4.5 High** | After every workstream (and again after integrator merge fixes), inspects the **actual diff and tests**. Extremely critical. Reports blocking / important / non-blocking findings. |
 
-| Role | Model and reasoning | Responsibilities |
-|---|---|---|
-| **Worker** | **GPT-5.6 Terra / high** by default; **GPT-5.6 Sol / high or xhigh** for the risk classes below | Implements one frozen workstream under exclusive file ownership. Does not edit shared files. Adds focused tests. |
-| **Integrator** (parent) | Session parent model; raise effort for shared-seam integration | Partitions work, freezes interfaces, owns shared files, waits for every worker in a wave, combines outputs, runs every Docker suite, updates §11, creates the single phase commit. |
-| **Reviewer** (read-only) | **GPT-5.6 Sol / xhigh**; **max** only for an unresolved correctness blocker | Reviews adversarially after every workstream and after integration. Reports blocking, important, and non-blocking findings. Never edits. |
+### 5.2 Hard Multitask rules
 
-Risk classes requiring Sol: the wire migration and error-model change, the shared
-protocol module, runtime construction and disposal, cancellation and GUI-thread
-seams, the generator's contract-equality proof, and every review gate.
-
-### 5.2 Hard rules
-
-1. Apply the prerequisite's §5.2.1 test before every spawn; record task, done
-   condition, model, reasoning level, exclusive paths, and dependencies.
-2. Do not delegate a whole phase to one worker when at least two safe workstreams
-   exist; do not split a tightly coupled workstream to manufacture parallelism.
-3. Assign exclusive file ownership before starting a wave.
-4. Workers never edit §5.3 shared files.
-5. Workers do not recursively delegate without explicit integrator authorization.
-6. Workers report changed files, tests, assumptions, and blockers (§5.6).
-7. One integrator owns shared files, integration, Docker execution, §11 updates,
-   and the single phase commit.
-8. The integrator waits for all workers in a wave before combining.
-9. After every workstream, run a read-only **Sol / xhigh** review of the actual diff.
-10. Fix every blocking and important finding, then re-review.
-11. Run the required Docker suites before the phase commit (§5.7).
-12. Do not mark a phase complete unless all reviews and suites pass.
-13. If fewer than two independent workstreams remain, use one worker or work
-    locally and record why.
-14. One commit per phase, inside `tools/mcp/freecad-mcp`.
-15. Every moved symbol keeps its old import path (§3.6); a removed re-export is blocking.
-16. Verify assigned models before each wave; never silently downgrade.
-17. Keep one runtime slot free for the integrator.
+1. Use **Composer 2.5** for every implementation subagent.
+2. **Never** use Composer 2.5 Fast or Grok 4.5 High Fast for subagents.
+3. **Do not** delegate an entire phase to one subagent when ≥2 safe workstreams exist.
+4. Assign **exclusive file ownership** to each worker (listed in the phase table).
+5. Workers **must not** edit shared files (see §5.3).
+6. Workers must report: **changed files**, **tests added**, **assumptions**, **blockers** (§5.6).
+7. Keep **shared files**, **integration**, **Docker execution**, and **§11 Progress
+   updates** with one dedicated integrator.
+8. The integrator **waits** for workers and **combines** their changes.
+9. After every workstream, start a **read-only Cursor Grok 4.5 High** review subagent.
+10. The reviewer must be extremely critical, inspect the actual diff and tests, and report **blocking**, **important**, and **non-blocking** findings.
+11. **Fix all blocking and important findings**, then review again.
+12. The integrator runs the required Docker suites before the phase commit (§5.7).
+13. **Do not** mark the phase complete unless all reviews and Docker suites pass.
+14. If fewer than two safe independent workstreams exist, use **one** worker and **explicitly explain** why parallelization is unsafe.
+15. **One git commit per phase** (integrator), inside `tools/mcp/freecad-mcp`. Workstream branches/worktrees may exist temporarily; they are not the delivery unit.
+16. Every moved symbol keeps its old import path working via an explicit shim (§3.6); reviewers treat a removed re-export as blocking.
 
 ### 5.3 Shared files (integrator-only)
 
@@ -806,7 +798,7 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 4. Freeze integrator-only shared paths from §5.3.
 5. Give each worker exact exclusive source, target, and test paths plus forbidden paths.
 6. State the native-authority rule and the public contracts the phase must preserve.
-7. Require the §5.6 worker report and an adversarial Sol/xhigh review.
+7. Require the §5.6 worker report and a read-only Cursor Grok 4.5 High review.
 8. Clear blocking and important findings before integration.
 9. Apply shared façade, barrel, registry, fixture, generator, and composition changes yourself.
 10. Run the §5.7 gate for the phase; run the integration gate where §6 marks it.
