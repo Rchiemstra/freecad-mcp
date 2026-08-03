@@ -7,9 +7,13 @@ from typing import Any
 
 import FreeCAD
 
-from ..lease_protocol import RequestReplayCache
 from ..save_service import SaveService
 from ..settings import SettingsPolicyError
+
+try:
+    from ..._shared.protocol.request_replay_cache import RequestReplayCache
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.request_replay_cache import RequestReplayCache
 
 logger = logging.getLogger("FreeCADMCP.rpc_server")
 

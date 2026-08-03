@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
+from ._shared.protocol.constants import REQUIRED_PROTOCOL_FEATURES
 from .build_info import (
     build_id,
     event_schema_version,
@@ -18,7 +19,6 @@ from .build_info import (
     protocol_version,
 )
 from .responses import json_response
-from .rpc_auth import REQUIRED_PROTOCOL_FEATURES
 from .tools_server_surfaces import server_connection, server_state
 
 if TYPE_CHECKING:

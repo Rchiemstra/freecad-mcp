@@ -76,6 +76,11 @@ def authority_symbol_census(
         path_pattern = _IMPLICIT_PATH_PATTERNS[authority_id]
         for path in production_files:
             relative = path.relative_to(root).as_posix()
+            # Phase 3 vendors one byte-identical protocol implementation into both
+            # processes. Count the add-on copy once; byte equality independently
+            # prevents the client vendor from hiding a divergent authority symbol.
+            if relative.startswith("src/freecad_mcp/_shared/protocol/"):
+                continue
             if authority_id == "sidecar_correctness" and path.name == "git_sidecar.py":
                 continue
             if path_pattern.search(relative):

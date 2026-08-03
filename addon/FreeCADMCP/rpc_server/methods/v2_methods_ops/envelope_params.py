@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import inspect
 
-from ...lease_protocol import LeaseProtocolError
+try:
+    from ...._shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 
 
 def ordered_envelope_params(method, params):

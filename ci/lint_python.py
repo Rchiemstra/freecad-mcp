@@ -1374,7 +1374,26 @@ def _declarative_shim_statement(
             and not node.orelse
             and all(_declarative_shim_statement(item, bindings) for item in node.body)
         )
+    if isinstance(node, ast.Try):
+        return (
+            bool(node.handlers)
+            and not node.orelse
+            and not node.finalbody
+            and all(
+                _qualified_name(handler.type, bindings) == "ImportError"
+                and handler.name is None
+                and _import_only_fallback_arm(handler.body)
+                for handler in node.handlers
+            )
+            and _import_only_fallback_arm(node.body)
+        )
     return False
+
+
+def _import_only_fallback_arm(statements: list[ast.stmt]) -> bool:
+    return bool(statements) and all(
+        isinstance(item, ast.Import | ast.ImportFrom | ast.Pass) for item in statements
+    )
 
 
 def _check_shim_purity(parsed: ParsedFile) -> list[Violation]:
@@ -1442,13 +1461,77 @@ def _check_public_surface(parsed: ParsedFile) -> list[Violation]:
     ]
 
 
+def _is_immutable_constant_expression(node: ast.AST, known_names: set[str]) -> bool:
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, ast.Name):
+        return node.id in known_names
+    if isinstance(node, ast.Tuple):
+        return all(_is_immutable_constant_expression(item, known_names) for item in node.elts)
+    if isinstance(node, ast.UnaryOp):
+        return isinstance(node.op, ast.UAdd | ast.USub | ast.Invert) and (
+            _is_immutable_constant_expression(node.operand, known_names)
+        )
+    if isinstance(node, ast.BinOp):
+        return not isinstance(node.op, ast.MatMult) and all(
+            _is_immutable_constant_expression(item, known_names)
+            for item in (node.left, node.right)
+        )
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "frozenset"
+        and len(node.args) == 1
+        and not node.keywords
+        and isinstance(node.args[0], ast.Set | ast.Tuple)
+    ):
+        return all(
+            _is_immutable_constant_expression(item, known_names)
+            for item in node.args[0].elts
+        )
+    return False
+
+
+def _is_cohesive_constants_module(parsed: ParsedFile, public_names: list[str]) -> bool:
+    if parsed.path.stem != "constants" or not public_names:
+        return False
+    if not all(name.isupper() for name in public_names):
+        return False
+
+    local_constants: set[str] = set()
+    for node in parsed.tree.body:
+        name: str | None = None
+        value: ast.AST | None = None
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            name = node.targets[0].id
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            name = node.target.id
+            value = node.value
+        if name is None or name.startswith("_"):
+            continue
+        if not name.isupper() or value is None:
+            return False
+        if not _is_immutable_constant_expression(value, local_constants):
+            return False
+        local_constants.add(name)
+    return set(public_names) == local_constants
+
+
 def _check_mixed_responsibility(parsed: ParsedFile) -> list[Violation]:
     public_names = _public_names(parsed)
     subjects = _capability_subjects(parsed)
+    constants_module = _is_cohesive_constants_module(parsed, public_names)
     giant = len(public_names) >= 24 or (
         len(public_names) >= 12 and len(subjects) >= 3
     )
     mixed = len(subjects) >= 3 and len(public_names) >= 7
+    if constants_module and not mixed:
+        return []
     if not giant and not mixed:
         return []
     owner: ast.AST = parsed.tree.body[0] if parsed.tree.body else parsed.tree

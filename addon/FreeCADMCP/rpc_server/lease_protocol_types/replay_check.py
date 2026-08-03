@@ -1,15 +1,8 @@
-"""Extracted ``ReplayCheck`` for ARCH002 (workstream 1G)."""
+"""Compatibility import for the canonical replay check."""
 
-from __future__ import annotations
+try:
+    from ..._shared.protocol.replay_check import ReplayCheck
+except ImportError:
+    from _shared.protocol.replay_check import ReplayCheck
 
-from dataclasses import dataclass
-from typing import Any
-
-
-@dataclass(frozen=True)
-class ReplayCheck:
-    status: str
-    response: Any = None
-
-
-ReplayCheck.__module__ = "rpc_server.lease_protocol"
+__all__ = ["ReplayCheck"]

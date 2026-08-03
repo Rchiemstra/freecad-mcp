@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from ...lease_protocol import LeaseProtocolError
-
+# Keep this locator aligned with the frozen Phase 1 structural baseline
+# until the runtime-locator removal phase.
 
 def _rpc_mod():
     from ... import rpc_server as rpc_mod
 
     return rpc_mod
+
+
+try:
+    from ...._shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 
 
 def invoke_v2_control(self, payload):

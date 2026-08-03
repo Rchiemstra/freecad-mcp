@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .._shared.protocol.constants import REQUIRED_PROTOCOL_FEATURES
 from ..build_info import build_id, package_version, protocol_version
-from ..rpc_auth import REQUIRED_PROTOCOL_FEATURES
 
 
 def compatibility_for_manifest(manifest: Any | None) -> dict[str, Any]:

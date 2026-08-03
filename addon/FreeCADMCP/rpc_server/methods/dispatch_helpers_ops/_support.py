@@ -21,8 +21,6 @@ except ImportError:
 from ...gui_dispatcher import GuiDispatchError, GuiDispatchTimeout
 from ...handoff_continuations import HandoffContinuationStore
 from ...inflight_requests import InflightLeaseCredential, RequestCancellationError
-from ...lease_protocol import public_error as lease_protocol_public_error
-from ...lease_protocol import redact_sensitive as redact_lease_protocol_details
 from ...lease_runtime import _import_document_lease, _import_document_lock
 from ...mutation_guard import (
     DocumentHealthVerdict,
@@ -42,6 +40,19 @@ from ...snapshot_service import (
 )
 from ...telemetry import emit as emit_telemetry
 from ._common import _rpc_mod, logger
+
+try:
+    from ...._shared.protocol.public_error import (
+        public_error as lease_protocol_public_error,
+    )
+    from ...._shared.protocol.redaction import (
+        redact_sensitive as redact_lease_protocol_details,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.public_error import public_error as lease_protocol_public_error
+    from _shared.protocol.redaction import (
+        redact_sensitive as redact_lease_protocol_details,
+    )
 
 
 class _FreeCADProxy:

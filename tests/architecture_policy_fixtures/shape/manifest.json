@@ -32,6 +32,12 @@
       "expect": []
     },
     {
+      "path": "pass/import_fallback_shim.py",
+      "verdict": "pass",
+      "rules": ["shim_purity"],
+      "expect": []
+    },
+    {
       "path": "fail/impure_import_shim.py",
       "verdict": "fail",
       "rules": ["shim_purity"],
@@ -54,6 +60,13 @@
     },
     {
       "path": "fail/type_checking_else_shim.py",
+      "verdict": "fail",
+      "rules": ["shim_purity"],
+      "expect": ["ARCH105"],
+      "message_fragment": "not declarative and side-effect free"
+    },
+    {
+      "path": "fail/import_fallback_effect_shim.py",
       "verdict": "fail",
       "rules": ["shim_purity"],
       "expect": ["ARCH105"],
@@ -156,6 +169,33 @@
       "verdict": "pass",
       "rules": ["mixed_responsibility", "cohesive_value_types"],
       "expect": []
+    },
+    {
+      "path": "pass/cohesive_constants/constants.py",
+      "verdict": "pass",
+      "rules": ["mixed_responsibility", "giant_facade"],
+      "expect": []
+    },
+    {
+      "path": "fail/constants_import_facade/constants.py",
+      "verdict": "fail",
+      "rules": ["giant_facade"],
+      "expect": ["ARCH107"],
+      "message_fragment": "giant public facade"
+    },
+    {
+      "path": "fail/constants_runtime_values/constants.py",
+      "verdict": "fail",
+      "rules": ["giant_facade"],
+      "expect": ["ARCH107"],
+      "message_fragment": "giant public facade"
+    },
+    {
+      "path": "fail/constants_mutable_values/constants.py",
+      "verdict": "fail",
+      "rules": ["giant_facade"],
+      "expect": ["ARCH107"],
+      "message_fragment": "giant public facade"
     },
     {
       "path": "pass/private_helper_methods.py",

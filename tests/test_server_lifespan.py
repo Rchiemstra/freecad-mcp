@@ -1,11 +1,12 @@
 import asyncio
 import unittest
-from unittest import mock
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest import mock
 
 from freecad_mcp import server
 from freecad_mcp.lease_manager import LeaseClientManager, LeaseCredential
+from freecad_mcp.server_ops import manifest_auth
 
 
 class ServerLifespanTest(unittest.TestCase):
@@ -117,7 +118,7 @@ class ServerLifespanTest(unittest.TestCase):
         self.assertEqual(self.state.document_sessions, {})
 
     def test_session_refresh_margin_is_fail_closed(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.state.rpc_session_expires_at = (now + timedelta(minutes=10)).isoformat()
         self.assertFalse(server._session_needs_refresh())
 
@@ -128,7 +129,7 @@ class ServerLifespanTest(unittest.TestCase):
         self.assertTrue(server._session_needs_refresh())
 
     def test_authenticated_session_refresh_preserves_held_lease_credentials(self):
-        expiry = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        expiry = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
         manifest = SimpleNamespace(auth_secret_file="profile.auth")
         verified = SimpleNamespace(
             session_token="new-session",
@@ -149,17 +150,19 @@ class ServerLifespanTest(unittest.TestCase):
         self.state.lease_manager.store(credential)
 
         with (
-            mock.patch.object(server, "load_profile_secret", return_value=b"x" * 32),
             mock.patch.object(
-                server, "make_mcp_runtime_identity", return_value=object()
+                manifest_auth, "load_profile_secret", return_value=b"x" * 32
             ),
             mock.patch.object(
-                server,
+                manifest_auth, "make_mcp_runtime_identity", return_value=object()
+            ),
+            mock.patch.object(
+                manifest_auth,
                 "build_handshake_request_from_manifest",
                 return_value={"client_nonce": "nonce"},
             ),
             mock.patch.object(
-                server,
+                manifest_auth,
                 "verify_handshake_response_from_manifest",
                 return_value=verified,
             ),
@@ -196,7 +199,7 @@ class ServerLifespanTest(unittest.TestCase):
 
         original = manifest("runtime-old", 1001, "build-old")
         refreshed = manifest("runtime-new", 2002, "build-new")
-        expiry = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        expiry = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
         verified = SimpleNamespace(
             session_token="new-session-token",
             session_id="new-session-id",
@@ -215,17 +218,21 @@ class ServerLifespanTest(unittest.TestCase):
 
         with (
             mock.patch.object(
-                server, "load_instance_manifest", return_value=refreshed
+                manifest_auth, "load_instance_manifest", return_value=refreshed
             ) as reload_manifest,
-            mock.patch.object(server, "load_profile_secret", return_value=b"x" * 32),
-            mock.patch.object(server, "make_mcp_runtime_identity", return_value=object()),
             mock.patch.object(
-                server,
+                manifest_auth, "load_profile_secret", return_value=b"x" * 32
+            ),
+            mock.patch.object(
+                manifest_auth, "make_mcp_runtime_identity", return_value=object()
+            ),
+            mock.patch.object(
+                manifest_auth,
                 "build_handshake_request_from_manifest",
                 return_value={"client_nonce": "nonce"},
             ) as build_request,
             mock.patch.object(
-                server,
+                manifest_auth,
                 "verify_handshake_response_from_manifest",
                 return_value=verified,
             ) as verify_response,
@@ -267,8 +274,10 @@ class ServerLifespanTest(unittest.TestCase):
         self.state.auth_file = "C:/isolated-profile/auth.secret"
 
         with (
-            mock.patch.object(server, "load_instance_manifest", return_value=changed),
-            mock.patch.object(server, "load_profile_secret") as load_secret,
+            mock.patch.object(
+                manifest_auth, "load_instance_manifest", return_value=changed
+            ),
+            mock.patch.object(manifest_auth, "load_profile_secret") as load_secret,
             self.assertRaisesRegex(Exception, "immutable profile configuration"),
         ):
             server._authenticate_connection(mock.Mock(), force=True)

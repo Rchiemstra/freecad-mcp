@@ -2,6 +2,13 @@
   "authority_symbol_census": {
     "core_authority": [
       {
+        "column": 4,
+        "kind": "FunctionDef",
+        "line": 71,
+        "path": "addon/FreeCADMCP/_shared/protocol/request_replay_cache.py",
+        "symbol": "set_owner_lease_predicate"
+      },
+      {
         "column": 18,
         "kind": "ImportAlias",
         "line": 44,
@@ -360,15 +367,8 @@
       },
       {
         "column": 4,
-        "kind": "FunctionDef",
-        "line": 62,
-        "path": "addon/FreeCADMCP/rpc_server/lease_protocol_types/request_replay_cache.py",
-        "symbol": "set_owner_lease_predicate"
-      },
-      {
-        "column": 4,
         "kind": "Attribute",
-        "line": 110,
+        "line": 114,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "set_owner_lease_predicate"
       },
@@ -753,14 +753,14 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 8,
+        "line": 16,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/diagnostics.py",
         "symbol": "_import_core_authority"
       },
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 71,
+        "line": 81,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -1751,21 +1751,21 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 24,
+        "line": 40,
         "path": "src/freecad_mcp/server.py",
         "symbol": "STALE_RECOVERY_TRIGGER_HEARTBEAT"
       },
       {
         "column": 34,
         "kind": "ImportAlias",
-        "line": 38,
+        "line": 46,
         "path": "src/freecad_mcp/server.py",
         "symbol": "_lease_heartbeat_once"
       },
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 54,
+        "line": 62,
         "path": "src/freecad_mcp/server.py",
         "symbol": "_LEASE_HEARTBEAT_INTERVAL_S"
       },
@@ -9008,42 +9008,42 @@
       {
         "column": 12,
         "kind": "Name",
-        "line": 55,
+        "line": 59,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 11,
         "kind": "Name",
-        "line": 73,
+        "line": 77,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 92,
+        "line": 96,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "SidecarStore"
       },
       {
         "column": 4,
         "kind": "Name",
-        "line": 141,
+        "line": 145,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 58,
         "kind": "Name",
-        "line": 143,
+        "line": 147,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 66,
         "kind": "Name",
-        "line": 146,
+        "line": 150,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
@@ -9363,7 +9363,7 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 65,
+        "line": 75,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -12265,6 +12265,7 @@
     {
       "classification": "temporary_implementation",
       "current_paths": [
+        "addon/FreeCADMCP/_shared/protocol/request_replay_cache.py",
         "addon/FreeCADMCP/document_lease/__init__.py",
         "addon/FreeCADMCP/document_lease/core_authority.py",
         "addon/FreeCADMCP/document_lease/core_authority_ops/__init__.py",
@@ -12278,7 +12279,6 @@
         "addon/FreeCADMCP/document_lease/service_ops/orphan_recovery_validation.py",
         "addon/FreeCADMCP/document_lease/service_ops/recover_orphaned_foreign.py",
         "addon/FreeCADMCP/document_lease/service_ops/recover_orphaned_local.py",
-        "addon/FreeCADMCP/rpc_server/lease_protocol_types/request_replay_cache.py",
         "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py",
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot.py",

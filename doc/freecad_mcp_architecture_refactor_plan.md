@@ -794,18 +794,18 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `863535a2d4b6c33b5bfce8171762320060a34afb` |
 | Execution MCP base revision | `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
-| Current stage / phase | Stage 0; Phase 2 complete |
-| Next phase | 3 — `refactor(mcp): extract the shared protocol module` |
+| Current stage / phase | Stage 0 complete; Phase 3 complete |
+| Next phase | 4 — `feat(mcp): add the JSON-RPC 2.0 transport` |
 | In-flight ownership | None |
-| Last review | Phase 2 final integrated Sol/xhigh re-review clear on 2026-08-03 |
-| Blocker | None |
-| Resume hint | Execute Phase 3 only; preserve the Phase 1 frozen inputs |
+| Last review | Phase 3 final integrated review clear on 2026-08-03 |
+| Blocker | Phase 4 requires confirmation whether any user macro, add-on, or external script calls the current RPC surface |
+| Resume hint | Resolve the external-caller question, then execute Phase 4 only; preserve the Phase 1 frozen inputs |
 
 ### 11.2 Stage status
 
 | Stage | Phases | Integration gate | Status |
 |---:|---|---|---|
-| 0 | 1–3 | phases 1 and 3 | in progress (Phases 1–2 complete; Phase 3 next) |
+| 0 | 1–3 | phases 1 and 3 | complete |
 | 1 | 4–5 | phase 5 | pending |
 | 2 | 6–7 | none | pending |
 | 3 | 8–11 | none | pending |
@@ -818,6 +818,50 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-03 — Phase 3 complete: shared protocol extracted
+
+- **Phase delivery:** both process layouts now contain a 26-file
+  `_shared/protocol/` package. The add-on and client copies are byte-identical,
+  use canonical UTC normalization, and own the manifest, proof, handshake,
+  credential, replay, session, validation, redaction, and public-error types.
+  Existing `lease_protocol*` and `rpc_auth*` paths remain declarative import-only
+  compatibility shims; their public names and behavior are unchanged.
+- **Internal migration:** production consumers under both package roots import the
+  canonical protocol leaves. The add-on copy remains standard-library-only and no
+  FreeCAD, Qt, document-authority, lifecycle, dirty-state, sidecar-correctness, or
+  recovery-policy dependency was introduced. Standalone scripts outside the two
+  production package roots remain public-facade consumers.
+- **Frozen contracts:** byte equality is asserted without counting the vendored
+  copy twice. The semantic RPC fixture and all old import paths remain valid. The
+  Phase 1 authority census remains exactly `core_authority=115`, `heartbeats=167`,
+  `lease_observers=30`, `locked_error_handoff_rotation=15`,
+  `mcp_save_recovery_authority=251`, and `sidecar_correctness=861`; the locator
+  census remains 514 nodes, 504 references, and 432 runtime calls, with 37 dynamic
+  lookups and 22 local-import locators.
+- **Policy hardening:** structurally paired import-fallback shims are recognized
+  without admitting same-arm effects, and the `constants.py` exception now accepts
+  only cohesive locally assigned immutable public constants. Import façades,
+  runtime-produced values, and mutable values fail focused negative fixtures. The
+  allowance ledger contains 1,054 exact findings: ARCH101 87, ARCH103 573,
+  ARCH104 301, ARCH105 19, ARCH106 31, and ARCH107 43. The one Phase 3-adjusted
+  ARCH107 record retains the legacy 28-symbol constants compatibility façade and
+  requires Phase 23 to remove the structural allowance without removing the shim.
+- **Agents and reviews:** separate shared-protocol/client and add-on/shim
+  workstreams were independently reviewed, followed by adversarial integrated
+  review. Findings around import-fallback effects, false-positive cohesive
+  constants, standalone public-facade consumers, UTC normalization, compatibility
+  shims, and allowance wording were fixed. The final integrated review reported no
+  blocking, important, or non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded in
+  §11.4. Production architecture policy and Ruff passed for 942 files; the focused
+  policy suite passed 91 and the integrated focused suite passed 191. All four final
+  Compose services and the complete branch-built native/cross-track integration
+  lane passed.
+- **Next/blocker:** Stage 0 is complete. Before Phase 4, confirm whether anything
+  outside this repository calls the current RPC surface (including user macros,
+  other add-ons, and scripts against the port); that answer determines the public
+  compatibility obligation for the dual-listener migration.
 
 #### 2026-08-03 — Phase 2 complete: boundary policy replaces size rules
 
@@ -1018,6 +1062,49 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 3 — `refactor(mcp): extract the shared protocol module`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:0ae761f034b66310a647fdd206961ea71889424e7bdca91de84408e4d7b80327`;
+  native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **MCP lint and focused contracts:** final-image architecture policy and full Ruff
+  each checked 942 production files and passed with Ruff 0.16.1. The focused
+  architecture-policy suite passed 91/91; integrated protocol/shim/auth/lifespan
+  review tests passed 191/191. Independent verification found 26 Python files in
+  each protocol layout with zero byte mismatch, no census expansion, and the 1,054
+  exact allowed legacy findings broken down in §11.3.
+- **Compose integration gate:** `docker compose run --rm unit` selected 1,823:
+  1,819 passed, three Windows-DACL tests skipped, and one existing screenshot test
+  xfailed. `e2e` passed 115 with two adapter-only native skips; `core` passed four
+  with one adapter-only native skip and seven expected xfails; `benchmark` passed
+  one. All four commands used the final image above.
+- **Native build:** an isolated Docker build volume preserved the host build tree.
+  The branch configured and built `FreeCADCmd`, `FreeCAD`, `App_tests_run`,
+  `Gui_tests_run`, `Part_tests_run`, `PartTestData`, `PartScripts`, `Materials`,
+  `PartDesign`, `Sketcher`, `Assembly`, `PartDesignScripts`, `AssemblyTests`, and
+  `pivy`. LF-normalized Pivy/Coin source overlays were used only inside Docker to
+  avoid the Windows bind mount's generated-header truncation issue; host source was
+  unchanged. The result identifies as FreeCAD 26.3.0, revision `48071 (Git)`, hash
+  `7a47b18044b82bb2eb1c17047150d72eadde6c26`.
+- **Native suites:** `App_tests_run` ran 747: 745 passed, the two known BackupPolicy
+  tests skipped, and seven tests remained disabled. `Part_tests_run` passed 342/342.
+  With Xvfb, llvmpipe, and the fixture-required `QT_QPA_PLATFORM=xcb`,
+  `Gui_tests_run` passed 240/240; the exact
+  `CollaborationDomainIntegrationTest.pythonPersonalContextStorageApiIsCallable`
+  filter passed 1/1.
+- **Cross-track jobs:** the unmodified Woodpecker preflight emitted `PREFLIGHT_OK`
+  with pytest 9.1.1 and the branch identity above. With the frozen native-API
+  requirement enabled, the unmodified core wrapper collected 12: seven passed and
+  five expected xfails, with no real skip. The unmodified e2e wrapper passed
+  117/117. Both strict JUnit verdict files were zero.
+- **Review result:** workstream reviews and the final integrated adversarial review
+  are green with no blocking, important, or non-blocking finding. Public RPC and
+  old-path import behavior are unchanged.
 
 #### Phase 2 — `build(mcp): replace module size rules with boundary policy`
 

@@ -1,1 +1,3 @@
-"""RPC authentication ops — internal modules."""
+"""Compatibility namespace for canonical RPC authentication operations."""
+
+__all__ = ()

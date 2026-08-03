@@ -4,7 +4,6 @@ import os
 
 import FreeCAD
 
-from ...lease_protocol import lease_protocol_public_error
 from ...lease_runtime import (
     _boot_identity,
     _process_started_at,
@@ -13,6 +12,13 @@ from ...lease_runtime import (
 from ...settings import load_settings
 from ._common import _rpc_mod
 from .control_status_state import continuation_flags, continuation_state, inflight_state
+
+try:
+    from ...._shared.protocol.public_error import (
+        public_error as lease_protocol_public_error,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.public_error import public_error as lease_protocol_public_error
 
 try:
     from build_info import addon_build_id, addon_version

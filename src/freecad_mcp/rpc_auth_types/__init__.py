@@ -1,10 +1,10 @@
-"""One-class authenticated RPC v2 handshake types (MCP client side)."""
+"""Compatibility exports for canonical RPC authentication types."""
 
-from .instance_manifest import InstanceManifest
-from .mcp_runtime_identity import McpRuntimeIdentity
-from .rpc_auth_error import RpcAuthError
-from .runtime_manifest import RuntimeManifest
-from .verified_handshake_response import VerifiedHandshakeResponse
+from .._shared.protocol.instance_manifest import InstanceManifest
+from .._shared.protocol.mcp_runtime_identity import McpRuntimeIdentity
+from .._shared.protocol.protocol_error import ProtocolError as RpcAuthError
+from .._shared.protocol.runtime_manifest import RuntimeManifest
+from .._shared.protocol.verified_handshake_response import VerifiedHandshakeResponse
 
 __all__ = [
     "InstanceManifest",

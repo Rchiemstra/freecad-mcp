@@ -3,8 +3,12 @@ import hmac
 import json
 from dataclasses import replace
 
-from ..lease_protocol import LeaseProtocolError
 from ..mutation_guard import RollbackCoverage, make_method_spec, validate_document_invariants
+
+try:
+    from ..._shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 
 """Generated execute_code envelope helpers."""
 

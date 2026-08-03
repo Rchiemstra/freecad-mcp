@@ -6,9 +6,12 @@ import argparse
 import os
 from collections.abc import Callable
 
+from .._shared.protocol.manifest import (
+    load_instance_manifest,
+    make_mcp_runtime_identity,
+)
 from ..build_info import build_id
 from ..instrumented_server import InstrumentedFastMCP
-from ..rpc_auth import load_instance_manifest, make_mcp_runtime_identity
 from ..server_state import ServerState
 from . import surfaces
 

@@ -26,13 +26,23 @@ from .filtered_xmlrpc_server import FilteredXMLRPCServer, validate_allowed_ips  
 from .gui_dispatcher import GuiDispatcher  # noqa: F401 - lifecycle test monkeypatch
 from .handoff_continuations import HandoffContinuationStore
 from .inflight_requests import InflightRequestRegistry
-from .lease_protocol import (  # noqa: F401 - lifecycle test monkeypatch
-    RequestReplayCache,
-    SessionManager,
-    lease_protocol_public_error,
-    load_profile_secret,
-    make_runtime_manifest,
-)
+
+try:
+    from .._shared.protocol.manifest import make_runtime_manifest
+    from .._shared.protocol.profile_secret import load_profile_secret
+    from .._shared.protocol.public_error import (
+        public_error as lease_protocol_public_error,
+    )
+    from .._shared.protocol.request_replay_cache import RequestReplayCache
+    from .._shared.protocol.session_manager import SessionManager
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.manifest import make_runtime_manifest  # noqa: F401
+    from _shared.protocol.profile_secret import load_profile_secret  # noqa: F401
+    from _shared.protocol.public_error import (  # noqa: F401
+        public_error as lease_protocol_public_error,
+    )
+    from _shared.protocol.request_replay_cache import RequestReplayCache
+    from _shared.protocol.session_manager import SessionManager  # noqa: F401
 from .lease_runtime import (  # noqa: F401
     _boot_identity,
     _ensure_lease_watchdog_running,

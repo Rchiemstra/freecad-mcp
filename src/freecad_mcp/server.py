@@ -10,6 +10,22 @@ from types import MappingProxyType
 
 from typing_extensions import TypedDict
 
+from ._shared.protocol.constants import (  # noqa: F401 - §3.3 test shims
+    REQUIRED_PROTOCOL_FEATURES,
+)
+from ._shared.protocol.handshake_request import (  # noqa: F401 - §3.3 test shims
+    build_handshake_request_from_manifest,
+)
+from ._shared.protocol.handshake_response import (  # noqa: F401 - §3.3 test shims
+    verify_handshake_response_from_manifest,
+)
+from ._shared.protocol.manifest import (  # noqa: F401 - §3.3 test shims
+    load_instance_manifest,
+    make_mcp_runtime_identity,
+)
+from ._shared.protocol.profile_secret import (  # noqa: F401 - §3.3 test shims
+    load_profile_secret,
+)
 from .build_info import (  # noqa: F401 - §3.3 test / runtime shims
     build_id,
     event_schema_version,
@@ -26,14 +42,6 @@ from .lease_manager import (  # noqa: F401 - §3.3 test shims
     StaleLeaseRecoveryOrchestrator,
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
-from .rpc_auth import (  # noqa: F401 - §3.3 test shims
-    REQUIRED_PROTOCOL_FEATURES,
-    build_handshake_request_from_manifest,
-    load_instance_manifest,
-    load_profile_secret,
-    make_mcp_runtime_identity,
-    verify_handshake_response_from_manifest,
-)
 from .server_ops.connection import get_freecad_connection
 from .server_ops.heartbeat import lease_heartbeat_once as _lease_heartbeat_once  # noqa: F401
 from .server_ops.lifespan import server_lifespan

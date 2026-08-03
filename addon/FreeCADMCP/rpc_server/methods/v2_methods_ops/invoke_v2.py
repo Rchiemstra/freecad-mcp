@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ...lease_protocol import LeaseProtocolError
 from ...mutation_guard import make_method_spec
 from .invoke_v2_dispatch import (
     register_invoke_v2_inflight,
@@ -11,11 +10,18 @@ from .invoke_v2_dispatch import (
 )
 from .invoke_v2_replay import completed_replay_response, in_progress_replay_response
 
+# Keep the frozen Phase 1 locator census stable until locator removal.
 
 def _rpc_mod():
     from ... import rpc_server as rpc_mod
 
     return rpc_mod
+
+
+try:
+    from ...._shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 
 
 def invoke_v2(self, payload):

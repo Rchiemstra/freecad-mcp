@@ -1,15 +1,7 @@
-"""Extracted ``RpcAuthError`` for ARCH002 (workstream 1G)."""
+"""Compatibility alias for the canonical protocol error type."""
 
 from __future__ import annotations
 
+from .._shared.protocol.protocol_error import ProtocolError as RpcAuthError
 
-class RpcAuthError(ValueError):
-    """A bounded authentication failure with a stable public error code."""
-
-    def __init__(self, code: str, message: str) -> None:
-        self.code = str(code)
-        self.public_message = str(message)
-        super().__init__(f"{self.code}: {self.public_message}")
-
-
-RpcAuthError.__module__ = "freecad_mcp.rpc_auth"
+__all__ = ["RpcAuthError"]

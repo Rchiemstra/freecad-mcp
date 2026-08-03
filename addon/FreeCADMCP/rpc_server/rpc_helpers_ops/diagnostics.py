@@ -1,7 +1,15 @@
 import hashlib
 
-from ..lease_protocol import redact_sensitive as redact_lease_protocol_details
 from ..lease_runtime import _import_document_lock
+
+try:
+    from ..._shared.protocol.redaction import (
+        redact_sensitive as redact_lease_protocol_details,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.redaction import (
+        redact_sensitive as redact_lease_protocol_details,
+    )
 
 """RPC diagnostic redaction and lease error formatting."""
 

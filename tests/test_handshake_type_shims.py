@@ -1,4 +1,4 @@
-"""§3.3 shim checks for handshake twin leaf types (workstream 1G)."""
+"""Compatibility shims for the canonical vendored protocol types."""
 
 from __future__ import annotations
 
@@ -6,22 +6,25 @@ import addon.FreeCADMCP.rpc_server.lease_protocol as addon_protocol
 from freecad_mcp import rpc_auth
 
 
-def test_addon_handshake_types_keep_legacy_module_names() -> None:
-    assert addon_protocol.LeaseProtocolError.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.RuntimeManifest.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.McpRuntimeIdentity.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.VerifiedHandshake.__module__ == "rpc_server.lease_protocol"
+def test_addon_handshake_types_report_canonical_module_origins() -> None:
+    prefix = "addon.FreeCADMCP._shared.protocol"
+    assert addon_protocol.LeaseProtocolError.__module__ == f"{prefix}.protocol_error"
+    assert addon_protocol.RuntimeManifest.__module__ == f"{prefix}.runtime_manifest"
+    assert addon_protocol.McpRuntimeIdentity.__module__ == f"{prefix}.mcp_runtime_identity"
+    assert addon_protocol.VerifiedHandshake.__module__ == f"{prefix}.verified_handshake"
     assert (
         addon_protocol.VerifiedHandshakeResponse.__module__
-        == "rpc_server.lease_protocol"
+        == f"{prefix}.verified_handshake_response"
     )
-    assert addon_protocol.SessionContext.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.LeaseCredential.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.OperationContext.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.RequestEnvelope.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.ReplayCheck.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.SessionManager.__module__ == "rpc_server.lease_protocol"
-    assert addon_protocol.RequestReplayCache.__module__ == "rpc_server.lease_protocol"
+    assert addon_protocol.SessionContext.__module__ == f"{prefix}.session_context"
+    assert addon_protocol.LeaseCredential.__module__ == f"{prefix}.lease_credential"
+    assert addon_protocol.OperationContext.__module__ == f"{prefix}.operation_context"
+    assert addon_protocol.RequestEnvelope.__module__ == f"{prefix}.request_envelope"
+    assert addon_protocol.ReplayCheck.__module__ == f"{prefix}.replay_check"
+    assert addon_protocol.SessionManager.__module__ == f"{prefix}.session_manager"
+    assert addon_protocol.RequestReplayCache.__module__ == (
+        f"{prefix}.request_replay_cache"
+    )
 
 
 def test_addon_handshake_helpers_keep_legacy_import_paths() -> None:
@@ -36,13 +39,15 @@ def test_addon_handshake_helpers_keep_legacy_import_paths() -> None:
     assert addon_protocol.canonical_json_bytes is defining_canonical
 
 
-def test_client_handshake_types_keep_legacy_module_names() -> None:
-    assert rpc_auth.RpcAuthError.__module__ == "freecad_mcp.rpc_auth"
-    assert rpc_auth.McpRuntimeIdentity.__module__ == "freecad_mcp.rpc_auth"
-    assert rpc_auth.InstanceManifest.__module__ == "freecad_mcp.rpc_auth"
-    assert rpc_auth.RuntimeManifest.__module__ == "freecad_mcp.rpc_auth"
+def test_client_handshake_types_report_canonical_module_origins() -> None:
+    prefix = "freecad_mcp._shared.protocol"
+    assert rpc_auth.RpcAuthError.__module__ == f"{prefix}.protocol_error"
+    assert rpc_auth.McpRuntimeIdentity.__module__ == f"{prefix}.mcp_runtime_identity"
+    assert rpc_auth.InstanceManifest.__module__ == f"{prefix}.instance_manifest"
+    assert rpc_auth.RuntimeManifest.__module__ == f"{prefix}.runtime_manifest"
     assert (
-        rpc_auth.VerifiedHandshakeResponse.__module__ == "freecad_mcp.rpc_auth"
+        rpc_auth.VerifiedHandshakeResponse.__module__
+        == f"{prefix}.verified_handshake_response"
     )
 
 

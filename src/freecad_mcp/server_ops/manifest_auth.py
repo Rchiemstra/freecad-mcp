@@ -4,11 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from .._shared.protocol.handshake_request import build_handshake_request_from_manifest
+from .._shared.protocol.handshake_response import (
+    verify_handshake_response_from_manifest,
+)
+from .._shared.protocol.manifest import load_instance_manifest, make_mcp_runtime_identity
+from .._shared.protocol.profile_secret import load_profile_secret
+from .._shared.protocol.protocol_error import ProtocolError as RpcAuthError
 from ..build_info import as_dict as build_info_dict
 from ..build_info import build_id, protocol_version
 from ..freecad_client import FreeCADConnection
 from ..outcomes import OutcomeStatus
-from ..rpc_auth import RpcAuthError
 from . import surfaces
 from .compatibility import compatibility_for_manifest
 from .paths import path_identity
@@ -22,8 +28,6 @@ def manifest_for_authentication() -> Any:
     FreeCAD restart.  Profile identity/path, RPC endpoint, authentication-file
     path, schema, and creation identity are immutable for this MCP process.
     """
-
-    from freecad_mcp import server
 
     baseline = surfaces.state.instance_manifest
     if baseline is None:
@@ -39,7 +43,7 @@ def manifest_for_authentication() -> Any:
             "INSTANCE_MANIFEST_PATH_CHANGED",
             "Isolated instance manifest path changed during session refresh",
         )
-    candidate = server.load_instance_manifest(configured_path)
+    candidate = load_instance_manifest(configured_path)
     immutable_mismatch = (
         candidate.schema_version != baseline.schema_version
         or candidate.profile_instance_id != baseline.profile_instance_id
@@ -88,22 +92,22 @@ def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> 
             ),
         },
     )
-    secret = server.load_profile_secret(secret_path)
+    secret = load_profile_secret(secret_path)
     try:
-        mcp_identity = server.make_mcp_runtime_identity(
+        mcp_identity = make_mcp_runtime_identity(
             runtime_id=surfaces.state.mcp_instance_id,
             pid=surfaces.state.mcp_pid,
             process_started_at=surfaces.state.mcp_process_started_at,
             hostname=surfaces.state.mcp_host,
             client_build_id=build_id,
         )
-        request = server.build_handshake_request_from_manifest(
+        request = build_handshake_request_from_manifest(
             secret=secret,
             mcp=mcp_identity,
             manifest=manifest,
         )
         response = conn.invoke_rpc("handshake_v2", request, control=True)
-        verified = server.verify_handshake_response_from_manifest(
+        verified = verify_handshake_response_from_manifest(
             response,
             secret=secret,
             expected_client_nonce=request["client_nonce"],
