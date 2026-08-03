@@ -792,14 +792,14 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | MCP authoring branch | `feature/dirty-document-adoption`; Phase 1 execution base `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
-| Execution parent revision | `eb531e5320d29f7df548a9a3997e9dd66bb5f70c` |
-| Execution MCP base revision | `ecc7025260593b680d0c39c6d90b3ab71e08e03d` |
-| Current stage / phase | Stage 1 complete; Phase 5 complete |
-| Next phase | 6 — `refactor(mcp): define LeaseClientManager normally` |
+| Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
+| Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
+| Current stage / phase | Stage 2 in progress; Phase 6 complete |
+| Next phase | 7 — `refactor(mcp): isolate legacy lease decoders` |
 | In-flight ownership | None |
-| Last review | Phase 5 final integrated and post-gate re-reviews clear on 2026-08-03 |
+| Last review | Phase 6 final integrated review clear on 2026-08-03 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Stage 1 is committed and gated; execute Phase 6 only, preserving the Phase 5 JSON-RPC and XML-RPC retirement contracts |
+| Resume hint | Phase 6 is committed and gated; execute Phase 7 only, preserving the normal manager and frozen Stage 1 wire contracts |
 
 ### 11.2 Stage status
 
@@ -807,7 +807,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 |---:|---|---|---|
 | 0 | 1–3 | phases 1 and 3 | complete |
 | 1 | 4–5 | phase 5 | complete |
-| 2 | 6–7 | none | pending |
+| 2 | 6–7 | none | in progress |
 | 3 | 8–11 | none | pending |
 | 4 | 12–17 | phase 12 | pending |
 | 5 | 18 | phase 18 | pending |
@@ -818,6 +818,45 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-03 — Phase 6 complete: LeaseClientManager defined normally
+
+- **Phase delivery:** `LeaseClientManager` now owns construction, representation,
+  connection state, credential and alias custody, heartbeat compatibility, and
+  redaction in one normal class body. The former credential, heartbeat, status,
+  binder, and initializer modules are declarative import-only shims. Every old
+  defining-module import remains available; the legacy free-function `manager=`
+  keyword signatures, binder path and return behavior, initializer behavior, and
+  public class construction signature remain frozen without import-time mutation.
+- **Explicit compatibility values:** the public `freecad_mcp.lease_manager` facade
+  exports immutable `NativeSessionHandle` and `LeaseCompatibilityResult` values.
+  The handle contains only one opaque native-session identifier and renders it
+  redacted. Compatibility results retain only copied JSON diagnostics, return a
+  fresh copy on every access, render no values, accept the frozen public instance
+  diagnostics, and reject or fully redact credential, capability, authorization,
+  permission, grant, and secret material across nested values, compound names,
+  camel/acronym spellings, separators, and encoded textual fragments.
+- **Authority and policy:** no legacy authority category grew. The exact frozen
+  counts remain core authority 115, locked-error handoff 15, lease observers 30,
+  heartbeats 167, sidecar correctness 861, and MCP save/recovery authority 251.
+  Heartbeat symbols moved from the retired operation/binding modules into the
+  defining manager while the Phase 18 allowance paths changed accordingly. The
+  existing facade ARCH106/ARCH107 records grew only for the two required public
+  read-only values; no new architecture allowance was introduced.
+- **Agents and reviews:** production and contract workstreams received independent
+  adversarial review, followed by integrated re-review. Findings covering missing
+  public exports, shim side effects, old keyword signatures, the former binder
+  import, subclass initializer dispatch, deep immutability, exception/repr leaks,
+  and adversarial structured and scalar authority spellings were fixed and
+  re-reviewed. The final integrated review reports no blocking, important, or
+  non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded
+  in §11.4. The final baked affected suite passed 271, production policy/lint
+  checked 951 files, Compose `unit` passed, and the branch-built preflight/core/e2e
+  lane passed against the current nested worktree.
+- **Stage result and next:** Stage 2 is in progress with Phase 6 complete. Resume
+  with Phase 7 only to isolate immutable historic lease decoders; do not begin the
+  gateway-runtime stage early.
 
 #### 2026-08-03 — Stage 1 complete: client migrated and XML-RPC retired
 
@@ -1175,6 +1214,36 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 6 — `refactor(mcp): define LeaseClientManager normally`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:287abb5527584644427dcc79a59a666d285bd6050d6975724c7ccb5e521709d8`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 951 production files and passed. Ruff passed for the
+  Phase 6 test module. The final manager, compatibility, recovery, lifespan,
+  baseline, and architecture-policy selection passed 271/271; the focused Phase 6
+  contract module passed 50/50 after the final adversarial redaction fixes.
+- **Compose phase gate:** after `docker compose build`, `docker compose run --rm
+  unit` selected 2,020: 2,016 passed, the three Windows-DACL tests skipped, and the
+  existing screenshot test xfailed; 129 non-unit tests were deselected. Phase 6 is
+  not an integration gate, so §5.7 requires this unit service rather than all four
+  Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` volume and
+  branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no native
+  source changed. The unmodified preflight wrapper emitted `PREFLIGHT_OK`. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the unmodified e2e wrapper
+  passed 117/117. Both strict verdict files contained zero and were removed with
+  their generated XML reports after recording.
+- **Review result:** production, contract, and final integrated adversarial reviews
+  are clear. Every blocking or important finding was fixed and re-reviewed; no
+  final non-blocking finding remains. The exact authority-census equality contract
+  passes with unchanged category counts.
 
 #### Phase 5 — `refactor(mcp): migrate to JSON-RPC and retire XML-RPC`
 

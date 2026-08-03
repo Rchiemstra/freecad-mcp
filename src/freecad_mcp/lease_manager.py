@@ -18,14 +18,20 @@ from .lease_manager_ops.heartbeat_helpers import (
 )
 from .lease_manager_ops.lease_alias_conflict_error import LeaseAliasConflictError
 from .lease_manager_ops.lease_client_manager import LeaseClientManager
+from .lease_manager_ops.lease_compatibility_result import LeaseCompatibilityResult
 from .lease_manager_ops.lease_credential import LeaseCredential
 from .lease_manager_ops.lease_manager_closed_error import LeaseManagerClosedError
-from .lease_manager_ops.lease_manager_disconnected_error import LeaseManagerDisconnectedError
+from .lease_manager_ops.lease_manager_disconnected_error import (
+    LeaseManagerDisconnectedError,
+)
 from .lease_manager_ops.lease_manager_error import LeaseManagerError
 from .lease_manager_ops.lease_not_found_error import LeaseNotFoundError
 from .lease_manager_ops.lease_revocation import LeaseRevocation
+from .lease_manager_ops.native_session_handle import NativeSessionHandle
 from .lease_manager_ops.rpc_request_context import RpcRequestContext
-from .lease_manager_ops.stale_lease_recovery_orchestrator import StaleLeaseRecoveryOrchestrator
+from .lease_manager_ops.stale_lease_recovery_orchestrator import (
+    StaleLeaseRecoveryOrchestrator,
+)
 from .lease_manager_ops.stale_recovery_constants import (
     DEFAULT_STALE_AFTER_SECONDS,
     REVOCATION_ERROR_CODES,
@@ -69,12 +75,14 @@ __all__ = [
     "STALE_RECOVERY_TRIGGER_RPC_REFUSAL",
     "LeaseAliasConflictError",
     "LeaseClientManager",
+    "LeaseCompatibilityResult",
     "LeaseCredential",
     "LeaseManagerClosedError",
     "LeaseManagerDisconnectedError",
     "LeaseManagerError",
     "LeaseNotFoundError",
     "LeaseRevocation",
+    "NativeSessionHandle",
     "RpcRequestContext",
     "StaleLeaseRecoveryOrchestrator",
     "StaleRecoveryResult",

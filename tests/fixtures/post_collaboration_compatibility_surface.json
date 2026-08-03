@@ -1320,7 +1320,7 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 40,
+        "line": 46,
         "path": "src/freecad_mcp/lease_manager.py",
         "symbol": "STALE_RECOVERY_TRIGGER_HEARTBEAT"
       },
@@ -1435,79 +1435,30 @@
         "symbol": "<module>"
       },
       {
-        "column": 31,
+        "column": 4,
         "kind": "ImportAlias",
-        "line": 11,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "heartbeat_item_lease_state"
-      },
-      {
-        "column": 59,
-        "kind": "ImportAlias",
-        "line": 11,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "is_timeout_stale_heartbeat_item"
-      },
-      {
-        "column": 0,
-        "kind": "FunctionDef",
-        "line": 19,
+        "line": 4,
         "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
         "symbol": "apply_heartbeat_response"
       },
       {
-        "column": 20,
-        "kind": "Name",
-        "line": 61,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "heartbeat_item_lease_state"
-      },
-      {
-        "column": 15,
-        "kind": "Name",
-        "line": 67,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "is_timeout_stale_heartbeat_item"
-      },
-      {
-        "column": 0,
-        "kind": "FunctionDef",
-        "line": 141,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "build_heartbeat_payload"
-      },
-      {
-        "column": 19,
-        "kind": "Attribute",
-        "line": 149,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "_build_heartbeat_payload_locked"
-      },
-      {
-        "column": 0,
-        "kind": "FunctionDef",
-        "line": 152,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "build_heartbeat_request"
-      },
-      {
-        "column": 22,
-        "kind": "Attribute",
-        "line": 162,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "symbol": "_build_heartbeat_payload_locked"
-      },
-      {
-        "column": 0,
-        "kind": "FunctionDef",
-        "line": 171,
+        "column": 4,
+        "kind": "ImportAlias",
+        "line": 5,
         "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
         "symbol": "build_heartbeat_envelope"
       },
       {
-        "column": 27,
-        "kind": "Attribute",
-        "line": 177,
+        "column": 4,
+        "kind": "ImportAlias",
+        "line": 6,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
+        "symbol": "build_heartbeat_payload"
+      },
+      {
+        "column": 4,
+        "kind": "ImportAlias",
+        "line": 7,
         "path": "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
         "symbol": "build_heartbeat_request"
       },
@@ -1515,111 +1466,160 @@
         "column": 4,
         "kind": "ImportAlias",
         "line": 18,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "apply_heartbeat_response"
-      },
-      {
-        "column": 4,
-        "kind": "ImportAlias",
-        "line": 19,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_envelope"
-      },
-      {
-        "column": 4,
-        "kind": "ImportAlias",
-        "line": 20,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_payload"
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_heartbeat_item_lease_state"
       },
       {
         "column": 4,
         "kind": "ImportAlias",
         "line": 21,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_request"
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_is_timeout_stale_heartbeat_item"
       },
       {
         "column": 4,
-        "kind": "ImportAlias",
-        "line": 27,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
+        "kind": "FunctionDef",
+        "line": 257,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "apply_heartbeat_response"
+      },
+      {
+        "column": 20,
+        "kind": "Name",
+        "line": 291,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_heartbeat_item_lease_state"
+      },
+      {
+        "column": 15,
+        "kind": "Name",
+        "line": 296,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_is_timeout_stale_heartbeat_item"
+      },
+      {
+        "column": 4,
+        "kind": "FunctionDef",
+        "line": 363,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "build_heartbeat_payload"
+      },
+      {
+        "column": 19,
+        "kind": "Attribute",
+        "line": 368,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
         "symbol": "_build_heartbeat_payload_locked"
       },
       {
         "column": 4,
-        "kind": "Attribute",
-        "line": 72,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "apply_heartbeat_response"
-      },
-      {
-        "column": 50,
-        "kind": "Name",
-        "line": 72,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "apply_heartbeat_response"
-      },
-      {
-        "column": 4,
-        "kind": "Attribute",
-        "line": 75,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_payload"
-      },
-      {
-        "column": 49,
-        "kind": "Name",
-        "line": 75,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_payload"
-      },
-      {
-        "column": 4,
-        "kind": "Attribute",
-        "line": 76,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
+        "kind": "FunctionDef",
+        "line": 370,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
         "symbol": "build_heartbeat_request"
       },
       {
-        "column": 49,
-        "kind": "Name",
-        "line": 76,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_request"
-      },
-      {
-        "column": 4,
+        "column": 22,
         "kind": "Attribute",
-        "line": 77,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_envelope"
-      },
-      {
-        "column": 50,
-        "kind": "Name",
-        "line": 77,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
-        "symbol": "build_heartbeat_envelope"
-      },
-      {
-        "column": 4,
-        "kind": "Attribute",
-        "line": 81,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
+        "line": 378,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
         "symbol": "_build_heartbeat_payload_locked"
       },
       {
-        "column": 57,
-        "kind": "Name",
-        "line": 81,
-        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
+        "column": 4,
+        "kind": "FunctionDef",
+        "line": 386,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "build_heartbeat_envelope"
+      },
+      {
+        "column": 27,
+        "kind": "Attribute",
+        "line": 392,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "build_heartbeat_request"
+      },
+      {
+        "column": 4,
+        "kind": "FunctionDef",
+        "line": 440,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
         "symbol": "_build_heartbeat_payload_locked"
       },
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 61,
+        "line": 616,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_compat_apply_heartbeat_response"
+      },
+      {
+        "column": 11,
+        "kind": "Attribute",
+        "line": 620,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "apply_heartbeat_response"
+      },
+      {
+        "column": 0,
+        "kind": "FunctionDef",
+        "line": 646,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_compat_build_heartbeat_payload"
+      },
+      {
+        "column": 11,
+        "kind": "Attribute",
+        "line": 650,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "build_heartbeat_payload"
+      },
+      {
+        "column": 0,
+        "kind": "FunctionDef",
+        "line": 653,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_compat_build_heartbeat_request"
+      },
+      {
+        "column": 11,
+        "kind": "Attribute",
+        "line": 659,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "build_heartbeat_request"
+      },
+      {
+        "column": 0,
+        "kind": "FunctionDef",
+        "line": 666,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_compat_build_heartbeat_envelope"
+      },
+      {
+        "column": 11,
+        "kind": "Attribute",
+        "line": 672,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "build_heartbeat_envelope"
+      },
+      {
+        "column": 0,
+        "kind": "FunctionDef",
+        "line": 691,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_compat_build_heartbeat_payload_locked"
+      },
+      {
+        "column": 11,
+        "kind": "Attribute",
+        "line": 695,
+        "path": "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
+        "symbol": "_build_heartbeat_payload_locked"
+      },
+      {
+        "column": 4,
+        "kind": "ImportAlias",
+        "line": 4,
         "path": "src/freecad_mcp/lease_manager_ops/lease_client_status_ops.py",
         "symbol": "_build_heartbeat_payload_locked"
       },
@@ -11104,6 +11104,8 @@
       "current_symbols": [
         "LeaseCredential",
         "LeaseClientManager",
+        "LeaseCompatibilityResult",
+        "NativeSessionHandle",
         "StaleLeaseRecoveryOrchestrator"
       ],
       "installed_aliases": [],
@@ -11113,7 +11115,10 @@
         "LeaseCredential.to_wire",
         "LeaseCredential.token"
       ],
-      "planned_readonly_symbols": [],
+      "planned_readonly_symbols": [
+        "LeaseCompatibilityResult",
+        "NativeSessionHandle"
+      ],
       "planned_removed_authority_symbols": [
         "LeaseCredential"
       ],
@@ -12387,7 +12392,7 @@
         "src/freecad_mcp/lease_manager.py",
         "src/freecad_mcp/lease_manager_ops/heartbeat_helpers.py",
         "src/freecad_mcp/lease_manager_ops/lease_client_heartbeat_ops.py",
-        "src/freecad_mcp/lease_manager_ops/lease_client_manager_bindings.py",
+        "src/freecad_mcp/lease_manager_ops/lease_client_manager.py",
         "src/freecad_mcp/lease_manager_ops/lease_client_status_ops.py",
         "src/freecad_mcp/lease_manager_ops/stale_lease_recovery_orchestrator.py",
         "src/freecad_mcp/lease_manager_ops/stale_recovery_constants.py",

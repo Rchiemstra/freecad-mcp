@@ -6567,17 +6567,17 @@
       "path": "src/freecad_mcp/lease_manager.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "25213c482ea3574d9dc1",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 38 symbols",
+      "fingerprint": "086145af290f7cacb042",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 40 symbols",
       "removal_phase": 22
     },
     {
       "code": "ARCH106",
       "path": "src/freecad_mcp/lease_manager.py",
-      "line": 55,
+      "line": 61,
       "column": 1,
-      "fingerprint": "61eec10a2814907aea8a",
-      "reason": "legacy package public surface: package exports 37 public symbols; budget is 16",
+      "fingerprint": "f38c064e78a88828c247",
+      "reason": "legacy package public surface: package exports 39 public symbols; budget is 16",
       "removal_phase": 23
     },
     {
