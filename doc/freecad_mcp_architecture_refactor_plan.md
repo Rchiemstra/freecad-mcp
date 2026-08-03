@@ -323,8 +323,9 @@ legacy authority paths remain frozen and explicitly allowed only until Phase 18.
    Phase 18 removal owner and a negative end-state assertion. New code may not call
    these paths.
 4. **The locator census.** Per-module counts of `_rpc_mod()` and equivalent runtime
-   lookups — 514 at authoring time. Stage 3 is sized from this census and the final
-   gate measures against it.
+   lookups — 514 AST locator nodes at execution (10 definitions plus 504 syntactic
+   references, of which 432 are runtime calls). Text-only comments/docstrings are
+   excluded. Stage 3 is sized from this census and the final gate measures against it.
 5. **The compose-lane decision.** `tools/mcp/freecad-mcp/Dockerfile` installs
    FreeCAD from conda-forge, so the `core`, `e2e`, and `benchmark` services run
    against a build with **no native collaboration bindings**. Phase 1 records one of:
@@ -420,10 +421,13 @@ seams, the generator's contract-equality proof, and every review gate.
   `src/Gui/Command.cpp`, `src/Gui/Dialogs/DlgMutationTakeover.*`,
   `tests/src/App/DocumentMutationAuthority.cpp`, and
   `tests/src/Gui/CollaborationAuthorityRemoval.cpp`
+- for Phase 12, `src/App/Document.pyi`, `src/App/DocumentPyImp.cpp`, the focused
+  native compatibility-binding test and its test CMake registration, the parent
+  plan, and the parent gitlink
 
 ### 5.4 Cross-repository delivery
 
-Except for Phase 18, substantive phase commits are created inside
+Except for Phases 12 and 18, substantive phase commits are created inside
 `tools/mcp/freecad-mcp`. The parent gitlink is **not** frozen for the whole program:
 the branch-built cross-track lane builds the parent branch at its recorded submodule
 revision, so a frozen gitlink would test the pre-refactor add-on at every gate. The
@@ -431,6 +435,17 @@ integrator bumps the parent gitlink in a separate parent commit at each integrat
 gate (phases 1, 3, 5, 12, 18, 19, 22, and 23), or records that the lane mounts the
 submodule worktree at its actual HEAD. Either is acceptable; leaving the gitlink
 stale through the program is not.
+
+Phase 12 is one logical cross-repository integration delivery with two Git objects:
+one nested MCP phase commit and one canonical parent commit containing the minimal
+native Python compatibility-mutation binding and tests, the updated gitlink, and both
+plan/progress updates. The binding exposes only a synchronous UnknownModel mutation
+over FreeCAD's existing `DocumentCollaborationService::commitCompatibilityMutation`;
+it accepts no caller-supplied stable identity, owner, token, generation, confirmation
+boolean, or TLS/capability grant. It must enter through the GUI dispatcher, manage the
+GIL without deadlock, propagate Python exceptions into native rollback, and return the
+native structured result. The revision-neutral `serializeCompatibilityCallback` is not
+exposed as a generic remote mutation surface.
 
 Phase 18 is one logical cross-repository cutover with two unavoidable Git objects:
 one squashed nested MCP commit and one parent commit containing the native authority
@@ -565,7 +580,7 @@ census measurably and records the remaining count.
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 12 | `refactor(mcp): inject collaboration collaborators` | Add the thin `collaboration_client.py` and add-on `collaboration_api.py` bridge over the frozen native API; pass acquisition, adoption, handoff, and recovery collaborators into `methods/lease_methods_ops/`; remove their `_rpc_mod()` lookups. | Public compatibility shims, structured native results, reconnect, adoption, recovery, authorization, cancellation, continuation, timeout, dependency identity, and no-client-authority tests; **integration gate**. |
+| 12 | `refactor(mcp): inject collaboration collaborators` | First expose a synchronous UnknownModel-only Python binding over FreeCAD's existing compatibility commit boundary, with no legacy authority dependency or caller-supplied identity; add the thin `collaboration_client.py` and add-on `collaboration_api.py` bridge over the frozen native API; pass acquisition, adoption, handoff, recovery, and compatibility-mutation collaborators into `methods/lease_methods_ops/`; remove their `_rpc_mod()` lookups. This is a two-object cross-repository delivery under §5.4. | Public compatibility shims, method/stub availability, exact-once callback, GUI-owner thread and off-thread GIL dispatch, UnknownModel wildcard publication, structured native results, Python exception rollback, lifecycle/reentrancy rejection, callback release, reconnect, adoption, recovery, authorization, cancellation, continuation, timeout, dependency identity, and no client/TLS/capability authority tests; **integration gate**. |
 | 13 | `refactor(mcp): inject lifecycle collaborators` | Pass save, Save As, finalize, release, query, and deprecation collaborators into lease and lifecycle adapters; route them to native lifecycle results without MCP dirty, persistence, or recovery decisions. | Save, release, query, close/reopen, restart, cancellation, GUI dispatch, semantic RPC contract, and no-MCP-lifecycle-authority tests. |
 | 14 | `refactor(mcp): inject execution collaborators` | Replace `_rpc_mod()` in dispatch, execute-code, and worker orchestration with injected dispatcher, execution-safety, worker, cancellation, and native compatibility-mutation dependencies. | Dispatch, execute-code, native mutation attribution, worker, cancellation, and AST no-locator scan. |
 | 15 | `refactor(mcp): inject CAD collaborators` | Pass document, object, sketch, feature, transaction, and native collaboration/compatibility-commit collaborators into CAD adapters; remove their dependence on MCP mutation ownership. | CAD, object, sketch, feature, transaction, remote revision-stream publication, dependency identity, and AST no-locator scan. |
@@ -773,24 +788,24 @@ job commands in §11 before phase 1. Do not substitute a host build.
 
 | Field | Current value |
 |---|---|
-| Authoring parent checkout | `feature/assembly-interference-detection` at `2e4336f39a` (context only) |
-| MCP authoring branch | `feature/dirty-document-adoption` at `fc3a5236` |
+| Authoring parent checkout | `feature/assembly-interference-detection`; Phase 1 execution base `863535a2d4b6c33b5bfce8171762320060a34afb` |
+| MCP authoring branch | `feature/dirty-document-adoption`; Phase 1 execution base `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
-| Execution parent revision | `TBD at phase 1` |
-| Execution MCP base revision | `TBD at phase 1` |
-| Current stage / phase | Planning revised; Stage 0 not started |
-| Next phase | 1 — `test(mcp): freeze the native collaboration baseline` |
+| Execution parent revision | `863535a2d4b6c33b5bfce8171762320060a34afb` |
+| Execution MCP base revision | `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
+| Current stage / phase | Stage 0; Phase 1 complete |
+| Next phase | 2 — `build(mcp): replace module size rules with boundary policy` |
 | In-flight ownership | None |
-| Last review | Phase ordering reconciled against both plans and the live tree on 2026-08-03 |
-| Blocker | None; Phase 1 must still record execution revisions, inventories, and the compose-lane decision |
-| Resume hint | Verify native Phases 1–6 and the selected MCP base, then execute phase 1 only |
+| Last review | Phase 1 native, census, and integrated Sol/xhigh reviews green on 2026-08-03 |
+| Blocker | None |
+| Resume hint | Execute Phase 2 only; preserve the Phase 1 authority and compatibility manifests as frozen inputs |
 
 ### 11.2 Stage status
 
 | Stage | Phases | Integration gate | Status |
 |---:|---|---|---|
-| 0 | 1–3 | phases 1 and 3 | pending |
+| 0 | 1–3 | phases 1 and 3 | in progress (Phase 1 complete; Phase 2 next) |
 | 1 | 4–5 | phase 5 | pending |
 | 2 | 6–7 | none | pending |
 | 3 | 8–11 | none | pending |
@@ -803,6 +818,71 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-03 — Phase 1 complete: native collaboration baseline frozen
+
+- **Phase delivery:** `test(mcp): freeze the native collaboration baseline` records
+  parent base `863535a2d4b6c33b5bfce8171762320060a34afb`, nested MCP base
+  `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6`, and native prerequisite
+  commits `8593f781ac`, `2e4336f39a`, `69b12a53d6`, `60ff7d9b22`,
+  `02476edba1`, and `300bbbcf5a` for native Phases 1–6.
+- **Frozen inventories:** the committed planned-pre-cutover manifest records all six
+  temporary authority classes with exact occurrence paths and Phase 18 negative end
+  states. It freezes 514 `_rpc_mod` AST locator nodes (10 definitions plus 504
+  syntactic references, including 432 runtime calls), 37 equivalent dynamic module
+  lookups, 22 local-import locators, seven retained compatibility surfaces, and 22
+  public lease RPC adapters. Exact occurrence records, rather than globs, are the
+  allowance boundary.
+- **Frozen public contracts:** the semantic RPC fixture now describes all 84 public
+  methods as transport-neutral parameter, result, and normalized-error schemas with
+  examples. The production XML-RPC dispatcher matches the listener specimens and
+  round-trips every semantic outcome. The registry fixture freezes 170 tools in
+  effective insertion order and 47 registration modules.
+- **Native boundary:** the branch lane proves all recorded App document/module
+  methods and the exact embedded-GUI-Python test
+  `CollaborationDomainIntegrationTest.pythonPersonalContextStorageApiIsCallable`.
+  The Compose image remains adapter-only because its conda FreeCAD has no branch
+  collaboration bindings; every later collaboration-touching phase therefore also
+  runs the branch-built lane.
+- **Implementation impact:** tests, helpers, fixtures, and this plan changed; no
+  production runtime file changed. The only Phase 1 re-scope is the Phase 12 native
+  compatibility-mutation binding recorded in the next entry; the phase list is now
+  fixed under §5.5.
+- **Agents and reviews:** independent native-baseline and MCP-census workstreams were
+  followed by adversarial native, census, and integrated Sol/xhigh reviews. Important
+  findings around semantic result specimens, indirect authority paths, ACL false
+  positives, compatibility inversion, and GUI Python execution evidence were fixed
+  and re-reviewed. The final integrated review reported no blocking or important
+  finding.
+- **Docker validation:** images and exact results are recorded in §11.4. Architecture
+  lint checked 888 production Python files; full Ruff passed. All four Compose
+  services, native App/Gui/Part suites, the exact GUI binding test, preflight, and
+  branch-built MCP core/e2e jobs passed.
+- **Next:** execute Phase 2 only; do not broaden any temporary authority allowance.
+
+#### 2026-08-03 — Phase 1 verified and re-scoped the Phase 12 native binding seam
+
+- **Verified fact:** native Phase 6 contains
+  `DocumentCollaborationService::commitCompatibilityMutation` and the corresponding
+  GUI compatibility executor, but neither is available to Python. Without a binding,
+  MCP compatibility mutations could not enter the native commit barrier before the
+  Phase 18 authority removal.
+- **Authorized Phase 1 rescope (§5.5):** Phase 12 is now one logical cross-repository
+  delivery. Its parent object adds the minimal synchronous UnknownModel-only
+  `DocumentPy` binding and focused native tests; its nested object routes MCP callers
+  and removes the affected locators. The parent commit is canonical and advances the
+  nested gitlink.
+- **Boundary constraints:** the binding accepts no caller stable identity, owner,
+  token, generation, confirmation boolean, TLS/capability grant, or revision-neutral
+  serialization callback. It enters through the GUI dispatcher, manages the GIL
+  during owner-thread dispatch, propagates Python exceptions into native rollback,
+  and returns the native structured result.
+- **Reason this does not transfer authority:** FreeCAD still assigns identity,
+  performs lifecycle/reentrancy checks, owns rollback and publication, and decides
+  the outcome. Python supplies only the compatibility callback body.
+- **Phase status:** Phase 1 remains in progress until its reviews and complete Docker
+  integration gate pass; this entry records the only phase-list rescope permitted by
+  §5.5 and does not mark the phase complete.
 
 #### 2026-08-03 — Collaboration cutover absorbed; plan expanded to 23 phases
 
@@ -873,6 +953,50 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 - Retained for history. Its 70-phase list, Stage 0–7 structure, Composer/Cursor worker
   policy, and per-phase four-service Docker gate are replaced by the entry above.
+
+### 11.4 Phase evidence
+
+Append evidence newest-first. Image IDs are used when the local image has no
+repository digest; host-side build or test output is never evidence.
+
+#### Phase 1 — `test(mcp): freeze the native collaboration baseline`
+
+- **Images:** `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`;
+  final Compose `freecad-mcp-tests:latest` at
+  `sha256:0bebb40f1d9db2c235d07f1159199894d457636af9430bbd6f5988bcbf56fab6`.
+  None has a repository digest in the local daemon.
+- **MCP lint/contracts:** Docker `uv run ci/lint_python.py --architecture-only
+  addon/FreeCADMCP src/freecad_mcp` checked 888 files and passed; the corresponding
+  full lint/Ruff command passed. Focused baseline, semantic RPC/listener, registry,
+  and native-API contracts passed 15 tests with the one expected adapter-only native
+  skip; the final Compose unit gate subsumed the complete fixture set.
+- **Compose integration gate:** after `docker compose build`, `unit` passed 1,721
+  with three platform skips and one expected xfail; `e2e` passed 115 with two
+  adapter-only native skips; `core` passed four with one adapter-only native skip and
+  seven expected xfails; `benchmark` passed one. Commands were the four §10
+  `docker compose run --rm` services with their declared markers.
+- **Native configure/build:** Docker ran
+  `ci/woodpecker/freecad-configure-debug.sh`, then built the gate artifacts and
+  required runtime resources with CMake targets `FreeCADCmd`, `FreeCAD`,
+  `App_tests_run`, `Gui_tests_run`, `Part_tests_run`, `PartDesign`, `Sketcher`,
+  `Assembly`, `PartDesignScripts`, `AssemblyTests`, and `pivy`. The Windows worktree's
+  generated Pivy headers were excluded/regenerated with LF endings inside the Docker
+  volume before the Pivy target; no host source was changed. The resulting branch
+  identity was `26.3.0`, revision `48070 (Git)`, hash
+  `863535a2d4b6c33b5bfce8171762320060a34afb`.
+- **Native suites:** `App_tests_run` ran 747: 745 passed and two known BackupPolicy
+  tests skipped (seven disabled); `Part_tests_run` passed 342/342; Xvfb-backed
+  `Gui_tests_run` passed 240/240. The exact personal-context Python binding filter
+  passed 1/1.
+- **Cross-track jobs:** the unmodified Woodpecker preflight emitted `PREFLIGHT_OK`
+  with pytest 9.1.1 and the recorded branch identity. The unmodified core job
+  collected 12: seven passed and five expected xfails, with no real skip. The
+  unmodified e2e job passed 117/117. Both strict JUnit verdict files were zero.
+- **Review result:** native, census, and integrated reviews are green; no blocking or
+  important finding remains. Runtime behavior is unchanged.
 
 ---
 

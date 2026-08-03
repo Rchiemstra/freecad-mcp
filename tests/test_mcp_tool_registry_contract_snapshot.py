@@ -61,3 +61,10 @@ def test_mcp_tool_registry_exposes_expected_tool_count(server_module):
     registry = _tool_registry(server_module.mcp)
     assert len(registry) == snapshot["tool_count"]
     assert frozenset(registry) == frozenset(snapshot["tools"])
+    assert list(registry) == snapshot["tool_order"]
+
+
+def test_mcp_tool_registration_module_order_matches_contract_snapshot():
+    from freecad_mcp.tools_register_order import REGISTER_TOOL_MODULES
+
+    assert list(REGISTER_TOOL_MODULES) == _load_snapshot()["register_order"]
