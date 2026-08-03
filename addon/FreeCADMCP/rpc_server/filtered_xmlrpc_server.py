@@ -1,15 +1,15 @@
-"""Bounded-capacity IP-filtered XML-RPC and JSON-RPC server."""
+"""Bounded-capacity JSON-RPC server with an XML-RPC retirement response."""
 
+import contextlib
 import inspect as _inspect
 import ipaddress
 import logging
 import re
+import socket
 import threading
+import time
 from collections.abc import Mapping as _Mapping
 from concurrent.futures import ThreadPoolExecutor
-from xmlrpc.client import Fault
-from xmlrpc.client import dumps as xmlrpc_dumps
-from xmlrpc.client import loads as xmlrpc_loads
 from xmlrpc.server import SimpleXMLRPCServer
 
 try:
@@ -22,6 +22,15 @@ try:
     from .._shared.protocol.json_rpc import (
         MAX_JSON_RPC_BYTES as _MAX_JSON_RPC_BYTES,
     )
+    from .._shared.protocol.json_rpc_client import (
+        JSON_RPC_HTTP_PATH as _JSON_RPC_HTTP_PATH,
+    )
+    from .._shared.protocol.json_rpc_client import (
+        JSON_RPC_PROTOCOL_HEADER as _JSON_RPC_PROTOCOL_HEADER,
+    )
+    from .._shared.protocol.json_rpc_client import (
+        JSON_RPC_PROTOCOL_VALUE as _JSON_RPC_PROTOCOL_VALUE,
+    )
 except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
     from _shared.protocol.json_rpc import (
         JSON_RPC_INVALID_PARAMS as _JSON_RPC_INVALID_PARAMS,
@@ -31,6 +40,15 @@ except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
     )
     from _shared.protocol.json_rpc import (
         MAX_JSON_RPC_BYTES as _MAX_JSON_RPC_BYTES,
+    )
+    from _shared.protocol.json_rpc_client import (
+        JSON_RPC_HTTP_PATH as _JSON_RPC_HTTP_PATH,
+    )
+    from _shared.protocol.json_rpc_client import (
+        JSON_RPC_PROTOCOL_HEADER as _JSON_RPC_PROTOCOL_HEADER,
+    )
+    from _shared.protocol.json_rpc_client import (
+        JSON_RPC_PROTOCOL_VALUE as _JSON_RPC_PROTOCOL_VALUE,
     )
 
 from .json_rpc_errors import json_rpc_error_from_result as _json_rpc_error_from_result
@@ -44,6 +62,14 @@ _XMLRPC_INT_MIN = -(2**31)
 _XMLRPC_INT_MAX = (2**31) - 1
 _JSON_RPC_SERVER_BUSY = -32000
 _JSON_RPC_SERVER_STOPPING = -32004
+_XMLRPC_DEPRECATION_BODY = (
+    b'{"error":"xmlrpc_retired","message":"XML-RPC is retired; '
+    b'use JSON-RPC 2.0 at /jsonrpc"}'
+)
+_PROTOCOL_MISMATCH_BODY = (
+    b'{"jsonrpc":"2.0","id":null,"error":{"code":-32005,'
+    b'"message":"Protocol mismatch","data":{"expected":"jsonrpc-2.0"}}}'
+)
 
 _COMMA_SEP_RE = re.compile(r"^\s*[^,\s]+(\s*,\s*[^,\s]+)*\s*$")
 
@@ -109,7 +135,7 @@ def validate_allowed_ips(allowed_ips_str):
 
 
 def _parse_allowed_ips(allowed_ips_str):
-    """Parse a comma-separated string of IPs/subnets into a list of ip_network objects."""
+    """Parse comma-separated IPs/subnets into ``ip_network`` objects."""
     valid, errors = validate_allowed_ips(allowed_ips_str)
     for msg in errors:
         logger.warning("MCP RPC: %s, skipping", msg)
@@ -117,7 +143,7 @@ def _parse_allowed_ips(allowed_ips_str):
 
 
 class FilteredXMLRPCServer(SimpleXMLRPCServer):
-    """IP-filtered server with separate bounded general/control capacity."""
+    """Compatibility-named JSON-RPC server with bounded admission capacity."""
 
     CONTROL_METHODS = frozenset(
         {
@@ -144,12 +170,17 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
         )
         self._accepting_requests = True
         self._accepting_lock = threading.Lock()
+        self._request_deadlines = {}
+        self._request_deadlines_lock = threading.Lock()
         self._json_rpc_transport = _JsonRpcTransport(
             self._dispatch_json_rpc,
             result_to_error=_json_rpc_error_from_result,
         )
         self.json_rpc_max_body_bytes = _MAX_JSON_RPC_BYTES
         self.json_rpc_read_timeout_seconds = 5.0
+        self.json_rpc_http_path = _JSON_RPC_HTTP_PATH
+        self.json_rpc_protocol_header = _JSON_RPC_PROTOCOL_HEADER
+        self.json_rpc_protocol_value = _JSON_RPC_PROTOCOL_VALUE
         kwargs.setdefault("requestHandler", McpIdentityRequestHandler)
         super().__init__(addr, **kwargs)
 
@@ -201,34 +232,24 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
         finally:
             slots.release()
 
-    def _handle_json_rpc_post(self, handler):
-        """Serve one JSON-RPC request on the shared listener."""
+    def _read_json_rpc_post(self, handler):
+        """Validate and read one bounded JSON-RPC request body."""
 
         handler.close_connection = True
-        content_length = handler.headers.get("Content-Length")
-        if content_length is None:
-            handler.send_error(411)
+        deadline_expired, deadline_at = self._take_request_deadline(
+            handler.connection
+        )
+        if deadline_expired:
             return
-        try:
-            length = int(content_length)
-        except ValueError:
-            handler.send_error(400)
+        length = self._json_rpc_content_length(handler)
+        if length is None:
             return
-        if length < 0:
-            handler.send_error(400)
-            return
-        if length > self.json_rpc_max_body_bytes:
-            handler.send_error(413)
-            return
-        try:
-            handler.connection.settimeout(self.json_rpc_read_timeout_seconds)
-            payload = handler.rfile.read(length)
-        except OSError:
-            handler.send_error(408)
-            return
-        if len(payload) != length:
-            handler.send_error(400)
-            return
+        payload = self._read_json_rpc_body(handler, length, deadline_at)
+        return payload
+
+    def _handle_json_rpc_post(self, handler, payload):
+        """Dispatch a validated JSON-RPC body on the shared listener."""
+
         response = self._json_rpc_transport.handle_bytes(payload)
         if response is None:
             handler.send_response(204)
@@ -240,6 +261,80 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
         handler.send_header("Content-Length", str(len(response)))
         handler.end_headers()
         handler.wfile.write(response)
+
+    def _json_rpc_content_length(self, handler):
+        content_lengths = handler.headers.get_all("Content-Length", [])
+        transfer_encodings = handler.headers.get_all("Transfer-Encoding", [])
+        if transfer_encodings or len(content_lengths) > 1:
+            handler.send_error(400)
+            return None
+        if not content_lengths:
+            handler.send_error(411)
+            return None
+        content_length = content_lengths[0].strip(" \t")
+        if not re.fullmatch(r"[0-9]+", content_length):
+            handler.send_error(400)
+            return None
+        try:
+            length = int(content_length)
+        except ValueError:
+            handler.send_error(400)
+            return None
+        if length > self.json_rpc_max_body_bytes:
+            handler.send_error(413)
+            return None
+        return length
+
+    def _read_json_rpc_body(self, handler, length, deadline_at):
+        chunks = []
+        remaining = length
+        while remaining:
+            timeout = deadline_at - time.monotonic()
+            if timeout <= 0:
+                handler.send_error(408)
+                return None
+            try:
+                handler.connection.settimeout(timeout)
+                chunk = handler.rfile.read1(min(remaining, 65536))
+            except OSError:
+                handler.send_error(408)
+                return None
+            if not chunk:
+                handler.send_error(400)
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        if time.monotonic() > deadline_at:
+            handler.send_error(408)
+            return None
+        handler.connection.settimeout(self.json_rpc_read_timeout_seconds)
+        return b"".join(chunks)
+
+    def _handle_xmlrpc_retired_post(self, handler):
+        """Return the bounded XML-RPC retirement response without reading a body."""
+
+        self._cancel_request_deadline(handler.connection)
+        handler.close_connection = True
+        handler.send_response(410, "Gone")
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Content-Length", str(len(_XMLRPC_DEPRECATION_BODY)))
+        handler.send_header("Cache-Control", "no-store")
+        handler.send_header("Deprecation", "true")
+        handler.send_header("Link", '</jsonrpc>; rel="successor-version"')
+        handler.end_headers()
+        handler.wfile.write(_XMLRPC_DEPRECATION_BODY)
+
+    def _handle_json_rpc_protocol_mismatch(self, handler):
+        """Reject an explicitly incompatible protocol before reading its body."""
+
+        self._cancel_request_deadline(handler.connection)
+        handler.close_connection = True
+        handler.send_response(409, "Conflict")
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Content-Length", str(len(_PROTOCOL_MISMATCH_BODY)))
+        handler.send_header("Cache-Control", "no-store")
+        handler.end_headers()
+        handler.wfile.write(_PROTOCOL_MISMATCH_BODY)
 
     def process_request(self, request, client_address):
         with self._accepting_lock:
@@ -258,48 +353,49 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
             raise
 
     def _process_request_in_pool(self, request, client_address):
+        deadline = {
+            "at": time.monotonic() + self.json_rpc_read_timeout_seconds,
+            "expired": threading.Event(),
+        }
+
+        def expire_request():
+            with self._request_deadlines_lock:
+                if self._request_deadlines.get(id(request)) is not deadline:
+                    return
+                deadline["expired"].set()
+            with contextlib.suppress(OSError):
+                request.shutdown(socket.SHUT_RD)
+
+        timer = threading.Timer(self.json_rpc_read_timeout_seconds, expire_request)
+        timer.daemon = True
+        deadline["timer"] = timer
+        with self._request_deadlines_lock:
+            self._request_deadlines[id(request)] = deadline
+        timer.start()
         try:
             self.finish_request(request, client_address)
         except Exception:
             self.handle_error(request, client_address)
         finally:
+            self._cancel_request_deadline(request)
             self.shutdown_request(request)
             self._handler_slots.release()
 
+    def _take_request_deadline(self, request):
+        with self._request_deadlines_lock:
+            deadline = self._request_deadlines.pop(id(request), None)
+        if deadline is None:
+            return False, time.monotonic() + self.json_rpc_read_timeout_seconds
+        deadline["timer"].cancel()
+        return deadline["expired"].is_set(), deadline["at"]
+
+    def _cancel_request_deadline(self, request):
+        self._take_request_deadline(request)
+
     def _marshaled_dispatch(self, data, dispatch_method=None, path=None):
-        """Route parsed XML-RPC methods through independent bounded slots."""
-        try:
-            _params, method = xmlrpc_loads(data)
-        except Exception:
-            return super()._marshaled_dispatch(data, dispatch_method, path)
-        control = method in self.CONTROL_METHODS
-        slots = self._control_slots if control else self._general_slots
-        with self._accepting_lock:
-            accepting = self._accepting_requests
-        if not accepting:
-            return xmlrpc_dumps(
-                Fault(503, "server_stopping"),
-                methodresponse=True,
-                allow_none=self.allow_none,
-                encoding=self.encoding,
-            ).encode(self.encoding, "xmlcharrefreplace")
-        if not slots.acquire(blocking=False):
-            lane = "control" if control else "general"
-            return xmlrpc_dumps(
-                Fault(503, f"server_busy: {lane} request capacity is full"),
-                methodresponse=True,
-                allow_none=self.allow_none,
-                encoding=self.encoding,
-            ).encode(self.encoding, "xmlcharrefreplace")
-        try:
-            dispatch = dispatch_method or self._dispatch
+        """Keep direct compatibility calls non-dispatching after XML-RPC retirement."""
 
-            def dispatch_with_safe_response(method_name, method_params):
-                return xmlrpc_safe_response(dispatch(method_name, method_params))
-
-            return super()._marshaled_dispatch(data, dispatch_with_safe_response, path)
-        finally:
-            slots.release()
+        return _XMLRPC_DEPRECATION_BODY
 
     def begin_shutdown(self):
         with self._accepting_lock:

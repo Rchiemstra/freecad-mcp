@@ -104,7 +104,7 @@ except (AttributeError, ImportError):
     logger.info("MCP Tasks extension unavailable; synchronous fallback active")
 
 mcp.task_request_canceller = (
-    lambda request_id: get_freecad_connection().cancel_request(request_id)
+    lambda request_id: get_freecad_connection()._notify_cancel_request(request_id)
 )
 
 _TOOL_EXPORTS = register_tool_modules(

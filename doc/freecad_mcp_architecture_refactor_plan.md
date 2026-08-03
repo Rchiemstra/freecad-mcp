@@ -793,20 +793,20 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `eb531e5320d29f7df548a9a3997e9dd66bb5f70c` |
-| Execution MCP base revision | `caff97a1aa1b0862e0e51c4f58ad7223eb163070` |
-| Current stage / phase | Stage 1 in progress; Phase 4 complete |
-| Next phase | 5 — `refactor(mcp): migrate to JSON-RPC and retire XML-RPC` |
+| Execution MCP base revision | `ecc7025260593b680d0c39c6d90b3ab71e08e03d` |
+| Current stage / phase | Stage 1 complete; Phase 5 complete |
+| Next phase | 6 — `refactor(mcp): define LeaseClientManager normally` |
 | In-flight ownership | None |
-| Last review | Phase 4 final listener/protocol re-review clear on 2026-08-03 |
+| Last review | Phase 5 final integrated and post-gate re-reviews clear on 2026-08-03 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Execute Phase 5 only: migrate the client, retain an explicit XML-RPC deprecation response, run the integration gate, and advance the parent gitlink |
+| Resume hint | Stage 1 is committed and gated; execute Phase 6 only, preserving the Phase 5 JSON-RPC and XML-RPC retirement contracts |
 
 ### 11.2 Stage status
 
 | Stage | Phases | Integration gate | Status |
 |---:|---|---|---|
 | 0 | 1–3 | phases 1 and 3 | complete |
-| 1 | 4–5 | phase 5 | in progress |
+| 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | pending |
 | 3 | 8–11 | none | pending |
 | 4 | 12–17 | phase 12 | pending |
@@ -818,6 +818,50 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-03 — Stage 1 complete: client migrated and XML-RPC retired
+
+- **Phase 5 delivery:** the MCP client, isolated launcher, live-dirty smoke script,
+  and lifecycle tests now use JSON-RPC 2.0 end to end. The client validates exact
+  protocol negotiation, response IDs, singleton framing headers, bounded bodies,
+  and absolute response deadlines. All 75 documented success-shaped failure
+  examples become native `JsonRpcRemoteError` instances with structured data;
+  unchanged errors retain object identity and peer-echoed session or lease secrets
+  are recursively redacted.
+- **Surviving listener:** `/jsonrpc` is the only dispatching route. `/` and `/RPC2`
+  return the frozen bounded HTTP 410 JSON retirement response without reading or
+  dispatching the body. Explicitly incompatible or duplicate protocol headers
+  return the frozen HTTP 409 / `-32005` mismatch response before identity capture.
+  Duplicate or conflicting framing, non-ASCII-decimal lengths, oversized or short
+  bodies, incomplete headers, and slow-drip peers are rejected under one absolute
+  header/body deadline. The old `ip_filter` names, including its private parser,
+  remain import-compatible.
+- **Cancellation and lifecycle:** task teardown sends authenticated
+  `invoke_v2_control` as a JSON-RPC notification while the acknowledged public
+  cancellation API remains available. Launcher readiness, HMAC proof, identity
+  verification, manifest persistence, and deterministic disconnect behavior are
+  preserved. No live `ServerProxy(` call remains in production or scripts.
+- **Contracts and authority:** the semantic fixture now freezes XML retirement and
+  version negotiation while retaining the encoding-independent RPC schema. The
+  two client codec vendors are byte-identical at SHA-256
+  `a41bd9117c5881e0455115850937e11ec52ba36810ce114e7e4daf93c220530f`.
+  The pure HTTP client transport is explicitly excluded from the Phase 18
+  save/recovery-authority module census, but its AST symbols remain scanned; the
+  frozen authority allowances and heartbeat census are otherwise unchanged.
+- **Agents and reviews:** client, listener/retirement, and script/contract
+  workstreams received independent adversarial review followed by integrated and
+  post-gate re-review. Findings covering duplicate request/response headers,
+  Content-Length ambiguity, transfer encodings, slow drip, direct-header secret
+  echoes, old private imports, and the authority census were fixed and re-reviewed.
+  Every final review reports no blocking, important, or non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded
+  in §11.4. The baked-image contract suite passed 244, production lint checked 949
+  files, all four Compose services passed, native App/Gui/Part and the exact GUI
+  filter passed, and branch-built preflight/core/e2e passed. An initial App test
+  failure was traced to a read-only test working directory; its writable ephemeral
+  `/tmp` rerun and the full App suite passed without a source change.
+- **Stage result and next:** Stage 1 is complete. The parent gitlink advances at
+  this integration gate. Resume with Phase 6 only; do not start Phase 7 early.
 
 #### 2026-08-03 — Phase 4 complete: dual JSON-RPC transport added
 
@@ -1131,6 +1175,43 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 5 — `refactor(mcp): migrate to JSON-RPC and retire XML-RPC`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:7c9ded3f5b5328dafabad4a00d889a4819f4e13b29485398f063eff8056db961`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 949 production files and passed. Ruff passed for every
+  touched script and test. The final protocol, native-error, client transport,
+  listener retirement, semantic RPC, isolated-script, cancellation, authority
+  baseline, registry, and shared-protocol selection passed 244/244. The larger
+  integrated selection passed 230/230 before the baseline additions; independent
+  final review reproduced 149 focused tests and one real-FreeCAD lifecycle test.
+- **Compose integration gate:** after the final `docker compose build`, `unit`
+  selected 1,970: 1,966 passed, three Windows-DACL tests skipped, and the existing
+  screenshot test xfailed; 129 were deselected. `e2e` selected 117: 115 passed and
+  two adapter-only native tests skipped. `core` selected 12: four passed, one
+  adapter-only native test skipped, and seven expected xfailed. `benchmark` passed
+  1/1. The commands were the four unmodified §10 Compose services.
+- **Native branch gate:** the preserved `freecad-phase3-debug` Docker volume was
+  exercised with branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26`.
+  From writable ephemeral `/tmp`, `App_tests_run` ran 747: 745 passed and the two
+  known BackupPolicy tests skipped. `Part_tests_run` passed 342/342. Under Xvfb,
+  llvmpipe, and `QT_QPA_PLATFORM=xcb`, `Gui_tests_run` passed 240/240 and exact
+  `CollaborationDomainIntegrationTest.pythonPersonalContextStorageApiIsCallable`
+  passed 1/1. The App test's diagnostic writable-directory filter also passed 1/1.
+- **Cross-track jobs:** the unmodified preflight wrapper emitted `PREFLIGHT_OK`.
+  With `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the e2e wrapper passed
+  117/117. Both strict verdict files were zero and were removed after recording.
+- **Review result:** all workstream reviews, the integrated adversarial review, and
+  the post-unit authority-census re-review are clear. Every blocking or important
+  finding was fixed and re-reviewed; no final non-blocking finding remains.
 
 #### Phase 4 — `feat(mcp): add the JSON-RPC 2.0 transport`
 

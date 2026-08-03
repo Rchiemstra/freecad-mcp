@@ -1,7 +1,7 @@
 """Private claim vault for acquisition credentials after response loss.
 
 Successful acquire/adopt/create responses deliberately omit the raw token from
-the replay cache. When the first XML-RPC response is lost, the authenticated
+the replay cache. When the first JSON-RPC response is lost, the authenticated
 MCP runtime that initiated the request may retrieve the credential repeatedly
 until it acknowledges custody. Unacknowledged entries are never expired,
 evicted, or rejected at the configured soft capacity: preserving the only raw

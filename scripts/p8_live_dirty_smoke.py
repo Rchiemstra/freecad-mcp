@@ -29,8 +29,8 @@ import tempfile
 import time
 import uuid
 import zipfile
-import xmlrpc.client
-from datetime import datetime, timedelta, timezone
+from contextlib import suppress
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -39,18 +39,22 @@ _SRC = _REPO / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp.shared.memory import create_connected_server_and_client_session  # noqa: E402
 
-from freecad_mcp import server as mcp_server
-from freecad_mcp.build_info import build_id
-from freecad_mcp.lease_manager import STALE_RECOVERY_OUTCOME_RECOVERED
-from freecad_mcp.rpc_auth import (
+from freecad_mcp import server as mcp_server  # noqa: E402
+from freecad_mcp._shared.protocol.json_rpc_client import (  # noqa: E402
+    JsonRpcProtocolMismatchError,
+    JsonRpcRemoteError,
+)
+from freecad_mcp.build_info import build_id  # noqa: E402
+from freecad_mcp.freecad_client import FreeCADConnection  # noqa: E402
+from freecad_mcp.lease_manager import STALE_RECOVERY_OUTCOME_RECOVERED  # noqa: E402
+from freecad_mcp.rpc_auth import (  # noqa: E402
     PROTOCOL_VERSION,
     REQUIRED_PROTOCOL_FEATURES,
     InstanceManifest,
     make_mcp_runtime_identity,
 )
-
 
 DOC_NAME_PREFIX = "P8DirtySmoke"
 AGENT_ID = "p8-live-validator"
@@ -138,9 +142,8 @@ def _error_text(payload: dict[str, Any]) -> str:
 
 def _is_gui_unresponsive(payload: dict[str, Any]) -> bool:
     code = _error_code(payload)
-    if code:
-        if code in _GUI_BLOCKER_CODES or code.startswith("GUI_TIMEOUT"):
-            return True
+    if code and (code in _GUI_BLOCKER_CODES or code.startswith("GUI_TIMEOUT")):
+        return True
     text = _error_text(payload).lower()
     return "freecad gui" in text and "timed out" in text
 
@@ -288,7 +291,7 @@ def _configure_mcp_enforce_auth(
         expected_freecad_version=freecad_version,
         expected_freecad_revision=freecad_revision,
         expected_profile_path_fingerprint=str(info.get("profile_path_fingerprint") or ""),
-        created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     )
     mcp_server.state.instance_manifest = manifest
     mcp_server.state.auth_file = str(auth_secret_file)
@@ -327,29 +330,34 @@ def _credential_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _rpc_proxy(host: str, port: int) -> xmlrpc.client.ServerProxy:
-    return xmlrpc.client.ServerProxy(f"http://{host}:{port}", allow_none=True)
+def _rpc_proxy(host: str, port: int) -> Any:
+    return FreeCADConnection(host=host, port=port).server
 
 
-def _close_document_if_open(proxy: xmlrpc.client.ServerProxy, name: str) -> None:
+def _close_document_if_open(proxy: Any, name: str) -> None:
     # Unauthenticated execute_code is blocked in enforce mode; cleanup happens
     # inside the authenticated MCP session instead.
     try:
         if name in proxy.list_documents():
             return
-    except Exception:
-        pass
+    except (JsonRpcProtocolMismatchError, JsonRpcRemoteError, OSError, RuntimeError):
+        return
 
 
 def _rpc_gui_sanity(
-    proxy: xmlrpc.client.ServerProxy,
+    proxy: Any,
     *,
     lease_mode: str | None,
 ) -> tuple[bool, dict[str, Any]]:
     started = time.monotonic()
     try:
         result = proxy.execute_code("import FreeCAD\nprint(1)")
-    except Exception as exc:
+    except JsonRpcRemoteError as exc:
+        result = dict(exc.data) if isinstance(exc.data, dict) else {}
+        result.setdefault("success", False)
+        result.setdefault("error_code", exc.semantic_code)
+        result.setdefault("error", exc.message)
+    except (JsonRpcProtocolMismatchError, OSError, RuntimeError) as exc:
         return False, {
             "success": False,
             "error": f"{type(exc).__name__}: {exc}",
@@ -420,17 +428,15 @@ async def _pause_heartbeats(pause_s: float) -> None:
         raise RuntimeError("lease heartbeat task not found in MCP server lifespan")
 
     task.cancel()
-    try:
+    with suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
     await asyncio.sleep(pause_s)
     new_task = asyncio.create_task(mcp_server._lease_heartbeat_loop())
     # Keep reference so the task is not garbage-collected.
     asyncio.get_running_loop()._p8_heartbeat_task = new_task  # type: ignore[attr-defined]
 
 
-async def run_smoke(
+async def run_smoke(  # noqa: C901
     *,
     host: str,
     port: int,

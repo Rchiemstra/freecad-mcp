@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
 from ...lease_manager import (
     RpcRequestContext,
 )
@@ -13,6 +14,7 @@ from .connection_invoke_v2_helpers import (
     _SESSION_EXPIRED_CODES,
     invoke_v2_execution_category,
     invoke_v2_prepare_telemetry,
+    invoke_v2_retry_expired_remote_error,
     invoke_v2_retry_expired_session,
     invoke_v2_session_error_code,
     invoke_v2_transport,
@@ -40,14 +42,29 @@ def invoke_v2(
         control=control,
         category=category,
     )
-    response = invoke_v2_transport(
-        conn,
-        method,
-        params,
-        context,
-        control=control,
-        timeout=timeout,
-    )
+    try:
+        response = invoke_v2_transport(
+            conn,
+            method,
+            params,
+            context,
+            control=control,
+            timeout=timeout,
+        )
+    except JsonRpcRemoteError as exc:
+        if exc.semantic_code not in _SESSION_EXPIRED_CODES:
+            raise
+        transport_method = "invoke_v2_control" if control else "invoke_v2"
+        return invoke_v2_retry_expired_remote_error(
+            conn,
+            method,
+            params,
+            context,
+            remote_error=exc,
+            transport_method=transport_method,
+            control=control,
+            timeout=timeout,
+        )
     stale_retry = conn._handle_stale_rpc_refusal(
         response if isinstance(response, Mapping) else {},
         method=method,

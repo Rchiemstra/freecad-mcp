@@ -22,6 +22,41 @@
       "xmlrpc",
       "jsonrpc2"
     ],
+    "post_phase5_deprecation": {
+      "body": {
+        "error": "xmlrpc_retired",
+        "message": "XML-RPC is retired; use JSON-RPC 2.0 at /jsonrpc"
+      },
+      "headers": {
+        "Cache-Control": "no-store",
+        "Deprecation": "true",
+        "Link": "</jsonrpc>; rel=\"successor-version\"",
+        "X-FreeCAD-MCP-Protocol": "jsonrpc-2.0"
+      },
+      "paths": [
+        "/",
+        "/RPC2"
+      ],
+      "status": 410
+    },
+    "post_phase5_negotiation": {
+      "header": "X-FreeCAD-MCP-Protocol",
+      "mismatch": {
+        "response": {
+          "error": {
+            "code": -32005,
+            "data": {
+              "expected": "jsonrpc-2.0"
+            },
+            "message": "Protocol mismatch"
+          },
+          "id": null,
+          "jsonrpc": "2.0"
+        },
+        "status": 409
+      },
+      "value": "jsonrpc-2.0"
+    },
     "post_phase5_required": [
       "jsonrpc2"
     ]
@@ -13738,5 +13773,5 @@
     },
     "ping": true
   },
-  "schema_version": 2
+  "schema_version": 3
 }

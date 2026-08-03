@@ -1,9 +1,8 @@
 """Translate legacy success-shaped failures into JSON-RPC 2.0 errors.
 
 The existing RPC methods keep returning their frozen result mappings while the
-XML-RPC and JSON-RPC listeners coexist.  The JSON-RPC listener calls this leaf
-after dispatch: an explicit failure marker becomes an application error, and
-every other result remains untouched.
+JSON-RPC listener calls this leaf after dispatch: an explicit failure marker
+becomes an application error, and every other result remains untouched.
 """
 
 from __future__ import annotations

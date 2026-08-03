@@ -2,7 +2,7 @@ import logging
 import threading  # noqa: F401 - §3.3 test monkeypatch surface
 import time  # noqa: F401 - §3.3 test monkeypatch surface
 import uuid  # noqa: F401 - §3.3 test monkeypatch surface
-import xmlrpc.client  # noqa: F401 - §3.3 test monkeypatch surface
+import xmlrpc.client  # noqa: F401 - declarative compatibility import
 
 # §3.3 compatibility shims — keep old import paths working.
 from .freecad_client_ops.constants import DIRECT_READ_METHODS as _DIRECT_READ_METHODS  # noqa: F401

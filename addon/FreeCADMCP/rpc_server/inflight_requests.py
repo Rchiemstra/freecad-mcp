@@ -2,7 +2,7 @@
 
 The registry deliberately has no FreeCAD or Qt dependency.  It spans the
 whole ``invoke_v2`` lifetime, including filesystem/worker gaps and GUI work
-that finishes after its XML-RPC handler has returned.
+that finishes after its JSON-RPC handler has returned.
 """
 
 from __future__ import annotations

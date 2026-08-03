@@ -5,11 +5,11 @@ from ._support import *
 from .dispatch_core_enforcement import dispatch_enforcement
 from .dispatch_core_unenforced import dispatch_unenforced_mutation, import_document_lock_or_none
 
-"""XML-RPC dispatch chokepoint with lease enforcement."""
+"""RPC dispatch chokepoint with lease enforcement."""
 
 
 def dispatch(self, method, params):
-    """XML-RPC chokepoint: enforce document leases when configured.
+    """RPC chokepoint: enforce document leases when configured.
 
     When ``document_lock_enforcement`` is off, behaviour is identical to
     the default SimpleXMLRPCDispatcher instance dispatch.

@@ -1,7 +1,7 @@
-"""XML-RPC client connection to a FreeCAD addon instance."""
+"""JSON-RPC client connection to a FreeCAD add-on instance."""
 
 from __future__ import annotations
 
 
 class FreeCADConnection:
-    """Authenticated XML-RPC client for one FreeCAD addon RPC endpoint."""
+    """Authenticated JSON-RPC client for one FreeCAD add-on RPC endpoint."""

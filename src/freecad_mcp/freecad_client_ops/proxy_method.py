@@ -1,4 +1,4 @@
-"""Dotted XML-RPC method bound to one serialized transport lane."""
+"""Dotted JSON-RPC method bound to one serialized transport lane."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 
 class ProxyMethod:
-    """Dotted XML-RPC method bound to one serialized transport lane."""
+    """Dotted JSON-RPC method bound to one serialized transport lane."""
 
     def __init__(self, lane: Any, name: str):
         self._lane = lane

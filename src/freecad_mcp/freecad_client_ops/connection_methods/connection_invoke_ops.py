@@ -62,6 +62,7 @@ def invoke_rpc(
         *args: Any,
         control: bool = False,
         timeout: float | None = None,
+        notification: bool = False,
     ) -> Any:
         """Invoke a method on a serialized general or independent control lane."""
 
@@ -82,12 +83,12 @@ def invoke_rpc(
             if timeout is not None and timeout != conn._timeout and not control:
                 lane = conn._make_proxy(timeout)
                 try:
-                    result = lane.call(method, *args)
+                    result = lane.call(method, *args, notification=notification)
                 finally:
                     lane.close()
             else:
                 lane = conn.control_server if control else conn.server
-                result = lane.call(method, *args)
+                result = lane.call(method, *args, notification=notification)
         except Exception as exc:
             emit_event(
                 "rpc_client",

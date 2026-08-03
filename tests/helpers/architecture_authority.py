@@ -83,7 +83,12 @@ def authority_symbol_census(
                 continue
             if authority_id == "sidecar_correctness" and path.name == "git_sidecar.py":
                 continue
-            if path_pattern.search(relative):
+            pure_client_transport = (
+                authority_id == "mcp_save_recovery_authority"
+                and relative
+                == "src/freecad_mcp/freecad_client_ops/json_rpc_http_transport.py"
+            )
+            if path_pattern.search(relative) and not pure_client_transport:
                 records.append(
                     {"path": relative, "line": 0, "column": 0, "symbol": "<module>"}
                 )

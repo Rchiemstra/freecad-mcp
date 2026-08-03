@@ -73,8 +73,7 @@ def _build_heartbeat_payload_locked(
             leases.append(item)
         return {
             "leases": leases,
-            # XML-RPC's standard ``int`` is limited to signed 32-bit. Keep the
-            # nanosecond clock lossless and wire-safe as decimal text.
+            # Retain the established decimal-text shape for compatibility.
             "client_monotonic_ns": str(time.monotonic_ns()),
         }
 

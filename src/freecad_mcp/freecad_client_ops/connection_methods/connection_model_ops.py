@@ -21,7 +21,7 @@ def sketch_attach(
             "sketch_name": sketch_name,
             "support": support,
         }
-        # Omit the key entirely for older addons / XML-RPC signatures.
+        # Omit the key entirely for older add-on method signatures.
         if attachment_offset is not None:
             params["attachment_offset"] = attachment_offset
         routed = conn._invoke_mutation_v2(

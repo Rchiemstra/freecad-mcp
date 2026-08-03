@@ -22,7 +22,7 @@ def _recover_acquisition_after_transport_loss(
         poll_attempts: int = 8,
         poll_interval_s: float = 0.25,
     ) -> dict[str, Any] | None:
-        """Status/claim recovery after the acquisition XML-RPC response is lost.
+        """Status/claim recovery after the acquisition transport response is lost.
 
         Returns an invoke_v2-shaped success envelope when the credential can be
         reclaimed; otherwise ``None`` so the caller re-raises with request_id.

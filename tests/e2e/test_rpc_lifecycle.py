@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import threading
 import time
-import xmlrpc.client
 
 import pytest
 
 FreeCAD = pytest.importorskip("FreeCAD")
 FreeCADGui = pytest.importorskip("FreeCADGui")
-from PySide import QtCore
+from PySide import QtCore  # noqa: E402
 
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
-from addon.FreeCADMCP.rpc_server import rpc_server
-
+from addon.FreeCADMCP.rpc_server import rpc_server  # noqa: E402
+from freecad_mcp._shared.protocol.json_rpc_client import (  # noqa: E402
+    JsonRpcRemoteError,
+)
+from freecad_mcp.freecad_client import FreeCADConnection  # noqa: E402
 
 pytestmark = [
     pytest.mark.e2e,
@@ -40,10 +42,18 @@ def _pump_until(app, predicate, timeout=15.0):
 
 
 def _call(port, method, *args):
-    with xmlrpc.client.ServerProxy(
-        f"http://127.0.0.1:{port}", allow_none=True
-    ) as client:
-        return getattr(client, method)(*args)
+    connection = FreeCADConnection(host="127.0.0.1", port=port)
+    try:
+        return getattr(connection.server, method)(*args)
+    finally:
+        connection.disconnect()
+
+
+def _call_outcome(port, method, *args):
+    try:
+        return _call(port, method, *args)
+    except JsonRpcRemoteError as exc:
+        return exc
 
 
 def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
@@ -62,7 +72,7 @@ def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
 
         long_thread = threading.Thread(
             target=lambda: worker_results.append(
-                _call(
+                _call_outcome(
                     port,
                     "execute_code",
                     "import time; time.sleep(60)",
@@ -88,7 +98,7 @@ def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
         for index in (1, 2):
             thread = threading.Thread(
                 target=lambda payload=f"print({index})": worker_results.append(
-                    _call(
+                    _call_outcome(
                         port,
                         "execute_code",
                         payload,
@@ -119,8 +129,8 @@ def test_full_server_shutdown_rejects_draining_work_and_restarts(monkeypatch):
         for thread in worker_threads:
             thread.join(timeout=10)
             assert not thread.is_alive()
-        assert all("error_code" in result for result in worker_results), worker_results
-        codes = sorted(result["error_code"] for result in worker_results)
+        assert all(isinstance(result, JsonRpcRemoteError) for result in worker_results)
+        codes = sorted(result.semantic_code for result in worker_results)
         assert codes.count("server_stopping") == 2
         assert codes.count("WORKER_CANCELLED") == 1
 

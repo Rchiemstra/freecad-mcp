@@ -93,6 +93,16 @@ def test_every_temporary_authority_has_a_phase18_owner_and_negative_assertion():
     assert "addon/FreeCADMCP/git_sidecar.py" not in sidecar_paths
     assert "addon/FreeCADMCP/InitGui.py" not in sidecar_paths
     assert "addon/FreeCADMCP/document_lock_ops/eligibility.py" not in sidecar_paths
+    save_paths = {
+        record["path"]
+        for record in manifest["authority_symbol_census"][
+            "mcp_save_recovery_authority"
+        ]
+    }
+    assert (
+        "src/freecad_mcp/freecad_client_ops/json_rpc_http_transport.py"
+        not in save_paths
+    )
 
 
 def _member_exists(module: object, qualified_name: str) -> bool:

@@ -53,7 +53,7 @@ class RpcRequestContext:
         method: str,
         params: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Build a fresh XML-RPC-serializable envelope for this request."""
+        """Build a fresh JSON-serializable envelope for this request."""
 
         if not method:
             raise ValueError("method must not be empty")

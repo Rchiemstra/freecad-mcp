@@ -1,20 +1,25 @@
 from __future__ import annotations
 
+import json
+import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import FrozenInstanceError
-import json
 from pathlib import Path
-import threading
 from unittest import mock
-import uuid
 
 import pytest
 
+from freecad_mcp._shared.protocol.json_rpc_client import (
+    JSON_RPC_PROTOCOL_HEADER,
+    JSON_RPC_PROTOCOL_VALUE,
+    JsonRpcRemoteError,
+)
 from freecad_mcp.freecad_client import FreeCADConnection, RpcInvocationError
 from freecad_mcp.lease_manager import (
     LeaseClientManager,
-    LeaseManagerClosedError,
     LeaseCredential,
+    LeaseManagerClosedError,
     LeaseManagerDisconnectedError,
     LeaseNotFoundError,
     RpcRequestContext,
@@ -363,16 +368,46 @@ class _FakeProxy:
         return {"success": True, "lane": self.index}
 
 
+class _FakeJsonRpcTransport:
+    def __init__(self, proxy):
+        self.proxy = proxy
+        self.extra_headers = []
+        self.closed = False
+
+    def request(self, _path, payload, headers):
+        self.extra_headers = list(headers)
+        document = json.loads(payload)
+        target = self.proxy
+        for segment in document["method"].split("."):
+            target = getattr(target, segment)
+        result = target(*document.get("params", ()))
+        response_headers = {
+            JSON_RPC_PROTOCOL_HEADER.lower(): (JSON_RPC_PROTOCOL_VALUE,)
+        }
+        if "id" not in document:
+            return 204, response_headers, b""
+        response = {
+            "jsonrpc": "2.0",
+            "id": document["id"],
+            "result": result,
+        }
+        return 200, response_headers, json.dumps(response).encode()
+
+    def close(self):
+        self.closed = True
+
+
 def _install_fake_proxies(monkeypatch):
-    import freecad_mcp.freecad_client as client_module
+    import freecad_mcp.freecad_client_ops.proxy_lane as proxy_lane_module
 
     calls: list[tuple[int, str, object]] = []
     created: list[_FakeProxy] = []
     general_started = threading.Event()
     release_general = threading.Event()
 
-    def factory(_uri, *, allow_none, transport):
-        assert allow_none is True
+    def factory(_uri, *, timeout):
+        assert timeout > 0
+        transport = _FakeJsonRpcTransport(None)
         proxy = _FakeProxy(
             transport,
             len(created),
@@ -380,10 +415,11 @@ def _install_fake_proxies(monkeypatch):
             general_started,
             release_general,
         )
+        transport.proxy = proxy
         created.append(proxy)
-        return proxy
+        return transport
 
-    monkeypatch.setattr(client_module.xmlrpc.client, "ServerProxy", factory)
+    monkeypatch.setattr(proxy_lane_module, "JsonRpcHttpTransport", factory)
     return calls, created, general_started, release_general
 
 
@@ -1096,6 +1132,132 @@ def test_session_rejection_refreshes_once_with_same_request_and_credentials(
 
 
 @pytest.mark.unit
+def test_native_session_error_refreshes_once_and_preserves_request_identity(
+    monkeypatch,
+):
+    _calls, _created, _started, _release = _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="expired-session")
+    manager.store(_credential("doc-a", "lease-secret"))
+    connection.configure_lease_routing(manager, lambda _name: "doc-a")
+    envelopes = []
+
+    def refresh():
+        manager.mark_connected("refreshed-session")
+
+    def invoke_rpc(method, envelope, **_kwargs):
+        assert method == "invoke_v2"
+        envelopes.append(envelope)
+        if len(envelopes) == 1:
+            raise JsonRpcRemoteError(
+                -32002,
+                "expired",
+                data={"error_code": "SESSION_EXPIRED", "retryable": True},
+                request_id=1,
+            )
+        return {
+            "ok": True,
+            "request_id": envelope["request_id"],
+            "result": {"success": True},
+        }
+
+    connection.configure_session_refresher(refresh)
+    monkeypatch.setattr(connection, "invoke_rpc", invoke_rpc)
+    context = manager.build_request_context(
+        document_session_uuids=("doc-a",),
+        request_id=_request_id("native-refresh-mutation"),
+    )
+
+    response = connection.invoke_v2("edit_object", {"doc_name": "Alpha"}, context)
+    connection.disconnect()
+
+    assert response["ok"] is True
+    assert len(envelopes) == 2
+    assert envelopes[0]["request_id"] == envelopes[1]["request_id"]
+    assert envelopes[0]["session_token"] == "expired-session"
+    assert envelopes[1]["session_token"] == "refreshed-session"
+    assert envelopes[0]["lease_credentials"] == envelopes[1]["lease_credentials"]
+
+
+@pytest.mark.unit
+def test_native_remote_error_is_not_treated_as_acquisition_transport_loss():
+    from freecad_mcp.freecad_client_ops.connection_methods.connection_invoke_v2_helpers import (
+        invoke_v2_transport,
+    )
+
+    error = JsonRpcRemoteError(
+        -32010,
+        "stale revision",
+        data={"error_code": "STALE_REVISION", "revision": 17},
+        request_id=7,
+    )
+    connection = mock.Mock()
+    connection.invoke_rpc.side_effect = error
+    manager = LeaseClientManager(session_token="rpc-session")
+    context = manager.build_request_context(
+        request_id=_request_id("native-acquisition-error")
+    )
+
+    with pytest.raises(JsonRpcRemoteError) as raised:
+        invoke_v2_transport(
+            connection,
+            "create_document",
+            {"name": "Alpha"},
+            context,
+            control=False,
+            timeout=5,
+        )
+
+    assert raised.value.code == error.code
+    assert raised.value.data == {"error_code": "STALE_REVISION", "revision": 17}
+    connection._recover_acquisition_after_transport_loss.assert_not_called()
+
+
+@pytest.mark.unit
+def test_native_remote_error_from_session_retry_remains_native(monkeypatch):
+    _calls, _created, _started, _release = _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="expired-session")
+    connection.configure_lease_routing(manager, lambda _name: None)
+    retry_error = JsonRpcRemoteError(
+        -32010,
+        "stale revision",
+        data={"error_code": "STALE_REVISION", "revision": 23},
+        request_id=2,
+    )
+    calls = 0
+
+    def refresh():
+        manager.mark_connected("refreshed-session")
+
+    def invoke_rpc(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise JsonRpcRemoteError(
+                -32002,
+                "expired",
+                data={"error_code": "UNKNOWN_SESSION"},
+                request_id=1,
+            )
+        raise retry_error
+
+    connection.configure_session_refresher(refresh)
+    monkeypatch.setattr(connection, "invoke_rpc", invoke_rpc)
+    context = manager.build_request_context(
+        request_id=_request_id("native-retry-error")
+    )
+
+    with pytest.raises(JsonRpcRemoteError) as raised:
+        connection.invoke_v2("get_document_info", {}, context)
+    connection.disconnect()
+
+    assert calls == 2
+    assert raised.value.code == retry_error.code
+    assert raised.value.data == {"error_code": "STALE_REVISION", "revision": 23}
+
+
+@pytest.mark.unit
 def test_authenticated_transport_exception_never_exposes_remote_fault_text(
     monkeypatch,
 ):
@@ -1123,11 +1285,47 @@ def test_authenticated_transport_exception_never_exposes_remote_fault_text(
 
 
 @pytest.mark.unit
+def test_authenticated_native_error_redacts_active_session_and_lease_tokens(monkeypatch):
+    _calls, _created, _started, _release = _install_fake_proxies(monkeypatch)
+    connection = FreeCADConnection(timeout=5)
+    manager = LeaseClientManager(session_token="rpc-session-secret")
+    manager.store(_credential("doc-a", "lease-secret"))
+    connection.configure_lease_routing(manager, lambda _name: "doc-a")
+    context = manager.build_request_context(
+        document_session_uuids=("doc-a",),
+        request_id=_request_id("native-secret-fault"),
+    )
+
+    def fail(*_args, **_kwargs):
+        raise JsonRpcRemoteError(
+            -32000,
+            "remote echoed rpc-session-secret and lease-secret",
+            data={
+                "error_code": "DENIED",
+                "detail": "rpc-session-secret / lease-secret",
+            },
+            request_id=9,
+        )
+
+    monkeypatch.setattr(connection, "invoke_rpc", fail)
+    with pytest.raises(JsonRpcRemoteError) as raised:
+        connection.invoke_v2("edit_object", {"doc_name": "Alpha"}, context)
+    connection.disconnect()
+
+    rendered = f"{raised.value} {raised.value.data}"
+    assert raised.value.semantic_code == "DENIED"
+    assert "rpc-session-secret" not in rendered
+    assert "lease-secret" not in rendered
+    assert "[REDACTED]" in rendered
+
+
+@pytest.mark.unit
 def test_mcp_request_id_derivation_is_stable_per_call_and_avoids_payload_collision(
     monkeypatch,
 ):
-    from mcp.server.lowlevel.server import request_ctx
     from types import SimpleNamespace
+
+    from mcp.server.lowlevel.server import request_ctx
 
     _calls, _created, _started, _release = _install_fake_proxies(monkeypatch)
     connection = FreeCADConnection(

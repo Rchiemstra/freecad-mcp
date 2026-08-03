@@ -22,6 +22,52 @@ _ACQUISITION_METHODS = frozenset(
 _SESSION_EXPIRED_CODES = frozenset({"SESSION_EXPIRED", "UNKNOWN_SESSION"})
 
 
+def _redact_native_remote_error(
+    conn,
+    error: Exception,
+    context: RpcRequestContext,
+) -> Exception:
+    """Preserve a native error while scrubbing active session/lease secrets."""
+
+    from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
+
+    secrets = (
+        context.session_token,
+        *(item.token for item in context.lease_credentials),
+    )
+    payload = {"message": error.message, "data": error.data}
+    manager = getattr(conn, "__dict__", {}).get("_lease_manager")
+    redact_value = getattr(manager, "redact_value", None)
+    if callable(redact_value):
+        safe = redact_value(payload, additional_secrets=secrets)
+    else:
+
+        def scrub(value: Any) -> Any:
+            if isinstance(value, str):
+                safe_text = value
+                for secret in secrets:
+                    if secret:
+                        safe_text = safe_text.replace(secret, "[REDACTED]")
+                return safe_text
+            if isinstance(value, Mapping):
+                return {str(key): scrub(item) for key, item in value.items()}
+            if isinstance(value, tuple):
+                return tuple(scrub(item) for item in value)
+            if isinstance(value, list):
+                return [scrub(item) for item in value]
+            return value
+
+        safe = scrub(payload)
+    if safe == payload:
+        return error
+    return JsonRpcRemoteError(
+        error.code,
+        str(safe["message"]),
+        data=safe["data"],
+        request_id=error.request_id,
+    )
+
+
 def invoke_v2_execution_category(method: str, params: Mapping[str, Any] | None) -> str:
     if method != "execute_code" or not isinstance(params, Mapping):
         return "typed_direct_rpc"
@@ -79,6 +125,8 @@ def invoke_v2_transport(
     control: bool,
     timeout: float | None,
 ) -> dict[str, Any]:
+    from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
+
     wire_params = _sign_generated_execute_params(method, params, context)
     envelope = context.to_envelope(method, wire_params)
     transport_method = "invoke_v2_control" if control else "invoke_v2"
@@ -90,6 +138,8 @@ def invoke_v2_transport(
             control=control,
             timeout=timeout,
         )
+    except JsonRpcRemoteError as exc:
+        raise _redact_native_remote_error(conn, exc, context) from None
     except Exception as exc:
         if not control and method in _ACQUISITION_METHODS:
             recovered = conn._recover_acquisition_after_transport_loss(
@@ -150,11 +200,60 @@ def invoke_v2_retry_expired_session(
     control: bool,
     timeout: float | None,
 ) -> dict[str, Any]:
+    from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
+
     with conn._identity_lock:
         refresher = conn._session_refresher
         manager = conn._lease_manager
     if refresher is None or manager is None:
         return response
+    try:
+        refresher()
+    except Exception as exc:
+        raise RpcInvocationError(method, exc, request_id=context.request_id) from None
+
+    refreshed = manager.build_request_context(
+        document_session_uuids=tuple(
+            item.document_session_uuid for item in context.lease_credentials
+        ),
+        operation_name=context.operation_name,
+        task_id=context.task_id,
+        request_id=context.request_id,
+    )
+    refreshed_params = _sign_generated_execute_params(method, params, refreshed)
+    try:
+        return conn.invoke_rpc(
+            transport_method,
+            refreshed.to_envelope(method, refreshed_params),
+            control=control,
+            timeout=timeout,
+        )
+    except JsonRpcRemoteError as exc:
+        raise _redact_native_remote_error(conn, exc, refreshed) from None
+    except Exception as exc:
+        raise RpcInvocationError(method, exc, request_id=context.request_id) from None
+
+
+def invoke_v2_retry_expired_remote_error(
+    conn,
+    method: str,
+    params: Mapping[str, Any] | None,
+    context: RpcRequestContext,
+    *,
+    remote_error: Exception,
+    transport_method: str,
+    control: bool,
+    timeout: float | None,
+) -> dict[str, Any]:
+    """Refresh once for a native session-expiry error, otherwise preserve it."""
+
+    from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
+
+    with conn._identity_lock:
+        refresher = conn._session_refresher
+        manager = conn._lease_manager
+    if refresher is None or manager is None:
+        raise remote_error
     try:
         refresher()
     except Exception as exc:
@@ -167,13 +266,15 @@ def invoke_v2_retry_expired_session(
         task_id=context.task_id,
         request_id=context.request_id,
     )
+    refreshed_params = _sign_generated_execute_params(method, params, refreshed)
     try:
-        refreshed_params = _sign_generated_execute_params(method, params, refreshed)
         return conn.invoke_rpc(
             transport_method,
             refreshed.to_envelope(method, refreshed_params),
             control=control,
             timeout=timeout,
         )
+    except JsonRpcRemoteError as exc:
+        raise _redact_native_remote_error(conn, exc, refreshed) from None
     except Exception as exc:
         raise RpcInvocationError(method, exc, request_id=context.request_id) from None

@@ -8,7 +8,6 @@ import socket
 import threading
 import urllib.error
 import urllib.request
-import xmlrpc.client
 
 import pytest
 
@@ -105,10 +104,12 @@ def _json_request(port, document, *, headers=None):
         return response.status, json.loads(payload) if payload else None
 
 
-def test_xmlrpc_and_jsonrpc_share_endpoint_dispatch_and_identity(monkeypatch):
+def test_jsonrpc_dispatch_and_identity_survive_xmlrpc_retirement(monkeypatch):
     identity = _IdentityContext()
     methods = _Methods(identity)
-    monkeypatch.setattr(xmlrpc_identity_handler, "_import_document_lock", lambda: identity)
+    monkeypatch.setattr(
+        xmlrpc_identity_handler, "_import_document_lock", lambda: identity
+    )
     server = FilteredXMLRPCServer(
         ("127.0.0.1", 0),
         allowed_ips_str="127.0.0.1",
@@ -120,10 +121,6 @@ def test_xmlrpc_and_jsonrpc_share_endpoint_dispatch_and_identity(monkeypatch):
     loop.start()
     port = server.server_address[1]
     try:
-        with xmlrpc.client.ServerProxy(
-            f"http://127.0.0.1:{port}", allow_none=True
-        ) as client:
-            assert client.add(3, 4) == 7
         status, named = _json_request(
             port,
             {
@@ -152,7 +149,7 @@ def test_xmlrpc_and_jsonrpc_share_endpoint_dispatch_and_identity(monkeypatch):
 
     assert status == 200
     assert named == {"jsonrpc": "2.0", "id": 1, "result": 11}
-    assert methods.named_calls == [(3, 4), (6, 5)]
+    assert methods.named_calls == [(6, 5)]
     assert captured["result"]["instance_id"] == "runtime-1"
     assert captured["result"]["pid"] == 123
     assert failure["error"] == {
@@ -165,7 +162,7 @@ def test_xmlrpc_and_jsonrpc_share_endpoint_dispatch_and_identity(monkeypatch):
         },
     }
     assert wide["result"] == 9_223_372_036_854_775_000
-    assert identity.cleared == 5
+    assert identity.cleared == 4
 
 
 def test_jsonrpc_method_and_parameter_errors_do_not_dispatch():
@@ -299,7 +296,9 @@ def test_shared_listener_bounds_incomplete_headers_before_body_parsing():
     server.json_rpc_read_timeout_seconds = 0.1
     loop = threading.Thread(target=server.serve_forever, daemon=True)
     loop.start()
-    stalled = [socket.create_connection(server.server_address, timeout=2) for _ in range(5)]
+    stalled = [
+        socket.create_connection(server.server_address, timeout=2) for _ in range(5)
+    ]
     for connection in stalled:
         connection.settimeout(2)
         connection.sendall(b"POST /jsonrpc HTTP/1.1\r\nHost: localhost")
@@ -336,7 +335,11 @@ def test_shared_listener_rejects_disallowed_ip_over_socket():
     loop.start()
     try:
         with pytest.raises(
-            (urllib.error.URLError, ConnectionResetError, http.client.RemoteDisconnected)
+            (
+                urllib.error.URLError,
+                ConnectionResetError,
+                http.client.RemoteDisconnected,
+            )
         ):
             _json_request(
                 server.server_address[1],
@@ -351,7 +354,7 @@ def test_shared_listener_rejects_disallowed_ip_over_socket():
     assert methods.ping_calls == 0
 
 
-def test_xml_and_json_share_reserved_control_and_general_capacity():
+def test_jsonrpc_preserves_reserved_control_and_general_capacity():
     methods = _LaneMethods()
     server = FilteredXMLRPCServer(
         ("127.0.0.1", 0),
@@ -383,8 +386,10 @@ def test_xml_and_json_share_reserved_control_and_general_capacity():
         worker.start()
     try:
         assert methods.three_started.wait(timeout=2)
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            assert client.ping() is True
+        _, control = _json_request(
+            port,
+            {"jsonrpc": "2.0", "method": "ping", "id": "control"},
+        )
         _, busy = _json_request(
             port,
             {"jsonrpc": "2.0", "method": "slow", "params": [4], "id": 4},
@@ -403,4 +408,5 @@ def test_xml_and_json_share_reserved_control_and_general_capacity():
         "message": "Server busy",
         "data": {"reason": "server_busy", "lane": "general"},
     }
+    assert control["result"] is True
     assert sorted(response["result"] for _, response in results) == [1, 2, 3]

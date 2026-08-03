@@ -64,11 +64,15 @@ and do not make arbitrary code inside FreeCAD trustworthy.
 on Windows. The manifest and Cursor configuration contain only its path. Never
 paste, log, commit, or copy the secret into an MCP argument value.
 
-HMAC authenticates but does not encrypt the RPC transport. During the Stage 1
-migration the same port accepts legacy XML-RPC at `/RPC2` and JSON-RPC 2.0 at
-`/jsonrpc`; both carry the same identity and credential headers. Loopback is the
-default and recommended deployment. A remote connection must use an SSH tunnel
-or TLS proxy, a narrow IP/CIDR allowlist, and a separately protected secret.
+HMAC authenticates but does not encrypt the RPC transport. The live endpoint is
+JSON-RPC 2.0 at `/jsonrpc`, and every request and response negotiates
+`X-FreeCAD-MCP-Protocol: jsonrpc-2.0`. The retired `/RPC2` and `/` routes return a
+bounded HTTP 410 deprecation response directing callers to `/jsonrpc`; they do
+not authenticate or dispatch an RPC method. Loopback is the default and
+recommended deployment. A nonempty, unsupported protocol header is rejected
+before dispatch with HTTP 409 and JSON-RPC error `-32005`. A remote connection
+must use an SSH tunnel or TLS
+proxy, a narrow IP/CIDR allowlist, and a separately protected secret.
 Plain non-loopback RPC exposes session and lease credentials to network observers.
 Accordingly, `document_lease_mode=enforce` rejects a non-loopback addon bind
 unless `allow_authenticated_remote_without_transport_security=true` is set by

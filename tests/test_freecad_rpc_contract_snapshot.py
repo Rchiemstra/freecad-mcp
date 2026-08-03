@@ -6,8 +6,6 @@ import inspect
 import json
 from pathlib import Path
 from typing import Any
-from xmlrpc.client import dumps as xmlrpc_dumps
-from xmlrpc.client import loads as xmlrpc_loads
 
 import pytest
 from jsonschema.validators import Draft202012Validator
@@ -219,10 +217,40 @@ def test_freecad_rpc_semantic_surface_matches_contract_snapshot(freecad_rpc_clas
 
 def test_freecad_rpc_result_schemas_are_valid_and_transport_neutral():
     snapshot = _load_snapshot()
-    assert snapshot["schema_version"] == 2
+    assert snapshot["schema_version"] == 3
     assert snapshot["listener_contract"] == {
         "phase1_validated": ["xmlrpc"],
         "phase4_required": ["xmlrpc", "jsonrpc2"],
+        "post_phase5_deprecation": {
+            "body": {
+                "error": "xmlrpc_retired",
+                "message": "XML-RPC is retired; use JSON-RPC 2.0 at /jsonrpc",
+            },
+            "headers": {
+                "Cache-Control": "no-store",
+                "Deprecation": "true",
+                "Link": '</jsonrpc>; rel="successor-version"',
+                "X-FreeCAD-MCP-Protocol": "jsonrpc-2.0",
+            },
+            "paths": ["/", "/RPC2"],
+            "status": 410,
+        },
+        "post_phase5_negotiation": {
+            "header": "X-FreeCAD-MCP-Protocol",
+            "mismatch": {
+                "response": {
+                    "error": {
+                        "code": -32005,
+                        "data": {"expected": "jsonrpc-2.0"},
+                        "message": "Protocol mismatch",
+                    },
+                    "id": None,
+                    "jsonrpc": "2.0",
+                },
+                "status": 409,
+            },
+            "value": "jsonrpc-2.0",
+        },
         "post_phase5_required": ["jsonrpc2"],
     }
     for method_name, contract in snapshot["methods"].items():
@@ -254,10 +282,7 @@ def test_freecad_rpc_result_schemas_are_valid_and_transport_neutral():
     assert normalization["error_message_fields"] == ["error", "message"]
 
 
-def test_phase1_xml_listener_round_trips_every_semantic_outcome(freecad_rpc_class):
-    # Import the production listener adapter after the FreeCAD test bootstrap.
-    from addon.FreeCADMCP.rpc_server.filtered_xmlrpc_server import xmlrpc_safe_response
-
+def test_frozen_semantic_examples_are_json_native(freecad_rpc_class):
     snapshot = _load_snapshot()
     assert freecad_rpc_class
     for method_name, contract in snapshot["methods"].items():
@@ -265,12 +290,7 @@ def test_phase1_xml_listener_round_trips_every_semantic_outcome(freecad_rpc_clas
         error_validator = Draft202012Validator(contract["normalized_error_schema"])
         for example in contract["result_examples"]:
             result_validator.validate(example)
-            payload = xmlrpc_dumps(
-                (xmlrpc_safe_response(example),),
-                allow_none=True,
-                methodresponse=True,
-            )
-            decoded = xmlrpc_loads(payload)[0][0]
+            decoded = json.loads(json.dumps(example, allow_nan=False))
             result_validator.validate(decoded)
             if isinstance(decoded, dict) and (
                 decoded.get("success") is False or decoded.get("ok") is False
@@ -319,6 +339,50 @@ def test_phase4_json_listener_round_trips_every_semantic_outcome():
             error_validator.validate(decoded["error"])
             assert decoded["error"] == mapped
         assert contract["result_examples"], method_name
+
+    assert converted_failures == 75
+
+
+def test_phase5_json_client_converts_every_documented_failure_to_native_error():
+    from addon.FreeCADMCP._shared.protocol.json_rpc import (
+        encode_json_rpc_responses,
+        json_rpc_error,
+        json_rpc_success,
+    )
+    from addon.FreeCADMCP._shared.protocol.json_rpc_client import (
+        JsonRpcRemoteError,
+        decode_json_rpc_response,
+    )
+    from addon.FreeCADMCP.rpc_server.json_rpc_errors import (
+        json_rpc_error_from_result,
+    )
+
+    snapshot = _load_snapshot()
+    converted_failures = 0
+    for method_name, contract in snapshot["methods"].items():
+        for index, example in enumerate(contract["result_examples"]):
+            mapped = json_rpc_error_from_result(example)
+            if mapped is None:
+                response = json_rpc_success(index, example)
+                payload = encode_json_rpc_responses([response], batch=False)
+                assert decode_json_rpc_response(payload, expected_id=index) == example
+                continue
+
+            converted_failures += 1
+            response = json_rpc_error(
+                index,
+                mapped["code"],
+                mapped["message"],
+                mapped["data"],
+            )
+            payload = encode_json_rpc_responses([response], batch=False)
+            with pytest.raises(JsonRpcRemoteError) as caught:
+                decode_json_rpc_response(payload, expected_id=index)
+            error = caught.value
+            assert error.code == mapped["code"], method_name
+            assert error.message == mapped["message"], method_name
+            assert error.data == mapped["data"], method_name
+            assert error.semantic_code == mapped["data"]["error_code"], method_name
 
     assert converted_failures == 75
 

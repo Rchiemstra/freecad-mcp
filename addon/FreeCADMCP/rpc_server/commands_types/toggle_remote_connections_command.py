@@ -24,7 +24,7 @@ class ToggleRemoteConnectionsCommand:
         ):
             commands.FreeCAD.Console.PrintWarning(
                 "Remote Connections was not enabled: enforce mode keeps the addon "
-                "on loopback because HMAC does not encrypt XML-RPC. Use an SSH/TLS "
+                "on loopback because HMAC does not encrypt JSON-RPC. Use an SSH/TLS "
                 "tunnel, or deliberately configure the unsafe transport override.\n"
             )
             return

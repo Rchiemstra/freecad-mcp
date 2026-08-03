@@ -72,7 +72,7 @@ async def lease_heartbeat_once() -> bool:
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        # Never interpolate remote exception text: an XML-RPC peer can place
+        # Never interpolate remote exception text: a remote peer can place
         # credentials in fault messages. The class/code is enough for routine
         # heartbeat diagnostics and leaves raw tokens out of logs.
         error_code = getattr(exc, "code", type(exc).__name__)

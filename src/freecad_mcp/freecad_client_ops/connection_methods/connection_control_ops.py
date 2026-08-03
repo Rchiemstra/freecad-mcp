@@ -221,6 +221,46 @@ def cancel_request(
         )
 
 
+def notify_cancel_request(
+    conn,
+    target_request_id: str,
+    *,
+    request_id: str | None = None,
+) -> bool:
+    """Send authenticated advisory cancellation as a JSON-RPC notification.
+
+    The acknowledged :func:`cancel_request` API remains available to callers
+    that consume its status. This path is for task teardown, where waiting for
+    a response can only delay cancellation.
+    """
+
+    try:
+        parsed_target_request_id = uuid.UUID(str(target_request_id))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise ValueError("target_request_id must be a UUID") from exc
+    if parsed_target_request_id.int == 0:
+        raise ValueError("target_request_id must not be the nil UUID")
+    target_request_id = str(parsed_target_request_id)
+    context = conn._build_v2_context(
+        operation_name="Cancel request",
+        request_id=request_id,
+        require_credentials=False,
+    )
+    if context is None:
+        return False
+    envelope = context.to_envelope(
+        "cancel_request",
+        {"target_request_id": target_request_id},
+    )
+    conn.invoke_rpc(
+        "invoke_v2_control",
+        envelope,
+        control=True,
+        notification=True,
+    )
+    return True
+
+
 def disconnect(conn) -> None:
         """Close both lanes. Lease release remains an explicit lifecycle step."""
 

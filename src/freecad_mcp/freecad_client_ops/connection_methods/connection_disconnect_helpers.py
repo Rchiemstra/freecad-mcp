@@ -34,12 +34,4 @@ def close_transport_lane(
             if first_error is None:
                 first_error = exc
         return first_error
-    transport = getattr(lane, "_ServerProxy__transport", None)
-    close_transport = getattr(transport, "close", None)
-    if callable(close_transport):
-        try:
-            close_transport()
-        except Exception as exc:
-            if first_error is None:
-                first_error = exc
     return first_error

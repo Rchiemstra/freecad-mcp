@@ -1,6 +1,6 @@
 """Late-bound method attachments for FreeCADConnection."""
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001 - preserve frozen census line positions
 
 from .connection_init import init_connection
 from .connection_methods.connection_acquisition_ops import (
@@ -9,7 +9,7 @@ from .connection_methods.connection_acquisition_ops import (
 )
 from .connection_methods.connection_control_ops import (
     acknowledge_acquisition_claim,
-    cancel_request,
+    cancel_request, notify_cancel_request as _notify_cancel_request,
     claim_acquisition_result,
     disconnect,
     get_request_status,
@@ -237,6 +237,7 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.get_document_lock = get_document_lock
     FreeCADConnection.list_document_locks = list_document_locks
     FreeCADConnection.heartbeat_document_lock = heartbeat_document_lock
+    FreeCADConnection._notify_cancel_request = _notify_cancel_request
     FreeCADConnection.update_document_lock = update_document_lock
     FreeCADConnection.save_document = save_document
     FreeCADConnection.save_document_as = save_document_as
