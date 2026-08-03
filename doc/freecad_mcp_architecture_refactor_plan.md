@@ -5,12 +5,14 @@ adapter**: an MCP server free to use any dependency, and an add-on that is a
 pure-stdlib gateway inside FreeCAD. One protocol implementation, one wire
 encoding, one place to declare a capability.
 
-This plan starts only after the repository-root
+This plan starts after native Phases 1–6 of the repository-root
 [`freecad_document_collaboration_plan.md`](../../../../doc/freecad_document_collaboration_plan.md)
-is complete. Its final cutover is authoritative: FreeCAD owns collaboration,
-document lifecycle, persistence, recovery, and conflict decisions. This plan
-organizes the resulting MCP adapter; it does not recreate the removed Python
-lease authority.
+are complete. The collaboration plan's former standalone Phase 7 is absorbed
+here: this plan first reorganizes and routes the MCP adapter, then performs the
+authoritative collaboration cutover in Phase 18. After that gate, FreeCAD alone
+owns collaboration, document lifecycle, persistence, recovery, and conflict
+decisions. No phase may extend the temporary Python lease authority while it is
+being retired.
 
 The completed [`module-size-refactor-plan.md`](module-size-refactor-plan.md) is
 the structural baseline. Its thin façades, explicit exports, compatibility
@@ -29,7 +31,7 @@ shims, and contract snapshots are inputs. Its ARCH001/ARCH002 size rules are
 
 **Out of scope**
 
-- Redesigning the native collaboration model delivered by the prerequisite plan
+- Redesigning the native collaboration model delivered by Phases 1–6 of the prerequisite plan
 - Reintroducing MCP-owned sidecars, heartbeats, credentials, document ownership,
   save/recovery authority, or FCStd-difference conflict policy
 - Renaming public **MCP tool** names, parameters, descriptions, or result envelopes
@@ -84,17 +86,17 @@ shims, and contract snapshots are inputs. Its ARCH001/ARCH002 size rules are
 
 | Constraint | Implication |
 |------------|-------------|
-| Collaboration plan first | No phase starts until the prerequisite is complete and its cutover is verified against the actual tree. |
-| Native authority | Only FreeCAD may authorize document mutation or decide lifecycle, save, recovery, persistence, and conflict outcomes. MCP translates requests and results. |
+| Native foundation first | No phase starts until native collaboration Phases 1–6 are complete and verified against the actual tree. The former Phase 7 is executed through this plan. |
+| Native authority target | Only FreeCAD may authorize document mutation or decide lifecycle, save, recovery, persistence, and conflict outcomes after Phase 18. Until then, existing lease machinery is frozen compatibility debt: it may keep the branch working but may not be expanded or become a dependency of new code. |
 | Add-on dependency purity | The add-on imports only the Python standard library and FreeCAD. A compiled or third-party dependency in the add-on is blocking. |
-| Compatibility lease records | `LeaseRecord`, transition tables, and sidecar formats may decode historic data but may not rotate authority, fence a live document, or advance native lifecycle state. |
+| Compatibility lease records | New decoder/shim surfaces may decode historic data but may not rotate authority, fence a live document, or advance native lifecycle state. Existing live records remain only as named Phase 18 allowances until their callers are routed. |
 | Public MCP surface | Tool names, parameters, descriptions, registration order, returned envelopes, and exported tool objects remain frozen by the registry snapshot. |
 | Semantic RPC contract | The RPC contract is frozen as method name → parameters → result schema, **independent of encoding**, so it validates both listeners during migration. |
 | Import compatibility | Every moved symbol keeps an explicit re-export at its old path. Shim removal is outside this plan. |
 | GUI-thread safety | FreeCAD and Qt work remains behind the GUI dispatcher; capability code never bypasses it. |
-| Typed authorization | Internal code receives immutable authorization evidence, never an unrestricted `local_confirmation=True` boolean. |
+| Typed authorization target | New and migrated internal code receives immutable authorization evidence, never a new unrestricted `local_confirmation=True` boolean; existing boolean paths are named allowances until their owning routing phase removes them. |
 | Layer direction | `transport` → `dispatch` → `capabilities` → FreeCAD. No layer imports upward; `runtime` constructs the graph and is imported by none of them. |
-| Runtime ownership | Mutable process-wide services and registries exist only inside `AddonRuntime`, with at most one bootstrap-owned reference. |
+| Runtime ownership target | By Phase 17, mutable process-wide services and registries exist only inside `AddonRuntime`, with at most one bootstrap-owned reference. |
 | Generated registration | Generated output is asserted byte-equal to the frozen registry snapshot. A hand edit to generated code is blocking. |
 | Manifest ownership | One manifest file per capability subject. A single global manifest is blocking — it destroys exclusive worker ownership. |
 | Atomic phase commits | Every phase commit includes its focused regressions, leaves the branch working, and can be reverted independently. No stage squash, merge, or validation-only commits. |
@@ -107,18 +109,20 @@ Related design inputs:
 - [`document-leases.md`](document-leases.md), [`lease-recovery.md`](lease-recovery.md), [`lease-security.md`](lease-security.md)
 - [`request-lifecycle.md`](request-lifecycle.md), [`runtime-identity.md`](runtime-identity.md), [`structured-results.md`](structured-results.md)
 
-When an older lease document conflicts with the completed collaboration cutover,
-the collaboration plan wins. Preserve the old public result or return its frozen
-deprecation result; do not restore the old authority implementation.
+When an older lease document conflicts with the native collaboration model or the
+Phase 18 cutover contract, the collaboration plan wins. Preserve the old public
+result or return its frozen deprecation result; do not extend or restore the old
+authority implementation.
 
 ---
 
 ## 3. Target architecture
 
-### 3.1 Post-collaboration authority
+### 3.1 Collaboration authority target
 
-The prerequisite changes what several MCP lease concepts mean. This plan
-preserves their public compatibility, not their old authority.
+The completed native foundation changes what several MCP lease concepts mean.
+This plan preserves their public compatibility while routing every ingress to the
+native boundary, then removes their old authority in Phase 18.
 
 | Legacy concept | Post-cutover owner | MCP responsibility |
 |---|---|---|
@@ -129,9 +133,9 @@ preserves their public compatibility, not their old authority.
 | Sidecar state and FCStd baseline comparison | Removed from MCP correctness | Read old formats only where migration or deprecation requires it |
 | Close/reopen, persisted marker, lifecycle epoch | Native FreeCAD | Expose read-only status |
 
-An MCP restart, replacement, or authentication-session loss must not transfer,
-revoke, or corrupt document authority. Compatibility shims cannot make a native
-operation legal and cannot mutate native session state.
+Phase 18 must prove that an MCP restart, replacement, or authentication-session loss
+does not transfer, revoke, or corrupt document authority. Compatibility shims cannot
+make a native operation legal and cannot mutate native session state.
 
 ### 3.2 Two processes, three layers
 
@@ -293,28 +297,31 @@ façades, mixed-capability grab-bags, and boundary-crossing imports fail.
 
 ## 4. Execution prerequisite and baseline
 
-The authoring-time tree still contains pre-cutover lease machinery. Execution uses
-the completed collaboration baseline, so **phase 1 refreshes this inventory before
-any implementation**.
+The authoring-time tree contains the completed native collaboration foundation and
+the still-live pre-cutover lease machinery. Execution begins from that mixed
+baseline, so **phase 1 refreshes this inventory before any implementation**. The
+legacy authority paths remain frozen and explicitly allowed only until Phase 18.
 
 ### 4.1 What phase 1 must establish
 
-1. **Recorded revisions.** Parent and MCP submodule revisions of the verified
-   post-cutover baseline.
-2. **The compatibility manifest.** Every legacy lease path classified as retained
-   implementation, compatibility/deprecation shim, or removed implementation.
-   The prerequisite's Phase 7 should publish this as
-   `tests/fixtures/post_collaboration_compatibility_surface.json`; if it does not,
-   phase 1 **derives and commits it** rather than asserting a manifest the upstream
-   plan never promised. The following are expected to survive as import, decoder, or
-   deprecation shims — but the derived manifest, not this list, is authoritative:
+1. **Recorded revisions.** Parent revision containing completed native Phase 6 and
+   the MCP submodule revision selected as the refactor base.
+2. **The planned compatibility manifest.** Every legacy lease path classified as
+   temporary implementation, retained compatibility/deprecation shim, or planned
+   removal. Phase 1 derives and commits this initial manifest as
+   `tests/fixtures/post_collaboration_compatibility_surface.json`; Phase 18 updates
+   it to the verified post-cutover state. The following are expected to survive as
+   import, decoder, or deprecation shims — but the committed manifest, not this list,
+   is authoritative:
    `src/freecad_mcp/lease_manager.py`, `document_lease/model.py`,
    `document_lease/types/transitions.py`, `document_lease/sidecar.py`,
    `document_lease/service.py`, `document_lease/service_ops/facade_bindings.py`,
    and the frozen public lease RPC adapters.
-3. **Absent implementations.** `core_authority`, `claim_locked_error_handoff` owner
-   rotation, lease observers, and MCP save/recovery authority are absent or
-   unreachable.
+3. **Removal inventory.** Record every reachable `core_authority`,
+   `claim_locked_error_handoff` owner rotation, lease observer, heartbeat, sidecar
+   correctness path, and MCP save/recovery authority path. Each receives an explicit
+   Phase 18 removal owner and a negative end-state assertion. New code may not call
+   these paths.
 4. **The locator census.** Per-module counts of `_rpc_mod()` and equivalent runtime
    lookups — 514 at authoring time. Stage 3 is sized from this census and the final
    gate measures against it.
@@ -329,10 +336,10 @@ any implementation**.
    rewritten as method → parameters → result schema, independent of encoding, so it
    validates both listeners during Stage 1.
 
-If the actual cutover contradicts the derived manifest in a way that removes a
-phase's subject entirely, phase 1 **re-scopes the phase list** under §5.5 and
-records the change. Stopping the program is reserved for a contradiction that
-cannot be resolved by re-scoping.
+If the actual native foundation or pre-cutover MCP tree contradicts the derived
+manifest in a way that removes a phase's subject entirely, phase 1 **re-scopes the
+phase list** under §5.5 and records the change. Stopping the program is reserved
+for a contradiction that cannot be resolved by re-scoping.
 
 ### 4.2 Current seams
 
@@ -409,24 +416,35 @@ seams, the generator's contract-equality proof, and every review gate.
 - the manifest **schema** and the generator; individual subject manifests are worker-owned
 - central `__init__.py` and `__all__` composition files
 - `Dockerfile`, `docker-compose.yml`, and the parent-repository gitlink
+- for Phase 18, the parent plan, App/Gui authority sources and build registration,
+  `src/Gui/Command.cpp`, `src/Gui/Dialogs/DlgMutationTakeover.*`,
+  `tests/src/App/DocumentMutationAuthority.cpp`, and
+  `tests/src/Gui/CollaborationAuthorityRemoval.cpp`
 
 ### 5.4 Cross-repository delivery
 
-All phase commits are created inside `tools/mcp/freecad-mcp`. The parent gitlink is
-**not** frozen for the whole program: the branch-built cross-track lane builds the
-parent branch at its recorded submodule revision, so a frozen gitlink would test the
-pre-refactor add-on at every gate. The integrator bumps the parent gitlink in a
-separate parent commit at each integration gate (phases 1, 3, 5, 12, 18, 21, 22), or
-records that the lane mounts the submodule worktree at its actual HEAD. Either is
-acceptable; leaving the gitlink stale through the program is not.
+Except for Phase 18, substantive phase commits are created inside
+`tools/mcp/freecad-mcp`. The parent gitlink is **not** frozen for the whole program:
+the branch-built cross-track lane builds the parent branch at its recorded submodule
+revision, so a frozen gitlink would test the pre-refactor add-on at every gate. The
+integrator bumps the parent gitlink in a separate parent commit at each integration
+gate (phases 1, 3, 5, 12, 18, 19, 22, and 23), or records that the lane mounts the
+submodule worktree at its actual HEAD. Either is acceptable; leaving the gitlink
+stale through the program is not.
+
+Phase 18 is one logical cross-repository cutover with two unavoidable Git objects:
+one squashed nested MCP commit and one parent commit containing the native authority
+removal, the updated gitlink, both plan/progress updates, and the final cross-track
+evidence. The parent commit is the canonical Phase 18 delivery. Worker commits are
+never delivery units.
 
 ### 5.5 Re-scoping authority
 
 Phase 1 alone may revise the phase list, and only from verified facts about the
-post-cutover tree — a phase whose subject no longer exists is deleted, and phases
-whose subjects merged become one. Every change is recorded in §11.3 with its
-justification. After phase 1, the list is fixed; a later discovery that invalidates
-a phase blocks under §7 rather than silently re-planning.
+native Phase 6 parent and pre-cutover MCP tree — a phase whose subject no longer
+exists is deleted, and phases whose subjects merged become one. Every change is
+recorded in §11.3 with its justification. After phase 1, the list is fixed; a later
+discovery that invalidates a phase blocks under §7 rather than silently re-planning.
 
 ### 5.6 Worker report template
 
@@ -450,7 +468,7 @@ a phase blocks under §7 rather than silently re-planning.
 - the branch-built cross-track lane for any phase touching a collaboration path,
   per the phase-1 compose-lane decision (§4.1 item 5).
 
-**Integration gates — phases 1, 3, 5, 12, 18, 21, and 22**
+**Integration gates — phases 1, 3, 5, 12, 18, 19, 22, and 23**
 
 - all four Compose services: `unit`, `e2e`, `core`, `benchmark`;
 - architecture lint and full Ruff;
@@ -472,9 +490,10 @@ Stage 1  Wire migration to JSON-RPC 2.0          phases 4–5
 Stage 2  Compatibility surfaces                  phases 6–7
 Stage 3  Gateway layers                          phases 8–11
 Stage 4  Locator removal and bootstrap           phases 12–17
-Stage 5  Typed registration                      phase 18
-Stage 6  Manifests and generation                phases 19–21
-Stage 7  Final enforcement                       phase 22
+Stage 5  Collaboration cutover                   phase 18
+Stage 6  Typed registration                      phase 19
+Stage 7  Manifests and generation                phases 20–22
+Stage 8  Final enforcement                       phase 23
 ```
 
 Phase numbers are continuous and authoritative. A later stage never starts before
@@ -482,13 +501,14 @@ all earlier phases and their marked gates are complete.
 
 ### Stage 0 — Baseline, policy, and one protocol
 
-**Outcome:** the completed cutover is recorded as the execution baseline; the
-distorting size rules are gone before any code moves; the protocol exists once.
+**Outcome:** the completed native foundation and temporary pre-cutover MCP state are
+recorded as the execution baseline; the distorting size rules are gone before any
+code moves; the protocol exists once.
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 1 | `test(mcp): freeze the post-collaboration baseline` | All six items in §4.1: revisions, derived compatibility manifest, absent implementations, locator census, compose-lane decision, semantic contract snapshot. Refresh the MCP registry snapshot. | Import/deprecation, collaboration-boundary, semantic RPC, MCP registry, restart, and native-authority contracts; **integration gate**. |
-| 2 | `build(mcp): replace module size rules with boundary policy` | Retire ARCH001/ARCH002 from `ci/lint_python.py`; add capability ownership, layer direction, locator ban, barrel-import ban, shim purity, public-surface budget, and the mixed-responsibility backstop, each with named legacy allowances recorded exactly. Retain Ruff `C901`. | `tests/test_architecture_policy.py`; accept cohesive multi-class value modules; reject giant façades and grab-bags; architecture-only lint. |
+| 1 | `test(mcp): freeze the native collaboration baseline` | All six items in §4.1: revisions, planned compatibility manifest, removal inventory, locator census, compose-lane decision, and semantic contract snapshot. Refresh the MCP registry snapshot and record every temporary authority allowance without changing runtime behavior. | Import/deprecation, collaboration-boundary, semantic RPC, MCP registry, restart, legacy-authority census, and native-API availability contracts; **integration gate**. |
+| 2 | `build(mcp): replace module size rules with boundary policy` | Retire ARCH001/ARCH002 from `ci/lint_python.py`; add capability ownership, layer direction, locator ban, barrel-import ban, shim purity, public-surface budget, and the mixed-responsibility backstop, each with named structural allowances recorded exactly. Phase 1 separately owns temporary authority allowances. Retain Ruff `C901`. | `tests/test_architecture_policy.py`; accept cohesive multi-class value modules; reject giant façades and grab-bags; architecture-only lint. |
 | 3 | `refactor(mcp): extract the shared protocol module` | Create `_shared/protocol/` with canonicalization, signing, nonce, replay, and bounds checking; vendor identically into both processes; add the byte-equality CI check. `lease_protocol*` and `rpc_auth*` become import shims. Framing is still XML-RPC. | Existing protocol and auth suites become tests of the one module; byte-equality gate; both façades unchanged; **integration gate**. |
 
 Phase 2 lands before any code moves, deliberately. Keeping a 300-line rule through
@@ -509,13 +529,14 @@ schema is designed against a native error model rather than inheriting the worka
 
 ### Stage 2 — Compatibility surfaces
 
-**Outcome:** import-time class assembly is gone; surviving lease values are safe
-decoders that cannot express authority.
+**Outcome:** import-time class assembly is gone; native-session and historic-decoder
+boundaries are explicit. Temporary live legacy behavior remains only behind named
+Phase 18 allowances until the native routing phases replace it.
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 6 | `refactor(mcp): define LeaseClientManager normally` | Move construction and methods into `lease_manager_ops/lease_client_manager.py`; binding and init modules become shims; retain only opaque native-session handles and compatibility results — never credentials, heartbeat state, or revocation authority. | Construction, opaque handles, aliases, reconnect, redaction, public imports, and no import-time binding. |
-| 7 | `refactor(mcp): reduce legacy lease records to decoders` | Make `model.py`, transition tables, and `sidecar.py` immutable historic decoders; `revised()` becomes metadata-only; reject production `transitioned()` and generic authority/lifecycle replacement. | Historic round-trip, malformed payloads, redaction, read-only sidecar, forbidden-field replacement, retired transitions, and native-state isolation. |
+| 6 | `refactor(mcp): define LeaseClientManager normally` | Move construction and methods into `lease_manager_ops/lease_client_manager.py`; binding and init modules become shims; introduce opaque native-session handles and compatibility results. Existing credential, heartbeat, and revocation behavior may remain only behind named Phase 18 allowances until phases 12–13 replace its live callers. | Construction, opaque handles, aliases, reconnect, redaction, public imports, no import-time binding, and no new legacy-authority dependency. |
+| 7 | `refactor(mcp): isolate legacy lease decoders` | Separate immutable historic decoding in `model.py`, transition tables, and `sidecar.py` from the still-live legacy implementation. Decoder APIs cannot transition authority; all remaining mutable callers are enumerated as Phase 18 removals and otherwise left behaviorally unchanged until native routing is live. | Historic round-trip, malformed payloads, redaction, decoder immutability, forbidden decoder transitions, complete mutable-caller census, and unchanged temporary runtime behavior. |
 
 **Parallelization:** two disjoint workers — 6 owns client paths, 7 owns add-on
 `document_lease/` paths. They land in order.
@@ -544,46 +565,61 @@ census measurably and records the remaining count.
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 12 | `refactor(mcp): inject collaboration collaborators` | Pass acquisition, adoption, handoff, and recovery collaborators into `methods/lease_methods_ops/`; remove their `_rpc_mod()` lookups. | Adoption, recovery, authorization, cancellation, continuation, timeout, dependency identity; **integration gate**. |
-| 13 | `refactor(mcp): inject lifecycle collaborators` | Pass save, Save As, finalize, release, query, and deprecation collaborators into lease and lifecycle adapters. | Save, release, query, close/reopen, cancellation, GUI dispatch, and semantic RPC contract. |
-| 14 | `refactor(mcp): inject execution collaborators` | Replace `_rpc_mod()` in dispatch, execute-code, and worker orchestration with injected dispatcher, execution-safety, worker, and cancellation dependencies. | Dispatch, execute-code, mutation attribution, worker, cancellation, and AST no-locator scan. |
-| 15 | `refactor(mcp): inject CAD collaborators` | Pass document, object, sketch, feature, and transaction collaborators into CAD adapters. | CAD, object, sketch, feature, transaction, dependency identity, and AST no-locator scan. |
-| 16 | `refactor(mcp): inject GUI and view collaborators` | Pass GUI dispatch, personal-view, presentation, snapshot, and restore collaborators into GUI and view adapters, using the native personal-context API. | GUI dispatch, camera/view, selection isolation, snapshot/restore, cancellation, and AST no-locator scan. |
-| 17 | `refactor(mcp): bootstrap startup and shutdown through the runtime` | `start_rpc_server()` adopts the factory as its only path and publishes the singleton only after success; `stop_rpc_server()` cancels, stops, disposes, unsubscribes, revokes, and clears idempotently; `InitGui.py` routes manual start, auto-start, and about-to-quit through the root. | Repeated start, failed bind/auth/worker/bridge construction, reverse-order rollback, concurrent stop, inflight cancellation, partial runtime, repeated disposal, `InitGui` callback order, and no duplicate runtime. |
+| 12 | `refactor(mcp): inject collaboration collaborators` | Add the thin `collaboration_client.py` and add-on `collaboration_api.py` bridge over the frozen native API; pass acquisition, adoption, handoff, and recovery collaborators into `methods/lease_methods_ops/`; remove their `_rpc_mod()` lookups. | Public compatibility shims, structured native results, reconnect, adoption, recovery, authorization, cancellation, continuation, timeout, dependency identity, and no-client-authority tests; **integration gate**. |
+| 13 | `refactor(mcp): inject lifecycle collaborators` | Pass save, Save As, finalize, release, query, and deprecation collaborators into lease and lifecycle adapters; route them to native lifecycle results without MCP dirty, persistence, or recovery decisions. | Save, release, query, close/reopen, restart, cancellation, GUI dispatch, semantic RPC contract, and no-MCP-lifecycle-authority tests. |
+| 14 | `refactor(mcp): inject execution collaborators` | Replace `_rpc_mod()` in dispatch, execute-code, and worker orchestration with injected dispatcher, execution-safety, worker, cancellation, and native compatibility-mutation dependencies. | Dispatch, execute-code, native mutation attribution, worker, cancellation, and AST no-locator scan. |
+| 15 | `refactor(mcp): inject CAD collaborators` | Pass document, object, sketch, feature, transaction, and native collaboration/compatibility-commit collaborators into CAD adapters; remove their dependence on MCP mutation ownership. | CAD, object, sketch, feature, transaction, remote revision-stream publication, dependency identity, and AST no-locator scan. |
+| 16 | `refactor(mcp): inject GUI and view collaborators` | Pass GUI dispatch, personal-view, presentation, snapshot, and restore collaborators into GUI and view adapters; add `collaboration_context.py` and route focus, screenshot, and refresh through the native personal-context API rather than authoritative global selection or active-view state. | GUI dispatch, camera/view, selection isolation, snapshot/restore, personal-context apply/render/restore, cancellation, and AST no-locator scan. |
+| 17 | `refactor(mcp): bootstrap startup and shutdown through the runtime` | `start_rpc_server()` adopts the factory as its only path and publishes the singleton only after success; `stop_rpc_server()` cancels, stops, disposes, unsubscribes, drops adapter authentication/session handles, and clears idempotently without changing native document authority; `InitGui.py` routes manual start, auto-start, and about-to-quit through the root. | Repeated start, failed bind/auth/worker/bridge construction, reverse-order rollback, concurrent stop, inflight cancellation, native-session survival, partial runtime, repeated disposal, `InitGui` callback order, and no duplicate runtime. |
 
 Phases 12–16 may be prepared in parallel where source and test ownership is disjoint;
 workers add constructor parameters, the integrator edits central assembly. Phase 17 is
 sequential and integrator-owned.
 
-### Stage 5 — Typed registration
+### Stage 5 — Collaboration cutover
+
+**Outcome:** every remote mutation, lifecycle, recovery, and view operation uses the
+native FreeCAD boundary; the temporary Python and native authority surfaces are gone.
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 18 | `refactor(mcp): pass a typed tool registration context` | Add `ToolDependencies` for server state, connection, recovery compatibility, collaboration, and selector; stop mutating imported tool modules in `server_ops/tool_registration.py`. | Simultaneous registration, dependency identity, selector isolation, deterministic order, no module mutation, server lifespan, registry snapshot; **integration gate**. |
+| 18 | `refactor(collaboration): cut over native MCP authority` | Remove live MCP lease ownership, heartbeat, sidecar-correctness, observer, FCStd-difference conflict, and save/recovery authority while retaining only the frozen decoder/deprecation shims. Remove the parent-tree `DocumentMutationAuthority`, `MutationCapability`, `MutationOwner`/`MutationOrigin`, `MutationAuthorityTLS`/`MutationInternalScope`, `DocumentPy` ownership methods, `AlterDoc` authority gate, and `DlgMutationTakeover` surface. Update package exports, CMake registration, the compatibility manifest, and both progress plans. | Remote operations enter the native revision stream; restart preserves document/lifecycle/persisted/recovery state; personal contexts are preserved; every old import returns its frozen shim or deprecation result; `CollaborationAuthorityRemoval.cpp` and negative reachability scans pass; branch-built App/Gui/Part tests, all four Compose services, and the branch cross-track lane pass; **integration gate**. |
+
+Phase 18 starts only after phases 12–17 prove that every affected ingress and the
+only startup path use injected native collaborators. Removal and façade rewiring are
+integrator-owned because they cross the parent/submodule boundary. The compatibility
+manifest changes from a planned classification to the verified post-cutover surface
+in the same delivery. The cross-repository commit protocol in §5.4 is mandatory.
+
+### Stage 6 — Typed registration
+
+| # | Phase commit | Change and main paths | Focused tests and validation |
+|---:|---|---|---|
+| 19 | `refactor(mcp): pass a typed tool registration context` | Add `ToolDependencies` for server state, connection, recovery compatibility, collaboration, and selector; stop mutating imported tool modules in `server_ops/tool_registration.py`. | Simultaneous registration, dependency identity, selector isolation, deterministic order, no module mutation, server lifespan, registry snapshot; **integration gate**. |
 
 This is the precondition for generation: a generated registrar must receive its
 dependencies rather than reach for module globals.
 
-### Stage 6 — Manifests and generation
+### Stage 7 — Manifests and generation
 
 **Outcome:** each capability is declared once; registration is generated and proven
 equal to the frozen snapshot.
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 19 | `feat(mcp): add capability manifests and the generator` | Define the manifest schema and the generator; bootstrap manifests for every subject from the frozen registry snapshot; emit registration, client stubs, and gateway dispatch entries into a shadow location. Prove the schema against sketch constraints, FEM, and assembly joints first. | Generated output byte-equal to the registry snapshot; schema coverage for the three awkward subjects; escape-hatch behavior; no hand edit to generated files. |
-| 20 | `refactor(mcp): switch registration to generated output` | Replace `tools_register_order.py` and `server_ops/tool_exports/bind_part_*.py` with generated ordered registration; old modules become declarative shims. | Registration order, public server API, duplicate/missing exports, registry snapshot, and all old binder imports. |
-| 21 | `refactor(mcp): delete the hand-written capability mirrors` | Remove the 31 mechanically split modules and the duplicated client operations and gateway methods now emitted by the generator; every old path remains an explicit shim. | Full registry snapshot, semantic RPC contract, generated FreeCAD code, per-subject behavior suites, and every old import path; **integration gate**. |
+| 20 | `feat(mcp): add capability manifests and the generator` | Define the manifest schema and the generator; bootstrap manifests for every subject from the frozen registry snapshot; emit registration, client stubs, and gateway dispatch entries into a shadow location. Prove the schema against sketch constraints, FEM, and assembly joints first. | Generated output byte-equal to the registry snapshot; schema coverage for the three awkward subjects; escape-hatch behavior; no hand edit to generated files. |
+| 21 | `refactor(mcp): switch registration to generated output` | Replace `tools_register_order.py` and `server_ops/tool_exports/bind_part_*.py` with generated ordered registration; old modules become declarative shims. | Registration order, public server API, duplicate/missing exports, registry snapshot, and all old binder imports. |
+| 22 | `refactor(mcp): delete the hand-written capability mirrors` | Remove the 31 mechanically split modules and the duplicated client operations and gateway methods now emitted by the generator; every old path remains an explicit shim. | Full registry snapshot, semantic RPC contract, generated FreeCAD code, per-subject behavior suites, and every old import path; **integration gate**. |
 
-**Parallelization:** phase 19 is integrator-owned. In phases 20–21, disjoint workers
+**Parallelization:** phase 20 is integrator-owned. In phases 21–22, disjoint workers
 may migrate separate subjects concurrently; the integrator lands them in one commit
 per phase and owns the generator, schema, and snapshots.
 
-### Stage 7 — Final enforcement
+### Stage 8 — Final enforcement
 
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
-| 22 | `build(mcp): enforce the final architecture policy` | Remove every named legacy allowance from phase 2; enforce add-on dependency purity, layer direction, zero locators against the phase-1 census, generated-registration equality, shim purity, and manifest-per-subject ownership. | Negative fixtures for each rule; full contract set; final **integration gate**. |
+| 23 | `build(mcp): enforce the final architecture policy` | Remove every named structural allowance from phase 2; confirm Phase 18 removed every authority allowance; enforce add-on dependency purity, layer direction, zero locators against the phase-1 census, generated-registration equality, shim purity, and manifest-per-subject ownership. | Negative fixtures for each rule; full contract set; final **integration gate**. |
 
 ---
 
@@ -601,8 +637,9 @@ per phase and owns the generator, schema, and snapshots.
 - [ ] Every moved symbol has an explicit old-path shim with no import-time side effect.
 - [ ] The add-on imports nothing outside the standard library and FreeCAD.
 - [ ] `transport/` and `dispatch/` import no FreeCAD or Qt module.
-- [ ] No Python path creates document authority, lifecycle transitions, dirty state,
-      sidecar correctness, or recovery policy.
+- [ ] No new or migrated Python path creates document authority, lifecycle
+      transitions, dirty state, sidecar correctness, or recovery policy; before
+      Phase 18, every remaining legacy path is a named allowance from Phase 1.
 - [ ] GUI work enters through the dispatcher; cancellation, replay, redaction, and
       authentication guarantees are intact.
 - [ ] Required Docker suites pass per §5.7; Ruff passes on touched files.
@@ -610,8 +647,9 @@ per phase and owns the generator, schema, and snapshots.
 
 ### At phase 1
 
-- [ ] The prerequisite is complete at recorded parent and MCP revisions.
-- [ ] The compatibility manifest is committed, whether published upstream or derived.
+- [ ] Native collaboration Phases 1–6 are complete at the recorded parent revision,
+      and the selected MCP base revision is recorded.
+- [ ] The planned compatibility manifest and complete Phase 18 removal inventory are committed.
 - [ ] The locator census is recorded per module.
 - [ ] The compose-lane decision is recorded and its consequences applied to §5.7.
 - [ ] The contract snapshot is semantic, not encoding-bound.
@@ -624,17 +662,30 @@ per phase and owns the generator, schema, and snapshots.
 - [ ] Version mismatch produces a clear, documented error.
 - [ ] 64-bit counters and `null` round-trip without smuggling.
 
-### At phase 12 and 18
+### At phase 12
+
+- [ ] The locator census has fallen measurably and the remaining count is recorded.
+
+### At phase 19
 
 - [ ] The locator census has fallen measurably and the remaining count is recorded.
 - [ ] Tool registration receives typed dependencies and mutates no imported module.
 
-### At phase 21 and 22
+### At phase 18
+
+- [ ] Every remote mutation, lifecycle, recovery, save, and view ingress uses the native boundary.
+- [ ] The final compatibility manifest matches the verified post-cutover tree.
+- [ ] No live lease owner, heartbeat, sidecar correctness, observer, MCP save/recovery authority,
+      `McpOwned`, `MutationAuthorityTLS`, `MutationInternalScope`, `AlterDoc` gate, or takeover dialog remains reachable.
+- [ ] Restart, revision-stream, lifecycle/persistence/recovery, personal-context,
+      import/deprecation, all-Compose, branch-built FreeCAD, and cross-track tests pass.
+
+### At phase 22 and 23
 
 - [ ] Generated registration is byte-equal to the frozen registry snapshot.
 - [ ] Every capability has exactly one manifest entry and one subject owner.
 - [ ] The locator census is zero.
-- [ ] No legacy allowance from phase 2 remains.
+- [ ] No structural allowance from phase 2 or authority allowance from phase 1 remains.
 - [ ] Every old import path resolves; every shim is declarative.
 - [ ] Architecture lint, Ruff, all four Compose services, contract fixtures, and the
       branch cross-track lane pass.
@@ -664,13 +715,13 @@ real boundary — never to satisfy a line budget.
 
 | Risk | Mitigation |
 |---|---|
-| Prerequisite tree differs from this plan | Phase 1 derives the manifest from the real tree and may re-scope under §5.5 rather than improvising or stopping. |
-| Upstream never publishes the compatibility manifest | Phase 1 derives and commits it; the plan does not depend on a promise the upstream document never made. |
+| Native foundation or MCP base differs from this plan | Phase 1 derives the manifest from the real tree and may re-scope under §5.5 rather than improvising or stopping. |
+| The former collaboration Phase 7 published no compatibility manifest | Phase 1 derives and commits the planned manifest; Phase 18 verifies and updates it to the final state. |
 | Compose services cannot exercise the native API | Phase-1 compose-lane decision; collaboration-touching phases run the branch-built lane. |
-| Retired lease authority is accidentally rebuilt | §3.1 mapping, native-authority architecture checks, negative tests, cross-track gates. |
+| Temporary lease authority is expanded before cutover | Phase-1 named allowances, no-new-dependency checks, native routing phases, and Phase-18 negative reachability tests. |
 | Wire migration breaks an unknown external caller | Confirm before phase 4 whether anything outside this repo calls the RPC surface; dual-bind keeps both listeners live through phase 4. |
 | Error-model change loses a documented result | The semantic contract enumerates every result; phase 5 maps each one explicitly and tests the conversion. |
-| Generation cannot express a subject | Phase 19 proves the schema against sketch constraints, FEM, and assembly joints **first**; escape hatches are allowed and counted. |
+| Generation cannot express a subject | Phase 20 proves the schema against sketch constraints, FEM, and assembly joints **first**; escape hatches are allowed and counted. |
 | The manifest becomes a shared file | One manifest per subject is a hard constraint; a global manifest is blocking. |
 | Generated code is hand-edited | Byte-equality assertion plus an architecture rule; a hand edit fails the gate. |
 | Vendored protocol copies drift | Byte-equality check in CI, not review discipline. |
@@ -708,7 +759,7 @@ docker compose run --rm core
 docker compose run --rm benchmark
 ```
 
-Integration gates also run the Docker branch-build lane recorded by the prerequisite:
+Integration gates also run the Docker branch-build lane recorded from the native foundation:
 current-branch FreeCAD App/Gui/Part tests plus the `.woodpecker/ci.yml` equivalents of
 `freecad-mcp-load-preflight`, `freecad-mcp-core-tests`, and `freecad-mcp-e2e` against
 the branch-built `FreeCADCmd`. Record the frozen image, configure/build commands, and
@@ -725,34 +776,61 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Authoring parent checkout | `feature/assembly-interference-detection` at `2e4336f39a` (context only) |
 | MCP authoring branch | `feature/dirty-document-adoption` at `fc3a5236` |
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
-| Collaboration prerequisite | Phases 1–2 complete, phase 3 in progress; phase 7 not started |
+| Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `TBD at phase 1` |
 | Execution MCP base revision | `TBD at phase 1` |
 | Current stage / phase | Planning revised; Stage 0 not started |
-| Next phase | 1 — `test(mcp): freeze the post-collaboration baseline` |
+| Next phase | 1 — `test(mcp): freeze the native collaboration baseline` |
 | In-flight ownership | None |
-| Last review | Architecture redesign reviewed against the tree on 2026-08-02 |
-| Blocker | Complete and verify the collaboration prerequisite through its phase 7 |
-| Resume hint | Verify the prerequisite and live tree, then execute phase 1 only |
+| Last review | Phase ordering reconciled against both plans and the live tree on 2026-08-03 |
+| Blocker | None; Phase 1 must still record execution revisions, inventories, and the compose-lane decision |
+| Resume hint | Verify native Phases 1–6 and the selected MCP base, then execute phase 1 only |
 
 ### 11.2 Stage status
 
 | Stage | Phases | Integration gate | Status |
 |---:|---|---|---|
-| 0 | 1–3 | phases 1 and 3 | **blocked** — awaiting prerequisite |
+| 0 | 1–3 | phases 1 and 3 | pending |
 | 1 | 4–5 | phase 5 | pending |
 | 2 | 6–7 | none | pending |
 | 3 | 8–11 | none | pending |
 | 4 | 12–17 | phase 12 | pending |
 | 5 | 18 | phase 18 | pending |
-| 6 | 19–21 | phase 21 | pending |
-| 7 | 22 | phase 22 | pending |
+| 6 | 19 | phase 19 | pending |
+| 7 | 20–22 | phase 22 | pending |
+| 8 | 23 | phase 23 | pending |
 
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
 
-#### 2026-08-02 — Architecture redesigned; 70 phases reduced to 22
+#### 2026-08-03 — Collaboration cutover absorbed; plan expanded to 23 phases
+
+- **Decision:** start this plan after native collaboration Phases 1–6. The former
+  standalone collaboration Phase 7 is not a prerequisite or a separate delivery;
+  its adapter and cutover obligations are now owned here.
+- **Reason:** the prior plans formed a cycle: collaboration Phase 7 expected a
+  stabilized MCP, while this plan required collaboration Phase 7 to have removed the
+  lease authority before MCP work began.
+- **Baseline change:** phase 1 records the native Phase 6 parent plus the live
+  pre-cutover MCP tree, commits a planned compatibility manifest and complete removal
+  inventory, and freezes every temporary authority path as a named allowance.
+- **Ordering change:** phases 6–17 prepare compatibility surfaces, native routing,
+  and deterministic bootstrap without expanding legacy authority. New Phase 18 then
+  removes the live MCP lease/sidecar/heartbeat/save-recovery authority and the parent
+  `McpOwned`/TLS/takeover surface in one cross-repository integration delivery.
+- **Renumbering:** typed registration is phase 19, manifests/generation are phases
+  20–22, and final enforcement is phase 23.
+- **Live state checked:** the parent records MCP gitlink
+  `fa98ad32a4dd80076200e1850a3169a67132566a`; the selected nested base is
+  `49b2dfda63caa9915e15949889d8612c7816fbc2`, whose committed content tree matches
+  the gitlink. This plan file is the only nested worktree change. Native
+  authority files and legacy MCP authority paths remain present, while the planned
+  collaboration client/bridge and final compatibility manifest are absent, matching
+  the new pre-cutover baseline.
+- **Next:** execute phase 1 only.
+
+#### 2026-08-02 — Architecture redesigned; 70 phases reduced to 22 (superseded by 2026-08-03 ordering)
 
 - **Base revisions:** authoring-time only; execution revisions intentionally TBD.
 - **Superseded:** the previous 70-phase plan and its 2026-08-02 "Chaptered plan ready"
@@ -801,7 +879,7 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 ## 12. Integrator cheat-sheet
 
 1. Read §11.1 and the newest §11.3 entry first.
-2. Verify the collaboration prerequisite and recorded base revisions.
+2. Verify native collaboration Phases 1–6 and record the parent and MCP base revisions.
 3. Select exactly the next numbered phase from §6; do not skip ahead.
 4. Freeze integrator-only shared paths from §5.3.
 5. Give each worker exact exclusive source, target, and test paths plus forbidden paths.
