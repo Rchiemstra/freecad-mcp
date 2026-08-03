@@ -792,21 +792,21 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | MCP authoring branch | `feature/dirty-document-adoption`; Phase 1 execution base `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
-| Execution parent revision | `863535a2d4b6c33b5bfce8171762320060a34afb` |
-| Execution MCP base revision | `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
-| Current stage / phase | Stage 0 complete; Phase 3 complete |
-| Next phase | 4 — `feat(mcp): add the JSON-RPC 2.0 transport` |
+| Execution parent revision | `eb531e5320d29f7df548a9a3997e9dd66bb5f70c` |
+| Execution MCP base revision | `caff97a1aa1b0862e0e51c4f58ad7223eb163070` |
+| Current stage / phase | Stage 1 in progress; Phase 4 complete |
+| Next phase | 5 — `refactor(mcp): migrate to JSON-RPC and retire XML-RPC` |
 | In-flight ownership | None |
-| Last review | Phase 3 final integrated review clear on 2026-08-03 |
-| Blocker | Phase 4 requires confirmation whether any user macro, add-on, or external script calls the current RPC surface |
-| Resume hint | Resolve the external-caller question, then execute Phase 4 only; preserve the Phase 1 frozen inputs |
+| Last review | Phase 4 final listener/protocol re-review clear on 2026-08-03 |
+| Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
+| Resume hint | Execute Phase 5 only: migrate the client, retain an explicit XML-RPC deprecation response, run the integration gate, and advance the parent gitlink |
 
 ### 11.2 Stage status
 
 | Stage | Phases | Integration gate | Status |
 |---:|---|---|---|
 | 0 | 1–3 | phases 1 and 3 | complete |
-| 1 | 4–5 | phase 5 | pending |
+| 1 | 4–5 | phase 5 | in progress |
 | 2 | 6–7 | none | pending |
 | 3 | 8–11 | none | pending |
 | 4 | 12–17 | phase 12 | pending |
@@ -818,6 +818,75 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-03 — Phase 4 complete: dual JSON-RPC transport added
+
+- **Phase delivery:** the existing bounded listener now serves legacy XML-RPC at
+  `/RPC2` and JSON-RPC 2.0 at `/jsonrpc` on the same host and port. Both encodings
+  capture the same MCP identity headers, enter the same registered `FreeCADRPC`
+  dispatcher, and share the three general plus two reserved control lanes. Named
+  JSON parameters are signature-bound before conversion to the existing positional
+  dispatch seam; unknown methods and invalid parameters use the standard JSON-RPC
+  errors without bypassing lease enforcement.
+- **Framing and bounds:** the byte-identical shared protocol vendors add strict
+  UTF-8 JSON framing, request/batch/notification handling, `null` and signed 64-bit
+  values, non-finite/lone-surrogate rejection, 4 MiB payload, 1,024-member batch,
+  128-level depth, and 100,000-item structural limits. Admission-time socket
+  timeouts bound incomplete headers and bodies; declared-length mismatches cannot
+  dispatch. Notification-only input produces no JSON body.
+- **Structured errors:** explicit legacy `ok: false` and `success: false` results
+  become JSON-RPC errors. Exact conflict, stale, cancellation, and lifecycle
+  categories use integer application codes while the stable semantic code and
+  diagnostic context remain in redacted, independently copied `error.data`.
+  Nested authenticated public errors, replay `claimable` extensions, and stale
+  state at both supported locations are preserved. Unexpected exceptions remain
+  opaque on the wire and in logs.
+- **Contracts:** both listeners satisfy the frozen semantic surface. The focused
+  suite covers every frozen result example, live same-port XML/JSON dispatch,
+  named and positional validation, batches, notifications, malformed/deep/wide
+  payloads, saturation, IP filtering, shutdown, short EOF and stalled-header
+  clients, signing proof stability, and replay identity across JSON framing. The
+  two protocol copies remain byte-identical at SHA-256
+  `8dcb7cc450d2fa203bbdf8e3722ec80545097b246975e9d3b060cf04819106ab`.
+- **Agents and reviews:** separate listener and structured-error workers were
+  independently reviewed, then the integrated listener/protocol seam received a
+  final adversarial review. Findings covering nested public errors, redaction and
+  copy independence, state-aware classification, recursion bounds, secret-bearing
+  logs, partial bodies, incomplete headers, worker
+  exhaustion, and weak socket oracles were fixed and re-reviewed. Both final
+  reviews reported no blocking, important, or non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded
+  in §11.4. The final focused suite passed 208, architecture policy checked 946
+  production files, all touched-file Ruff checks passed, the final Compose unit
+  service passed, and the branch-built preflight/core/e2e lane passed against the
+  mounted Phase 4 worktree.
+- **Next:** create the single Phase 4 commit, then execute Phase 5. Phase 5 must
+  move the client end to end, convert every documented failure, negotiate the
+  protocol version explicitly, and replace `/RPC2` with a documented deprecation
+  response before its integration gate and parent gitlink update.
+
+#### 2026-08-03 — Stage 1 started: JSON-RPC wire migration
+
+- **Authorization and compatibility decision:** the request to execute Stage 1
+  resolves the former Phase 4 question conservatively. Treat the existing RPC
+  surface as externally consumed: Phase 4 must keep XML-RPC and JSON-RPC working
+  against the same dispatcher, and Phase 5 must replace the XML-RPC listener with
+  an explicit documented deprecation response rather than silently removing it.
+- **Execution base:** Stage 1 starts from parent
+  `eb531e5320d29f7df548a9a3997e9dd66bb5f70c` and nested MCP
+  `caff97a1aa1b0862e0e51c4f58ad7223eb163070`. The Phase 1 frozen semantic,
+  authority, locator, and registry inputs remain unchanged.
+- **In-flight Phase 4 ownership:** the integrator owns the byte-identical shared
+  JSON-RPC codec and central dual-listener wiring. Separate workers own the
+  listener and structured-error seams; each receives an independent adversarial
+  review, followed by an integrated Phase 4 review.
+- **Current evidence:** the shared codec's focused Docker suite passes 17/17 and
+  its touched-file Ruff gate passes. This is interim evidence only; Phase 4 remains
+  in progress until both listener paths, semantic contracts, reviews, the complete
+  Docker gate, and the collaboration cross-track lane pass.
+- **Resume:** finish Phase 4, replace this entry with the complete delivery and
+  record exact evidence in §11.4, create the single required Phase 4 commit, then
+  continue automatically through Phase 5 and its integration gate.
 
 #### 2026-08-03 — Phase 3 complete: shared protocol extracted
 
@@ -1062,6 +1131,40 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 4 — `feat(mcp): add the JSON-RPC 2.0 transport`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:b85cbbe5bfc7c83846ff01023c28f82770886cc3a6faae9de405a7f81aeb1f64`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Focused contracts and lint:** a final bind-mounted Docker run passed 208/208
+  JSON framing, structured-error, dual-listener, frozen semantic, concurrency,
+  shared-protocol, authentication, replay, lifecycle, idempotency, and cancellation
+  tests. The exact production architecture command checked 946 Python files and
+  passed. Production touched-file lint passed for nine files; Ruff passed for the
+  five touched test modules. Independent review verified byte equality at the
+  SHA-256 recorded in §11.3 and reproduced the slow/partial-client boundaries
+  after their fixes.
+- **Compose phase gate:** after rebuilding the final image, `docker compose run
+  --rm unit` selected 1,909: 1,905 passed, three Windows-DACL tests skipped, and
+  the existing screenshot test xfailed; 129 non-unit tests were deselected.
+- **Branch-built cross-track:** no native source changed, so the final Phase 3
+  `freecad-phase3-debug` build volume was reused and the current nested worktree
+  was mounted over the parent checkout. The unmodified preflight wrapper emitted
+  `PREFLIGHT_OK` with pytest 9.1.1 and FreeCAD 26.3.0 revision 48071, branch
+  `feature/assembly-interference-detection`, hash
+  `7a47b18044b82bb2eb1c17047150d72eadde6c26`. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfails with no real skip; the
+  unmodified e2e wrapper passed 117/117. Both strict verdict files were zero and
+  were removed after the run.
+- **Review result:** structured-error and listener/protocol reviews are clear.
+  Every reported blocking or important finding was fixed and re-reviewed; the
+  final reviews found no remaining finding.
 
 #### Phase 3 — `refactor(mcp): extract the shared protocol module`
 

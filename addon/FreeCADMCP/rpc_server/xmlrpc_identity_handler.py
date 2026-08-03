@@ -1,4 +1,4 @@
-"""XML-RPC request handler that captures MCP identity headers."""
+"""RPC request handler that captures MCP identity headers."""
 
 import contextlib
 import json
@@ -18,7 +18,7 @@ def _import_document_lock():
 
 
 class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):
-    """Capture MCP identity / lease headers into document_lock thread-local."""
+    """Capture MCP identity / lease headers for both RPC encodings."""
 
     def do_POST(self):
         try:
@@ -74,6 +74,8 @@ class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):
         except Exception:
             pass
         try:
+            if self.path == "/jsonrpc":
+                return self.server._handle_json_rpc_post(self)
             return super().do_POST()
         finally:
             with contextlib.suppress(Exception):

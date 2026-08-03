@@ -1,4 +1,4 @@
-"""XML-RPC listener start orchestration."""
+"""Dual XML-RPC / JSON-RPC listener start orchestration."""
 
 from __future__ import annotations
 

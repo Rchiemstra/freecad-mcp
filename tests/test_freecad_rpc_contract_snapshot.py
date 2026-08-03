@@ -282,6 +282,47 @@ def test_phase1_xml_listener_round_trips_every_semantic_outcome(freecad_rpc_clas
         assert contract["normalized_error_examples"], method_name
 
 
+def test_phase4_json_listener_round_trips_every_semantic_outcome():
+    from addon.FreeCADMCP._shared.protocol.json_rpc import (
+        encode_json_rpc_responses,
+        json_rpc_error,
+        json_rpc_success,
+    )
+    from addon.FreeCADMCP.rpc_server.json_rpc_errors import (
+        json_rpc_error_from_result,
+    )
+
+    snapshot = _load_snapshot()
+    converted_failures = 0
+    for method_name, contract in snapshot["methods"].items():
+        result_validator = Draft202012Validator(contract["result_schema"])
+        error_validator = Draft202012Validator(contract["normalized_error_schema"])
+        for index, example in enumerate(contract["result_examples"]):
+            mapped = json_rpc_error_from_result(example)
+            if mapped is None:
+                response = json_rpc_success(index, example)
+                decoded = json.loads(
+                    encode_json_rpc_responses([response], batch=False)
+                )
+                result_validator.validate(decoded["result"])
+                assert decoded["result"] == example
+                continue
+            converted_failures += 1
+            error_validator.validate(mapped)
+            response = json_rpc_error(
+                index,
+                mapped["code"],
+                mapped["message"],
+                mapped["data"],
+            )
+            decoded = json.loads(encode_json_rpc_responses([response], batch=False))
+            error_validator.validate(decoded["error"])
+            assert decoded["error"] == mapped
+        assert contract["result_examples"], method_name
+
+    assert converted_failures == 75
+
+
 def test_freecad_rpc_instance_exposes_same_public_names(freecad_rpc_class):
     expected_names = frozenset(_load_snapshot()["methods"])
     assert _exposed_names(freecad_rpc_class()) == expected_names

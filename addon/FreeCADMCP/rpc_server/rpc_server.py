@@ -1,4 +1,4 @@
-"""FreeCAD MCP XML-RPC server façade (Phase 4 slice 4H)."""
+"""FreeCAD MCP dual-encoding RPC server façade (Phase 4 slice 4H)."""
 
 from __future__ import annotations
 

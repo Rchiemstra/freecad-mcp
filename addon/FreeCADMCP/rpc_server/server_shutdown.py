@@ -1,4 +1,4 @@
-"""Stop the XML-RPC listener and release worker/dispatcher resources."""
+"""Stop both RPC encodings and release worker/dispatcher resources."""
 
 from __future__ import annotations
 

@@ -1,21 +1,49 @@
-"""Bounded-capacity IP-filtered XML-RPC server."""
+"""Bounded-capacity IP-filtered XML-RPC and JSON-RPC server."""
 
+import inspect as _inspect
 import ipaddress
 import logging
 import re
 import threading
+from collections.abc import Mapping as _Mapping
 from concurrent.futures import ThreadPoolExecutor
 from xmlrpc.client import Fault
 from xmlrpc.client import dumps as xmlrpc_dumps
 from xmlrpc.client import loads as xmlrpc_loads
 from xmlrpc.server import SimpleXMLRPCServer
 
+try:
+    from .._shared.protocol.json_rpc import (
+        JSON_RPC_INVALID_PARAMS as _JSON_RPC_INVALID_PARAMS,
+    )
+    from .._shared.protocol.json_rpc import (
+        JSON_RPC_METHOD_NOT_FOUND as _JSON_RPC_METHOD_NOT_FOUND,
+    )
+    from .._shared.protocol.json_rpc import (
+        MAX_JSON_RPC_BYTES as _MAX_JSON_RPC_BYTES,
+    )
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from _shared.protocol.json_rpc import (
+        JSON_RPC_INVALID_PARAMS as _JSON_RPC_INVALID_PARAMS,
+    )
+    from _shared.protocol.json_rpc import (
+        JSON_RPC_METHOD_NOT_FOUND as _JSON_RPC_METHOD_NOT_FOUND,
+    )
+    from _shared.protocol.json_rpc import (
+        MAX_JSON_RPC_BYTES as _MAX_JSON_RPC_BYTES,
+    )
+
+from .json_rpc_errors import json_rpc_error_from_result as _json_rpc_error_from_result
+from .json_rpc_transport import JsonRpcError as _JsonRpcError
+from .json_rpc_transport import JsonRpcTransport as _JsonRpcTransport
 from .xmlrpc_identity_handler import McpIdentityRequestHandler
 
 logger = logging.getLogger("FreeCADMCP.rpc_server")
 
 _XMLRPC_INT_MIN = -(2**31)
 _XMLRPC_INT_MAX = (2**31) - 1
+_JSON_RPC_SERVER_BUSY = -32000
+_JSON_RPC_SERVER_STOPPING = -32004
 
 _COMMA_SEP_RE = re.compile(r"^\s*[^,\s]+(\s*,\s*[^,\s]+)*\s*$")
 
@@ -116,8 +144,102 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
         )
         self._accepting_requests = True
         self._accepting_lock = threading.Lock()
+        self._json_rpc_transport = _JsonRpcTransport(
+            self._dispatch_json_rpc,
+            result_to_error=_json_rpc_error_from_result,
+        )
+        self.json_rpc_max_body_bytes = _MAX_JSON_RPC_BYTES
+        self.json_rpc_read_timeout_seconds = 5.0
         kwargs.setdefault("requestHandler", McpIdentityRequestHandler)
         super().__init__(addr, **kwargs)
+
+    def _registered_method(self, method):
+        if method.startswith("_"):
+            raise _JsonRpcError(_JSON_RPC_METHOD_NOT_FOUND, "Method not found")
+        function = self.funcs.get(method)
+        if function is None:
+            function = getattr(getattr(self, "instance", None), method, None)
+        if not callable(function):
+            raise _JsonRpcError(_JSON_RPC_METHOD_NOT_FOUND, "Method not found")
+        return function
+
+    def _validated_json_rpc_params(self, method, params):
+        function = self._registered_method(method)
+        try:
+            signature = _inspect.signature(function)
+            if isinstance(params, _Mapping):
+                bound = signature.bind(**params)
+                bound.apply_defaults()
+                if bound.kwargs:
+                    raise TypeError("keyword-only parameters are unsupported")
+                return bound.args
+            signature.bind(*params)
+        except (TypeError, ValueError) as exc:
+            raise _JsonRpcError(
+                _JSON_RPC_INVALID_PARAMS,
+                "Invalid params",
+            ) from exc
+        return tuple(params)
+
+    def _dispatch_json_rpc(self, method, params):
+        method_params = self._validated_json_rpc_params(method, params)
+        control = method in self.CONTROL_METHODS
+        slots = self._control_slots if control else self._general_slots
+        with self._accepting_lock:
+            accepting = self._accepting_requests
+        if not accepting:
+            raise _JsonRpcError(_JSON_RPC_SERVER_STOPPING, "Server stopping")
+        if not slots.acquire(blocking=False):
+            lane = "control" if control else "general"
+            raise _JsonRpcError(
+                _JSON_RPC_SERVER_BUSY,
+                "Server busy",
+                {"reason": "server_busy", "lane": lane},
+            )
+        try:
+            return self._dispatch(method, method_params)
+        finally:
+            slots.release()
+
+    def _handle_json_rpc_post(self, handler):
+        """Serve one JSON-RPC request on the shared listener."""
+
+        handler.close_connection = True
+        content_length = handler.headers.get("Content-Length")
+        if content_length is None:
+            handler.send_error(411)
+            return
+        try:
+            length = int(content_length)
+        except ValueError:
+            handler.send_error(400)
+            return
+        if length < 0:
+            handler.send_error(400)
+            return
+        if length > self.json_rpc_max_body_bytes:
+            handler.send_error(413)
+            return
+        try:
+            handler.connection.settimeout(self.json_rpc_read_timeout_seconds)
+            payload = handler.rfile.read(length)
+        except OSError:
+            handler.send_error(408)
+            return
+        if len(payload) != length:
+            handler.send_error(400)
+            return
+        response = self._json_rpc_transport.handle_bytes(payload)
+        if response is None:
+            handler.send_response(204)
+            handler.send_header("Content-Length", "0")
+            handler.end_headers()
+            return
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Content-Length", str(len(response)))
+        handler.end_headers()
+        handler.wfile.write(response)
 
     def process_request(self, request, client_address):
         with self._accepting_lock:
@@ -126,6 +248,7 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
             self.shutdown_request(request)
             return
         try:
+            request.settimeout(self.json_rpc_read_timeout_seconds)
             self._handler_executor.submit(
                 self._process_request_in_pool, request, client_address
             )
@@ -181,11 +304,12 @@ class FilteredXMLRPCServer(SimpleXMLRPCServer):
     def begin_shutdown(self):
         with self._accepting_lock:
             self._accepting_requests = False
+        self._json_rpc_transport.begin_shutdown()
 
     def server_close(self):
         self.begin_shutdown()
         super().server_close()
-        self._handler_executor.shutdown(wait=False, cancel_futures=False)
+        self._handler_executor.shutdown(wait=True, cancel_futures=False)
 
     def verify_request(self, request, client_address):
         client_ip = client_address[0]
