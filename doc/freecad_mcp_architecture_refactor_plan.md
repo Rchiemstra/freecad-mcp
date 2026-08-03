@@ -794,18 +794,18 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `863535a2d4b6c33b5bfce8171762320060a34afb` |
 | Execution MCP base revision | `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
-| Current stage / phase | Stage 0; Phase 1 complete |
-| Next phase | 2 — `build(mcp): replace module size rules with boundary policy` |
+| Current stage / phase | Stage 0; Phase 2 complete |
+| Next phase | 3 — `refactor(mcp): extract the shared protocol module` |
 | In-flight ownership | None |
-| Last review | Phase 1 native, census, and integrated Sol/xhigh reviews green on 2026-08-03 |
+| Last review | Phase 2 final integrated Sol/xhigh re-review clear on 2026-08-03 |
 | Blocker | None |
-| Resume hint | Execute Phase 2 only; preserve the Phase 1 authority and compatibility manifests as frozen inputs |
+| Resume hint | Execute Phase 3 only; preserve the Phase 1 frozen inputs |
 
 ### 11.2 Stage status
 
 | Stage | Phases | Integration gate | Status |
 |---:|---|---|---|
-| 0 | 1–3 | phases 1 and 3 | in progress (Phase 1 complete; Phase 2 next) |
+| 0 | 1–3 | phases 1 and 3 | in progress (Phases 1–2 complete; Phase 3 next) |
 | 1 | 4–5 | phase 5 | pending |
 | 2 | 6–7 | none | pending |
 | 3 | 8–11 | none | pending |
@@ -818,6 +818,66 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-03 — Phase 2 complete: boundary policy replaces size rules
+
+- **Phase delivery:** `ci/lint_python.py` no longer contains ARCH001/ARCH002,
+  line-count, or class-count enforcement. ARCH101–ARCH107 now enforce capability
+  ownership, add-on layer direction, application runtime locator removal, internal
+  leaf imports, declarative shim purity, a 16-symbol explicit public-surface budget,
+  and the mixed-responsibility/giant-façade backstop. Ruff `C901` remains the
+  function-complexity rule.
+- **Structural behavior:** relative and aliased imports are resolved before ownership
+  and layer checks; runtime plus transport/dispatch are explicit multi-capability
+  composition seams; capability subjects remain isolated. Locator aliases are
+  rejected while the frozen Phase 1 inventory remains exact. Explicit but
+  unauditable `__all__` fails closed, import-only and hybrid façades count their
+  public bindings, and import-plus-`__all__` shims are recognized without relying on
+  prose markers.
+- **Allowances:** `ci/architecture_policy_allowances.json` contains 1,052 exact
+  code/path/line/column/fingerprint records with reasons and removal phases:
+  ARCH101 87, ARCH103 573, ARCH104 301, ARCH105 20, ARCH106 27, and ARCH107 44.
+  There are no ARCH102 allowances and no glob or module-wide waiver. Stale, moved,
+  changed, and newly introduced occurrences fail independently.
+- **Focused contract:** 85 synthetic cases cover cohesive multi-class values,
+  exact 16/17 public surfaces, dynamic and augmented `__all__`, mutable and
+  alternate-worded shims, function/import/hybrid façades, exact capability
+  taxonomy, relative layer imports, barrel resolution, aliased locators, composition
+  roots, mixed definitions inside a declared capability, class-method façades,
+  `TYPE_CHECKING` else effects and qualified guards, nested/destructive `__all__`
+  mutation, public/private class methods, assignment-bound exports, builtin and
+  assignment-aliased runtime locators, anchored add-on layers/composition seams, both
+  add-on package spellings, package-`__init__` and child-package barrel imports, and a
+  non-discoverable source specimen that Ruff alone rejects with exactly one C901
+  diagnostic and no other code. Module-executed conditional, loop-destructured,
+  tuple, named-expression, and destructive bindings are covered; ordinary dependency
+  names and generic builtin imports remain valid, while add-on dispatch rejects the
+  authoritative stdlib/internal-only boundary. Comprehension-local bindings remain
+  scoped; structurally paired fallbacks preserve the frozen census without hiding an
+  unrelated, same-arm, or nested-scope locator; definition/import bindings of
+  `__all__` fail closed. Static and dynamic imports share the same layer-direction
+  checks, direct and aliased dynamic FreeCAD/Qt imports fail at the gateway, both
+  package spellings remain valid internal targets, and aliased `TYPE_CHECKING`
+  guards remain declarative.
+- **Agents and reviews:** independent boundary and shape fixture workstreams were
+  followed by adversarial Sol/xhigh reviews. Findings around relative imports,
+  locator aliases, taxonomy, composition roots, shim detection, public-surface
+  fail-open behavior, façade binding counts, Ruff ownership, and oracle strength
+  were fixed; both workstream re-reviews reported no remaining finding. Integrated
+  reviews then found adversarial gaps around declared-package and assignment-bound
+  mixing, class visibility, `TYPE_CHECKING` forms, destructive `__all__`, equivalent
+  locators, barrel variants, path-insensitive layer/composition detection, fallback
+  branch structure, dynamic layer imports, and policy-function complexity. All
+  reported gaps were fixed; the final integrated re-review reported no blocking,
+  important, or non-blocking finding.
+- **Runtime/contracts:** no add-on or client production runtime file changed; public
+  imports, RPC behavior, registry order, and the Phase 1 collaboration/authority
+  inventories remain unchanged.
+- **Docker validation:** exact results and image identity are recorded in §11.4.
+  Both production lint modes checked 888 Python files and passed; the focused policy
+  suite passed 85; the complete Compose unit service passed.
+- **Next:** execute Phase 3 only. Phase 2 is not an integration gate, so the parent
+  gitlink remains at the Phase 1 integration revision.
 
 #### 2026-08-03 — Phase 1 complete: native collaboration baseline frozen
 
@@ -958,6 +1018,28 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 2 — `build(mcp): replace module size rules with boundary policy`
+
+- **Image:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:91767d159ad0b0427f1d2a908449c785c961f62e467c3fd1cddbe9d1b439dd2d`;
+  the local daemon reports no repository digest.
+- **Architecture policy:** Docker `uv run ci/lint_python.py --architecture-only
+  addon/FreeCADMCP src/freecad_mcp` checked 888 production files and passed. Its raw
+  policy inventory is 1,052 exact allowed legacy findings with the ARCH101/103–107
+  breakdown in §11.3; the ARCH103 component is exactly the Phase 1 census of 514
+  `_rpc_mod` nodes, 37 dynamic lookups, and 22 local-import locators.
+- **Ruff and focused contracts:** the corresponding full production lint/Ruff
+  command passed with final-image Ruff 0.16.1. A separate Docker compatibility run
+  pinned Ruff 0.12.12 and passed all touched Python paths. The focused
+  `tests/test_architecture_policy.py` suite passed 85/85, including an isolated source
+  assertion for exactly one C901 diagnostic; architecture policy did not duplicate it.
+- **Compose phase gate:** after `docker compose build`, `docker compose run --rm
+  unit` selected 1,810 tests: 1,806 passed, three Windows-DACL tests skipped, and one
+  existing screenshot behavior test xfailed; 129 non-unit tests were deselected.
+- **Review result:** boundary and shape Sol/xhigh workstream reviews and re-reviews
+  are green. The final integrated Sol/xhigh re-review is clear with no blocking,
+  important, or non-blocking finding. Production runtime behavior is unchanged.
 
 #### Phase 1 — `test(mcp): freeze the native collaboration baseline`
 
