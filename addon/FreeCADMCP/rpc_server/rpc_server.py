@@ -28,21 +28,21 @@ from .handoff_continuations import HandoffContinuationStore
 from .inflight_requests import InflightRequestRegistry
 
 try:
-    from .._shared.protocol.manifest import make_runtime_manifest
-    from .._shared.protocol.profile_secret import load_profile_secret
-    from .._shared.protocol.public_error import (
+    from .._shared.protocol.public_error import (  # noqa: I001 - frozen census lines
         public_error as lease_protocol_public_error,
     )
-    from .._shared.protocol.request_replay_cache import RequestReplayCache
-    from .._shared.protocol.session_manager import SessionManager
+    from ..transport.authentication import (
+        SessionManager, load_profile_secret, make_runtime_manifest
+    )
+    from ..transport.replay import RequestReplayCache
 except ImportError:  # pragma: no cover - flat addon import path
-    from _shared.protocol.manifest import make_runtime_manifest  # noqa: F401
-    from _shared.protocol.profile_secret import load_profile_secret  # noqa: F401
-    from _shared.protocol.public_error import (  # noqa: F401
+    from _shared.protocol.public_error import (  # noqa: F401, I001 - frozen census lines
         public_error as lease_protocol_public_error,
     )
-    from _shared.protocol.request_replay_cache import RequestReplayCache
-    from _shared.protocol.session_manager import SessionManager  # noqa: F401
+    from transport.authentication import (  # noqa: F401
+        SessionManager, load_profile_secret, make_runtime_manifest
+    )
+    from transport.replay import RequestReplayCache
 from .lease_runtime import (  # noqa: F401
     _boot_identity,
     _ensure_lease_watchdog_running,

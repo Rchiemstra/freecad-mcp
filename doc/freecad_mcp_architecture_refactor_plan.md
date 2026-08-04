@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 3 in progress; Phase 8 complete |
-| Next phase | 9 — `refactor(mcp): establish the transport layer` |
+| Current stage / phase | Stage 3 in progress; Phase 9 complete |
+| Next phase | 10 — `refactor(mcp): establish the dispatch layer` |
 | In-flight ownership | None |
-| Last review | Phase 8 behavior, boundary, and final integrated reviews clear on 2026-08-04 |
+| Last review | Phase 9 production, contract, and final integrated reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 8 is committed and gated; continue Stage 3 with Phase 9 only, keeping transport free of dispatch, document authority, and runtime composition |
+| Resume hint | Phase 9 is committed and gated; continue Stage 3 with Phase 10 only, preserving the authority-free transport boundary and frozen locator census |
 
 ### 11.2 Stage status
 
@@ -818,6 +818,51 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 9 complete: transport layer established
+
+- **Phase delivery:** `transport/` now owns the canonical JSON-RPC codec and error
+  mapper, IP validation, bounded HTTP listener, callback-injected request handler,
+  and transport-facing authentication and replay identities. The listener retains
+  the frozen body, deadline, admission-lane, protocol-negotiation, notification,
+  XML-retirement, IP-filter, and shutdown behavior while accepting an injected
+  request handler, framing transport factory, result mapper, and identity callbacks.
+  Construction binds but never starts a serving thread.
+- **Authentication, replay, and compatibility:** `SessionManager`, profile-secret
+  loading, runtime-manifest construction, and `RequestReplayCache` are exact
+  identities from the byte-identical `_shared/protocol` vendor; no protocol logic
+  was copied. The live RPC façade consumes all four through `transport/`. The old
+  codec and error modules are declarative identity shims, and the compatibility
+  listener subclasses the canonical listener only to retain the existing
+  `McpIdentityRequestHandler`. Package and flat add-on imports remain valid. The
+  legacy handler's frozen `document_lock` locator remains in place for Stage 4.
+- **Isolation and cleanup:** transport imports only the standard library, sibling
+  transport leaves, and `_shared.protocol`; it imports no FreeCAD, Qt, runtime,
+  dispatch, capability, document-lock, or document-lease implementation. Identity
+  parsing invokes only injected callbacks. Listener close attempts transport
+  shutdown, base-socket close, and executor shutdown unconditionally, preserving a
+  sole failure or grouping multiple failures only after all cleanup is attempted.
+- **Contracts and frozen inventories:** adversarial tests cover package and flat
+  import provenance, annotated/destructured/dynamic aliases, reflective import
+  retrieval, blocked FreeCAD/Qt imports, bind and IP behavior, identity bracketing,
+  injected shutdown failure, listener substitution, framing, redaction, auth/replay
+  identity, and every old import. All six authority totals and the complete locator
+  census remain byte-for-byte exact; no semantic snapshot or architecture allowance
+  changed.
+- **Agents and reviews:** independent production and contract workstreams received
+  cross-reviews and a final integrated review. Findings covering cleanup after an
+  injected shutdown failure, flat add-on coverage, reflective import bypasses,
+  incomplete authentication routing, and a false-passing identity-only provenance
+  check were fixed and re-reviewed. All final reviews are clear with no blocking,
+  important, or non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded
+  in §11.4. The baked affected selection passed 335/335, production lint checked
+  961 files, Compose `unit` passed, and branch-built preflight/core/e2e passed with
+  both strict collaboration verdicts zero.
+- **Stage result and next:** Stage 3 is in progress with Phase 9 complete. Resume
+  with Phase 10 only to establish GUI dispatch, cancellation, and bounded registry
+  ownership. Phase 9 is not an integration gate, so the parent gitlink remains at
+  the Phase 5 integration revision.
 
 #### 2026-08-04 — Phase 8 complete: gateway runtime introduced
 
@@ -1302,6 +1347,40 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 9 — `refactor(mcp): establish the transport layer`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:5a345f8b02f8255dbb458ad3b8d751834dc842f7f226f324537da7a16dc46f94`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 961 production files and passed architecture policy and
+  Ruff. The final transport behavior/boundary, codec, error, listener, retirement,
+  concurrency, auth, replay, compatibility, lifecycle, semantic-contract, baseline,
+  and architecture-policy selection passed 335/335. The dedicated Phase 9 behavior
+  and boundary modules contribute 27 passing contracts; touched-test Ruff passed.
+- **Compose phase gate:** after `docker compose build unit`, `docker compose run
+  --rm unit` selected 2,121: 2,117 passed, the three Windows-DACL tests skipped,
+  and the existing screenshot test xfailed; 129 non-unit tests were deselected.
+  Phase 9 is not an integration gate, so §5.7 requires this unit service rather
+  than all four Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` volume and
+  branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no native
+  source changed. The unmodified preflight wrapper emitted `PREFLIGHT_OK` for
+  FreeCAD 26.3.0 revision 48071. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the unmodified e2e wrapper
+  passed 117/117. Both strict verdict files contained zero and were removed with
+  their generated XML reports after recording.
+- **Review and inventory result:** production, contract, and final integrated
+  adversarial reviews are clear with no blocking, important, or non-blocking
+  finding. The exact six authority counts remain 115, 15, 30, 167, 861, and 251;
+  the frozen locator, protocol-vendor, semantic RPC, and registry inputs are
+  unchanged, and no architecture allowance was added or refreshed.
 
 #### Phase 8 — `refactor(mcp): introduce the gateway runtime`
 
