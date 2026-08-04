@@ -6,11 +6,15 @@ from ...mutation_guard import (
     calculate_document_health_delta,
     capture_document_health,
 )
-from ._common import _rpc_mod, require_document_modified
+
+try:
+    from document_state import require_document_modified
+except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.document_state import require_document_modified
 
 
-def revalidate_save_promotion(credential, phase, lease):
-    record = _rpc_mod().document_lease_service.authorize(
+def revalidate_save_promotion(credential, phase, lease, collaborators):
+    record = collaborators.document_lease_service.authorize(
         credential,
         selector={"document_session_uuid": phase["document_session_uuid"]},
         allowed_states={lease.LeaseState.LOCKED_SAVING},
@@ -25,12 +29,12 @@ def revalidate_save_promotion(credential, phase, lease):
     return record
 
 
-def assert_saved_path_matches(document, phase, result, lease):
-    live_identity = _rpc_mod().document_identity_service.inspect_registered_document(
+def assert_saved_path_matches(document, phase, result, lease, collaborators):
+    live_identity = collaborators.document_identity_service.inspect_registered_document(
         phase["document_session_uuid"], document
     )
     _canonical, saved_comparison = lease.canonicalize_path(
-        result.path, platform=_rpc_mod().document_identity_service.platform
+        result.path, platform=collaborators.document_identity_service.platform
     )
     if live_identity.comparison_key != saved_comparison:
         raise lease.CoordinationError(
@@ -47,6 +51,7 @@ def build_save_promotion_response(
     phase,
     mode,
     validation_profile,
+    collaborators,
 ):
     response = {
         "success": True,
@@ -59,7 +64,7 @@ def build_save_promotion_response(
         },
     }
     health_after = capture_document_health(
-        _rpc_mod().FreeCAD.getDocument(phase["document_name"]),
+        collaborators.freecad.getDocument(phase["document_name"]),
         profile=ValidationProfile(str(validation_profile).lower()),
     )
     health_delta = calculate_document_health_delta(
@@ -86,11 +91,12 @@ def maybe_release_after_save(
     result,
     inflight,
     response,
+    collaborators,
 ):
-    promoted_identity = _rpc_mod().document_identity_service.inspect_registered_document(
+    promoted_identity = collaborators.document_identity_service.inspect_registered_document(
         credential.document_session_uuid, document
     )
-    lease = _rpc_mod()._import_document_lease()
+    lease = collaborators.import_document_lease()
     evidence = lease.LiveDocumentValidation(
         document=promoted_identity,
         document_modified=require_document_modified(document),
@@ -99,15 +105,15 @@ def maybe_release_after_save(
     )
     if inflight is not None:
         inflight.token.begin_irreversible("finalize_release_sidecar_cas")
-    response["release"] = _rpc_mod().document_lease_service.release_clean(
+    response["release"] = collaborators.document_lease_service.release_clean(
         credential, validation=evidence
     )
     try:
-        _rpc_mod()._import_core_authority().sync_clear_from_release(document)
+        collaborators.import_core_authority().sync_clear_from_release(document)
     except Exception:
-        _rpc_mod().FreeCAD.Console.PrintWarning(
+        collaborators.freecad.Console.PrintWarning(
             "[MCP] core mutation owner clear failed after finalize\n"
         )
-    _rpc_mod()._discard_terminal_snapshot(response["release"])
+    collaborators.discard_terminal_snapshot(response["release"])
     response["released"] = True
     return response

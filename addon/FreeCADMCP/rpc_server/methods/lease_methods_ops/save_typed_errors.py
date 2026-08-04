@@ -1,7 +1,11 @@
 """Typed save error-recovery GUI helpers."""
 
 from ...save_service import SaveServiceError
-from ._common import _rpc_mod, document_modified_or_dirty
+
+try:
+    from document_state import document_modified_or_dirty
+except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.document_state import document_modified_or_dirty
 
 
 def record_preflight_save_error(
@@ -11,6 +15,7 @@ def record_preflight_save_error(
     captured_identity,
     request_id,
     inflight,
+    collaborators,
 ):
     credential = phase["credential"]
     try:
@@ -18,13 +23,15 @@ def record_preflight_save_error(
             isinstance(failure, SaveServiceError)
             and failure.stage == "destination_preflight"
         ):
-            _rpc_mod().document_lease_service.cancel_save_before_mutation(credential)
+            collaborators.document_lease_service.cancel_save_before_mutation(
+                credential
+            )
             return
-        document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
-        _rpc_mod().document_lease_service.record_error(
+        document = collaborators.freecad.getDocument(phase["document_name"])
+        collaborators.document_lease_service.record_error(
             credential,
             code=getattr(failure, "code", type(failure).__name__.upper()),
-            message=_rpc_mod()._redact_rpc_diagnostic(
+            message=collaborators.redact_rpc_diagnostic(
                 failure,
                 identity=captured_identity,
                 inflight=inflight,
@@ -47,14 +54,15 @@ def record_validation_save_error(
     captured_identity,
     request_id,
     inflight,
+    collaborators,
 ):
     try:
         credential = phase["credential"]
-        document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
-        _rpc_mod().document_lease_service.record_error(
+        document = collaborators.freecad.getDocument(phase["document_name"])
+        collaborators.document_lease_service.record_error(
             credential,
             code=getattr(failure, "code", type(failure).__name__.upper()),
-            message=_rpc_mod()._redact_rpc_diagnostic(
+            message=collaborators.redact_rpc_diagnostic(
                 failure,
                 identity=captured_identity,
                 inflight=inflight,

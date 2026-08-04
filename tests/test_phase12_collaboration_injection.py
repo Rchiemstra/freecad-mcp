@@ -266,7 +266,7 @@ def test_cancelled_handoff_continuation_never_consults_claim_authority() -> None
     assert result["error_code"] == "LOCKED_ERROR_HANDOFF_CANCELLED"
 
 
-def test_assigned_modules_have_no_runtime_locator_and_phase13_is_untouched() -> None:
+def test_phase12_and_phase13_modules_have_no_runtime_locator() -> None:
     assigned = [OPS / "acquire.py"]
     for pattern in (
         "acquire_v2*.py",
@@ -286,5 +286,12 @@ def test_assigned_modules_have_no_runtime_locator_and_phase13_is_untouched() -> 
             for node in ast.walk(tree)
         ), path.name
 
-    phase13_source = (OPS / "release.py").read_text(encoding="utf-8")
-    assert "_rpc_mod" in phase13_source
+    phase13_paths = [
+        OPS / "release.py",
+        OPS / "release_gui.py",
+        OPS / "lock_query.py",
+        OPS / "lock_query_helpers.py",
+        *OPS.glob("save*.py"),
+    ]
+    for path in sorted(set(phase13_paths)):
+        assert "_rpc_mod" not in path.read_text(encoding="utf-8"), path.name

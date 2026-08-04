@@ -1,10 +1,11 @@
 """Lease RPC methods extracted from ``FreeCADRPC`` (Phase 4 slice 4E)."""
 
-from ._common import _rpc_mod
+from contextlib import suppress
 
 
 def save_document(self, selector, validation_profile="default"):
-    identity = _rpc_mod()._import_document_lock().get_request_identity()
+    collaborators = self._lifecycle_collaborators
+    identity = collaborators.import_document_lock().get_request_identity()
     if identity.get("lease_token") and not identity.get("lease_credentials"):
         return self._run_legacy_save(
             selector,
@@ -44,6 +45,7 @@ def finalize_document_edit(
     expected_destination_sha256="",
     validation_profile="default",
 ):
+    collaborators = self._lifecycle_collaborators
     normalized = str(save_mode).lower().replace("-", "_")
     if normalized not in {"save", "save_as", "saveas", "first_save"}:
         return {
@@ -51,7 +53,7 @@ def finalize_document_edit(
             "error_code": "INVALID_SAVE_MODE",
             "error": "save_mode must be save, save_as, or first_save",
         }
-    identity = _rpc_mod()._import_document_lock().get_request_identity()
+    identity = collaborators.import_document_lock().get_request_identity()
     if identity.get("lease_token") and not identity.get("lease_credentials"):
         if normalized != "save":
             return {
@@ -71,7 +73,7 @@ def finalize_document_edit(
         lease_payload = saved.get("lease") or {}
         doc_key = str(lease_payload.get("doc_key") or "")
         token = str(identity.get("lease_token") or "")
-        released = _rpc_mod()._import_document_lock().release_lease(doc_key, token)
+        released = collaborators.import_document_lock().release_lease(doc_key, token)
         if not released.get("success"):
             return {
                 **saved,
@@ -85,12 +87,8 @@ def finalize_document_edit(
             }
         saved["release"] = released
         saved["released"] = True
-        try:
-            from lock_indicator import refresh_lock_indicator
-
-            refresh_lock_indicator()
-        except Exception:
-            pass
+        with suppress(Exception):
+            collaborators.refresh_lock_indicator()
         return saved
     return self._run_typed_save(
         selector,

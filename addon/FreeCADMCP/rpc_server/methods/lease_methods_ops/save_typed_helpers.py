@@ -4,10 +4,9 @@ import os
 
 from ...mutation_guard import RollbackCoverage
 from ...save_service import SaveServiceError
-from ._common import _rpc_mod
 
 
-def make_error_response(self, exc, *, mode, request_id, phase):
+def make_error_response(self, exc, *, mode, request_id, phase, collaborators):
     if isinstance(exc, SaveServiceError):
         response = {
             "success": False,
@@ -16,7 +15,7 @@ def make_error_response(self, exc, *, mode, request_id, phase):
             "save_error": exc.to_dict(request_id=request_id),
         }
     else:
-        response = _rpc_mod()._lease_service_error(exc, request_id=request_id)
+        response = collaborators.lease_service_error(exc, request_id=request_id)
     response.update(
         self._unknown_mutation_evidence(
             f"{mode}_document",

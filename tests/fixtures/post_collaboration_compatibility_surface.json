@@ -674,53 +674,46 @@
         "symbol": "sync_owner_from_lease_record"
       },
       {
-        "column": 35,
-        "kind": "ImportAlias",
-        "line": 41,
-        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release_gui.py",
-        "symbol": "core_authority"
+        "column": 4,
+        "kind": "Name",
+        "line": 23,
+        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lifecycle_dependencies.py",
+        "symbol": "import_core_authority"
+      },
+      {
+        "column": 37,
+        "kind": "Attribute",
+        "line": 46,
+        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lifecycle_dependencies.py",
+        "symbol": "import_core_authority"
       },
       {
         "column": 8,
-        "kind": "Name",
-        "line": 43,
+        "kind": "Attribute",
+        "line": 42,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release_gui.py",
-        "symbol": "core_authority"
+        "symbol": "import_core_authority"
       },
       {
-        "column": 35,
-        "kind": "ImportAlias",
-        "line": 39,
-        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke_helpers.py",
-        "symbol": "core_authority"
-      },
-      {
-        "column": 21,
-        "kind": "Name",
-        "line": 41,
-        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke_helpers.py",
-        "symbol": "core_authority"
-      },
-      {
-        "column": 24,
-        "kind": "Name",
+        "column": 32,
+        "kind": "Attribute",
         "line": 45,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke_helpers.py",
-        "symbol": "core_authority"
+        "symbol": "import_core_authority"
       },
       {
         "column": 24,
         "kind": "Attribute",
-        "line": 45,
+        "line": 50,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke_helpers.py",
         "symbol": "open_mutation_capability"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 106,
+        "line": 112,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote_helpers.py",
-        "symbol": "_import_core_authority"
+        "symbol": "import_core_authority"
       },
       {
         "column": 35,
@@ -760,7 +753,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 89,
+        "line": 92,
+        "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
+        "symbol": "_import_core_authority"
+      },
+      {
+        "column": 30,
+        "kind": "Name",
+        "line": 287,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -1180,14 +1180,14 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 83,
+        "line": 87,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query.py",
         "symbol": "heartbeat_document_lock"
       },
       {
         "column": 13,
         "kind": "Attribute",
-        "line": 109,
+        "line": 114,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query.py",
         "symbol": "heartbeat_lease"
       },
@@ -3441,7 +3441,7 @@
       {
         "column": 15,
         "kind": "Attribute",
-        "line": 37,
+        "line": 38,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release_gui.py",
         "symbol": "release_clean"
       },
@@ -3454,7 +3454,7 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 13,
+        "line": 12,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_legacy.py",
         "symbol": "run_legacy_save"
       },
@@ -3473,7 +3473,7 @@
       {
         "column": 15,
         "kind": "Attribute",
-        "line": 178,
+        "line": 198,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_legacy_phases.py",
         "symbol": "mark_save_verified"
       },
@@ -3486,35 +3486,35 @@
       {
         "column": 15,
         "kind": "Attribute",
-        "line": 9,
+        "line": 10,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_public.py",
         "symbol": "_run_legacy_save"
       },
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 13,
+        "line": 14,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_public.py",
         "symbol": "_run_typed_save"
       },
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 28,
+        "line": 29,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_public.py",
         "symbol": "_run_typed_save"
       },
       {
         "column": 16,
         "kind": "Attribute",
-        "line": 65,
+        "line": 67,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_public.py",
         "symbol": "_run_legacy_save"
       },
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 95,
+        "line": 93,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_public.py",
         "symbol": "_run_typed_save"
       },
@@ -3527,7 +3527,7 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 18,
+        "line": 17,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed.py",
         "symbol": "run_typed_save"
       },
@@ -3570,14 +3570,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 8,
+        "line": 7,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_prepare.py",
         "symbol": "begin_save_reservation"
       },
       {
         "column": 8,
         "kind": "Name",
-        "line": 55,
+        "line": 57,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_prepare.py",
         "symbol": "begin_save_reservation"
       },
@@ -3610,14 +3610,14 @@
       {
         "column": 23,
         "kind": "Attribute",
-        "line": 46,
+        "line": 50,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote.py",
         "symbol": "commit_save_as"
       },
       {
         "column": 23,
         "kind": "Attribute",
-        "line": 52,
+        "line": 56,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote.py",
         "symbol": "mark_save_verified"
       },
@@ -3630,7 +3630,7 @@
       {
         "column": 26,
         "kind": "Attribute",
-        "line": 102,
+        "line": 108,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote_helpers.py",
         "symbol": "release_clean"
       },
@@ -9210,84 +9210,84 @@
       {
         "column": 4,
         "kind": "Name",
-        "line": 55,
+        "line": 56,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar"
       },
       {
         "column": 14,
         "kind": "Attribute",
-        "line": 55,
+        "line": 56,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar_path_for"
       },
       {
         "column": 27,
         "kind": "Name",
-        "line": 56,
+        "line": 57,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar"
       },
       {
         "column": 17,
         "kind": "Attribute",
-        "line": 64,
+        "line": 65,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar_store"
       },
       {
-        "column": 70,
+        "column": 73,
         "kind": "Name",
-        "line": 64,
+        "line": 65,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar"
       },
       {
         "column": 12,
         "kind": "Attribute",
-        "line": 83,
+        "line": 84,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "list_effective_records"
       },
       {
         "column": 12,
         "kind": "Name",
-        "line": 102,
+        "line": 103,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar"
       },
       {
         "column": 22,
         "kind": "Attribute",
-        "line": 102,
+        "line": 103,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar_path_for"
       },
       {
         "column": 35,
         "kind": "Name",
-        "line": 103,
+        "line": 104,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar"
       },
       {
         "column": 25,
         "kind": "Attribute",
-        "line": 106,
+        "line": 107,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar_store"
       },
       {
-        "column": 78,
+        "column": 81,
         "kind": "Name",
-        "line": 106,
+        "line": 107,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "sidecar"
       },
       {
         "column": 39,
         "kind": "Attribute",
-        "line": 144,
+        "line": 145,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py",
         "symbol": "discover_sidecar_leases"
       },
@@ -9363,7 +9363,7 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 83,
+        "line": 86,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -10465,7 +10465,7 @@
     "baseline_references": 504,
     "baseline_runtime_calls": 432,
     "current_definitions": 10,
-    "current_locator_nodes": 351,
+    "current_locator_nodes": 221,
     "current_modules": {
       "addon/FreeCADMCP/rpc_server/lease_runtime.py": {
         "definitions": 1,
@@ -10642,132 +10642,6 @@
         "loaded_references": 6,
         "runtime_calls": 6
       },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 14,
-        "runtime_calls": 14
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lock_query_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 10,
-        "runtime_calls": 10
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release_gui.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 7,
-        "runtime_calls": 7
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_legacy.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_legacy_orchestration.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_legacy_phases.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 14,
-        "runtime_calls": 14
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_public.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_errors.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 7,
-        "runtime_calls": 7
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 8,
-        "runtime_calls": 8
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_orchestration.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_prepare.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_prepare_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 10,
-        "runtime_calls": 10
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 10,
-        "runtime_calls": 10
-      },
       "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py": {
         "definitions": 1,
         "exported_names": 1,
@@ -10902,8 +10776,8 @@
         "runtime_calls": 2
       }
     },
-    "current_references": 341,
-    "current_runtime_calls": 293,
+    "current_references": 211,
+    "current_runtime_calls": 181,
     "method": "AST count of _rpc_mod definitions, loaded references/runtime calls, import bindings, and explicit exports"
   },
   "manifest_state": "planned_pre_cutover",
@@ -12713,6 +12587,7 @@
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
+        "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/lifecycle_dependencies.py",
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release_gui.py",
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_invoke_helpers.py",
         "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_typed_promote_helpers.py",

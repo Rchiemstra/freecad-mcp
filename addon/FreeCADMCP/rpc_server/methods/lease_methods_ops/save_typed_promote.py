@@ -1,7 +1,10 @@
 """Promotion GUI phase for typed save."""
 try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
-from ._common import _rpc_mod, document_modified_or_dirty
+try:
+    from document_state import document_modified_or_dirty
+except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.document_state import document_modified_or_dirty
 from .save_typed_helpers import make_error_response, marker_keys_for
 from .save_typed_promote_helpers import (
     assert_saved_path_matches,
@@ -23,6 +26,7 @@ def promote_gui_phase(
     validation_profile,
     release,
     result,
+    collaborators,
 ):
     marker_keys = []
     attribution_started = False
@@ -30,26 +34,26 @@ def promote_gui_phase(
     try:
         if inflight is not None:
             inflight.token.checkpoint("save_promotion_gui")
-        document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
+        document = collaborators.freecad.getDocument(phase["document_name"])
         if document is None:
             raise RuntimeError("saved document closed before lease promotion")
         original_identity = phase["original_identity"]
         marker_keys = marker_keys_for(document, original_identity, destination)
-        dl = _rpc_mod()._import_document_lock()
+        dl = collaborators.import_document_lock()
         dl.begin_agent_mutation_scope(request_id, marker_keys)
         attribution_started = True
-        lease = _rpc_mod()._import_document_lease()
-        revalidate_save_promotion(credential, phase, lease)
-        assert_saved_path_matches(document, phase, result, lease)
-        _rpc_mod().save_service.revalidate_saved_document_gui(document, result)
+        lease = collaborators.import_document_lease()
+        revalidate_save_promotion(credential, phase, lease, collaborators)
+        assert_saved_path_matches(document, phase, result, lease, collaborators)
+        collaborators.save_service.revalidate_saved_document_gui(document, result)
         if mode == "save_as":
-            verified = _rpc_mod().document_lease_service.commit_save_as(
+            verified = collaborators.document_lease_service.commit_save_as(
                 credential,
                 destination=result.path,
                 baseline=result.baseline,
             )
         else:
-            verified = _rpc_mod().document_lease_service.mark_save_verified(
+            verified = collaborators.document_lease_service.mark_save_verified(
                 credential, baseline=result.baseline
             )
         response = build_save_promotion_response(
@@ -59,6 +63,7 @@ def promote_gui_phase(
             phase=phase,
             mode=mode,
             validation_profile=validation_profile,
+            collaborators=collaborators,
         )
         response["lease"] = verified.to_public_dict()
         if release:
@@ -69,6 +74,7 @@ def promote_gui_phase(
                 result=result,
                 inflight=inflight,
                 response=response,
+                collaborators=collaborators,
             )
         return response
     except RequestCancellationError:
@@ -76,11 +82,11 @@ def promote_gui_phase(
         raise
     except Exception as exc:
         try:
-            document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
-            _rpc_mod().document_lease_service.record_error(
+            document = collaborators.freecad.getDocument(phase["document_name"])
+            collaborators.document_lease_service.record_error(
                 credential,
                 code=getattr(exc, "code", type(exc).__name__.upper()),
-                message=_rpc_mod()._redact_rpc_diagnostic(
+                message=collaborators.redact_rpc_diagnostic(
                     exc,
                     identity=captured_identity,
                     inflight=inflight,
@@ -94,8 +100,15 @@ def promote_gui_phase(
             )
         except Exception:
             pass
-        return make_error_response(self, exc, mode=mode, request_id=request_id, phase=phase)
+        return make_error_response(
+            self,
+            exc,
+            mode=mode,
+            request_id=request_id,
+            phase=phase,
+            collaborators=collaborators,
+        )
     finally:
-        dl = _rpc_mod()._import_document_lock()
+        dl = collaborators.import_document_lock()
         if attribution_started:
             dl.end_agent_mutation_scope(request_id, marker_keys)

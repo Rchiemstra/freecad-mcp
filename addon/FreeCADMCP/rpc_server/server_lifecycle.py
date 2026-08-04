@@ -304,6 +304,7 @@ def _compose_transitional_runtime(
             collaboration_collaborators=(
                 rpc_mod._build_collaboration_collaborators()
             ),
+            lifecycle_collaborators=rpc_mod._build_lifecycle_collaborators(),
         )
         capability_bridge_state["bridge"] = bridge
         return bridge

@@ -67,8 +67,11 @@ from .lease_runtime import (  # noqa: F401
 from .methods.lease_methods_ops.collaboration_dependencies import (
     CollaborationCollaborators as _CollaborationCollaborators,
 )
+from .methods.lease_methods_ops.lifecycle_dependencies import (
+    LifecycleCollaborators as _LifecycleCollaborators,
+)
 from .parts_library import configure_parts_library_path  # noqa: F401
-from .reference_repair import inspect_references_gui  # noqa: F401 - §3.3 shim
+from .reference_repair import inspect_references_gui  # §3.3 shim
 from .rpc_helpers import (  # noqa: F401 - §3.3 moved-symbol shims
     _SAVE_VALIDATION_MARKER,
     _assert_mutation_file_metadata_unchanged,
@@ -175,6 +178,7 @@ class FreeCADRPC:
         allow_execute_code: bool = True,
         *,
         collaboration_collaborators: _CollaborationCollaborators | None = None,
+        lifecycle_collaborators: _LifecycleCollaborators | None = None,
     ):
         self.allow_execute_code = allow_execute_code
         self._mutation_context = threading.local()
@@ -189,10 +193,22 @@ class FreeCADRPC:
         if collaboration_collaborators is None:
             collaboration_collaborators = _build_collaboration_collaborators()
         self.__collaboration_collaborators = collaboration_collaborators
+        if (
+            lifecycle_collaborators is not None
+            and not isinstance(lifecycle_collaborators, _LifecycleCollaborators)
+        ):
+            raise TypeError("lifecycle_collaborators must be LifecycleCollaborators")
+        if lifecycle_collaborators is None:
+            lifecycle_collaborators = _build_lifecycle_collaborators()
+        self.__lifecycle_collaborators = lifecycle_collaborators
 
     @property
     def _collaboration_collaborators(self) -> _CollaborationCollaborators:
         return self.__collaboration_collaborators
+
+    @property
+    def _lifecycle_collaborators(self) -> _LifecycleCollaborators:
+        return self.__lifecycle_collaborators
 
     def _bind_collaboration_runtime_manifest(self, runtime_manifest) -> None:
         """Complete the private graph before the listener can serve requests."""
@@ -234,6 +250,56 @@ def _build_collaboration_collaborators() -> _CollaborationCollaborators:
             _assert_mutation_file_metadata_unchanged
         ),
         assert_never_saved_stale_continuity=_assert_never_saved_stale_continuity,
+    )
+
+
+def _refresh_lock_indicator() -> None:
+    """Refresh the optional GUI compatibility indicator without owning its state."""
+
+    try:
+        from ..lock_indicator import refresh_lock_indicator
+    except ImportError:  # pragma: no cover - flat addon import path
+        from lock_indicator import refresh_lock_indicator
+
+    refresh_lock_indicator()
+
+
+def _deprecated_force_release_result() -> dict[str, object]:
+    """Return the frozen compatibility tombstone from the composition root."""
+
+    return {
+        "success": False,
+        "error_code": "LOCAL_RECOVERY_REQUIRED",
+        "error": (
+            "Stale or malformed lease recovery is available only from "
+            "FreeCAD's local document-lock UI with explicit confirmation"
+        ),
+    }
+
+
+def _build_lifecycle_collaborators() -> _LifecycleCollaborators:
+    """Capture transitional lifecycle dependencies at the composition point."""
+
+    return _LifecycleCollaborators(
+        freecad=FreeCAD,
+        import_document_lock=_import_document_lock,
+        import_document_lease=_import_document_lease,
+        import_core_authority=_import_core_authority,
+        document_lease_service=document_lease_service,
+        document_identity_service=document_identity_service,
+        save_service=save_service,
+        credential_for_selector=_credential_for_selector,
+        live_document_from_selector=_live_document_from_selector,
+        ensure_v2_document=_ensure_v2_document,
+        live_validation_evidence=_live_validation_evidence,
+        discard_terminal_snapshot=_discard_terminal_snapshot,
+        saved_document_expectations=_saved_document_expectations,
+        validate_saved_document_worker=_validate_saved_document_worker,
+        inspect_references_gui=inspect_references_gui,
+        redact_rpc_diagnostic=_redact_rpc_diagnostic,
+        lease_service_error=_lease_service_error,
+        deprecated_force_release_result=_deprecated_force_release_result,
+        refresh_lock_indicator=_refresh_lock_indicator,
     )
 
 

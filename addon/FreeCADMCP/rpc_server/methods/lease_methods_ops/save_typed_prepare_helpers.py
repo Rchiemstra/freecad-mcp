@@ -2,7 +2,6 @@
 
 from ...mutation_guard import ValidationProfile, capture_document_health
 from ...save_service import DomainValidationError
-from ._common import _rpc_mod
 from .save_typed_helpers import marker_keys_for
 
 
@@ -13,9 +12,10 @@ def authorize_save_prepare(
     document_identity,
     document,
     inflight,
+    collaborators,
 ):
-    lease = _rpc_mod()._import_document_lease()
-    record = _rpc_mod().document_lease_service.authorize(
+    lease = collaborators.import_document_lease()
+    record = collaborators.document_lease_service.authorize(
         credential,
         selector={
             "document_session_uuid": document_identity.session_uuid,
@@ -30,8 +30,8 @@ def authorize_save_prepare(
     return record
 
 
-def validate_save_references(document_identity):
-    reference_preflight = _rpc_mod().inspect_references_gui(
+def validate_save_references(document_identity, collaborators):
+    reference_preflight = collaborators.inspect_references_gui(
         document_identity.name,
         only_invalid=True,
         validate=True,
@@ -62,8 +62,8 @@ def validate_save_references(document_identity):
         )
 
 
-def begin_save_reservation(credential, mode, destination, phase):
-    saving = _rpc_mod().document_lease_service.begin_save(credential)
+def begin_save_reservation(credential, mode, destination, phase, collaborators):
+    saving = collaborators.document_lease_service.begin_save(credential)
     phase.update(
         saving_state_revision=saving.state_revision,
         saving_mutation_revision=saving.last_mutation_revision,
@@ -71,7 +71,7 @@ def begin_save_reservation(credential, mode, destination, phase):
     if mode == "save_as":
         if not destination:
             raise ValueError("Save As requires a destination")
-        _rpc_mod().document_lease_service.reserve_save_as(credential, destination)
+        collaborators.document_lease_service.reserve_save_as(credential, destination)
         phase["reserved"] = True
     elif mode != "save":
         raise ValueError(f"Unsupported save mode: {mode}")
@@ -86,13 +86,14 @@ def populate_prepare_phase(
     document,
     destination,
     validation_profile,
+    collaborators,
 ):
     phase.update(
         credential=credential,
         document_session_uuid=document_identity.session_uuid,
         document_name=document_identity.name,
         original_identity=document_identity,
-        validation_expectations=_rpc_mod()._saved_document_expectations(document),
+        validation_expectations=collaborators.saved_document_expectations(document),
         source_path=(str(getattr(document, "FileName", "") or "") or None),
         health_before=capture_document_health(
             document,

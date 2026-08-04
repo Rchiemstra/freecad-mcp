@@ -3,15 +3,31 @@
 import hmac
 
 from ...save_service import DomainValidationError, SaveServiceError
-from ._common import _rpc_mod, document_modified_or_dirty
+
+try:
+    from document_state import document_modified_or_dirty
+except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.document_state import document_modified_or_dirty
 
 
 def legacy_save_failure_response(
-    self, exc, *, phase, dl, token, request_id, captured_identity, inflight, dirty=None
+    self,
+    exc,
+    *,
+    phase,
+    dl,
+    token,
+    request_id,
+    captured_identity,
+    inflight,
+    collaborators,
+    dirty=None,
 ):
     if phase.get("doc_key") and phase.get("save_state_entered"):
         try:
-            document = _rpc_mod().FreeCAD.getDocument(phase.get("document_name", ""))
+            document = collaborators.freecad.getDocument(
+                phase.get("document_name", "")
+            )
             observed_dirty = (
                 document_modified_or_dirty(document)
                 if document is not None
@@ -26,7 +42,7 @@ def legacy_save_failure_response(
                 request_id=request_id or None,
                 error={
                     "code": str(getattr(exc, "code", type(exc).__name__.upper())),
-                    "message": _rpc_mod()._redact_rpc_diagnostic(
+                    "message": collaborators.redact_rpc_diagnostic(
                         exc,
                         identity=captured_identity,
                         inflight=inflight,
@@ -45,7 +61,7 @@ def legacy_save_failure_response(
     return {
         "success": False,
         "error_code": str(getattr(exc, "code", type(exc).__name__.upper())),
-        "error": _rpc_mod()._redact_rpc_diagnostic(
+        "error": collaborators.redact_rpc_diagnostic(
             exc, identity=captured_identity, inflight=inflight
         ),
     }
@@ -62,8 +78,9 @@ def legacy_prepare_gui(
     validation_profile,
     token,
     inflight,
+    collaborators,
 ):
-    document, document_identity = _rpc_mod()._live_document_from_selector(selector)
+    document, document_identity = collaborators.live_document_from_selector(selector)
     source_path = str(getattr(document, "FileName", "") or "")
     if not source_path:
         raise ValueError("Protocol-v1 compatibility supports same-path save only")
@@ -84,7 +101,7 @@ def legacy_prepare_gui(
     record = dl.get_lease(doc_key)
     if record is None or not record.baseline_hash:
         raise RuntimeError("The compatibility lease has no accepted file baseline")
-    reference_preflight = _rpc_mod().inspect_references_gui(
+    reference_preflight = collaborators.inspect_references_gui(
         document_identity.name,
         only_invalid=True,
         validate=True,
@@ -117,7 +134,7 @@ def legacy_prepare_gui(
         document_name=document_identity.name,
         source_path=source_path,
         expected_sha256=record.baseline_hash,
-        validation_expectations=_rpc_mod()._saved_document_expectations(document),
+        validation_expectations=collaborators.saved_document_expectations(document),
     )
     transitioned = dl.transition_lease(
         doc_key,
@@ -141,6 +158,7 @@ def legacy_invoke_gui(
     request_id,
     preflight,
     inflight,
+    collaborators,
 ):
     marker_keys = [
         phase["doc_key"],
@@ -149,7 +167,7 @@ def legacy_invoke_gui(
     ]
     attribution_started = False
     try:
-        document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
+        document = collaborators.freecad.getDocument(phase["document_name"])
         if document is None:
             raise RuntimeError("document closed before save invocation")
         authorized = dl.check_persisted_mutation_allowed(
@@ -163,18 +181,20 @@ def legacy_invoke_gui(
             )
         dl.begin_agent_mutation_scope(request_id, marker_keys)
         attribution_started = True
-        phase["invocation"] = _rpc_mod().save_service.invoke_save_gui(document, preflight)
+        phase["invocation"] = collaborators.save_service.invoke_save_gui(
+            document, preflight
+        )
         return {"success": True}
     finally:
         if attribution_started:
             dl.end_agent_mutation_scope(request_id, marker_keys)
 
 
-def legacy_promote_gui(self, *, phase, dl, token, result):
-    document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
+def legacy_promote_gui(self, *, phase, dl, token, result, collaborators):
+    document = collaborators.freecad.getDocument(phase["document_name"])
     if document is None:
         raise RuntimeError("saved document closed before lease promotion")
-    _rpc_mod().save_service.revalidate_saved_document_gui(document, result)
+    collaborators.save_service.revalidate_saved_document_gui(document, result)
     promoted = dl.mark_save_verified(
         phase["doc_key"],
         token,
@@ -198,13 +218,13 @@ def legacy_promote_gui(self, *, phase, dl, token, result):
     }
 
 
-def hash_legacy_baseline(self, phase, validation_profile):
-    lease = _rpc_mod()._import_document_lease()
+def hash_legacy_baseline(self, phase, validation_profile, collaborators):
+    lease = collaborators.import_document_lease()
     baseline = lease.capture_file_baseline(
         phase["source_path"],
         platform=(
-            _rpc_mod().document_identity_service.platform
-            if _rpc_mod().document_identity_service is not None
+            collaborators.document_identity_service.platform
+            if collaborators.document_identity_service is not None
             else None
         ),
     )
@@ -212,7 +232,7 @@ def hash_legacy_baseline(self, phase, validation_profile):
         raise RuntimeError(
             "The saved file changed after the compatibility lease was acquired"
         )
-    return _rpc_mod().save_service.prepare_save(
+    return collaborators.save_service.prepare_save(
         phase["source_path"],
         expected_baseline=baseline,
         expected_path=phase["source_path"],

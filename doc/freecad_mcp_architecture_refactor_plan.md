@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 4 in progress; Phase 12 complete |
-| Next phase | 13 — `refactor(mcp): inject lifecycle collaborators` |
+| Current stage / phase | Stage 4 in progress; Phase 13 complete |
+| Next phase | 14 — `refactor(mcp): inject execution collaborators` |
 | In-flight ownership | None |
-| Last review | Phase 12 client, add-on bridge, lease-injection, native-binding, integrated, and final-delta reviews clear on 2026-08-04 |
+| Last review | Phase 13 save, release/query, and final integrated reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 12 passed its cross-repository integration gate; begin Phase 13 by freezing lifecycle collaborator interfaces and exclusive ownership |
+| Resume hint | Phase 13 passed its phase and branch cross-track gates; begin Phase 14 by freezing execution collaborator interfaces and exclusive ownership |
 
 ### 11.2 Stage status
 
@@ -809,7 +809,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
-| 4 | 12–17 | phase 12 | in progress (Phase 12 complete) |
+| 4 | 12–17 | phase 12 | in progress (Phase 13 complete) |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
@@ -818,6 +818,44 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 13 complete: lifecycle collaborators injected
+
+- **Phase delivery:** frozen `LifecycleCollaborators` are composed eagerly at the
+  live `FreeCADRPC` construction point and passed through every save, Save As,
+  finalize, release, query, heartbeat/update, and deprecation adapter. The graph
+  captures the exact FreeCAD object, lease/identity/save services, validation and
+  reference inspectors, native-compatibility authority loader, diagnostic/error
+  mappers, indicator refresh, and force-release tombstone result before any GUI
+  closure can run. It owns no dirty, persistence, recovery, credential, sidecar, or
+  lifecycle policy.
+- **Behavior and compatibility:** public signatures and result envelopes, protocol-v1
+  fallbacks, protocol-v2 authorization, cancellation checkpoints, caller-versus-GUI
+  save phases, post-save reopen validation, release irreversibility, and the
+  `LOCAL_RECOVERY_REQUIRED` compatibility tombstone are unchanged. The existing
+  `SaveService` still invokes native `Document.save()`/`saveAs()`; no separate
+  structured native release/query binding exists to invent in this phase. Remaining
+  named MCP save/recovery and sidecar authority stays frozen as Phase 18 debt.
+- **Contracts and inventory:** new composition and exact-identity contracts cover
+  both lifecycle workstreams, including Save As filesystem-preflight failure and
+  injected deprecation identity. The locator census falls from 351 to 221 nodes,
+  references from 341 to 211, and runtime calls from 293 to 181. Exactly 130 Phase 13
+  ARCH103 allowances were removed with no additions or unrelated metadata changes;
+  dynamic/local-import counts remain 37/22 and the frozen authority vector remains
+  115/15/30/167/861/251.
+- **Agents and reviews:** disjoint save and release/query workers implemented and
+  tested their owned paths. Independent workstream reviews and a final integrated
+  review found and closed eager-fixture ordering, authority-census naming,
+  uninjected deprecation routing, a missing filesystem-preflight collaborator,
+  the completed Phase 12 transition assertion, and over-broad generated-manifest
+  rewrites. Every final review is clear with no remaining finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded in
+  §11.4. Production lint checked 980 files; the final baked affected/contract
+  selection passed 209/209; Compose `unit` passed; and branch-built preflight,
+  strict core, and strict e2e passed with both collaboration verdicts zero.
+- **Stage result and next:** Stage 4 is in progress with Phase 13 complete. Phase 13
+  is not an integration gate, so the canonical parent gitlink remains at Phase 12.
+  Resume with Phase 14 only to inject execution collaborators.
 
 #### 2026-08-04 — Phase 12 complete: collaboration collaborators injected
 
@@ -1492,6 +1530,39 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 13 — `refactor(mcp): inject lifecycle collaborators`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:8152b482f928ae97942c35bd4e39ea401ae98153dfee398305381c0c81f3382a`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 980 production files and passed architecture policy and
+  full Ruff. The final Phase 12-transition, Phase 13 injection, architecture
+  baseline, save/release/query, restart/reconcile, cancellation, gateway-composition,
+  semantic RPC, registry, legacy-compatibility, and public-surface selection passed
+  209/209 on the baked image. Exact touched-test Ruff and `git diff --check` passed.
+- **Compose phase gate:** after `docker compose build unit`, `docker compose run
+  --rm unit` selected 2,245: 2,241 passed, the three Windows-DACL tests skipped,
+  the existing screenshot test xfailed, and 129 non-unit tests were deselected.
+  The final container exited zero. Phase 13 is not an integration gate, so §5.7
+  requires this unit service rather than all four Compose services.
+- **Branch-built cross-track:** the preserved Phase 12 native workspace was reused
+  because no native source changed, while the exact current nested worktree was
+  mounted into the cross-track image. The unmodified preflight wrapper emitted
+  `PREFLIGHT_OK` with pytest 9.1.1 and FreeCAD 26.3.0 revision 48070. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, core selected 12: seven passed and
+  five documented xfailed; e2e passed 117/117. Both strict verdict files contained
+  zero and their generated XML/verdict artifacts were removed after recording.
+- **Review and inventory result:** save, release/query, and integrated reviews are
+  clear. The exact locator census is 221 nodes, 211 references, and 181 runtime
+  calls after a 130-node Phase 13 reduction; dynamic/local-import counts remain
+  37/22. Frozen authority totals remain 115, 15, 30, 167, 861, and 251; 130 exact
+  ARCH103 allowances were removed and none added.
 
 #### Phase 12 — `refactor(mcp): inject collaboration collaborators`
 

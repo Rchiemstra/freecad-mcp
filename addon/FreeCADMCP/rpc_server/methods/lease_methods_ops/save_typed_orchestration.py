@@ -1,7 +1,6 @@
 """Typed save orchestration helpers."""
 try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
-from ._common import _rpc_mod
 from .save_typed_errors import (
     record_preflight_save_error,
     record_validation_save_error,
@@ -19,18 +18,19 @@ def run_save_preflight(
     expected_destination_sha256,
     validation_profile,
     inflight,
+    collaborators,
 ):
     try:
         self._request_checkpoint("save_filesystem_preflight")
         if mode == "save":
-            preflight = _rpc_mod().save_service.prepare_save(
+            preflight = collaborators.save_service.prepare_save(
                 phase["source_path"],
                 expected_baseline=phase["lease_baseline"],
                 expected_path=phase["original_identity"].canonical_path,
                 validation_profile=validation_profile,
             )
         else:
-            preflight = _rpc_mod().save_service.prepare_save_as(
+            preflight = collaborators.save_service.prepare_save_as(
                 phase["source_path"],
                 destination,
                 source_baseline=phase["lease_baseline"],
@@ -55,10 +55,11 @@ def run_save_verification(
     phase,
     inflight,
     validate_in_worker,
+    collaborators,
 ):
     try:
         self._request_checkpoint("save_reopen_verification")
-        result = _rpc_mod().save_service.verify_saved_file(
+        result = collaborators.save_service.verify_saved_file(
             invocation, domain_validator=validate_in_worker
         )
         self._request_checkpoint("save_reopen_verification_complete")
@@ -79,6 +80,7 @@ def handle_preflight_failure(
     request_id,
     inflight,
     mode,
+    collaborators,
 ):
     def preflight_error_gui():
         record_preflight_save_error(
@@ -87,12 +89,18 @@ def handle_preflight_failure(
             captured_identity=captured_identity,
             request_id=request_id,
             inflight=inflight,
+            collaborators=collaborators,
         )
         return True
 
     self._dispatch_gui(preflight_error_gui, timeout=self.EXECUTE_TIMEOUT)
     return make_error_response(
-        self, failure, mode=mode, request_id=request_id, phase=phase
+        self,
+        failure,
+        mode=mode,
+        request_id=request_id,
+        phase=phase,
+        collaborators=collaborators,
     )
 
 
@@ -106,6 +114,7 @@ def run_save_invocation(
     mode,
     destination,
     invoke_save_gui_phase_impl,
+    collaborators,
 ):
     def invoke_save_gui_phase():
         return invoke_save_gui_phase_impl(
@@ -116,6 +125,7 @@ def run_save_invocation(
             request_id=request_id,
             mode=mode,
             destination=destination,
+            collaborators=collaborators,
         )
 
     self._request_checkpoint("save_invocation_queue")
@@ -141,6 +151,7 @@ def handle_validation_failure(
     request_id,
     inflight,
     mode,
+    collaborators,
 ):
     def validation_error_gui():
         record_validation_save_error(
@@ -149,10 +160,16 @@ def handle_validation_failure(
             captured_identity=captured_identity,
             request_id=request_id,
             inflight=inflight,
+            collaborators=collaborators,
         )
         return True
 
     self._dispatch_gui(validation_error_gui, timeout=self.EXECUTE_TIMEOUT)
     return make_error_response(
-        self, failure, mode=mode, request_id=request_id, phase=phase
+        self,
+        failure,
+        mode=mode,
+        request_id=request_id,
+        phase=phase,
+        collaborators=collaborators,
     )

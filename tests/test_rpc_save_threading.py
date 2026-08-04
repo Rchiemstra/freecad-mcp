@@ -335,7 +335,6 @@ def _configure_rpc_test(monkeypatch, tmp_path):
 
 @pytest.mark.unit
 def test_post_save_validation_runs_on_rpc_caller_not_gui_thread(tmp_path, monkeypatch):
-    context = _configure_rpc_test(monkeypatch, tmp_path)
     caller_thread = threading.get_ident()
     worker_threads = []
 
@@ -344,6 +343,7 @@ def test_post_save_validation_runs_on_rpc_caller_not_gui_thread(tmp_path, monkey
         return {"ok": True, "worker_reopened": True}
 
     monkeypatch.setattr(rpc_server, "_validate_saved_document_worker", worker_validator)
+    context = _configure_rpc_test(monkeypatch, tmp_path)
 
     result = context.rpc.save_document({"document_session_uuid": "document-session"})
 
@@ -367,12 +367,12 @@ def test_post_save_validation_runs_on_rpc_caller_not_gui_thread(tmp_path, monkey
 
 @pytest.mark.unit
 def test_finalize_release_clears_core_mutation_owner(tmp_path, monkeypatch):
-    context = _configure_rpc_test(monkeypatch, tmp_path)
     monkeypatch.setattr(
         rpc_server,
         "_validate_saved_document_worker",
         lambda *_args: {"ok": True, "worker_reopened": True},
     )
+    context = _configure_rpc_test(monkeypatch, tmp_path)
 
     result = context.rpc.finalize_document_edit(
         {"document_session_uuid": "document-session"}
@@ -385,7 +385,6 @@ def test_finalize_release_clears_core_mutation_owner(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_invalid_live_references_block_typed_save_before_write(tmp_path, monkeypatch):
-    context = _configure_rpc_test(monkeypatch, tmp_path)
     invalid = {
         "object": "Joint",
         "property": "Reference2",
@@ -406,6 +405,7 @@ def test_invalid_live_references_block_typed_save_before_write(tmp_path, monkeyp
             "recomputed": False,
         },
     )
+    context = _configure_rpc_test(monkeypatch, tmp_path)
 
     result = context.rpc.save_document({"document_session_uuid": "document-session"})
 
@@ -421,10 +421,30 @@ def test_invalid_live_references_block_typed_save_before_write(tmp_path, monkeyp
 
 
 @pytest.mark.unit
+def test_save_as_filesystem_preflight_returns_structured_error(tmp_path, monkeypatch):
+    context = _configure_rpc_test(monkeypatch, tmp_path)
+    destination = tmp_path / "existing.FCStd"
+    _write_fcstd(destination, "existing")
+
+    result = context.rpc.save_document_as(
+        {"document_session_uuid": "document-session"},
+        str(destination),
+        overwrite=False,
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "SAVE_AS_DESTINATION_CONFLICT"
+    assert result["save_error"]["stage"] == "destination_preflight"
+    assert context.lease_service.destination_reserved is True
+    assert context.lease_service.save_cancelled is True
+    assert context.document.save_as_thread is None
+    assert "invoke-save-as" not in dict(context.events)
+
+
+@pytest.mark.unit
 def test_failed_save_as_validation_keeps_reservation_and_records_gui_error(
     tmp_path, monkeypatch
 ):
-    context = _configure_rpc_test(monkeypatch, tmp_path)
     destination = tmp_path / "destination.FCStd"
 
     monkeypatch.setattr(
@@ -432,6 +452,7 @@ def test_failed_save_as_validation_keeps_reservation_and_records_gui_error(
         "_validate_saved_document_worker",
         lambda *_args: {"ok": False, "reason": "Body.Tip mismatch"},
     )
+    context = _configure_rpc_test(monkeypatch, tmp_path)
 
     result = context.rpc.save_document_as(
         {"document_session_uuid": "document-session"}, str(destination)

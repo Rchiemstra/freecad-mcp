@@ -439,11 +439,15 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         has_unresolved_owner=lambda _owner: False,
     )
     identity_service = object()
+    save_service = object()
     dispatcher = _LiveDispatcher(timeline, parent)
     worker_manager = _LiveWorkerManager(timeline)
     listener = _LiveListener(timeline)
     listener.server_address = listener_address
-    bridge = SimpleNamespace(_collaboration_collaborators=None)
+    bridge = SimpleNamespace(
+        _collaboration_collaborators=None,
+        _lifecycle_collaborators=None,
+    )
 
     def bind_collaboration_runtime_manifest(manifest):
         bridge._collaboration_collaborators = (
@@ -487,6 +491,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         if bridge_failure is not None:
             raise bridge_failure
         collaborators = kwargs["collaboration_collaborators"]
+        lifecycle = kwargs["lifecycle_collaborators"]
         assert _args == ()
         assert kwargs["allow_execute_code"] is True
         assert collaborators.document_lease_service is lease_service
@@ -500,7 +505,12 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
             collaborators.compatibility_api._document_lookup
             is rpc_server.FreeCAD.getDocument
         )
+        assert lifecycle.freecad is rpc_server.FreeCAD
+        assert lifecycle.document_lease_service is lease_service
+        assert lifecycle.document_identity_service is identity_service
+        assert lifecycle.save_service is save_service
         bridge._collaboration_collaborators = collaborators
+        bridge._lifecycle_collaborators = lifecycle
         return bridge
 
     class _Thread:
@@ -542,6 +552,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
     monkeypatch.setattr(rpc_server, "rpc_acquisition_claim_store", claims)
     monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
     monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
+    monkeypatch.setattr(rpc_server, "save_service", save_service)
     monkeypatch.setattr(
         rpc_server,
         "QtWidgets",

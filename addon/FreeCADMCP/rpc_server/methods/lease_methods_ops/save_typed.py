@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from ._common import _rpc_mod
 from .save_typed_invoke import invoke_save_gui_phase as invoke_save_gui_phase_impl
 from .save_typed_orchestration import (
     handle_preflight_failure,
@@ -26,13 +25,19 @@ def run_typed_save(
     validation_profile="default",
     release=False,
 ):
-    if _rpc_mod().document_lease_service is None or _rpc_mod().save_service is None:
+    collaborators = self._lifecycle_collaborators
+    if (
+        collaborators.document_lease_service is None
+        or collaborators.save_service is None
+    ):
         return {
             "success": False,
             "error_code": "LEASE_PROTOCOL_UNAVAILABLE",
             "error": "Typed save requires document lease v2",
         }
-    captured_identity = dict(_rpc_mod()._import_document_lock().get_request_identity())
+    captured_identity = dict(
+        collaborators.import_document_lock().get_request_identity()
+    )
     request_id = captured_identity.get("request_id")
     phase: dict[str, Any] = {}
     inflight = self._current_inflight()
@@ -49,6 +54,7 @@ def run_typed_save(
             mode=mode,
             destination=destination,
             validation_profile=validation_profile,
+            collaborators=collaborators,
         )
 
     self._request_checkpoint("save_prepare_queue")
@@ -65,6 +71,7 @@ def run_typed_save(
         expected_destination_sha256=expected_destination_sha256,
         validation_profile=validation_profile,
         inflight=inflight,
+        collaborators=collaborators,
     )
     if preflight_failure is not None:
         return handle_preflight_failure(
@@ -75,6 +82,7 @@ def run_typed_save(
             request_id=request_id,
             inflight=inflight,
             mode=mode,
+            collaborators=collaborators,
         )
 
     invocation_result = run_save_invocation(
@@ -86,13 +94,14 @@ def run_typed_save(
         mode=mode,
         destination=destination,
         invoke_save_gui_phase_impl=invoke_save_gui_phase_impl,
+        collaborators=collaborators,
     )
     if isinstance(invocation_result, dict):
         return invocation_result
     invocation = invocation_result
 
     def validate_in_worker(saved_path, profile):
-        return _rpc_mod()._validate_saved_document_worker(
+        return collaborators.validate_saved_document_worker(
             saved_path,
             phase["document_name"],
             profile,
@@ -105,6 +114,7 @@ def run_typed_save(
         phase=phase,
         inflight=inflight,
         validate_in_worker=validate_in_worker,
+        collaborators=collaborators,
     )
     if isinstance(verification_failure, Exception):
         return handle_validation_failure(
@@ -115,6 +125,7 @@ def run_typed_save(
             request_id=request_id,
             inflight=inflight,
             mode=mode,
+            collaborators=collaborators,
         )
     result = verification_failure
 
@@ -130,6 +141,7 @@ def run_typed_save(
             validation_profile=validation_profile,
             release=release,
             result=result,
+            collaborators=collaborators,
         )
 
     self._request_checkpoint("save_promotion_queue")

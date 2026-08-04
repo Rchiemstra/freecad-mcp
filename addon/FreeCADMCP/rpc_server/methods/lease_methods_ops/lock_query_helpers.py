@@ -3,7 +3,7 @@
 import os
 from typing import Any
 
-from ._common import _rpc_mod
+from .lifecycle_dependencies import LifecycleCollaborators
 
 
 def lease_service_get_lock(
@@ -13,6 +13,7 @@ def lease_service_get_lock(
     session_id,
     selector,
     dl,
+    collaborators: LifecycleCollaborators,
 ) -> dict[str, Any]:
     requested_selector = dict(selector or {})
     if doc_name:
@@ -21,10 +22,10 @@ def lease_service_get_lock(
         requested_selector.setdefault("canonical_path", file_path)
     if session_id:
         requested_selector.setdefault("document_session_uuid", session_id)
-    _document, document_identity = _rpc_mod()._live_document_from_selector(
+    _document, document_identity = collaborators.live_document_from_selector(
         requested_selector
     )
-    record = _rpc_mod().document_lease_service.get_effective(
+    record = collaborators.document_lease_service.get_effective(
         {"document_session_uuid": document_identity.session_uuid}
     )
     if record is not None:
@@ -51,7 +52,7 @@ def lease_service_get_lock(
             "source": "local_compatibility_v1",
             "lease": compatibility,
         }
-    lease = _rpc_mod()._import_document_lease()
+    lease = collaborators.import_document_lease()
     sidecar = lease.sidecar_path_for(document_identity.canonical_path)
     if not os.path.lexists(sidecar):
         return {
@@ -61,7 +62,7 @@ def lease_service_get_lock(
             "lease": None,
         }
     try:
-        shadow = _rpc_mod().document_lease_service.sidecar_store.read(sidecar)
+        shadow = collaborators.document_lease_service.sidecar_store.read(sidecar)
         return {
             "success": True,
             "locked": True,
@@ -78,14 +79,14 @@ def lease_service_get_lock(
         }
 
 
-def list_v2_locks(dl):
-    lease = _rpc_mod()._import_document_lease()
-    local = _rpc_mod().document_lease_service.list_effective_records()
+def list_v2_locks(dl, *, collaborators: LifecycleCollaborators):
+    lease = collaborators.import_document_lease()
+    local = collaborators.document_lease_service.list_effective_records()
     local_ids = {item.get("document", {}).get("session_uuid") for item in local}
     shadows = []
-    for document in _rpc_mod().FreeCAD.listDocuments().values():
+    for document in collaborators.freecad.listDocuments().values():
         try:
-            document_identity = _rpc_mod()._ensure_v2_document(document)
+            document_identity = collaborators.ensure_v2_document(document)
             if (
                 document_identity.session_uuid in local_ids
                 or not document_identity.canonical_path
@@ -103,7 +104,7 @@ def list_v2_locks(dl):
             if not os.path.lexists(sidecar):
                 continue
             try:
-                record = _rpc_mod().document_lease_service.sidecar_store.read(sidecar)
+                record = collaborators.document_lease_service.sidecar_store.read(sidecar)
                 shadows.append(
                     {
                         "source": "foreign_sidecar",
@@ -134,10 +135,10 @@ def list_v2_locks(dl):
     }
 
 
-def list_v1_locks(dl):
+def list_v1_locks(dl, *, collaborators: LifecycleCollaborators):
     registry = [r.to_dict() for r in dl.list_leases()]
     paths = []
-    for doc in _rpc_mod().FreeCAD.listDocuments().values():
+    for doc in collaborators.freecad.listDocuments().values():
         fname = getattr(doc, "FileName", None) or ""
         if fname:
             paths.append(fname)
