@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 3 in progress; Phase 10 complete |
-| Next phase | 11 — `refactor(mcp): add the composition root` |
+| Current stage / phase | Stage 3 complete; Phase 11 complete |
+| Next phase | 12 — `refactor(mcp): inject collaboration collaborators` |
 | In-flight ownership | None |
-| Last review | Phase 10 GUI, registry, boundary, integrated, and post-gate delta reviews clear on 2026-08-04 |
+| Last review | Phase 11 contract, startup, integrated, and final delta reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 10 is committed and gated; continue Stage 3 with Phase 11 only, constructing the runtime through the transitional startup hook without removing locators early |
+| Resume hint | Stage 3 is committed and gated through Phase 11; begin Stage 4 with Phase 12 only and follow its two-object cross-repository delivery protocol |
 
 ### 11.2 Stage status
 
@@ -808,7 +808,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 0 | 1–3 | phases 1 and 3 | complete |
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
-| 3 | 8–11 | none | in progress |
+| 3 | 8–11 | none | complete |
 | 4 | 12–17 | phase 12 | pending |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
@@ -818,6 +818,59 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 11 complete: composition root added
+
+- **Phase delivery:** private `_build_addon_runtime()` now constructs the restart-scoped
+  gateway graph in dependency order and returns the existing inert `AddonRuntime`.
+  Dispatcher, deferred-start worker manager, collaboration bridge, sole listener,
+  authentication/session manager, replay cache, in-flight registry, handoff
+  continuations, and acquisition claims retain exact injected identities. The
+  public runtime export remains only `AddonRuntime`; construction starts no worker
+  or listener and adds no document or lifecycle authority.
+- **Transitional live startup:** the frozen `start_rpc_server()` locator calls the
+  factory through one transitional hook. Authentication writes into an unpublished
+  façade until the complete graph exists; only then are all legacy aliases,
+  manifest, endpoint, and replay predicate published. The real worker is constructed
+  with `autostart=False`, starts after publication, and precedes the listener thread.
+  The builder registers the exact bridge once, while the serving closure captures
+  the runtime listener rather than a mutable module global.
+- **Rollback and shutdown:** every construction failure, malformed endpoint, replay
+  publication failure, worker-start failure, and ordinary or fatal listener-thread
+  failure disposes the partial graph in reverse order and unpublishes aliases.
+  Dispatcher cleanup attempts both operations, worker timeout is a failure, and
+  multiple cleanup failures remain grouped. Abort and shutdown clear the runtime
+  alias while preserving the process-lifetime native/legacy lease services required
+  before Phase 18.
+- **Contracts and frozen inventories:** new behavior and AST contracts cover exact
+  construction order and identity, optional/required authentication, all factory
+  failures, cleanup grouping, live publication/start order, exact listener identity,
+  staged replay, malformed endpoints, fatal-control exceptions, forbidden authority
+  dependencies, and package/flat import boundaries. The exact six authority totals
+  remain 115, 15, 30, 167, 861, and 251; the frozen lifecycle and shutdown locators
+  remain at lines 108 and 70, and semantic RPC and tool-registry snapshots are
+  unchanged.
+- **Test and runner isolation:** WorkerManager retains default autostart compatibility
+  while its private idempotent `_start()` supports composition. Startup tests now
+  restore every published runtime alias and isolate the process-lifetime document-lock
+  mode. Docker invokes pytest through a fail-closed Python entrypoint so successful
+  FreeCAD/PySide extension teardown cannot turn pytest's zero result into a false
+  container failure; non-zero pytest outcomes still exit non-zero.
+- **Agents and reviews:** independent contract and startup workstreams cross-reviewed
+  their findings, followed by integrated and post-gate delta reviews. Findings about
+  launch double-disposal, early authentication publication, worker-stop failure,
+  `BaseException` rollback, endpoint extraction, early real-worker start, duplicate
+  listener registration, mutable listener lookup, test isolation, and the idempotent
+  start oracle were fixed and re-reviewed. No blocking, important, or non-blocking
+  finding remains.
+- **Docker validation:** exact images, commands, counts, and results are recorded in
+  §11.4. The baked affected selection passed 190/190, production lint checked 976
+  files, Compose `unit` passed, and branch-built preflight/core/e2e passed with both
+  strict collaboration verdicts zero.
+- **Stage result and next:** Stage 3 is complete through Phase 11. The next work is
+  Stage 4 Phase 12 only, using the mandatory nested-MCP plus canonical-parent
+  cross-repository delivery. Phase 11 is not an integration gate, so the parent
+  gitlink remains at the Phase 5 integration revision.
 
 #### 2026-08-04 — Phase 10 complete: dispatch layer established
 
@@ -1391,6 +1444,42 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 11 — `refactor(mcp): add the composition root`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:4192081cfe96042bbddb9375be654751a4cfbe5643be7bb2210cc9a89d677a37`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 976 production files and passed architecture policy and
+  Ruff. The final runtime/composition/boundary, worker, settings, authenticated
+  lifecycle, auth, semantic RPC, tool-registry, and architecture-baseline selection
+  passed 190/190; its focused composition/runtime/worker subset passed 95/95.
+  Exact touched-file Ruff and `git diff --check` also passed.
+- **Compose phase gate:** after `docker compose build unit`, retained
+  `docker compose run unit` selected 2,195: 2,191 passed, the three Windows-DACL
+  tests skipped, and the existing screenshot test xfailed; 129 non-unit tests were
+  deselected. The final container exited zero. The Python pytest entrypoint returns
+  normally only for pytest zero and raises every non-zero status; a deliberate
+  no-tests probe remained non-zero. Phase 11 is not an integration gate, so §5.7
+  requires this unit service rather than all four Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` volume and
+  branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no native
+  source changed. The unmodified preflight wrapper emitted `PREFLIGHT_OK` for
+  FreeCAD 26.3.0 revision 48071. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the unmodified e2e wrapper
+  passed 117/117. Both strict verdict files contained zero and were removed with
+  their generated XML reports after recording.
+- **Review and inventory result:** contract, startup, integrated, and final
+  post-gate delta reviews are clear with no blocking, important, or non-blocking
+  finding. The exact six authority counts remain 115, 15, 30, 167, 861, and 251;
+  frozen lifecycle/shutdown line locators, semantic snapshots, and registry inputs
+  are unchanged, and no architecture allowance was added or refreshed.
 
 #### Phase 10 — `refactor(mcp): establish the dispatch layer`
 

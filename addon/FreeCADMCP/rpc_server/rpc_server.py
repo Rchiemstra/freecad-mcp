@@ -122,6 +122,7 @@ rpc_server_thread = None
 rpc_server_instance = None
 gui_dispatcher = None
 worker_manager = None
+_addon_runtime = None
 snapshot_coordinator = threading.Lock()
 
 shutdown_requested = threading.Event()

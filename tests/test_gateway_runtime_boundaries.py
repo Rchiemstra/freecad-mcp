@@ -347,7 +347,9 @@ def _import_time_calls(tree: ast.Module) -> list[ast.Call]:
     return _import_time_state(tree).calls
 
 
-def _trusted_import_time_bindings(tree: ast.Module) -> frozenset[str]:
+def _trusted_import_time_bindings(  # noqa: C901 - intentionally complete AST oracle
+    tree: ast.Module,
+) -> frozenset[str]:
     expected = {"dataclass": "_dataclass", "field": "_field"}
     bindings: dict[str, list[tuple[str, str]]] = {}
 
@@ -515,17 +517,56 @@ def test_gateway_runtime_module_body_is_inert_and_has_no_global_state() -> None:
     assert import_time_state.mutable_values == []
 
 
-def test_no_addon_module_imports_gateway_runtime_before_phase11() -> None:
-    importers = []
+def test_only_server_lifecycle_imports_private_gateway_runtime_builder() -> None:
+    importers: list[tuple[str, ast.AST]] = []
     for path in sorted(ADDON_ROOT.rglob("*.py")):
         if path == RUNTIME_PATH:
             continue
         findings = _imports_gateway_runtime(_parse(path))
         importers.extend(
-            (path.relative_to(ROOT).as_posix(), node.lineno) for node in findings
+            (path.relative_to(ROOT).as_posix(), node) for node in findings
         )
 
-    assert importers == []
+    expected_path = "addon/FreeCADMCP/rpc_server/server_lifecycle.py"
+    assert importers
+    assert {path for path, _node in importers} == {expected_path}
+
+    lifecycle_tree = _parse(ROOT / expected_path)
+    parents = {
+        child: parent
+        for parent in ast.walk(lifecycle_tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+    locator = [
+        node
+        for node in ast.walk(lifecycle_tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.lineno == 108
+        and node.level == 1
+        and node.module is None
+        and [(alias.name, alias.asname) for alias in node.names]
+        == [("rpc_server", "rpc_mod")]
+    ]
+    assert len(locator) == 1, "the frozen startup locator must remain at line 108"
+
+    def enclosing_function(node: ast.AST) -> str | None:
+        current = parents.get(node)
+        while current is not None:
+            if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                return current.name
+            current = parents.get(current)
+        return None
+
+    lifecycle_importers = _imports_gateway_runtime(lifecycle_tree)
+    assert lifecycle_importers
+    for node in lifecycle_importers:
+        assert isinstance(node, ast.ImportFrom)
+        assert node.module == "runtime"
+        assert [(alias.name, alias.asname) for alias in node.names] == [
+            ("_build_addon_runtime", None)
+        ]
+        assert node.lineno > locator[0].lineno
+        assert enclosing_function(node) == "start_rpc_server"
 
 
 def test_gateway_runtime_has_no_raw_architecture_findings() -> None:

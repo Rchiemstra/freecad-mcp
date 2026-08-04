@@ -57,5 +57,5 @@ RUN python -c "import FreeCAD, Part, Sketcher; print('FreeCAD', FreeCAD.Version(
 
 # Default: run the full suite. Override with `pytest -m unit` for the fast
 # mock-based layer that does not need FreeCAD.
-ENTRYPOINT ["pytest"]
+ENTRYPOINT ["python", "ci/pytest_entrypoint.py"]
 CMD ["-m", "e2e", "-ra", "--tb=short"]

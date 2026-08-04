@@ -57,6 +57,7 @@ class WorkerManager:
         temp_root: str | Path | None = None,
         temp_root_limit_bytes: int = MAX_TEMP_ROOT_BYTES,
         monitor_interval_seconds: float = 0.1,
+        autostart: bool = True,
     ):
         self.runtime = runtime
         self.module_dir = Path(module_dir)
@@ -77,6 +78,8 @@ class WorkerManager:
         self._invocations: dict[str, _WorkerInvocation] = {}
         self._work_queue: queue.Queue[_WorkerInvocation] = queue.Queue()
         self._admission = threading.BoundedSemaphore(4)
+        self._start_lock = threading.Lock()
+        self._worker_started = False
         self._stopping = False
         self._last_error: str | None = None
         self._executable: Path | None = None
@@ -88,7 +91,19 @@ class WorkerManager:
             name="FreeCADMCP-WorkerManager",
             daemon=True,
         )
-        self._worker_thread.start()
+        if autostart:
+            self._start()
+
+    def _start(self) -> None:
+        """Start queue processing once, after all runtime dependencies exist."""
+
+        with self._start_lock:
+            if self._worker_started:
+                return
+            if self._stopping:
+                raise RuntimeError("server_stopping")
+            self._worker_thread.start()
+            self._worker_started = True
 
     def discover_executable(self) -> Path:
         return discover_executable(self)
@@ -253,8 +268,11 @@ class WorkerManager:
         stopped = True if process is None else terminate_process_tree(
             process, grace=min(timeout, 2.0)
         )
-        self._worker_thread.join(timeout=max(0.1, timeout))
-        thread_stopped = not self._worker_thread.is_alive()
+        with self._start_lock:
+            worker_started = self._worker_started
+        if worker_started:
+            self._worker_thread.join(timeout=max(0.1, timeout))
+        thread_stopped = not worker_started or not self._worker_thread.is_alive()
         if thread_stopped:
             shutil.rmtree(self.artifact_root, ignore_errors=True)
         return stopped and thread_stopped

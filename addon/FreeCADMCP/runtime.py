@@ -7,6 +7,7 @@ from collections.abc import Callable as _Callable
 from collections.abc import Iterable as _Iterable
 from dataclasses import dataclass as _dataclass
 from dataclasses import field as _field
+from functools import partial as _partial
 
 __all__ = ["AddonRuntime"]
 
@@ -152,3 +153,167 @@ class AddonRuntime:
             self._dispose_complete.set()
         if failures:
             raise BaseExceptionGroup("AddonRuntime disposal failed", failures)
+
+
+def _dispose_dispatcher(component: object) -> None:
+    failures: list[BaseException] = []
+    for method_name in ("stop_accepting", "deleteLater"):
+        method = getattr(component, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            method()
+        except BaseException as exc:
+            failures.append(exc)
+    if failures:
+        raise BaseExceptionGroup("Dispatcher disposal failed", failures)
+
+
+def _dispose_worker_manager(component: object) -> None:
+    method = getattr(component, "stop", None)
+    if callable(method):
+        stopped = method(timeout=4.0)
+        if stopped is False:
+            raise RuntimeError("worker manager did not stop within the disposal timeout")
+
+
+def _dispose_listener(component: object) -> None:
+    method = getattr(component, "server_close", None)
+    if callable(method):
+        method()
+
+
+def _cleanup_partial_construction(
+    stop_event: object,
+    owned_resources: list[tuple[object, _Callable[[], None]]],
+    primary_failure: BaseException,
+) -> None:
+    failures = [primary_failure]
+    try:
+        stop_event.set()
+    except BaseException as exc:
+        failures.append(exc)
+    for _resource, disposer in reversed(owned_resources):
+        try:
+            disposer()
+        except BaseException as exc:
+            failures.append(exc)
+    if len(failures) == 1:
+        raise primary_failure
+    raise BaseExceptionGroup("Addon runtime construction failed", failures)
+
+
+def _required_component(component: object | None, factory_name: str) -> object:
+    if component is None:
+        raise ValueError(f"{factory_name} returned None")
+    return component
+
+
+def _register_capability_bridge(listener: object, capability_bridge: object) -> None:
+    register_instance = getattr(listener, "register_instance", None)
+    if not callable(register_instance):
+        raise TypeError("listener must provide register_instance()")
+    register_instance(capability_bridge)
+
+
+def _validated_authentication(
+    authentication: object,
+    *,
+    required: bool,
+) -> tuple[object | None, str]:
+    if not isinstance(authentication, tuple) or len(authentication) != 2:
+        raise TypeError("authentication_factory must return a pair")
+    session_manager, warning = authentication
+    if required and session_manager is None:
+        raise RuntimeError("authenticated session is required")
+    return session_manager, str(warning or "")
+
+
+def _build_addon_runtime(
+    *,
+    shutdown_requested: object,
+    dispatcher_factory: _Callable[[], object],
+    worker_manager_factory: _Callable[[object], object | None],
+    listener_factory: _Callable[[object, object], object],
+    authentication_factory: _Callable[[object, object], tuple[object | None, str]],
+    capability_bridge_factory: _Callable[
+        [object, object | None, object, object, object, object], object
+    ],
+    authentication_required: bool,
+    request_replay_cache: object,
+    inflight_requests: object,
+    handoff_continuations: object,
+    acquisition_claims: object,
+) -> tuple[AddonRuntime, str]:
+    """Construct one restart-scoped gateway graph without starting it."""
+
+    factories = (
+        dispatcher_factory,
+        worker_manager_factory,
+        listener_factory,
+        authentication_factory,
+        capability_bridge_factory,
+    )
+    if not all(callable(factory) for factory in factories):
+        raise TypeError("runtime factories must be callable")
+    if not callable(getattr(shutdown_requested, "set", None)):
+        raise TypeError("shutdown_requested must provide set()")
+
+    owned_resources: list[tuple[object, _Callable[[], None]]] = []
+    try:
+        dispatcher = _required_component(dispatcher_factory(), "dispatcher_factory")
+        owned_resources.append(
+            (dispatcher, _partial(_dispose_dispatcher, dispatcher))
+        )
+
+        worker_manager = worker_manager_factory(dispatcher)
+        if worker_manager is not None:
+            owned_resources.append(
+                (
+                    worker_manager,
+                    _partial(_dispose_worker_manager, worker_manager),
+                )
+            )
+
+        capability_bridge = _required_component(
+            capability_bridge_factory(
+                dispatcher,
+                worker_manager,
+                request_replay_cache,
+                inflight_requests,
+                handoff_continuations,
+                acquisition_claims,
+            ),
+            "capability_bridge_factory",
+        )
+
+        listener = _required_component(
+            listener_factory(dispatcher, capability_bridge),
+            "listener_factory",
+        )
+        owned_resources.append((listener, _partial(_dispose_listener, listener)))
+        _register_capability_bridge(listener, capability_bridge)
+
+        session_manager, warning = _validated_authentication(
+            authentication_factory(listener, request_replay_cache),
+            required=authentication_required,
+        )
+
+        return (
+            AddonRuntime(
+                listener=listener,
+                dispatcher=dispatcher,
+                worker_manager=worker_manager,
+                session_manager=session_manager,
+                request_replay_cache=request_replay_cache,
+                inflight_requests=inflight_requests,
+                handoff_continuations=handoff_continuations,
+                acquisition_claims=acquisition_claims,
+                collaboration_bridge=capability_bridge,
+                shutdown_requested=shutdown_requested,
+                owned_resources=owned_resources,
+            ),
+            warning,
+        )
+    except BaseException as exc:
+        _cleanup_partial_construction(shutdown_requested, owned_resources, exc)

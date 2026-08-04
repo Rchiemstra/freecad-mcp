@@ -5,15 +5,14 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
-import sys
-import uuid
 
 import pytest
-
 
 SETTINGS_MODULE = (
     Path(__file__).resolve().parents[1]
@@ -22,6 +21,19 @@ SETTINGS_MODULE = (
     / "rpc_server"
     / "settings.py"
 )
+
+
+@pytest.fixture
+def isolated_document_lock_runtime():
+    """Keep process-lifetime lease mode and registries local to each test."""
+
+    from addon.FreeCADMCP import document_lock
+
+    previous_mode = document_lock.get_runtime_lease_mode()
+    yield
+    document_lock.reset_registry_for_tests()
+    if previous_mode is not None:
+        document_lock.configure_runtime_lease_mode(previous_mode)
 
 
 class _Console:
@@ -342,7 +354,15 @@ def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
     )
 
     monkeypatch.setattr(rpc_server, "rpc_server_instance", None)
+    monkeypatch.setattr(rpc_server, "rpc_server_thread", None)
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", None)
+    monkeypatch.setattr(rpc_server, "worker_manager", None)
     monkeypatch.setattr(rpc_server, "rpc_session_manager", None)
+    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", None)
+    monkeypatch.setattr(rpc_server, "rpc_server_actual_endpoint", None)
+    monkeypatch.setattr(rpc_server, "rpc_server_runtime_id", "")
+    monkeypatch.setattr(rpc_server, "rpc_server_started_at", "")
+    monkeypatch.setattr(rpc_server, "_addon_runtime", None)
     monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
     monkeypatch.setattr(rpc_server, "rpc_request_replay_cache", replay_cache)
     monkeypatch.setattr(
@@ -368,7 +388,9 @@ def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
         rpc_server.FreeCAD, "getHomePath", lambda: "", raising=False
     )
     monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", lambda: {})
-    monkeypatch.setattr(rpc_server, "WorkerManager", lambda *_args: object())
+    monkeypatch.setattr(
+        rpc_server, "WorkerManager", lambda *_args, **_kwargs: object()
+    )
     monkeypatch.setattr(
         rpc_server, "initialize_document_lease_runtime", lambda _settings: lease_service
     )
@@ -470,6 +492,7 @@ def test_rpc_stop_preserves_addon_process_lease_authority(monkeypatch):
 
 def test_document_lease_runtime_outlives_transport_and_upgrades_when_clean(
     monkeypatch,
+    isolated_document_lock_runtime,
 ):
     from addon.FreeCADMCP.rpc_server import rpc_server
 
@@ -520,7 +543,10 @@ def test_document_lease_runtime_outlives_transport_and_upgrades_when_clean(
     assert rpc_server.document_identity_service is identities
 
 
-def test_document_lease_runtime_rejects_live_mode_downgrade(monkeypatch):
+def test_document_lease_runtime_rejects_live_mode_downgrade(
+    monkeypatch,
+    isolated_document_lock_runtime,
+):
     from addon.FreeCADMCP.rpc_server import rpc_server
 
     service = SimpleNamespace(
@@ -545,6 +571,7 @@ def test_document_lease_runtime_rejects_live_mode_downgrade(monkeypatch):
 
 def test_runtime_watchdog_starts_without_rpc_auto_start_and_is_idempotent(
     monkeypatch,
+    isolated_document_lock_runtime,
 ):
     from addon.FreeCADMCP.rpc_server import rpc_server
 
@@ -734,7 +761,9 @@ def test_ntquery_exact_buffer_size(monkeypatch):
     assert sizes == [48]
 
 
-def test_document_lease_runtime_does_not_coerce_task_summary_opt_in():
+def test_document_lease_runtime_does_not_coerce_task_summary_opt_in(
+    isolated_document_lock_runtime,
+):
     from addon.FreeCADMCP.rpc_server import rpc_server
 
     with pytest.raises(

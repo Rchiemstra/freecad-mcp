@@ -61,7 +61,7 @@ def _clear_rpc_runtime_state(rpc_mod: Any, dispatcher: Any) -> None:
     rpc_mod.rpc_server_started_at = ""
     rpc_mod.rpc_server_actual_endpoint = None
     rpc_mod.rpc_session_manager = None
-    rpc_mod.rpc_runtime_manifest = None
+    rpc_mod.rpc_runtime_manifest = None; rpc_mod._addon_runtime = None  # noqa: E702
     if dispatcher is not None:
         dispatcher.deleteLater()
 
