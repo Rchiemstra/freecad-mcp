@@ -6,9 +6,9 @@ from ._support import *
 """Post-mutation health aggregation for execute_mutation_with_health."""
 
 
-def collect_unexpected_documents(all_before, declared_names):
+def collect_unexpected_documents(freecad, all_before, declared_names):
     unexpected_documents = []
-    all_after_documents = tuple(FreeCAD.listDocuments().values())
+    all_after_documents = tuple(freecad.listDocuments().values())
     for document in all_after_documents:
         name = str(getattr(document, "Name", "") or "")
         if name in declared_names:

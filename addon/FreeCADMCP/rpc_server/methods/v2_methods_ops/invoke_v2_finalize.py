@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
-
-logger = logging.getLogger("FreeCADMCP.rpc_server")
 
 
 def finalize_invoke_v2_response(
     *,
-    rpc_mod,
+    collaborators,
     self,
     session,
     envelope,
@@ -24,7 +21,7 @@ def finalize_invoke_v2_response(
     process_pinned: bool = False,
 ) -> dict[str, Any]:
     """Close the cancellation gate before publishing replay state."""
-    terminal_check = rpc_mod.rpc_inflight_request_registry.finish_handler(
+    terminal_check = collaborators.inflight_request_registry.finish_handler(
         session.session_id,
         envelope.request_id,
         status=status,
@@ -67,7 +64,7 @@ def finalize_invoke_v2_response(
         outbound.update(cancellation_response)
         cached = cancellation_response
         status = "cancelled"
-        rpc_mod.rpc_inflight_request_registry.finish_handler(
+        collaborators.inflight_request_registry.finish_handler(
             session.session_id,
             envelope.request_id,
             status=status,
@@ -85,7 +82,7 @@ def finalize_invoke_v2_response(
 
 def apply_acquisition_escrow(
     *,
-    rpc_mod,
+    collaborators,
     response: dict[str, Any],
     result: dict[str, Any],
     envelope,
@@ -96,8 +93,8 @@ def apply_acquisition_escrow(
     cached_response = response
     escrowed = False
     try:
-        if rpc_mod.rpc_acquisition_claim_store is not None:
-            rpc_mod.rpc_acquisition_claim_store.store(
+        if collaborators.acquisition_claim_store is not None:
+            collaborators.acquisition_claim_store.store(
                 mcp_runtime_id=session.mcp.runtime_id,
                 request_id=envelope.request_id,
                 method=envelope.method,
@@ -106,7 +103,7 @@ def apply_acquisition_escrow(
             )
             escrowed = True
     except Exception:
-        logger.exception(
+        collaborators.logger.exception(
             "Failed to retain private acquisition claim for %s",
             envelope.request_id,
         )
@@ -131,8 +128,8 @@ def apply_acquisition_escrow(
         cached_response = response
     else:
         claimable = bool(
-            rpc_mod.rpc_acquisition_claim_store is not None
-            and rpc_mod.rpc_acquisition_claim_store.claimable(
+            collaborators.acquisition_claim_store is not None
+            and collaborators.acquisition_claim_store.claimable(
                 session.mcp.runtime_id, envelope.request_id
             )
         )

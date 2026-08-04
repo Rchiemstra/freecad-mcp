@@ -447,6 +447,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
     bridge = SimpleNamespace(
         _collaboration_collaborators=None,
         _lifecycle_collaborators=None,
+        _execution_collaborators=None,
     )
 
     def bind_collaboration_runtime_manifest(manifest):
@@ -455,6 +456,15 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         )
 
     bridge._bind_collaboration_runtime_manifest = bind_collaboration_runtime_manifest
+
+    def bind_authenticated_execution_runtime(**kwargs):
+        bridge._execution_collaborators = (
+            bridge._execution_collaborators.with_authenticated_runtime(**kwargs)
+        )
+
+    bridge._bind_authenticated_execution_runtime = (
+        bind_authenticated_execution_runtime
+    )
     built: dict[str, object] = {}
     shutdown_requested = _TracingShutdown(timeline)
 
@@ -492,6 +502,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
             raise bridge_failure
         collaborators = kwargs["collaboration_collaborators"]
         lifecycle = kwargs["lifecycle_collaborators"]
+        execution = kwargs["execution_collaborators"]
         assert _args == ()
         assert kwargs["allow_execute_code"] is True
         assert collaborators.document_lease_service is lease_service
@@ -500,6 +511,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         assert collaborators.handoff_continuation_store is handoffs
         assert collaborators.acquisition_claim_store is claims
         assert collaborators.request_replay_cache is replay
+        assert collaborators.rpc_server_runtime_id == rpc_server._ADDON_RUNTIME_ID
         assert collaborators.runtime_manifest is None
         assert (
             collaborators.compatibility_api._document_lookup
@@ -509,8 +521,21 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         assert lifecycle.document_lease_service is lease_service
         assert lifecycle.document_identity_service is identity_service
         assert lifecycle.save_service is save_service
+        assert execution.compatibility_api is collaborators.compatibility_api
+        assert execution.gui_dispatcher is dispatcher
+        assert execution.worker_manager is worker_manager
+        assert execution.request_replay_cache is replay
+        assert execution.inflight_request_registry is inflight
+        assert execution.handoff_continuation_store is handoffs
+        assert execution.acquisition_claim_store is claims
+        assert execution.runtime_id == rpc_server._ADDON_RUNTIME_ID
+        assert execution.session_manager is None
+        assert execution.runtime_manifest is None
+        assert execution.actual_endpoint is None
+        assert execution.server_started_at == ""
         bridge._collaboration_collaborators = collaborators
         bridge._lifecycle_collaborators = lifecycle
+        bridge._execution_collaborators = execution
         return bridge
 
     class _Thread:
@@ -544,6 +569,9 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
     monkeypatch.setattr(rpc_server, "worker_manager", None)
     monkeypatch.setattr(rpc_server, "rpc_session_manager", None)
     monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", None)
+    monkeypatch.setattr(rpc_server, "rpc_server_runtime_id", "")
+    monkeypatch.setattr(rpc_server, "rpc_server_actual_endpoint", None)
+    monkeypatch.setattr(rpc_server, "rpc_server_started_at", "")
     monkeypatch.setattr(rpc_server, "_addon_runtime", None, raising=False)
     monkeypatch.setattr(rpc_server, "shutdown_requested", shutdown_requested)
     monkeypatch.setattr(rpc_server, "rpc_request_replay_cache", replay)
@@ -692,6 +720,11 @@ def test_transitional_start_builds_once_publishes_exact_graph_then_starts_thread
     }
     runtime = context.built["runtime"]
     assert context.rpc_server._addon_runtime is runtime
+    assert context.rpc_server.rpc_server_runtime_id == context.rpc_server._ADDON_RUNTIME_ID
+    assert (
+        context.bridge._execution_collaborators.runtime_id
+        == context.rpc_server._ADDON_RUNTIME_ID
+    )
     assert runtime.listener is context.listener
     assert runtime.dispatcher is context.dispatcher
     assert runtime.worker_manager is context.worker_manager
@@ -725,6 +758,26 @@ def test_authenticated_start_publishes_authentication_only_after_composition(
     assert (
         context.bridge._collaboration_collaborators.runtime_manifest
         is context.runtime_manifest
+    )
+    assert (
+        context.bridge._execution_collaborators.session_manager
+        is context.session_manager
+    )
+    assert (
+        context.bridge._execution_collaborators.runtime_manifest
+        is context.runtime_manifest
+    )
+    assert context.bridge._execution_collaborators.actual_endpoint == {
+        "host": "127.0.0.1",
+        "port": 19875,
+    }
+    assert (
+        context.rpc_server.rpc_server_actual_endpoint
+        is context.bridge._execution_collaborators.actual_endpoint
+    )
+    assert (
+        context.rpc_server.rpc_server_started_at
+        == context.bridge._execution_collaborators.server_started_at
     )
     assert context.replay_predicates == [
         context.rpc_server.document_lease_service.has_unresolved_owner

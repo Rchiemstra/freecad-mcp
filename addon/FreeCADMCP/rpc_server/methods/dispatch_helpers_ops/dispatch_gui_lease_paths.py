@@ -6,8 +6,10 @@ from ._support import *
 """Unenforced and legacy GUI lease task paths."""
 
 
-def run_unenforced_lease_task(self, original_task, captured, inflight):
-    documents = [FreeCAD.getDocument(name) for name in captured["doc_names"]]
+def run_unenforced_lease_task(self, collaborators, original_task, captured, inflight):
+    documents = [
+        collaborators.freecad.getDocument(name) for name in captured["doc_names"]
+    ]
     if any(document is None for document in documents):
         return {
             "success": False,
@@ -27,10 +29,12 @@ def run_unenforced_lease_task(self, original_task, captured, inflight):
     return result
 
 
-def _transition_legacy_leases(dl, captured, token, operation, *, failed=False, result=None):
+def _transition_legacy_leases(
+    collaborators, dl, captured, token, operation, *, failed=False, result=None
+):
     dirty_by_name = {}
     for name in captured["doc_names"]:
-        doc = FreeCAD.getDocument(name)
+        doc = collaborators.freecad.getDocument(name)
         dirty_by_name[name] = document_modified_or_dirty(doc) if doc is not None else True
     for index, key in enumerate(captured["doc_keys"]):
         name = captured["doc_names"][index] if index < len(captured["doc_names"]) else None
@@ -58,8 +62,8 @@ def _transition_legacy_leases(dl, captured, token, operation, *, failed=False, r
         )
 
 
-def run_legacy_lease_task(self, original_task, captured, inflight):
-    dl = _import_document_lock()
+def run_legacy_lease_task(self, collaborators, original_task, captured, inflight):
+    dl = collaborators.import_document_lock()
     for key in captured["doc_keys"]:
         allowed = dl.check_mutation_allowed(key, identity=captured["identity"])
         if not allowed.get("success"):
@@ -94,7 +98,13 @@ def run_legacy_lease_task(self, original_task, captured, inflight):
             result.get("success") is False or result.get("ok") is False
         )
         _transition_legacy_leases(
-            dl, captured, token, operation, failed=failed, result=result
+            collaborators,
+            dl,
+            captured,
+            token,
+            operation,
+            failed=failed,
+            result=result,
         )
         return result
     except Exception as exc:

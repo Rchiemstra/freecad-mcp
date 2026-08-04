@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from ._common import _rpc_mod
 from .execute_code_context import build_execute_code_context
 from .execute_code_gui_task import run_execute_code_gui_task
 from .execute_code_policy import (
@@ -15,11 +14,95 @@ from .execute_code_policy import (
 from .execute_code_response import finalize_gui_execute_response
 
 
+class _GuiExecuteRollback(RuntimeError):
+    """Abort the native transaction while retaining its public error envelope."""
+
+
+def _run_gui_execute_with_native_attribution(
+    collaborators,
+    run_gui_task,
+    primary_document,
+):
+    if not isinstance(primary_document, str) or not primary_document:
+        return run_gui_task()
+    captured = {}
+
+    def native_callback():
+        captured["result"] = run_gui_task()
+        if (
+            isinstance(captured["result"], dict)
+            and captured["result"].get("ok") is False
+        ):
+            raise _GuiExecuteRollback
+        return captured["result"]
+
+    try:
+        native_result = collaborators.commit_compatibility_mutation(
+            primary_document, native_callback
+        )
+    except _GuiExecuteRollback:
+        return captured["result"]
+    native_status = (
+        native_result.get("status") if isinstance(native_result, dict) else None
+    )
+    native_committed = (
+        native_result.get("committed") if isinstance(native_result, dict) else False
+    )
+    if native_status == "Committed" and native_committed is True:
+        return captured["result"]
+    return {
+        "ok": False,
+        "error": (
+            "Native compatibility mutation rejected execution"
+            + (f" ({native_status})" if native_status else "")
+        ),
+        "traceback": None,
+        "session": {},
+        "stdout": "",
+    }
+
+
+def _gui_execute_policy_block(
+    collaborators,
+    annotate,
+    code,
+    options,
+    execution_mode,
+    read_only,
+):
+    if options.get("timeout_seconds") is not None:
+        return gui_timeout_not_supported_response(annotate)
+    blocked = geometry_loop_block_response(
+        annotate,
+        code=code,
+        execution_mode=execution_mode,
+        read_only=read_only,
+        allow_gui_loop=bool(options.get("allow_gui_geometry_loop", False)),
+        find_gui_geometry_loop_risk_fn=(
+            collaborators.find_gui_geometry_loop_risk
+        ),
+    )
+    if blocked is not None:
+        return blocked
+    return boolean_audit_block_response(
+        annotate,
+        code=code,
+        read_only=read_only,
+        find_gui_blocking_risk_fn=collaborators.find_gui_blocking_risk,
+    )
+
+
 def execute_code(
     self, code: str, options: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     options = options or {}
-    _category, _analysis, annotate = build_execute_code_context(code, options)
+    collaborators = self._execution_collaborators
+    _category, _analysis, annotate = build_execute_code_context(
+        code,
+        options,
+        analyze_execute_code_fn=collaborators.analyze_execute_code,
+        typed_tool_warning_fn=collaborators.typed_tool_warning,
+    )
 
     if not self.allow_execute_code:
         return annotate(
@@ -41,32 +124,35 @@ def execute_code(
             return worker_requires_read_only_response(annotate)
         return annotate(self._execute_code_worker(code, options))
 
-    if options.get("timeout_seconds") is not None:
-        return gui_timeout_not_supported_response(annotate)
-
-    read_only = bool(options.get("read_only", False))
-    blocked = geometry_loop_block_response(
+    blocked = _gui_execute_policy_block(
+        collaborators,
         annotate,
         code=code,
+        options=options,
         execution_mode=execution_mode,
-        read_only=read_only,
-        allow_gui_loop=bool(options.get("allow_gui_geometry_loop", False)),
+        read_only=read_only_requested,
     )
     if blocked is not None:
         return blocked
 
-    blocked = boolean_audit_block_response(annotate, code=code, read_only=read_only)
-    if blocked is not None:
-        return blocked
-
-    def execute_code_gui_task():
+    def run_gui_task():
         return run_execute_code_gui_task(
             code,
             options,
+            freecad=collaborators.freecad,
             collect_invalid_objects_fn=self._collect_invalid_objects,
         )
 
-    res = self._dispatch_gui(execute_code_gui_task, _rpc_mod().FreeCADRPC.EXECUTE_TIMEOUT)
+    primary_document = options.get("document")
+
+    def execute_code_gui_task():
+        return _run_gui_execute_with_native_attribution(
+            collaborators,
+            run_gui_task,
+            primary_document,
+        )
+
+    res = self._dispatch_gui(execute_code_gui_task, collaborators.execute_timeout)
     if isinstance(res, str):
         return annotate({"success": False, "error": res, "is_error": True})
     return finalize_gui_execute_response(annotate, res, options)

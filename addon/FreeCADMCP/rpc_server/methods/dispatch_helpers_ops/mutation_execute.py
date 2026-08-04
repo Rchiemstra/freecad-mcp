@@ -2,14 +2,17 @@ from __future__ import annotations
 
 # ruff: noqa: F403, F405
 from ._support import *
-from .mutation_execute_body import mutation_failure_result, run_mutation_transaction_body
+from .mutation_execute_body import (
+    mutation_failure_result,
+    run_mutation_transaction_body,
+)
 from .mutation_execute_close import finalize_close_mutation
 from .mutation_execute_finalize import finalize_mutation_health
 
 """Execute typed GUI mutations with health postflight."""
 
 
-def _capture_mutation_baselines(documents, spec, expected):
+def _capture_mutation_baselines(freecad, documents, spec, expected):
     all_before = {
         str(getattr(document, "Name", "") or ""): capture_document_health(
             document,
@@ -20,7 +23,7 @@ def _capture_mutation_baselines(documents, spec, expected):
             ),
             affected_objects=expected,
         )
-        for document in tuple(FreeCAD.listDocuments().values())
+        for document in tuple(freecad.listDocuments().values())
     }
     before = {
         str(getattr(document, "Name", "") or ""): all_before[
@@ -45,11 +48,14 @@ def execute_mutation_with_health(
     """Run, validate, then commit a typed GUI mutation."""
 
     documents = tuple(documents)
+    freecad = self._execution_collaborators.freecad
     expected = set(expected_objects)
     declared_names = {
         str(getattr(document, "Name", "") or "") for document in documents
     }
-    all_before, before = _capture_mutation_baselines(documents, spec, expected)
+    all_before, before = _capture_mutation_baselines(
+        freecad, documents, spec, expected
+    )
     transaction = GuiMutationTransaction(
         documents,
         f"MCP: {spec.name}",
@@ -97,6 +103,7 @@ def execute_mutation_with_health(
             result=result,
             failed=failed,
             transaction=transaction,
+            freecad=freecad,
         )
     except RequestCancellationError:
         transaction.abort()

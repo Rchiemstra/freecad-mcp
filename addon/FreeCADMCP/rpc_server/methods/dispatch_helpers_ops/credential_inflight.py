@@ -5,8 +5,8 @@ from ._support import *
 
 """Inflight lease credential retention."""
 
-def model_credential(inflight_credential):
-    lease = _import_document_lease()
+def model_credential(self, inflight_credential):
+    lease = self._execution_collaborators.import_document_lease()
     return lease.LeaseCredential(
         lease_id=inflight_credential.lease_id,
         document_session_uuid=inflight_credential.document_session_uuid,
@@ -47,6 +47,7 @@ def retain_inflight_credential(self, credential):
 
 
 def touch_inflight_credential(self, credential, inflight=None):
+    collaborators = self._execution_collaborators
     inflight = inflight or self._current_inflight()
     if inflight is None:
         return
@@ -61,10 +62,10 @@ def touch_inflight_credential(self, credential, inflight=None):
             ),
         )
     )
-    if _rpc_mod().rpc_acquisition_claim_store is not None:
+    if collaborators.acquisition_claim_store is not None:
         try:
-            identity = _import_document_lock().get_request_identity()
-            _rpc_mod().rpc_acquisition_claim_store.acknowledge_credential(
+            identity = collaborators.import_document_lock().get_request_identity()
+            collaborators.acquisition_claim_store.acknowledge_credential(
                 mcp_runtime_id=str(
                     identity.get("instance_id")
                     or getattr(credential, "mcp_instance_id", "")
@@ -76,6 +77,6 @@ def touch_inflight_credential(self, credential, inflight=None):
                 token=credential.token,
             )
         except Exception:
-            _rpc_mod().logger.debug(
+            collaborators.logger.debug(
                 "acquisition claim auto-ack failed", exc_info=True
             )

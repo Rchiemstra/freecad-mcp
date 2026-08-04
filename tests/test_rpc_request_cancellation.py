@@ -139,7 +139,7 @@ def test_concurrent_resolver_waits_for_authority_and_terminalizes_registry(
     assert waiter_finished.wait(0.05) is False
 
     expected = [{"state": "LOCKED_ERROR", "record_revision": 12}]
-    rpc_server_module.FreeCADRPC._finish_cancellation_resolution(request, expected)
+    rpc_server_module.FreeCADRPC()._finish_cancellation_resolution(request, expected)
     waiter.join(timeout=1.0)
 
     assert waiter_finished.is_set()
@@ -547,12 +547,12 @@ def test_acquisition_cancelled_in_hash_gap_aborts_private_reservation(
         "_live_document_from_selector",
         lambda _selector: (document, identity),
     )
-    rpc = rpc_server_module.FreeCADRPC()
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, timeout=None: task())
     registry = InflightRequestRegistry()
     monkeypatch.setattr(
         rpc_server_module, "rpc_inflight_request_registry", registry
     )
+    rpc = rpc_server_module.FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, timeout=None: task())
     session_id = _uuid()
     request_id = _uuid()
     inflight = registry.register(

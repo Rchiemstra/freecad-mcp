@@ -10,14 +10,6 @@ from .invoke_v2_dispatch import (
 )
 from .invoke_v2_replay import completed_replay_response, in_progress_replay_response
 
-# Keep the frozen Phase 1 locator census stable until locator removal.
-
-def _rpc_mod():
-    from ... import rpc_server as rpc_mod
-
-    return rpc_mod
-
-
 try:
     from ...._shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 except ImportError:  # pragma: no cover - flat addon import path
@@ -26,21 +18,21 @@ except ImportError:  # pragma: no cover - flat addon import path
 
 def invoke_v2(self, payload):
     """Authenticate, de-duplicate, and dispatch one immutable RPC envelope."""
-    rpc_mod = _rpc_mod()
+    collaborators = self._execution_collaborators
     request_id = payload.get("request_id") if isinstance(payload, dict) else None
-    session_manager = rpc_mod.rpc_session_manager
-    replay_cache = rpc_mod.rpc_request_replay_cache
-    invocation_runtime_id = rpc_mod.rpc_server_runtime_id
-    lease_service = rpc_mod.document_lease_service
+    session_manager = collaborators.session_manager
+    replay_cache = collaborators.request_replay_cache
+    invocation_runtime_id = collaborators.runtime_id
+    lease_service = collaborators.document_lease_service
     if session_manager is None or replay_cache is None:
-        return rpc_mod.lease_protocol_public_error(
+        return collaborators.lease_protocol_public_error(
             LeaseProtocolError(
                 "LEASE_PROTOCOL_UNAVAILABLE",
                 "Authenticated RPC v2 is not configured for this profile",
             ),
             request_id=request_id,
         )
-    dl = rpc_mod._import_document_lock()
+    dl = collaborators.import_document_lock()
     transport_identity = dl.get_request_identity()
     try:
         session, envelope = session_manager.authenticate_envelope(
@@ -64,7 +56,7 @@ def invoke_v2(self, payload):
             raise LeaseProtocolError(
                 "UNKNOWN_METHOD", "The requested RPC method is not registered"
             )
-        rpc_mod._validate_generated_operation_envelope(envelope)
+        collaborators.validate_generated_operation_envelope(envelope)
         request_kind, _request_extractor = dl.classify_verb(envelope.method)
         method_spec = make_method_spec(envelope.method, request_kind.value)
         lease_affecting = method_spec.pin_replay_for_lease_lifetime
@@ -83,7 +75,7 @@ def invoke_v2(self, payload):
                 envelope=envelope,
                 session=session,
                 invocation_runtime_id=invocation_runtime_id,
-                claim_store=rpc_mod.rpc_acquisition_claim_store,
+                claim_store=collaborators.acquisition_claim_store,
             )
         if replay.status == "in_progress":
             return in_progress_replay_response(
@@ -92,7 +84,7 @@ def invoke_v2(self, payload):
             )
 
         params, inflight = register_invoke_v2_inflight(
-            rpc_mod=rpc_mod,
+            collaborators=collaborators,
             self=self,
             session=session,
             envelope=envelope,
@@ -111,7 +103,7 @@ def invoke_v2(self, payload):
         handler_state = {"status": "failed", "finalized": False}
         try:
             return run_invoke_v2_dispatch(
-                rpc_mod=rpc_mod,
+                collaborators=collaborators,
                 self=self,
                 session=session,
                 envelope=envelope,
@@ -128,4 +120,6 @@ def invoke_v2(self, payload):
                 del self._inflight_context.value
             dl.set_request_identity(**previous_identity)
     except Exception as exc:
-        return rpc_mod.lease_protocol_public_error(exc, request_id=request_id)
+        return collaborators.lease_protocol_public_error(
+            exc, request_id=request_id
+        )

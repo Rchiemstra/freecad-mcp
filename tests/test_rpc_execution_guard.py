@@ -288,8 +288,15 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
             os.utime(model, ns=(before_mtime + 1_000_000, before_mtime + 1_000_000))
             self.Modified = False
 
+        def commitCompatibilityMutation(self, callback):
+            callback()
+            return {
+                "status": "Committed",
+                "committed": True,
+                "revisions": {"UnknownModel": 1},
+            }
+
     document = _Document()
-    rpc = rpc_server.FreeCADRPC()
     monkeypatch.setattr(
         rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
     )
@@ -299,6 +306,7 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
         lambda name: document if name == document.Name else None,
     )
     monkeypatch.setattr(rpc_server.FreeCAD, "ActiveDocument", document)
+    rpc = rpc_server.FreeCADRPC()
     monkeypatch.setattr(rpc, "_collect_invalid_objects", lambda: {})
     monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
 

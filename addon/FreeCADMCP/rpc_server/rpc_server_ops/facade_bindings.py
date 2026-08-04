@@ -32,13 +32,13 @@ def bind_freecad_rpc(FreeCADRPC):
         dispatch_helpers.adapt_gui_mutation_result
     )
     FreeCADRPC._execute_mutation_with_health = dispatch_helpers.execute_mutation_with_health
-    FreeCADRPC._model_credential = staticmethod(dispatch_helpers.model_credential)
+    FreeCADRPC._model_credential = dispatch_helpers.model_credential
     FreeCADRPC._retain_inflight_credential = dispatch_helpers.retain_inflight_credential
     FreeCADRPC._touch_inflight_credential = dispatch_helpers.touch_inflight_credential
-    FreeCADRPC._finish_cancellation_resolution = staticmethod(
+    FreeCADRPC._finish_cancellation_resolution = (
         dispatch_helpers.finish_cancellation_resolution
     )
-    FreeCADRPC._wait_for_cancellation_resolution = staticmethod(
+    FreeCADRPC._wait_for_cancellation_resolution = (
         dispatch_helpers.wait_for_cancellation_resolution
     )
     FreeCADRPC._complete_request_cancellation = dispatch_helpers.complete_request_cancellation

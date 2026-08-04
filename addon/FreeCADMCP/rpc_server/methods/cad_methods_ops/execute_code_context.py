@@ -5,15 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ...execute_code_analysis import analyze_execute_code, typed_tool_warning
 from ...telemetry import emit as emit_telemetry
 
 
 def build_execute_code_context(
-    code: str, options: dict[str, Any]
+    code: str,
+    options: dict[str, Any],
+    *,
+    analyze_execute_code_fn: Callable[..., dict[str, Any]],
+    typed_tool_warning_fn: Callable[..., Any],
 ) -> tuple[str, dict[str, Any], Callable[[dict[str, Any]], dict[str, Any]] | None]:
     generated_operation = bool(options.get("generated_operation"))
-    analysis = analyze_execute_code(code, options)
+    analysis = analyze_execute_code_fn(code, options)
     category = (
         "generated_internal_execute"
         if generated_operation
@@ -21,7 +24,7 @@ def build_execute_code_context(
         if options.get("read_only")
         else "public_execute_code"
     )
-    warning = None if generated_operation else typed_tool_warning(analysis)
+    warning = None if generated_operation else typed_tool_warning_fn(analysis)
     emit_telemetry(
         "execute_code",
         "routing_completed",

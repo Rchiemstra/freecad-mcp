@@ -5,8 +5,6 @@ from __future__ import annotations
 import io
 from typing import Any
 
-import FreeCAD
-
 from ._common import require_document_modified
 from .execute_code_gui_exec import run_python_on_gui_thread
 from .execute_code_gui_hooks import (
@@ -23,6 +21,7 @@ def run_execute_code_gui_task(
     code: str,
     options: dict[str, Any],
     *,
+    freecad,
     collect_invalid_objects_fn=None,
 ):
     output_buffer = io.StringIO()
@@ -35,35 +34,39 @@ def run_execute_code_gui_task(
     restore_active = bool(options.get("restore_active_document", True))
     activate_doc = bool(options.get("activate_document", False))
 
-    active_before = FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
+    active_before = freecad.ActiveDocument.Name if freecad.ActiveDocument else None
     dirty_before = {
         name: require_document_modified(doc)
-        for name, doc in FreeCAD.listDocuments().items()
+        for name, doc in freecad.listDocuments().items()
     }
     disk_before = {
-        name: disk_signature(doc) for name, doc in FreeCAD.listDocuments().items()
+        name: disk_signature(doc) for name, doc in freecad.listDocuments().items()
     }
     collector = collect_invalid_objects_fn or collect_invalid_objects
     invalid_before = collector()
 
     if target_doc and activate_doc:
-        doc = FreeCAD.getDocument(target_doc)
+        doc = freecad.getDocument(target_doc)
         if doc:
-            FreeCAD.setActiveDocument(target_doc)
+            freecad.setActiveDocument(target_doc)
 
     saved_hooks: list = []
     read_only_unguarded: list[str] = []
     if read_only:
-        saved_hooks, read_only_unguarded = install_read_only_save_hooks()
+        saved_hooks, read_only_unguarded = install_read_only_save_hooks(
+            freecad=freecad
+        )
 
     ok = False
     tb_info = None
     try:
-        ok, tb_info = run_python_on_gui_thread(code, output_buffer)
+        ok, tb_info = run_python_on_gui_thread(
+            code, output_buffer, freecad=freecad
+        )
     finally:
         restore_save_hooks(saved_hooks)
-        recompute_documents(recompute_mode, recompute_docs)
-        restore_active_document(active_before, restore_active)
+        recompute_documents(recompute_mode, recompute_docs, freecad=freecad)
+        restore_active_document(active_before, restore_active, freecad=freecad)
 
     session = build_execute_session(
         target_doc=target_doc,
@@ -72,6 +75,7 @@ def run_execute_code_gui_task(
         disk_before=disk_before,
         invalid_before=invalid_before,
         read_only_unguarded=read_only_unguarded,
+        freecad=freecad,
         collect_invalid_objects_fn=collect_invalid_objects_fn,
     )
     stdout = output_buffer.getvalue()

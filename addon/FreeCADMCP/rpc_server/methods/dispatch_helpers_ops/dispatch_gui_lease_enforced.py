@@ -29,17 +29,17 @@ def _mutation_capability_context(captured, credentials, documents, spec):
         return nullcontext([])
 
 
-def _authorize_gui_credentials(self, captured, inflight, lease):
+def _authorize_gui_credentials(self, collaborators, captured, inflight, lease):
     credentials = []
     marker_keys = list(captured["doc_keys"]) + list(captured["doc_names"])
     for name in captured["doc_names"]:
-        credential, document_identity = _rpc_mod()._credential_for_document(
+        credential, document_identity = collaborators.credential_for_document(
             name, captured["identity"]
         )
         allowed_states = {lease.LeaseState.LOCKED_IDLE}
         if captured["method_spec"].allowed_during_recovery:
             allowed_states.add(lease.LeaseState.LOCKED_ERROR)
-        record = _rpc_mod().document_lease_service.authorize(
+        record = collaborators.document_lease_service.authorize(
             credential,
             selector={
                 "document_session_uuid": document_identity.session_uuid,
@@ -58,38 +58,40 @@ def _authorize_gui_credentials(self, captured, inflight, lease):
             )
             if value
         )
-        _rpc_mod()._assert_mutation_file_metadata_unchanged(record)
+        collaborators.assert_mutation_file_metadata_unchanged(record)
     return credentials, tuple(sorted(set(marker_keys)))
 
 
-def _begin_gui_lease_operations(captured, inflight, credentials, lease):
+def _begin_gui_lease_operations(
+    collaborators, captured, inflight, credentials, lease
+):
     operation = captured["method"]
     if inflight is not None:
         inflight.token.begin_mutation("gui_mutation_authorized")
     for _name, credential, initial_state in credentials:
         if "recompute" in operation:
-            _rpc_mod().document_lease_service.begin_recompute(credential)
+            collaborators.document_lease_service.begin_recompute(credential)
         elif initial_state == lease.LeaseState.LOCKED_ERROR:
-            _rpc_mod().document_lease_service.begin_recovery(
+            collaborators.document_lease_service.begin_recovery(
                 credential, operation=operation
             )
         else:
-            _rpc_mod().document_lease_service.begin_mutation(
+            collaborators.document_lease_service.begin_mutation(
                 credential, operation=operation
             )
 
 
 def _complete_gui_lease_operations(
-    self, captured, inflight, credentials, operation, result, failed
+    collaborators, captured, inflight, credentials, operation, result, failed
 ):
     for name, credential, _state in credentials:
-        document = FreeCAD.getDocument(name)
+        document = collaborators.freecad.getDocument(name)
         dirty = require_document_modified(document) if document is not None else True
         if failed:
-            _rpc_mod().document_lease_service.record_error(
+            collaborators.document_lease_service.record_error(
                 credential,
                 code=str(result.get("error_code") or "OPERATION_FAILED"),
-                message=_rpc_mod()._redact_rpc_diagnostic(
+                message=collaborators.redact_rpc_diagnostic(
                     result.get("error") or result.get("message") or operation,
                     identity=captured["identity"],
                     inflight=inflight,
@@ -98,17 +100,19 @@ def _complete_gui_lease_operations(
                 dirty=dirty,
             )
         else:
-            _rpc_mod().document_lease_service.complete_operation(credential, dirty=dirty)
+            collaborators.document_lease_service.complete_operation(
+                credential, dirty=dirty
+            )
 
 
-def _record_gui_lease_errors(self, captured, inflight, credentials, exc):
+def _record_gui_lease_errors(collaborators, captured, inflight, credentials, exc):
     for name, credential, _state in credentials:
         try:
-            document = FreeCAD.getDocument(name)
-            _rpc_mod().document_lease_service.record_error(
+            document = collaborators.freecad.getDocument(name)
+            collaborators.document_lease_service.record_error(
                 credential,
                 code=getattr(exc, "code", type(exc).__name__.upper()),
-                message=_rpc_mod()._redact_rpc_diagnostic(
+                message=collaborators.redact_rpc_diagnostic(
                     exc,
                     identity=captured["identity"],
                     inflight=inflight,
@@ -122,18 +126,25 @@ def _record_gui_lease_errors(self, captured, inflight, credentials, exc):
             pass
 
 
-def run_enforced_lease_service_task(self, original_task, captured, inflight):
-    dl = _import_document_lock()
-    lease = _import_document_lease()
-    credentials, marker_keys = _authorize_gui_credentials(self, captured, inflight, lease)
+def run_enforced_lease_service_task(
+    self, collaborators, original_task, captured, inflight
+):
+    dl = collaborators.import_document_lock()
+    lease = collaborators.import_document_lease()
+    credentials, marker_keys = _authorize_gui_credentials(
+        self, collaborators, captured, inflight, lease
+    )
     attribution_started = False
     operation = captured["method"]
     try:
-        _begin_gui_lease_operations(captured, inflight, credentials, lease)
+        _begin_gui_lease_operations(
+            collaborators, captured, inflight, credentials, lease
+        )
         dl.begin_agent_mutation_scope(captured["request_id"], marker_keys)
         attribution_started = True
         documents = [
-            FreeCAD.getDocument(name) for name, _credential, _state in credentials
+            collaborators.freecad.getDocument(name)
+            for name, _credential, _state in credentials
         ]
         if any(document is None for document in documents):
             raise RuntimeError("A declared document closed before mutation execution")
@@ -141,7 +152,7 @@ def run_enforced_lease_service_task(self, original_task, captured, inflight):
 
         def begin_recompute():
             for _name, credential, _state in credentials:
-                _rpc_mod().document_lease_service.begin_recompute(credential)
+                collaborators.document_lease_service.begin_recompute(credential)
 
         with _mutation_capability_context(captured, credentials, documents, spec):
             result, failed = self._execute_mutation_with_health(
@@ -154,11 +165,13 @@ def run_enforced_lease_service_task(self, original_task, captured, inflight):
                 request_id=captured["request_id"],
             )
         _complete_gui_lease_operations(
-            self, captured, inflight, credentials, operation, result, failed
+            collaborators, captured, inflight, credentials, operation, result, failed
         )
         return result
     except Exception as exc:
-        _record_gui_lease_errors(self, captured, inflight, credentials, exc)
+        _record_gui_lease_errors(
+            collaborators, captured, inflight, credentials, exc
+        )
         raise
     finally:
         if attribution_started:

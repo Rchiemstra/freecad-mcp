@@ -15,7 +15,8 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
     ``late_on_complete`` is invoked when the GUI task finishes, including
     after the waiter has already timed out (completion_uncertain).
     """
-    dispatcher = _rpc_mod().gui_dispatcher
+    collaborators = self._execution_collaborators
+    dispatcher = collaborators.gui_dispatcher
     if dispatcher is None:
         return "RPC GUI dispatcher is not initialized"
     t = timeout if timeout is not None else self.TIMEOUT
@@ -38,12 +39,12 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
 
         def task():
             return run_lease_aware_gui_task(
-                self, original_task, captured, inflight, context
+                self, collaborators, original_task, captured, inflight, context
             )
 
     replay_on_complete = None
-    replay_cache = _rpc_mod().rpc_request_replay_cache
-    completion_runtime_id = _rpc_mod().rpc_server_runtime_id
+    replay_cache = collaborators.request_replay_cache
+    completion_runtime_id = collaborators.runtime_id
     if context and replay_cache is not None:
         replay_on_complete = build_replay_on_complete(
             context, replay_cache, completion_runtime_id
@@ -53,7 +54,7 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
     session_id = inflight.session_id if inflight is not None else None
     gui_phase_registered = False
     if inflight is not None:
-        _rpc_mod().rpc_inflight_request_registry.begin_gui_phase(
+        collaborators.inflight_request_registry.begin_gui_phase(
             inflight.session_id,
             inflight.request_id,
             f"gui:{context['method'] if context else 'lifecycle'}",
@@ -67,6 +68,7 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
         completion_seen=completion_seen,
         replay_on_complete=replay_on_complete,
         late_on_complete=late_on_complete,
+        collaborators=collaborators,
     )
 
     try:
@@ -94,16 +96,18 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
             request_id=request_id,
             gui_phase_registered=gui_phase_registered,
             completion_seen=completion_seen,
+            collaborators=collaborators,
         )
 
 
 def dispatch_snapshot_gui(self, task):
     """Snapshot saveCopy has no safe hard timeout; wait outside Qt."""
-    dispatcher = _rpc_mod().gui_dispatcher
+    collaborators = self._execution_collaborators
+    dispatcher = collaborators.gui_dispatcher
     if dispatcher is None:
         return "RPC GUI dispatcher is not initialized"
     try:
         return dispatcher.submit(task, None)
     except GuiDispatchError as exc:
-        _rpc_mod().logger.error("RPC snapshot dispatch failed: %s", exc)
+        collaborators.logger.error("RPC snapshot dispatch failed: %s", exc)
         return str(exc)

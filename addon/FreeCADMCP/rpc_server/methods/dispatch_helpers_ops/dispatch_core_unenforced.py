@@ -6,9 +6,9 @@ from ._support import *
 """Non-enforcement dispatch path extracted from ``dispatch``."""
 
 
-def import_document_lock_or_none():
+def import_document_lock_or_none(collaborators):
     try:
-        return _import_document_lock()
+        return collaborators.import_document_lock()
     except ImportError:
         return None
 
@@ -47,7 +47,7 @@ def collect_execute_scope_names(method, params, extractor):
     return names, execute_options, affected_documents_declared, scope_resolution_failed
 
 
-def resolve_mutation_documents(names, params, scope_resolution_failed):
+def resolve_mutation_documents(collaborators, names, params, scope_resolution_failed):
     selector = params[0] if params and isinstance(params[0], dict) else {}
     selected_name = selector.get("document_name")
     if selected_name and selected_name not in names:
@@ -55,13 +55,13 @@ def resolve_mutation_documents(names, params, scope_resolution_failed):
     selected_path = str(selector.get("canonical_path") or "")
     documents = []
     for name in names:
-        document = FreeCAD.getDocument(name)
+        document = collaborators.freecad.getDocument(name)
         if document is not None and document not in documents:
             documents.append(document)
         elif document is None:
             scope_resolution_failed = True
     selected_path_resolved = not selected_path
-    open_documents = tuple(FreeCAD.listDocuments().values())
+    open_documents = tuple(collaborators.freecad.listDocuments().values())
     if selected_path:
         wanted = os.path.normcase(os.path.realpath(selected_path))
         for document in open_documents:
@@ -118,10 +118,10 @@ def _blocked_documents_payload(sidecar_blocks):
     ]
 
 
-def collect_sidecar_blocks(open_documents, request_identity):
+def collect_sidecar_blocks(collaborators, open_documents, request_identity):
     sidecar_blocks = []
     for document in open_documents:
-        blocked = _rpc_mod()._effective_sidecar_block(document, request_identity)
+        blocked = collaborators.external_scope_block(document, request_identity)
         if blocked is not None:
             sidecar_blocks.append((document, blocked))
     return sidecar_blocks
@@ -139,14 +139,17 @@ def document_sidecar_block(documents, sidecar_blocks):
 
 
 def dispatch_unenforced_mutation(self, method, params, func, method_spec, extractor, dl):
+    collaborators = self._execution_collaborators
     names, _execute_options, affected_documents_declared, scope_resolution_failed = (
         collect_execute_scope_names(method, params, extractor)
     )
     documents, open_documents, scope_resolution_failed = resolve_mutation_documents(
-        names, params, scope_resolution_failed
+        collaborators, names, params, scope_resolution_failed
     )
     request_identity = dl.get_request_identity()
-    sidecar_blocks = collect_sidecar_blocks(open_documents, request_identity)
+    sidecar_blocks = collect_sidecar_blocks(
+        collaborators, open_documents, request_identity
+    )
 
     scope_required_error = sidecar_scope_required_error(
         method, sidecar_blocks, affected_documents_declared

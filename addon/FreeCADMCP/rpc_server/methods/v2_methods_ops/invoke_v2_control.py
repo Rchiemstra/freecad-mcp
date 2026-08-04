@@ -2,15 +2,6 @@
 
 from __future__ import annotations
 
-# Keep this locator aligned with the frozen Phase 1 structural baseline
-# until the runtime-locator removal phase.
-
-def _rpc_mod():
-    from ... import rpc_server as rpc_mod
-
-    return rpc_mod
-
-
 try:
     from ...._shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 except ImportError:  # pragma: no cover - flat addon import path
@@ -32,7 +23,7 @@ def invoke_v2_control(self, payload):
     }
     if method not in allowed:
         request_id = payload.get("request_id") if isinstance(payload, dict) else None
-        return _rpc_mod().lease_protocol_public_error(
+        return self._execution_collaborators.lease_protocol_public_error(
             LeaseProtocolError(
                 "METHOD_NOT_CONTROL",
                 "The requested method is not available on the control lane",

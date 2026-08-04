@@ -260,6 +260,24 @@ def _bind_authenticated_collaboration_manifest(bridge, manifest) -> None:
     bridge._bind_collaboration_runtime_manifest(manifest)
 
 
+def _bind_authenticated_request_runtime(
+    bridge,
+    *,
+    session_manager,
+    manifest,
+    actual_endpoint,
+    server_started_at,
+) -> None:
+    if bridge is None:
+        raise RuntimeError("authenticated runtime has no capability bridge")
+    bridge._bind_authenticated_execution_runtime(
+        session_manager=session_manager,
+        runtime_manifest=manifest,
+        actual_endpoint=actual_endpoint,
+        server_started_at=server_started_at,
+    )
+
+
 def _compose_transitional_runtime(
     builder,
     rpc_mod: Any,
@@ -279,6 +297,8 @@ def _compose_transitional_runtime(
         "apply_deferred": lambda: None,
         "actual_host": None,
         "actual_port": None,
+        "actual_endpoint": None,
+        "server_started_at": None,
     }
     capability_bridge_state: dict[str, Any] = {"bridge": None}
 
@@ -296,13 +316,25 @@ def _compose_transitional_runtime(
         _handoff_continuations,
         _acquisition_claims,
     ):
+        collaboration_collaborators = rpc_mod._build_collaboration_collaborators()
         bridge = rpc_mod.FreeCADRPC(
             allow_execute_code=(
                 not remote_enabled
                 or bool(settings.get("allow_remote_execute_code", False))
             ),
-            collaboration_collaborators=(
-                rpc_mod._build_collaboration_collaborators()
+            collaboration_collaborators=collaboration_collaborators,
+            execution_collaborators=rpc_mod._build_execution_collaborators(
+                compatibility_api=collaboration_collaborators.compatibility_api,
+                gui_dispatcher_value=_dispatcher,
+                worker_manager_value=_worker_manager,
+                request_replay_cache=_request_replay_cache,
+                inflight_request_registry=_inflight_requests,
+                handoff_continuation_store=_handoff_continuations,
+                acquisition_claim_store=_acquisition_claims,
+                session_manager_value=None,
+                runtime_manifest_value=None,
+                actual_endpoint_value=None,
+                server_started_at_value="",
             ),
             lifecycle_collaborators=rpc_mod._build_lifecycle_collaborators(),
         )
@@ -341,12 +373,24 @@ def _compose_transitional_runtime(
         if warning.startswith("RPC Server could not"):
             raise _RpcStartRefusal(warning)
         manifest = staged_rpc.staged("rpc_runtime_manifest")
+        session_manager = staged_rpc.staged("rpc_session_manager")
+        actual_endpoint = {"host": str(actual_host), "port": int(actual_port)}
+        server_started_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         authentication_state["manifest"] = manifest
+        authentication_state["actual_endpoint"] = actual_endpoint
+        authentication_state["server_started_at"] = server_started_at
         _bind_authenticated_collaboration_manifest(
             capability_bridge_state["bridge"], manifest
         )
+        _bind_authenticated_request_runtime(
+            capability_bridge_state["bridge"],
+            session_manager=session_manager,
+            manifest=manifest,
+            actual_endpoint=actual_endpoint,
+            server_started_at=server_started_at,
+        )
         authentication_state["apply_deferred"] = staged_rpc.apply_deferred
-        return staged_rpc.staged("rpc_session_manager"), warning
+        return session_manager, warning
 
     runtime, warning = builder(
         shutdown_requested=rpc_mod.shutdown_requested,
@@ -368,6 +412,8 @@ def _compose_transitional_runtime(
         authentication_state["apply_deferred"],
         authentication_state["actual_host"],
         authentication_state["actual_port"],
+        authentication_state["actual_endpoint"],
+        authentication_state["server_started_at"],
     )
 
 
@@ -384,6 +430,8 @@ def _construct_and_launch_transitional_runtime(
             apply_deferred,
             actual_host,
             actual_port,
+            actual_endpoint,
+            server_started_at,
         ) = (
             _compose_transitional_runtime(
                 builder,
@@ -408,6 +456,8 @@ def _construct_and_launch_transitional_runtime(
             apply_deferred=apply_deferred,
             actual_host=actual_host,
             actual_port=actual_port,
+            actual_endpoint=actual_endpoint,
+            server_started_at=server_started_at,
         )
         _launch_listener_thread(
             rpc_mod,
@@ -449,6 +499,8 @@ def _publish_transitional_runtime(
     apply_deferred,
     actual_host: str,
     actual_port: int,
+    actual_endpoint: dict[str, Any],
+    server_started_at: str,
 ) -> None:
     rpc_mod.rpc_server_instance = runtime.listener
     rpc_mod.gui_dispatcher = runtime.dispatcher
@@ -460,12 +512,9 @@ def _publish_transitional_runtime(
     rpc_mod.rpc_acquisition_claim_store = runtime.acquisition_claims
     rpc_mod.rpc_runtime_manifest = runtime_manifest
     apply_deferred()
-    rpc_mod.rpc_server_actual_endpoint = {
-        "host": actual_host,
-        "port": int(actual_port),
-    }
+    rpc_mod.rpc_server_actual_endpoint = actual_endpoint
     rpc_mod.rpc_server_runtime_id = rpc_mod._ADDON_RUNTIME_ID
-    rpc_mod.rpc_server_started_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    rpc_mod.rpc_server_started_at = server_started_at
 
 
 def _unpublish_transitional_runtime(rpc_mod: Any, runtime: Any) -> None:

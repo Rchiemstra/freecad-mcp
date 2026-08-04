@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from xmlrpc.server import SimpleXMLRPCDispatcher
@@ -34,18 +35,49 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     freecad_rpc_class, monkeypatch
 ):
     expected = _snapshot()["production_listener_examples"]
-    document_lock = SimpleNamespace(
-        is_enabled=lambda: True,
-        get_request_identity=lambda: {
-            "instance_id": "mcp-contract",
-            "authenticated_session_id": "session-contract",
-        },
+    default_instance = freecad_rpc_class()
+    collaboration_collaborators = replace(
+        default_instance._collaboration_collaborators,
+        import_document_lock=lambda: SimpleNamespace(
+            is_enabled=lambda: True,
+            get_request_identity=lambda: {
+                "instance_id": "mcp-contract",
+                "authenticated_session_id": "session-contract",
+            },
+        ),
+        document_lease_service=object(),
     )
-    rpc_module = inspect.getmodule(freecad_rpc_class)
-    assert rpc_module is not None
-    monkeypatch.setattr(rpc_module, "_import_document_lock", lambda: document_lock)
-    monkeypatch.setattr(rpc_module, "document_lease_service", object())
-    instance = freecad_rpc_class()
+    execution_collaborators = replace(
+        default_instance._execution_collaborators,
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: None,
+            listDocuments=lambda: {},
+            getUserAppDataDir=lambda: "/profile/",
+        ),
+        import_document_lock=lambda: None,
+        document_lease_service=None,
+        session_manager=object(),
+        runtime_manifest=None,
+        actual_endpoint={"host": "127.0.0.1", "port": 9988},
+        runtime_id="addon-runtime-contract",
+        server_started_at="rpc-started-contract",
+        addon_loaded_at="loaded-contract",
+        freecad_version_parts=lambda: ("1", "2", "3"),
+        load_settings=lambda: {
+            "profile_instance_id": "profile-contract",
+            "rpc_bind_host": "127.0.0.1",
+            "rpc_port": 9988,
+            "document_lease_mode": "enforce",
+        },
+        process_started_at="process-contract",
+        boot_id="boot-contract",
+        profile_fingerprint="profile-fingerprint-contract",
+    )
+    instance = freecad_rpc_class(
+        collaboration_collaborators=collaboration_collaborators,
+        lifecycle_collaborators=default_instance._lifecycle_collaborators,
+        execution_collaborators=execution_collaborators,
+    )
     dispatcher = SimpleXMLRPCDispatcher(allow_none=True, encoding=None)
     dispatcher.register_instance(instance)
 
@@ -93,33 +125,7 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
 
     status_module = inspect.getmodule(freecad_rpc_class.get_instance_info)
     assert status_module is not None
-    runtime = SimpleNamespace(
-        _freecad_version_parts=lambda: ("1", "2", "3"),
-        rpc_server_actual_endpoint={"host": "127.0.0.1", "port": 9988},
-        rpc_server_runtime_id="addon-runtime-contract",
-        rpc_runtime_manifest=None,
-        addon_loaded_at="loaded-contract",
-        rpc_server_started_at="rpc-started-contract",
-        rpc_session_manager=object(),
-    )
-    monkeypatch.setattr(status_module, "_rpc_mod", lambda: runtime)
-    monkeypatch.setattr(
-        status_module,
-        "load_settings",
-        lambda: {
-            "profile_instance_id": "profile-contract",
-            "rpc_bind_host": "127.0.0.1",
-            "rpc_port": 9988,
-            "document_lease_mode": "enforce",
-        },
-    )
-    monkeypatch.setattr(status_module.FreeCAD, "getUserAppDataDir", lambda: "/profile/")
     monkeypatch.setattr(status_module.os, "getpid", lambda: 4242)
-    monkeypatch.setattr(status_module, "_process_started_at", lambda: "process-contract")
-    monkeypatch.setattr(status_module, "_boot_identity", lambda: "boot-contract")
-    monkeypatch.setattr(
-        status_module, "_profile_fingerprint", lambda: "profile-fingerprint-contract"
-    )
     actual["get_instance_info"] = dispatcher._dispatch("get_instance_info", ())
 
     assert actual == expected

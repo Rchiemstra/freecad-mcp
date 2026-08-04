@@ -5,10 +5,10 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
-import FreeCAD
 
-
-def install_read_only_save_hooks() -> tuple[list[tuple[Any, str, Any]], list[str]]:
+def install_read_only_save_hooks(
+    *, freecad
+) -> tuple[list[tuple[Any, str, Any]], list[str]]:
     saved_hooks: list[tuple[Any, str, Any]] = []
     read_only_unguarded: list[str] = []
 
@@ -18,7 +18,7 @@ def install_read_only_save_hooks() -> tuple[list[tuple[Any, str, Any]], list[str
 
         return wrapped
 
-    for doc_name, doc in FreeCAD.listDocuments().items():
+    for doc_name, doc in freecad.listDocuments().items():
         for attr in ("save", "saveAs", "saveCopy"):
             if not hasattr(doc, attr):
                 continue
@@ -40,26 +40,31 @@ def restore_save_hooks(saved_hooks: list[tuple[Any, str, Any]]) -> None:
 
 
 def recompute_documents(
-    recompute_mode: str, recompute_docs: list[str] | tuple[str, ...]
+    recompute_mode: str,
+    recompute_docs: list[str] | tuple[str, ...],
+    *,
+    freecad,
 ) -> None:
     if recompute_mode == "all":
-        for doc in FreeCAD.listDocuments().values():
+        for doc in freecad.listDocuments().values():
             with contextlib.suppress(Exception):
                 doc.recompute()
         return
     if recompute_mode == "target" and recompute_docs:
         for doc_name in recompute_docs:
-            doc = FreeCAD.getDocument(doc_name)
+            doc = freecad.getDocument(doc_name)
             if doc:
                 with contextlib.suppress(Exception):
                     doc.recompute()
 
 
-def restore_active_document(active_before: str | None, restore_active: bool) -> None:
+def restore_active_document(
+    active_before: str | None, restore_active: bool, *, freecad
+) -> None:
     if not restore_active or not active_before:
         return
     try:
-        if FreeCAD.getDocument(active_before):
-            FreeCAD.setActiveDocument(active_before)
+        if freecad.getDocument(active_before):
+            freecad.setActiveDocument(active_before)
     except Exception:
         pass

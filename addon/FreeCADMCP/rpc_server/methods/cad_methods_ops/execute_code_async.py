@@ -3,10 +3,8 @@
 import threading
 from typing import Any
 
-import FreeCAD
 import FreeCADGui
 
-from ...execute_code_analysis import analyze_execute_code
 from ...telemetry import emit as emit_telemetry
 
 
@@ -18,7 +16,11 @@ def execute_code_async(self, code: str) -> dict[str, Any]:
     completion status (e.g. check SessionState.Label via get_object).
     """
 
-    analysis = analyze_execute_code(code, {"execution_mode": "async"})
+    collaborators = self._execution_collaborators
+    freecad = collaborators.freecad
+    analysis = collaborators.analyze_execute_code(
+        code, {"execution_mode": "async"}
+    )
     emit_telemetry(
         "execute_code",
         "policy_rejected",
@@ -49,12 +51,14 @@ def execute_code_async(self, code: str) -> dict[str, Any]:
         # GUI thread and other concurrent work. Background code should report
         # via FreeCAD.Console (which is thread-safe) instead.
         try:
-            exec(code, globals())
-            FreeCAD.Console.PrintMessage("Async code execution completed.\n")
+            execution_globals = globals()
+            execution_globals["FreeCAD"] = freecad
+            exec(code, execution_globals)
+            freecad.Console.PrintMessage("Async code execution completed.\n")
         except Exception as e:
             import traceback as _tb
 
-            FreeCAD.Console.PrintError(f"Async code error: {e}\n{_tb.format_exc()}")
+            freecad.Console.PrintError(f"Async code error: {e}\n{_tb.format_exc()}")
         finally:
             _clear_status()
 

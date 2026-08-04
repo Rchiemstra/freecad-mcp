@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from ...telemetry import emit as emit_telemetry
-from ._common import _rpc_mod
 from .control_cancel_handoff import handoff_public
 
 
-def finalize_cancel_request(self, *, session_id, target_request_id, cancellation, target):
+def finalize_cancel_request(
+    self,
+    *,
+    session_id,
+    target_request_id,
+    cancellation,
+    target,
+    collaborators,
+):
     emit_telemetry(
         "cancellation",
         "cancellation_requested",
@@ -29,8 +36,10 @@ def finalize_cancel_request(self, *, session_id, target_request_id, cancellation
             payload={"lease_event_count": len(lease_events or ())},
         )
     queue_status = "not_queued"
-    if target is not None and _rpc_mod().gui_dispatcher is not None:
-        queue_status = _rpc_mod().gui_dispatcher.cancel_request(session_id, target_request_id)
+    if target is not None and collaborators.gui_dispatcher is not None:
+        queue_status = collaborators.gui_dispatcher.cancel_request(
+            session_id, target_request_id
+        )
     if target is not None and queue_status in {"cancelled_pending", "completed"}:
         target.token.set_phase(
             "cancelled_before_gui_execution"
@@ -42,7 +51,7 @@ def finalize_cancel_request(self, *, session_id, target_request_id, cancellation
         cached = target.token.cancellation_resolution()
         if cached is not None:
             lease_events = cached
-    mcp_runtime_id = _rpc_mod()._import_document_lock().get_request_identity().get(
+    mcp_runtime_id = collaborators.import_document_lock().get_request_identity().get(
         "instance_id"
     )
     return {
@@ -52,5 +61,9 @@ def finalize_cancel_request(self, *, session_id, target_request_id, cancellation
         "gui_queue": queue_status,
         "lease_events": lease_events,
         "handoff_cancelled": False,
-        "handoff_continuation": handoff_public(mcp_runtime_id, target_request_id),
+        "handoff_continuation": handoff_public(
+            collaborators.handoff_continuation_store,
+            mcp_runtime_id,
+            target_request_id,
+        ),
     }

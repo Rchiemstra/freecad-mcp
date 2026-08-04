@@ -3,16 +3,10 @@
 from __future__ import annotations
 
 
-def _rpc_mod():
-    from ... import rpc_server as rpc_mod
-
-    return rpc_mod
-
-
 def handshake_v2(self, payload):
     """Authenticate one exact MCP runtime before any lease operation."""
-    rpc_mod = _rpc_mod()
-    if rpc_mod.rpc_session_manager is None:
+    collaborators = self._execution_collaborators
+    if collaborators.session_manager is None:
         return {
             "ok": False,
             "error": {
@@ -21,6 +15,6 @@ def handshake_v2(self, payload):
             },
         }
     try:
-        return rpc_mod.rpc_session_manager.perform_handshake(payload)
+        return collaborators.session_manager.perform_handshake(payload)
     except Exception as exc:
-        return rpc_mod.lease_protocol_public_error(exc)
+        return collaborators.lease_protocol_public_error(exc)

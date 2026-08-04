@@ -2,13 +2,12 @@
 
 from typing import Any
 
-from ._common import _rpc_mod
-
 
 def execute_code_worker(
     self, code: str, options: dict[str, Any]
 ) -> dict[str, Any]:
-    manager = _rpc_mod().worker_manager
+    collaborators = self._execution_collaborators
+    manager = collaborators.worker_manager
     if manager is None:
         return {
             "success": False,
@@ -27,11 +26,11 @@ def execute_code_worker(
         }
 
     snapshot = None
-    mutation_context = _rpc_mod()._snapshot_mutation_context_for_request()
-    with _rpc_mod().snapshot_coordinator:
+    mutation_context = collaborators.snapshot_mutation_context_for_request()
+    with collaborators.snapshot_coordinator:
         for attempt in range(2):
             def create_snapshot_task():
-                return _rpc_mod().create_primary_snapshot_gui(
+                return collaborators.create_primary_snapshot_gui(
                     options.get("document"),
                     str(workspace),
                     link_policy=str(options.get("link_policy") or "strict"),

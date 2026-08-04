@@ -27,11 +27,12 @@ def dispatch_enforcement(
     resolve_doc_key,
     extract_referenced_documents_from_code,
     validate_unsafe_execute_scope,
+    collaborators,
 ):
     identity = dl.get_request_identity()
     read_only_execute = is_read_only_execute(method, params)
     if requires_authenticated_session(method, kind, VerbKind, read_only_execute):
-        auth_error = authenticate_session_or_error(dl, identity)
+        auth_error = authenticate_session_or_error(collaborators, dl, identity)
         if auth_error is not None:
             return auth_error
 
@@ -42,7 +43,12 @@ def dispatch_enforcement(
         doc_name = None
 
     authorize_document = make_authorize_document(
-        self, method_spec, dl, resolve_doc_key, check_mutation_allowed
+        self,
+        collaborators,
+        method_spec,
+        dl,
+        resolve_doc_key,
+        check_mutation_allowed,
     )
 
     if method == "execute_code":
@@ -59,6 +65,7 @@ def dispatch_enforcement(
             annotate_read_result,
             extract_referenced_documents_from_code,
             validate_unsafe_execute_scope,
+            collaborators,
         )
 
     return dispatch_enforced_verb(

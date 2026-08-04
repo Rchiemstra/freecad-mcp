@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from ...execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
-
 
 def invalid_execution_mode_response(
     annotate: Callable[[dict[str, Any]], dict[str, Any]], execution_mode: str
@@ -93,8 +91,9 @@ def geometry_loop_block_response(
     execution_mode: str,
     read_only: bool,
     allow_gui_loop: bool,
+    find_gui_geometry_loop_risk_fn: Callable[[str], Any],
 ) -> dict[str, Any] | None:
-    loop_risk = find_gui_geometry_loop_risk(code)
+    loop_risk = find_gui_geometry_loop_risk_fn(code)
     if loop_risk is None:
         return None
     block_unmarked_mutation = execution_mode == "auto" and not read_only
@@ -132,8 +131,9 @@ def boolean_audit_block_response(
     *,
     code: str,
     read_only: bool,
+    find_gui_blocking_risk_fn: Callable[..., Any],
 ) -> dict[str, Any] | None:
-    risk = find_gui_blocking_risk(code, read_only=read_only)
+    risk = find_gui_blocking_risk_fn(code, read_only=read_only)
     if risk is None:
         return None
     return annotate(

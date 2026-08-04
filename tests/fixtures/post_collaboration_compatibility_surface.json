@@ -410,7 +410,7 @@
       {
         "column": 13,
         "kind": "Name",
-        "line": 146,
+        "line": 157,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py",
         "symbol": "_mutation_capability_context"
       },
@@ -753,14 +753,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 92,
+        "line": 100,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
       {
         "column": 30,
         "kind": "Name",
-        "line": 287,
+        "line": 460,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -1166,14 +1166,14 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 7,
+        "line": 3,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/heartbeat.py",
         "symbol": "lease_heartbeat_batch"
       },
       {
         "column": 21,
         "kind": "Attribute",
-        "line": 23,
+        "line": 21,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/heartbeat.py",
         "symbol": "heartbeat"
       },
@@ -9117,13 +9117,6 @@
         "symbol": "sidecar_blocks"
       },
       {
-        "column": 18,
-        "kind": "Attribute",
-        "line": 124,
-        "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "symbol": "_effective_sidecar_block"
-      },
-      {
         "column": 12,
         "kind": "Name",
         "line": 126,
@@ -9154,56 +9147,56 @@
       {
         "column": 4,
         "kind": "Name",
-        "line": 149,
+        "line": 150,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "sidecar_blocks"
       },
       {
         "column": 21,
         "kind": "Name",
-        "line": 149,
+        "line": 150,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "collect_sidecar_blocks"
       },
       {
         "column": 27,
         "kind": "Name",
-        "line": 151,
+        "line": 154,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "sidecar_scope_required_error"
       },
       {
         "column": 16,
         "kind": "Name",
-        "line": 152,
+        "line": 155,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "sidecar_blocks"
       },
       {
         "column": 23,
         "kind": "Name",
-        "line": 158,
+        "line": 161,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "sidecar_scope_unresolved_error"
       },
       {
         "column": 54,
         "kind": "Name",
-        "line": 158,
+        "line": 161,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "sidecar_blocks"
       },
       {
         "column": 14,
         "kind": "Name",
-        "line": 162,
+        "line": 165,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "document_sidecar_block"
       },
       {
         "column": 48,
         "kind": "Name",
-        "line": 162,
+        "line": 165,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
         "symbol": "sidecar_blocks"
       },
@@ -9363,7 +9356,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 86,
+        "line": 94,
+        "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
+        "symbol": "_effective_sidecar_block"
+      },
+      {
+        "column": 29,
+        "kind": "Name",
+        "line": 402,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -10359,14 +10359,6 @@
       "classification": "runtime_singleton_locator",
       "column": 4,
       "function": "_rpc_mod",
-      "line": 9,
-      "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/_common.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
       "line": 7,
       "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py",
       "target": "...rpc_server"
@@ -10385,30 +10377,6 @@
       "function": "_rpc_mod",
       "line": 9,
       "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
-      "line": 7,
-      "path": "addon/FreeCADMCP/rpc_server/methods/v2_methods_ops/handshake.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
-      "line": 16,
-      "path": "addon/FreeCADMCP/rpc_server/methods/v2_methods_ops/invoke_v2.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
-      "line": 9,
-      "path": "addon/FreeCADMCP/rpc_server/methods/v2_methods_ops/invoke_v2_control.py",
       "target": "...rpc_server"
     },
     {
@@ -10464,8 +10432,8 @@
     "baseline_locator_nodes": 514,
     "baseline_references": 504,
     "baseline_runtime_calls": 432,
-    "current_definitions": 10,
-    "current_locator_nodes": 221,
+    "current_definitions": 6,
+    "current_locator_nodes": 87,
     "current_modules": {
       "addon/FreeCADMCP/rpc_server/lease_runtime.py": {
         "definitions": 1,
@@ -10480,20 +10448,6 @@
         "import_bindings": 0,
         "loaded_references": 0,
         "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/execute_code.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/execute_code_worker.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
       },
       "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py": {
         "definitions": 0,
@@ -10523,97 +10477,6 @@
         "loaded_references": 4,
         "runtime_calls": 4
       },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/_common.py": {
-        "definitions": 1,
-        "exported_names": 1,
-        "import_bindings": 0,
-        "loaded_references": 0,
-        "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/_support.py": {
-        "definitions": 0,
-        "exported_names": 1,
-        "import_bindings": 1,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/cancellation.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 7,
-        "runtime_calls": 7
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/cancellation_resolve.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 11,
-        "runtime_calls": 11
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/credential_inflight.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_enforcement_auth.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_execute_mutating.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_callbacks.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_errors.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 12,
-        "runtime_calls": 12
-      },
-      "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_task.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
       "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py": {
         "definitions": 1,
         "exported_names": 1,
@@ -10635,47 +10498,12 @@
         "loaded_references": 0,
         "runtime_calls": 0
       },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/heartbeat.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
       "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py": {
         "definitions": 1,
         "exported_names": 1,
         "import_bindings": 0,
         "loaded_references": 0,
         "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/control_cancel.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/control_cancel_finalize.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/control_cancel_handoff.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/control_status.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 24,
-        "runtime_calls": 24
       },
       "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create.py": {
         "definitions": 0,
@@ -10705,34 +10533,6 @@
         "loaded_references": 1,
         "runtime_calls": 1
       },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/worker_ops.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/v2_methods_ops/handshake.py": {
-        "definitions": 1,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/methods/v2_methods_ops/invoke_v2.py": {
-        "definitions": 1,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/methods/v2_methods_ops/invoke_v2_control.py": {
-        "definitions": 1,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
       "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py": {
         "definitions": 1,
         "exported_names": 1,
@@ -10746,13 +10546,6 @@
         "import_bindings": 1,
         "loaded_references": 21,
         "runtime_calls": 21
-      },
-      "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/reconcile.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 8,
-        "runtime_calls": 8
       },
       "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/save_validation.py": {
         "definitions": 0,
@@ -10776,8 +10569,8 @@
         "runtime_calls": 2
       }
     },
-    "current_references": 211,
-    "current_runtime_calls": 181,
+    "current_references": 81,
+    "current_runtime_calls": 63,
     "method": "AST count of _rpc_mod definitions, loaded references/runtime calls, import bindings, and explicit exports"
   },
   "manifest_state": "planned_pre_cutover",

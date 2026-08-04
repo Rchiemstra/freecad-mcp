@@ -6,10 +6,10 @@ from ._support import *
 """Mutating execute_code path for enforced dispatch."""
 
 
-def validate_generated_execute(identity, code, options, method_spec):
+def validate_generated_execute(collaborators, identity, code, options, method_spec):
     operation_id = str(options.get("operation_id") or "")
     supplied_signature = str(options.get("operation_signature") or "")
-    expected_signature = _rpc_mod()._generated_execute_signature(
+    expected_signature = collaborators.generated_execute_signature(
         session_token=identity.get("rpc_session_token") or "",
         request_id=identity.get("request_id") or "",
         code=code,
@@ -24,7 +24,7 @@ def validate_generated_execute(identity, code, options, method_spec):
                 "signature is missing or invalid"
             ),
         }
-    return _rpc_mod()._generated_operation_method_spec(method_spec, operation_id)
+    return collaborators.generated_operation_method_spec(method_spec, operation_id)
 
 
 def validate_mutating_execute_scope(
@@ -65,14 +65,17 @@ def dispatch_mutating_execute_code(
     options,
     extract_referenced_documents_from_code,
     validate_unsafe_execute_scope,
+    collaborators,
 ):
     generated_operation = bool(options.get("generated_operation"))
     if generated_operation:
-        signature_result = validate_generated_execute(identity, code, options, method_spec)
+        signature_result = validate_generated_execute(
+            collaborators, identity, code, options, method_spec
+        )
         if isinstance(signature_result, dict):
             return signature_result
         method_spec = signature_result
-    settings = load_settings()
+    settings = collaborators.load_settings()
     if not generated_operation and not settings.get("allow_unsafe_mutating_execute_code", False):
         return {
             "success": False,

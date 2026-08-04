@@ -75,12 +75,13 @@ def build_gui_on_complete(
     completion_seen,
     replay_on_complete,
     late_on_complete,
+    collaborators,
 ):
     def on_complete(completed_request_id, outcome):
         completion_seen.set()
         completion_state = None
         if inflight is not None:
-            completion_state = _rpc_mod().rpc_inflight_request_registry.end_gui_phase(
+            completion_state = collaborators.inflight_request_registry.end_gui_phase(
                 inflight.session_id, inflight.request_id
             )
             if completion_state is not None and completion_state.recovery_incident_id:
@@ -100,7 +101,7 @@ def build_gui_on_complete(
                     inflight,
                     dirty=(True if completion_state.mutation_started else None),
                 )
-                completion_state = _rpc_mod().rpc_inflight_request_registry.refresh_terminal(
+                completion_state = collaborators.inflight_request_registry.refresh_terminal(
                     inflight.session_id, inflight.request_id
                 )
         if replay_on_complete is not None and (
@@ -111,6 +112,8 @@ def build_gui_on_complete(
             try:
                 late_on_complete(completed_request_id, outcome)
             except Exception:
-                _rpc_mod().logger.debug("late_on_complete callback failed", exc_info=True)
+                collaborators.logger.debug(
+                    "late_on_complete callback failed", exc_info=True
+                )
 
     return on_complete

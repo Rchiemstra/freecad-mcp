@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import FreeCAD
-
 from ._common import require_document_modified
 from .recompute_helpers import classify_recompute_errors, collect_invalid_objects
 
@@ -34,18 +32,19 @@ def build_execute_session(
     disk_before: dict[str, tuple | None],
     invalid_before: dict[str, list[dict[str, Any]]],
     read_only_unguarded: list[str],
+    freecad,
     collect_invalid_objects_fn=None,
 ) -> dict[str, Any]:
     collector = collect_invalid_objects_fn or collect_invalid_objects
     invalid_after = collector()
     classified = classify_recompute_errors(invalid_before, invalid_after, target_doc)
-    active_after = FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
+    active_after = freecad.ActiveDocument.Name if freecad.ActiveDocument else None
     dirty_after = {
         name: require_document_modified(doc)
-        for name, doc in FreeCAD.listDocuments().items()
+        for name, doc in freecad.listDocuments().items()
     }
     disk_after = {
-        name: disk_signature(doc) for name, doc in FreeCAD.listDocuments().items()
+        name: disk_signature(doc) for name, doc in freecad.listDocuments().items()
     }
     saved_documents = sorted(
         name
@@ -56,7 +55,7 @@ def build_execute_session(
             or (dirty_before.get(name) is True and dirty_after.get(name) is False)
         )
     )
-    target_doc_obj = FreeCAD.getDocument(target_doc) if target_doc else None
+    target_doc_obj = freecad.getDocument(target_doc) if target_doc else None
     session = {
         "active_document_before": active_before,
         "active_document_after": active_after,

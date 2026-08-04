@@ -3,7 +3,10 @@ from __future__ import annotations
 # ruff: noqa: F403, F405
 from ._support import *
 from .dispatch_core_enforcement import dispatch_enforcement
-from .dispatch_core_unenforced import dispatch_unenforced_mutation, import_document_lock_or_none
+from .dispatch_core_unenforced import (
+    dispatch_unenforced_mutation,
+    import_document_lock_or_none,
+)
 
 """RPC dispatch chokepoint with lease enforcement."""
 
@@ -14,7 +17,8 @@ def dispatch(self, method, params):
     When ``document_lock_enforcement`` is off, behaviour is identical to
     the default SimpleXMLRPCDispatcher instance dispatch.
     """
-    dl = import_document_lock_or_none()
+    collaborators = self._execution_collaborators
+    dl = import_document_lock_or_none(collaborators)
     if dl is None:
         func = getattr(self, method, None)
         if func is None or method.startswith("_"):
@@ -60,4 +64,5 @@ def dispatch(self, method, params):
         dl.resolve_doc_key,
         dl.extract_referenced_documents_from_code,
         dl.validate_unsafe_execute_scope,
+        collaborators,
     )

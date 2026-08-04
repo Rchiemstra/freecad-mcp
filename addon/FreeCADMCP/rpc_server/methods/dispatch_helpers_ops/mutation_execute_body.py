@@ -22,6 +22,7 @@ def run_mutation_transaction_body(
     result,
     failed,
     transaction,
+    freecad,
 ):
     if not failed and spec.recompute:
         if inflight is not None:
@@ -31,7 +32,7 @@ def run_mutation_transaction_body(
         for document in documents:
             document.recompute()
 
-    get_document = getattr(FreeCAD, "getDocument", lambda _name: None)
+    get_document = getattr(freecad, "getDocument", lambda _name: None)
     post_documents = tuple(
         get_document(str(getattr(document, "Name", "") or "")) or document
         for document in documents
@@ -53,7 +54,9 @@ def run_mutation_transaction_body(
         for document in post_documents
     }
     attempted_deltas = build_health_deltas(before, after, affected)
-    unexpected_documents = collect_unexpected_documents(all_before, declared_names)
+    unexpected_documents = collect_unexpected_documents(
+        freecad, all_before, declared_names
+    )
     attempted_health = self._aggregate_document_health(
         attempted_deltas,
         unexpected_documents=unexpected_documents,

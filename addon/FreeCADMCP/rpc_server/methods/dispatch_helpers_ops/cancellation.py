@@ -13,10 +13,11 @@ from .cancellation_resolve import (
 """Request cancellation resolution helpers."""
 
 
-def finish_cancellation_resolution(inflight, result):
+def finish_cancellation_resolution(self, inflight, result):
     """Publish one authoritative result and retire terminal credentials."""
-    resolved = _rpc_mod().rpc_inflight_request_registry.finish_cancellation_resolution(
-        inflight, result
+    resolved = (
+        self._execution_collaborators.inflight_request_registry
+        .finish_cancellation_resolution(inflight, result)
     )
     snapshot = inflight.token.snapshot()
     emit_telemetry(
@@ -39,7 +40,7 @@ def finish_cancellation_resolution(inflight, result):
     return resolved
 
 
-def wait_for_cancellation_resolution(inflight, *, wait_timeout=None):
+def wait_for_cancellation_resolution(self, inflight, *, wait_timeout=None):
     """Wait for the resolver owner; never publish a speculative result."""
 
     if not inflight.token.wait_cancellation_resolution(wait_timeout):
@@ -47,7 +48,7 @@ def wait_for_cancellation_resolution(inflight, *, wait_timeout=None):
             "Cancellation resolution remains owned by another request phase"
         )
     resolved = inflight.token.cancellation_resolution()
-    _rpc_mod().rpc_inflight_request_registry.refresh_terminal(
+    self._execution_collaborators.inflight_request_registry.refresh_terminal(
         inflight.session_id, inflight.request_id
     )
     return resolved or []
@@ -61,7 +62,8 @@ def complete_request_cancellation(self, inflight, *, dirty=None, snapshot_id=Non
     snapshot = inflight.token.snapshot()
     if not snapshot.cancellation_requested:
         return []
-    wait_timeout = cancellation_wait_timeout()
+    collaborators = self._execution_collaborators
+    wait_timeout = cancellation_wait_timeout(collaborators)
     if inflight.method in ACQUISITION_CANCEL_METHODS:
         claimed, cached = inflight.token.claim_cancellation_resolution()
         resolved = resolve_cached_or_wait(
@@ -79,7 +81,7 @@ def complete_request_cancellation(self, inflight, *, dirty=None, snapshot_id=Non
         raise RuntimeError(
             "Cancellation fencing remains owned by another request phase"
         )
-    if not inflight.lease_affecting or _rpc_mod().document_lease_service is None:
+    if not inflight.lease_affecting or collaborators.document_lease_service is None:
         claimed, cached = inflight.token.claim_cancellation_resolution()
         resolved = resolve_cached_or_wait(
             self, inflight, claimed=claimed, cached=cached, wait_timeout=wait_timeout
@@ -116,12 +118,13 @@ def begin_request_cancellation(self, inflight, *, wait_timeout=None):
         return []
     results = []
     try:
-        if not inflight.lease_affecting or _rpc_mod().document_lease_service is None:
+        collaborators = self._execution_collaborators
+        if not inflight.lease_affecting or collaborators.document_lease_service is None:
             return results
         snapshot = inflight.token.snapshot()
         for private in inflight.affected_credentials:
             try:
-                record = _rpc_mod().document_lease_service.begin_cancellation(
+                record = collaborators.document_lease_service.begin_cancellation(
                     self._model_credential(private),
                     request_id=inflight.request_id,
                     operation="Cancelling authenticated request",
@@ -134,11 +137,11 @@ def begin_request_cancellation(self, inflight, *, wait_timeout=None):
                 results.append(
                     {
                         "success": False,
-                        "error_code": _rpc_mod()._redact_rpc_diagnostic(
+                        "error_code": collaborators.redact_rpc_diagnostic(
                             getattr(exc, "code", type(exc).__name__.upper()),
                             inflight=inflight,
                         ),
-                        "error": _rpc_mod()._redact_rpc_diagnostic(exc, inflight=inflight),
+                        "error": collaborators.redact_rpc_diagnostic(exc, inflight=inflight),
                     }
                 )
         return results

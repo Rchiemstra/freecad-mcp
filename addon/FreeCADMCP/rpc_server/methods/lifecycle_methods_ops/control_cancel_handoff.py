@@ -3,28 +3,24 @@
 from __future__ import annotations
 
 from ...telemetry import emit as emit_telemetry
-from ._common import _rpc_mod
 
 
-def handoff_public(mcp_runtime_id, target_request_id):
-    store = _rpc_mod().rpc_handoff_continuation_store
+def handoff_public(store, mcp_runtime_id, target_request_id):
     if store is None or not mcp_runtime_id:
         return None
     entry = store.get(mcp_runtime_id, target_request_id)
     return entry.to_public_dict() if entry is not None else None
 
 
-def handoff_entry(mcp_runtime_id, target_request_id, cached_entry=None):
+def handoff_entry(store, mcp_runtime_id, target_request_id, cached_entry=None):
     if cached_entry is not None:
         return cached_entry
-    store = _rpc_mod().rpc_handoff_continuation_store
     if store is None or not mcp_runtime_id:
         return None
     return store.get(mcp_runtime_id, target_request_id)
 
 
-def request_handoff_cancel(mcp_runtime_id, target_request_id):
-    store = _rpc_mod().rpc_handoff_continuation_store
+def request_handoff_cancel(store, mcp_runtime_id, target_request_id):
     if store is None or not mcp_runtime_id or not target_request_id:
         return None, None
     handoff_entry_value = store.get(mcp_runtime_id, target_request_id)
@@ -58,6 +54,7 @@ def handoff_block_response(
     error_code,
     error,
     cancellation_status,
+    handoff_store,
     mcp_runtime_id,
     cached_entry=None,
 ):
@@ -70,11 +67,15 @@ def handoff_block_response(
         "gui_queue": "not_queued",
         "lease_events": [],
         "handoff_cancelled": False,
-        "handoff_continuation": handoff_public(mcp_runtime_id, target_request_id),
+        "handoff_continuation": handoff_public(
+            handoff_store, mcp_runtime_id, target_request_id
+        ),
     }
 
 
-def handoff_cancelled_response(target_request_id, mcp_runtime_id):
+def handoff_cancelled_response(
+    handoff_store, target_request_id, mcp_runtime_id
+):
     emit_telemetry(
         "cancellation",
         "cancellation_requested",
@@ -90,11 +91,15 @@ def handoff_cancelled_response(target_request_id, mcp_runtime_id):
         "gui_queue": "not_queued",
         "lease_events": [],
         "handoff_cancelled": True,
-        "handoff_continuation": handoff_public(mcp_runtime_id, target_request_id),
+        "handoff_continuation": handoff_public(
+            handoff_store, mcp_runtime_id, target_request_id
+        ),
     }
 
 
-def handoff_completed_tombstone_response(target_request_id, mcp_runtime_id):
+def handoff_completed_tombstone_response(
+    handoff_store, target_request_id, mcp_runtime_id
+):
     emit_telemetry(
         "cancellation",
         "cancellation_requested",
@@ -110,11 +115,14 @@ def handoff_completed_tombstone_response(target_request_id, mcp_runtime_id):
         "gui_queue": "not_queued",
         "lease_events": [],
         "handoff_cancelled": True,
-        "handoff_continuation": handoff_public(mcp_runtime_id, target_request_id),
+        "handoff_continuation": handoff_public(
+            handoff_store, mcp_runtime_id, target_request_id
+        ),
     }
 
 
 def resolve_handoff_block(
+    handoff_store,
     handoff_cancel_status,
     *,
     target_request_id,
@@ -122,18 +130,23 @@ def resolve_handoff_block(
     handoff_entry_value,
 ):
     if handoff_cancel_status == "not_cancellable":
-        entry = handoff_entry(mcp_runtime_id, target_request_id, handoff_entry_value)
+        entry = handoff_entry(
+            handoff_store, mcp_runtime_id, target_request_id, handoff_entry_value
+        )
         state = entry.state if entry is not None else "claim_committed"
         return handoff_block_response(
             target_request_id=target_request_id,
             error_code="REQUEST_NOT_CANCELLABLE",
             error=not_cancellable_message(state),
             cancellation_status="not_cancellable",
+            handoff_store=handoff_store,
             mcp_runtime_id=mcp_runtime_id,
             cached_entry=handoff_entry_value,
         )
     if handoff_cancel_status == "terminal_failed":
-        entry = handoff_entry(mcp_runtime_id, target_request_id, handoff_entry_value)
+        entry = handoff_entry(
+            handoff_store, mcp_runtime_id, target_request_id, handoff_entry_value
+        )
         return handoff_block_response(
             target_request_id=target_request_id,
             error_code=(entry.error_code if entry is not None else None)
@@ -141,11 +154,14 @@ def resolve_handoff_block(
             error=(entry.error if entry is not None else None)
             or "LOCKED_ERROR handoff failed; no credential is available to claim",
             cancellation_status="terminal_failed",
+            handoff_store=handoff_store,
             mcp_runtime_id=mcp_runtime_id,
             cached_entry=handoff_entry_value,
         )
     if handoff_cancel_status == "terminal_denied":
-        entry = handoff_entry(mcp_runtime_id, target_request_id, handoff_entry_value)
+        entry = handoff_entry(
+            handoff_store, mcp_runtime_id, target_request_id, handoff_entry_value
+        )
         return handoff_block_response(
             target_request_id=target_request_id,
             error_code=(entry.error_code if entry is not None else None)
@@ -153,6 +169,7 @@ def resolve_handoff_block(
             error=(entry.error if entry is not None else None)
             or "LOCKED_ERROR handoff was denied; no credential is available to claim",
             cancellation_status="terminal_denied",
+            handoff_store=handoff_store,
             mcp_runtime_id=mcp_runtime_id,
             cached_entry=handoff_entry_value,
         )
@@ -165,6 +182,7 @@ def resolve_handoff_block(
                 "cancellation is impossible and no token is returned"
             ),
             cancellation_status="already_completed",
+            handoff_store=handoff_store,
             mcp_runtime_id=mcp_runtime_id,
             cached_entry=handoff_entry_value,
         )

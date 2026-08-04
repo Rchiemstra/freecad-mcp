@@ -8,7 +8,7 @@ from .invoke_v2_finalize import apply_acquisition_escrow, finalize_invoke_v2_res
 
 def register_invoke_v2_inflight(
     *,
-    rpc_mod,
+    collaborators,
     self,
     session,
     envelope,
@@ -19,7 +19,7 @@ def register_invoke_v2_inflight(
     """Bind envelope params and register the inflight request."""
     try:
         params = self._ordered_envelope_params(target, envelope.params)
-        inflight = rpc_mod.rpc_inflight_request_registry.register(
+        inflight = collaborators.inflight_request_registry.register(
             session.session_id,
             envelope.request_id,
             envelope.method,
@@ -79,7 +79,7 @@ def set_invoke_v2_request_identity(
 
 def run_invoke_v2_dispatch(
     *,
-    rpc_mod,
+    collaborators,
     self,
     session,
     envelope,
@@ -146,7 +146,7 @@ def run_invoke_v2_dispatch(
             and result.get("credential")
         ):
             response, cached_response = apply_acquisition_escrow(
-                rpc_mod=rpc_mod,
+                collaborators=collaborators,
                 response=response,
                 result=result,
                 envelope=envelope,
@@ -181,7 +181,7 @@ def run_invoke_v2_dispatch(
             )
         )
         return finalize_invoke_v2_response(
-            rpc_mod=rpc_mod,
+            collaborators=collaborators,
             self=self,
             session=session,
             envelope=envelope,
@@ -214,7 +214,7 @@ def run_invoke_v2_dispatch(
         }
         handler_status = "cancelled"
         return finalize_invoke_v2_response(
-            rpc_mod=rpc_mod,
+            collaborators=collaborators,
             self=self,
             session=session,
             envelope=envelope,
@@ -246,7 +246,7 @@ def run_invoke_v2_dispatch(
             }
             handler_status = "uncertain"
             return finalize_invoke_v2_response(
-                rpc_mod=rpc_mod,
+                collaborators=collaborators,
                 self=self,
                 session=session,
                 envelope=envelope,
@@ -263,7 +263,7 @@ def run_invoke_v2_dispatch(
         raise
     finally:
         if not handler_state["finalized"]:
-            failed_terminal = rpc_mod.rpc_inflight_request_registry.finish_handler(
+            failed_terminal = collaborators.inflight_request_registry.finish_handler(
                 session.session_id,
                 envelope.request_id,
                 status=handler_state["status"],
@@ -281,7 +281,7 @@ def run_invoke_v2_dispatch(
                         else None
                     ),
                 )
-                rpc_mod.rpc_inflight_request_registry.finish_handler(
+                collaborators.inflight_request_registry.finish_handler(
                     session.session_id,
                     envelope.request_id,
                     status="cancelled",

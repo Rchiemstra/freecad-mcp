@@ -1,6 +1,8 @@
 """FreeCAD MCP dual-encoding RPC server façade (Phase 4 slice 4H)."""
 from __future__ import annotations
 
+# ruff: noqa: E701, I001
+
 import logging
 import os  # noqa: F401 - §3.3 lifecycle / test shims
 import platform  # noqa: F401 - §3.3 test shims
@@ -8,6 +10,7 @@ import sys  # noqa: F401 - §3.3 lifecycle shims
 import threading
 import uuid
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path  # noqa: F401 - §3.3 lease runtime shims
 
 import FreeCAD  # §3.3 test monkeypatch
@@ -24,16 +27,18 @@ try:
 except ImportError:  # pragma: no cover - flat addon import path
     from collaboration_api import CollaborationAPI as _CollaborationAPI
 
-from .acquisition_claims import AcquisitionClaimStore  # noqa: I001 - frozen census lines
+from .acquisition_claims import AcquisitionClaimStore
 from .commands import register_commands, schedule_toggle_sync
 from .filtered_xmlrpc_server import FilteredXMLRPCServer, validate_allowed_ips  # noqa: F401
 from .gui_dispatcher_qt import GuiDispatcher  # noqa: F401 - lifecycle test monkeypatch
 from .handoff_continuations import HandoffContinuationStore
-try: from ..dispatch.inflight_request_registry import InflightRequestRegistry  # noqa: E701, I001 - frozen census lines
-except ImportError: from dispatch.inflight_request_registry import InflightRequestRegistry  # noqa: E701, I001 - frozen census lines
+from .execute_code_analysis import analyze_execute_code, typed_tool_warning
+from .execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
+try: from ..dispatch.inflight_request_registry import InflightRequestRegistry
+except ImportError: from dispatch.inflight_request_registry import InflightRequestRegistry
 
 try:
-    from .._shared.protocol.public_error import (  # noqa: I001 - frozen census lines
+    from .._shared.protocol.public_error import (
         public_error as lease_protocol_public_error,
     )
     from ..transport.authentication import (
@@ -41,7 +46,7 @@ try:
     )
     from ..transport.replay import RequestReplayCache
 except ImportError:  # pragma: no cover - flat addon import path
-    from _shared.protocol.public_error import (  # noqa: F401, I001 - frozen census lines
+    from _shared.protocol.public_error import (
         public_error as lease_protocol_public_error,
     )
     from transport.authentication import (  # noqa: F401
@@ -66,6 +71,9 @@ from .lease_runtime import (  # noqa: F401
 )
 from .methods.lease_methods_ops.collaboration_dependencies import (
     CollaborationCollaborators as _CollaborationCollaborators,
+)
+from .methods.lease_methods_ops.execution_dependencies import (
+    ExecutionCollaborators as _ExecutionCollaborators,
 )
 from .methods.lease_methods_ops.lifecycle_dependencies import (
     LifecycleCollaborators as _LifecycleCollaborators,
@@ -109,19 +117,19 @@ from .rpc_helpers import (  # noqa: F401 - §3.3 moved-symbol shims
 )
 from .rpc_server_ops.facade_bindings import bind_freecad_rpc
 from .server_lifecycle import start_rpc_server  # noqa: F401
-from .server_shutdown import stop_rpc_server  # noqa: F401 - §3.3 test monkeypatch
+from .server_shutdown import stop_rpc_server
 from .settings import (
     DEFAULT_SETTINGS as _DEFAULT_SETTINGS,  # noqa: F401 - compatibility export
 )
 from .settings import (
     SettingsPolicyError,  # noqa: F401 - §3.3 test shims
-    load_settings,  # noqa: F401 - §3.3 InitGui / test shims
+    load_settings,
     resolve_rpc_bind_host,  # noqa: F401
 )
 from .settings import (
     get_settings_path as _get_settings_path,  # noqa: F401 - compatibility export
 )
-from .snapshot_service import (  # noqa: F401 - §3.3 shims
+from .snapshot_service import (
     create_lease_baseline_snapshot_gui,
     create_primary_snapshot_gui,
     discard_lease_baseline_snapshot,
@@ -166,9 +174,12 @@ except ImportError:  # pragma: no cover - flat addon import path
     pass
 
 
+_EXECUTE_TIMEOUT = 120
+
+
 class FreeCADRPC:
     TIMEOUT = 30
-    EXECUTE_TIMEOUT = 120
+    EXECUTE_TIMEOUT = _EXECUTE_TIMEOUT
     ACQUIRE_GUI_PHASE_TIMEOUT_S = 45
     ACQUIRE_HASH_TIMEOUT_S = 30
     CLIENT_LIFECYCLE_TIMEOUT_S = 150
@@ -179,6 +190,7 @@ class FreeCADRPC:
         *,
         collaboration_collaborators: _CollaborationCollaborators | None = None,
         lifecycle_collaborators: _LifecycleCollaborators | None = None,
+        execution_collaborators: _ExecutionCollaborators | None = None,
     ):
         self.allow_execute_code = allow_execute_code
         self._mutation_context = threading.local()
@@ -201,6 +213,23 @@ class FreeCADRPC:
         if lifecycle_collaborators is None:
             lifecycle_collaborators = _build_lifecycle_collaborators()
         self.__lifecycle_collaborators = lifecycle_collaborators
+        if (
+            execution_collaborators is not None
+            and not isinstance(execution_collaborators, _ExecutionCollaborators)
+        ):
+            raise TypeError("execution_collaborators must be ExecutionCollaborators")
+        if execution_collaborators is None:
+            execution_collaborators = _build_execution_collaborators(
+                compatibility_api=collaboration_collaborators.compatibility_api
+            )
+        if (
+            execution_collaborators.compatibility_api
+            is not collaboration_collaborators.compatibility_api
+        ):
+            raise ValueError(
+                "execution and collaboration collaborators must share compatibility_api"
+            )
+        self.__execution_collaborators = execution_collaborators
 
     @property
     def _collaboration_collaborators(self) -> _CollaborationCollaborators:
@@ -210,12 +239,35 @@ class FreeCADRPC:
     def _lifecycle_collaborators(self) -> _LifecycleCollaborators:
         return self.__lifecycle_collaborators
 
+    @property
+    def _execution_collaborators(self) -> _ExecutionCollaborators:
+        return self.__execution_collaborators
+
     def _bind_collaboration_runtime_manifest(self, runtime_manifest) -> None:
         """Complete the private graph before the listener can serve requests."""
 
         collaborators = self._collaboration_collaborators
         self.__collaboration_collaborators = collaborators.with_runtime_manifest(
             runtime_manifest
+        )
+
+    def _bind_authenticated_execution_runtime(
+        self,
+        *,
+        session_manager,
+        runtime_manifest,
+        actual_endpoint,
+        server_started_at,
+    ) -> None:
+        """Complete authenticated execution dependencies before publication."""
+
+        self.__execution_collaborators = (
+            self._execution_collaborators.with_authenticated_runtime(
+                session_manager=session_manager,
+                runtime_manifest=runtime_manifest,
+                actual_endpoint=actual_endpoint,
+                server_started_at=server_started_at,
+            )
         )
 
 
@@ -234,7 +286,7 @@ def _build_collaboration_collaborators() -> _CollaborationCollaborators:
         acquisition_claim_store=rpc_acquisition_claim_store,
         handoff_continuation_store=rpc_handoff_continuation_store,
         request_replay_cache=rpc_request_replay_cache,
-        rpc_server_runtime_id=rpc_server_runtime_id,
+        rpc_server_runtime_id=_ADDON_RUNTIME_ID,
         addon_loaded_at=addon_loaded_at,
         redact_rpc_diagnostic=_redact_rpc_diagnostic,
         lease_service_error=_lease_service_error,
@@ -244,12 +296,133 @@ def _build_collaboration_collaborators() -> _CollaborationCollaborators:
         create_lease_baseline_snapshot_gui=create_lease_baseline_snapshot_gui,
         discard_lease_baseline_snapshot=discard_lease_baseline_snapshot,
         credential_from_wire=_credential_from_wire,
-        stale_reconcile_already_recovered=_stale_reconcile_already_recovered,
+        stale_reconcile_already_recovered=partial(
+            _stale_reconcile_already_recovered,
+            document_lease_service=document_lease_service,
+        ),
         stale_reconcile_classify=_stale_reconcile_classify,
         assert_mutation_file_metadata_unchanged=(
             _assert_mutation_file_metadata_unchanged
         ),
-        assert_never_saved_stale_continuity=_assert_never_saved_stale_continuity,
+        assert_never_saved_stale_continuity=partial(
+            _assert_never_saved_stale_continuity,
+            document_identity_service=document_identity_service,
+        ),
+    )
+
+
+_EXECUTION_COMPONENT_UNSET = object()
+
+
+def _build_execution_collaborators(
+    *,
+    compatibility_api,
+    gui_dispatcher_value=_EXECUTION_COMPONENT_UNSET,
+    worker_manager_value=_EXECUTION_COMPONENT_UNSET,
+    request_replay_cache=_EXECUTION_COMPONENT_UNSET,
+    inflight_request_registry=_EXECUTION_COMPONENT_UNSET,
+    acquisition_claim_store=_EXECUTION_COMPONENT_UNSET,
+    handoff_continuation_store=_EXECUTION_COMPONENT_UNSET,
+    session_manager_value=_EXECUTION_COMPONENT_UNSET,
+    runtime_manifest_value=_EXECUTION_COMPONENT_UNSET,
+    actual_endpoint_value=_EXECUTION_COMPONENT_UNSET,
+    server_started_at_value=_EXECUTION_COMPONENT_UNSET,
+) -> _ExecutionCollaborators:
+    """Capture execution components at the explicit composition point."""
+
+    return _ExecutionCollaborators(
+        compatibility_api=compatibility_api,
+        freecad=FreeCAD,
+        gui_dispatcher=(
+            gui_dispatcher
+            if gui_dispatcher_value is _EXECUTION_COMPONENT_UNSET
+            else gui_dispatcher_value
+        ),
+        worker_manager=(
+            worker_manager
+            if worker_manager_value is _EXECUTION_COMPONENT_UNSET
+            else worker_manager_value
+        ),
+        snapshot_coordinator=snapshot_coordinator,
+        shutdown_requested=shutdown_requested,
+        request_replay_cache=(
+            rpc_request_replay_cache
+            if request_replay_cache is _EXECUTION_COMPONENT_UNSET
+            else request_replay_cache
+        ),
+        inflight_request_registry=(
+            rpc_inflight_request_registry
+            if inflight_request_registry is _EXECUTION_COMPONENT_UNSET
+            else inflight_request_registry
+        ),
+        acquisition_claim_store=(
+            rpc_acquisition_claim_store
+            if acquisition_claim_store is _EXECUTION_COMPONENT_UNSET
+            else acquisition_claim_store
+        ),
+        handoff_continuation_store=(
+            rpc_handoff_continuation_store
+            if handoff_continuation_store is _EXECUTION_COMPONENT_UNSET
+            else handoff_continuation_store
+        ),
+        document_lease_service=document_lease_service,
+        document_identity_service=document_identity_service,
+        session_manager=(
+            rpc_session_manager
+            if session_manager_value is _EXECUTION_COMPONENT_UNSET
+            else session_manager_value
+        ),
+        runtime_manifest=(
+            rpc_runtime_manifest
+            if runtime_manifest_value is _EXECUTION_COMPONENT_UNSET
+            else runtime_manifest_value
+        ),
+        actual_endpoint=(
+            rpc_server_actual_endpoint
+            if actual_endpoint_value is _EXECUTION_COMPONENT_UNSET
+            else actual_endpoint_value
+        ),
+        runtime_id=_ADDON_RUNTIME_ID,
+        server_started_at=(
+            rpc_server_started_at
+            if server_started_at_value is _EXECUTION_COMPONENT_UNSET
+            else server_started_at_value
+        ),
+        addon_loaded_at=addon_loaded_at,
+        execute_timeout=_EXECUTE_TIMEOUT,
+        logger=logger,
+        stop_rpc_server=stop_rpc_server,
+        import_document_lock=_import_document_lock,
+        import_document_lease=_import_document_lease,
+        credential_for_document=_credential_for_document,
+        credential_from_wire=_credential_from_wire,
+        redact_rpc_diagnostic=_redact_rpc_diagnostic,
+        lease_service_error=_lease_service_error,
+        lease_protocol_public_error=lease_protocol_public_error,
+        external_scope_block=_effective_sidecar_block,
+        assert_mutation_file_metadata_unchanged=(
+            _assert_mutation_file_metadata_unchanged
+        ),
+        generated_execute_signature=_generated_execute_signature,
+        generated_operation_method_spec=_generated_operation_method_spec,
+        validate_generated_operation_envelope=(
+            _validate_generated_operation_envelope
+        ),
+        snapshot_mutation_context_for_request=partial(
+            _snapshot_mutation_context_for_request,
+            document_lease_service=document_lease_service,
+            import_document_lock=_import_document_lock,
+        ),
+        create_primary_snapshot_gui=create_primary_snapshot_gui,
+        freecad_version_parts=_freecad_version_parts,
+        load_settings=load_settings,
+        analyze_execute_code=analyze_execute_code,
+        typed_tool_warning=typed_tool_warning,
+        find_gui_geometry_loop_risk=find_gui_geometry_loop_risk,
+        find_gui_blocking_risk=find_gui_blocking_risk,
+        process_started_at=_process_started_at(),
+        boot_id=_boot_identity(),
+        profile_fingerprint=_profile_fingerprint(),
     )
 
 
@@ -292,7 +465,10 @@ def _build_lifecycle_collaborators() -> _LifecycleCollaborators:
         live_document_from_selector=_live_document_from_selector,
         ensure_v2_document=_ensure_v2_document,
         live_validation_evidence=_live_validation_evidence,
-        discard_terminal_snapshot=_discard_terminal_snapshot,
+        discard_terminal_snapshot=partial(
+            _discard_terminal_snapshot,
+            logger_override=logger,
+        ),
         saved_document_expectations=_saved_document_expectations,
         validate_saved_document_worker=_validate_saved_document_worker,
         inspect_references_gui=inspect_references_gui,

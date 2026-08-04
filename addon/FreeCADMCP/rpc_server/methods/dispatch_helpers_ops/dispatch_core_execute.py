@@ -18,6 +18,7 @@ def dispatch_execute_code(
     annotate_read_result,
     extract_referenced_documents_from_code,
     validate_unsafe_execute_scope,
+    collaborators,
 ):
     options = params[1] if len(params) > 1 and isinstance(params[1], dict) else {}
     read_only = bool(options.get("read_only", False))
@@ -37,6 +38,7 @@ def dispatch_execute_code(
             options,
             extract_referenced_documents_from_code,
             validate_unsafe_execute_scope,
+            collaborators,
         )
 
     safe_options = dict(options)

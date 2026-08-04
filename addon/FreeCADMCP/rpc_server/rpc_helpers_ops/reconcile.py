@@ -1,3 +1,6 @@
+"""Stale lease reconciliation helpers."""
+
+import logging
 from typing import Any
 
 try:
@@ -7,9 +10,9 @@ except ImportError:
 
 from ..lease_runtime import _import_document_lease
 from ..snapshot_service import discard_lease_baseline_snapshot, recovery_snapshot_path
-from ._common import _rpc_mod
 
-"""Stale lease reconciliation helpers."""
+logger = logging.getLogger("FreeCADMCP.rpc_server")
+
 
 def _recovery_snapshot_intact(snapshot_id: str | None) -> bool:
     if not snapshot_id:
@@ -54,7 +57,14 @@ def _stale_reconcile_classify(record):
     )
 
 
-def _assert_never_saved_stale_continuity(record, document, parsed, live_identity):
+def _assert_never_saved_stale_continuity(
+    record,
+    document,
+    parsed,
+    live_identity,
+    *,
+    document_identity_service,
+):
     """Prove in-memory continuity for a never-saved dirty stale lease (D5)."""
 
     lease = _import_document_lease()
@@ -87,19 +97,19 @@ def _assert_never_saved_stale_continuity(record, document, parsed, live_identity
         raise lease.LiveDocumentValidationError(
             "never-saved stale reconciliation requires an intact recovery snapshot"
         )
-    bound_session = _rpc_mod().document_identity_service.registered_session_uuid(document)
+    bound_session = document_identity_service.registered_session_uuid(document)
     if bound_session != parsed.document_session_uuid:
         raise lease.LiveDocumentValidationError(
             "live document proxy is not registered to this lease session"
         )
 
 
-def _stale_reconcile_already_recovered(parsed):
+def _stale_reconcile_already_recovered(parsed, *, document_lease_service):
     """Return the lease record when reconcile already succeeded for *parsed*."""
 
     lease = _import_document_lease()
     try:
-        return _rpc_mod().document_lease_service.authorize(
+        return document_lease_service.authorize(
             parsed,
             selector={"document_session_uuid": parsed.document_session_uuid},
             allowed_states={lease.LeaseState.LOCKED_IDLE},
@@ -108,7 +118,7 @@ def _stale_reconcile_already_recovered(parsed):
         return None
 
 
-def _discard_terminal_snapshot(terminal):
+def _discard_terminal_snapshot(terminal, *, logger_override=None):
     snapshot_id = (
         terminal.get("document_state", {}).get("snapshot_id")
         if isinstance(terminal, dict)
@@ -118,15 +128,15 @@ def _discard_terminal_snapshot(terminal):
         try:
             discard_lease_baseline_snapshot(snapshot_id)
         except Exception:
-            _rpc_mod().logger.warning(
+            (logger_override or logger).warning(
                 "Released lease but could not remove recovery snapshot %s",
                 snapshot_id,
                 exc_info=True,
             )
 
 
-def _v2_status_for_context(context):
-    if _rpc_mod().document_lease_service is None:
+def _v2_status_for_context(context, *, document_lease_service):
+    if document_lease_service is None:
         return []
     document_ids = {
         item.get("document_session_uuid")
@@ -135,22 +145,24 @@ def _v2_status_for_context(context):
     }
     return [
         record
-        for record in _rpc_mod().document_lease_service.list_records()
+        for record in document_lease_service.list_records()
         if record.get("document", {}).get("session_uuid") in document_ids
     ]
 
 
-def _snapshot_mutation_context_for_request() -> dict[str, Any]:
+def _snapshot_mutation_context_for_request(
+    *, document_lease_service, import_document_lock
+) -> dict[str, Any]:
     """Return core generations and observer attribution for a snapshot caller."""
 
-    if _rpc_mod().document_lease_service is None:
+    if document_lease_service is None:
         return {
             "generations": None,
             "request_id": "",
             "document_keys": (),
         }
     try:
-        identity = _rpc_mod()._import_document_lock().get_request_identity()
+        identity = import_document_lock().get_request_identity()
     except Exception:
         return {
             "generations": {},
@@ -166,7 +178,7 @@ def _snapshot_mutation_context_for_request() -> dict[str, Any]:
         }
     generations: dict[str, int] = {}
     document_keys: set[str] = set()
-    for record in _rpc_mod().document_lease_service.list_records():
+    for record in document_lease_service.list_records():
         owner = record.get("owner") or {}
         document = record.get("document") or {}
         if str(owner.get("mcp_instance_id") or "") != runtime_id:

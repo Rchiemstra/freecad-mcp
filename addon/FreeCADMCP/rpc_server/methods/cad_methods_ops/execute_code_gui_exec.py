@@ -7,14 +7,16 @@ import io
 import sys
 import traceback
 
-import FreeCAD
 
-
-def run_python_on_gui_thread(code: str, output_buffer: io.StringIO) -> tuple[bool, dict | None]:
+def run_python_on_gui_thread(
+    code: str, output_buffer: io.StringIO, *, freecad
+) -> tuple[bool, dict | None]:
     try:
+        execution_globals = globals()
+        execution_globals["FreeCAD"] = freecad
         with contextlib.redirect_stdout(output_buffer):
-            exec(code, globals())
-        FreeCAD.Console.PrintMessage("Python code executed successfully.\n")
+            exec(code, execution_globals)
+        freecad.Console.PrintMessage("Python code executed successfully.\n")
         return True, None
     except Exception as exc:
         exc_type, exc_val, exc_tb = sys.exc_info()
@@ -37,5 +39,5 @@ def run_python_on_gui_thread(code: str, output_buffer: io.StringIO) -> tuple[boo
             "line_code": last.line if last else None,
             "stdout": output_buffer.getvalue(),
         }
-        FreeCAD.Console.PrintError(f"Error executing Python code: {exc}\n")
+        freecad.Console.PrintError(f"Error executing Python code: {exc}\n")
         return False, tb_info

@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 4 in progress; Phase 13 complete |
-| Next phase | 14 — `refactor(mcp): inject execution collaborators` |
+| Current stage / phase | Stage 4 in progress; Phase 14 complete |
+| Next phase | 15 — `refactor(mcp): inject CAD collaborators` |
 | In-flight ownership | None |
-| Last review | Phase 13 save, release/query, and final integrated reviews clear on 2026-08-04 |
+| Last review | Phase 14 dispatch/control and final integrated reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 13 passed its phase and branch cross-track gates; begin Phase 14 by freezing execution collaborator interfaces and exclusive ownership |
+| Resume hint | Phase 14 passed its phase and branch cross-track gates; begin Phase 15 by freezing CAD collaborator interfaces and exclusive ownership |
 
 ### 11.2 Stage status
 
@@ -809,7 +809,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
-| 4 | 12–17 | phase 12 | in progress (Phase 13 complete) |
+| 4 | 12–17 | phase 12 | in progress (Phase 14 complete) |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
@@ -818,6 +818,50 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 14 complete: execution collaborators injected
+
+- **Phase delivery:** frozen `ExecutionCollaborators` are composed eagerly with the
+  exact dispatcher, worker manager, replay/inflight/cancellation stores, session and
+  runtime publication values, execution-safety analyzers, status providers, logger,
+  FreeCAD object, and native compatibility-mutation API. Dispatch, protocol-v2,
+  cancellation, control/status, execute-code, and worker orchestration consume that
+  graph without `_rpc_mod()` or a FreeCAD proxy. The execution and collaboration
+  graphs must share the exact compatibility API object; authenticated runtime values
+  bind once before listener publication and remain restart-safe.
+- **Behavior and native attribution:** public RPC signatures and frozen listener
+  examples remain unchanged. Read-only execution stays isolated in the worker;
+  mutating GUI execution with a primary document crosses the native compatibility
+  boundary exactly once. Only exact native `Committed`/`committed=true` is published
+  as success; a failed Python execute envelope raises a private sentinel through the
+  callback so native rollback occurs while the historical public error envelope is
+  restored. The persistent GUI execution namespace, cancellation fencing, replay,
+  handoff, heartbeat, and status behavior are preserved.
+- **Contracts and inventory:** new exact-identity composition, dispatch/control, and
+  execute/worker contracts cover authenticated binding, restart, public-error and
+  credential conversion, status providers, escrow logging, native rejection before
+  and after callback, callback-error rollback, and persistent namespace behavior.
+  The locator census falls from 221 to 87 nodes, references from 211 to 81, runtime
+  calls from 181 to 63, and definitions from 10 to 6. Dynamic lookups remain 37;
+  local-import locators fall from 22 to 18. The frozen authority vector remains
+  115/15/30/167/861/251. Exactly 138 ARCH103, two ARCH105, and one ARCH107 obsolete
+  allowances were removed; total allowances fall from 757 to 616 with no new
+  code/path group.
+- **Agents and reviews:** disjoint dispatch/control and execute/worker workers
+  implemented their owned paths, and a fixture worker migrated the intentional
+  legacy dirty-adoption monkeypatch seam without weakening production eager capture.
+  Independent dispatch and integrated reviews found and closed transitive runtime
+  locators, late status providers, stale listener fixtures, persistent-namespace
+  loss, restart and constructor-capture defects, and native post-callback rejection
+  and rollback handling. The final integrated review is clear.
+- **Docker validation:** exact images, commands, counts, and results are recorded in
+  §11.4. Production lint checked 981 files; the affected/contract selection passed
+  327/327; Compose `unit` passed 2,265 with the three documented Windows-DACL skips
+  and one existing screenshot xfail; branch-built preflight, strict core, and strict
+  e2e passed with both collaboration verdicts zero.
+- **Stage result and next:** Stage 4 remains in progress with Phase 14 complete.
+  Phase 14 is not an integration gate, so the canonical parent gitlink remains at
+  Phase 12. Resume with Phase 15 only to inject CAD collaborators.
 
 #### 2026-08-04 — Phase 13 complete: lifecycle collaborators injected
 
@@ -1530,6 +1574,44 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 14 — `refactor(mcp): inject execution collaborators`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:870463667ce2dc8b43cddae856cc61c9f4d2fd248c97d3e03f91e2ff81ee692c`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 981 production files and passed architecture policy and
+  full Ruff. The final architecture, collaboration-authority, Phase 14 injection,
+  gateway/listener, native-attribution, cancellation, dirty-adoption, snapshot,
+  operation-scope, worker, and indicator selection passed 327/327. The independent
+  integrated review's final selection passed 274/274; exact touched-test Ruff and
+  `git diff --check` passed.
+- **Compose phase gate:** after the final `docker compose build`, `docker compose run
+  --rm unit` selected 2,269: 2,265 passed, the three Windows-DACL tests skipped, the
+  existing screenshot test xfailed, and 129 non-unit tests were deselected. An
+  initial run encountered the existing timing-sensitive GUI-dispatch timeout test;
+  its immediate isolated rerun and the complete clean rerun both passed. Phase 14 is
+  not an integration gate, so §5.7 requires this unit service rather than all four
+  Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` native workspace
+  and branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no
+  native source changed, while the exact current nested worktree was mounted into
+  the cross-track image. The unmodified preflight wrapper emitted `PREFLIGHT_OK` with
+  pytest 9.1.1 and FreeCAD 26.3.0 revision 48071. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, core selected 12: seven passed and
+  five documented xfailed; e2e passed 117/117. Both strict verdict files contained
+  zero and their generated XML/verdict artifacts were removed after recording.
+- **Review and inventory result:** dispatch/control and integrated reviews are clear.
+  The exact locator census is 87 nodes, 81 references, and 63 runtime calls after a
+  134-node Phase 14 reduction; definitions fall from 10 to 6, dynamic lookups remain
+  37, and local-import locators fall from 22 to 18. Frozen authority totals remain
+  115, 15, 30, 167, 861, and 251. ARCH103 allowances fall from 280 to 142; total
+  allowances fall from 757 to 616 with no new code/path group.
 
 #### Phase 13 — `refactor(mcp): inject lifecycle collaborators`
 

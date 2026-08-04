@@ -124,6 +124,12 @@ class _LegacyGlobalFixtureRPC(rpc_server.FreeCADRPC):
     def _collaboration_collaborators(self):
         return rpc_server._build_collaboration_collaborators()
 
+    @property
+    def _execution_collaborators(self):
+        return rpc_server._build_execution_collaborators(
+            compatibility_api=self._collaboration_collaborators.compatibility_api
+        )
+
 
 def _configure_dirty_adoption(monkeypatch, tmp_path):
     model = tmp_path / "DirtyModel.FCStd"
