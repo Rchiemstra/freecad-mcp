@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from ._common import _rpc_mod
 from .acquire_v2_abort import abort_phase_reservation
 from .acquire_v2_helpers import (
     handle_reserve_failure,
@@ -29,14 +28,15 @@ def acquire_document_lock_v2(
     """Reserve first, hash off Qt, then snapshot/promote on Qt."""
 
     request_id = request_identity.get("request_id")
-    task_description = _rpc_mod()._redact_rpc_diagnostic(
+    collaborators = self._collaboration_collaborators
+    task_description = collaborators.redact_rpc_diagnostic(
         task_description, identity=request_identity
     )[:1024]
-    client = _rpc_mod()._redact_rpc_diagnostic(client, identity=request_identity)[:256]
-    agent_id = _rpc_mod()._redact_rpc_diagnostic(agent_id, identity=request_identity)[
+    client = collaborators.redact_rpc_diagnostic(client, identity=request_identity)[:256]
+    agent_id = collaborators.redact_rpc_diagnostic(agent_id, identity=request_identity)[
         :256
     ]
-    invalid = validate_acquire_inputs(hash_policy)
+    invalid = validate_acquire_inputs(hash_policy, collaborators)
     if invalid is not None:
         return invalid
     phase: dict[str, Any] = {}
@@ -63,7 +63,7 @@ def acquire_document_lock_v2(
     try:
         reserved = self._dispatch_gui(reserve_gui, timeout=acquire_timeout)
     except Exception:
-        abort_phase_reservation(phase)
+        abort_phase_reservation(phase, collaborators)
         raise
     if not isinstance(reserved, dict) or not reserved.get("success"):
         return handle_reserve_failure(self, reserved, phase, inflight)

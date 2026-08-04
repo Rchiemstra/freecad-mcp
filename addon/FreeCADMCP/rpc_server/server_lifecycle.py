@@ -252,6 +252,14 @@ class _UnpublishedRpcFacade:
         binding.apply()
 
 
+def _bind_authenticated_collaboration_manifest(bridge, manifest) -> None:
+    if manifest is None:
+        return
+    if bridge is None:
+        raise RuntimeError("authenticated runtime has no capability bridge")
+    bridge._bind_collaboration_runtime_manifest(manifest)
+
+
 def _compose_transitional_runtime(
     builder,
     rpc_mod: Any,
@@ -272,6 +280,7 @@ def _compose_transitional_runtime(
         "actual_host": None,
         "actual_port": None,
     }
+    capability_bridge_state: dict[str, Any] = {"bridge": None}
 
     def dispatcher_factory():
         return rpc_mod.GuiDispatcher(parent)
@@ -287,12 +296,17 @@ def _compose_transitional_runtime(
         _handoff_continuations,
         _acquisition_claims,
     ):
-        return rpc_mod.FreeCADRPC(
+        bridge = rpc_mod.FreeCADRPC(
             allow_execute_code=(
                 not remote_enabled
                 or bool(settings.get("allow_remote_execute_code", False))
-            )
+            ),
+            collaboration_collaborators=(
+                rpc_mod._build_collaboration_collaborators()
+            ),
         )
+        capability_bridge_state["bridge"] = bridge
+        return bridge
 
     def listener_factory(_dispatcher, _capability_bridge):
         try:
@@ -325,7 +339,11 @@ def _compose_transitional_runtime(
         )
         if warning.startswith("RPC Server could not"):
             raise _RpcStartRefusal(warning)
-        authentication_state["manifest"] = staged_rpc.staged("rpc_runtime_manifest")
+        manifest = staged_rpc.staged("rpc_runtime_manifest")
+        authentication_state["manifest"] = manifest
+        _bind_authenticated_collaboration_manifest(
+            capability_bridge_state["bridge"], manifest
+        )
         authentication_state["apply_deferred"] = staged_rpc.apply_deferred
         return staged_rpc.staged("rpc_session_manager"), warning
 

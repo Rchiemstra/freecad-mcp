@@ -438,11 +438,19 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         list_records=lambda: [],
         has_unresolved_owner=lambda _owner: False,
     )
+    identity_service = object()
     dispatcher = _LiveDispatcher(timeline, parent)
     worker_manager = _LiveWorkerManager(timeline)
     listener = _LiveListener(timeline)
     listener.server_address = listener_address
-    bridge = object()
+    bridge = SimpleNamespace(_collaboration_collaborators=None)
+
+    def bind_collaboration_runtime_manifest(manifest):
+        bridge._collaboration_collaborators = (
+            bridge._collaboration_collaborators.with_runtime_manifest(manifest)
+        )
+
+    bridge._bind_collaboration_runtime_manifest = bind_collaboration_runtime_manifest
     built: dict[str, object] = {}
     shutdown_requested = _TracingShutdown(timeline)
 
@@ -473,11 +481,26 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         timeline.append("factory:listener")
         return listener
 
-    def bridge_constructor(*_args, **_kwargs):
+    def bridge_constructor(*_args, **kwargs):
         counts["bridge"] += 1
         timeline.append("factory:bridge")
         if bridge_failure is not None:
             raise bridge_failure
+        collaborators = kwargs["collaboration_collaborators"]
+        assert _args == ()
+        assert kwargs["allow_execute_code"] is True
+        assert collaborators.document_lease_service is lease_service
+        assert collaborators.document_identity_service is identity_service
+        assert collaborators.inflight_request_registry is inflight
+        assert collaborators.handoff_continuation_store is handoffs
+        assert collaborators.acquisition_claim_store is claims
+        assert collaborators.request_replay_cache is replay
+        assert collaborators.runtime_manifest is None
+        assert (
+            collaborators.compatibility_api._document_lookup
+            is rpc_server.FreeCAD.getDocument
+        )
+        bridge._collaboration_collaborators = collaborators
         return bridge
 
     class _Thread:
@@ -518,6 +541,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
     monkeypatch.setattr(rpc_server, "rpc_handoff_continuation_store", handoffs)
     monkeypatch.setattr(rpc_server, "rpc_acquisition_claim_store", claims)
     monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
+    monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
     monkeypatch.setattr(
         rpc_server,
         "QtWidgets",
@@ -687,6 +711,10 @@ def test_authenticated_start_publishes_authentication_only_after_composition(
     assert context.rpc_server.rpc_session_manager is context.session_manager
     assert context.rpc_server.rpc_runtime_manifest is context.runtime_manifest
     assert context.built["runtime"].session_manager is context.session_manager
+    assert (
+        context.bridge._collaboration_collaborators.runtime_manifest
+        is context.runtime_manifest
+    )
     assert context.replay_predicates == [
         context.rpc_server.document_lease_service.has_unresolved_owner
     ]

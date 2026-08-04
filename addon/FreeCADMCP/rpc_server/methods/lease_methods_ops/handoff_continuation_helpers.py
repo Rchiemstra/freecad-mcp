@@ -1,6 +1,5 @@
 """LOCKED_ERROR handoff continuation phase helpers."""
 
-from ._common import _rpc_mod
 from .handoff_continuation_authorize import (
     authorize_handoff_gui as authorize_handoff_gui_phase,
 )
@@ -30,7 +29,7 @@ def journal_cancelled_handoff(self, store, mcp_runtime_id, request_id):
         response={
             "ok": False,
             "request_id": request_id,
-            "addon_runtime_id": _rpc_mod().rpc_server_runtime_id,
+            "addon_runtime_id": self._collaboration_collaborators.rpc_server_runtime_id,
             "result": {
                 "success": False,
                 "error_code": "LOCKED_ERROR_HANDOFF_CANCELLED",
@@ -65,7 +64,7 @@ def publish_handoff_failure(self, store, mcp_runtime_id, request_id, code, messa
         response={
             "ok": False,
             "request_id": request_id,
-            "addon_runtime_id": _rpc_mod().rpc_server_runtime_id,
+            "addon_runtime_id": self._collaboration_collaborators.rpc_server_runtime_id,
             "result": {
                 "success": False,
                 "error_code": code,
@@ -223,8 +222,10 @@ def finalize_handoff_claim(self, claimed, store, mcp_runtime_id, request_id, fai
                 )
         return
     if (
-        _rpc_mod().rpc_acquisition_claim_store is not None
-        and _rpc_mod().rpc_acquisition_claim_store.claimable(mcp_runtime_id, request_id)
+        self._collaboration_collaborators.acquisition_claim_store is not None
+        and self._collaboration_collaborators.acquisition_claim_store.claimable(
+            mcp_runtime_id, request_id
+        )
     ):
         return
     if not isinstance(claimed, dict) or not claimed.get("success"):

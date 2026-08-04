@@ -1,9 +1,11 @@
 """Reservation-phase helpers for ``acquire_document_lock_v2``."""
 
-from ._common import _rpc_mod, require_document_modified
+from ._common import require_document_modified
 
 
-def validate_dirty_adoption(document, document_identity, adopt_dirty, lease):
+def validate_dirty_adoption(
+    document, document_identity, adopt_dirty, lease, collaborators
+):
     if not adopt_dirty:
         document_dirty = require_document_modified(document)
         if document_dirty:
@@ -11,7 +13,7 @@ def validate_dirty_adoption(document, document_identity, adopt_dirty, lease):
                 "a pre-existing dirty document requires local adoption"
             )
         return document_dirty
-    if not _rpc_mod()._confirm_dirty_document_adoption_gui(
+    if not collaborators.confirm_dirty_document_adoption_gui(
         document, document_identity
     ):
         raise lease.DirtyAdoptionError(
@@ -29,22 +31,22 @@ def validate_dirty_adoption(document, document_identity, adopt_dirty, lease):
     return document_dirty
 
 
-def build_lease_owner(request_identity, client, agent_id, lease):
+def build_lease_owner(request_identity, client, agent_id, lease, collaborators):
     return lease.LeaseOwner(
-        addon_profile_id=_rpc_mod().rpc_runtime_manifest.profile_id,
-        addon_runtime_id=_rpc_mod().rpc_runtime_manifest.addon_runtime_id,
-        freecad_pid=_rpc_mod().rpc_runtime_manifest.freecad_pid,
+        addon_profile_id=collaborators.runtime_manifest.profile_id,
+        addon_runtime_id=collaborators.runtime_manifest.addon_runtime_id,
+        freecad_pid=collaborators.runtime_manifest.freecad_pid,
         freecad_process_started_at=(
-            _rpc_mod().rpc_runtime_manifest.freecad_process_started_at
+            collaborators.runtime_manifest.freecad_process_started_at
         ),
-        boot_id=_rpc_mod().rpc_runtime_manifest.boot_id,
+        boot_id=collaborators.runtime_manifest.boot_id,
         mcp_instance_id=request_identity.get("instance_id") or "",
         mcp_pid=int(request_identity.get("pid") or 0),
         mcp_process_started_at=(
             request_identity.get("mcp_process_started_at")
-            or _rpc_mod().addon_loaded_at
+            or collaborators.addon_loaded_at
         ),
-        hostname=_rpc_mod().document_lease_service.local_runtime_identity.hostname,
+        hostname=collaborators.document_lease_service.local_runtime_identity.hostname,
         mcp_hostname=request_identity.get("host") or "",
         client=client or request_identity.get("client") or "",
         agent_id=agent_id or request_identity.get("agent_id") or "",
@@ -62,14 +64,15 @@ def begin_lease_reservation(
     phase,
     lease,
 ):
+    collaborators = self._collaboration_collaborators
     live_request_ids = (
-        _rpc_mod().rpc_inflight_request_registry.active_lifecycle_request_ids()
-        if _rpc_mod().rpc_inflight_request_registry is not None
+        collaborators.inflight_request_registry.active_lifecycle_request_ids()
+        if collaborators.inflight_request_registry is not None
         else frozenset()
     )
     try:
         if adopt_dirty:
-            reservation = _rpc_mod().document_lease_service.begin_dirty_adoption(
+            reservation = collaborators.document_lease_service.begin_dirty_adoption(
                 exact_selector,
                 owner,
                 task_summary=task_description,
@@ -79,7 +82,7 @@ def begin_lease_reservation(
                 live_acquisition_request_ids=live_request_ids,
             )
         else:
-            reservation = _rpc_mod().document_lease_service.begin_acquisition(
+            reservation = collaborators.document_lease_service.begin_acquisition(
                 exact_selector,
                 owner,
                 task_summary=task_description,

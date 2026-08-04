@@ -303,8 +303,6 @@ def _configure_rpc_test(monkeypatch, tmp_path):
         baseline_reader=baseline_reader,
         archive_verifier=archive_verifier,
     )
-    rpc = rpc_server.FreeCADRPC()
-    monkeypatch.setattr(rpc, "_dispatch_gui", _threaded_gui_dispatcher(gui_thread_ids))
     monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
     monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
     monkeypatch.setattr(rpc_server, "save_service", service)
@@ -321,6 +319,8 @@ def _configure_rpc_test(monkeypatch, tmp_path):
         "getDocument",
         lambda name: document if name == document.Name else None,
     )
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(rpc, "_dispatch_gui", _threaded_gui_dispatcher(gui_thread_ids))
     return SimpleNamespace(
         rpc=rpc,
         path=path,
@@ -540,12 +540,6 @@ def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
             hostname=rpc_server.platform.node(),
         ),
     )
-    rpc = rpc_server.FreeCADRPC()
-    monkeypatch.setattr(
-        rpc,
-        "_dispatch_gui",
-        _threaded_gui_dispatcher(gui_thread_ids, gui_threads),
-    )
     monkeypatch.setattr(rpc_server, "document_lease_service", service)
     monkeypatch.setattr(rpc_server, "document_identity_service", identities)
     monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", manifest)
@@ -571,6 +565,12 @@ def test_saved_acquisition_reserves_before_bounded_hash_and_gui_snapshot(
         rpc_server,
         "create_lease_baseline_snapshot_gui",
         snapshot_after_reservation,
+    )
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(
+        rpc,
+        "_dispatch_gui",
+        _threaded_gui_dispatcher(gui_thread_ids, gui_threads),
     )
 
     if selector_form == "doc_name":

@@ -1,7 +1,6 @@
 """GUI reservation phase for ``acquire_document_lock_v2``."""
 try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
-from ._common import _rpc_mod
 from .acquire_v2_reserve_helpers import (
     begin_lease_reservation,
     build_lease_owner,
@@ -22,20 +21,23 @@ def reserve_gui(
     phase,
     inflight,
 ):
+    collaborators = self._collaboration_collaborators
     reservation = None
     try:
         if inflight is not None:
             inflight.token.checkpoint("acquisition_reserve_gui")
-        document, document_identity = _rpc_mod()._live_document_from_selector(
+        document, document_identity = collaborators.live_document_from_selector(
             requested_selector
         )
-        lease = _rpc_mod()._import_document_lease()
+        lease = collaborators.import_document_lease()
         validate_dirty_adoption(
-            document, document_identity, adopt_dirty, lease
+            document, document_identity, adopt_dirty, lease, collaborators
         )
         if adopt_dirty:
             phase["initial_dirty_adoption_authorized"] = True
-        owner = build_lease_owner(request_identity, client, agent_id, lease)
+        owner = build_lease_owner(
+            request_identity, client, agent_id, lease, collaborators
+        )
         exact_selector = {
             "document_session_uuid": document_identity.session_uuid,
             "document_name": document_identity.name,
@@ -71,7 +73,11 @@ def reserve_gui(
     except Exception as exc:
         if reservation is not None:
             try:
-                _rpc_mod().document_lease_service.abort_acquisition(reservation.credential)
+                collaborators.document_lease_service.abort_acquisition(
+                    reservation.credential
+                )
             except Exception as rollback_exc:
-                return _rpc_mod()._lease_service_error(rollback_exc, request_id=request_id)
-        return _rpc_mod()._lease_service_error(exc, request_id=request_id)
+                return collaborators.lease_service_error(
+                    rollback_exc, request_id=request_id
+                )
+        return collaborators.lease_service_error(exc, request_id=request_id)

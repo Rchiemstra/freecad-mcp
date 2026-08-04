@@ -1,8 +1,5 @@
 """Normal acquisition completion after snapshot."""
 
-from ._common import _rpc_mod
-
-
 def complete_normal_acquisition(
     self,
     *,
@@ -13,14 +10,15 @@ def complete_normal_acquisition(
     document,
     original_identity,
 ):
-    _rpc_mod().document_lease_service.record_acquisition_snapshot(
+    collaborators = self._collaboration_collaborators
+    collaborators.document_lease_service.record_acquisition_snapshot(
         credential,
         snapshot_id=snapshot_id,
     )
     completion = (
-        _rpc_mod().document_lease_service.complete_dirty_adoption
+        collaborators.document_lease_service.complete_dirty_adoption
         if adopt_dirty
-        else _rpc_mod().document_lease_service.complete_acquisition
+        else collaborators.document_lease_service.complete_acquisition
     )
     grant = completion(
         credential,
@@ -33,7 +31,7 @@ def complete_normal_acquisition(
 
         core_authority.sync_owner_from_lease_record(document, grant.record)
     except Exception:
-        _rpc_mod().FreeCAD.Console.PrintWarning(
+        collaborators.freecad.Console.PrintWarning(
             "[MCP] core mutation owner sync failed after acquire\n"
         )
     return {

@@ -34,12 +34,6 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     freecad_rpc_class, monkeypatch
 ):
     expected = _snapshot()["production_listener_examples"]
-    instance = freecad_rpc_class()
-    dispatcher = SimpleXMLRPCDispatcher(allow_none=True, encoding=None)
-    dispatcher.register_instance(instance)
-
-    acquire_module = inspect.getmodule(freecad_rpc_class.acquire_document_lock)
-    assert acquire_module is not None
     document_lock = SimpleNamespace(
         is_enabled=lambda: True,
         get_request_identity=lambda: {
@@ -47,14 +41,14 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
             "authenticated_session_id": "session-contract",
         },
     )
-    monkeypatch.setattr(
-        acquire_module,
-        "_rpc_mod",
-        lambda: SimpleNamespace(
-            _import_document_lock=lambda: document_lock,
-            document_lease_service=object(),
-        ),
-    )
+    rpc_module = inspect.getmodule(freecad_rpc_class)
+    assert rpc_module is not None
+    monkeypatch.setattr(rpc_module, "_import_document_lock", lambda: document_lock)
+    monkeypatch.setattr(rpc_module, "document_lease_service", object())
+    instance = freecad_rpc_class()
+    dispatcher = SimpleXMLRPCDispatcher(allow_none=True, encoding=None)
+    dispatcher.register_instance(instance)
+
     instance._acquire_document_lock_v2 = (
         lambda _selector, **_kwargs: expected["acquire_document_lock"]
     )

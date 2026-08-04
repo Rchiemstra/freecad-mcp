@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 3 complete; Phase 11 complete |
-| Next phase | 12 — `refactor(mcp): inject collaboration collaborators` |
+| Current stage / phase | Stage 4 in progress; Phase 12 complete |
+| Next phase | 13 — `refactor(mcp): inject lifecycle collaborators` |
 | In-flight ownership | None |
-| Last review | Phase 11 contract, startup, integrated, and final delta reviews clear on 2026-08-04 |
+| Last review | Phase 12 client, add-on bridge, lease-injection, native-binding, integrated, and final-delta reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Stage 3 is committed and gated through Phase 11; begin Stage 4 with Phase 12 only and follow its two-object cross-repository delivery protocol |
+| Resume hint | Phase 12 passed its cross-repository integration gate; begin Phase 13 by freezing lifecycle collaborator interfaces and exclusive ownership |
 
 ### 11.2 Stage status
 
@@ -809,7 +809,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
-| 4 | 12–17 | phase 12 | pending |
+| 4 | 12–17 | phase 12 | in progress (Phase 12 complete) |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
@@ -818,6 +818,54 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 12 complete: collaboration collaborators injected
+
+- **Cross-repository delivery:** the parent exposes
+  `Document.commitCompatibilityMutation(callback)` as the exact synchronous,
+  UnknownModel-only Python seam over the existing native commit barrier. It accepts
+  only one callback, enters through the owner-thread dispatcher, releases the GIL
+  while waiting, carries Python failures back to the caller after native rollback,
+  and returns the structured native result. No caller identity, lease owner, token,
+  generation, confirmation, TLS/capability grant, or revision-neutral serializer is
+  exposed.
+- **MCP collaborators:** the add-on bridge is a thin exact-once delegator over the
+  frozen native method. The installed client delegates its eight existing RPC
+  collaboration operations without acquiring document authority; later phases own
+  their native mutation routing and final cutover. `FreeCADRPC` eagerly captures one
+  frozen `CollaborationCollaborators` graph; authenticated startup replaces it once
+  with the exact live runtime manifest before publication or listener start.
+  Acquisition, adoption, handoff, recovery, reconciliation, and compatibility
+  mutation paths now consume the injected graph instead of resolving the RPC module
+  at call time.
+- **Locator and authority result:** 163 assigned ARCH103 allowances were removed.
+  The locator census fell from 514 to 351 nodes: references 504 to 341 and runtime
+  calls 432 to 293; definitions remain 10. Equivalent dynamic lookups remain 37 and
+  local-import locators remain 22. Frozen authority totals remain exactly 115, 15,
+  30, 167, 861, and 251. The sorted post-collaboration surface manifest and exact
+  allowance inventory record the new coordinates and counts.
+- **Contracts and cleanup:** bridge/client shape, exact dependency identity, eager
+  capture, authenticated-manifest binding, reconnect, adoption, authorization,
+  cancellation, continuation, timeout, recovery, exception rollback, callback
+  release, and no-authority contracts cover the complete changed surface. The Docker
+  pytest entrypoint now records pytest's logical result in a child before FreeCAD C
+  teardown; green results cannot become late false failures, while collection/test
+  failures, missing results, and signals remain fail-closed. The authenticated
+  lifecycle fixture explicitly releases its server instance and Qt-thread reference.
+- **Agents and reviews:** independent client, add-on bridge, lease-injection, native,
+  and integrated reviews found and closed live-manifest staging, cross-thread Python
+  exception, JSON ordering, late-bound default collaborator, and fixture-order
+  defects. The final read-only delta review is clear with zero blocking and zero
+  important findings.
+- **Docker validation:** exact images, commands, counts, and results are recorded in
+  §11.4. Production lint checked 979 files. The final baked touched selection passed
+  127/127; all four Compose services passed; native App/Gui/Part and the focused
+  seven-test binding suite passed; branch-built preflight/core/e2e passed with both
+  strict collaboration verdicts zero.
+- **Stage result and next:** Stage 4 is in progress with Phase 12 complete. Resume
+  with Phase 13 only to inject lifecycle collaborators. Phase 12 used the mandatory
+  nested MCP plus canonical parent two-object delivery and advances the parent
+  gitlink.
 
 #### 2026-08-04 — Phase 11 complete: composition root added
 
@@ -1444,6 +1492,45 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 12 — `refactor(mcp): inject collaboration collaborators`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:d5c6a2c1360e0afd5dc5b5f0199784a4cd273c538925577013588e5e2dccca88`;
+  native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 979 production files and passed architecture policy and
+  Ruff. The final Phase 12-touched selection passed 127/127 with a true container
+  zero; the final architecture/manifest/injection selection passed 111/111, and the
+  broader acquisition/adoption/recovery selection passed 210/210 before the final
+  fixture-only cleanup. Exact entrypoint Ruff and `git diff --check` passed. A
+  deliberate missing-test probe returned pytest code 4 through the hardened
+  fail-closed entrypoint.
+- **Compose integration gate:** on the final baked image, `unit` selected 2,233:
+  2,229 passed, three Windows-DACL tests skipped, the existing screenshot test
+  xfailed, and 129 non-unit tests were deselected. `e2e` passed 115 with two expected
+  native-binding skips; `core` passed four with one expected adapter-only skip and
+  seven documented FreeCAD xfails; `benchmark` passed 1/1. Every service container
+  exited zero.
+- **Native branch build:** exact current Phase 12 native sources were copied into
+  `freecad-collaboration-workspace` and built in Docker. The focused
+  `DocumentCollaborationPythonCompatibility` suite passed 7/7. Full App executed
+  754: 752 passed and the two known BackupPolicy cases skipped; GUI passed 240/240
+  under `docker run --init` plus Xvfb; Part passed 342/342.
+- **Branch-built cross-track:** the current native binding plus current nested MCP
+  tree passed `PREFLIGHT_OK` with pytest 9.1.1 and FreeCAD 26.3.0. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, core selected 12: seven passed and
+  five expected xfailed; e2e passed 117/117. Both strict collaboration verdicts
+  were zero, and the four generated result/XML files were removed after recording.
+- **Review and inventory result:** client, bridge, lease-injection, native,
+  integrated, and post-gate final-delta reviews are clear. The exact locator census
+  is 351 nodes, 341 references, and 293 runtime calls after a 163-node reduction;
+  dynamic/local-import counts remain 37/22. Frozen authority totals remain 115, 15,
+  30, 167, 861, and 251; 163 exact ARCH103 allowances were removed and none added.
 
 #### Phase 11 — `refactor(mcp): add the composition root`
 

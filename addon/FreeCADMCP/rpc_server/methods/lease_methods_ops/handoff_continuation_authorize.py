@@ -4,7 +4,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 
-from ._common import _rpc_mod, require_document_modified
+from ._common import require_document_modified
 
 
 def authorize_handoff_gui(
@@ -15,6 +15,7 @@ def authorize_handoff_gui(
     request_id,
     phase,
 ):
+    collaborators = self._collaboration_collaborators
     try:
         if cancelled():
             return {
@@ -23,7 +24,7 @@ def authorize_handoff_gui(
                 "error": "LOCKED_ERROR handoff was cancelled before authorization",
                 "request_id": request_id,
             }
-        document, document_identity = _rpc_mod()._live_document_from_selector(
+        document, document_identity = collaborators.live_document_from_selector(
             requested_selector
         )
         if not require_document_modified(document):
@@ -33,7 +34,7 @@ def authorize_handoff_gui(
                 "error": "the selected document has no unsaved changes to adopt",
                 "request_id": request_id,
             }
-        if not _rpc_mod()._authorize_locked_error_handoff_gui(
+        if not collaborators.authorize_locked_error_handoff_gui(
             document, document_identity
         ):
             return {
@@ -56,7 +57,7 @@ def authorize_handoff_gui(
         phase["canonical_path"] = document_identity.canonical_path
         return {"success": True}
     except Exception as exc:
-        return _rpc_mod()._lease_service_error(exc, request_id=request_id)
+        return collaborators.lease_service_error(exc, request_id=request_id)
 
 
 def hash_handoff_baseline(self, phase, lease, fail):
@@ -71,7 +72,7 @@ def hash_handoff_baseline(self, phase, lease, fail):
                 "saved document path is missing or is not a regular file",
             )
             return False
-        hash_platform = _rpc_mod().document_identity_service.platform
+        hash_platform = self._collaboration_collaborators.document_identity_service.platform
 
         def _hash_baseline():
             return lease.capture_file_baseline(path, platform=hash_platform)

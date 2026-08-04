@@ -117,6 +117,14 @@ class _DocumentLock:
         return True
 
 
+class _LegacyGlobalFixtureRPC(rpc_server.FreeCADRPC):
+    """Keep older behavior fixtures independent from production graph assembly."""
+
+    @property
+    def _collaboration_collaborators(self):
+        return rpc_server._build_collaboration_collaborators()
+
+
 def _configure_dirty_adoption(monkeypatch, tmp_path):
     model = tmp_path / "DirtyModel.FCStd"
     original = b"existing saved baseline"
@@ -142,7 +150,7 @@ def _configure_dirty_adoption(monkeypatch, tmp_path):
             hostname=rpc_server.platform.node(),
         ),
     )
-    rpc = rpc_server.FreeCADRPC()
+    rpc = _LegacyGlobalFixtureRPC()
     _DocumentLock.request_id = str(uuid.uuid4())
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
@@ -1402,7 +1410,7 @@ def test_clean_acquire_self_recovers_missing_foreign_sidecar(
     )
     sidecar_path_for(model).unlink()
 
-    rpc = rpc_server.FreeCADRPC()
+    rpc = _LegacyGlobalFixtureRPC()
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
     )
@@ -1527,7 +1535,7 @@ def test_dirty_adoption_self_recovers_cached_worker_intervention_without_close(
     sidecar = sidecar_path_for(model)
     sidecar.unlink()
 
-    rpc = rpc_server.FreeCADRPC()
+    rpc = _LegacyGlobalFixtureRPC()
     claims = AcquisitionClaimStore()
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
@@ -1701,7 +1709,7 @@ def test_acquisition_self_recovers_saved_acknowledged_dirty_sidecar(
         ),
         process_liveness_probe=lambda _pid: ProcessLivenessEvidence(exists=False),
     )
-    rpc = rpc_server.FreeCADRPC()
+    rpc = _LegacyGlobalFixtureRPC()
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
     )
@@ -1833,7 +1841,7 @@ def test_acquisition_self_recovers_abandoned_locked_error_sidecar(
         live_document=local_document,
     )
 
-    rpc = rpc_server.FreeCADRPC()
+    rpc = _LegacyGlobalFixtureRPC()
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
     )
@@ -2314,7 +2322,7 @@ def test_clean_acquire_never_opens_adoption_dialog(tmp_path, monkeypatch):
             hostname=rpc_server.platform.node(),
         ),
     )
-    rpc = rpc_server.FreeCADRPC()
+    rpc = _LegacyGlobalFixtureRPC()
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
     )

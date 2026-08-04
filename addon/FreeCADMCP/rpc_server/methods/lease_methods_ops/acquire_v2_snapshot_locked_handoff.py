@@ -1,8 +1,5 @@
 """LOCKED_ERROR handoff grant during acquisition snapshot."""
 
-from ._common import _rpc_mod
-
-
 def grant_locked_error_handoff(
     self,
     *,
@@ -13,8 +10,9 @@ def grant_locked_error_handoff(
     document_dirty,
     original_identity,
 ):
-    lease = _rpc_mod()._import_document_lease()
-    grant = _rpc_mod().document_lease_service.claim_locked_error_handoff(
+    collaborators = self._collaboration_collaborators
+    lease = collaborators.import_document_lease()
+    grant = collaborators.document_lease_service.claim_locked_error_handoff(
         phase["exact_selector"],
         phase["owner"],
         validation=lease.LiveDocumentValidation(
@@ -34,7 +32,7 @@ def grant_locked_error_handoff(
 
         core_authority.sync_owner_from_lease_record(document, grant.record)
     except Exception:
-        _rpc_mod().FreeCAD.Console.PrintWarning(
+        collaborators.freecad.Console.PrintWarning(
             "[MCP] core mutation owner sync failed after LOCKED_ERROR handoff\n"
         )
     return {

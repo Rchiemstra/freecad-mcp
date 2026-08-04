@@ -1,6 +1,6 @@
 """LOCKED_ERROR handoff continuation orchestration."""
 
-from ._common import _rpc_mod, logger
+from ._common import logger
 from .handoff_continuation_helpers import (
     finalize_handoff_claim,
     journal_cancelled_handoff,
@@ -22,9 +22,10 @@ def run_locked_error_handoff_continuation(
 ):
     """Confirm on GUI (unbounded), then hash/CAS-claim within phase budgets."""
 
-    store = _rpc_mod().rpc_handoff_continuation_store
+    collaborators = self._collaboration_collaborators
+    store = collaborators.handoff_continuation_store
     acquire_timeout = self.ACQUIRE_GUI_PHASE_TIMEOUT_S
-    lease = _rpc_mod()._import_document_lease()
+    lease = collaborators.import_document_lease()
 
     def cancelled():
         return store is not None and store.is_cancelled(mcp_runtime_id, request_id)
@@ -72,11 +73,13 @@ def run_locked_error_handoff_continuation(
             "LOCKED_ERROR handoff continuation failed for %s", request_id
         )
         if (
-            _rpc_mod().rpc_acquisition_claim_store is not None
-            and _rpc_mod().rpc_acquisition_claim_store.claimable(mcp_runtime_id, request_id)
+            collaborators.acquisition_claim_store is not None
+            and collaborators.acquisition_claim_store.claimable(
+                mcp_runtime_id, request_id
+            )
         ):
             return
         fail(
             getattr(exc, "code", type(exc).__name__.upper()),
-            _rpc_mod()._redact_rpc_diagnostic(exc),
+            collaborators.redact_rpc_diagnostic(exc),
         )

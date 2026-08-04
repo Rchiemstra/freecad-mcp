@@ -1,7 +1,6 @@
 """GUI snapshot and promote phase for ``acquire_document_lock_v2``."""
 try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
-from ._common import _rpc_mod
 from .acquire_v2_snapshot_complete import complete_normal_acquisition
 from .acquire_v2_snapshot_helpers import (
     abort_snapshot_on_failure,
@@ -24,6 +23,7 @@ def snapshot_and_promote_gui(
     task_description,
     request_id,
 ):
+    collaborators = self._collaboration_collaborators
     snapshot_id = None
     prior_core_authority_status = None
     marker_keys = []
@@ -31,7 +31,7 @@ def snapshot_and_promote_gui(
     try:
         if inflight is not None:
             inflight.token.checkpoint("acquisition_snapshot_gui")
-        document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
+        document = collaborators.freecad.getDocument(phase["document_name"])
         if document is None:
             raise RuntimeError("document closed while acquisition was preparing")
         original_identity = phase["document_identity"]
@@ -40,7 +40,7 @@ def snapshot_and_promote_gui(
             original_identity.session_uuid,
             str(original_identity.canonical_path or ""),
         } - {""}
-        dl = _rpc_mod()._import_document_lock()
+        dl = collaborators.import_document_lock()
         if not (
             phase.get("orphaned_local_mcp_recovery")
             or phase.get("orphaned_foreign_recovery")
@@ -48,7 +48,12 @@ def snapshot_and_promote_gui(
             dl.begin_agent_mutation_scope(request_id, marker_keys)
             attribution_started = True
         observed, document_dirty = validate_snapshot_document_state(
-            phase, adopt_dirty, document, original_identity, _rpc_mod()._import_document_lease()
+            phase,
+            adopt_dirty,
+            document,
+            original_identity,
+            collaborators.import_document_lease(),
+            collaborators,
         )
         if phase.get("locked_error_handoff"):
             return grant_locked_error_handoff(
@@ -106,6 +111,6 @@ def snapshot_and_promote_gui(
     except Exception as exc:
         return abort_snapshot_on_failure(self, phase, snapshot_id, exc, request_id)
     finally:
-        dl = _rpc_mod()._import_document_lock()
+        dl = collaborators.import_document_lock()
         if attribution_started:
             dl.end_agent_mutation_scope(request_id, marker_keys)

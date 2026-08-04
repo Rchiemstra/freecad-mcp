@@ -2,7 +2,6 @@
 
 import threading
 
-from ._common import _rpc_mod
 from .handoff_continuation import run_locked_error_handoff_continuation
 from .handoff_escrow import escrow_locked_error_handoff_claim
 from .handoff_journal import journal_handoff_terminal
@@ -26,9 +25,14 @@ def start_locked_error_handoff_continuation(
 ):
     """Kick off automatic bounded handoff after a mutation-free detect."""
 
-    if _rpc_mod().rpc_handoff_continuation_store is None or not mcp_runtime_id or not request_id:
+    collaborators = self._collaboration_collaborators
+    if (
+        collaborators.handoff_continuation_store is None
+        or not mcp_runtime_id
+        or not request_id
+    ):
         return
-    _rpc_mod().rpc_handoff_continuation_store.begin(
+    collaborators.handoff_continuation_store.begin(
         mcp_runtime_id=mcp_runtime_id, request_id=request_id
     )
     thread = threading.Thread(

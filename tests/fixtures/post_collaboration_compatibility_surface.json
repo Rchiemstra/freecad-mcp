@@ -424,147 +424,147 @@
       {
         "column": 21,
         "kind": "Name",
-        "line": 63,
+        "line": 68,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 44,
         "kind": "Name",
-        "line": 92,
+        "line": 97,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 52,
+        "line": 55,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "core_authority"
       },
       {
         "column": 12,
         "kind": "Attribute",
-        "line": 53,
+        "line": 56,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "core_authority"
       },
       {
         "column": 9,
         "kind": "Attribute",
-        "line": 59,
+        "line": 62,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "core_authority"
       },
       {
         "column": 9,
         "kind": "Attribute",
-        "line": 59,
+        "line": 62,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "open_mutation_capability"
       },
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 83,
+        "line": 86,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "capture_prior_core_authority"
       },
       {
         "column": 4,
         "kind": "Name",
-        "line": 84,
+        "line": 87,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 85,
+        "line": 88,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "core_authority"
       },
       {
         "column": 15,
         "kind": "Name",
-        "line": 86,
+        "line": 89,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 4,
         "kind": "Name",
-        "line": 87,
+        "line": 90,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 34,
         "kind": "Attribute",
-        "line": 87,
+        "line": 90,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "core_authority"
       },
       {
         "column": 7,
         "kind": "Name",
-        "line": 88,
+        "line": 91,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 11,
         "kind": "Name",
-        "line": 99,
+        "line": 102,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 35,
         "kind": "ImportAlias",
+        "line": 30,
+        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
+        "symbol": "core_authority"
+      },
+      {
+        "column": 8,
+        "kind": "Name",
         "line": 32,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
-        "kind": "Name",
-        "line": 34,
-        "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
-        "symbol": "core_authority"
-      },
-      {
-        "column": 8,
         "kind": "Attribute",
-        "line": 34,
+        "line": 32,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
         "symbol": "sync_owner_from_lease_record"
       },
       {
         "column": 35,
         "kind": "ImportAlias",
-        "line": 33,
+        "line": 31,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
         "kind": "Name",
-        "line": 35,
+        "line": 33,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 35,
+        "line": 33,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
         "symbol": "sync_owner_from_lease_record"
       },
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 8,
+        "line": 7,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "capture_prior_core_authority"
       },
@@ -627,49 +627,49 @@
       {
         "column": 4,
         "kind": "Name",
-        "line": 154,
+        "line": 159,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 8,
         "kind": "Name",
-        "line": 156,
+        "line": 161,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 38,
         "kind": "Name",
-        "line": 156,
+        "line": 161,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "capture_prior_core_authority"
       },
       {
         "column": 24,
         "kind": "Name",
-        "line": 159,
+        "line": 164,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "prior_core_authority_status"
       },
       {
         "column": 35,
         "kind": "ImportAlias",
-        "line": 58,
+        "line": 59,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
         "kind": "Name",
-        "line": 60,
+        "line": 61,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 60,
+        "line": 61,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
         "symbol": "sync_owner_from_lease_record"
       },
@@ -760,7 +760,7 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 81,
+        "line": 89,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -2220,7 +2220,7 @@
       {
         "column": 12,
         "kind": "Attribute",
-        "line": 17,
+        "line": 15,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
         "symbol": "claim_locked_error_handoff"
       },
@@ -2245,7 +2245,7 @@
       {
         "column": 12,
         "kind": "Attribute",
-        "line": 45,
+        "line": 46,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
         "symbol": "claim_locked_error_handoff"
       },
@@ -3340,14 +3340,14 @@
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 18,
+        "line": 19,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py",
         "symbol": "begin_saved_foreign_recovery_acquisition"
       },
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 6,
+        "line": 5,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "begin_saved_foreign_recovery"
       },
@@ -3368,7 +3368,7 @@
       {
         "column": 21,
         "kind": "Name",
-        "line": 130,
+        "line": 131,
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py",
         "symbol": "begin_saved_foreign_recovery"
       },
@@ -9363,7 +9363,7 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 75,
+        "line": 83,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -10465,7 +10465,7 @@
     "baseline_references": 504,
     "baseline_runtime_calls": 432,
     "current_definitions": 10,
-    "current_locator_nodes": 514,
+    "current_locator_nodes": 351,
     "current_modules": {
       "addon/FreeCADMCP/rpc_server/lease_runtime.py": {
         "definitions": 1,
@@ -10635,160 +10635,6 @@
         "loaded_references": 0,
         "runtime_calls": 0
       },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_abort.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_hash.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 7,
-        "runtime_calls": 7
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_reserve_gui.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 5,
-        "runtime_calls": 5
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_reserve_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 12,
-        "runtime_calls": 12
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_capture_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 3,
-        "runtime_calls": 3
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_orphan.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 7,
-        "runtime_calls": 7
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquisition_claims.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 15,
-        "runtime_calls": 15
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquisition_claims_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 5,
-        "runtime_calls": 5
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_authorize.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 8,
-        "runtime_calls": 8
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_escrow.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 12,
-        "runtime_calls": 12
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_journal.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
       "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/heartbeat.py": {
         "definitions": 0,
         "exported_names": 0,
@@ -10809,20 +10655,6 @@
         "import_bindings": 1,
         "loaded_references": 10,
         "runtime_calls": 10
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/reconcile.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 6,
-        "runtime_calls": 6
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/reconcile_helpers.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 14,
-        "runtime_calls": 14
       },
       "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/release.py": {
         "definitions": 0,
@@ -11070,594 +10902,594 @@
         "runtime_calls": 2
       }
     },
-    "current_references": 504,
-    "current_runtime_calls": 432,
+    "current_references": 341,
+    "current_runtime_calls": 293,
     "method": "AST count of _rpc_mod definitions, loaded references/runtime calls, import bindings, and explicit exports"
   },
+  "manifest_state": "planned_pre_cutover",
   "phase7_mutable_lease_callers": {
-    "classification": "temporary_implementation",
     "calls": [
       {
-        "path": "addon/FreeCADMCP/document_lease/model.py",
-        "line": 327,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "transitioned",
-        "target": "validate_transition",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 327,
+        "path": "addon/FreeCADMCP/document_lease/model.py",
+        "target": "validate_transition"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/acquiring_reservation.py",
-        "line": 185,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_replace_unreturned_reservation",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 185,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/acquiring_reservation.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
-        "line": 75,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "record_acquisition_snapshot",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 75,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
-        "line": 128,
+        "classification": "temporary_mutable_lease_caller",
         "column": 15,
         "function": "_complete_acquisition_record",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 128,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
-        "line": 154,
+        "classification": "temporary_mutable_lease_caller",
         "column": 16,
         "function": "abort_acquisition",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 154,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
-        "line": 156,
+        "classification": "temporary_mutable_lease_caller",
         "column": 27,
         "function": "abort_acquisition",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 156,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
+        "classification": "temporary_mutable_lease_caller",
+        "column": 22,
+        "function": "fail_acquisition_after_mutation",
         "line": 233,
-        "column": 22,
-        "function": "fail_acquisition_after_mutation",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
-      },
-      {
         "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
-        "line": 235,
-        "column": 22,
-        "function": "fail_acquisition_after_mutation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/authorize_ops.py",
-        "line": 103,
+        "classification": "temporary_mutable_lease_caller",
+        "column": 22,
+        "function": "fail_acquisition_after_mutation",
+        "line": 235,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/acquisition_complete.py",
+        "target": "LeaseRecord.transitioned"
+      },
+      {
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "update_metadata",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 103,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/authorize_ops.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/begin_acquisition.py",
-        "line": 212,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_publish_new_acquisition_record",
-        "target": "SidecarStore.create",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 212,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/begin_acquisition.py",
+        "target": "SidecarStore.create"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/cross_layer_handoff.py",
-        "line": 50,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "rollback_local_orphan_cross_layer",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 50,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/cross_layer_handoff.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/cross_layer_handoff.py",
-        "line": 118,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "rollback_foreign_orphan_cross_layer",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 118,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/cross_layer_handoff.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
-        "line": 97,
+        "classification": "temporary_mutable_lease_caller",
         "column": 16,
         "function": "_fence_transitioning_foreign_record",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 97,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
-        "line": 106,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "_fence_transitioning_foreign_record",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 106,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
-        "line": 243,
+        "classification": "temporary_mutable_lease_caller",
         "column": 16,
         "function": "confirmed_takeover_foreign_recovery",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 243,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
-        "line": 258,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "confirmed_takeover_foreign_recovery",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 258,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/foreign_import.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/identity_refresh.py",
-        "line": 183,
+        "classification": "temporary_mutable_lease_caller",
         "column": 14,
         "function": "_refresh_exact_proxy_file_identity",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 183,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/identity_refresh.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/identity_refresh.py",
-        "line": 251,
+        "classification": "temporary_mutable_lease_caller",
         "column": 14,
         "function": "_apply_baseline_preserving_identity_refresh",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 251,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/identity_refresh.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
-        "line": 121,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_remove_local_recovery_sidecar",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 121,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
-        "line": 123,
+        "classification": "temporary_mutable_lease_caller",
         "column": 17,
         "function": "_remove_local_recovery_sidecar",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 123,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
-        "line": 170,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "acknowledge_local_dirty",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 170,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
-        "line": 224,
+        "classification": "temporary_mutable_lease_caller",
         "column": 20,
         "function": "complete_local_save_and_clear",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 224,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
-        "line": 238,
+        "classification": "temporary_mutable_lease_caller",
         "column": 19,
         "function": "complete_local_save_and_clear",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 238,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/local_recovery.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/locked_error_handoff.py",
-        "line": 179,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "claim_locked_error_handoff",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 179,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/locked_error_handoff.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/locked_error_handoff.py",
-        "line": 202,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "claim_locked_error_handoff",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 202,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/locked_error_handoff.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
-        "line": 23,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "begin_mutation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 23,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
-        "line": 40,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "begin_recovery",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 40,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
-        "line": 59,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "begin_recompute",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 59,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
-        "line": 79,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "complete_operation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 79,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
+        "classification": "temporary_mutable_lease_caller",
+        "column": 22,
+        "function": "record_error",
         "line": 108,
-        "column": 22,
-        "function": "record_error",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
-      },
-      {
         "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
-        "line": 110,
-        "column": 22,
-        "function": "record_error",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/orphan_recovery_ops.py",
-        "line": 92,
+        "classification": "temporary_mutable_lease_caller",
+        "column": 22,
+        "function": "record_error",
+        "line": 110,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/mutation_ops.py",
+        "target": "LeaseRecord.transitioned"
+      },
+      {
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "commit_orphan_sidecar_create",
-        "target": "SidecarStore.create",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 92,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/orphan_recovery_ops.py",
+        "target": "SidecarStore.create"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/orphan_recovery_ops.py",
-        "line": 131,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "commit_orphan_sidecar_replace",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 131,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/orphan_recovery_ops.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/orphaned_foreign_begin.py",
-        "line": 122,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "begin_orphaned_foreign_acquisition",
-        "target": "SidecarStore.create",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 122,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/orphaned_foreign_begin.py",
+        "target": "SidecarStore.create"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/registry_core.py",
-        "line": 69,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_commit",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 69,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/registry_core.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
-        "line": 50,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_remove_release_sidecar",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 50,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
-        "line": 52,
+        "classification": "temporary_mutable_lease_caller",
         "column": 23,
         "function": "_remove_release_sidecar",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 52,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
-        "line": 88,
+        "classification": "temporary_mutable_lease_caller",
         "column": 21,
         "function": "release_clean",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 88,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
-        "line": 104,
+        "classification": "temporary_mutable_lease_caller",
         "column": 20,
         "function": "release_clean",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 104,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
-        "line": 109,
+        "classification": "temporary_mutable_lease_caller",
         "column": 19,
         "function": "release_clean",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 109,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/release_clean.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "classification": "temporary_mutable_lease_caller",
+        "column": 23,
+        "function": "_publish_save_as_identity",
         "line": 93,
-        "column": 23,
-        "function": "_publish_save_as_identity",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "classification": "temporary_mutable_lease_caller",
+        "column": 12,
+        "function": "_publish_save_as_identity",
         "line": 102,
-        "column": 12,
-        "function": "_publish_save_as_identity",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 126,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_release_save_as_source_sidecar",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 126,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 128,
+        "classification": "temporary_mutable_lease_caller",
         "column": 23,
         "function": "_release_save_as_source_sidecar",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 128,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 137,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_release_save_as_source_sidecar",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 137,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 155,
+        "classification": "temporary_mutable_lease_caller",
         "column": 16,
         "function": "_finalize_save_as_linkage",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 155,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 157,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "_finalize_save_as_linkage",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 157,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 163,
+        "classification": "temporary_mutable_lease_caller",
         "column": 23,
         "function": "_finalize_save_as_linkage",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 163,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 172,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "_finalize_save_as_linkage",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 172,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
-        "line": 220,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "commit_save_as_record",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 220,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_commit.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_ops.py",
-        "line": 76,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "reserve_save_as",
-        "target": "SidecarStore.create",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 76,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_ops.py",
+        "target": "SidecarStore.create"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_ops.py",
-        "line": 82,
+        "classification": "temporary_mutable_lease_caller",
         "column": 24,
         "function": "reserve_save_as",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 82,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_ops.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_ops.py",
-        "line": 140,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "mark_save_verified",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 140,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_as_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 31,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "begin_save",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 31,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 50,
+        "classification": "temporary_mutable_lease_caller",
         "column": 20,
         "function": "cancel_save_before_mutation",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 50,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 56,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "cancel_save_before_mutation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 56,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 122,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "begin_cancellation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 122,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 181,
+        "classification": "temporary_mutable_lease_caller",
         "column": 22,
         "function": "complete_cancellation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 181,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 197,
+        "classification": "temporary_mutable_lease_caller",
         "column": 20,
         "function": "complete_cancellation",
-        "target": "SidecarStore.delete",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 197,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "SidecarStore.delete"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 205,
+        "classification": "temporary_mutable_lease_caller",
         "column": 29,
         "function": "complete_cancellation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 205,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
-        "line": 223,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "complete_cancellation",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 223,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/save_cancel.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/saved_foreign_acquisition.py",
-        "line": 174,
+        "classification": "temporary_mutable_lease_caller",
         "column": 12,
         "function": "begin_saved_foreign_recovery_acquisition",
-        "target": "SidecarStore.replace",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 174,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/saved_foreign_acquisition.py",
+        "target": "SidecarStore.replace"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
-        "line": 39,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "mark_stale",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 39,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
-        "line": 82,
+        "classification": "temporary_mutable_lease_caller",
         "column": 22,
         "function": "mark_expired_stale",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 82,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
-        "line": 118,
+        "classification": "temporary_mutable_lease_caller",
         "column": 21,
         "function": "reconcile_stale",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 118,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
-        "line": 127,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "reconcile_stale",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 127,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/stale_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/takeover_ops.py",
-        "line": 44,
+        "classification": "temporary_mutable_lease_caller",
         "column": 24,
         "function": "takeover",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 44,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/takeover_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/takeover_ops.py",
-        "line": 57,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "takeover",
-        "target": "LeaseRecord.transitioned",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 57,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/takeover_ops.py",
+        "target": "LeaseRecord.transitioned"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/service_ops/takeover_ops.py",
-        "line": 104,
+        "classification": "temporary_mutable_lease_caller",
         "column": 18,
         "function": "update_local_dirty",
-        "target": "LeaseRecord.revised",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 104,
+        "path": "addon/FreeCADMCP/document_lease/service_ops/takeover_ops.py",
+        "target": "LeaseRecord.revised"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/sidecar.py",
-        "line": 138,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "create",
-        "target": "create_sidecar",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 138,
+        "path": "addon/FreeCADMCP/document_lease/sidecar.py",
+        "target": "create_sidecar"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/sidecar.py",
-        "line": 155,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "replace",
-        "target": "replace_sidecar",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 155,
+        "path": "addon/FreeCADMCP/document_lease/sidecar.py",
+        "target": "replace_sidecar"
       },
       {
-        "path": "addon/FreeCADMCP/document_lease/sidecar.py",
-        "line": 169,
+        "classification": "temporary_mutable_lease_caller",
         "column": 8,
         "function": "delete",
-        "target": "delete_sidecar",
-        "classification": "temporary_mutable_lease_caller"
+        "line": 169,
+        "path": "addon/FreeCADMCP/document_lease/sidecar.py",
+        "target": "delete_sidecar"
       }
     ],
+    "classification": "temporary_implementation",
     "negative_end_state": "No reachable MCP path can revise or transition a legacy lease record or create, replace, or delete an authoritative lease sidecar.",
     "phase18_owner": "integrator"
   },
-  "manifest_state": "planned_pre_cutover",
   "public_lease_rpc_adapters": [
     "acknowledge_acquisition_claim",
     "acquire_document_lock",

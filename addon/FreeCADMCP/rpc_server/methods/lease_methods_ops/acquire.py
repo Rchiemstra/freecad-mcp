@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from ._common import _rpc_mod
-
 
 def acquire_document_lock(
     self,
@@ -18,7 +16,7 @@ def acquire_document_lock(
 ) -> dict[str, Any]:
     """Acquire an exclusive renewable write lease for a document."""
     try:
-        dl = _rpc_mod()._import_document_lock()
+        dl = self._collaboration_collaborators.import_document_lock()
     except ImportError as exc:
         return {"success": False, "error": str(exc)}
     if not dl.is_enabled():
@@ -45,7 +43,7 @@ def acquire_document_lock(
             ),
         }
 
-    if _rpc_mod().document_lease_service is None:
+    if self._collaboration_collaborators.document_lease_service is None:
         return {
             "success": False,
             "error_code": "LEASE_PROTOCOL_UNAVAILABLE",
@@ -100,7 +98,7 @@ def adopt_dirty_document(
     """Locally confirm and adopt an already-dirty document into lease v2."""
 
     try:
-        dl = _rpc_mod()._import_document_lock()
+        dl = self._collaboration_collaborators.import_document_lock()
     except ImportError as exc:
         return {"success": False, "error": str(exc)}
     if not dl.is_enabled():
@@ -132,7 +130,7 @@ def adopt_dirty_document(
                 "or selector.canonical_path"
             ),
         }
-    if _rpc_mod().document_lease_service is None:
+    if self._collaboration_collaborators.document_lease_service is None:
         return {
             "success": False,
             "error_code": "LEASE_PROTOCOL_UNAVAILABLE",

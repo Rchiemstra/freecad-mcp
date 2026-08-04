@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from ._common import _rpc_mod
 from .reconcile_helpers import (
     capture_reconcile_baseline,
     commit_reconcile_gui,
@@ -11,10 +10,13 @@ from .reconcile_helpers import (
 
 
 def lease_reconcile(self, credential):
-    if _rpc_mod().document_lease_service is None:
-        return _rpc_mod()._lease_service_error(RuntimeError("lease service unavailable"))
-    captured_identity = dict(_rpc_mod()._import_document_lock().get_request_identity())
-    lease = _rpc_mod()._import_document_lease()
+    collaborators = self._collaboration_collaborators
+    if collaborators.document_lease_service is None:
+        return collaborators.lease_service_error(RuntimeError("lease service unavailable"))
+    captured_identity = dict(
+        collaborators.import_document_lock().get_request_identity()
+    )
+    lease = collaborators.import_document_lease()
     phase: dict[str, Any] = {}
     inflight = self._current_inflight()
     self._request_checkpoint("lease_reconcile_start")
@@ -30,7 +32,7 @@ def lease_reconcile(self, credential):
                 lease=lease,
             )
         except Exception as exc:
-            return _rpc_mod()._lease_service_error(
+            return collaborators.lease_service_error(
                 exc, request_id=captured_identity.get("request_id")
             )
 
@@ -65,7 +67,7 @@ def lease_reconcile(self, credential):
                 fresh_baseline=fresh_baseline,
             )
         except Exception as exc:
-            return _rpc_mod()._lease_service_error(
+            return collaborators.lease_service_error(
                 exc, request_id=captured_identity.get("request_id")
             )
 

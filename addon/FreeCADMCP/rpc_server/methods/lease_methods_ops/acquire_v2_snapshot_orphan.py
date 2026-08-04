@@ -1,6 +1,5 @@
 """Orphan-recovery promotion during acquisition snapshot."""
 
-from ._common import _rpc_mod
 from .acquire_v2_snapshot_capture_helpers import (
     authorize_standard_snapshot,
     begin_saved_foreign_recovery,
@@ -25,10 +24,11 @@ def complete_orphan_recovery(
     snapshot_id,
     prior_core_authority_status,
 ):
-    lease = _rpc_mod()._import_document_lease()
+    collaborators = self._collaboration_collaborators
+    lease = collaborators.import_document_lease()
 
     def escrow_recovery_grant(recovery_grant):
-        if _rpc_mod().rpc_acquisition_claim_store is None:
+        if collaborators.acquisition_claim_store is None:
             return False
         escrow_result = {
             "success": True,
@@ -39,7 +39,7 @@ def complete_orphan_recovery(
                 "stale_after_seconds": 90,
             },
         }
-        _rpc_mod().rpc_acquisition_claim_store.store(
+        collaborators.acquisition_claim_store.store(
             mcp_runtime_id=phase["owner"].mcp_instance_id,
             request_id=request_id,
             method=(
@@ -51,7 +51,7 @@ def complete_orphan_recovery(
         return True
 
     if phase.get("orphaned_local_mcp_recovery"):
-        grant = _rpc_mod().document_lease_service.recover_orphaned_local_mcp_acquisition(
+        grant = collaborators.document_lease_service.recover_orphaned_local_mcp_acquisition(
             phase["exact_selector"],
             phase["owner"],
             validation=lease.LiveDocumentValidation(
@@ -73,7 +73,7 @@ def complete_orphan_recovery(
             credential_escrow=escrow_recovery_grant,
         )
     else:
-        grant = _rpc_mod().document_lease_service.recover_orphaned_foreign_acquisition(
+        grant = collaborators.document_lease_service.recover_orphaned_foreign_acquisition(
             phase["exact_selector"],
             phase["owner"],
             validation=lease.LiveDocumentValidation(
@@ -125,7 +125,8 @@ def capture_acquisition_snapshot(
     original_identity,
     credential,
 ):
-    lease = _rpc_mod()._import_document_lease()
+    collaborators = self._collaboration_collaborators
+    lease = collaborators.import_document_lease()
     if phase.get("saved_foreign_recovery"):
         credential = begin_saved_foreign_recovery(
             self,
@@ -138,15 +139,19 @@ def capture_acquisition_snapshot(
             lease=lease,
         )
     else:
-        authorize_standard_snapshot(credential, original_identity, phase, lease)
+        authorize_standard_snapshot(
+            credential, original_identity, phase, lease, collaborators
+        )
     direct_orphan_recovery = bool(
         phase.get("orphaned_local_mcp_recovery")
         or phase.get("orphaned_foreign_recovery")
     )
     if direct_orphan_recovery:
-        snapshot_id = capture_orphan_snapshot_gui(document, request_id, lease)
+        snapshot_id = capture_orphan_snapshot_gui(
+            document, request_id, lease, collaborators
+        )
     else:
-        snapshot_id = _rpc_mod().create_lease_baseline_snapshot_gui(document)
+        snapshot_id = collaborators.create_lease_baseline_snapshot_gui(document)
     phase["snapshot_id"] = snapshot_id
     if inflight is not None:
         inflight.token.checkpoint("acquisition_snapshot_complete")

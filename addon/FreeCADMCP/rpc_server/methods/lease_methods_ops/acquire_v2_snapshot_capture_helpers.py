@@ -1,6 +1,6 @@
 """Snapshot capture helpers for orphan recovery."""
 
-from ._common import _rpc_mod, require_document_modified
+from ._common import require_document_modified
 
 
 def begin_saved_foreign_recovery(
@@ -14,8 +14,9 @@ def begin_saved_foreign_recovery(
     original_identity,
     lease,
 ):
+    collaborators = self._collaboration_collaborators
     reservation = (
-        _rpc_mod().document_lease_service.begin_saved_foreign_recovery_acquisition(
+        collaborators.document_lease_service.begin_saved_foreign_recovery_acquisition(
             phase["exact_selector"],
             phase["owner"],
             validation=lease.LiveDocumentValidation(
@@ -37,17 +38,19 @@ def begin_saved_foreign_recovery(
     return credential
 
 
-def authorize_standard_snapshot(credential, original_identity, phase, lease):
+def authorize_standard_snapshot(
+    credential, original_identity, phase, lease, collaborators
+):
     if phase.get("orphaned_local_mcp_recovery") or phase.get("orphaned_foreign_recovery"):
         return
-    _rpc_mod().document_lease_service.authorize(
+    collaborators.document_lease_service.authorize(
         credential,
         selector={"document_session_uuid": original_identity.session_uuid},
         allowed_states={lease.LeaseState.ACQUIRING},
     )
 
 
-def capture_orphan_snapshot_gui(document, request_id, lease):
+def capture_orphan_snapshot_gui(document, request_id, lease, collaborators):
     if (
         lease.core_authority.core_owner_api_available(document)
         and lease.core_authority.authority_status(document) is None
@@ -61,7 +64,7 @@ def capture_orphan_snapshot_gui(document, request_id, lease):
         generation=0,
         kinds=("SaveAs",),
     ):
-        return _rpc_mod().create_lease_baseline_snapshot_gui(
+        return collaborators.create_lease_baseline_snapshot_gui(
             document,
             observer_request_id=request_id,
         )

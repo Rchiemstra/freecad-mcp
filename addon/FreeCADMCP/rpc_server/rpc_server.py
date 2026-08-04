@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: F401 - §3.3 lease runtime shims
 
-import FreeCAD  # noqa: F401 - §3.3 test monkeypatch
+import FreeCAD  # §3.3 test monkeypatch
 import FreeCADGui  # noqa: F401 - §3.3 test monkeypatch
 from PySide import QtCore, QtWidgets  # noqa: F401 - §3.3 test monkeypatch
 
@@ -18,6 +18,11 @@ try:
     from build_info import addon_build_id, addon_version
 except ImportError:  # pragma: no cover - flat addon import path
     from addon.FreeCADMCP.build_info import addon_build_id, addon_version  # noqa: F401
+
+try:
+    from ..collaboration_api import CollaborationAPI as _CollaborationAPI
+except ImportError:  # pragma: no cover - flat addon import path
+    from collaboration_api import CollaborationAPI as _CollaborationAPI
 
 from .acquisition_claims import AcquisitionClaimStore  # noqa: I001 - frozen census lines
 from .commands import register_commands, schedule_toggle_sync
@@ -58,6 +63,9 @@ from .lease_runtime import (  # noqa: F401
     _utc_timestamp,
     initialize_document_lease_runtime,
     shutdown_document_lease_runtime,
+)
+from .methods.lease_methods_ops.collaboration_dependencies import (
+    CollaborationCollaborators as _CollaborationCollaborators,
 )
 from .parts_library import configure_parts_library_path  # noqa: F401
 from .reference_repair import inspect_references_gui  # noqa: F401 - §3.3 shim
@@ -162,10 +170,71 @@ class FreeCADRPC:
     ACQUIRE_HASH_TIMEOUT_S = 30
     CLIENT_LIFECYCLE_TIMEOUT_S = 150
 
-    def __init__(self, allow_execute_code: bool = True):
+    def __init__(
+        self,
+        allow_execute_code: bool = True,
+        *,
+        collaboration_collaborators: _CollaborationCollaborators | None = None,
+    ):
         self.allow_execute_code = allow_execute_code
         self._mutation_context = threading.local()
         self._inflight_context = threading.local()
+        if (
+            collaboration_collaborators is not None
+            and not isinstance(collaboration_collaborators, _CollaborationCollaborators)
+        ):
+            raise TypeError(
+                "collaboration_collaborators must be CollaborationCollaborators"
+            )
+        if collaboration_collaborators is None:
+            collaboration_collaborators = _build_collaboration_collaborators()
+        self.__collaboration_collaborators = collaboration_collaborators
+
+    @property
+    def _collaboration_collaborators(self) -> _CollaborationCollaborators:
+        return self.__collaboration_collaborators
+
+    def _bind_collaboration_runtime_manifest(self, runtime_manifest) -> None:
+        """Complete the private graph before the listener can serve requests."""
+
+        collaborators = self._collaboration_collaborators
+        self.__collaboration_collaborators = collaborators.with_runtime_manifest(
+            runtime_manifest
+        )
+
+
+def _build_collaboration_collaborators() -> _CollaborationCollaborators:
+    """Capture the current transitional aliases at the explicit composition point."""
+
+    return _CollaborationCollaborators(
+        compatibility_api=_CollaborationAPI(document_lookup=FreeCAD.getDocument),
+        freecad=FreeCAD,
+        import_document_lock=_import_document_lock,
+        import_document_lease=_import_document_lease,
+        document_lease_service=document_lease_service,
+        document_identity_service=document_identity_service,
+        runtime_manifest=rpc_runtime_manifest,
+        inflight_request_registry=rpc_inflight_request_registry,
+        acquisition_claim_store=rpc_acquisition_claim_store,
+        handoff_continuation_store=rpc_handoff_continuation_store,
+        request_replay_cache=rpc_request_replay_cache,
+        rpc_server_runtime_id=rpc_server_runtime_id,
+        addon_loaded_at=addon_loaded_at,
+        redact_rpc_diagnostic=_redact_rpc_diagnostic,
+        lease_service_error=_lease_service_error,
+        live_document_from_selector=_live_document_from_selector,
+        confirm_dirty_document_adoption_gui=_confirm_dirty_document_adoption_gui,
+        authorize_locked_error_handoff_gui=_authorize_locked_error_handoff_gui,
+        create_lease_baseline_snapshot_gui=create_lease_baseline_snapshot_gui,
+        discard_lease_baseline_snapshot=discard_lease_baseline_snapshot,
+        credential_from_wire=_credential_from_wire,
+        stale_reconcile_already_recovered=_stale_reconcile_already_recovered,
+        stale_reconcile_classify=_stale_reconcile_classify,
+        assert_mutation_file_metadata_unchanged=(
+            _assert_mutation_file_metadata_unchanged
+        ),
+        assert_never_saved_stale_continuity=_assert_never_saved_stale_continuity,
+    )
 
 
 bind_freecad_rpc(FreeCADRPC)

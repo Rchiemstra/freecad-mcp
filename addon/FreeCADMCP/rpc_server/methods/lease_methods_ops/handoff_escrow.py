@@ -1,6 +1,6 @@
 """Credential escrow for LOCKED_ERROR handoff continuation."""
 
-from ._common import _rpc_mod, logger
+from ._common import logger
 from .handoff_journal import journal_handoff_terminal
 
 
@@ -19,14 +19,15 @@ def escrow_locked_error_handoff_claim(
     the token is never published and the continuation is not claimable.
     """
 
+    collaborators = self._collaboration_collaborators
     if not isinstance(claimed, dict) or not claimed.get("success"):
         return False
     credential = claimed.get("credential") or {}
     if not credential.get("token"):
         return False
-    if _rpc_mod().rpc_acquisition_claim_store is None:
-        if _rpc_mod().rpc_handoff_continuation_store is not None:
-            _rpc_mod().rpc_handoff_continuation_store.update(
+    if collaborators.acquisition_claim_store is None:
+        if collaborators.handoff_continuation_store is not None:
+            collaborators.handoff_continuation_store.update(
                 mcp_runtime_id,
                 request_id,
                 state="failed",
@@ -45,7 +46,7 @@ def escrow_locked_error_handoff_claim(
             response={
                 "ok": False,
                 "request_id": request_id,
-                "addon_runtime_id": _rpc_mod().rpc_server_runtime_id,
+                "addon_runtime_id": collaborators.rpc_server_runtime_id,
                 "result": {
                     "success": False,
                     "error_code": "ACQUISITION_CREDENTIAL_ESCROW_FAILED",
@@ -62,7 +63,7 @@ def escrow_locked_error_handoff_claim(
         )
         return False
     try:
-        _rpc_mod().rpc_acquisition_claim_store.store(
+        collaborators.acquisition_claim_store.store(
             mcp_runtime_id=mcp_runtime_id,
             request_id=request_id,
             method="adopt_dirty_document",
@@ -74,8 +75,8 @@ def escrow_locked_error_handoff_claim(
             "Failed to escrow LOCKED_ERROR handoff credential for %s",
             request_id,
         )
-        if _rpc_mod().rpc_handoff_continuation_store is not None:
-            _rpc_mod().rpc_handoff_continuation_store.update(
+        if collaborators.handoff_continuation_store is not None:
+            collaborators.handoff_continuation_store.update(
                 mcp_runtime_id,
                 request_id,
                 state="failed",
@@ -84,7 +85,7 @@ def escrow_locked_error_handoff_claim(
                 error=(
                     "Ownership rotated but credential escrow failed; "
                     "recovery is required and no claimable credential exists: "
-                    f"{_rpc_mod()._redact_rpc_diagnostic(exc)}"
+                    f"{collaborators.redact_rpc_diagnostic(exc)}"
                 ),
             )
         journal_handoff_terminal(
@@ -94,7 +95,7 @@ def escrow_locked_error_handoff_claim(
             response={
                 "ok": False,
                 "request_id": request_id,
-                "addon_runtime_id": _rpc_mod().rpc_server_runtime_id,
+                "addon_runtime_id": collaborators.rpc_server_runtime_id,
                 "result": {
                     "success": False,
                     "error_code": "ACQUISITION_CREDENTIAL_ESCROW_FAILED",
@@ -117,7 +118,7 @@ def escrow_locked_error_handoff_claim(
         response={
             "ok": False,
             "request_id": request_id,
-            "addon_runtime_id": _rpc_mod().rpc_server_runtime_id,
+            "addon_runtime_id": collaborators.rpc_server_runtime_id,
             "error": {
                 "code": "ACQUISITION_RESULT_NOT_REPLAYABLE",
                 "message": (
@@ -129,8 +130,8 @@ def escrow_locked_error_handoff_claim(
             },
         },
     )
-    if _rpc_mod().rpc_handoff_continuation_store is not None:
-        _rpc_mod().rpc_handoff_continuation_store.update(
+    if collaborators.handoff_continuation_store is not None:
+        collaborators.handoff_continuation_store.update(
             mcp_runtime_id,
             request_id,
             state="claimable",

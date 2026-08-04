@@ -322,7 +322,6 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
         ),
     )
     document.expected_gui_thread = dispatcher.thread()
-    rpc = _TracingFreeCADRPC()
     worker_validations: list[dict[str, Any]] = []
 
     def validate_saved_worker(path, document_name, profile, expected):
@@ -362,6 +361,7 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
         addon_rpc, "_validate_saved_document_worker", validate_saved_worker
     )
 
+    rpc = _TracingFreeCADRPC()
     xmlrpc_server.register_instance(rpc)
     xmlrpc_thread = threading.Thread(
         target=xmlrpc_server.serve_forever,
@@ -583,6 +583,8 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
         xmlrpc_server.server_close()
         xmlrpc_thread.join(timeout=5)
         assert not xmlrpc_thread.is_alive()
+        xmlrpc_server.register_instance(None)
+        document.expected_gui_thread = None
 
     # Acquisition is the only permitted public disclosure of the raw token.
     # Finalization removes the sidecar and the MCP-side credential custody.

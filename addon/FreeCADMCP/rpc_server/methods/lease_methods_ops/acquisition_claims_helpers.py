@@ -1,10 +1,11 @@
 """Acquisition claim helpers."""
 
 from ...handoff_continuations import HandoffContinuationStore
-from ._common import _rpc_mod
 
 
-def claim_handoff_continuation(mcp_runtime_id, request_id, continuation):
+def claim_handoff_continuation(
+    mcp_runtime_id, request_id, continuation, collaborators
+):
     if continuation.state in HandoffContinuationStore.ACTIVE:
         return {
             "success": False,
@@ -67,7 +68,7 @@ def claim_handoff_continuation(mcp_runtime_id, request_id, continuation):
         }
     if continuation.state != "claimable":
         return None
-    if _rpc_mod().rpc_acquisition_claim_store is None:
+    if collaborators.acquisition_claim_store is None:
         return {
             "success": False,
             "error_code": "ACQUISITION_CLAIM_UNAVAILABLE",
@@ -76,11 +77,11 @@ def claim_handoff_continuation(mcp_runtime_id, request_id, continuation):
             ),
             "request_id": request_id,
         }
-    claimed = _rpc_mod().rpc_acquisition_claim_store.claim(
+    claimed = collaborators.acquisition_claim_store.claim(
         mcp_runtime_id, request_id
     )
     if claimed is None:
-        _rpc_mod().rpc_handoff_continuation_store.update(
+        collaborators.handoff_continuation_store.update(
             mcp_runtime_id,
             request_id,
             state="failed",
@@ -91,7 +92,7 @@ def claim_handoff_continuation(mcp_runtime_id, request_id, continuation):
                 "ownership may require recovery"
             ),
         )
-        updated = _rpc_mod().rpc_handoff_continuation_store.get(
+        updated = collaborators.handoff_continuation_store.get(
             mcp_runtime_id, request_id
         )
         return {

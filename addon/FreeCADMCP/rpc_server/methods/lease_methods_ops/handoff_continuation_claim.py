@@ -1,6 +1,6 @@
 """Claim phase for LOCKED_ERROR handoff continuation."""
 
-from ._common import _rpc_mod, require_document_modified
+from ._common import require_document_modified
 from .handoff_escrow import escrow_locked_error_handoff_claim
 
 
@@ -14,11 +14,12 @@ def claim_handoff_gui(
     task_description,
     lease,
 ):
-    document = _rpc_mod().FreeCAD.getDocument(phase["document_name"])
+    collaborators = self._collaboration_collaborators
+    document = collaborators.freecad.getDocument(phase["document_name"])
     if document is None:
         raise RuntimeError("document closed while handoff authorization was pending")
     original_identity = phase["document_identity"]
-    observed = _rpc_mod().document_identity_service.inspect_registered_document(
+    observed = collaborators.document_identity_service.inspect_registered_document(
         original_identity.session_uuid, document
     )
     if (
@@ -42,7 +43,7 @@ def claim_handoff_gui(
             "error": "LOCKED_ERROR handoff was cancelled before claim",
             "request_id": request_id,
         }
-    grant = _rpc_mod().document_lease_service.claim_locked_error_handoff(
+    grant = collaborators.document_lease_service.claim_locked_error_handoff(
         phase["exact_selector"],
         phase["owner"],
         validation=lease.LiveDocumentValidation(
@@ -59,7 +60,7 @@ def claim_handoff_gui(
 
         core_authority.sync_owner_from_lease_record(document, grant.record)
     except Exception:
-        _rpc_mod().FreeCAD.Console.PrintWarning(
+        collaborators.freecad.Console.PrintWarning(
             "[MCP] core mutation owner sync failed after LOCKED_ERROR handoff\n"
         )
     claimed = {
@@ -112,8 +113,8 @@ def claim_late_complete(
             isinstance(value, dict)
             and value.get("success")
             and (
-                _rpc_mod().rpc_acquisition_claim_store is None
-                or not _rpc_mod().rpc_acquisition_claim_store.claimable(
+                self._collaboration_collaborators.acquisition_claim_store is None
+                or not self._collaboration_collaborators.acquisition_claim_store.claimable(
                     mcp_runtime_id, request_id
                 )
             )
@@ -129,8 +130,10 @@ def claim_late_complete(
         return
     # Late failure: only journal denied/failed when vault is empty.
     if (
-        _rpc_mod().rpc_acquisition_claim_store is not None
-        and _rpc_mod().rpc_acquisition_claim_store.claimable(mcp_runtime_id, request_id)
+        self._collaboration_collaborators.acquisition_claim_store is not None
+        and self._collaboration_collaborators.acquisition_claim_store.claimable(
+            mcp_runtime_id, request_id
+        )
     ):
         return
     error = getattr(outcome, "error", None) or "LOCKED_ERROR handoff claim failed"
