@@ -7,6 +7,7 @@ import time
 from unittest.mock import MagicMock
 
 import FreeCADGui
+import pytest
 from PySide import QtCore
 
 
@@ -23,6 +24,25 @@ from addon.FreeCADMCP.rpc_server.gui_dispatcher import (
 
 def _app():
     return QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _flush_posted_dispatch_wakes(monkeypatch):
+    dispatchers = []
+    original_init = GuiDispatcher.__init__
+
+    def tracked_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        dispatchers.append(self)
+
+    monkeypatch.setattr(GuiDispatcher, "__init__", tracked_init)
+    yield
+    app = QtCore.QCoreApplication.instance()
+    if app is not None:
+        app.processEvents()
+        for dispatcher in dispatchers:
+            dispatcher.deleteLater()
+        app.processEvents()
 
 
 class _FakeQApp:
@@ -321,7 +341,14 @@ def test_running_timeout_rejects_new_work_until_original_request_finishes():
     while dispatcher.pending_count != 1 and time.monotonic() < deadline:
         time.sleep(0.001)
 
-    drain = threading.Thread(target=dispatcher._drain_one)
+    original_is_gui_thread = dispatcher._core._is_gui_thread
+
+    def drain_on_declared_owner():
+        owner = threading.get_ident()
+        dispatcher._core._is_gui_thread = lambda: threading.get_ident() == owner
+        dispatcher._drain_one()
+
+    drain = threading.Thread(target=drain_on_declared_owner)
     drain.start()
     assert started.wait(0.2)
     first.join(timeout=0.2)
@@ -346,6 +373,7 @@ def test_running_timeout_rejects_new_work_until_original_request_finishes():
 
     release.set()
     drain.join(timeout=0.2)
+    dispatcher._core._is_gui_thread = original_is_gui_thread
     assert dispatcher.submit(lambda: "recovered", 0.01) == "recovered"
 
 

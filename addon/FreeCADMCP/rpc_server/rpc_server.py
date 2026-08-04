@@ -1,5 +1,4 @@
 """FreeCAD MCP dual-encoding RPC server façade (Phase 4 slice 4H)."""
-
 from __future__ import annotations
 
 import logging
@@ -20,12 +19,13 @@ try:
 except ImportError:  # pragma: no cover - flat addon import path
     from addon.FreeCADMCP.build_info import addon_build_id, addon_version  # noqa: F401
 
-from .acquisition_claims import AcquisitionClaimStore
+from .acquisition_claims import AcquisitionClaimStore  # noqa: I001 - frozen census lines
 from .commands import register_commands, schedule_toggle_sync
 from .filtered_xmlrpc_server import FilteredXMLRPCServer, validate_allowed_ips  # noqa: F401
-from .gui_dispatcher import GuiDispatcher  # noqa: F401 - lifecycle test monkeypatch
+from .gui_dispatcher_qt import GuiDispatcher  # noqa: F401 - lifecycle test monkeypatch
 from .handoff_continuations import HandoffContinuationStore
-from .inflight_requests import InflightRequestRegistry
+try: from ..dispatch.inflight_request_registry import InflightRequestRegistry  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.inflight_request_registry import InflightRequestRegistry  # noqa: E701, I001 - frozen census lines
 
 try:
     from .._shared.protocol.public_error import (  # noqa: I001 - frozen census lines

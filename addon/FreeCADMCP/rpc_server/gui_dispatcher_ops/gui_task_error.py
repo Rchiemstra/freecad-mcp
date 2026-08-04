@@ -1,11 +1,8 @@
-"""Error raised when a GUI-thread callable fails."""
+"""Compatibility import for the canonical GUI task error."""
 
-from __future__ import annotations
+try:
+    from ...dispatch.gui_errors import GuiTaskError
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_errors import GuiTaskError
 
-from .gui_dispatch_error import GuiDispatchError
-
-
-class GuiTaskError(GuiDispatchError):
-    """A callable raised while executing on the GUI thread."""
-
-    error_code = "GUI_TASK_FAILED"
+__all__ = ["GuiTaskError"]

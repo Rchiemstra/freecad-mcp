@@ -1,12 +1,12 @@
 """Leased document creation path for ``create_document``."""
-
 from __future__ import annotations
 
 import contextlib
 
 import FreeCAD
 
-from ...inflight_requests import RequestCancellationError
+try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 from ...lease_runtime import _import_document_lease
 from ...mutation_guard import RollbackCoverage
 from ...snapshot_service import discard_lease_baseline_snapshot

@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 3 in progress; Phase 9 complete |
-| Next phase | 10 — `refactor(mcp): establish the dispatch layer` |
+| Current stage / phase | Stage 3 in progress; Phase 10 complete |
+| Next phase | 11 — `refactor(mcp): add the composition root` |
 | In-flight ownership | None |
-| Last review | Phase 9 production, contract, and final integrated reviews clear on 2026-08-04 |
+| Last review | Phase 10 GUI, registry, boundary, integrated, and post-gate delta reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 9 is committed and gated; continue Stage 3 with Phase 10 only, preserving the authority-free transport boundary and frozen locator census |
+| Resume hint | Phase 10 is committed and gated; continue Stage 3 with Phase 11 only, constructing the runtime through the transitional startup hook without removing locators early |
 
 ### 11.2 Stage status
 
@@ -818,6 +818,50 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 10 complete: dispatch layer established
+
+- **Phase delivery:** `dispatch/` now owns the standard-library GUI queue state
+  machine, canonical request/outcome/error types, cancellation token and in-flight
+  request registry, and the generic bounded continuation registry. The narrow Qt
+  adapter remains in `rpc_server/gui_dispatcher_qt.py`; legacy GUI, submit-helper,
+  cancellation, and in-flight modules are declarative exact-identity shims with
+  package and flat add-on compatibility. Live method consumers import the canonical
+  defining leaves without moving or obscuring any frozen authority location.
+- **Concurrency and shutdown:** injected owner, wake, deferred-wake, busy-state, and
+  telemetry ports keep the core FreeCAD/Qt-free. Admission, pending-to-running,
+  stop, timeout quarantine, owner-scoped cancellation, fatal task exceptions, wake
+  failures, and next-request scheduling preserve their lock linearization points;
+  all terminal paths release waiters and owner maps. Direct owner submission is
+  rejected after stop, and an off-owner drain cannot dequeue work.
+- **Bounded state and compatibility:** in-flight registration, cancellation, lease
+  credential snapshots, and removal retain their public identities and race
+  behavior. Generic continuations validate finite positive bounds, reject duplicate
+  live keys, expire at the exact TTL boundary, refresh only after successful apply,
+  and fail closed when every capacity candidate is protected. Handoff custody and
+  CAS authority policy remains in its existing façade and is only stored by the
+  generic registry. Four completed Phase 10 `ARCH107` allowances were removed.
+- **Contracts and frozen inventories:** adversarial behavior and AST tests cover
+  FIFO/exact-once execution, busy requeue, timeout/cancellation races, fatal-control
+  exceptions, scheduler failures, shutdown, package/flat identity, Python 3.11
+  importability, dynamic/reflective import aliases, and forbidden FreeCAD, Qt,
+  runtime, transport, RPC, and authority dependencies. The exact six authority
+  totals remain 115, 15, 30, 167, 861, and 251; locator and semantic snapshots are
+  unchanged and no architecture allowance was added or refreshed.
+- **Agents and reviews:** separate GUI, registry, and boundary workstreams received
+  cross-reviews and a final integrated adversarial review. Findings covering owner
+  validation before dequeue, stop/admission races, wake-failure cleanup, fatal task
+  recovery, Python 3.11 generics, continuation capacity/expiry policy, reflective
+  imports, and live canonical consumers were fixed and re-reviewed. A post-gate
+  review of the lint-driven drain extraction is also clear; no finding remains.
+- **Docker validation:** exact images, commands, counts, and results are recorded
+  in §11.4. The baked affected selection passed 341/341, production lint checked
+  976 files, Compose `unit` passed, and branch-built preflight/core/e2e passed with
+  both strict collaboration verdicts zero.
+- **Stage result and next:** Stage 3 is in progress with Phase 10 complete. Resume
+  with Phase 11 only to add the composition root and transitional live-start hook.
+  Phase 10 is not an integration gate, so the parent gitlink remains at the Phase 5
+  integration revision.
 
 #### 2026-08-04 — Phase 9 complete: transport layer established
 
@@ -1347,6 +1391,40 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 10 — `refactor(mcp): establish the dispatch layer`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:ae28ee6c30adeaec76b5296ab76e2a4c1401bc654edd0a34f3c15095d1527d74`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 976 production files and passed architecture policy and
+  Ruff. The final dispatch, legacy GUI, cancellation, in-flight, lease, dirty
+  adoption, idempotency, concurrency, runtime-boundary, semantic-contract,
+  architecture-baseline, and policy selection passed 341/341. Exact touched-file
+  Ruff and a real Docker Python 3.11 import probe also passed.
+- **Compose phase gate:** after `docker compose build unit`, the retained
+  `docker compose run unit` result selected 2,167: 2,163 passed, the three
+  Windows-DACL tests skipped, the existing screenshot test xfailed, and 129
+  non-unit tests were deselected. Phase 10 is not an integration gate, so §5.7
+  requires this unit service rather than all four Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` volume and
+  branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no native
+  source changed. The unmodified preflight wrapper emitted `PREFLIGHT_OK` for
+  FreeCAD 26.3.0 revision 48071. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the unmodified e2e wrapper
+  passed 117/117. Both strict verdict files contained zero and were removed with
+  their generated XML reports after recording.
+- **Review and inventory result:** GUI, registry, boundary, final integrated, and
+  post-gate delta reviews are clear with no blocking, important, or non-blocking
+  finding. The exact six authority counts remain 115, 15, 30, 167, 861, and 251;
+  four completed dispatch allowances were removed, and no allowance was added or
+  refreshed.
 
 #### Phase 9 — `refactor(mcp): establish the transport layer`
 

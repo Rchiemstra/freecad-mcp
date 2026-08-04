@@ -1,9 +1,8 @@
-"""Timeout error for GUI dispatch."""
+"""Compatibility import for the canonical GUI dispatch timeout."""
 
-from __future__ import annotations
+try:
+    from ...dispatch.gui_errors import GuiDispatchTimeout
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_errors import GuiDispatchTimeout
 
-from .gui_dispatch_error import GuiDispatchError
-
-
-class GuiDispatchTimeout(GuiDispatchError):
-    """The GUI did not complete a request before its caller timed out."""
+__all__ = ["GuiDispatchTimeout"]

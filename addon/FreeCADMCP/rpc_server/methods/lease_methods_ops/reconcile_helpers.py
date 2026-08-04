@@ -1,6 +1,6 @@
 """Stale lease reconciliation helpers."""
-
-from ...inflight_requests import RequestCancellationError
+try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 from ._common import _rpc_mod, require_document_modified
 
 

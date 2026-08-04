@@ -1,8 +1,8 @@
 """Authenticated RPC dispatch body for invoke_v2."""
-
 from __future__ import annotations
 
-from ...inflight_requests import InflightLeaseCredential, RequestCancellationError
+try: from ....dispatch.inflight_lease_credential import InflightLeaseCredential; from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E501, E701, E702, I001 - frozen census lines
+except ImportError: from dispatch.inflight_lease_credential import InflightLeaseCredential; from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E501, E701, E702, I001 - frozen census lines
 from .invoke_v2_finalize import apply_acquisition_escrow, finalize_invoke_v2_response
 
 

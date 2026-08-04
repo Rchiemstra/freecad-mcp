@@ -1,6 +1,6 @@
 """Promotion GUI phase for typed save."""
-
-from ...inflight_requests import RequestCancellationError
+try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 from ._common import _rpc_mod, document_modified_or_dirty
 from .save_typed_helpers import make_error_response, marker_keys_for
 from .save_typed_promote_helpers import (

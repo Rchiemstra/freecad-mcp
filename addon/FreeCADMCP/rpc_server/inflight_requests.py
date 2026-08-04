@@ -1,23 +1,28 @@
-"""Process-wide authenticated request cancellation and completion tracking.
+"""Compatibility imports for the canonical dispatch request registry."""
 
-The registry deliberately has no FreeCAD or Qt dependency.  It spans the
-whole ``invoke_v2`` lifetime, including filesystem/worker gaps and GUI work
-that finishes after its JSON-RPC handler has returned.
-"""
+try:
+    from ..dispatch.cancellation_result import CancellationResult
+    from ..dispatch.cancellation_token import CancellationToken
+    from ..dispatch.inflight_lease_credential import InflightLeaseCredential
+    from ..dispatch.inflight_request import InflightRequest
+    from ..dispatch.inflight_request_registry import InflightRequestRegistry
+    from ..dispatch.inflight_snapshot import InflightSnapshot
+    from ..dispatch.request_cancellation_error import RequestCancellationError
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.cancellation_result import CancellationResult
+    from dispatch.cancellation_token import CancellationToken
+    from dispatch.inflight_lease_credential import InflightLeaseCredential
+    from dispatch.inflight_request import InflightRequest
+    from dispatch.inflight_request_registry import InflightRequestRegistry
+    from dispatch.inflight_snapshot import InflightSnapshot
+    from dispatch.request_cancellation_error import RequestCancellationError
 
-from __future__ import annotations
-
-# §3.3 compatibility shims — moved symbols keep their legacy import path.
-from .inflight_requests_ops.cancellation_result import CancellationResult  # noqa: F401
-from .inflight_requests_ops.cancellation_token import CancellationToken  # noqa: F401
-from .inflight_requests_ops.inflight_lease_credential import (  # noqa: F401
-    InflightLeaseCredential,
-)
-from .inflight_requests_ops.inflight_request import InflightRequest  # noqa: F401
-from .inflight_requests_ops.inflight_request_registry import (  # noqa: F401
-    InflightRequestRegistry,
-)
-from .inflight_requests_ops.inflight_snapshot import InflightSnapshot  # noqa: F401
-from .inflight_requests_ops.request_cancellation_error import (  # noqa: F401
-    RequestCancellationError,
-)
+__all__ = [
+    "CancellationResult",
+    "CancellationToken",
+    "InflightLeaseCredential",
+    "InflightRequest",
+    "InflightRequestRegistry",
+    "InflightSnapshot",
+    "RequestCancellationError",
+]

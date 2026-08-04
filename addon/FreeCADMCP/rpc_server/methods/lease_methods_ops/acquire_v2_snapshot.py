@@ -1,6 +1,6 @@
 """GUI snapshot and promote phase for ``acquire_document_lock_v2``."""
-
-from ...inflight_requests import RequestCancellationError
+try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 from ._common import _rpc_mod
 from .acquire_v2_snapshot_complete import complete_normal_acquisition
 from .acquire_v2_snapshot_helpers import (

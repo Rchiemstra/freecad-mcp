@@ -876,42 +876,6 @@
     },
     {
       "code": "ARCH107",
-      "path": "addon/FreeCADMCP/rpc_server/gui_dispatcher_ops/gui_dispatcher_impl.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "9d9ff768d4ae47713b06",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 24 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "addon/FreeCADMCP/rpc_server/gui_dispatcher_ops/submit_helpers.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "157d1f568081aab5021b",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 28 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "addon/FreeCADMCP/rpc_server/inflight_requests_ops/cancellation_token.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "656f167d092fe312dc52",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 28 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "addon/FreeCADMCP/rpc_server/inflight_requests_ops/inflight_request_registry.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "c11c5e21088d4535c3b5",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 24 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
       "path": "addon/FreeCADMCP/rpc_server/lease_protocol.py",
       "line": 1,
       "column": 1,

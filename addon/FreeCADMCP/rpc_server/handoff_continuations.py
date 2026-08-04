@@ -14,11 +14,16 @@ claimed states return their actual continuation details instead of
 
 from __future__ import annotations
 
-import threading
 import time
+from collections.abc import Callable
 from typing import Literal
 
 from .handoff_continuations_types.handoff_continuation import HandoffContinuation
+
+try:
+    from ..dispatch.continuations import BoundedContinuationRegistry
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.continuations import BoundedContinuationRegistry
 
 HandoffCancelStatus = Literal[
     "not_found",
@@ -55,10 +60,24 @@ class HandoffContinuationStore:
         {"cancelled", "failed", "denied", "claimed", "claimable"}
     )
 
-    def __init__(self, *, ttl_seconds: float = 3600.0) -> None:
-        self._ttl_seconds = float(ttl_seconds)
-        self._entries: dict[tuple[str, str], HandoffContinuation] = {}
-        self._lock = threading.RLock()
+    def __init__(
+        self,
+        *,
+        ttl_seconds: float = 3600.0,
+        max_entries: int = 4096,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._monotonic = monotonic
+        self._registry: BoundedContinuationRegistry[
+            tuple[str, str], HandoffContinuation
+        ] = BoundedContinuationRegistry(
+            max_entries=max_entries,
+            ttl_seconds=ttl_seconds,
+            monotonic=monotonic,
+            is_protected=lambda entry: entry.state in self.ACTIVE
+            or entry.state in self.IRREVERSIBLE,
+            is_expiry_protected=lambda entry: entry.state in self.ACTIVE,
+        )
 
     @staticmethod
     def _key(mcp_runtime_id: str, request_id: str) -> tuple[str, str]:
@@ -70,29 +89,20 @@ class HandoffContinuationStore:
         key = self._key(mcp_runtime_id, request_id)
         if not key[0] or not key[1]:
             raise ValueError("mcp_runtime_id and request_id are required")
+        now = float(self._monotonic())
         entry = HandoffContinuation(
-            mcp_runtime_id=key[0], request_id=key[1]
+            mcp_runtime_id=key[0],
+            request_id=key[1],
+            created_monotonic=now,
+            updated_monotonic=now,
         )
-        with self._lock:
-            self._entries[key] = entry
-        return entry
+        return self._registry.begin(key, entry)
 
     def get(
         self, mcp_runtime_id: str, request_id: str
     ) -> HandoffContinuation | None:
         key = self._key(mcp_runtime_id, request_id)
-        with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return None
-            if (
-                entry.state not in self.ACTIVE
-                and (time.monotonic() - entry.updated_monotonic)
-                > self._ttl_seconds
-            ):
-                self._entries.pop(key, None)
-                return None
-            return entry
+        return self._registry.get(key)
 
     def update(
         self,
@@ -105,10 +115,7 @@ class HandoffContinuationStore:
         error: str | None = None,
     ) -> HandoffContinuation | None:
         key = self._key(mcp_runtime_id, request_id)
-        with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return None
+        def apply_update(entry: HandoffContinuation) -> HandoffContinuation:
             # Escrow wins over cancel/fail races; claim_committed may still
             # become terminal failed/denied if CAS/validation aborts after the
             # cancel gate (no credential escrowed yet). Claimable may move to
@@ -145,8 +152,13 @@ class HandoffContinuationStore:
             else:
                 entry.error_code = error_code
                 entry.error = error
-            entry.updated_monotonic = time.monotonic()
+            entry.updated_monotonic = float(self._monotonic())
             return entry
+
+        try:
+            return self._registry.apply(key, apply_update)
+        except KeyError:
+            return None
 
     def begin_claim(self, mcp_runtime_id: str, request_id: str) -> bool:
         """Atomically authorize CAS; False if cancel already won.
@@ -156,10 +168,7 @@ class HandoffContinuationStore:
         """
 
         key = self._key(mcp_runtime_id, request_id)
-        with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return False
+        def claim(entry: HandoffContinuation) -> bool:
             if entry.state in self.IRREVERSIBLE:
                 return True
             if entry.state == "cancelled" or entry.cancel_requested.is_set():
@@ -171,7 +180,7 @@ class HandoffContinuationStore:
                         "LOCKED_ERROR handoff was cancelled before ownership "
                         "rotation"
                     )
-                    entry.updated_monotonic = time.monotonic()
+                    entry.updated_monotonic = float(self._monotonic())
                 return False
             if entry.state not in self.PRE_CLAIM and entry.state not in self.ACTIVE:
                 return False
@@ -179,8 +188,13 @@ class HandoffContinuationStore:
             entry.stage = "acquisition_claim"
             entry.error_code = None
             entry.error = None
-            entry.updated_monotonic = time.monotonic()
+            entry.updated_monotonic = float(self._monotonic())
             return True
+
+        try:
+            return self._registry.apply(key, claim)
+        except KeyError:
+            return False
 
     def request_cancel(
         self, mcp_runtime_id: str, request_id: str
@@ -196,10 +210,7 @@ class HandoffContinuationStore:
         """
 
         key = self._key(mcp_runtime_id, request_id)
-        with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return "not_found"
+        def cancel(entry: HandoffContinuation) -> HandoffCancelStatus:
             if entry.state in self.IRREVERSIBLE:
                 return "not_cancellable"
             if entry.state == "failed":
@@ -219,9 +230,14 @@ class HandoffContinuationStore:
                 entry.error = (
                     "LOCKED_ERROR handoff was cancelled before ownership rotation"
                 )
-                entry.updated_monotonic = time.monotonic()
+                entry.updated_monotonic = float(self._monotonic())
                 return "cancelled"
             return "not_cancellable"
+
+        try:
+            return self._registry.apply(key, cancel)
+        except KeyError:
+            return "not_found"
 
     def is_cancelled(self, mcp_runtime_id: str, request_id: str) -> bool:
         entry = self.get(mcp_runtime_id, request_id)
@@ -233,5 +249,10 @@ class HandoffContinuationStore:
 
     def discard(self, mcp_runtime_id: str, request_id: str) -> bool:
         key = self._key(mcp_runtime_id, request_id)
-        with self._lock:
-            return self._entries.pop(key, None) is not None
+        return self._registry.discard(key)
+
+    @property
+    def entry_count(self) -> int:
+        """Return retained continuations after bounded expiry cleanup."""
+
+        return self._registry.count

@@ -1,11 +1,8 @@
-"""Error when a timed-out request still occupies the GUI thread."""
+"""Compatibility import for the canonical GUI busy error."""
 
-from __future__ import annotations
+try:
+    from ...dispatch.gui_errors import GuiBusyAfterTimeout
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_errors import GuiBusyAfterTimeout
 
-from .gui_dispatch_error import GuiDispatchError
-
-
-class GuiBusyAfterTimeout(GuiDispatchError):
-    """A timed-out request is still occupying FreeCAD's GUI thread."""
-
-    error_code = "GUI_BUSY_AFTER_TIMEOUT"
+__all__ = ["GuiBusyAfterTimeout"]

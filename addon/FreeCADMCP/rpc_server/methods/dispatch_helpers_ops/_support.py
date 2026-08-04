@@ -18,9 +18,9 @@ except ImportError:
         require_document_modified,
     )
 
-from ...gui_dispatcher import GuiDispatchError, GuiDispatchTimeout
+try: from ....dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout; from ....dispatch.inflight_lease_credential import InflightLeaseCredential; from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E501, E701, E702, I001 - frozen census lines
+except ImportError: from dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout; from dispatch.inflight_lease_credential import InflightLeaseCredential; from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E501, E701, E702, I001 - frozen census lines
 from ...handoff_continuations import HandoffContinuationStore
-from ...inflight_requests import InflightLeaseCredential, RequestCancellationError
 from ...lease_runtime import _import_document_lease, _import_document_lock
 from ...mutation_guard import (
     DocumentHealthVerdict,

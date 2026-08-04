@@ -199,7 +199,7 @@ def test_irreversible_boundary_reports_not_cancellable_not_completed():
 
 @pytest.mark.unit
 def test_queued_gui_request_is_atomically_removed_before_execution():
-    QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
+    app = QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
     registry = InflightRequestRegistry()
     dispatcher = GuiDispatcher()
     session_id = _uuid()
@@ -237,11 +237,14 @@ def test_queued_gui_request_is_atomically_removed_before_execution():
     assert len(errors) == 1 and isinstance(errors[0], GuiTaskError)
     assert dispatcher.pending_count == 0
     assert request.token.snapshot().active_gui_phases == 0
+    app.processEvents()
+    dispatcher.deleteLater()
+    app.processEvents()
 
 
 @pytest.mark.unit
 def test_running_gui_request_is_signalled_but_never_claimed_stopped():
-    QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
+    app = QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
     registry = InflightRequestRegistry()
     dispatcher = GuiDispatcher()
     session_id = _uuid()
@@ -275,7 +278,14 @@ def test_running_gui_request_is_signalled_but_never_claimed_stopped():
     deadline = time.monotonic() + 1.0
     while dispatcher.pending_count != 1 and time.monotonic() < deadline:
         time.sleep(0.001)
-    drain = threading.Thread(target=dispatcher._drain_one)
+    original_is_gui_thread = dispatcher._core._is_gui_thread
+
+    def drain_on_declared_owner():
+        owner = threading.get_ident()
+        dispatcher._core._is_gui_thread = lambda: threading.get_ident() == owner
+        dispatcher._drain_one()
+
+    drain = threading.Thread(target=drain_on_declared_owner)
     drain.start()
     assert started.wait(0.5)
 
@@ -285,8 +295,12 @@ def test_running_gui_request_is_signalled_but_never_claimed_stopped():
 
     release.set()
     drain.join(timeout=1.0)
+    dispatcher._core._is_gui_thread = original_is_gui_thread
     submitter.join(timeout=1.0)
     assert results == ["actual-result"]
+    app.processEvents()
+    dispatcher.deleteLater()
+    app.processEvents()
 
 
 @pytest.mark.unit

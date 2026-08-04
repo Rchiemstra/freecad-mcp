@@ -1,16 +1,8 @@
-"""Private request credential; its bearer token is never represented."""
+"""Compatibility import for the canonical private lease credential."""
 
-from __future__ import annotations
+try:
+    from ...dispatch.inflight_lease_credential import InflightLeaseCredential
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.inflight_lease_credential import InflightLeaseCredential
 
-from dataclasses import dataclass, field
-
-
-@dataclass(frozen=True)
-class InflightLeaseCredential:
-    """Private request credential; its bearer token is never represented."""
-
-    lease_id: str
-    document_session_uuid: str
-    generation: int
-    token: str = field(repr=False)
-    mcp_instance_id: str = ""
+__all__ = ["InflightLeaseCredential"]

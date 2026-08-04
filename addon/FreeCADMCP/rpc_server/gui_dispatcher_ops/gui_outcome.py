@@ -1,13 +1,8 @@
-"""Outcome container for GUI-thread callables."""
+"""Compatibility import for the canonical GUI outcome."""
 
-from __future__ import annotations
+try:
+    from ...dispatch.gui_outcome import GuiOutcome
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_outcome import GuiOutcome
 
-from dataclasses import dataclass
-from typing import Any
-
-
-@dataclass(frozen=True)
-class GuiOutcome:
-    ok: bool
-    value: Any = None
-    error: str | None = None
+__all__ = ["GuiOutcome"]

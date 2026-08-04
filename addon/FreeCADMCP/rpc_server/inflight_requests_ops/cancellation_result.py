@@ -1,20 +1,8 @@
-"""Public cancellation status for one authenticated request."""
+"""Compatibility import for the canonical cancellation result."""
 
-from __future__ import annotations
+try:
+    from ...dispatch.cancellation_result import CancellationResult
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.cancellation_result import CancellationResult
 
-from dataclasses import dataclass
-from typing import Any
-
-from .inflight_snapshot import InflightSnapshot
-
-
-@dataclass(frozen=True)
-class CancellationResult:
-    status: str
-    request: InflightSnapshot | None
-
-    def to_public_dict(self) -> dict[str, Any]:
-        result = {"status": self.status}
-        if self.request is not None:
-            result["request"] = self.request.to_public_dict()
-        return result
+__all__ = ["CancellationResult"]

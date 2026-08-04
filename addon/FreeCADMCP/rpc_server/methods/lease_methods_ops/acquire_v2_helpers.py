@@ -1,8 +1,8 @@
 """Orchestration helpers for ``acquire_document_lock_v2``."""
-
 from typing import Any
 
-from ...inflight_requests import RequestCancellationError
+try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
 from ._common import _rpc_mod
 from .acquire_v2_abort import abort_phase_reservation
 from .acquire_v2_hash import hash_acquisition_baseline, rollback_after_hash_failure
