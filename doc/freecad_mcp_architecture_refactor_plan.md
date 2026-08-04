@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 2 in progress; Phase 6 complete |
-| Next phase | 7 — `refactor(mcp): isolate legacy lease decoders` |
+| Current stage / phase | Stage 2 complete; Phase 7 complete |
+| Next phase | 8 — `refactor(mcp): introduce the gateway runtime` |
 | In-flight ownership | None |
-| Last review | Phase 6 final integrated review clear on 2026-08-03 |
+| Last review | Phase 7 model/census, sidecar, and final integrated reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 6 is committed and gated; execute Phase 7 only, preserving the normal manager and frozen Stage 1 wire contracts |
+| Resume hint | Phase 7 is committed and gated; begin Stage 3 with Phase 8 only, preserving the explicit historic decoder boundary and frozen Stage 1 wire contracts |
 
 ### 11.2 Stage status
 
@@ -807,7 +807,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 |---:|---|---|---|
 | 0 | 1–3 | phases 1 and 3 | complete |
 | 1 | 4–5 | phase 5 | complete |
-| 2 | 6–7 | none | in progress |
+| 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | pending |
 | 4 | 12–17 | phase 12 | pending |
 | 5 | 18 | phase 18 | pending |
@@ -818,6 +818,56 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 7 complete: legacy lease decoders isolated
+
+- **Phase delivery:** `HistoricLeaseRecord` is a frozen, slotted, repr-redacted
+  compatibility value with only fresh-copy `to_sidecar_dict()` and redacted
+  `to_public_dict()` projections. `decode_historic_lease_record()` applies the
+  complete existing schema without constructing `LeaseRecord` or exposing
+  transition, revision, store, credential, or authority behavior. Direct
+  construction is rejected. `decode_historic_sidecar_bytes()` is explicitly
+  exported from both add-on and installed `document_lease.sidecar` spellings and
+  applies the existing byte, UTF-8, JSON, and schema bounds.
+- **Immutability, redaction, and malformed data:** historic payloads are copied
+  recursively into read-only storage and every returned projection is independent.
+  Credential and diagnostic fields, the complete structured error, and
+  secret-bearing scalar values are removed or redacted. Malformed schema values,
+  untrusted JSON, non-UTF-8 input, oversized input, and bounded deeply nested JSON
+  become generic public errors with no retained cause, context, traceback payload,
+  or input echo. `ALLOWED_TRANSITIONS` is now a read-only mapping over the existing
+  frozenset edges; live transition validation is unchanged.
+- **Compatibility and temporary runtime:** the existing `LeaseRecord`,
+  `validate_transition`, `parse_sidecar_bytes`, and `SidecarStore` signatures,
+  exports, and live behavior remain unchanged under their Phase 18 allowance. The
+  compatibility manifest now names the historic model and byte decoder symbols.
+  A separate exact Phase 18 census owns all 72 remaining mutable callers:
+  11 revisions, 33 transitions, four store creates, seven store deletes, 13 store
+  replacements, one call to each low-level create/delete/replace function, and one
+  transition-validator call.
+- **Authority policy:** the retained decoder seam is excluded from the temporary
+  sidecar-authority inventory only by exact path, approved definition scope, and
+  benign symbol. Adversarial fixtures prove that store writes inside either named
+  decoder and inside unexpected helpers remain visible. The six frozen authority
+  totals remain exactly core authority 115, locked-error handoff 15, lease
+  observers 30, heartbeats 167, sidecar correctness 861, and MCP save/recovery
+  authority 251. The existing model and sidecar ARCH105–ARCH107 records were
+  refreshed for their required decoder symbols; no new architecture allowance was
+  introduced.
+- **Agents and reviews:** independent model/transition and sidecar workstreams each
+  received Sol/xhigh adversarial review and re-review, followed by a separate
+  integrated review. Findings covering schema bypass, secret-bearing diagnostic
+  values, exception chains, deep JSON recursion, incomplete forbidden-transition
+  oracles, direct construction, overbroad authority exclusions, and aliased mutable
+  store calls were fixed. All final reviews report no blocking, important, or
+  non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded in
+  §11.4. The final baked affected suite passed 373 with three Windows-only skips,
+  production lint checked 952 files, Compose `unit` passed, and branch-built
+  preflight/core/e2e passed with both strict verdicts zero.
+- **Stage result and next:** Stage 2 is complete. Resume with Phase 8 only to
+  introduce the authority-free gateway runtime; Phase 7 is not an integration gate,
+  so the parent gitlink remains at the Phase 5 integration revision.
 
 #### 2026-08-03 — Phase 6 complete: LeaseClientManager defined normally
 
@@ -1214,6 +1264,39 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 7 — `refactor(mcp): isolate legacy lease decoders`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:5815335147e3f95d16634ee0e7d64bb171a8bcb4e647dcacfcc1ae5cc7be2198`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 952 production files and passed architecture policy and
+  Ruff. The final historic decoder, live model/sidecar/service, public and legacy
+  import, observer, Git-sidecar, baseline, and architecture-policy selection passed
+  373 with the three Windows-DACL cases skipped. The dedicated historic model and
+  sidecar modules contribute 14 and eight passing contracts respectively.
+- **Compose phase gate:** after `docker compose build`, `docker compose run --rm
+  unit` selected 2,045: 2,041 passed, the three Windows-DACL tests skipped, and the
+  existing screenshot test xfailed; 129 non-unit tests were deselected. Phase 7 is
+  not an integration gate, so §5.7 requires this unit service rather than all four
+  Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` volume and
+  branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no native
+  source changed. The unmodified preflight wrapper emitted `PREFLIGHT_OK`. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the unmodified e2e wrapper
+  passed 117/117. Both strict verdict files contained zero and were removed with
+  their generated XML reports after recording.
+- **Review and authority result:** both workstream re-reviews and the final
+  integrated review are clear with no blocking, important, or non-blocking finding.
+  The immutable-decoder exemption's adversarial write probes pass, aliased
+  create/delete/replace calls remain visible, the 72-call Phase 18 census is exact,
+  and all six frozen authority-category counts remain unchanged.
 
 #### Phase 6 — `refactor(mcp): define LeaseClientManager normally`
 

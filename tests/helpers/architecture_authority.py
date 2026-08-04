@@ -17,8 +17,10 @@ _SYMBOL_PATTERNS = {
         r"^(?:DocumentLeaseObserver|DocumentLockObserver|"
         r"(?:un)?register_(?:document_lease_observer|live_document_recovery))$"
     ),
-    "heartbeats": re.compile(r".*heartbeat.*", re.I),
-    "sidecar_correctness": re.compile(r".*(?:sidecar|FileBaseline|effective_record).*", re.I),
+    "heartbeats": re.compile(r".*heartbeat.*", re.IGNORECASE),
+    "sidecar_correctness": re.compile(
+        r".*(?:sidecar|FileBaseline|effective_record).*", re.IGNORECASE
+    ),
     "mcp_save_recovery_authority": re.compile(
         r".*(?:begin_save|commit_save_as|complete_local_save_and_clear|local_save|"
         r"local_restore|local_recovery|mark_save_verified|recover_orphaned|"
@@ -46,6 +48,49 @@ _IMPLICIT_PATH_PATTERNS = {
         r"freecad_client_ops/|stale_recovery|tools_lease_"
     ),
 }
+_HISTORIC_DECODER_SCOPES = {
+    "addon/FreeCADMCP/document_lease/model.py": frozenset(
+        {
+            "HistoricLeaseRecord",
+            "_freeze_historic_value",
+            "_historic_hash",
+            "_redact_historic_public_value",
+            "_thaw_historic_value",
+            "_validated_historic_payload",
+            "decode_historic_lease_record",
+        }
+    ),
+    "addon/FreeCADMCP/document_lease/historic_sidecar.py": frozenset(
+        {
+            "_decode_validated_historic_record",
+            "_load_historic_json",
+            "decode_historic_sidecar_bytes",
+        }
+    ),
+}
+_HISTORIC_DECODER_SIDECAR_SYMBOLS = {
+    "addon/FreeCADMCP/document_lease/model.py": frozenset(
+        {
+            "SidecarMalformedError",
+            "to_sidecar_dict",
+            "validate_sidecar_payload",
+        }
+    ),
+    "addon/FreeCADMCP/document_lease/historic_sidecar.py": frozenset(
+        {
+            "MAX_SIDECAR_BYTES",
+            "SidecarMalformedError",
+            "SidecarTooLargeError",
+            "decode_historic_sidecar_bytes",
+            "validate_sidecar_payload",
+        }
+    ),
+}
+_HISTORIC_DECODER_REEXPORTS = {
+    "addon/FreeCADMCP/document_lease/sidecar.py": frozenset(
+        {"decode_historic_sidecar_bytes"}
+    ),
+}
 
 
 def _symbol_nodes(tree: ast.AST) -> list[tuple[ast.AST, str, str]]:
@@ -67,6 +112,49 @@ def _is_git_sidecar(symbol: str) -> bool:
     return "gitsidecar" in compact
 
 
+def _historic_decoder_nodes(tree: ast.Module, relative: str) -> set[ast.AST]:
+    """Return nodes in the explicitly non-authoritative Phase 7 decoder seam."""
+
+    scopes = _HISTORIC_DECODER_SCOPES.get(relative, frozenset())
+    return {
+        node
+        for statement in tree.body
+        if isinstance(statement, (ast.ClassDef, ast.FunctionDef))
+        and statement.name in scopes
+        for node in ast.walk(statement)
+    }
+
+
+def _skip_authority_path(authority_id: str, relative: str, path: Path) -> bool:
+    if relative.startswith("src/freecad_mcp/_shared/protocol/"):
+        return True
+    return authority_id == "sidecar_correctness" and path.name == "git_sidecar.py"
+
+
+def _skip_authority_symbol(
+    authority_id: str,
+    relative: str,
+    symbol: str,
+    node: ast.AST,
+    historic_decoder_nodes: set[ast.AST],
+) -> bool:
+    if authority_id == "core_authority" and "windows_owner" in symbol:
+        return True
+    if authority_id != "sidecar_correctness":
+        return False
+    if _is_git_sidecar(symbol):
+        return True
+    if isinstance(node, ast.alias):
+        return symbol in _HISTORIC_DECODER_REEXPORTS.get(
+            relative, frozenset()
+        ) or symbol in _HISTORIC_DECODER_SIDECAR_SYMBOLS.get(
+            relative, frozenset()
+        )
+    return node in historic_decoder_nodes and symbol in (
+        _HISTORIC_DECODER_SIDECAR_SYMBOLS.get(relative, frozenset())
+    )
+
+
 def authority_symbol_census(
     *, root: Path, production_files: list[Path]
 ) -> dict[str, list[dict[str, Any]]]:
@@ -79,9 +167,7 @@ def authority_symbol_census(
             # Phase 3 vendors one byte-identical protocol implementation into both
             # processes. Count the add-on copy once; byte equality independently
             # prevents the client vendor from hiding a divergent authority symbol.
-            if relative.startswith("src/freecad_mcp/_shared/protocol/"):
-                continue
-            if authority_id == "sidecar_correctness" and path.name == "git_sidecar.py":
+            if _skip_authority_path(authority_id, relative, path):
                 continue
             pure_client_transport = (
                 authority_id == "mcp_save_recovery_authority"
@@ -93,12 +179,17 @@ def authority_symbol_census(
                     {"path": relative, "line": 0, "column": 0, "symbol": "<module>"}
                 )
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            historic_decoder_nodes = _historic_decoder_nodes(tree, relative)
             for node, symbol, kind in _symbol_nodes(tree):
                 if not symbol_pattern.fullmatch(symbol):
                     continue
-                if authority_id == "core_authority" and "windows_owner" in symbol:
-                    continue
-                if authority_id == "sidecar_correctness" and _is_git_sidecar(symbol):
+                if _skip_authority_symbol(
+                    authority_id,
+                    relative,
+                    symbol,
+                    node,
+                    historic_decoder_nodes,
+                ):
                     continue
                 records.append(
                     {

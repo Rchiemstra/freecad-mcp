@@ -2,19 +2,26 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
 import sys
+from pathlib import Path
 
 import pytest
 
+from tests.helpers.architecture_authority import (
+    authority_symbol_census as scan_authority_symbols,
+)
 from tests.helpers.architecture_baseline import (
     FROZEN_DEPRECATION_RESULT,
     ROOT,
+    _mutable_lease_call_target,
     authority_symbol_census,
     dynamic_module_lookup_census,
     load_manifest,
     local_import_locator_census,
+    mutable_lease_caller_census,
     rpc_mod_census,
 )
 from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
@@ -91,6 +98,9 @@ def test_every_temporary_authority_has_a_phase18_owner_and_negative_assertion():
         record["path"] for record in manifest["authority_symbol_census"]["sidecar_correctness"]
     }
     assert "addon/FreeCADMCP/git_sidecar.py" not in sidecar_paths
+    assert (
+        "addon/FreeCADMCP/document_lease/historic_sidecar.py" not in sidecar_paths
+    )
     assert "addon/FreeCADMCP/InitGui.py" not in sidecar_paths
     assert "addon/FreeCADMCP/document_lock_ops/eligibility.py" not in sidecar_paths
     save_paths = {
@@ -103,6 +113,99 @@ def test_every_temporary_authority_has_a_phase18_owner_and_negative_assertion():
         "src/freecad_mcp/freecad_client_ops/json_rpc_http_transport.py"
         not in save_paths
     )
+
+
+def test_every_mutable_lease_caller_is_owned_by_phase18():
+    manifest = load_manifest()
+    allowance = manifest["phase7_mutable_lease_callers"]
+    actual = mutable_lease_caller_census()
+
+    assert allowance["classification"] == "temporary_implementation"
+    assert allowance["phase18_owner"] == "integrator"
+    assert allowance["negative_end_state"]
+    assert actual == allowance["calls"]
+    assert {call["target"] for call in actual} == {
+        "LeaseRecord.revised",
+        "LeaseRecord.transitioned",
+        "SidecarStore.create",
+        "SidecarStore.delete",
+        "SidecarStore.replace",
+        "create_sidecar",
+        "delete_sidecar",
+        "replace_sidecar",
+        "validate_transition",
+    }
+    for call in actual:
+        assert call["path"].startswith("addon/FreeCADMCP/document_lease/")
+        assert (ROOT / call["path"]).is_file()
+
+
+def test_historic_decoder_authority_exclusion_does_not_hide_new_writes(
+    tmp_path: Path,
+):
+    historic_path = (
+        tmp_path
+        / "addon"
+        / "FreeCADMCP"
+        / "document_lease"
+        / "historic_sidecar.py"
+    )
+    historic_path.parent.mkdir(parents=True)
+    historic_path.write_text(
+        """
+def decode_historic_sidecar_bytes(data, sidecar_store, path, record):
+    sidecar_store.create(path, record)
+    return data
+
+def unexpected_live_sidecar_write(sidecar_store, path, record):
+    sidecar_store.create(path, record)
+""".lstrip(),
+        encoding="utf-8",
+    )
+    model_path = historic_path.with_name("model.py")
+    model_path.write_text(
+        """
+def decode_historic_lease_record(data, authoritative_sidecar, path, record):
+    authoritative_sidecar.replace(path, record)
+    return data
+
+class HistoricLeaseRecord:
+    def injected_write(self, path, record):
+        self._sidecar.create(path, record)
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    records = scan_authority_symbols(
+        root=tmp_path,
+        production_files=[historic_path, model_path],
+    )["sidecar_correctness"]
+
+    assert not any(
+        record["symbol"] == "decode_historic_sidecar_bytes" for record in records
+    )
+    assert sum(record["symbol"] == "sidecar_store" for record in records) == 2
+    assert any(record["symbol"] == "authoritative_sidecar" for record in records)
+    assert any(record["symbol"] == "_sidecar" for record in records)
+
+
+def test_mutable_lease_census_recognizes_store_aliases_without_string_false_positives():
+    calls = {
+        source: _mutable_lease_call_target(ast.parse(source).body[0].value)
+        for source in (
+            "store.create(path, record)",
+            "store.delete(path, expected=record)",
+            "writer.replace(path, record, expected=old)",
+            "text.replace('a', 'b')",
+        )
+    }
+
+    assert calls == {
+        "store.create(path, record)": "SidecarStore.create",
+        "store.delete(path, expected=record)": "SidecarStore.delete",
+        "writer.replace(path, record, expected=old)": "SidecarStore.replace",
+        "text.replace('a', 'b')": "",
+    }
 
 
 def _member_exists(module: object, qualified_name: str) -> bool:

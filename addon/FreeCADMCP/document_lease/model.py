@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType as _MappingProxyType
 from typing import Any
-
-from .types.document_identity import DocumentIdentity
+from typing import Self as _Self
 
 # §3.3 compatibility shims — keep old import paths working.
+from .types.document_identity import DocumentIdentity
 from .types.document_selector import DocumentSelector  # noqa: F401
 from .types.file_baseline import FileBaseline
 from .types.file_identity import FileIdentity  # noqa: F401
@@ -33,12 +34,168 @@ from .types.schema_constants import (
 )
 from .types.task_summary import sanitize_persisted_task_summary
 from .types.time_utils import utc_now
-from .types.token_utils import TOKEN_FINGERPRINT_RE, token_fingerprint, token_matches  # noqa: F401
+from .types.token_utils import (  # noqa: F401
+    TOKEN_FINGERPRINT_RE,
+    token_fingerprint,
+    token_matches,
+)
 from .types.transitions import (  # noqa: F401
     ALLOWED_TRANSITIONS,
     TERMINAL_STATES,
     validate_transition,
 )
+
+_HISTORIC_REDACTED_FIELD_NAMES = frozenset(
+    {
+        "current_operation",
+        "error",
+        "message",
+        "request_id",
+        "task_summary",
+        "token_fingerprint",
+    }
+)
+_HISTORIC_SENSITIVE_MARKERS = frozenset(
+    {
+        "authorization",
+        "bearer",
+        "capability",
+        "credential",
+        "diagnostic",
+        "grant",
+        "permission",
+        "secret",
+        "token",
+    }
+)
+_INVALID_HISTORIC_PAYLOAD = object()
+
+
+def _freeze_historic_value(value: Any) -> Any:
+    """Return a recursively immutable copy of a historic JSON value."""
+
+    if isinstance(value, Mapping):
+        if not all(isinstance(key, str) for key in value):
+            raise TypeError("historic sidecar mapping keys must be strings")
+        return _MappingProxyType(
+            {key: _freeze_historic_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, list | tuple):
+        return tuple(_freeze_historic_value(item) for item in value)
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    raise TypeError(
+        f"historic sidecar contains unsupported value {type(value).__name__}"
+    )
+
+
+def _thaw_historic_value(value: Any) -> Any:
+    """Return a fresh mutable copy of a recursively frozen historic value."""
+
+    if isinstance(value, Mapping):
+        return {key: _thaw_historic_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_historic_value(item) for item in value]
+    if isinstance(value, frozenset):
+        return {_thaw_historic_value(item) for item in value}
+    return value
+
+
+def _historic_hash(value: Any) -> int:
+    """Hash immutable historic data without retaining mutable containers."""
+
+    if isinstance(value, Mapping):
+        return hash(
+            frozenset((key, _historic_hash(item)) for key, item in value.items())
+        )
+    if isinstance(value, tuple):
+        return hash(tuple(_historic_hash(item) for item in value))
+    return hash(value)
+
+
+def _redact_historic_public_value(value: Any) -> Any:
+    """Copy historic data while removing secret-bearing diagnostic fields."""
+
+    if isinstance(value, Mapping):
+        return {
+            key: _redact_historic_public_value(item)
+            for key, item in value.items()
+            if key.casefold() not in _HISTORIC_REDACTED_FIELD_NAMES
+            and not any(
+                marker in "".join(character for character in key.casefold() if character.isalnum())
+                for marker in _HISTORIC_SENSITIVE_MARKERS
+            )
+        }
+    if isinstance(value, tuple):
+        return [_redact_historic_public_value(item) for item in value]
+    if isinstance(value, str):
+        normalized = "".join(
+            character for character in value.casefold() if character.isalnum()
+        )
+        if any(marker in normalized for marker in _HISTORIC_SENSITIVE_MARKERS):
+            return "<redacted>"
+    return value
+
+
+def _validated_historic_payload(data: Any) -> Mapping[str, Any] | object:
+    """Return fully schema-validated historic data or an opaque invalid sentinel."""
+
+    # Local imports avoid a model/validator import cycle while keeping this public
+    # mapping decoder subject to the exact same schema as the byte decoder.
+    from .sidecar_ops.validate_payload import validate_sidecar_payload
+    from .sidecar_types.sidecar_malformed_error import SidecarMalformedError
+
+    try:
+        return validate_sidecar_payload(data)
+    except (KeyError, RecursionError, TypeError, ValueError, SidecarMalformedError):
+        return _INVALID_HISTORIC_PAYLOAD
+
+
+@dataclass(frozen=True, slots=True, repr=False, init=False)
+class HistoricLeaseRecord:
+    """Read-only decoded sidecar data retained solely for compatibility.
+
+    This value deliberately preserves historic serialized data without creating
+    a live lease record.  It has no transition, revision, credential, or
+    authorization API.
+    """
+
+    _payload: Mapping[str, Any] = field(repr=False)
+
+    def __new__(cls) -> _Self:
+        raise TypeError("HistoricLeaseRecord must be created by its decoder")
+
+    def __repr__(self) -> str:
+        return "HistoricLeaseRecord(<redacted>)"
+
+    def __hash__(self) -> int:
+        return _historic_hash(self._payload)
+
+    def to_sidecar_dict(self) -> dict[str, Any]:
+        """Return a fresh mutable copy of the historic sidecar mapping."""
+
+        return _thaw_historic_value(self._payload)
+
+    def to_public_dict(self) -> dict[str, Any]:
+        """Return historic status data without credentials or diagnostics."""
+
+        return _redact_historic_public_value(self._payload)
+
+
+def decode_historic_lease_record(data: Mapping[str, Any]) -> HistoricLeaseRecord:
+    """Decode a historic sidecar mapping into immutable compatibility data.
+
+    The decoder only snapshots an already-serialized historic shape.  It does
+    not instantiate a live lease, validate a transition, or confer authority.
+    """
+
+    validated = _validated_historic_payload(data)
+    if validated is _INVALID_HISTORIC_PAYLOAD:
+        raise ValueError("historic sidecar record is invalid")
+
+    record = object.__new__(HistoricLeaseRecord)
+    object.__setattr__(record, "_payload", _freeze_historic_value(validated))
+    return record
 
 
 @dataclass(frozen=True)

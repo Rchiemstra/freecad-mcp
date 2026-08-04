@@ -231,17 +231,17 @@
       "path": "addon/FreeCADMCP/document_lease/model.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "d07907cd47f938627a41",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 38 symbols",
+      "fingerprint": "c3d539acd73146f3e5e4",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 40 symbols",
       "removal_phase": 22
     },
     {
       "code": "ARCH105",
       "path": "addon/FreeCADMCP/document_lease/model.py",
-      "line": 45,
+      "line": 48,
       "column": 1,
-      "fingerprint": "fe59dc239ca3e8691b95",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: ClassDef@45",
+      "fingerprint": "9ad6b2f15d3d343439af",
+      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@48, Assign@58, Assign@71, FunctionDef@74, FunctionDef@92, FunctionDef@104, FunctionDef@116, FunctionDef@140, ClassDef@155, FunctionDef@185, ClassDef@202",
       "removal_phase": 22
     },
     {
@@ -510,17 +510,17 @@
       "path": "addon/FreeCADMCP/document_lease/sidecar.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "78289e0d8746eabfc568",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 57 symbols",
+      "fingerprint": "2760b9ebb9216df8980f",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 58 symbols",
       "removal_phase": 22
     },
     {
       "code": "ARCH106",
       "path": "addon/FreeCADMCP/document_lease/sidecar.py",
-      "line": 176,
+      "line": 177,
       "column": 1,
-      "fingerprint": "3da06b2b521d50d54403",
-      "reason": "legacy package public surface: package exports 19 public symbols; budget is 16",
+      "fingerprint": "7eb0e7cccc75c8a5659b",
+      "reason": "legacy package public surface: package exports 20 public symbols; budget is 16",
       "removal_phase": 23
     },
     {

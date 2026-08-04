@@ -239,3 +239,66 @@ def authority_symbol_census() -> dict[str, list[dict[str, Any]]]:
         root=ROOT,
         production_files=production_python_files(),
     )
+
+
+def _mutable_lease_call_target(node: ast.Call) -> str:
+    direct_targets = {
+        "create_sidecar",
+        "delete_sidecar",
+        "replace_sidecar",
+        "validate_transition",
+    }
+    if isinstance(node.func, ast.Name):
+        return node.func.id if node.func.id in direct_targets else ""
+    if not isinstance(node.func, ast.Attribute):
+        return ""
+    if node.func.attr in {"revised", "transitioned"}:
+        return f"LeaseRecord.{node.func.attr}"
+    if node.func.attr == "validate_transition":
+        return "validate_transition"
+    if node.func.attr in {"create", "delete"}:
+        return f"SidecarStore.{node.func.attr}"
+    if node.func.attr == "replace" and any(
+        keyword.arg == "expected" for keyword in node.keywords
+    ):
+        return "SidecarStore.replace"
+    return ""
+
+
+def mutable_lease_caller_census() -> list[dict[str, Any]]:
+    """Enumerate the live lease/sidecar mutation calls Phase 18 must remove."""
+
+    lease_root = ROOT / "addon" / "FreeCADMCP" / "document_lease"
+    occurrences: list[dict[str, Any]] = []
+    for path in sorted(lease_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        parents = {
+            child: parent
+            for parent in ast.walk(tree)
+            for child in ast.iter_child_nodes(parent)
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = _mutable_lease_call_target(node)
+            if not target:
+                continue
+            occurrences.append(
+                {
+                    "path": relative(path),
+                    "line": node.lineno,
+                    "column": node.col_offset,
+                    "function": nearest_function(node, parents),
+                    "target": target,
+                    "classification": "temporary_mutable_lease_caller",
+                }
+            )
+    return sorted(
+        occurrences,
+        key=lambda item: (
+            item["path"],
+            item["line"],
+            item["column"],
+            item["target"],
+        ),
+    )

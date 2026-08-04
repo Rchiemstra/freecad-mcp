@@ -7,6 +7,7 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+from .historic_sidecar import decode_historic_sidecar_bytes
 from .model import LeaseRecord
 from .sidecar_ops.cas import matches_cas
 from .sidecar_ops.codec import parse_sidecar_bytes, serialize_record
@@ -189,6 +190,7 @@ __all__ = [
     "SidecarPermissionError",
     "SidecarStore",
     "SidecarTooLargeError",
+    "decode_historic_sidecar_bytes",
     "guard_path_for",
     "parse_sidecar_bytes",
     "sidecar_path_for",
