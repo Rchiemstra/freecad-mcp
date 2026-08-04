@@ -794,12 +794,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 2 complete; Phase 7 complete |
-| Next phase | 8 — `refactor(mcp): introduce the gateway runtime` |
+| Current stage / phase | Stage 3 in progress; Phase 8 complete |
+| Next phase | 9 — `refactor(mcp): establish the transport layer` |
 | In-flight ownership | None |
-| Last review | Phase 7 model/census, sidecar, and final integrated reviews clear on 2026-08-04 |
+| Last review | Phase 8 behavior, boundary, and final integrated reviews clear on 2026-08-04 |
 | Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 7 is committed and gated; begin Stage 3 with Phase 8 only, preserving the explicit historic decoder boundary and frozen Stage 1 wire contracts |
+| Resume hint | Phase 8 is committed and gated; continue Stage 3 with Phase 9 only, keeping transport free of dispatch, document authority, and runtime composition |
 
 ### 11.2 Stage status
 
@@ -808,7 +808,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 0 | 1–3 | phases 1 and 3 | complete |
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
-| 3 | 8–11 | none | pending |
+| 3 | 8–11 | none | in progress |
 | 4 | 12–17 | phase 12 | pending |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
@@ -818,6 +818,44 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-04 — Phase 8 complete: gateway runtime introduced
+
+- **Phase delivery:** `AddonRuntime` is a frozen, slotted, standard-library-only
+  composition container for the listener, dispatcher, worker and session managers,
+  replay and in-flight registries, handoff continuations, acquisition claims,
+  collaboration bridge, and shutdown signal. Construction is keyword-only and
+  inert: it imports neither FreeCAD nor Qt, starts no listener or worker, creates
+  no document state, and preserves the exact identity of every injected component.
+- **Ownership and disposal:** owned resources must be non-null injected components
+  with unique identities and callable disposers. Disposal signals shutdown first,
+  invokes every disposer exactly once in reverse order, is safe under concurrent
+  callers and same-thread re-entry, and replays one complete failure group to
+  waiters after attempting all cleanup. `BaseException` failures, including a
+  failed shutdown signal and cancellation-class exceptions, cannot prevent later
+  cleanup; repeated successful disposal is a no-op.
+- **Boundary contract:** adversarial AST tests keep the runtime authority-free and
+  import-inert. They reject document, lease, dirty-state, persistence, recovery,
+  sidecar, credential, and related authority vocabulary; dynamic imports and their
+  aliases; decorators, bases, defaults, annotations, class-body execution, mutable
+  module or class state, and rebinding of trusted dataclass helpers. No existing
+  add-on module may import the runtime before the Phase 11 composition root, and no
+  architecture allowance, authority census, manifest, or frozen wire contract was
+  changed.
+- **Agents and reviews:** separate behavior and structural-boundary workstreams
+  received independent Sol/xhigh adversarial reviews followed by an integrated
+  review. Findings covering `BaseException` cleanup, concurrent disposal waiting,
+  same-owner re-entry, dynamic-import aliases, import-time execution, mutable class
+  state, alternate authority spellings, and top-level or class-local trusted-name
+  shadowing were fixed and re-reviewed. All three final reviews are clear with no
+  blocking, important, or non-blocking finding.
+- **Docker validation:** exact images, commands, counts, and results are recorded
+  in §11.4. The baked affected selection passed 150/150, production lint checked
+  953 files, Compose `unit` passed, and branch-built preflight/core/e2e passed with
+  both strict collaboration verdicts zero.
+- **Stage result and next:** Stage 3 is in progress with Phase 8 complete. Resume
+  with Phase 9 only to establish the transport layer; Phase 8 is not an integration
+  gate, so the parent gitlink remains at the Phase 5 integration revision.
 
 #### 2026-08-04 — Phase 7 complete: legacy lease decoders isolated
 
@@ -1264,6 +1302,39 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 8 — `refactor(mcp): introduce the gateway runtime`
+
+- **Images:** final Compose `freecad-mcp-tests:latest` at
+  `sha256:0b5f3692a520a8a3fb5ef9028d8ab4a1fcaad2ef1b959258792f780321590afb`;
+  preserved native `freecad-collaboration-ci:ubuntu24.04-20260801` at
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` at
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The local daemon reports no repository digest for these images.
+- **Baked-image contracts and lint:** `ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 953 production files and passed architecture policy and
+  Ruff. The runtime behavior, structural boundary, architecture baseline, and
+  architecture-policy selection passed 150/150. The dedicated runtime behavior and
+  boundary modules passed 49/49, and touched-test Ruff passed.
+- **Compose phase gate:** after `docker compose build unit`, `docker compose run
+  --rm unit` selected 2,094: 2,090 passed, the three Windows-DACL tests skipped,
+  and the existing screenshot test xfailed; 129 non-unit tests were deselected.
+  Phase 8 is not an integration gate, so §5.7 requires this unit service rather
+  than all four Compose services.
+- **Branch-built cross-track:** the preserved `freecad-phase3-debug` volume and
+  branch hash `7a47b18044b82bb2eb1c17047150d72eadde6c26` were reused because no native
+  source changed. The unmodified preflight wrapper emitted `PREFLIGHT_OK` for
+  FreeCAD 26.3.0 revision 48071. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper
+  collected 12: seven passed and five expected xfailed; the unmodified e2e wrapper
+  passed 117/117. Both strict verdict files contained zero and were removed with
+  their generated XML reports after recording.
+- **Review and authority result:** behavior, structural-boundary, and final
+  integrated adversarial reviews are clear with no blocking, important, or
+  non-blocking finding. The runtime remains standard-library-only, inert, and free
+  of document authority, while all frozen Stage 1 contracts and authority
+  inventories remain unchanged.
 
 #### Phase 7 — `refactor(mcp): isolate legacy lease decoders`
 
