@@ -410,7 +410,7 @@
       {
         "column": 13,
         "kind": "Name",
-        "line": 157,
+        "line": 191,
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py",
         "symbol": "_mutation_capability_context"
       },
@@ -753,14 +753,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 121,
+        "line": 165,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
       {
         "column": 30,
         "kind": "Name",
-        "line": 545,
+        "line": 675,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -9356,14 +9356,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 115,
+        "line": 159,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
       {
         "column": 29,
         "kind": "Name",
-        "line": 487,
+        "line": 619,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -10359,14 +10359,6 @@
       "classification": "runtime_singleton_locator",
       "column": 4,
       "function": "_rpc_mod",
-      "line": 7,
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
       "line": 17,
       "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py",
       "target": "...rpc_server"
@@ -10432,8 +10424,8 @@
     "baseline_locator_nodes": 514,
     "baseline_references": 504,
     "baseline_runtime_calls": 432,
-    "current_definitions": 6,
-    "current_locator_nodes": 76,
+    "current_definitions": 5,
+    "current_locator_nodes": 72,
     "current_modules": {
       "addon/FreeCADMCP/rpc_server/lease_runtime.py": {
         "definitions": 1,
@@ -10455,20 +10447,6 @@
         "import_bindings": 1,
         "loaded_references": 4,
         "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py": {
-        "definitions": 1,
-        "exported_names": 1,
-        "import_bindings": 0,
-        "loaded_references": 0,
-        "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/document_ops.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 1,
-        "runtime_calls": 1
       },
       "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py": {
         "definitions": 1,
@@ -10548,8 +10526,8 @@
         "runtime_calls": 2
       }
     },
-    "current_references": 70,
-    "current_runtime_calls": 55,
+    "current_references": 67,
+    "current_runtime_calls": 54,
     "method": "AST count of _rpc_mod definitions, loaded references/runtime calls, import bindings, and explicit exports"
   },
   "manifest_state": "planned_pre_cutover",

@@ -112,7 +112,9 @@ ADDON_COMPATIBILITY_ORIGINS = {
     ),
     "lease_protocol_types.replay_cache_helpers": (
         "replay_cache_helpers",
-        _same_names("completion_tombstone", "is_completion_tombstone", "scrub_exact_secrets"),
+        _same_names(
+            "completion_tombstone", "is_completion_tombstone", "scrub_exact_secrets"
+        ),
     ),
     "lease_protocol_types.replay_check": ("replay_check", _same_names("ReplayCheck")),
     "lease_protocol_types.request_envelope": (
@@ -431,9 +433,7 @@ def test_authenticated_handshake_and_bound_envelope_succeed():
     assert response["client_nonce"] == request["client_nonce"]
     assert verified.manifest.addon_runtime_id == _manifest().addon_runtime_id
 
-    context, envelope = manager.authenticate_envelope(
-        _envelope(verified.session_token)
-    )
+    context, envelope = manager.authenticate_envelope(_envelope(verified.session_token))
     assert context.session_id == verified.session_id
     assert context.mcp.runtime_id == _mcp().runtime_id
     assert envelope.method == "create_pad"
@@ -556,15 +556,11 @@ def test_session_expires_using_monotonic_time():
     manager, request_payload, _response, verified = _handshake(
         clock=lambda: now[0], ttl=5.0
     )
-    manager.authenticate(
-        verified.session_token, mcp_runtime_id=_mcp().runtime_id
-    )
+    manager.authenticate(verified.session_token, mcp_runtime_id=_mcp().runtime_id)
     now[0] = 105.0
 
     with pytest.raises(LeaseProtocolError) as raised:
-        manager.authenticate(
-            verified.session_token, mcp_runtime_id=_mcp().runtime_id
-        )
+        manager.authenticate(verified.session_token, mcp_runtime_id=_mcp().runtime_id)
 
     assert raised.value.code == "SESSION_EXPIRED"
 
@@ -588,9 +584,7 @@ def test_session_revocation_and_runtime_binding_are_enforced():
 
     assert manager.revoke(session_id=verified.session_id, reason="test") is True
     with pytest.raises(LeaseProtocolError) as raised:
-        manager.authenticate(
-            verified.session_token, mcp_runtime_id=_mcp().runtime_id
-        )
+        manager.authenticate(verified.session_token, mcp_runtime_id=_mcp().runtime_id)
     assert raised.value.code == "SESSION_REVOKED"
 
 
@@ -668,13 +662,38 @@ def test_replay_cache_journals_late_gui_completion():
     )
 
     late = {"ok": True, "late_completion": True, "result": {"success": True}}
-    assert cache.journal_completion(
-        runtime_id, envelope.request_id, late
+    assert cache.journal_completion(runtime_id, envelope.request_id, late)
+    assert cache.status(runtime_id, envelope.request_id).response == late
+    cache.complete(
+        runtime_id,
+        envelope,
+        {"ok": False, "error": {"code": "GUI_COMPLETION_UNCERTAIN"}},
     )
     assert cache.status(runtime_id, envelope.request_id).response == late
-    assert not cache.journal_completion(
-        runtime_id, str(uuid.uuid4()), late
+    assert not cache.journal_completion(runtime_id, str(uuid.uuid4()), late)
+
+
+def test_oversized_late_completion_tombstone_is_not_overwritten_by_timeout():
+    _manager, _request_payload, _response, verified = _handshake()
+    envelope = RequestEnvelope.from_dict(_envelope(verified.session_token))
+    cache = RequestReplayCache(response_max_bytes=256)
+    runtime_id = _mcp().runtime_id
+    assert cache.claim(runtime_id, envelope).status == "new"
+
+    assert cache.journal_completion(
+        runtime_id,
+        envelope.request_id,
+        {"ok": True, "late_completion": True, "result": "x" * 1024},
     )
+    compacted = cache.status(runtime_id, envelope.request_id).response
+    assert compacted["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
+
+    cache.complete(
+        runtime_id,
+        envelope,
+        {"ok": False, "error": {"code": "GUI_COMPLETION_UNCERTAIN"}},
+    )
+    assert cache.status(runtime_id, envelope.request_id).response == compacted
 
 
 def test_replay_semantics_survive_session_refresh_and_normalize_generated_hmac():
@@ -753,7 +772,7 @@ def test_replay_rejects_changed_multi_document_credential_across_sessions():
 
 def test_pinned_replay_compacts_after_ttl_and_is_not_evicted_until_release():
     now = [10.0]
-    active = { _mcp().runtime_id }
+    active = {_mcp().runtime_id}
     runtime_id = _mcp().runtime_id
     envelope = RequestEnvelope.from_dict(_envelope("S" * 43))
     cache = RequestReplayCache(

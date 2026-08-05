@@ -130,3 +130,79 @@ def _call_baseline_reader(
             mutation_may_have_occurred=mutation_may_have_occurred,
         )
     return result
+
+
+def compare_serialized_file_to_baseline(
+    path: str | os.PathLike[str],
+    expected: dict[str, Any] | None,
+    *,
+    platform: str | None = None,
+    baseline_reader: Callable[..., Any] = capture_file_baseline,
+):
+    """Compare a public baseline payload without exporting its authority type."""
+
+    canonical, _ = canonicalize_path(path, platform=platform)
+    required = {"size", "mtime_ns", "sha256"}
+    if not isinstance(expected, dict) or not required.issubset(expected):
+        raise BaselineRequiredError(
+            "a complete FileBaseline is required",
+            stage="preflight",
+            path=canonical,
+        )
+    expected_sha = str(expected["sha256"]).lower()
+    if not _SHA256_RE.fullmatch(expected_sha):
+        raise InvalidSaveRequestError(
+            "expected baseline has an invalid SHA-256",
+            stage="preflight",
+            path=canonical,
+        )
+    try:
+        actual = baseline_reader(canonical, platform=platform)
+    except (OSError, DocumentIdentityError) as exc:
+        raise BaselineMismatchError(
+            f"unable to verify the current file baseline: {exc}",
+            stage="preflight",
+            path=canonical,
+        ) from exc
+
+    try:
+        actual_values = {
+            "size": actual.size,
+            "mtime_ns": actual.mtime_ns,
+            "sha256": str(actual.sha256).lower(),
+        }
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise BaselineMismatchError(
+            "unable to verify the current file baseline",
+            stage="preflight",
+            path=canonical,
+        ) from exc
+
+    differences: dict[str, dict[str, Any]] = {}
+    expected_values = {
+        "size": expected["size"],
+        "mtime_ns": expected["mtime_ns"],
+        "sha256": expected_sha,
+    }
+    for field_name, expected_value in expected_values.items():
+        actual_value = actual_values[field_name]
+        if expected_value != actual_value:
+            differences[field_name] = {
+                "expected": expected_value,
+                "actual": actual_value,
+            }
+    expected_identity = expected.get("file_identity")
+    actual_identity = _identity_dict(getattr(actual, "file_identity", None))
+    if expected_identity is not None and expected_identity != actual_identity:
+        differences["file_identity"] = {
+            "expected": expected_identity,
+            "actual": actual_identity,
+        }
+    if differences:
+        raise BaselineMismatchError(
+            "document file changed since the accepted baseline",
+            stage="preflight",
+            path=canonical,
+            details={"differences": differences},
+        )
+    return actual

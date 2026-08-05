@@ -9,7 +9,15 @@ from .dispatch_gui_lease_task import run_lease_aware_gui_task
 """GUI-thread dispatch with lease revalidation."""
 
 
-def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
+def dispatch_gui(
+    self,
+    task,
+    timeout=None,
+    *,
+    late_on_complete=None,
+    late_result_transform=None,
+    journal_late_completion=True,
+):
     """Run *task* on the GUI thread and preserve legacy string errors.
 
     ``late_on_complete`` is invoked when the GUI task finishes, including
@@ -20,6 +28,9 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
     if dispatcher is None:
         return "RPC GUI dispatcher is not initialized"
     t = timeout if timeout is not None else self.TIMEOUT
+    completion_seen = threading.Event()
+    completion_lock = threading.RLock()
+    completion_handoff = {"held": False}
     context = getattr(self._mutation_context, "value", None)
     inflight = self._current_inflight()
     request_id = inflight.request_id if inflight is not None else None
@@ -39,18 +50,27 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
 
         def task():
             return run_lease_aware_gui_task(
-                self, collaborators, original_task, captured, inflight, context
+                self,
+                collaborators,
+                original_task,
+                captured,
+                inflight,
+                context,
+                completion_lock=completion_lock,
+                completion_handoff=completion_handoff,
             )
 
     replay_on_complete = None
     replay_cache = collaborators.request_replay_cache
     completion_runtime_id = collaborators.runtime_id
-    if context and replay_cache is not None:
+    if context and replay_cache is not None and journal_late_completion:
         replay_on_complete = build_replay_on_complete(
-            context, replay_cache, completion_runtime_id
+            context,
+            replay_cache,
+            completion_runtime_id,
+            result_transform=late_result_transform,
         )
 
-    completion_seen = threading.Event()
     session_id = inflight.session_id if inflight is not None else None
     gui_phase_registered = False
     if inflight is not None:
@@ -66,6 +86,8 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
         inflight=inflight,
         context=context,
         completion_seen=completion_seen,
+        completion_lock=completion_lock,
+        completion_handoff=completion_handoff,
         replay_on_complete=replay_on_complete,
         late_on_complete=late_on_complete,
         collaborators=collaborators,
@@ -81,6 +103,7 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
                 on_complete
                 if (
                     gui_phase_registered
+                    or context is not None
                     or replay_on_complete
                     or late_on_complete is not None
                 )
@@ -96,6 +119,7 @@ def dispatch_gui(self, task, timeout=None, *, late_on_complete=None):
             request_id=request_id,
             gui_phase_registered=gui_phase_registered,
             completion_seen=completion_seen,
+            completion_lock=completion_lock,
             collaborators=collaborators,
         )
 

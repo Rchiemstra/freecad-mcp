@@ -327,6 +327,7 @@ def _compose_transitional_runtime(
             ),
             collaboration_collaborators=collaboration_collaborators,
             cad_collaborators=cad_collaborators,
+            gui_collaborators=rpc_mod._build_gui_collaborators(),
             execution_collaborators=rpc_mod._build_execution_collaborators(
                 compatibility_api=collaboration_collaborators.compatibility_api,
                 gui_dispatcher_value=_dispatcher,

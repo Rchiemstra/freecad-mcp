@@ -62,9 +62,7 @@ def _authorize_gui_credentials(self, collaborators, captured, inflight, lease):
     return credentials, tuple(sorted(set(marker_keys)))
 
 
-def _begin_gui_lease_operations(
-    collaborators, captured, inflight, credentials, lease
-):
+def _begin_gui_lease_operations(collaborators, captured, inflight, credentials, lease):
     operation = captured["method"]
     if inflight is not None:
         inflight.token.begin_mutation("gui_mutation_authorized")
@@ -100,9 +98,36 @@ def _complete_gui_lease_operations(
                 dirty=dirty,
             )
         else:
-            collaborators.document_lease_service.complete_operation(
-                credential, dirty=dirty
-            )
+            try:
+                collaborators.document_lease_service.complete_operation(
+                    credential, dirty=dirty
+                )
+            except Exception as completion_error:
+                recovery = inflight.token.snapshot() if inflight is not None else None
+                record = collaborators.document_lease_service.authorize(credential)
+                lease_error = getattr(record, "error", None)
+                state = getattr(getattr(record, "state", None), "value", None)
+                if not (
+                    recovery is not None
+                    and recovery.recovery_incident_id
+                    and state == "LOCKED_ERROR"
+                    and getattr(lease_error, "code", None) == "GUI_COMPLETION_UNCERTAIN"
+                    and getattr(lease_error, "request_id", None)
+                    == captured["request_id"]
+                ):
+                    raise completion_error from None
+                try:
+                    collaborators.document_lease_service.begin_recovery(
+                        credential, operation=f"{operation}:late_completion"
+                    )
+                    collaborators.document_lease_service.complete_operation(
+                        credential, dirty=dirty
+                    )
+                except Exception as recovery_error:
+                    completion_error.add_note(
+                        f"late GUI lease recovery also failed: {recovery_error}"
+                    )
+                    raise completion_error from recovery_error
 
 
 def _record_gui_lease_errors(collaborators, captured, inflight, credentials, exc):
@@ -119,7 +144,9 @@ def _record_gui_lease_errors(collaborators, captured, inflight, credentials, exc
                 ),
                 request_id=captured["request_id"],
                 dirty=(
-                    document_modified_or_dirty(document) if document is not None else True
+                    document_modified_or_dirty(document)
+                    if document is not None
+                    else True
                 ),
             )
         except Exception:
@@ -127,7 +154,14 @@ def _record_gui_lease_errors(collaborators, captured, inflight, credentials, exc
 
 
 def run_enforced_lease_service_task(
-    self, collaborators, original_task, captured, inflight
+    self,
+    collaborators,
+    original_task,
+    captured,
+    inflight,
+    *,
+    completion_lock,
+    completion_handoff,
 ):
     dl = collaborators.import_document_lock()
     lease = collaborators.import_document_lease()
@@ -164,14 +198,17 @@ def run_enforced_lease_service_task(
                 recompute_callback=begin_recompute,
                 request_id=captured["request_id"],
             )
+        completion_lock.acquire()
+        completion_handoff["held"] = True
         _complete_gui_lease_operations(
             collaborators, captured, inflight, credentials, operation, result, failed
         )
         return result
     except Exception as exc:
-        _record_gui_lease_errors(
-            collaborators, captured, inflight, credentials, exc
-        )
+        if not completion_handoff["held"]:
+            completion_lock.acquire()
+            completion_handoff["held"] = True
+        _record_gui_lease_errors(collaborators, captured, inflight, credentials, exc)
         raise
     finally:
         if attribution_started:

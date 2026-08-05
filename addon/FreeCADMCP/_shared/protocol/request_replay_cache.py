@@ -59,8 +59,8 @@ class RequestReplayCache:
         self._max_entries = int(max_entries)
         self._response_max_bytes = int(response_max_bytes)
         self._monotonic = monotonic
-        self._owner_has_unresolved_lease = (
-            owner_has_unresolved_lease or (lambda _runtime_id: False)
+        self._owner_has_unresolved_lease = owner_has_unresolved_lease or (
+            lambda _runtime_id: False
         )
         self._entries: dict[tuple[str, str], _ReplayEntry] = {}
         # Bounded tombstones let request-status distinguish a genuinely
@@ -68,9 +68,7 @@ class RequestReplayCache:
         self._expired: dict[tuple[str, str], None] = {}
         self._lock = _threading.RLock()
 
-    def set_owner_lease_predicate(
-        self, predicate: _Callable[[str], bool]
-    ) -> None:
+    def set_owner_lease_predicate(self, predicate: _Callable[[str], bool]) -> None:
         """Bind the process journal to the current lease authority service."""
 
         if not callable(predicate):
@@ -131,11 +129,15 @@ class RequestReplayCache:
         fingerprint = envelope.semantic_fingerprint()
         with self._lock:
             entry = self._entries.get(key)
-            if entry is None or not _hmac.compare_digest(entry.fingerprint, fingerprint):
+            if entry is None or not _hmac.compare_digest(
+                entry.fingerprint, fingerprint
+            ):
                 raise _ProtocolError(
                     "REQUEST_NOT_CLAIMED",
                     "Request must be claimed before its result is cached",
                 )
+            if entry.late_completion_journaled:
+                return
             entry.state = "completed"
             entry.response = self._bounded_response(
                 envelope.request_id,
@@ -158,14 +160,10 @@ class RequestReplayCache:
             self._prune_locked(now)
             entry = self._entries.get(key)
             if entry is None:
-                return _ReplayCheck(
-                    "expired" if key in self._expired else "unknown"
-                )
+                return _ReplayCheck("expired" if key in self._expired else "unknown")
             return _ReplayCheck(
                 entry.state,
-                _copy.deepcopy(entry.response)
-                if entry.state == "completed"
-                else None,
+                _copy.deepcopy(entry.response) if entry.state == "completed" else None,
             )
 
     def journal_completion(
@@ -193,6 +191,7 @@ class RequestReplayCache:
             entry.response = self._bounded_response(
                 key[1], response, secrets=tuple(secrets)
             )
+            entry.late_completion_journaled = True
             entry.process_pinned = bool(entry.process_pinned or process_pinned)
             entry.response_compacted = _is_completion_tombstone(entry.response)
             entry.expires_at = self._monotonic() + self._ttl
@@ -205,7 +204,9 @@ class RequestReplayCache:
         fingerprint = envelope.semantic_fingerprint()
         with self._lock:
             entry = self._entries.get(key)
-            if entry is not None and _hmac.compare_digest(entry.fingerprint, fingerprint):
+            if entry is not None and _hmac.compare_digest(
+                entry.fingerprint, fingerprint
+            ):
                 self._entries.pop(key, None)
 
     def prune(self) -> int:

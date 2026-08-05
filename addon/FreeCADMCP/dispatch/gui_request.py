@@ -93,6 +93,13 @@ class GuiRequest:
     ) -> None:
         with self._state_lock:
             previous_state = self.state
+            if previous_state == "timed_out_running" and not outcome.late:
+                outcome = GuiOutcome(
+                    ok=outcome.ok,
+                    value=outcome.value,
+                    error=outcome.error,
+                    late=True,
+                )
             self.outcome = outcome
             self.state = "completed"
             callback = self.on_complete

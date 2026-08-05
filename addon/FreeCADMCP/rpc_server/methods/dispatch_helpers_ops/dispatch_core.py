@@ -3,6 +3,10 @@ from __future__ import annotations
 # ruff: noqa: F403, F405
 from ._support import *
 from .dispatch_core_enforcement import dispatch_enforcement
+from .dispatch_core_enforcement_auth import (
+    AUTHENTICATED_METHODS,
+    authenticate_session_or_error,
+)
 from .dispatch_core_unenforced import (
     dispatch_unenforced_mutation,
     import_document_lock_or_none,
@@ -32,6 +36,15 @@ def dispatch(self, method, params):
     func = getattr(self, method, None)
     if func is None or method.startswith("_"):
         raise Exception(f'method "{method}" is not supported')
+
+    session_authenticated = False
+    if method in AUTHENTICATED_METHODS:
+        auth_error = authenticate_session_or_error(
+            collaborators, dl, dl.get_request_identity()
+        )
+        if auth_error is not None:
+            return auth_error
+        session_authenticated = True
 
     if not enforce:
         read_only_execute = (
@@ -65,4 +78,5 @@ def dispatch(self, method, params):
         dl.extract_referenced_documents_from_code,
         dl.validate_unsafe_execute_scope,
         collaborators,
+        session_authenticated=session_authenticated,
     )

@@ -995,12 +995,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 4 in progress; Phase 15 is the last complete phase |
-| Next phase | 16 — `refactor(mcp): inject GUI and view collaborators` |
-| In-flight ownership | None; Phase 15 implementation workers and final reviewer are complete |
-| Last review | Phase 15 final integrated parent+nested review CLEAR on 2026-08-05 after every Blocking/Important finding was fixed and re-reviewed |
+| Current stage / phase | Stage 4 in progress; Phase 16 is the last complete phase |
+| Next phase | 17 — `refactor(mcp): bootstrap startup and shutdown through the runtime` |
+| In-flight ownership | None; Phase 16 implementation workstreams and final delta reviewers are complete |
+| Last review | Phase 16 final integrated and circular-import delta reviews CLEAR on 2026-08-05 after every finding was fixed and re-reviewed |
 | Blocker | None |
-| Resume hint | Start Phase 16 from the Phase 15 two-object delivery; freeze GUI/view collaborator interfaces, partition disjoint GUI/view adapters, and preserve the native personal-context and shared-presentation domains |
+| Resume hint | Start Phase 17 sequentially under integrator ownership; make the runtime factory the sole startup path, publish only after success, and prove idempotent reverse-order shutdown and `InitGui.py` routing |
 
 ### 11.2 Stage status
 
@@ -1010,7 +1010,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
-| 4 | 12–17 | phase 12 | in progress (Phase 15 complete) |
+| 4 | 12–17 | phase 12 | in progress (Phase 16 complete) |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
@@ -1019,6 +1019,39 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-05 — Phase 16 complete: GUI and view collaborators injected
+
+- **Composition and adapter delivery:** frozen `GuiCollaborators` are composed eagerly
+  with GUI dispatch, actor identity, document open/reload, personal-view registry,
+  camera/viewport snapshot, presentation, section, animation, and context
+  store/snapshot/apply/render/restore dependencies. GUI and collaboration graphs share
+  the exact FreeCAD object. GUI/view adapters contain no `_rpc_mod()` locator, and the
+  deleted GUI `_common.py` no longer exports one.
+- **Personal-context isolation:** the new `collaboration_context.py` façade and focused
+  core/dispatch/render/view leaves address only the authenticated actor and explicitly
+  named document. Active-target state is persisted as an actor-scoped native context
+  marker; selection, focus, screenshot, refresh, section, camera, viewport, edit focus,
+  and overlays never use authoritative global active-document or active-view state.
+  Open, reload, activation, and restore paths roll back exact prior context on failure.
+- **Dispatch, cancellation, and replay:** GUI results have one typed synchronous/late
+  outcome envelope. Placement animation runs as one bounded atomic GUI callback with
+  exact restoration. Lease finalization and completion publication share one lock;
+  same-request uncertainty recovery is exact. Late animation results and oversized
+  terminal journals cannot be overwritten by timeout compaction, and both shared
+  protocol vendors remain byte-identical.
+- **Architecture result:** the locator census is 72 nodes, 67 references, 54 runtime
+  calls, and five definitions; dynamic/local-import counts are 37/17. Frozen authority
+  totals remain 115/15/30/167/861/251. Five obsolete ARCH103 and one ARCH105 allowances
+  were removed, leaving 600 total and 127 ARCH103 with no new allowance or authority.
+- **Agents, review, and gates:** document/context, GUI, and integrated Sol/xhigh reviews
+  found and closed transactional restore, exact view targeting, aspect-aware camera,
+  animation atomicity/bounds, late replay, terminal lease handoff, module ownership,
+  and a full-suite circular-import race. Both post-gate delta reviews are CLEAR. Exact
+  Docker images, commands, counts, and strict native verdicts are recorded in §11.4.
+- **Stage result and next:** Stage 4 remains in progress with Phase 16 complete. Resume
+  automatically with integrator-owned Phase 17 only: route startup and shutdown through
+  the runtime composition root and update `InitGui.py` lifecycle routing.
 
 #### 2026-08-05 — Phase 15 complete: CAD collaborators injected
 
@@ -1878,6 +1911,36 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 16 — `refactor(mcp): inject GUI and view collaborators`
+
+- **Images and source identity:** final Compose `freecad-mcp-tests:latest` is
+  `sha256:ae0ec185936626a0b30488ab6b607cd5df2fa056d689543f0761657db2e1dc26`;
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The latter reports branch-built FreeCAD 26.3.0 at parent revision
+  `863535a2d4b6c33b5bfce8171762320060a34afb`; the Compose image reports FreeCAD
+  1.1.0 revision 20260325 at `34a9716668b1ddeb55b914f1c5be644826bdbbbf`.
+- **MCP lint and focused contracts:** baked `python ci/lint_python.py
+  addon/FreeCADMCP src/freecad_mcp` checked 994 production files and passed
+  architecture policy plus full Ruff. The final Phase 16, GUI-dispatch, lease/replay,
+  cancellation, lock-enforcement, shared-protocol, architecture-baseline, and policy
+  selection passed 294/294; its eight Phase 16 files contributed 78 passing contracts.
+- **Compose phase gate:** `docker compose run --rm unit` collected 2,543, selected
+  2,413, and passed 2,409; the three documented Windows-DACL cases skipped, the
+  existing screenshot case xfailed, and 130 marker-incompatible cases were deselected.
+  This final run includes the regression for document-lock alias initialization racing
+  eager GUI collaborator construction.
+- **Cross-track jobs:** the unmodified preflight wrapper emitted `PREFLIGHT_OK`. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, strict core selected 13 and passed eight
+  with the five documented FreeCAD xfails; strict e2e passed 117/117. Both verdict
+  files were zero. The two XML and two verdict artifacts were verified and removed.
+- **Frozen inventories and review:** locator nodes/references/runtime calls/definitions
+  are 72/67/54/5; dynamic/local-import counts are 37/17; authority totals are
+  115/15/30/167/861/251; allowances are 600 total and 127 ARCH103. All workstream,
+  integrated, and post-gate delta reviews report CLEAR with no remaining Blocking,
+  Important, or non-blocking finding. `git diff --check` is clean apart from expected
+  Windows line-ending warnings.
 
 #### Phase 15 — `refactor(mcp): inject CAD collaborators`
 

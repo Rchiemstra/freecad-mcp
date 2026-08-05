@@ -6,7 +6,13 @@ from ._support import *
 """GUI dispatch callback builders."""
 
 
-def build_replay_on_complete(context, replay_cache, completion_runtime_id):
+def build_replay_on_complete(
+    context,
+    replay_cache,
+    completion_runtime_id,
+    *,
+    result_transform=None,
+):
     session_id = context["identity"].get("authenticated_session_id")
     replay_runtime_id = context["identity"].get("instance_id")
     addon_request_id = context.get("request_id")
@@ -27,12 +33,19 @@ def build_replay_on_complete(context, replay_cache, completion_runtime_id):
 
     def replay_on_complete(completed_request_id, outcome, cancellation=None):
         result = outcome.value if outcome.ok else None
+        transform_error = None
+        if outcome.ok and result_transform is not None:
+            try:
+                result = result_transform(result)
+            except Exception as exc:
+                transform_error = exc
         result_failed = isinstance(result, dict) and (
             result.get("success") is False or result.get("ok") is False
         )
         response = {
             "ok": bool(
                 outcome.ok
+                and transform_error is None
                 and not result_failed
                 and not (cancellation and cancellation.cancellation_requested)
             ),
@@ -50,6 +63,11 @@ def build_replay_on_complete(context, replay_cache, completion_runtime_id):
                 "message": "Authenticated request was cancelled",
             }
             response["cancellation"] = cancellation.to_public_dict()
+        elif transform_error is not None:
+            response["error"] = {
+                "code": "GUI_RESULT_FINALIZATION_FAILED",
+                "message": "Late GUI result could not be finalized",
+            }
         elif outcome.ok:
             response["result"] = result
         else:
@@ -73,11 +91,13 @@ def build_gui_on_complete(
     inflight,
     context,
     completion_seen,
+    completion_lock,
+    completion_handoff,
     replay_on_complete,
     late_on_complete,
     collaborators,
 ):
-    def on_complete(completed_request_id, outcome):
+    def record_completion(completed_request_id, outcome):
         completion_seen.set()
         completion_state = None
         if inflight is not None:
@@ -101,13 +121,26 @@ def build_gui_on_complete(
                     inflight,
                     dirty=(True if completion_state.mutation_started else None),
                 )
-                completion_state = collaborators.inflight_request_registry.refresh_terminal(
-                    inflight.session_id, inflight.request_id
+                completion_state = (
+                    collaborators.inflight_request_registry.refresh_terminal(
+                        inflight.session_id, inflight.request_id
+                    )
                 )
         if replay_on_complete is not None and (
-            completion_state is None or completion_state.handler_finished
+            outcome.late
+            or completion_state is None
+            or completion_state.handler_finished
         ):
             replay_on_complete(completed_request_id, outcome, completion_state)
+
+    def on_complete(completed_request_id, outcome):
+        try:
+            with completion_lock:
+                record_completion(completed_request_id, outcome)
+        finally:
+            if completion_handoff["held"]:
+                completion_handoff["held"] = False
+                completion_lock.release()
         if late_on_complete is not None:
             try:
                 late_on_complete(completed_request_id, outcome)

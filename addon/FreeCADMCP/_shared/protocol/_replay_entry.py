@@ -15,3 +15,4 @@ class _ReplayEntry:
     state: str = "in_progress"
     response: Any = None
     response_compacted: bool = False
+    late_completion_journaled: bool = False

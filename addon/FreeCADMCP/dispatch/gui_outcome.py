@@ -11,3 +11,4 @@ class GuiOutcome:
     ok: bool
     value: Any = None
     error: str | None = None
+    late: bool = False

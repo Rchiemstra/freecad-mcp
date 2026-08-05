@@ -28,10 +28,14 @@ def dispatch_enforcement(
     extract_referenced_documents_from_code,
     validate_unsafe_execute_scope,
     collaborators,
+    *,
+    session_authenticated=False,
 ):
     identity = dl.get_request_identity()
     read_only_execute = is_read_only_execute(method, params)
-    if requires_authenticated_session(method, kind, VerbKind, read_only_execute):
+    if not session_authenticated and requires_authenticated_session(
+        method, kind, VerbKind, read_only_execute
+    ):
         auth_error = authenticate_session_or_error(collaborators, dl, identity)
         if auth_error is not None:
             return auth_error

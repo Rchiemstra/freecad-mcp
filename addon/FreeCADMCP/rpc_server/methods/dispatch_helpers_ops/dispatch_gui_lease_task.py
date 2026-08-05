@@ -7,13 +7,27 @@ from .dispatch_gui_lease_paths import run_legacy_lease_task, run_unenforced_leas
 
 
 def run_lease_aware_gui_task(
-    self, collaborators, original_task, captured, inflight, context
+    self,
+    collaborators,
+    original_task,
+    captured,
+    inflight,
+    context,
+    *,
+    completion_lock,
+    completion_handoff,
 ):
     if inflight is not None:
         inflight.token.checkpoint("gui_revalidation")
     if captured["lease_enforced"] and collaborators.document_lease_service is not None:
         return run_enforced_lease_service_task(
-            self, collaborators, original_task, captured, inflight
+            self,
+            collaborators,
+            original_task,
+            captured,
+            inflight,
+            completion_lock=completion_lock,
+            completion_handoff=completion_handoff,
         )
 
     if not captured["lease_enforced"]:

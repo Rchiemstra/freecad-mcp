@@ -15,57 +15,66 @@ def handle_gui_dispatch_error(
     request_id,
     gui_phase_registered,
     completion_seen,
+    completion_lock,
     collaborators,
 ):
-    if (
-        gui_phase_registered
-        and not completion_seen.is_set()
-        and not (isinstance(exc, GuiDispatchTimeout) and exc.execution_started)
-    ):
-        collaborators.inflight_request_registry.end_gui_phase(
-            inflight.session_id, inflight.request_id
-        )
     collaborators.logger.error("RPC GUI dispatch failed: %s", exc)
     recovery = None
-    if isinstance(exc, GuiDispatchTimeout) and exc.completion_uncertain and inflight is not None:
-        recovery = inflight.token.mark_uncertain("gui_completion_uncertain")
-        emit_telemetry(
-            "recovery",
-            "recovery_started",
-            status="warning",
-            error_code="GUI_COMPLETION_UNCERTAIN",
-            request_id=inflight.request_id,
-            execution_id=inflight.request_id,
-            recovery_incident_id=recovery.recovery_incident_id,
-            payload={
-                "stage": "gui_execution",
-                "mutation_started": recovery.mutation_started,
-            },
-        )
-    if (
-        context
-        and collaborators.document_lease_service is not None
-        and isinstance(exc, GuiDispatchTimeout)
-        and exc.completion_uncertain
-    ):
-        for name in context["doc_names"]:
-            try:
-                credential, _document_identity = collaborators.credential_for_document(
-                    name, context["identity"]
-                )
-                collaborators.document_lease_service.record_error(
-                    credential,
-                    code="GUI_COMPLETION_UNCERTAIN",
-                    message=collaborators.redact_rpc_diagnostic(
-                        exc, identity=context["identity"], inflight=inflight
-                    ),
-                    request_id=context["request_id"],
-                    dirty=True,
-                )
-            except Exception:
-                pass
+    with completion_lock:
+        completion_already_seen = completion_seen.is_set()
+        if (
+            gui_phase_registered
+            and not completion_already_seen
+            and not (isinstance(exc, GuiDispatchTimeout) and exc.execution_started)
+        ):
+            collaborators.inflight_request_registry.end_gui_phase(
+                inflight.session_id, inflight.request_id
+            )
+        if (
+            not completion_already_seen
+            and isinstance(exc, GuiDispatchTimeout)
+            and exc.completion_uncertain
+            and inflight is not None
+        ):
+            recovery = inflight.token.mark_uncertain("gui_completion_uncertain")
+            emit_telemetry(
+                "recovery",
+                "recovery_started",
+                status="warning",
+                error_code="GUI_COMPLETION_UNCERTAIN",
+                request_id=inflight.request_id,
+                execution_id=inflight.request_id,
+                recovery_incident_id=recovery.recovery_incident_id,
+                payload={
+                    "stage": "gui_execution",
+                    "mutation_started": recovery.mutation_started,
+                },
+            )
+        if (
+            not completion_already_seen
+            and context
+            and collaborators.document_lease_service is not None
+            and isinstance(exc, GuiDispatchTimeout)
+            and exc.completion_uncertain
+        ):
+            for name in context["doc_names"]:
+                try:
+                    credential, _document_identity = (
+                        collaborators.credential_for_document(name, context["identity"])
+                    )
+                    collaborators.document_lease_service.record_error(
+                        credential,
+                        code="GUI_COMPLETION_UNCERTAIN",
+                        message=collaborators.redact_rpc_diagnostic(
+                            exc, identity=context["identity"], inflight=inflight
+                        ),
+                        request_id=context["request_id"],
+                        dirty=True,
+                    )
+                except Exception:
+                    pass
+        timeout_snapshot = inflight.token.snapshot() if inflight is not None else None
     code = getattr(exc, "error_code", "GUI_DISPATCH_FAILED")
-    timeout_snapshot = inflight.token.snapshot() if inflight is not None else None
     return {
         "success": False,
         "error_code": code,
@@ -78,6 +87,8 @@ def handle_gui_dispatch_error(
         ),
         "completion_uncertain": bool(getattr(exc, "completion_uncertain", False)),
         "recovery_incident_id": (
-            timeout_snapshot.recovery_incident_id if timeout_snapshot is not None else None
+            timeout_snapshot.recovery_incident_id
+            if timeout_snapshot is not None
+            else None
         ),
     }

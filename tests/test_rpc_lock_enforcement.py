@@ -131,7 +131,7 @@ def test_open_document_rejects_duplicate_before_calling_freecad(monkeypatch):
     monkeypatch.setattr(addon_rpc, "document_identity_service", identity_service)
     monkeypatch.setattr(gui_tools, "open_document", opener)
     rpc = FreeCADRPC()
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, **_kwargs: task())
 
     result = rpc.open_document("C:/models/duplicate.FCStd")
 
@@ -157,7 +157,7 @@ def test_close_document_active_lease_is_failure_and_keeps_document_open(monkeypa
     )
     monkeypatch.setattr(addon_rpc, "document_lease_service", lease_service)
     rpc = FreeCADRPC()
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, **_kwargs: task())
 
     result = rpc.close_document(document.Name)
 
@@ -521,7 +521,7 @@ class TestRpcLockEnforcement:
             addon_rpc.FreeCAD, "getDocument", lambda _name: document
         )
         rpc = FreeCADRPC()
-        rpc._dispatch_gui = lambda task, timeout=None: task()
+        rpc._dispatch_gui = lambda task, timeout=None, **_kwargs: task()
 
         result = rpc._run_legacy_save({"document_name": "Legacy"})
 

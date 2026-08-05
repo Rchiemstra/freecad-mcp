@@ -1298,60 +1298,6 @@
       "removal_phase": 22
     },
     {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py",
-      "line": 6,
-      "column": 1,
-      "fingerprint": "ce87ed08d46f12cc7433",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH105",
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py",
-      "line": 6,
-      "column": 1,
-      "fingerprint": "517765f742d890b53e58",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: FunctionDef@6",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py",
-      "line": 7,
-      "column": 5,
-      "fingerprint": "aeb15a66b9ecf17a5463",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ...rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/_common.py",
-      "line": 12,
-      "column": 1,
-      "fingerprint": "71197fdb3aa1517e6b70",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be exported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/document_ops.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "fd2f481aadde7c4dce89",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/document_ops.py",
-      "line": 30,
-      "column": 11,
-      "fingerprint": "f41eb7f1d651eaf3e351",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
       "code": "ARCH101",
       "path": "addon/FreeCADMCP/rpc_server/methods/gui_methods_ops/gui_interaction.py",
       "line": 1,

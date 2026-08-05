@@ -20,6 +20,22 @@ AUTHENTICATED_METHODS = frozenset(
         "get_request_status",
         "cancel_request",
         "shutdown_rpc_server",
+        # Phase 16 actor-scoped GUI operations are read-only from the document
+        # authority perspective, but must never accept a caller-supplied actor.
+        "activate_document",
+        "animate_placement",
+        "capture_view_sequence",
+        "capture_view_sequence_to_disk",
+        "get_active_screenshot",
+        "get_gui_state",
+        "get_selection",
+        "open_document",
+        "refresh_view",
+        "reload_document",
+        "repair_view_placements",
+        "select_subshapes",
+        "set_section_view",
+        "set_tree_expanded",
     }
 )
 
@@ -45,7 +61,7 @@ def authenticate_session_or_error(collaborators, dl, identity):
         return {
             "success": False,
             "error_code": "LEASE_PROTOCOL_REQUIRED",
-            "error": "Document lease enforce mode requires authenticated RPC v2",
+            "error": "This operation requires authenticated RPC v2",
         }
     session_token = identity.get("rpc_session_token")
     runtime_id = identity.get("instance_id")
@@ -62,10 +78,9 @@ def authenticate_session_or_error(collaborators, dl, identity):
         session = collaborators.session_manager.authenticate(
             session_token, mcp_runtime_id=runtime_id
         )
-        if not identity.get("authenticated_session_id"):
-            identity["authenticated_session_id"] = session.session_id
-            identity["mcp_process_started_at"] = session.mcp.process_started_at
-            dl.set_request_identity(**identity)
+        identity["authenticated_session_id"] = session.session_id
+        identity["mcp_process_started_at"] = session.mcp.process_started_at
+        dl.set_request_identity(**identity)
     except Exception as exc:
         error = collaborators.lease_protocol_public_error(
             exc, request_id=identity.get("request_id")

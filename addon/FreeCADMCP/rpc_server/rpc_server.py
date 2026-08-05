@@ -1,7 +1,8 @@
 """FreeCAD MCP dual-encoding RPC server façade (Phase 4 slice 4H)."""
+
 from __future__ import annotations
 
-# ruff: noqa: E701, I001
+# ruff: noqa: I001
 
 import logging
 import os  # noqa: F401 - §3.3 lifecycle / test shims
@@ -15,7 +16,7 @@ from functools import partial
 from pathlib import Path  # noqa: F401 - §3.3 lease runtime shims
 
 import FreeCAD  # §3.3 test monkeypatch
-import FreeCADGui  # noqa: F401 - §3.3 test monkeypatch
+import FreeCADGui  # §3.3 test monkeypatch and GUI collaborator capture
 import Part as _Part
 import Sketcher as _Sketcher
 from PySide import QtCore, QtWidgets  # noqa: F401 - §3.3 test monkeypatch
@@ -34,18 +35,51 @@ from .acquisition_claims import AcquisitionClaimStore
 from .commands import register_commands, schedule_toggle_sync
 from .filtered_xmlrpc_server import FilteredXMLRPCServer, validate_allowed_ips  # noqa: F401
 from .gui_dispatcher_qt import GuiDispatcher  # noqa: F401 - lifecycle test monkeypatch
+from .gui_context_runtime import (
+    render as _render_gui_context,
+    restore as _restore_gui_context,
+    snapshot as _snapshot_gui_context,
+    store as _store_gui_context,
+)
+from .gui_context_snapshot import capture_baseline as _capture_gui_context_baseline
+from .gui_personal_registry import PersonalViewRegistry as _PersonalViewRegistry
+from .gui_animation_runtime import (
+    apply_sample as _apply_personal_placement_sample,
+    prepare as _prepare_personal_placement_animation,
+    repair_placements as _repair_personal_placements,
+    restore as _restore_personal_placement_animation,
+)
+from .gui_document_runtime import (
+    open_document as _open_gui_document,
+    reload_document as _reload_gui_document,
+)
+from .gui_dispatch import _flush_gui_events
+from .gui_section_runtime import set_section_view as _set_named_section_view
 from .handoff_continuations import HandoffContinuationStore
 from .execute_code_analysis import analyze_execute_code, typed_tool_warning
 from .execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
-try: from ..dispatch.inflight_request_registry import InflightRequestRegistry
-except ImportError: from dispatch.inflight_request_registry import InflightRequestRegistry
+
+try:
+    from ..dispatch.inflight_request_registry import InflightRequestRegistry
+except ImportError:
+    from dispatch.inflight_request_registry import InflightRequestRegistry
+try:
+    from ..dispatch.request_cancellation_error import (
+        RequestCancellationError as _RequestCancellationError,
+    )
+except ImportError:
+    from dispatch.request_cancellation_error import (
+        RequestCancellationError as _RequestCancellationError,
+    )
 
 try:
     from .._shared.protocol.public_error import (
         public_error as lease_protocol_public_error,
     )
     from ..transport.authentication import (
-        SessionManager, load_profile_secret, make_runtime_manifest
+        SessionManager,
+        load_profile_secret,
+        make_runtime_manifest,
     )
     from ..transport.replay import RequestReplayCache
 except ImportError:  # pragma: no cover - flat addon import path
@@ -53,7 +87,9 @@ except ImportError:  # pragma: no cover - flat addon import path
         public_error as lease_protocol_public_error,
     )
     from transport.authentication import (  # noqa: F401
-        SessionManager, load_profile_secret, make_runtime_manifest
+        SessionManager,
+        load_profile_secret,
+        make_runtime_manifest,
     )
     from transport.replay import RequestReplayCache
 from .lease_runtime import (  # noqa: F401
@@ -75,6 +111,9 @@ from .lease_runtime import (  # noqa: F401
 from .methods.cad_methods_ops.cad_dependencies import (
     CadCollaborators as _CadCollaborators,
 )
+from .methods.gui_methods_ops.gui_dependencies import (
+    GuiCollaborators as _GuiCollaborators,
+)
 from .methods.lease_methods_ops.collaboration_dependencies import (
     CollaborationCollaborators as _CollaborationCollaborators,
 )
@@ -88,7 +127,9 @@ from .mutation_guard_ops.validate_invariants import (
     validate_document_invariants as _validate_document_invariants,
 )
 from .fem_executor import run_fem_analysis as _run_fem_analysis
-from .gui_tools import recompute_and_wait as _recompute_and_wait
+from .gui_tools import (
+    recompute_and_wait as _recompute_and_wait,
+)
 from .object_factory import create_object_gui as _create_object_gui
 from .parts_library import (  # noqa: F401
     configure_parts_library_path,
@@ -101,6 +142,9 @@ from .reference_repair import (
     repair_references_gui as _repair_references_gui,
 )
 from .serialize import serialize_object as _serialize_object
+from .save_service_ops.baseline import (
+    compare_serialized_file_to_baseline as _compare_serialized_file_baseline,
+)
 from .rpc_helpers import (  # noqa: F401 - §3.3 moved-symbol shims
     _SAVE_VALIDATION_MARKER,
     _assert_mutation_file_metadata_unchanged,
@@ -228,6 +272,47 @@ def _capture_cad_collaborators(
     return cad_collaborators
 
 
+def _dispatch_gui_collaborator(
+    facade,
+    callback,
+    *,
+    late_result_transform=None,
+    journal_late_completion=True,
+):
+    """Preserve the façade's cancellation-aware GUI dispatch behind injection."""
+
+    return facade._dispatch_gui(
+        callback,
+        late_result_transform=late_result_transform,
+        journal_late_completion=journal_late_completion,
+    )
+
+
+def _reraise_gui_cancellation(exception):
+    if isinstance(exception, _RequestCancellationError):
+        raise exception
+
+
+def _get_gui_request_identity(import_document_lock):
+    """Resolve the request identity after document-lock initialization completes."""
+
+    return import_document_lock().get_request_identity()
+
+
+def _capture_gui_collaborators(gui_collaborators, collaboration_collaborators):
+    if gui_collaborators is not None and not isinstance(
+        gui_collaborators, _GuiCollaborators
+    ):
+        raise TypeError("gui_collaborators must be GuiCollaborators")
+    if gui_collaborators is None:
+        gui_collaborators = _build_gui_collaborators(
+            freecad_value=collaboration_collaborators.freecad
+        )
+    if gui_collaborators.freecad is not collaboration_collaborators.freecad:
+        raise ValueError("GUI and collaboration collaborators must share freecad")
+    return gui_collaborators
+
+
 class FreeCADRPC:
     TIMEOUT = 30
     EXECUTE_TIMEOUT = _EXECUTE_TIMEOUT
@@ -243,13 +328,13 @@ class FreeCADRPC:
         lifecycle_collaborators: _LifecycleCollaborators | None = None,
         execution_collaborators: _ExecutionCollaborators | None = None,
         cad_collaborators: _CadCollaborators | None = None,
+        gui_collaborators: _GuiCollaborators | None = None,
     ):
         self.allow_execute_code = allow_execute_code
         self._mutation_context = threading.local()
         self._inflight_context = threading.local()
-        if (
-            collaboration_collaborators is not None
-            and not isinstance(collaboration_collaborators, _CollaborationCollaborators)
+        if collaboration_collaborators is not None and not isinstance(
+            collaboration_collaborators, _CollaborationCollaborators
         ):
             raise TypeError(
                 "collaboration_collaborators must be CollaborationCollaborators"
@@ -257,17 +342,15 @@ class FreeCADRPC:
         if collaboration_collaborators is None:
             collaboration_collaborators = _build_collaboration_collaborators()
         self.__collaboration_collaborators = collaboration_collaborators
-        if (
-            lifecycle_collaborators is not None
-            and not isinstance(lifecycle_collaborators, _LifecycleCollaborators)
+        if lifecycle_collaborators is not None and not isinstance(
+            lifecycle_collaborators, _LifecycleCollaborators
         ):
             raise TypeError("lifecycle_collaborators must be LifecycleCollaborators")
         if lifecycle_collaborators is None:
             lifecycle_collaborators = _build_lifecycle_collaborators()
         self.__lifecycle_collaborators = lifecycle_collaborators
-        if (
-            execution_collaborators is not None
-            and not isinstance(execution_collaborators, _ExecutionCollaborators)
+        if execution_collaborators is not None and not isinstance(
+            execution_collaborators, _ExecutionCollaborators
         ):
             raise TypeError("execution_collaborators must be ExecutionCollaborators")
         if execution_collaborators is None:
@@ -287,6 +370,9 @@ class FreeCADRPC:
             collaboration_collaborators,
             execution_collaborators,
         )
+        self.__gui_collaborators = _capture_gui_collaborators(
+            gui_collaborators, collaboration_collaborators
+        )
 
     @property
     def _collaboration_collaborators(self) -> _CollaborationCollaborators:
@@ -303,6 +389,10 @@ class FreeCADRPC:
     @property
     def _cad_collaborators(self) -> _CadCollaborators:
         return self.__cad_collaborators
+
+    @property
+    def _gui_collaborators(self) -> _GuiCollaborators:
+        return self.__gui_collaborators
 
     def _bind_collaboration_runtime_manifest(self, runtime_manifest) -> None:
         """Complete the private graph before the listener can serve requests."""
@@ -393,6 +483,48 @@ def _build_cad_collaborators(*, compatibility_api) -> _CadCollaborators:
         set_extrusion_symmetric=_set_extrusion_symmetric,
         set_feature_bool=_set_feature_bool,
         validate_document_invariants=_validate_document_invariants,
+    )
+
+
+def _build_gui_collaborators(*, freecad_value=None) -> _GuiCollaborators:
+    """Capture GUI, presentation, and native personal-view dependencies."""
+
+    freecad = FreeCAD if freecad_value is None else freecad_value
+    return _GuiCollaborators(
+        freecad=freecad,
+        dispatch_gui=_dispatch_gui_collaborator,
+        get_request_identity=partial(_get_gui_request_identity, _import_document_lock),
+        reraise_if_cancelled=_reraise_gui_cancellation,
+        document_identity_service=document_identity_service,
+        ensure_v2_document=_ensure_v2_document,
+        redact_rpc_diagnostic=_redact_rpc_diagnostic,
+        open_document=partial(_open_gui_document, freecad, FreeCADGui),
+        reload_document=partial(
+            _reload_gui_document,
+            freecad,
+            FreeCADGui,
+            document_identity_service,
+            document_lease_service,
+            _compare_serialized_file_baseline,
+        ),
+        personal_view_registry=_PersonalViewRegistry(),
+        set_section_view=partial(
+            _set_named_section_view,
+            freecad,
+            FreeCADGui,
+            _flush_gui_events,
+        ),
+        repair_placements=partial(_repair_personal_placements, freecad),
+        prepare_placement_animation=partial(
+            _prepare_personal_placement_animation, freecad, _Part
+        ),
+        apply_placement_sample=_apply_personal_placement_sample,
+        restore_placement_animation=_restore_personal_placement_animation,
+        store_personal_view_context=partial(_store_gui_context, FreeCADGui),
+        snapshot_personal_view_context=partial(_snapshot_gui_context, FreeCADGui),
+        restore_personal_view_context=partial(_restore_gui_context, FreeCADGui),
+        render_personal_view_context=partial(_render_gui_context, FreeCADGui),
+        snapshot_view_context=partial(_capture_gui_context_baseline, FreeCADGui),
     )
 
 
@@ -490,9 +622,7 @@ def _build_execution_collaborators(
         ),
         generated_execute_signature=_generated_execute_signature,
         generated_operation_method_spec=_generated_operation_method_spec,
-        validate_generated_operation_envelope=(
-            _validate_generated_operation_envelope
-        ),
+        validate_generated_operation_envelope=(_validate_generated_operation_envelope),
         snapshot_mutation_context_for_request=partial(
             _snapshot_mutation_context_for_request,
             document_lease_service=document_lease_service,

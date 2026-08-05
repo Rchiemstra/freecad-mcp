@@ -270,6 +270,7 @@ def test_running_timeout_quarantines_until_late_completion() -> None:
     started = threading.Event()
     release = threading.Event()
     first_errors: list[BaseException] = []
+    completions = []
 
     def slow() -> str:
         started.set()
@@ -278,10 +279,19 @@ def test_running_timeout_quarantines_until_late_completion() -> None:
 
     submitter = threading.Thread(
         target=_capture,
-        args=(lambda: core.submit(slow, 0.02), [], first_errors),
+        args=(
+            lambda: core.submit(
+                slow,
+                0.02,
+                on_complete=lambda _request_id, outcome: completions.append(outcome),
+            ),
+            [],
+            first_errors,
+        ),
     )
     submitter.start()
     _wait_until(lambda: core.pending_count == 1)
+
     def drain_as_owner() -> None:
         harness.owner = threading.get_ident()
         core.drain_one()
@@ -301,6 +311,8 @@ def test_running_timeout_quarantines_until_late_completion() -> None:
 
     release.set()
     drainer.join(timeout=1.0)
+    assert len(completions) == 1
+    assert completions[0].late is True
     harness.owner = threading.get_ident()
     core._is_gui_thread = harness.is_gui_thread
     results: list[str] = []
@@ -600,7 +612,11 @@ def test_operational_core_propagates_control_exceptions_and_releases_waiter() ->
     recovered_errors: list[BaseException] = []
     recovery = threading.Thread(
         target=_capture,
-        args=(lambda: core.submit(lambda: "recovered", 1.0), recovered, recovered_errors),
+        args=(
+            lambda: core.submit(lambda: "recovered", 1.0),
+            recovered,
+            recovered_errors,
+        ),
     )
     recovery.start()
     _wait_until(lambda: core.pending_count == 1)
@@ -630,7 +646,11 @@ def test_control_exception_wakes_the_next_already_queued_request() -> None:
     )
     second = threading.Thread(
         target=_capture,
-        args=(lambda: core.submit(lambda: "second", 1.0), second_results, second_errors),
+        args=(
+            lambda: core.submit(lambda: "second", 1.0),
+            second_results,
+            second_errors,
+        ),
     )
     first.start()
     _wait_until(lambda: core.pending_count == 1)
