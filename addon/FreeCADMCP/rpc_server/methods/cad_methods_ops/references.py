@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from ...reference_repair import inspect_references_gui, repair_references_gui
-
 
 def inspect_references(
     self,
@@ -13,8 +11,9 @@ def inspect_references(
     validate: bool = False,
 ) -> dict[str, Any]:
     """Inspect link properties without serializing shapes or recomputing."""
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: inspect_references_gui(
+        lambda: collaborators.inspect_references_gui(
             doc_name,
             object_names,
             only_invalid=bool(only_invalid),
@@ -34,8 +33,9 @@ def repair_references(
     validate: bool = False,
 ) -> dict[str, Any]:
     """Atomically rewrite link properties, deferring recompute by default."""
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: repair_references_gui(
+        lambda: collaborators.repair_references_gui(
             doc_name,
             repairs,
             recompute=bool(recompute),

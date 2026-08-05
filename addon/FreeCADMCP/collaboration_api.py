@@ -22,6 +22,8 @@ class CollaborationAPI:
         self,
         document_name: str,
         callback: Callable[[], Any],
+        *,
+        structural: bool = False,
     ) -> Any:
         """Return the native result after invoking ``callback`` at the commit boundary."""
 
@@ -35,4 +37,4 @@ class CollaborationAPI:
         commit = getattr(document, "commitCompatibilityMutation", None)
         if not callable(commit):
             raise TypeError("document must provide commitCompatibilityMutation()")
-        return commit(callback)
+        return commit(callback, structural=structural)

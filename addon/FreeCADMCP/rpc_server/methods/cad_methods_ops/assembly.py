@@ -2,16 +2,23 @@
 
 import contextlib
 
-import FreeCAD
-
+from .cad_mutation import run_cad_mutation
 from .solve_assembly_helpers import run_assembly_solve
 
 
 def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
     """I9 — re-solve an Assembly via the real internal solver. Tries
     assembly.solve() (C++), then JointObject.solveIfAllowed, then recompute."""
+    collaborators = self._cad_collaborators
+
     def solve_task():
-        return solve_assembly_gui(doc_name, assembly_name)
+        return run_cad_mutation(
+            collaborators,
+            doc_name,
+            lambda: solve_assembly_gui(
+                doc_name, assembly_name, freecad=collaborators.freecad
+            ),
+        )
 
     res = self._dispatch_gui(solve_task)
     if isinstance(res, dict):
@@ -19,9 +26,9 @@ def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
     return {"ok": False, "error": res}
 
 
-def solve_assembly_gui(doc_name: str, assembly_name: str):
+def solve_assembly_gui(doc_name: str, assembly_name: str, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return {"ok": False, "error": f"Document '{doc_name}' not found."}
         asm = doc.getObject(assembly_name)

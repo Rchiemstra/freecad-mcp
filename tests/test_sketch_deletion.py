@@ -5,6 +5,12 @@ from unittest.mock import MagicMock
 
 from addon.FreeCADMCP.rpc_server import rpc_server
 from addon.FreeCADMCP.rpc_server.execute_code_analysis import analyze_execute_code
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_gui_constraints import (
+    sketch_delete_constraint_gui,
+)
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_gui_geometry import (
+    sketch_delete_geometry_gui,
+)
 from addon.FreeCADMCP.rpc_server.mutation_guard import make_method_spec
 from freecad_mcp.freecad_client import FreeCADConnection
 from freecad_mcp.operations.core import (
@@ -86,11 +92,14 @@ def _install_freecad(monkeypatch):
 def test_constraint_deletion_resolves_names_and_indices_before_one_batch(monkeypatch):
     sketch, document = _install_freecad(monkeypatch)
 
-    result = rpc_server.FreeCADRPC()._sketch_delete_constraint_gui(
+    result = sketch_delete_constraint_gui(
         "Doc",
         "Sketch",
         [1, 1],
         ["Pinned"],
+        freecad=SimpleNamespace(
+            getDocument=lambda name: document if name == document.Name else None
+        ),
     )
 
     assert result["success"] is True
@@ -108,11 +117,14 @@ def test_constraint_deletion_resolves_names_and_indices_before_one_batch(monkeyp
 def test_constraint_deletion_rejects_invalid_selector_before_mutation(monkeypatch):
     sketch, document = _install_freecad(monkeypatch)
 
-    result = rpc_server.FreeCADRPC()._sketch_delete_constraint_gui(
+    result = sketch_delete_constraint_gui(
         "Doc",
         "Sketch",
         [99],
         None,
+        freecad=SimpleNamespace(
+            getDocument=lambda name: document if name == document.Name else None
+        ),
     )
 
     assert result["success"] is False
@@ -124,10 +136,13 @@ def test_constraint_deletion_rejects_invalid_selector_before_mutation(monkeypatc
 def test_geometry_deletion_is_batched_and_reports_dependent_constraints(monkeypatch):
     sketch, document = _install_freecad(monkeypatch)
 
-    result = rpc_server.FreeCADRPC()._sketch_delete_geometry_gui(
+    result = sketch_delete_geometry_gui(
         "Doc",
         "Sketch",
         [2, 0, 2],
+        freecad=SimpleNamespace(
+            getDocument=lambda name: document if name == document.Name else None
+        ),
     )
 
     assert result["success"] is True
@@ -218,12 +233,35 @@ def test_connection_routes_deletion_through_authenticated_mutation_v2():
     connection.server.sketch_delete_geometry.assert_not_called()
 
 
-def test_deletion_methods_get_transaction_recompute_and_validation_guards():
+def test_deletion_methods_delegate_postflight_guards_to_native_commit():
     for method in ("sketch_delete_constraint", "sketch_delete_geometry"):
         spec = make_method_spec(method, "MUTATING")
-        assert spec.transaction is True
-        assert spec.recompute is True
-        assert spec.validator is not None
+        assert spec.transaction is False
+        assert spec.recompute is False
+        assert spec.validator is None
+
+
+def test_private_deletion_facade_wrappers_preserve_bound_shape_and_injection():
+    sketch = _Sketch()
+    document = _Document(sketch)
+    injected_freecad = SimpleNamespace(
+        getDocument=lambda name: document if name == document.Name else None
+    )
+    facade = SimpleNamespace(
+        _cad_collaborators=SimpleNamespace(freecad=injected_freecad)
+    )
+
+    constraint_result = rpc_server.FreeCADRPC._sketch_delete_constraint_gui(
+        facade, "Doc", "Sketch", [1], None
+    )
+    geometry_result = rpc_server.FreeCADRPC._sketch_delete_geometry_gui(
+        facade, "Doc", "Sketch", [0]
+    )
+
+    assert constraint_result["success"] is True
+    assert geometry_result["success"] is True
+    assert sketch.deleted_constraint_batches == [([1], True)]
+    assert sketch.deleted_geometry_batches == [[0]]
 
 
 def test_execute_code_analysis_points_deletions_to_typed_tools():

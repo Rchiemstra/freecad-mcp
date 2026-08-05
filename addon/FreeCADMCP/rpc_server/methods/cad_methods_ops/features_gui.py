@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-import FreeCAD
 
-from ._common import _rpc_mod
+class _DeferredSketchHide:
+    """Apply one presentation-only sketch hide after native publication."""
+
+    __slots__ = ("_sketch",)
+
+    def __init__(self, sketch) -> None:
+        self._sketch = sketch
+
+    def apply_after_commit(self) -> None:
+        self._sketch.Visibility = False
 
 
 def pad_feature_gui(
@@ -15,9 +23,13 @@ def pad_feature_gui(
     body_name,
     symmetric,
     reversed_dir,
+    *,
+    freecad,
+    set_extrusion_symmetric,
+    set_feature_bool,
 ):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         sketch = doc.getObject(sketch_name)
@@ -43,13 +55,12 @@ def pad_feature_gui(
 
         pad.Profile = (sketch, [""])
         pad.Length = length
-        _rpc_mod()._set_extrusion_symmetric(pad, symmetric)
-        _rpc_mod()._set_feature_bool(pad, ("Reversed",), reversed_dir)
+        set_extrusion_symmetric(pad, symmetric)
+        set_feature_bool(pad, ("Reversed",), reversed_dir)
         body.Tip = pad
-        sketch.Visibility = False
         doc.recompute()
-        FreeCAD.Console.PrintMessage(f"Pad '{pad_name}' created in '{doc_name}'.\n")
-        return True
+        freecad.Console.PrintMessage(f"Pad '{pad_name}' created in '{doc_name}'.\n")
+        return _DeferredSketchHide(sketch)
     except Exception as e:
         return str(e)
 
@@ -62,9 +73,13 @@ def pocket_feature_gui(
     body_name,
     symmetric,
     reversed_dir,
+    *,
+    freecad,
+    set_extrusion_symmetric,
+    set_feature_bool,
 ):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         sketch = doc.getObject(sketch_name)
@@ -90,22 +105,21 @@ def pocket_feature_gui(
 
         pocket.Profile = (sketch, [""])
         pocket.Length = length
-        _rpc_mod()._set_extrusion_symmetric(pocket, symmetric)
-        _rpc_mod()._set_feature_bool(pocket, ("Reversed",), reversed_dir)
+        set_extrusion_symmetric(pocket, symmetric)
+        set_feature_bool(pocket, ("Reversed",), reversed_dir)
         body.Tip = pocket
-        sketch.Visibility = False
         doc.recompute()
-        FreeCAD.Console.PrintMessage(
+        freecad.Console.PrintMessage(
             f"Pocket '{pocket_name}' created in '{doc_name}'.\n"
         )
-        return True
+        return _DeferredSketchHide(sketch)
     except Exception as e:
         return str(e)
 
 
-def body_create_gui(doc_name, body_name):
+def body_create_gui(doc_name, body_name, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         if doc.getObject(body_name):
@@ -117,9 +131,9 @@ def body_create_gui(doc_name, body_name):
         return str(e)
 
 
-def body_set_tip_gui(doc_name, body_name, feature_name):
+def body_set_tip_gui(doc_name, body_name, feature_name, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         body = doc.getObject(body_name)

@@ -317,12 +317,16 @@ def _compose_transitional_runtime(
         _acquisition_claims,
     ):
         collaboration_collaborators = rpc_mod._build_collaboration_collaborators()
+        cad_collaborators = rpc_mod._build_cad_collaborators(
+            compatibility_api=collaboration_collaborators.compatibility_api
+        )
         bridge = rpc_mod.FreeCADRPC(
             allow_execute_code=(
                 not remote_enabled
                 or bool(settings.get("allow_remote_execute_code", False))
             ),
             collaboration_collaborators=collaboration_collaborators,
+            cad_collaborators=cad_collaborators,
             execution_collaborators=rpc_mod._build_execution_collaborators(
                 compatibility_api=collaboration_collaborators.compatibility_api,
                 gui_dispatcher_value=_dispatcher,

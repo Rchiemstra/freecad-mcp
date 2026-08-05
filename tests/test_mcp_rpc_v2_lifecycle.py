@@ -125,6 +125,31 @@ class _FakeDocument:
         self._record_gui_thread()
         self.transactions.append(("abort", None))
 
+    def commitCompatibilityMutation(self, callback, *, structural=False):
+        self._record_gui_thread()
+        objects_before = list(self.Objects)
+        modified_before = self.Modified
+        self.transactions.append(("open", "Collaborative operation fake-native"))
+        try:
+            callback()
+            self.recompute()
+        except Exception:
+            self.Objects = objects_before
+            self.Modified = modified_before
+            self.transactions.append(("abort", None))
+            raise
+        self.transactions.append(("commit", None))
+        kinds = ["UnknownModelMutation"]
+        if structural:
+            kinds = ["ObjectExistence", "DocumentStructure", *kinds]
+        return {
+            "status": "Committed",
+            "committed": True,
+            "published_revisions": [
+                {"kind": kind, "revision": 1} for kind in kinds
+            ],
+        }
+
     def saveCopy(self, path: str) -> None:
         self._record_gui_thread()
         _write_fcstd(path, [item.Name for item in self.Objects])
@@ -478,7 +503,7 @@ async def _run_mcp_tool_to_authenticated_xmlrpc_gui_lifecycle(
             assert document.getObject("BoundaryObject") is not None
             assert document.Modified is True
             assert document.transactions == [
-                ("open", "MCP: create_object"),
+                ("open", "Collaborative operation fake-native"),
                 ("commit", None),
             ]
 

@@ -16,7 +16,6 @@ from addon.FreeCADMCP.rpc_server.mutation_guard import (
     make_method_spec,
 )
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -264,7 +263,7 @@ def test_mutation_validator_failure_aborts_before_commit(monkeypatch):
         ),
     )
     spec = replace(
-        make_method_spec("create_object", "MUTATING"),
+        make_method_spec("health_test_mutation", "MUTATING"),
         validator=lambda _doc: (_ for _ in ()).throw(RuntimeError("invalid")),
     )
     result, failed = addon_rpc.FreeCADRPC()._execute_mutation_with_health(
@@ -298,7 +297,7 @@ def test_healthy_typed_mutation_commits_with_expected_object_delta(monkeypatch):
     feature = Obj("Feature", shape=Shape(1))
     document = Doc(objects=(feature,))
     _install_documents(monkeypatch, document)
-    spec = make_method_spec("edit_object", "MUTATING")
+    spec = make_method_spec("health_test_mutation", "MUTATING")
 
     def mutate():
         feature.Label = "Expected label"
@@ -320,7 +319,7 @@ def test_backend_failure_and_new_invalid_shape_abort_before_commit(monkeypatch):
     feature = Obj("Feature", shape=Shape(1))
     document = Doc(objects=(feature,))
     _install_documents(monkeypatch, document)
-    spec = make_method_spec("edit_object", "MUTATING")
+    spec = make_method_spec("health_test_mutation", "MUTATING")
     rpc = addon_rpc.FreeCADRPC()
 
     failed_result, failed = rpc._execute_mutation_with_health(
@@ -359,7 +358,7 @@ def test_unrelated_document_mutation_is_degraded_and_rolled_back(monkeypatch):
     unrelated_obj = Obj("Unrelated", shape=Shape(2))
     unrelated = Doc("UnrelatedDoc", objects=(unrelated_obj,))
     _install_documents(monkeypatch, target, unrelated)
-    spec = make_method_spec("edit_object", "MUTATING")
+    spec = make_method_spec("health_test_mutation", "MUTATING")
 
     def mutate_wrong_document():
         unrelated_obj.Label = "unexpected"

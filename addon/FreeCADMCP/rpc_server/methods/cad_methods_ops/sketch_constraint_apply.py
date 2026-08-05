@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import Sketcher
 
-
-def _apply_distance_constraint(sketch, constraint: dict) -> tuple[int | None, str | None]:
+def _apply_distance_constraint(
+    sketch, constraint: dict, *, sketcher
+) -> tuple[int | None, str | None]:
     if "geo2" in constraint:
         idx = sketch.addConstraint(
-            Sketcher.Constraint(
+            sketcher.Constraint(
                 "Distance",
                 constraint["geo1"],
                 constraint.get("pos1", 0),
@@ -20,37 +20,39 @@ def _apply_distance_constraint(sketch, constraint: dict) -> tuple[int | None, st
         return idx, None
     if "pos" in constraint:
         idx = sketch.addConstraint(
-            Sketcher.Constraint(
+            sketcher.Constraint(
                 "Distance", constraint["geo"], constraint["pos"], constraint["value"]
             )
         )
         return idx, None
     idx = sketch.addConstraint(
-        Sketcher.Constraint("Distance", constraint["geo"], constraint["value"])
+        sketcher.Constraint("Distance", constraint["geo"], constraint["value"])
     )
     return idx, None
 
 
 def _apply_distance_axis_constraint(
-    sketch, constraint: dict, axis: str
+    sketch, constraint: dict, axis: str, *, sketcher
 ) -> tuple[int | None, str | None]:
     if "pos" in constraint:
         idx = sketch.addConstraint(
-            Sketcher.Constraint(
+            sketcher.Constraint(
                 axis, constraint["geo"], constraint["pos"], constraint["value"]
             )
         )
         return idx, None
     idx = sketch.addConstraint(
-        Sketcher.Constraint(axis, constraint["geo"], constraint["value"])
+        sketcher.Constraint(axis, constraint["geo"], constraint["value"])
     )
     return idx, None
 
 
-def _apply_angle_constraint(sketch, constraint: dict) -> tuple[int | None, str | None]:
+def _apply_angle_constraint(
+    sketch, constraint: dict, *, sketcher
+) -> tuple[int | None, str | None]:
     if "geo2" in constraint:
         idx = sketch.addConstraint(
-            Sketcher.Constraint(
+            sketcher.Constraint(
                 "Angle",
                 constraint["geo1"],
                 constraint.get("pos1", 0),
@@ -61,6 +63,6 @@ def _apply_angle_constraint(sketch, constraint: dict) -> tuple[int | None, str |
         )
         return idx, None
     idx = sketch.addConstraint(
-        Sketcher.Constraint("Angle", constraint["geo"], constraint["value"])
+        sketcher.Constraint("Angle", constraint["geo"], constraint["value"])
     )
     return idx, None

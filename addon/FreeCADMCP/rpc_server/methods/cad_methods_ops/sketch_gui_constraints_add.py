@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import contextlib
 
-import FreeCAD
-
 from .sketch_constraint_dispatch import apply_sketch_constraint
 
 
-def sketch_add_constraint_gui(doc_name, sketch_name, constraints):
+def sketch_add_constraint_gui(doc_name, sketch_name, constraints, *, freecad, sketcher):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         sketch = doc.getObject(sketch_name)
@@ -19,7 +17,7 @@ def sketch_add_constraint_gui(doc_name, sketch_name, constraints):
             return f"Sketch '{sketch_name}' not found."
 
         for constraint in constraints:
-            idx, error = apply_sketch_constraint(sketch, constraint)
+            idx, error = apply_sketch_constraint(sketch, constraint, sketcher=sketcher)
             if error:
                 return error
             name = constraint.get("name")

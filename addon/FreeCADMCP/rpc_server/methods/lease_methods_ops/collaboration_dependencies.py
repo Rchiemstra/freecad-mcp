@@ -11,7 +11,11 @@ class CompatibilityMutationAPI(Protocol):
     """The narrow native compatibility-mutation bridge used by the add-on."""
 
     def commit_compatibility_mutation(
-        self, document_name: str, callback: Callable[[], Any]
+        self,
+        document_name: str,
+        callback: Callable[[], Any],
+        *,
+        structural: bool = False,
     ) -> Any: ...
 
 

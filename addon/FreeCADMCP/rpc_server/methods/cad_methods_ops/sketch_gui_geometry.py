@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import contextlib
 
-from ._common import _rpc_mod
 from .sketch_geometry_ops import add_sketch_geometry_item
 from .sketch_gui_constraints import sketch_delete_error
 
 
-def sketch_add_geometry_gui(doc_name, sketch_name, geometry):
+def sketch_add_geometry_gui(doc_name, sketch_name, geometry, *, freecad, part):
     try:
-        doc = _rpc_mod().FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         sketch = doc.getObject(sketch_name)
@@ -20,7 +19,9 @@ def sketch_add_geometry_gui(doc_name, sketch_name, geometry):
 
         indices = []
         for geom in geometry:
-            added, error = add_sketch_geometry_item(sketch, geom)
+            added, error = add_sketch_geometry_item(
+                sketch, geom, freecad=freecad, part=part
+            )
             if error:
                 return error
             indices.extend(added)
@@ -35,9 +36,11 @@ def sketch_delete_geometry_gui(
     doc_name,
     sketch_name,
     geometry_indices,
+    *,
+    freecad,
 ):
     try:
-        doc = _rpc_mod().FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return sketch_delete_error(
                 "DOCUMENT_NOT_FOUND",
@@ -62,9 +65,7 @@ def sketch_delete_geometry_gui(
                 "geometry_indices must be a non-empty list.",
             )
         if any(
-            isinstance(index, bool)
-            or not isinstance(index, int)
-            or index < 0
+            isinstance(index, bool) or not isinstance(index, int) or index < 0
             for index in indices
         ):
             return sketch_delete_error(
@@ -73,9 +74,7 @@ def sketch_delete_geometry_gui(
             )
 
         geometry = list(getattr(sketch, "Geometry", []) or [])
-        invalid_indices = sorted(
-            {index for index in indices if index >= len(geometry)}
-        )
+        invalid_indices = sorted({index for index in indices if index >= len(geometry)})
         if invalid_indices:
             return sketch_delete_error(
                 "GEOMETRY_INDEX_OUT_OF_RANGE",
@@ -104,17 +103,11 @@ def sketch_delete_geometry_gui(
                 }
             )
 
-        constraint_count_before = len(
-            list(getattr(sketch, "Constraints", []) or [])
-        )
+        constraint_count_before = len(list(getattr(sketch, "Constraints", []) or []))
         sketch.delGeometries(target_indices)
         doc.recompute()
-        remaining_geometry_count = len(
-            list(getattr(sketch, "Geometry", []) or [])
-        )
-        remaining_constraint_count = len(
-            list(getattr(sketch, "Constraints", []) or [])
-        )
+        remaining_geometry_count = len(list(getattr(sketch, "Geometry", []) or []))
+        remaining_constraint_count = len(list(getattr(sketch, "Constraints", []) or []))
         return {
             "success": True,
             "sketch": str(getattr(sketch, "Name", sketch_name)),

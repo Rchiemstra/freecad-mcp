@@ -288,7 +288,8 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
             os.utime(model, ns=(before_mtime + 1_000_000, before_mtime + 1_000_000))
             self.Modified = False
 
-        def commitCompatibilityMutation(self, callback):
+        def commitCompatibilityMutation(self, callback, *, structural=False):
+            assert structural is False
             callback()
             return {
                 "status": "Committed",

@@ -2,12 +2,10 @@
 
 from typing import Any
 
-import FreeCAD
 
-
-def collect_invalid_objects() -> dict[str, list[dict[str, Any]]]:
+def collect_invalid_objects(freecad) -> dict[str, list[dict[str, Any]]]:
     flagged: dict[str, list[dict[str, Any]]] = {}
-    for doc_name, doc in FreeCAD.listDocuments().items():
+    for doc_name, doc in freecad.listDocuments().items():
         entries = []
         for obj in doc.Objects:
             try:
@@ -65,12 +63,15 @@ def classify_recompute_errors(
 
 def get_recompute_log(self, doc_name: str) -> list:
     """Return recompute state for every object in a document (read-only)."""
-    res = self._dispatch_gui(lambda: get_recompute_log_gui(doc_name))
+    collaborators = self._cad_collaborators
+    res = self._dispatch_gui(
+        lambda: get_recompute_log_gui(doc_name, freecad=collaborators.freecad)
+    )
     return res if isinstance(res, list) else [{"error": res}]
 
 
-def get_recompute_log_gui(doc_name: str) -> list:
-    doc = FreeCAD.getDocument(doc_name)
+def get_recompute_log_gui(doc_name: str, *, freecad) -> list:
+    doc = freecad.getDocument(doc_name)
     if not doc:
         return [{"error": f"Document '{doc_name}' not found"}]
     results = []
@@ -109,13 +110,16 @@ def get_recompute_log_gui(doc_name: str) -> list:
 
 
 def recompute_document(self, doc_name: str) -> dict:
-    res = self._dispatch_gui(lambda: recompute_document_gui(doc_name))
+    collaborators = self._cad_collaborators
+    res = self._dispatch_gui(
+        lambda: recompute_document_gui(doc_name, freecad=collaborators.freecad)
+    )
     return self._adapt_gui_mutation_result(res)
 
 
-def recompute_document_gui(doc_name):
+def recompute_document_gui(doc_name, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         doc.recompute()
@@ -125,13 +129,16 @@ def recompute_document_gui(doc_name):
 
 
 def undo(self, doc_name: str) -> dict:
-    res = self._dispatch_gui(lambda: undo_gui(doc_name))
+    collaborators = self._cad_collaborators
+    res = self._dispatch_gui(
+        lambda: undo_gui(doc_name, freecad=collaborators.freecad)
+    )
     return self._adapt_gui_mutation_result(res)
 
 
-def undo_gui(doc_name):
+def undo_gui(doc_name, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         doc.undo()
@@ -141,13 +148,16 @@ def undo_gui(doc_name):
 
 
 def redo(self, doc_name: str) -> dict:
-    res = self._dispatch_gui(lambda: redo_gui(doc_name))
+    collaborators = self._cad_collaborators
+    res = self._dispatch_gui(
+        lambda: redo_gui(doc_name, freecad=collaborators.freecad)
+    )
     return self._adapt_gui_mutation_result(res)
 
 
-def redo_gui(doc_name):
+def redo_gui(doc_name, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         doc.redo()
@@ -157,9 +167,8 @@ def redo_gui(doc_name):
 
 
 def recompute_and_wait(self, doc_name: str) -> dict[str, Any]:
-    from ...gui_tools import recompute_and_wait as _recompute_and_wait
-
-    res = self._dispatch_gui(lambda: _recompute_and_wait(doc_name))
+    collaborators = self._cad_collaborators
+    res = self._dispatch_gui(lambda: collaborators.recompute_and_wait(doc_name))
     if isinstance(res, dict):
         return res
     return {"ok": False, "error": str(res)}

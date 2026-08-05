@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ._common import _rpc_mod
 from .sketch_constraint_delete_helpers import (
     resolve_constraint_delete_indices,
     sketch_delete_error,
@@ -21,9 +20,11 @@ def sketch_delete_constraint_gui(
     sketch_name,
     constraint_indices,
     constraint_names,
+    *,
+    freecad,
 ):
     try:
-        doc = _rpc_mod().FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return sketch_delete_error(
                 "DOCUMENT_NOT_FOUND",
@@ -62,7 +63,9 @@ def sketch_delete_constraint_gui(
                 "constraint_names must contain non-empty strings.",
             )
 
-        target_indices, error = resolve_constraint_delete_indices(sketch, indices, names)
+        target_indices, error = resolve_constraint_delete_indices(
+            sketch, indices, names
+        )
         if error:
             return error
 
@@ -93,9 +96,9 @@ def sketch_delete_constraint_gui(
         )
 
 
-def sketch_edit_constraint_gui(doc_name, sketch_name, value, name, index):
+def sketch_edit_constraint_gui(doc_name, sketch_name, value, name, index, *, freecad):
     try:
-        doc = _rpc_mod().FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         sketch = doc.getObject(sketch_name)

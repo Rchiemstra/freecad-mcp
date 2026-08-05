@@ -9,12 +9,15 @@ import platform  # noqa: F401 - §3.3 test shims
 import sys  # noqa: F401 - §3.3 lifecycle shims
 import threading
 import uuid
+from contextlib import suppress as _suppress
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path  # noqa: F401 - §3.3 lease runtime shims
 
 import FreeCAD  # §3.3 test monkeypatch
 import FreeCADGui  # noqa: F401 - §3.3 test monkeypatch
+import Part as _Part
+import Sketcher as _Sketcher
 from PySide import QtCore, QtWidgets  # noqa: F401 - §3.3 test monkeypatch
 
 try:
@@ -69,6 +72,9 @@ from .lease_runtime import (  # noqa: F401
     initialize_document_lease_runtime,
     shutdown_document_lease_runtime,
 )
+from .methods.cad_methods_ops.cad_dependencies import (
+    CadCollaborators as _CadCollaborators,
+)
 from .methods.lease_methods_ops.collaboration_dependencies import (
     CollaborationCollaborators as _CollaborationCollaborators,
 )
@@ -78,8 +84,23 @@ from .methods.lease_methods_ops.execution_dependencies import (
 from .methods.lease_methods_ops.lifecycle_dependencies import (
     LifecycleCollaborators as _LifecycleCollaborators,
 )
-from .parts_library import configure_parts_library_path  # noqa: F401
-from .reference_repair import inspect_references_gui  # §3.3 shim
+from .mutation_guard_ops.validate_invariants import (
+    validate_document_invariants as _validate_document_invariants,
+)
+from .fem_executor import run_fem_analysis as _run_fem_analysis
+from .gui_tools import recompute_and_wait as _recompute_and_wait
+from .object_factory import create_object_gui as _create_object_gui
+from .parts_library import (  # noqa: F401
+    configure_parts_library_path,
+    insert_part_from_library as _insert_part_from_library,
+)
+from .placement_codec import dict_to_placement, placement_to_dict
+from .property_mapper import set_object_property
+from .reference_repair import (
+    inspect_references_gui,
+    repair_references_gui as _repair_references_gui,
+)
+from .serialize import serialize_object as _serialize_object
 from .rpc_helpers import (  # noqa: F401 - §3.3 moved-symbol shims
     _SAVE_VALIDATION_MARKER,
     _assert_mutation_file_metadata_unchanged,
@@ -167,14 +188,44 @@ lease_watchdog_stop = threading.Event()
 lease_watchdog_lock = threading.RLock()
 RPC_SHUTDOWN_CANCELLATION_WAIT_SECONDS = 0.5
 
-try:
-    from .placement_codec import dict_to_placement, placement_to_dict  # noqa: F401
-    from .property_mapper import Object, set_object_property  # noqa: F401
-except ImportError:  # pragma: no cover - flat addon import path
-    pass
+with _suppress(ImportError):
+    from .property_mapper import Object  # noqa: F401
 
 
 _EXECUTE_TIMEOUT = 120
+
+
+def _capture_cad_collaborators(
+    cad_collaborators,
+    collaboration_collaborators,
+    execution_collaborators,
+) -> _CadCollaborators:
+    if cad_collaborators is not None and not isinstance(
+        cad_collaborators, _CadCollaborators
+    ):
+        raise TypeError("cad_collaborators must be CadCollaborators")
+    if cad_collaborators is None:
+        cad_collaborators = _build_cad_collaborators(
+            compatibility_api=collaboration_collaborators.compatibility_api
+        )
+    if (
+        cad_collaborators.compatibility_api
+        is not collaboration_collaborators.compatibility_api
+        or cad_collaborators.compatibility_api
+        is not execution_collaborators.compatibility_api
+    ):
+        raise ValueError(
+            "CAD, execution, and collaboration collaborators must share "
+            "compatibility_api"
+        )
+    if (
+        cad_collaborators.freecad is not execution_collaborators.freecad
+        or cad_collaborators.freecad is not collaboration_collaborators.freecad
+    ):
+        raise ValueError(
+            "CAD, execution, and collaboration collaborators must share freecad"
+        )
+    return cad_collaborators
 
 
 class FreeCADRPC:
@@ -191,6 +242,7 @@ class FreeCADRPC:
         collaboration_collaborators: _CollaborationCollaborators | None = None,
         lifecycle_collaborators: _LifecycleCollaborators | None = None,
         execution_collaborators: _ExecutionCollaborators | None = None,
+        cad_collaborators: _CadCollaborators | None = None,
     ):
         self.allow_execute_code = allow_execute_code
         self._mutation_context = threading.local()
@@ -230,6 +282,11 @@ class FreeCADRPC:
                 "execution and collaboration collaborators must share compatibility_api"
             )
         self.__execution_collaborators = execution_collaborators
+        self.__cad_collaborators = _capture_cad_collaborators(
+            cad_collaborators,
+            collaboration_collaborators,
+            execution_collaborators,
+        )
 
     @property
     def _collaboration_collaborators(self) -> _CollaborationCollaborators:
@@ -242,6 +299,10 @@ class FreeCADRPC:
     @property
     def _execution_collaborators(self) -> _ExecutionCollaborators:
         return self.__execution_collaborators
+
+    @property
+    def _cad_collaborators(self) -> _CadCollaborators:
+        return self.__cad_collaborators
 
     def _bind_collaboration_runtime_manifest(self, runtime_manifest) -> None:
         """Complete the private graph before the listener can serve requests."""
@@ -308,6 +369,30 @@ def _build_collaboration_collaborators() -> _CollaborationCollaborators:
             _assert_never_saved_stale_continuity,
             document_identity_service=document_identity_service,
         ),
+    )
+
+
+def _build_cad_collaborators(*, compatibility_api) -> _CadCollaborators:
+    """Capture typed CAD dependencies at the explicit composition point."""
+
+    return _CadCollaborators(
+        compatibility_api=compatibility_api,
+        freecad=FreeCAD,
+        part=_Part,
+        sketcher=_Sketcher,
+        create_object_gui=_create_object_gui,
+        insert_part_from_library=_insert_part_from_library,
+        set_object_property=set_object_property,
+        serialize_object=_serialize_object,
+        inspect_references_gui=inspect_references_gui,
+        repair_references_gui=_repair_references_gui,
+        recompute_and_wait=_recompute_and_wait,
+        run_fem_analysis=_run_fem_analysis,
+        dict_to_placement=dict_to_placement,
+        placement_to_dict=placement_to_dict,
+        set_extrusion_symmetric=_set_extrusion_symmetric,
+        set_feature_bool=_set_feature_bool,
+        validate_document_invariants=_validate_document_invariants,
     )
 
 

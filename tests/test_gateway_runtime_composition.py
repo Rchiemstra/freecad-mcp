@@ -404,7 +404,7 @@ class _LiveListener:
         self.timeline.append("cleanup:listener")
 
 
-def _prepare_live_start(  # noqa: C901 - complete live-start seam
+def _prepare_live_start(
     monkeypatch,
     *,
     authentication_enabled: bool = False,
@@ -435,7 +435,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
     runtime_manifest = object()
     replay_predicates: list[object] = []
     lease_service = SimpleNamespace(
-        list_records=lambda: [],
+        list_records=list,
         has_unresolved_owner=lambda _owner: False,
     )
     identity_service = object()
@@ -448,6 +448,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         _collaboration_collaborators=None,
         _lifecycle_collaborators=None,
         _execution_collaborators=None,
+        _cad_collaborators=None,
     )
 
     def bind_collaboration_runtime_manifest(manifest):
@@ -503,6 +504,7 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         collaborators = kwargs["collaboration_collaborators"]
         lifecycle = kwargs["lifecycle_collaborators"]
         execution = kwargs["execution_collaborators"]
+        cad = kwargs["cad_collaborators"]
         assert _args == ()
         assert kwargs["allow_execute_code"] is True
         assert collaborators.document_lease_service is lease_service
@@ -533,9 +535,12 @@ def _prepare_live_start(  # noqa: C901 - complete live-start seam
         assert execution.runtime_manifest is None
         assert execution.actual_endpoint is None
         assert execution.server_started_at == ""
+        assert cad.compatibility_api is collaborators.compatibility_api
+        assert cad.freecad is rpc_server.FreeCAD
         bridge._collaboration_collaborators = collaborators
         bridge._lifecycle_collaborators = lifecycle
         bridge._execution_collaborators = execution
+        bridge._cad_collaborators = cad
         return bridge
 
     class _Thread:

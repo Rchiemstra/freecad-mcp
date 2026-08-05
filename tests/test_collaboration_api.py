@@ -26,9 +26,11 @@ class _NativeDocument:
     def __init__(self, result: object) -> None:
         self.result = result
         self.callbacks: list[object] = []
+        self.structural_scopes: list[bool] = []
 
-    def commitCompatibilityMutation(self, callback):
+    def commitCompatibilityMutation(self, callback, *, structural=False):
         self.callbacks.append(callback)
+        self.structural_scopes.append(structural)
         return self.result
 
 
@@ -69,6 +71,18 @@ def test_bridge_resolves_once_and_returns_the_exact_native_result() -> None:
     assert lookup_calls[0] is document_name
     assert document.callbacks == [callback]
     assert document.callbacks[0] is callback
+    assert document.structural_scopes == [False]
+
+
+def test_bridge_forwards_only_the_explicit_structural_scope() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    document = _NativeDocument({"status": "Committed"})
+
+    api_type(document_lookup=lambda _name: document).commit_compatibility_mutation(
+        "Model", lambda: None, structural=True
+    )
+
+    assert document.structural_scopes == [True]
 
 
 def test_bridge_propagates_lookup_and_native_failures_without_translation() -> None:
@@ -87,7 +101,8 @@ def test_bridge_propagates_lookup_and_native_failures_without_translation() -> N
     assert lookup_info.value is lookup_failure
 
     class FailedNativeDocument:
-        def commitCompatibilityMutation(self, _callback):
+        def commitCompatibilityMutation(self, _callback, *, structural=False):
+            assert structural is False
             raise native_failure
 
     with pytest.raises(ValueError) as native_info:
@@ -150,7 +165,10 @@ def test_public_signatures_expose_no_caller_supplied_authority_inputs() -> None:
     )
     assert list(
         inspect.signature(api_type.commit_compatibility_mutation).parameters
-    ) == ["self", "document_name", "callback"]
+    ) == ["self", "document_name", "callback", "structural"]
+    assert inspect.signature(api_type.commit_compatibility_mutation).parameters[
+        "structural"
+    ].kind is inspect.Parameter.KEYWORD_ONLY
     assert _load_package_module().__all__ == ["CollaborationAPI"]
 
 

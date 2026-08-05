@@ -866,6 +866,15 @@
       "removal_phase": 22
     },
     {
+      "code": "ARCH103",
+      "path": "addon/FreeCADMCP/rpc_server/fem_executor_ops/solver_resolution.py",
+      "line": 70,
+      "column": 27,
+      "fingerprint": "9b7d5fe529405f0d9ba6",
+      "reason": "Phase 15 FEM compatibility provider resolver imports the exact proxy-owned module; replace it with generated typed registration",
+      "removal_phase": 22
+    },
+    {
       "code": "ARCH105",
       "path": "addon/FreeCADMCP/rpc_server/gui_dispatch.py",
       "line": 42,
@@ -1163,51 +1172,6 @@
       "removal_phase": 22
     },
     {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py",
-      "line": 7,
-      "column": 1,
-      "fingerprint": "f637ed62b71f539ddfff",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py",
-      "line": 46,
-      "column": 9,
-      "fingerprint": "6f93c4428bad1914c932",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py",
-      "line": 47,
-      "column": 9,
-      "fingerprint": "dd826d4ce4236564b1cd",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py",
-      "line": 93,
-      "column": 9,
-      "fingerprint": "4165327461644019e926",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py",
-      "line": 94,
-      "column": 9,
-      "fingerprint": "0bfb3dbf0025c69b643b",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
       "code": "ARCH101",
       "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_constraint_dispatch.py",
       "line": 1,
@@ -1224,60 +1188,6 @@
       "fingerprint": "7cefc3d7254bc06262a3",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: object, sketch",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_constraints.py",
-      "line": 5,
-      "column": 1,
-      "fingerprint": "5606efffe7d324138048",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_constraints.py",
-      "line": 26,
-      "column": 15,
-      "fingerprint": "7088309ff4aa46f76764",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_constraints.py",
-      "line": 98,
-      "column": 15,
-      "fingerprint": "620afeab7116dc5c89c2",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_geometry.py",
-      "line": 7,
-      "column": 1,
-      "fingerprint": "d23cdea6cf798508f10f",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_geometry.py",
-      "line": 14,
-      "column": 15,
-      "fingerprint": "45d6d8010eeb5eb2f653",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_geometry.py",
-      "line": 40,
-      "column": 15,
-      "fingerprint": "d8b053c69d6c00fa8be8",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
     },
     {
       "code": "ARCH103",

@@ -1,18 +1,19 @@
 """CAD RPC helpers extracted from ``FreeCADRPC`` (Phase 4 slice 4F)."""
 
-import FreeCAD
-
 
 def diagnose_parametric(self, doc_name: str, object_name=None) -> dict:
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: diagnose_parametric_gui(doc_name, object_name)
+        lambda: diagnose_parametric_gui(
+            doc_name, object_name, freecad=collaborators.freecad
+        )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
-def diagnose_parametric_gui(doc_name, object_name=None):
+def diagnose_parametric_gui(doc_name, object_name=None, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         targets = [doc.getObject(object_name)] if object_name else list(doc.Objects)
@@ -101,14 +102,17 @@ def diagnose_parametric_gui(doc_name, object_name=None):
 
 def get_sketch_diagnostics(self, doc_name: str, sketch_name: str) -> dict:
     """Return solver diagnostics for a Sketcher sketch (read-only)."""
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: get_sketch_diagnostics_gui(doc_name, sketch_name)
+        lambda: get_sketch_diagnostics_gui(
+            doc_name, sketch_name, freecad=collaborators.freecad
+        )
     )
     return res if isinstance(res, dict) else {"error": res}
 
 
-def get_sketch_diagnostics_gui(doc_name: str, sketch_name: str) -> dict:
-    doc = FreeCAD.getDocument(doc_name)
+def get_sketch_diagnostics_gui(doc_name: str, sketch_name: str, *, freecad) -> dict:
+    doc = freecad.getDocument(doc_name)
     if not doc:
         return {"error": f"Document '{doc_name}' not found"}
     sk = doc.getObject(sketch_name)

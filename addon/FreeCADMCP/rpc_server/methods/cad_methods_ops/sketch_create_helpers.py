@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import FreeCAD
-
 
 def create_sketch_object(doc, sketch_name: str, body_name: str | None):
     if body_name:
@@ -14,9 +12,9 @@ def create_sketch_object(doc, sketch_name: str, body_name: str | None):
     return doc.addObject("Sketcher::SketchObject", sketch_name), None
 
 
-def apply_create_attach_to(sketch, doc, attach_to: str) -> str | None:
+def apply_create_attach_to(sketch, doc, attach_to: str, *, freecad) -> str | None:
     if attach_to in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
-        return _attach_origin_plane_on_create(sketch, doc, attach_to)
+        return _attach_origin_plane_on_create(sketch, doc, attach_to, freecad=freecad)
     if ":" in attach_to:
         obj_name, face = attach_to.split(":", 1)
         ref_obj = doc.getObject(obj_name)
@@ -27,7 +25,9 @@ def apply_create_attach_to(sketch, doc, attach_to: str) -> str | None:
     return None
 
 
-def _attach_origin_plane_on_create(sketch, doc, plane_name: str) -> str | None:
+def _attach_origin_plane_on_create(
+    sketch, doc, plane_name: str, *, freecad
+) -> str | None:
     plane_obj = None
     for obj in doc.Objects:
         if obj.TypeId == "App::Origin":
@@ -42,13 +42,13 @@ def _attach_origin_plane_on_create(sketch, doc, plane_name: str) -> str | None:
         sketch.MapMode = "FlatFace"
         return None
     if plane_name == "XZ_Plane":
-        sketch.Placement = FreeCAD.Placement(
-            FreeCAD.Vector(0, 0, 0),
-            FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), 90),
+        sketch.Placement = freecad.Placement(
+            freecad.Vector(0, 0, 0),
+            freecad.Rotation(freecad.Vector(1, 0, 0), 90),
         )
     elif plane_name == "YZ_Plane":
-        sketch.Placement = FreeCAD.Placement(
-            FreeCAD.Vector(0, 0, 0),
-            FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), -90),
+        sketch.Placement = freecad.Placement(
+            freecad.Vector(0, 0, 0),
+            freecad.Rotation(freecad.Vector(0, 1, 0), -90),
         )
     return None

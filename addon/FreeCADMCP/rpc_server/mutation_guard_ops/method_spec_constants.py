@@ -2,11 +2,40 @@
 
 from __future__ import annotations
 
-NO_OUTER_TRANSACTION = frozenset(
+NATIVE_COMPATIBILITY_METHODS = frozenset(
+    {
+        "body_create",
+        "body_set_tip",
+        "clear_expression",
+        "create_object",
+        "delete_object",
+        "edit_object",
+        "insert_part_from_library",
+        "pad_feature",
+        "pocket_feature",
+        "run_fem_analysis",
+        "set_expression",
+        "sketch_add_constraint",
+        "sketch_add_geometry",
+        "sketch_attach",
+        "sketch_create",
+        "sketch_delete_constraint",
+        "sketch_delete_geometry",
+        "sketch_edit_constraint",
+        "solve_assembly",
+        "spreadsheet_create",
+        "spreadsheet_set_alias",
+        "spreadsheet_set_cells",
+    }
+)
+
+
+NO_OUTER_TRANSACTION = NATIVE_COMPATIBILITY_METHODS | frozenset(
     {
         "execute_code",
         "recompute_document",
         "recompute_and_wait",
+        "repair_references",
         "undo",
         "redo",
         "reload_document",

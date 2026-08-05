@@ -36,8 +36,14 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
 ):
     expected = _snapshot()["production_listener_examples"]
     default_instance = freecad_rpc_class()
+    freecad = SimpleNamespace(
+        getDocument=lambda _name: None,
+        listDocuments=dict,
+        getUserAppDataDir=lambda: "/profile/",
+    )
     collaboration_collaborators = replace(
         default_instance._collaboration_collaborators,
+        freecad=freecad,
         import_document_lock=lambda: SimpleNamespace(
             is_enabled=lambda: True,
             get_request_identity=lambda: {
@@ -49,11 +55,7 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     )
     execution_collaborators = replace(
         default_instance._execution_collaborators,
-        freecad=SimpleNamespace(
-            getDocument=lambda _name: None,
-            listDocuments=lambda: {},
-            getUserAppDataDir=lambda: "/profile/",
-        ),
+        freecad=freecad,
         import_document_lock=lambda: None,
         document_lease_service=None,
         session_manager=object(),
@@ -77,6 +79,11 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
         collaboration_collaborators=collaboration_collaborators,
         lifecycle_collaborators=default_instance._lifecycle_collaborators,
         execution_collaborators=execution_collaborators,
+        cad_collaborators=replace(
+            default_instance._cad_collaborators,
+            compatibility_api=collaboration_collaborators.compatibility_api,
+            freecad=freecad,
+        ),
     )
     dispatcher = SimpleXMLRPCDispatcher(allow_none=True, encoding=None)
     dispatcher.register_instance(instance)
@@ -97,7 +104,7 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
         "_rpc_mod",
         lambda: SimpleNamespace(
             _import_document_lock=lambda: SimpleNamespace(
-                get_request_identity=lambda: {}
+                get_request_identity=dict
             ),
             document_lease_service=None,
         ),

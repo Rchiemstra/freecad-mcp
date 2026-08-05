@@ -753,14 +753,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 100,
+        "line": 121,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
       {
         "column": 30,
         "kind": "Name",
-        "line": 460,
+        "line": 545,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -1194,28 +1194,28 @@
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 58,
+        "line": 83,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "lease_heartbeat_batch"
       },
       {
         "column": 39,
         "kind": "Attribute",
-        "line": 58,
+        "line": 83,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "lease_heartbeat_batch"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 77,
+        "line": 102,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "heartbeat_document_lock"
       },
       {
         "column": 41,
         "kind": "Attribute",
-        "line": 77,
+        "line": 102,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "heartbeat_document_lock"
       },
@@ -3637,28 +3637,28 @@
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 79,
+        "line": 104,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "_run_legacy_save"
       },
       {
         "column": 34,
         "kind": "Attribute",
-        "line": 79,
+        "line": 104,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "run_legacy_save"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 80,
+        "line": 105,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "_run_typed_save"
       },
       {
         "column": 33,
         "kind": "Attribute",
-        "line": 80,
+        "line": 105,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "run_typed_save"
       },
@@ -9356,14 +9356,14 @@
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 94,
+        "line": 115,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
       {
         "column": 29,
         "kind": "Name",
-        "line": 402,
+        "line": 487,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -10433,7 +10433,7 @@
     "baseline_references": 504,
     "baseline_runtime_calls": 432,
     "current_definitions": 6,
-    "current_locator_nodes": 87,
+    "current_locator_nodes": 76,
     "current_modules": {
       "addon/FreeCADMCP/rpc_server/lease_runtime.py": {
         "definitions": 1,
@@ -10448,27 +10448,6 @@
         "import_bindings": 0,
         "loaded_references": 0,
         "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/features_gui.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_constraints.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/sketch_gui_geometry.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
       },
       "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py": {
         "definitions": 0,
@@ -10569,8 +10548,8 @@
         "runtime_calls": 2
       }
     },
-    "current_references": 81,
-    "current_runtime_calls": 63,
+    "current_references": 70,
+    "current_runtime_calls": 55,
     "method": "AST count of _rpc_mod definitions, loaded references/runtime calls, import bindings, and explicit exports"
   },
   "manifest_state": "planned_pre_cutover",

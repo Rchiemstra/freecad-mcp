@@ -1,36 +1,50 @@
 """CAD RPC helpers extracted from ``FreeCADRPC`` (Phase 4 slice 4F)."""
 
-import FreeCAD
+from .cad_mutation import run_cad_mutation
 
 
 def set_expression(
     self, doc_name: str, object_name: str, prop_path: str, expression: str
 ) -> dict:
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: set_expression_gui(
-            doc_name, object_name, prop_path, expression
+        lambda: run_cad_mutation(
+            collaborators, doc_name,
+            lambda: set_expression_gui(
+                doc_name, object_name, prop_path, expression,
+                freecad=collaborators.freecad,
+            ),
         )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
 def clear_expression(self, doc_name: str, object_name: str, prop_path: str) -> dict:
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: clear_expression_gui(doc_name, object_name, prop_path)
+        lambda: run_cad_mutation(
+            collaborators, doc_name,
+            lambda: clear_expression_gui(
+                doc_name, object_name, prop_path, freecad=collaborators.freecad
+            ),
+        )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
 def list_expressions(self, doc_name: str, object_name: str) -> dict:
+    collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: list_expressions_gui(doc_name, object_name)
+        lambda: list_expressions_gui(
+            doc_name, object_name, freecad=collaborators.freecad
+        )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
-def set_expression_gui(doc_name, object_name, prop_path, expression):
+def set_expression_gui(doc_name, object_name, prop_path, expression, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         obj = doc.getObject(object_name)
@@ -62,9 +76,9 @@ def set_expression_gui(doc_name, object_name, prop_path, expression):
         return str(e)
 
 
-def clear_expression_gui(doc_name, object_name, prop_path):
+def clear_expression_gui(doc_name, object_name, prop_path, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         obj = doc.getObject(object_name)
@@ -80,9 +94,9 @@ def clear_expression_gui(doc_name, object_name, prop_path):
         return str(e)
 
 
-def list_expressions_gui(doc_name, object_name):
+def list_expressions_gui(doc_name, object_name, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         obj = doc.getObject(object_name)

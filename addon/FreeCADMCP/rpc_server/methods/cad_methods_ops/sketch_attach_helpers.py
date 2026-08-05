@@ -19,7 +19,10 @@ def find_origin_plane(doc, sketch, plane_name: str):
             origins.append(origin)
     for origin in origins:
         for feat in getattr(origin, "OriginFeatures", []) or []:
-            if getattr(feat, "Label", "") == plane_name or getattr(feat, "Name", "") == plane_name:
+            if (
+                getattr(feat, "Label", "") == plane_name
+                or getattr(feat, "Name", "") == plane_name
+            ):
                 return feat
         if hasattr(origin, plane_name):
             return getattr(origin, plane_name)
@@ -61,9 +64,7 @@ def attach_dict_reference(sketch, doc, support: dict) -> tuple[dict | None, str 
     return {"object": ref.Name, "subname": sub, "kind": "dict_ref"}, None
 
 
-def resolve_sketch_support(
-    sketch, doc, support
-) -> tuple[dict | None, str | None]:
+def resolve_sketch_support(sketch, doc, support) -> tuple[dict | None, str | None]:
     if isinstance(support, str):
         if support in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
             return attach_origin_plane(sketch, doc, support)

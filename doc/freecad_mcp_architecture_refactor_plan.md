@@ -293,6 +293,182 @@ the same phase:
 Cohesive modules holding several closely related value types are accepted. Giant
 façades, mixed-capability grab-bags, and boundary-crossing imports fail.
 
+### 3.8 Native structural compatibility boundary
+
+Phase 15 needs one native capability that Phases 1–6 deliberately did not build:
+a legacy callback that **adds or removes document structure** and is still atomic,
+rollback-safe, and revision-published. The Phase 12 binding cannot do this, and the
+rejection is correct rather than accidental — `Document::ensureCollaborationStructuralMutationAllowed()`
+protects four separate invariants, only one of which is an admission flag:
+
+| # | Invariant | Why a bare flag flip breaks it |
+|---|---|---|
+| N1 | **Notification atomicity** — an observer sees the old or the new committed state, never an intermediate one | `signalNewObject`, `signalDeletedObject`, `signalActivatedObject`, and `signalTransaction{Append,Remove}` are emitted immediately in `_addObject()`/`_removeObject()` and are not in `CollaborationDeferredNotificationKind`. Structure created inside the barrier would reach `Gui::Document`, `Application`, and every `DocumentObserver` before commit, and a rollback would show observers a create/delete pair for an object that never existed. |
+| N2 | **Publication exactness** — every committed mutation publishes its exact semantic keys | Inside the barrier `collaborationRevisionPublicationSuppressed()` is true, so the `publishObjectBoundary()` calls in `_addObject()`/`_removeObject()` are silently dropped. The prepared effect set is also frozen *before* `apply()`, while the new object's name and stable identity are allocated *during* it, so `effectsExactlyCoverWrites()` can never be satisfied by a declared-ahead structural edit. A granted structural mutation would commit unrevisioned — the one outcome the reservation design exists to prevent. |
+| N3 | **Stable-read isolation** | `collaborationLifecycleMutationBlockDepth` is raised both by the commit barrier and by `beginCollaborationStableReadCapture()`. Exempting the flag wholesale would also let structure change under a GUI or prepared-edit reader holding a stable capture. |
+| N4 | **Rollback provability** | Object addition is reversible only through `Transaction::addObjectDel()` recorded under an active transaction, and `removeObject()` silently defers to `d->pendingRemove` for a `PendingRecompute` object — an escape from the coordinator's transaction. |
+
+The resolution therefore extends the native compatibility path with **four mechanisms
+delivered together**, not with a relaxed guard.
+
+**M1 — scoped structural mutation grant.** A private RAII `Document` scope, friended
+to `DocumentCommitCoordinator` and issued only by `commitCompatibility()`. It admits
+structure only while every precondition holds: the document owner thread, the
+coordinator's own notification barrier, the coordinator's own open native transaction,
+a lifecycle block depth equal to the barrier's single contribution (so a foreign stable
+read still rejects, per N3), no active atomic-presentation audit, no poisoned commit,
+and no reentry. `ensureCollaborationStructuralMutationAllowed()` then admits exactly
+two cases — the existing `d->rollback` exemption and an active grant. Undo, redo,
+nested transaction control, and `clearDocument()` remain rejected unchanged, and
+`removeObject()` fails closed instead of deferring a `PendingRecompute` object (N4).
+Ordinary prepared operations never receive the grant, so `structuralAndSchemaMutationRejectBeforeVisibility`
+keeps passing verbatim.
+
+**M2 — deferred structural notifications.** Add `NewObject`, `DeletedObject`,
+`ActivatedObject`, `TransactionAppendObject`, and `TransactionRemoveObject` to
+`CollaborationDeferredNotificationKind` and route the `_addObject()`/`_removeObject()`
+emissions through `emitCollaboration*` helpers (N1). Replay is pointer-safe: under an
+active transaction a removed pre-existing object is retained for post-commit replay.
+An object added and removed in that same transaction is instead deleted immediately
+when `Transaction::addObjectNew()` cancels its initial transaction record; its queued
+object/property/extension records are eliminated by pointer-identity comparison without
+dereferencing the destroyed object. On failure the list is discarded, so no observer
+ever learns that a rolled-back object existed.
+
+**M3 — observed structural effect ledger.** While the grant is active, the structural
+funnels append their already-classified `DocumentRevisionPublicationRequest`s to a
+per-commit ledger instead of dropping them under publication suppression. After the
+grant closes, the coordinator publishes `declared ∪ observed` (deduplicated and sorted)
+through the existing reservation, so one atomic post-commit event carries
+`documentStructure`, `objectStructure(<name>)`, and `objectExistence(<name>)` with
+stable identities alongside the `unknownModelMutation` wildcard (N2). Expected
+revisions stay as captured; newly allocated keys were zero, so no false conflict is
+possible. This is also what makes Phase 18 provable — a remote structural mutation
+becomes observable in the native revision stream rather than as an opaque wildcard.
+
+**M4 — explicit opt-in scope.** Add `CollaborationCompatibilityScope::Structural` and
+expose it as a keyword-only `Document.commitCompatibilityMutation(callback, structural=True)`
+defaulting to today's behavior. A caller that does not declare structural intent keeps
+the current strict rejection, so an `execute_code` payload cannot silently acquire
+structural authority.
+
+**Delivered refinements.** The implementation closes the structural seams discovered
+by focused native and integrated review without widening M1. Newly created and imported
+objects may complete their dynamic-property schema, status, metadata, extension, rename,
+and removal setup while existing objects remain protected. App and Gui bulk import use
+an owned reader/archive/replay object, so import notifications and ViewProvider creation
+are committed or discarded as one boundary. Deferred property records retain their
+owning container, coalesce add/rename/remove to the stable committed state, and use
+object/container pointers only as non-dereferenced identity tokens when pruning a
+destroyed transient object; observer replay therefore never follows a dangling object
+or property pointer. Rollback restores exact membership order, stable
+identities, active object, imported state, and property schema before the barrier opens.
+
+The grant still closes before authoritative recompute. The coordinator then recomputes,
+checks the postcondition, and consumes the observed ledger only after those steps succeed,
+so schema synthesized during recompute is part of the same exact publication. Spreadsheet
+uses a Sheet-only, `Prop_NoPersist` transient-schema scope during that authoritative
+recompute and rollback stabilization; no general recompute-time schema exemption exists.
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor Agent
+    participant MCP as Phase 15 CAD adapters
+    participant Binding as Structural compatibility binding
+    participant Coordinator as DocumentCommitCoordinator
+    participant Document as App Document
+    participant Ledger as Observed structural effects
+    participant Revisions as DocumentRevisionIndex
+    participant Observers as Deferred observers
+
+    Agent->>MCP: Request structural CAD mutation
+    MCP->>Binding: Invoke injected CAD collaborator
+    Binding->>Coordinator: commitCompatibility with Structural scope
+
+    Coordinator->>Document: Validate identity and lifecycle epoch
+    Coordinator->>Revisions: Validate expected semantic revisions
+    Coordinator->>Document: Require clean recompute boundary
+    Coordinator->>Document: Begin notification barrier
+    Coordinator->>Document: Suppress direct revision publication
+    Coordinator->>Document: Open native rollback transaction
+
+    Note over Coordinator,Document: M1 grant opens only on the compatibility path
+
+    Coordinator->>Document: Acquire scoped structural mutation grant
+    Note right of Document: Requires the document owner thread
+    Note right of Document: Requires the coordinator notification barrier
+    Note right of Document: Requires the coordinator native transaction
+    Note right of Document: Requires block depth equal to the barrier alone
+    Note right of Document: A foreign stable read capture still rejects
+
+    Coordinator->>Binding: Apply collaborative operation
+    Binding->>Document: Add or remove document structure
+    Document->>Document: Check structural mutation authority
+    Document->>Ledger: M3 record classified structural effects
+    Document->>Document: M2 defer new, deleted, and activated object signals
+    Note right of Document: Undo, redo, nested transactions, and clearDocument stay rejected
+
+    Binding-->>Coordinator: Callback completed
+    Coordinator->>Document: Release scoped structural mutation grant
+    Note over Coordinator,Document: Grant ends before recompute and validation
+
+    alt Apply, recompute, and reservation succeed
+        Coordinator->>Document: Recompute document
+        Coordinator->>Binding: Check operation postcondition
+        Coordinator->>Ledger: Read observed structural effects
+        Ledger-->>Coordinator: Classified keys and stable identities
+        Coordinator->>Coordinator: Union declared and observed effects
+        Coordinator->>Document: Prepare commit finalization
+        Coordinator->>Revisions: Reserve the exact union publication
+        Revisions-->>Coordinator: Publication reservation ready
+
+        Coordinator->>Document: Commit native transaction
+        Coordinator->>Revisions: Commit reserved revision publication
+        Coordinator->>Document: Restore normal revision publication
+        Coordinator->>Document: Finish notification barrier successfully
+        Document->>Observers: Replay deferred structural and property notifications
+        Note over Document,Observers: View providers are created after the commit
+
+        Coordinator-->>Binding: Committed result and published revisions
+        Binding-->>MCP: Frozen legacy compatible result
+        MCP-->>Agent: Structural mutation succeeded and published
+
+    else Failure before native transaction commit
+        Coordinator->>Document: Roll back collaboration transaction
+        Note right of Document: Rollback reverses structure under the existing exemption
+        Coordinator->>Ledger: Discard observed structural effects
+        Coordinator->>Document: Restore normal revision publication
+        Coordinator->>Document: Finish notification barrier as failed
+        Note over Document,Observers: Deferred notifications are discarded so no observer saw the objects
+        Note over Coordinator,Revisions: Reserved publication is cancelled
+
+        Coordinator-->>Binding: Terminal failure
+        Binding-->>MCP: Frozen legacy compatible failure
+        MCP-->>Agent: Structural mutation failed atomically
+    end
+```
+
+**Accepted consequences.** M2 moves ViewProvider creation after the commit, so
+`obj.ViewObject` is unavailable for an object created in the same callback. That is
+correct — presentation is a separate domain under the prerequisite plan's §8 — and
+Phase 15 adapts by moving create/edit `ShapeColor` and `ViewObject`, Pad/Pocket sketch
+visibility, and FEM ViewProxy attachment to exact-once post-commit presentation replay.
+Every callback, recompute, health, and publication failure performs no presentation
+write. `enforceDocumentMutation()` remains a second, independent gate; the grant does
+not bypass it, and it is removed on schedule in Phase 18.
+
+**Rejected alternatives.** Relaxing the guard flag alone was rejected: it leaves N1 and
+N2 broken, so observers see uncommitted objects and remote clients can never detect
+that objects appeared. Running the structural callback before the barrier was rejected
+for the same N1 reason. Staging into a scratch document and grafting was rejected as
+lossy for links, dependencies, and stable identities. Typed structural
+`CollaborativeOperation` adapters per CAD verb remain the long-term destination, but
+they are not a Phase 15 unblocker — that is roughly forty adapters, and M1–M4 is the
+compatibility bridge that keeps that destination reachable without widening MCP
+authority.
+
 ---
 
 ## 4. Execution prerequisite and baseline
@@ -427,7 +603,7 @@ seams, the generator's contract-equality proof, and every review gate.
 
 ### 5.4 Cross-repository delivery
 
-Except for Phases 12 and 18, substantive phase commits are created inside
+Except for Phases 12, 15, and 18, substantive phase commits are created inside
 `tools/mcp/freecad-mcp`. The parent gitlink is **not** frozen for the whole program:
 the branch-built cross-track lane builds the parent branch at its recorded submodule
 revision, so a frozen gitlink would test the pre-refactor add-on at every gate. The
@@ -446,6 +622,19 @@ boolean, or TLS/capability grant. It must enter through the GUI dispatcher, mana
 GIL without deadlock, propagate Python exceptions into native rollback, and return the
 native structured result. The revision-neutral `serializeCompatibilityCallback` is not
 exposed as a generic remote mutation surface.
+
+Phase 15 is the second cross-repository integration delivery, for the same reason and
+with the same shape: one parent commit carrying the §3.8 native structural
+compatibility boundary (M1–M4), its focused native tests, the updated gitlink, and both
+plan/progress updates; plus one nested MCP commit injecting the CAD collaborators. The
+parent commit is the canonical delivery. The native change is authorized as a
+prerequisite of an existing phase, not as a new phase — §5.5 forbids re-scoping the
+phase list after Phase 1, and this decision changes no phase's number, subject, or
+outcome. The parent half is integrator-owned because it edits shared native funnels
+(`Document.cpp`, `DocumentCommitCoordinator.cpp`, `DocumentP.h`, `DocumentPyImp.cpp`).
+Phase 15's Docker gate is upgraded accordingly: it now also requires branch-built
+`App_tests_run` and `Gui_tests_run`, because the parent half changes native
+notification and publication behavior that no MCP suite can observe.
 
 Phase 18 is one logical cross-repository cutover with two unavoidable Git objects:
 one squashed nested MCP commit and one parent commit containing the native authority
@@ -583,7 +772,7 @@ census measurably and records the remaining count.
 | 12 | `refactor(mcp): inject collaboration collaborators` | First expose a synchronous UnknownModel-only Python binding over FreeCAD's existing compatibility commit boundary, with no legacy authority dependency or caller-supplied identity; add the thin `collaboration_client.py` and add-on `collaboration_api.py` bridge over the frozen native API; pass acquisition, adoption, handoff, recovery, and compatibility-mutation collaborators into `methods/lease_methods_ops/`; remove their `_rpc_mod()` lookups. This is a two-object cross-repository delivery under §5.4. | Public compatibility shims, method/stub availability, exact-once callback, GUI-owner thread and off-thread GIL dispatch, UnknownModel wildcard publication, structured native results, Python exception rollback, lifecycle/reentrancy rejection, callback release, reconnect, adoption, recovery, authorization, cancellation, continuation, timeout, dependency identity, and no client/TLS/capability authority tests; **integration gate**. |
 | 13 | `refactor(mcp): inject lifecycle collaborators` | Pass save, Save As, finalize, release, query, and deprecation collaborators into lease and lifecycle adapters; route them to native lifecycle results without MCP dirty, persistence, or recovery decisions. | Save, release, query, close/reopen, restart, cancellation, GUI dispatch, semantic RPC contract, and no-MCP-lifecycle-authority tests. |
 | 14 | `refactor(mcp): inject execution collaborators` | Replace `_rpc_mod()` in dispatch, execute-code, and worker orchestration with injected dispatcher, execution-safety, worker, cancellation, and native compatibility-mutation dependencies. | Dispatch, execute-code, native mutation attribution, worker, cancellation, and AST no-locator scan. |
-| 15 | `refactor(mcp): inject CAD collaborators` | Pass document, object, sketch, feature, transaction, and native collaboration/compatibility-commit collaborators into CAD adapters; remove their dependence on MCP mutation ownership. | CAD, object, sketch, feature, transaction, remote revision-stream publication, dependency identity, and AST no-locator scan. |
+| 15 | `refactor(mcp): inject CAD collaborators` | **Parent half:** deliver the §3.8 native structural compatibility boundary — the scoped structural mutation grant (M1), deferred structural notifications (M2), the observed structural effect ledger (M3), and the opt-in `Structural` scope and its keyword-only Python binding (M4). **Nested half:** pass document, object, sketch, feature, transaction, and native collaboration/compatibility-commit collaborators into CAD adapters; declare structural intent at the structural call sites; move new-object presentation writes after the commit; remove their dependence on MCP mutation ownership. Two-object cross-repository delivery under §5.4. | Grant precondition matrix (off-thread, no barrier, no transaction, foreign stable-read capture, reentry, poisoned commit); undo/redo/nested-transaction/`clearDocument` still rejected; ordinary prepared operations still rejected; structural rollback leaves no observer notification and no publication; committed structure publishes the exact declared∪observed key set with stable identities in one event; pointer-safe deferred `DeletedObject` replay; `PendingRecompute` removal fails closed; CAD, object, sketch, feature, transaction, remote revision-stream publication, dependency identity, and AST no-locator scan; branch-built `App_tests_run` and `Gui_tests_run`. |
 | 16 | `refactor(mcp): inject GUI and view collaborators` | Pass GUI dispatch, personal-view, presentation, snapshot, and restore collaborators into GUI and view adapters; add `collaboration_context.py` and route focus, screenshot, and refresh through the native personal-context API rather than authoritative global selection or active-view state. | GUI dispatch, camera/view, selection isolation, snapshot/restore, personal-context apply/render/restore, cancellation, and AST no-locator scan. |
 | 17 | `refactor(mcp): bootstrap startup and shutdown through the runtime` | `start_rpc_server()` adopts the factory as its only path and publishes the singleton only after success; `stop_rpc_server()` cancels, stops, disposes, unsubscribes, drops adapter authentication/session handles, and clears idempotently without changing native document authority; `InitGui.py` routes manual start, auto-start, and about-to-quit through the root. | Repeated start, failed bind/auth/worker/bridge construction, reverse-order rollback, concurrent stop, inflight cancellation, native-session survival, partial runtime, repeated disposal, `InitGui` callback order, and no duplicate runtime. |
 
@@ -680,6 +869,18 @@ per phase and owns the generator, schema, and snapshots.
 ### At phase 12
 
 - [ ] The locator census has fallen measurably and the remaining count is recorded.
+
+### At phase 15
+
+- [ ] The structural grant is issued only by the compatibility commit path, and every
+      §3.8 precondition rejects with a distinct diagnostic.
+- [ ] Undo, redo, nested transaction control, and `clearDocument()` remain rejected
+      inside the callback; ordinary prepared operations still receive no grant.
+- [ ] A failed structural callback leaves no observer notification, no publication, and
+      no surviving object.
+- [ ] A committed structural callback publishes the exact declared∪observed key set,
+      with stable object identities, in one atomic post-commit event.
+- [ ] Branch-built `App_tests_run` and `Gui_tests_run` pass on the parent half.
 
 ### At phase 19
 
@@ -794,12 +995,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 4 in progress; Phase 14 complete |
-| Next phase | 15 — `refactor(mcp): inject CAD collaborators` |
-| In-flight ownership | None |
-| Last review | Phase 14 dispatch/control and final integrated reviews clear on 2026-08-04 |
-| Blocker | None; preserve the existing RPC surface as an externally consumed public contract |
-| Resume hint | Phase 14 passed its phase and branch cross-track gates; begin Phase 15 by freezing CAD collaborator interfaces and exclusive ownership |
+| Current stage / phase | Stage 4 in progress; Phase 15 is the last complete phase |
+| Next phase | 16 — `refactor(mcp): inject GUI and view collaborators` |
+| In-flight ownership | None; Phase 15 implementation workers and final reviewer are complete |
+| Last review | Phase 15 final integrated parent+nested review CLEAR on 2026-08-05 after every Blocking/Important finding was fixed and re-reviewed |
+| Blocker | None |
+| Resume hint | Start Phase 16 from the Phase 15 two-object delivery; freeze GUI/view collaborator interfaces, partition disjoint GUI/view adapters, and preserve the native personal-context and shared-presentation domains |
 
 ### 11.2 Stage status
 
@@ -809,7 +1010,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
-| 4 | 12–17 | phase 12 | in progress (Phase 14 complete) |
+| 4 | 12–17 | phase 12 | in progress (Phase 15 complete) |
 | 5 | 18 | phase 18 | pending |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
@@ -818,6 +1019,109 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-05 — Phase 15 complete: CAD collaborators injected
+
+- **Two-object delivery:** the parent half implements §3.8 M1–M4 and the nested half
+  eagerly composes `CadCollaborators`, injects document/object/sketch/feature/FEM/
+  transaction dependencies, declares structural intent only at structural call sites,
+  and removes the owned CAD runtime locators. The bridge defaults to UnknownModel and
+  grants Structural scope only through explicit keyword-only `structural=True`; undo,
+  redo, nested transaction control, `clearDocument()`, prepared operations, and foreign
+  stable-read captures remain rejected.
+- **Native exactness:** new/import structure, dynamic-property schema/status/metadata,
+  extensions, recompute-generated Spreadsheet schema, and bulk-import replay are atomic.
+  The declared and observed effects publish once with stable identities. Failure restores
+  exact object order, identity, activation, cell/schema state, and import state while
+  emitting no observer or revision event. Deferred property records retain container
+  identity, coalesce to stable state, and safely disappear with transient objects.
+- **Presentation separation:** create/edit `ShapeColor`/`ViewObject`, Pad/Pocket sketch
+  hiding, and FEM ViewProxy attachment occur exactly once only after confirmed native
+  publication. The callback, leaf/validation recompute, health, and publication failure
+  matrices perform zero presentation writes.
+- **Architecture result:** the locator census is 76 nodes, 70 references, 55 runtime
+  calls, and six definitions; dynamic/local-import counts remain 37/18. Frozen authority
+  totals remain 115/15/30/167/861/251. Exact allowances are 606 total and 132 ARCH103;
+  the one Phase 15 FEM provider-module resolver is exact-fingerprinted and expires with
+  generated typed registration in Phase 22.
+- **Agents, review, and gates:** independent CAD/FEM workers plus native and integrated
+  reviewers found and closed structural admission, rollback/import/schema replay,
+  Spreadsheet recompute, transient pointer lifetime, FEM provider resolution, and
+  pre-commit presentation defects. The final live parent+nested review is CLEAR. Exact
+  Docker images, commands, and counts are in §11.4; production lint, Compose unit,
+  branch-built App/Gui/Spreadsheet, preflight, strict core, and strict e2e all pass.
+- **Stage result and next:** Stage 4 remains in progress with Phase 15 complete. Resume
+  automatically with Phase 16 only: inject GUI and view collaborators.
+
+#### 2026-08-04 — Phase 15 unblocked: structural compatibility boundary authorized
+
+- **Plan decision:** the parent native compatibility path is extended so a legacy
+  callback may change document structure atomically. The design is §3.8 and is
+  delivered as the parent half of Phase 15 under the §5.4 two-object protocol. This
+  is a prerequisite of an existing phase, not a re-scoping: no phase number, subject,
+  or outcome changes, so §5.5 is satisfied and §7 no longer blocks.
+- **Why a grant alone was rejected:** the existing rejection protects four invariants,
+  and only one is admission. Deferred-notification coverage (N1) and publication
+  exactness (N2) would both stay broken by a bare flag — observers would see
+  uncommitted objects, and the structural revisions would be silently swallowed by
+  the barrier's publication suppression, leaving remote clients unable to observe
+  that objects appeared. That is precisely what Phase 18 must prove, so the fix
+  lands here rather than being deferred into the cutover.
+- **Authorized native change (M1–M4):** a scoped, non-reentrant structural mutation
+  grant issued only by `commitCompatibility()` and gated on owner thread, the
+  coordinator's own barrier and transaction, a lifecycle block depth equal to the
+  barrier alone, no atomic-presentation audit, and no poisoned commit; five new
+  deferred notification kinds covering new/deleted/activated object and transaction
+  append/remove; a per-commit ledger of classified structural effects that the
+  coordinator unions with the declared effects before reserving publication; and an
+  opt-in `CollaborationCompatibilityScope::Structural` exposed as a keyword-only
+  `structural=True`. Undo, redo, nested transaction control, `clearDocument()`,
+  ordinary prepared operations, and foreign stable-read captures all keep rejecting.
+- **Accepted consequence:** ViewProvider creation moves after the commit, so
+  `obj.ViewObject` is unavailable for an object created in the same callback. The
+  nested Phase 15 half adapts by moving new-object presentation writes to the
+  post-commit shared-presentation path. `enforceDocumentMutation()` is unchanged and
+  is still removed on schedule in Phase 18.
+- **Resume order:** parent half with native tests → rebuild the native Docker
+  workspace at the new parent hash → adapt the held nested worktree → full Phase 15
+  review → §5.7 per-phase gate plus branch-built `App_tests_run`/`Gui_tests_run` →
+  the two Phase 15 Git objects. The previously recorded WIP evidence in §11.4 stays
+  as WIP and is superseded by the delivery evidence.
+
+#### 2026-08-04 — Phase 15 blocked: native compatibility boundary rejects structural CAD mutations
+
+- **Uncommitted implementation:** the Phase 15 worktree contains the frozen eager
+  `CadCollaborators` graph, dependency injection across CAD/object/sketch/feature/
+  transaction adapters, exact-once native attribution for 22 ordinary mutators,
+  pre-publication recompute/invariant validation, legacy-envelope rollback, and
+  locator/allowance/contract updates. Transaction-control operations and deferred
+  reference repair remain injected but outside the UnknownModel callback because
+  the native coordinator rejects undo/redo, pending recompute, and nested transaction
+  control. No Phase 15 commit exists and Phase 14 remains the last completed phase.
+- **Blocking native contradiction:** the current parent implementation begins the
+  collaboration notification barrier before `CollaborativeOperation::apply()` in
+  `src/App/DocumentCommitCoordinator.cpp`. The Phase 12 Python binding invokes its
+  callback from that apply step. `Document::ensureCollaborationStructuralMutationAllowed()`
+  rejects structural changes while the barrier is active, and `Document::addObject()`
+  and `Document::removeObject()` enforce that guard. Therefore `create_object`,
+  `delete_object`, part insertion, Body/Sketch/Pad/Pocket creation, spreadsheet
+  creation, and any other structural callback cannot be both rolled back and
+  revision-published by the available UnknownModel API. Publishing after an
+  out-of-boundary mutation would violate the required rollback/publication atomicity.
+- **Review and Docker evidence:** both workstream reviews were completed and the
+  final Sol/xhigh integrated review marked this finding blocking. The WIP image,
+  commands, and counts are recorded in §11.4. Production lint and the 471-test
+  affected selection pass, but the required Compose unit gate and strict native
+  cross-track gate do not. The phase is intentionally not marked complete.
+- **Required resolution:** extend the parent native compatibility path with a
+  narrowly scoped structural-mutation grant that is active only inside its native
+  rollback transaction, without weakening the stable-boundary rules for ordinary
+  prepared operations. This is parent shared-file work outside Phase 15's authorized
+  nested-only delivery and cannot be silently re-scoped after Phase 1 under §5.5.
+  After that authority decision and Docker rebuild, rerun the native callback/
+  rollback/publication tests, full Phase 15 review, Compose unit, and branch
+  cross-track gates before updating this entry to complete and creating the single
+  Phase 15 commit.
 
 #### 2026-08-04 — Phase 14 complete: execution collaborators injected
 
@@ -1574,6 +1878,67 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 15 — `refactor(mcp): inject CAD collaborators`
+
+- **Images and source identity:** final Compose `freecad-mcp-tests:latest` is
+  `sha256:af598e307043b5a35c2e60760c1271af8ed248c794a6fbe12bbe903533e360c0`;
+  native `freecad-collaboration-ci:ubuntu24.04-20260801` is
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  The 28 changed native source/test files byte-match the preserved Docker workspace.
+- **MCP lint and tests:** baked `python ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked 983 production files and passed architecture policy plus
+  full Ruff. The final Phase 15 composition/injection/sketch selection passed 63/63.
+  `docker compose run --rm unit` selected 2,334: 2,330 passed, three documented
+  Windows-DACL cases skipped, the existing screenshot case xfailed, and 130 were
+  deselected.
+- **Native branch gate:** Docker rebuilt `App_tests_run`; the final full run executed
+  778 with 776 passed and the two known BackupPolicy cases skipped. `Gui_tests_run`
+  passed 242/242 under Xvfb, `QT_QPA_PLATFORM=xcb`, and llvmpipe. The Spreadsheet
+  binary passed 8/8, including all three authoritative transient-schema tests.
+- **Cross-track jobs:** the unmodified preflight wrapper emitted `PREFLIGHT_OK`.
+  With `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, strict core selected 13 and
+  passed eight with the five documented FreeCAD xfails; strict e2e passed 117/117.
+  Both verdict files were zero and their XML/verdict artifacts were removed.
+- **Review result:** every worker review and re-review is complete. The final
+  adversarial live parent+nested review reports CLEAR with no remaining Blocking or
+  Important finding; `git diff --check` is clean apart from expected line-ending
+  warnings.
+
+#### Phase 15 — blocked evidence (uncommitted)
+
+- **WIP image and passing checks:** Compose `freecad-mcp-tests:latest` was built at
+  `sha256:78a3494af025af02fd2330e2a060ababb37660e8955caea4edeb9fdfcc57ea13`.
+  Baked production lint checked 983 Python files and passed architecture policy and
+  full Ruff; exact touched-test Ruff passed. The final baked architecture, authority,
+  Phase 15 injection, CAD/sketch/feature, health, semantic listener, gateway,
+  diagnostics, parametric, repair, lock, dirty-adoption, and public-surface selection
+  passed 471 with two expected adapter-only native skips. An earlier focused
+  architecture/Phase 15 selection passed 53/53.
+- **Failed required unit gate:** `docker compose run --rm unit` selected 2,305:
+  2,300 passed, the three Windows-DACL tests skipped, the existing screenshot test
+  xfailed, and 130 non-unit tests were deselected. The authenticated MCP lifecycle
+  failed at its first structural `create_object` call because the adapter document
+  cannot provide a compatibility commit that truthfully accepts the operation. A
+  fake success implementation was rejected because the real native barrier forbids
+  the same structural callback.
+- **Native/cross-track evidence:** branch preflight passed, but the preserved
+  `freecad-phase3-debug` volume currently reports parent hash `7a47b18044` and lacks
+  the Phase 12 `commitCompatibilityMutation` binding; strict core therefore selected
+  13, passed six, xfailed the five documented FreeCAD cases, and failed both native
+  availability/typed-attribution tests. Independently, the current parent source at
+  `b9d12b8811` proves the deeper blocker: the compatibility callback executes after
+  `beginCollaborationCommitNotificationBarrier()`, while structural mutation guards
+  reject `addObject`/`removeObject` until that barrier ends. Rebuilding the current
+  source would expose the binding but cannot make a structural callback admissible.
+  Generated strict verdict/XML artifacts were removed after recording.
+- **Inventory at the blocked worktree:** locator nodes are 76, references 70,
+  runtime calls 55, and definitions six; dynamic/local-import counts remain 37/18.
+  Frozen authority totals remain 115/15/30/167/861/251. ARCH103 allowances fall
+  from 142 to 131 and total allowances from 616 to 605. These values are WIP evidence,
+  not a completed-phase baseline.
 
 #### Phase 14 — `refactor(mcp): inject execution collaborators`
 

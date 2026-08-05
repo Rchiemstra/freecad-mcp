@@ -16,6 +16,31 @@ from ..methods.cad_methods_ops.sketch_gui_geometry import sketch_delete_geometry
 from ..methods.cad_methods_ops.snapshot_restore import restore_gui, snapshot_gui
 
 
+def _collect_invalid_objects(self):
+    return collect_invalid_objects(self._cad_collaborators.freecad)
+
+
+def _sketch_delete_constraint_gui(
+    self, doc_name, sketch_name, constraint_indices, constraint_names
+):
+    return sketch_delete_constraint_gui(
+        doc_name,
+        sketch_name,
+        constraint_indices,
+        constraint_names,
+        freecad=self._cad_collaborators.freecad,
+    )
+
+
+def _sketch_delete_geometry_gui(self, doc_name, sketch_name, geometry_indices):
+    return sketch_delete_geometry_gui(
+        doc_name,
+        sketch_name,
+        geometry_indices,
+        freecad=self._cad_collaborators.freecad,
+    )
+
+
 def bind_freecad_rpc(FreeCADRPC):
     # Phase 4 slice 4H — dispatch internals (private; not XML-RPC surface)
     FreeCADRPC._current_inflight = dispatch_helpers.current_inflight
@@ -160,9 +185,9 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC._reload_document_gui = lifecycle_methods.reload_document_gui
     FreeCADRPC._save_active_screenshot = lifecycle_methods.save_active_screenshot
     FreeCADRPC._close_document_gui = lifecycle_methods.close_document_gui
-    FreeCADRPC._collect_invalid_objects = staticmethod(collect_invalid_objects)
-    FreeCADRPC._sketch_delete_constraint_gui = staticmethod(sketch_delete_constraint_gui)
-    FreeCADRPC._sketch_delete_geometry_gui = staticmethod(sketch_delete_geometry_gui)
+    FreeCADRPC._collect_invalid_objects = _collect_invalid_objects
+    FreeCADRPC._sketch_delete_constraint_gui = _sketch_delete_constraint_gui
+    FreeCADRPC._sketch_delete_geometry_gui = _sketch_delete_geometry_gui
     FreeCADRPC._snapshot_gui = lambda self, doc_name: snapshot_gui(doc_name)
     FreeCADRPC._restore_gui = lambda self, doc_name, snapshot_id=None: restore_gui(
         doc_name, snapshot_id

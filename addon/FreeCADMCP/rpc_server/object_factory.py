@@ -9,13 +9,15 @@ public entry point that selects the branch.
 import FreeCAD
 import ObjectsFem
 
+from .fem_executor_ops.solver_resolution import defer_fem_presentation
+
 try:
     from .property_mapper import Object, set_object_property
 except ImportError:  # pragma: no cover - flat addon import path
     from rpc_server.property_mapper import Object, set_object_property
 
 
-def _create_fem_mesh(doc: FreeCAD.Document, obj: Object) -> None:
+def _create_fem_mesh(doc: FreeCAD.Document, obj: Object):
     """Create a ``Fem::FemMeshGmsh`` and run Gmsh to populate it.
 
     Accepts both the FreeCAD 0.x and 1.x property names (``Part``/``Shape``,
@@ -57,9 +59,10 @@ def _create_fem_mesh(doc: FreeCAD.Document, obj: Object) -> None:
     FreeCAD.Console.PrintMessage(
         f"FEM Mesh '{res.Name}' generated successfully in '{doc.Name}'.\n"
     )
+    return res
 
 
-def _create_fem_object(doc: FreeCAD.Document, obj: Object) -> None:
+def _create_fem_object(doc: FreeCAD.Document, obj: Object):
     """Create a ``Fem::*`` object via the appropriate ``ObjectsFem.makeXxx`` factory."""
     fem_make_methods = {
         "MaterialCommon": ObjectsFem.makeMaterialSolid,
@@ -79,6 +82,7 @@ def _create_fem_object(doc: FreeCAD.Document, obj: Object) -> None:
     )
     if obj.type != "Fem::AnalysisPython" and obj.analysis:
         getattr(doc, obj.analysis).addObject(res)
+    return res
 
 
 def _create_generic_object(doc: FreeCAD.Document, obj: Object) -> None:
@@ -101,15 +105,20 @@ def create_object_gui(doc_name: str, obj: Object):
         FreeCAD.Console.PrintError(f"Document '{doc_name}' not found.\n")
         return f"Document '{doc_name}' not found.\n"
     try:
-        if obj.type == "Fem::FemMeshGmsh":
-            if not obj.analysis:
+        if obj.type.startswith("Fem::"):
+            if obj.type == "Fem::FemMeshGmsh" and not obj.analysis:
                 return (
                     "Fem::FemMeshGmsh requires an 'analysis_name' naming the "
                     "Fem::AnalysisPython container to add the mesh to."
                 )
-            _create_fem_mesh(doc, obj)
-        elif obj.type.startswith("Fem::"):
-            _create_fem_object(doc, obj)
+            with defer_fem_presentation(doc) as presentation:
+                if obj.type == "Fem::FemMeshGmsh":
+                    created = _create_fem_mesh(doc, obj)
+                else:
+                    created = _create_fem_object(doc, obj)
+                presentation.capture(created)
+            if presentation.requires_replay:
+                return presentation
         else:
             _create_generic_object(doc, obj)
 

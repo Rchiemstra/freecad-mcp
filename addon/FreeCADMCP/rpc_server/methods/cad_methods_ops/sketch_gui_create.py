@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import FreeCAD
-
-from ...placement_codec import dict_to_placement, placement_to_dict
 from .sketch_attach_helpers import resolve_sketch_support
 from .sketch_create_helpers import apply_create_attach_to, create_sketch_object
 
 
-def sketch_create_gui(doc_name, sketch_name, body_name, attach_to):
+def sketch_create_gui(doc_name, sketch_name, body_name, attach_to, *, freecad):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
 
@@ -20,12 +17,14 @@ def sketch_create_gui(doc_name, sketch_name, body_name, attach_to):
             return error
 
         if attach_to:
-            attach_error = apply_create_attach_to(sketch, doc, attach_to)
+            attach_error = apply_create_attach_to(
+                sketch, doc, attach_to, freecad=freecad
+            )
             if attach_error:
                 return attach_error
 
         doc.recompute()
-        FreeCAD.Console.PrintMessage(
+        freecad.Console.PrintMessage(
             f"Sketch '{sketch_name}' created in '{doc_name}'.\n"
         )
         return True
@@ -33,9 +32,18 @@ def sketch_create_gui(doc_name, sketch_name, body_name, attach_to):
         return str(e)
 
 
-def sketch_attach_gui(doc_name, sketch_name, support, attachment_offset=None):
+def sketch_attach_gui(
+    doc_name,
+    sketch_name,
+    support,
+    attachment_offset=None,
+    *,
+    freecad,
+    dict_to_placement,
+    placement_to_dict,
+):
     try:
-        doc = FreeCAD.getDocument(doc_name)
+        doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
         sketch = doc.getObject(sketch_name)
@@ -46,17 +54,29 @@ def sketch_attach_gui(doc_name, sketch_name, support, attachment_offset=None):
         if error:
             return error
 
-        offset_error = _apply_attachment_offset(sketch, sketch_name, attachment_offset)
+        offset_error = _apply_attachment_offset(
+            sketch,
+            sketch_name,
+            attachment_offset,
+            dict_to_placement=dict_to_placement,
+        )
         if offset_error:
             return offset_error
 
         doc.recompute()
-        return _sketch_attach_result(sketch, attached, attachment_offset)
+        return _sketch_attach_result(
+            sketch,
+            attached,
+            attachment_offset,
+            placement_to_dict=placement_to_dict,
+        )
     except Exception as e:
         return str(e)
 
 
-def _apply_attachment_offset(sketch, sketch_name, attachment_offset):
+def _apply_attachment_offset(
+    sketch, sketch_name, attachment_offset, *, dict_to_placement
+):
     if attachment_offset is None:
         return None
     if not hasattr(sketch, "AttachmentOffset"):
@@ -65,7 +85,7 @@ def _apply_attachment_offset(sketch, sketch_name, attachment_offset):
     return None
 
 
-def _sketch_attach_result(sketch, attached, attachment_offset):
+def _sketch_attach_result(sketch, attached, attachment_offset, *, placement_to_dict):
     result = {"success": True, "sketch": sketch.Name, "attached": attached}
     if attachment_offset is not None and hasattr(sketch, "AttachmentOffset"):
         result["attachment_offset"] = placement_to_dict(sketch.AttachmentOffset)

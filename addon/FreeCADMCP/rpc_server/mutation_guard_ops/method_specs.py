@@ -8,6 +8,7 @@ from typing import Any
 from .method_spec_constants import (
     FULL_VALIDATION_METHODS,
     LEASE_LIFETIME_IDEMPOTENCY_METHODS,
+    NATIVE_COMPATIBILITY_METHODS,
     NO_OUTER_TRANSACTION,
     PARTDESIGN_METHODS,
     PARTIAL_ROLLBACK_METHODS,
@@ -52,10 +53,16 @@ def make_method_spec(name: str, kind: str) -> RpcMethodSpec:
         name,
         mutation_kind,
         transaction=name not in NO_OUTER_TRANSACTION,
-        recompute=name in PARTDESIGN_METHODS,
+        recompute=(
+            name in PARTDESIGN_METHODS
+            and name not in NATIVE_COMPATIBILITY_METHODS
+        ),
         validator=(
             validate_document_invariants
-            if name in PARTDESIGN_METHODS
+            if (
+                name in PARTDESIGN_METHODS
+                and name not in NATIVE_COMPATIBILITY_METHODS
+            )
             else None
         ),
         may_rebind_document=name in REBIND_DOCUMENT_METHODS,
