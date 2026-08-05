@@ -1071,8 +1071,8 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | MCP authoring branch | `feature/dirty-document-adoption`; Phase 1 execution base `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
-| Execution parent revision | `2d2eeba5b04fd5543c5eafd7d55efc9a220a2016` |
-| Execution MCP base revision | `bd128c3eb3087d42ebf70024ce89813866aa852d` |
+| Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
+| Execution MCP base revision | `246d4991e6e8cc45cb0d6eecba5f1c16e2e864a4` |
 | Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phase 18; Phases 1–17 ran the Codex lane. Record the chosen lane in §11.3 before the first spawn of a phase; do not mix lanes inside a phase. |
 | Current stage / phase | **Stage 5 complete; Phase 18 complete** — see the newest §11.3 entry and §11.4 evidence |
 | Next phase | 19 — `refactor(mcp): pass a typed tool registration context` |
@@ -1111,9 +1111,11 @@ the bumped gitlink, both plan/progress updates, and the final gate evidence in �
 - **Nested half:** removed live MCP lease ownership, heartbeat, sidecar-correctness,
   observer, save/recovery, and credential-escrow authority; retained frozen decoder and
   deprecation shims only. Refreshed `post_collaboration_compatibility_surface.json` to
-  `verified_post_cutover` with live census totals (core_authority **76**, heartbeats **99**,
-  lease_observers **30**, locked_error_handoff_rotation **13**, mcp_save_recovery_authority
-  **174**, sidecar_correctness **714**); pruned deleted `core_authority_ops/*`, `guard.py`,
+  `verified_post_cutover` with retained-shim `authority_symbol_census` totals
+  (core_authority **76**, heartbeats **99**, lease_observers **30**,
+  locked_error_handoff_rotation **13**, mcp_save_recovery_authority **174**,
+  sidecar_correctness **714** — symbol counts in frozen deprecation shims, not live
+  authority); pruned deleted `core_authority_ops/*`, `guard.py`,
   `cas.py`, and tombstoned bootstrap paths from `temporary_authority_allowances[].current_paths`.
 - **Parent half:** removed `DocumentMutationAuthority`, `MutationCapability`, GUI takeover
   dialog, and Python ownership surfaces; preserved atomic-presentation guard and added native
