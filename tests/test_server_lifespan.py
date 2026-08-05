@@ -1,12 +1,13 @@
 import asyncio
+import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest import mock
 
 from freecad_mcp import server
-from freecad_mcp.lease_manager import LeaseClientManager, LeaseCredential
 from freecad_mcp.server_ops import manifest_auth
+from freecad_mcp.server_ops.heartbeat import lease_heartbeat_once
 
 
 class ServerLifespanTest(unittest.TestCase):
@@ -50,18 +51,9 @@ class ServerLifespanTest(unittest.TestCase):
 
     def test_shutdown_disconnects_existing_connection(self):
         connection = mock.Mock()
+        connection._identity_lock = threading.RLock()
         self.state.freecad_connection = connection
-        self.state.lease_manager = LeaseClientManager(session_token="rpc-session")
-        self.state.lease_manager.store(
-            LeaseCredential(
-                lease_id="lease-a",
-                document_session_uuid="doc-a",
-                generation=1,
-                token="lease-secret",
-            )
-        )
-        self.state.lease_tokens["legacy"] = "legacy-secret"
-        self.state.document_sessions["Doc"] = "doc-a"
+        self.state.rpc_session.mark_connected("rpc-session")
         self.state.rpc_session_id = "session-id"
         self.state.rpc_session_expires_at = "2099-01-01T00:00:00Z"
         self.state.authenticated_manifest = object()
@@ -74,9 +66,7 @@ class ServerLifespanTest(unittest.TestCase):
 
         connection.disconnect.assert_called_once_with()
         self.assertIsNone(server.state.freecad_connection)
-        self.assertTrue(server.state.lease_manager.redacted_status()["closed"])
-        self.assertEqual(server.state.lease_tokens, {})
-        self.assertEqual(server.state.document_sessions, {})
+        self.assertFalse(server.state.rpc_session.connected)
         self.assertIsNone(server.state.rpc_session_id)
         self.assertIsNone(server.state.rpc_session_expires_at)
         self.assertIsNone(server.state.authenticated_manifest)
@@ -85,8 +75,9 @@ class ServerLifespanTest(unittest.TestCase):
         self,
     ):
         connection = mock.Mock()
+        connection._identity_lock = threading.RLock()
         connection.ping.return_value = False
-        self.state.lease_manager = LeaseClientManager(session_token="old-session")
+        self.state.rpc_session.mark_connected("old-session")
 
         with (
             mock.patch.object(server, "FreeCADConnection", return_value=connection),
@@ -96,26 +87,24 @@ class ServerLifespanTest(unittest.TestCase):
 
         connection.disconnect.assert_called_once_with()
         self.assertIsNone(server.state.freecad_connection)
-        self.assertFalse(server.state.lease_manager.connected)
+        self.assertFalse(server.state.rpc_session.connected)
 
     def test_shutdown_clears_sensitive_state_even_when_transport_close_fails(self):
         connection = mock.Mock()
-        connection.disconnect.side_effect = RuntimeError("remote echoed legacy-secret")
+        connection.disconnect.side_effect = RuntimeError("remote echoed auth-secret")
         self.state.freecad_connection = connection
-        self.state.lease_tokens["legacy"] = "legacy-secret"
-        self.state.document_sessions["Doc"] = "doc-a"
+        self.state.rpc_session.mark_connected("auth-secret")
 
         async def run_lifespan():
             with mock.patch.object(server.logger, "warning") as warning:
                 async with server.server_lifespan(object()):
                     pass
-                self.assertNotIn("legacy-secret", repr(warning.call_args_list))
+                self.assertNotIn("auth-secret", repr(warning.call_args_list))
 
         asyncio.run(run_lifespan())
 
         self.assertIsNone(self.state.freecad_connection)
-        self.assertEqual(self.state.lease_tokens, {})
-        self.assertEqual(self.state.document_sessions, {})
+        self.assertFalse(self.state.rpc_session.connected)
 
     def test_session_refresh_margin_is_fail_closed(self):
         now = datetime.now(UTC)
@@ -128,7 +117,7 @@ class ServerLifespanTest(unittest.TestCase):
         self.state.rpc_session_expires_at = "not-a-timestamp"
         self.assertTrue(server._session_needs_refresh())
 
-    def test_authenticated_session_refresh_preserves_held_lease_credentials(self):
+    def test_authenticated_session_refresh_replaces_authentication_only(self):
         expiry = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
         manifest = SimpleNamespace(auth_secret_file="profile.auth")
         verified = SimpleNamespace(
@@ -138,16 +127,10 @@ class ServerLifespanTest(unittest.TestCase):
             manifest=SimpleNamespace(addon_runtime_id="addon-runtime"),
         )
         connection = mock.Mock()
+        connection._identity_lock = threading.RLock()
         connection.invoke_rpc.return_value = {"signed": "response"}
         self.state.instance_manifest = manifest
-        self.state.lease_manager = LeaseClientManager(session_token="old-session")
-        credential = LeaseCredential(
-            lease_id="lease-a",
-            document_session_uuid="doc-a",
-            generation=3,
-            token="lease-secret",
-        )
-        self.state.lease_manager.store(credential)
+        self.state.rpc_session.mark_connected("old-session")
 
         with (
             mock.patch.object(
@@ -169,13 +152,9 @@ class ServerLifespanTest(unittest.TestCase):
         ):
             server._authenticate_connection(connection, force=True)
 
-        self.assertTrue(self.state.lease_manager.connected)
-        self.assertIs(
-            self.state.lease_manager.get(document_session_uuid="doc-a"), credential
-        )
+        self.assertTrue(self.state.rpc_session.connected)
         self.assertEqual(self.state.rpc_session_id, "new-session-id")
         self.assertEqual(self.state.rpc_session_expires_at, expiry)
-        connection.configure_lease_routing.assert_called_once()
         connection.configure_session_refresher.assert_called_once()
 
     def test_session_refresh_reloads_launcher_authorized_runtime_manifest(self):
@@ -207,6 +186,7 @@ class ServerLifespanTest(unittest.TestCase):
             manifest=SimpleNamespace(addon_runtime_id="runtime-new"),
         )
         connection = mock.Mock()
+        connection._identity_lock = threading.RLock()
         connection.invoke_rpc.return_value = {"signed": "response"}
         self.state.instance_manifest = original
         self.state.instance_manifest_path = manifest_path
@@ -285,39 +265,8 @@ class ServerLifespanTest(unittest.TestCase):
         load_secret.assert_not_called()
         self.assertIs(self.state.instance_manifest, baseline)
 
-    def test_heartbeat_failure_logs_only_bounded_code_not_remote_secrets(self):
-        manager = LeaseClientManager(session_token="rpc-session-secret")
-        manager.store(
-            LeaseCredential(
-                lease_id="lease-a",
-                document_session_uuid="doc-a",
-                generation=1,
-                token="lease-secret",
-            )
-        )
-        connection = mock.Mock()
-        connection.heartbeat_document_locks_batch.return_value = {
-            "ok": False,
-            "error": {
-                "code": "DENIED",
-                "message": "rpc-session-secret lease-secret",
-            },
-        }
-        self.state.lease_manager = manager
-        self.state.freecad_connection = connection
-
-        with mock.patch.object(server.logger, "warning") as warning:
-            successful = asyncio.run(server._lease_heartbeat_once())
-
-        self.assertFalse(successful)
-        self.assertNotIn("rpc-session-secret", repr(warning.call_args_list))
-        self.assertNotIn("lease-secret", repr(warning.call_args_list))
-        warning.assert_called_once_with(
-            "Lease heartbeat batch failed (code=%s)", "DENIED"
-        )
-        payload, context = connection.heartbeat_document_locks_batch.call_args.args
-        self.assertEqual(payload["leases"][0]["token"], "lease-secret")
-        self.assertEqual(context.lease_credentials, ())
+    def test_removed_heartbeat_is_inert(self):
+        self.assertFalse(asyncio.run(lease_heartbeat_once()))
 
     def test_asset_creation_strategy_prompt_loads_resource(self):
         prompt = server.asset_creation_strategy()

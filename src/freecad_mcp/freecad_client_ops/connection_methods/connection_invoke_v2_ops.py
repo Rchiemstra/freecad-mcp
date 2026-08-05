@@ -7,9 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
-from ...lease_manager import (
-    RpcRequestContext,
-)
+from ...rpc_session import RpcAuthenticationContext
 from .connection_invoke_v2_helpers import (
     _SESSION_EXPIRED_CODES,
     invoke_v2_execution_category,
@@ -28,12 +26,22 @@ def invoke_v2(
     conn,
     method: str,
     params: Mapping[str, Any] | None,
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
     *,
     control: bool = False,
     timeout: float | None = None,
 ) -> dict[str, Any]:
     """Send one immutable v2 envelope without shared credential headers."""
+
+    if not isinstance(context, RpcAuthenticationContext):
+        session = conn._v2_auth_session()
+        if session is None:
+            raise TypeError("context must be an RpcAuthenticationContext")
+        context = session.build_request_context(
+            operation_name=str(getattr(context, "operation_name", "") or ""),
+            task_id=str(getattr(context, "task_id", "") or ""),
+            request_id=str(getattr(context, "request_id", "") or "") or None,
+        )
 
     category = invoke_v2_execution_category(method, params)
     task_context_id = invoke_v2_prepare_telemetry(
@@ -65,13 +73,6 @@ def invoke_v2(
             control=control,
             timeout=timeout,
         )
-    stale_retry = conn._handle_stale_rpc_refusal(
-        response if isinstance(response, Mapping) else {},
-        method=method,
-        context=context,
-    )
-    if stale_retry is not None:
-        return stale_retry
     if isinstance(response, Mapping):
         invoke_v2_update_runtime_links(
             response,

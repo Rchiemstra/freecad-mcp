@@ -1,14 +1,13 @@
-"""Pure data model for version-2 per-document leases.
+"""Pure, read-only decoders for historic version-2 lease records.
 
-This module deliberately has no FreeCAD or Qt dependency.  It owns the wire
-shape and transition rules, while :mod:`service` is the only component that
-commits transitions for live leases.
+This compatibility module deliberately has no FreeCAD or Qt dependency.  It
+retains the retired wire shape, but exposes no transition or revision authority.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from types import MappingProxyType as _MappingProxyType
 from typing import Any
 from typing import Self as _Self
@@ -42,7 +41,6 @@ from .types.token_utils import (  # noqa: F401
 from .types.transitions import (  # noqa: F401
     ALLOWED_TRANSITIONS,
     TERMINAL_STATES,
-    validate_transition,
 )
 
 _HISTORIC_REDACTED_FIELD_NAMES = frozenset(
@@ -198,8 +196,14 @@ def decode_historic_lease_record(data: Mapping[str, Any]) -> HistoricLeaseRecord
     return record
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LeaseRecord:
+    """Read-only compatibility projection of a validated schema-v2 record.
+
+    The class remains importable for historic callers and byte decoding.  It
+    cannot revise or transition the retired lease state machine.
+    """
+
     lease_id: str
     generation: int
     token_fingerprint: str
@@ -236,10 +240,10 @@ class LeaseRecord:
     def to_sidecar_dict(
         self, *, include_task_summary: bool = False
     ) -> dict[str, Any]:
-        """Serialize persistent authority with privacy-safe diagnostics.
+        """Return the historic wire representation with privacy-safe diagnostics.
 
-        A task summary is omitted unless the caller is the configured sidecar
-        store and explicitly opts in.  The in-memory record is never modified.
+        A task summary is omitted unless an explicit compatibility decoder caller
+        requests it.  The frozen record is never modified.
         """
 
         return {
@@ -279,18 +283,16 @@ class LeaseRecord:
         }
 
     def to_public_dict(self) -> dict[str, Any]:
-        """Return status metadata with both raw token and digest omitted."""
+        """Return historic data without credentials or diagnostic contents."""
 
-        payload = self.to_sidecar_dict()
-        payload.pop("token_fingerprint", None)
-        # Public status is sourced from the process-local registry. Keep its
-        # already-bounded task metadata useful without coupling it to the
-        # separate, opt-in persistence policy.
-        payload["lease"]["task_summary"] = self.task_summary
-        return payload
+        return _redact_historic_public_value(
+            self.to_sidecar_dict(include_task_summary=True)
+        )
 
     @classmethod
     def from_sidecar_dict(cls, data: Mapping[str, Any]) -> LeaseRecord:
+        """Decode a validated historic mapping into a frozen compatibility value."""
+
         lease = data["lease"]
         document_state = data["document_state"]
         return cls(
@@ -320,20 +322,3 @@ class LeaseRecord:
             validation_complete=document_state["validation_complete"],
             snapshot_id=document_state["snapshot_id"],
         )
-
-    def transitioned(self, target: LeaseState, **changes: Any) -> LeaseRecord:
-        """Return a revisioned successor after validating the state edge."""
-
-        validate_transition(self.state, target)
-        return replace(
-            self,
-            state=target,
-            state_revision=self.state_revision + 1,
-            record_revision=self.record_revision + 1,
-            **changes,
-        )
-
-    def revised(self, **changes: Any) -> LeaseRecord:
-        """Return a non-state metadata revision."""
-
-        return replace(self, record_revision=self.record_revision + 1, **changes)

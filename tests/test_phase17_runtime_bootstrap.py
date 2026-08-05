@@ -61,8 +61,6 @@ def test_runtime_disposal_unsubscribes_bridge_in_reverse_construction_order():
         authentication_required=False,
         request_replay_cache=object(),
         inflight_requests=object(),
-        handoff_continuations=object(),
-        acquisition_claims=object(),
     )
 
     assert warning == ""
@@ -87,8 +85,6 @@ def test_disposed_runtime_tombstone_retains_only_restart_replay_state():
         session_manager=object(),
         request_replay_cache=replay_cache,
         inflight_requests=object(),
-        handoff_continuations=object(),
-        acquisition_claims=object(),
         collaboration_bridge=object(),
         shutdown_requested=shutdown_requested,
     )
@@ -113,8 +109,6 @@ def test_disposed_runtime_tombstone_retains_only_restart_replay_state():
         "worker_manager",
         "session_manager",
         "inflight_requests",
-        "handoff_continuations",
-        "acquisition_claims",
         "collaboration_bridge",
         "listener_thread",
         "runtime_manifest",
@@ -154,8 +148,6 @@ def test_disposal_failure_clears_auth_metadata_and_successful_resources():
         authentication_required=True,
         request_replay_cache=replay,
         inflight_requests=object(),
-        handoff_continuations=object(),
-        acquisition_claims=object(),
     )
     runtime.bind_publication(
         listener_thread=object(),
@@ -176,8 +168,6 @@ def test_disposal_failure_clears_auth_metadata_and_successful_resources():
         "worker_manager",
         "session_manager",
         "inflight_requests",
-        "handoff_continuations",
-        "acquisition_claims",
         "collaboration_bridge",
         "listener_thread",
         "runtime_manifest",
@@ -215,8 +205,6 @@ def _published_runtime(
         session_manager=session_manager,
         request_replay_cache=object(),
         inflight_requests=inflight_requests,
-        handoff_continuations=rpc_server.rpc_handoff_continuation_store,
-        acquisition_claims=rpc_server.rpc_acquisition_claim_store,
         collaboration_bridge=bridge,
         listener_thread=listener_thread,
         runtime_manifest=None,
@@ -235,8 +223,6 @@ def _published_runtime(
         runtime.worker_manager = None
         runtime.session_manager = None
         runtime.inflight_requests = None
-        runtime.handoff_continuations = None
-        runtime.acquisition_claims = None
         runtime.collaboration_bridge = None
 
     runtime.dispose = dispose_runtime
@@ -392,8 +378,6 @@ def test_shutdown_quiesces_workers_before_listener_disposal(monkeypatch):
         authentication_required=False,
         request_replay_cache=object(),
         inflight_requests=SimpleNamespace(request_cancel_all=lambda: ()),
-        handoff_continuations=object(),
-        acquisition_claims=object(),
     )
     monkeypatch.setattr(rpc_server, "_runtime_lifecycle_lock", threading.RLock())
     monkeypatch.setattr(rpc_server, "_runtime_shutdown_claim", None)
@@ -450,7 +434,6 @@ def test_bridge_disposal_drops_authentication_without_native_authority_changes()
         execution_collaborators=execution,
     )
     native_api = facade._collaboration_collaborators.compatibility_api
-    document_lease_service = facade._collaboration_collaborators.document_lease_service
     manifest = object()
     session_manager = object()
     endpoint = {"host": "127.0.0.1", "port": 9875}
@@ -471,9 +454,9 @@ def test_bridge_disposal_drops_authentication_without_native_authority_changes()
     assert facade._execution_collaborators.actual_endpoint is None
     assert facade._execution_collaborators.server_started_at == ""
     assert facade._collaboration_collaborators.compatibility_api is native_api
-    assert (
-        facade._collaboration_collaborators.document_lease_service
-        is document_lease_service
+    assert not hasattr(
+        facade._collaboration_collaborators,
+        "document_lease_service",
     )
 
 
@@ -596,65 +579,15 @@ def test_original_lifecycle_modules_remain_call_compatible(monkeypatch):
     assert observed == [("start", 4321), ("stop", None)]
 
 
-def test_original_lease_runtime_path_uses_exact_root_state(monkeypatch):
-    from addon.FreeCADMCP.rpc_server import lease_runtime
-
-    identity_service = object()
-    lease_service = object()
-    save_service = object()
-    monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
-    monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
-    monkeypatch.setattr(rpc_server, "save_service", save_service)
-    observed = {}
-
-    def initialize(settings, *, dependencies):
-        observed["dependencies"] = dependencies
-        observed["settings"] = settings
-        return lease_service
-
-    monkeypatch.setattr(
-        rpc_server,
-        "_initialize_document_lease_runtime_impl",
-        initialize,
-    )
-
-    result = lease_runtime.initialize_document_lease_runtime({"mode": "observe"})
-
-    assert result is lease_service
-    assert observed["settings"] == {"mode": "observe"}
-    assert observed["dependencies"].document_identity_service is identity_service
-    assert observed["dependencies"].document_lease_service is lease_service
-    assert observed["dependencies"].save_service is save_service
-
-
-def test_watchdog_snapshot_reads_upgraded_root_lease_service(monkeypatch):
-    from addon.FreeCADMCP.rpc_server.lease_runtime_ops.watchdog import (
-        lease_watchdog_loop,
-    )
-
-    calls = []
-    retired_service = SimpleNamespace(
-        mark_expired_stale=lambda: pytest.fail("retired service must not be polled")
-    )
-    upgraded_service = SimpleNamespace(
-        mark_expired_stale=lambda: calls.append("upgraded:poll") or []
-    )
-    monkeypatch.setattr(rpc_server, "document_lease_service", retired_service)
-    dependencies = rpc_server._lease_runtime_dependencies()
-    monkeypatch.setattr(rpc_server, "document_lease_service", upgraded_service)
-
-    class _OnePoll:
-        calls = 0
-
-        def wait(self, _interval):
-            self.calls += 1
-            return self.calls > 1
-
-    lease_watchdog_loop(0.0, _OnePoll(), rpc_mod=dependencies)
-
-    assert dependencies.document_lease_service is retired_service
-    assert dependencies._current_document_lease_service() is upgraded_service
-    assert calls == ["upgraded:poll"]
+def test_runtime_root_does_not_publish_retired_document_authority() -> None:
+    for name in (
+        "document_identity_service",
+        "document_lease_service",
+        "initialize_document_lease_runtime",
+        "lease_watchdog_thread",
+        "save_service",
+    ):
+        assert not hasattr(rpc_server, name)
 
 
 def test_manual_start_stop_commands_use_exact_injected_root_callbacks():
@@ -674,7 +607,7 @@ def test_manual_start_stop_commands_use_exact_injected_root_callbacks():
         freecad=SimpleNamespace(
             Console=SimpleNamespace(PrintMessage=messages.append)
         ),
-        load_settings=lambda: {},
+        load_settings=dict,
         save_settings=lambda _settings: None,
         start_rpc_server=lambda: calls.append("start") or "started",
         stop_rpc_server=lambda: calls.append("stop") or "stopped",

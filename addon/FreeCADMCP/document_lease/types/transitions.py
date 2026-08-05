@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType as _MappingProxyType
 
-from .invalid_transition_error import InvalidTransitionError
 from .lease_state import LeaseState
 
 TERMINAL_STATES = frozenset(
@@ -11,8 +10,8 @@ TERMINAL_STATES = frozenset(
 )
 
 
-# The transition table is intentionally explicit.  Recovery paths are present,
-# but no heartbeat or client-supplied state is involved in choosing one.
+# Frozen schema-v2 transition metadata retained for historic interpretation.
+# No function in this module validates or performs a transition.
 ALLOWED_TRANSITIONS: Mapping[LeaseState, frozenset[LeaseState]] = _MappingProxyType({
     LeaseState.ACQUIRING: frozenset(
         {LeaseState.LOCKED_IDLE, LeaseState.LOCKED_ERROR, LeaseState.STALE}
@@ -103,10 +102,3 @@ ALLOWED_TRANSITIONS: Mapping[LeaseState, frozenset[LeaseState]] = _MappingProxyT
         }
     ),
 })
-
-
-def validate_transition(current: LeaseState, target: LeaseState) -> None:
-    """Raise when *target* is not an explicit successor of *current*."""
-
-    if target not in ALLOWED_TRANSITIONS[current]:
-        raise InvalidTransitionError(current, target)

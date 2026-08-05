@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import contextlib
 import threading
-import uuid
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from .constants import _LOCAL_SAVE_GUI_TIMEOUT
 from .facade_bindings import facade_callable
 from .lease_view import _lease_view
-from .local_restore_gui import _run_restore_gui_phase
 from .runtime_bindings import current_runtime_bindings
+
+_LEGACY_MESSAGE = (
+    "Document authority is owned by native FreeCAD collaboration."
+)
+
+
+def _legacy_lease_authority_removed() -> dict[str, object]:
+    return {
+        "success": False,
+        "ok": False,
+        "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
+        "error": _LEGACY_MESSAGE,
+    }
 
 
 def _runtime_restore_components() -> tuple[Any, Any, Any, Any]:
@@ -76,44 +86,18 @@ def _restore_local_baseline(
     snapshot_restorer: Any | None = None,
     document_validator: Any | None = None,
 ) -> Mapping[str, Any]:
-    """Restore one opaque baseline snapshot without closing the leased proxy."""
+    """Return the frozen result for retired baseline-restore authority."""
 
-    session_uuid, current_view, snapshot_id = _validate_restore_prerequisites(
-        lease, service
+    del (
+        lease,
+        service,
+        document,
+        gui_dispatcher,
+        snapshot_path_resolver,
+        snapshot_restorer,
+        document_validator,
     )
-
-    if gui_dispatcher is None:
-        (
-            gui_dispatcher,
-            snapshot_path_resolver,
-            snapshot_restorer,
-            document_validator,
-        ) = _runtime_restore_components()
-    if not callable(snapshot_path_resolver) or not callable(snapshot_restorer):
-        raise RuntimeError("lease baseline snapshot restore is unavailable")
-    if not callable(document_validator):
-        raise RuntimeError("snapshot post-restore validation is unavailable")
-    if not callable(getattr(gui_dispatcher, "submit", None)):
-        raise RuntimeError("the FreeCAD GUI dispatcher is not running")
-
-    def restore_gui() -> Mapping[str, Any]:
-        return _run_restore_gui_phase(
-            service=service,
-            document=document,
-            session_uuid=session_uuid,
-            current_view=current_view,
-            snapshot_id=snapshot_id,
-            snapshot_path_resolver=snapshot_path_resolver,
-            snapshot_restorer=snapshot_restorer,
-            document_validator=document_validator,
-        )
-
-    submit = gui_dispatcher.submit
-    return submit(
-        restore_gui,
-        timeout=_LOCAL_SAVE_GUI_TIMEOUT,
-        request_id=f"local-restore-{uuid.uuid4()}",
-    )
+    return _legacy_lease_authority_removed()
 
 
 def _start_local_baseline_restore_async(

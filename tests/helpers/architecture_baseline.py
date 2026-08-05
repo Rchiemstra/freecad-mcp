@@ -250,28 +250,22 @@ def local_import_locator_census() -> list[dict[str, Any]]:
                 ) and (function, target) in {
                     ("Initialize", "rpc_server.rpc_server"),
                     ("_auto_start_mcp", "rpc_server.rpc_server"),
-                    ("_initialize_document_lease_runtime", "rpc_server.rpc_server"),
-                    ("_register_document_lease_observer", "rpc_server.rpc_server"),
-                    ("_register_document_lease_observer", "document_lock"),
-                    ("_register_document_lock", "document_lock"),
+                    (
+                        "_initialize_rpc_runtime_shutdown",
+                        "rpc_server.rpc_server",
+                    ),
                 }
                 is_static_compatibility_binding = function == "<module>" and (
-                    (
-                        path_text.endswith("/document_lease/__init__.py")
-                        and target == ".core_authority"
+                    path_text.endswith(
+                        "/rpc_server/lease_runtime_ops/imports.py"
                     )
-                    or (
-                        path_text.endswith(
-                            "/rpc_server/lease_runtime_ops/imports.py"
-                        )
-                        and target
-                        in {
-                            "addon.FreeCADMCP.document_lease",
-                            "addon.FreeCADMCP.document_lock",
-                            "document_lease",
-                            "document_lock",
-                        }
-                    )
+                    and target
+                    in {
+                        "addon.FreeCADMCP.document_lease",
+                        "addon.FreeCADMCP.document_lock",
+                        "document_lease",
+                        "document_lock",
+                    }
                 )
                 is_static_authority_binding = (
                     path_text

@@ -1,5 +1,3 @@
-import os
-
 import FreeCAD
 
 try:
@@ -186,77 +184,7 @@ def _credential_for_selector(
 def _effective_sidecar_block(
     document, request_identity, *, dependencies: RpcHelperDependencies
 ):
-    """Block foreign/unknown sidecars while honoring a proven live v1 lease."""
+    """Frozen compatibility seam; native collaboration owns sidecar authority."""
 
-    path = str(getattr(document, "FileName", "") or "")
-    if not path:
-        return None
-    lease = dependencies.import_document_lease()
-    sidecar = lease.sidecar_path_for(path)
-    if not os.path.lexists(sidecar):
-        return None
-    store = (
-        dependencies.document_lease_service.sidecar_store
-        if dependencies.document_lease_service is not None
-        else lease.SidecarStore(strict_permissions=False, allow_network=True)
-    )
-    try:
-        persisted = store.read(sidecar)
-    except Exception as exc:
-        # A v1 sidecar remains unknown when found on disk by itself. During the
-        # documented off/observe migration window, however, the same addon
-        # process can prove the flat record against its private live registry,
-        # exact instance identity, bearer token, generation, and fingerprint.
-        # This does not parse or migrate v1 data into the v2 authority.
-        try:
-            dl = dependencies.import_document_lock()
-            doc_key = dl.resolve_doc_key(
-                doc_name=str(getattr(document, "Name", "") or "") or None,
-                file_path=path,
-            )
-            compatible = dl.check_persisted_mutation_allowed(
-                doc_key,
-                identity=request_identity,
-                allowed_states={
-                    dl.LeaseState.LOCKED_IDLE.value,
-                    dl.LeaseState.LOCKED_ERROR.value,
-                },
-            )
-            if compatible.get("success"):
-                return None
-        except Exception:
-            pass
-        return {
-            "success": False,
-            "error_code": "SIDECAR_UNKNOWN",
-            "error": (
-                "A document lease sidecar exists but cannot be validated; "
-                f"writes remain blocked: {str(exc)[:1024]}"
-            ),
-        }
-
-    if dependencies.document_lease_service is not None:
-        try:
-            identity = _ensure_v2_document(document, dependencies)
-            local = dependencies.document_lease_service.get(
-                {"document_session_uuid": identity.session_uuid}
-            )
-            if local is not None:
-                credential, _identity = _credential_for_document(
-                    document.Name,
-                    request_identity,
-                    dependencies=dependencies,
-                )
-                dependencies.document_lease_service.authorize(
-                    credential,
-                    selector={"document_session_uuid": identity.session_uuid},
-                )
-                return None
-        except Exception:
-            pass
-    return {
-        "success": False,
-        "error_code": "DOCUMENT_LEASE_CONFLICT",
-        "error": "A v2 document lease owns this file; this request is read-only",
-        "lease": persisted.to_public_dict(),
-    }
+    del document, request_identity, dependencies
+    return None

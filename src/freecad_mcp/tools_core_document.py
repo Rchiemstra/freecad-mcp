@@ -45,12 +45,7 @@ def _register_create_document(
             }
             ```
         """
-        return create_document_operation(
-            server_connection(),
-            name,
-            lease_manager=server_state().lease_manager,
-            document_sessions=server_state().document_sessions,
-        )
+        return create_document_operation(server_connection(), name)
 
     exports['create_document'] = create_document
 def _register_create_object(

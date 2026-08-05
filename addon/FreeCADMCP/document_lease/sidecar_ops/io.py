@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
-import os
 import stat
-import tempfile
 from pathlib import Path
 
 from .. import sidecar as sidecar_mod
@@ -15,7 +12,7 @@ from ..sidecar_types.sidecar_malformed_error import SidecarMalformedError
 from ..sidecar_types.sidecar_not_found_error import SidecarNotFoundError
 from ..sidecar_types.sidecar_permission_error import SidecarPermissionError
 from .codec import parse_sidecar_bytes
-from .permissions import assert_windows_owner_only, harden_permissions
+from .permissions import assert_windows_owner_only
 
 
 def assert_regular_not_symlink(
@@ -64,24 +61,8 @@ def read_record(
 def write_temp(
     path: Path, payload: bytes, *, strict_permissions: bool
 ) -> Path:
-    try:
-        fd, temp_name = tempfile.mkstemp(
-            prefix=path.name + ".", suffix=".tmp", dir=path.parent
-        )
-    except OSError as exc:
-        raise SidecarError(f"unable to create a sidecar temporary file: {exc}") from exc
-    temp_path = Path(temp_name)
-    try:
-        harden_permissions(temp_path, strict=strict_permissions)
-        with os.fdopen(fd, "wb") as handle:
-            fd = -1
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        return temp_path
-    except Exception:
-        if fd >= 0:
-            os.close(fd)
-        with contextlib.suppress(OSError):
-            temp_path.unlink()
-        raise
+    del path, payload, strict_permissions
+    raise SidecarError(
+        "LEGACY_LEASE_AUTHORITY_REMOVED: Document authority is owned by native "
+        "FreeCAD collaboration."
+    )

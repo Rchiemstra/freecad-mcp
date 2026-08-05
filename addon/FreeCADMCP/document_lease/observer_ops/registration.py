@@ -126,12 +126,13 @@ def take_over_selected_document(
     notification_queue: NotificationQueue | None = None,
     reason: str = "Local user selected Take Over",
 ) -> Any | None:
-    """Fence the active document for a confirmed local GUI takeover action."""
+    """Return without exercising the retired GUI takeover authority."""
 
-    observer = LeaseObserver(
-        service_provider=service_provider,
-        selected_document_provider=selected_document_provider,
-        notification_callback=notification_callback,
-        notification_queue=notification_queue,
+    del (
+        service_provider,
+        selected_document_provider,
+        notification_callback,
+        notification_queue,
+        reason,
     )
-    return observer.take_over_selected_document(reason=reason)
+    return None

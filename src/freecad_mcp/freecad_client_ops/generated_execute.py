@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from ..lease_manager import RpcRequestContext
+from ..rpc_session import RpcAuthenticationContext
 
 
 def _generated_execute_signature(
@@ -45,7 +45,7 @@ def _generated_execute_signature(
 def _sign_generated_execute_params(
     method: str,
     params: Mapping[str, Any] | None,
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
 ) -> Mapping[str, Any] | None:
     if method != "execute_code" or not isinstance(params, Mapping):
         return params

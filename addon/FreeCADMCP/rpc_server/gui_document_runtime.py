@@ -81,13 +81,7 @@ def open_document(freecad, gui_module, path):
     return result
 
 
-def _reload_preflight(
-    freecad,
-    identity_service,
-    lease_service,
-    compare_baseline,
-    document_name,
-):
+def _reload_preflight(freecad, document_name):
     if document_name not in freecad.listDocuments():
         return f"Document '{document_name}' is not loaded.", None, None
     document = freecad.getDocument(document_name)
@@ -104,37 +98,15 @@ def _reload_preflight(
     if not os.path.exists(file_path):
         return f"File for '{document_name}' not found at {file_path!r}.", None, None
 
-    identity = None
-    if lease_service is not None:
-        identity = identity_service.resolve({"document_name": document_name})
-        status = lease_service.get({"document_session_uuid": identity.session_uuid})
-        if status is not None:
-            baseline_data = status.get("document_state", {}).get("baseline")
-            if baseline_data is None:
-                return "Reload requires a verified saved baseline.", None, None
-            compare_baseline(
-                file_path,
-                baseline_data,
-                platform=identity_service.platform,
-            )
-    return None, file_path, identity
+    return None, file_path, None
 
 
 def reload_document(
     freecad,
     gui_module,
-    identity_service,
-    lease_service,
-    compare_baseline,
     document_name,
 ):
-    error, file_path, identity = _reload_preflight(
-        freecad,
-        identity_service,
-        lease_service,
-        compare_baseline,
-        document_name,
-    )
+    error, file_path, _identity = _reload_preflight(freecad, document_name)
     if error is not None:
         return error
 
@@ -146,10 +118,6 @@ def reload_document(
         reopened = freecad.openDocument(file_path)
         if reopened is None:
             result = f"FreeCAD did not reopen '{file_path}'."
-        elif identity is not None:
-            rebound = identity_service.rebind_document(identity.session_uuid, reopened)
-            if rebound.comparison_key != identity.comparison_key:
-                result = "Reload rebound the document to an unexpected file."
         if result is None:
             with suppress(Exception):
                 freecad.Console.PrintMessage(

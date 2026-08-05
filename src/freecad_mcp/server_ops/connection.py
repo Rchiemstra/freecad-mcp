@@ -33,7 +33,7 @@ def get_freecad_connection() -> FreeCADConnection:
             if surfaces.state.instance_manifest is not None:
                 surfaces.authenticate_connection(conn, force=True)
         except Exception:
-            surfaces.state.lease_manager.mark_disconnected(
+            surfaces.state.rpc_session.mark_disconnected(
                 "FreeCAD connection initialization failed"
             )
             conn.disconnect()

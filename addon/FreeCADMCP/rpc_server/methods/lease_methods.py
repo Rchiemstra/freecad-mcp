@@ -1,33 +1,210 @@
-"""Document-lease RPC methods bound on ``FreeCADRPC``."""
+"""Frozen compatibility RPCs for the removed MCP document authority.
 
-from .lease_methods_ops.acquire import acquire_document_lock, adopt_dirty_document
-from .lease_methods_ops.acquire_v2 import acquire_document_lock_v2
-from .lease_methods_ops.acquisition_claims import (
-    acknowledge_acquisition_claim,
-    claim_acquisition_result,
-)
-from .lease_methods_ops.handoff import (
-    escrow_locked_error_handoff_claim,
-    journal_handoff_terminal,
-    run_locked_error_handoff_continuation,
-    start_locked_error_handoff_continuation,
-)
-from .lease_methods_ops.heartbeat import lease_heartbeat_batch
-from .lease_methods_ops.lock_query import (
-    get_document_lock,
-    heartbeat_document_lock,
-    list_document_locks,
-    update_document_lock,
-)
-from .lease_methods_ops.reconcile import lease_reconcile
-from .lease_methods_ops.release import force_release_stale_lock, release_document_lock
-from .lease_methods_ops.save_legacy import run_legacy_save
-from .lease_methods_ops.save_public import (
-    finalize_document_edit,
-    save_document,
-    save_document_as,
-)
-from .lease_methods_ops.save_typed import run_typed_save
+Native FreeCAD collaboration owns document authority after the collaboration
+cutover.  These callables intentionally retain the legacy parameter surface so
+older clients receive one deterministic deprecation result instead of an
+unknown-method transport error.
+"""
+
+from typing import Any
+
+
+def _legacy_lease_authority_removed() -> dict[str, Any]:
+    """Return a fresh result for a removed legacy authority operation."""
+
+    return {
+        "success": False,
+        "ok": False,
+        "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
+        "error": "Document authority is owned by native FreeCAD collaboration.",
+    }
+
+
+def acknowledge_acquisition_claim(self, request_id):
+    return _legacy_lease_authority_removed()
+
+
+def acquire_document_lock(
+    self,
+    doc_name: str = "",
+    file_path: str = "",
+    session_id: str = "",
+    task_description: str = "",
+    client: str = "",
+    selector: dict[str, Any] | None = None,
+    agent_id: str = "",
+    hash_policy: str = "sha256",
+) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def acquire_document_lock_v2(
+    self,
+    requested_selector,
+    *,
+    request_identity,
+    task_description,
+    client,
+    agent_id,
+    hash_policy,
+    adopt_dirty=False,
+):
+    return _legacy_lease_authority_removed()
+
+
+def adopt_dirty_document(
+    self,
+    selector: dict[str, Any] | None = None,
+    task_description: str = "",
+    client: str = "",
+    agent_id: str = "",
+    hash_policy: str = "sha256",
+) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def claim_acquisition_result(self, request_id):
+    return _legacy_lease_authority_removed()
+
+
+def escrow_locked_error_handoff_claim(
+    self,
+    *,
+    mcp_runtime_id,
+    request_id,
+    claimed,
+):
+    return _legacy_lease_authority_removed()
+
+
+def finalize_document_edit(
+    self,
+    selector,
+    save_mode="save",
+    destination="",
+    overwrite=False,
+    expected_destination_sha256="",
+    validation_profile="default",
+):
+    return _legacy_lease_authority_removed()
+
+
+def force_release_stale_lock(self, doc_key: str) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def get_document_lock(
+    self,
+    doc_name: str = "",
+    file_path: str = "",
+    session_id: str = "",
+    selector: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def heartbeat_document_lock(
+    self,
+    doc_key: str,
+    token: str,
+    current_operation: str = "",
+    state: str = "",
+    document_dirty: bool | None = None,
+) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def journal_handoff_terminal(self, *, mcp_runtime_id, request_id, response):
+    return _legacy_lease_authority_removed()
+
+
+def lease_heartbeat_batch(self, leases, client_monotonic_ns=""):
+    return _legacy_lease_authority_removed()
+
+
+def lease_reconcile(self, credential):
+    return _legacy_lease_authority_removed()
+
+
+def list_document_locks(self) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def release_document_lock(
+    self,
+    doc_key: str = "",
+    token: str = "",
+    selector: dict[str, Any] | None = None,
+    disposition: str = "saved",
+) -> dict[str, Any]:
+    return _legacy_lease_authority_removed()
+
+
+def run_legacy_save(self, selector, *, validation_profile="default"):
+    return _legacy_lease_authority_removed()
+
+
+def run_locked_error_handoff_continuation(
+    self,
+    *,
+    request_id,
+    mcp_runtime_id,
+    requested_selector,
+    task_description,
+    phase,
+):
+    return _legacy_lease_authority_removed()
+
+
+def run_typed_save(
+    self,
+    selector,
+    *,
+    mode,
+    destination="",
+    overwrite=False,
+    expected_destination_sha256="",
+    validation_profile="default",
+    release=False,
+):
+    return _legacy_lease_authority_removed()
+
+
+def save_document(self, selector, validation_profile="default"):
+    return _legacy_lease_authority_removed()
+
+
+def save_document_as(
+    self,
+    selector,
+    destination,
+    overwrite=False,
+    expected_destination_sha256="",
+    validation_profile="default",
+):
+    return _legacy_lease_authority_removed()
+
+
+def start_locked_error_handoff_continuation(
+    self,
+    *,
+    request_id,
+    mcp_runtime_id,
+    requested_selector,
+    task_description,
+    phase,
+):
+    return _legacy_lease_authority_removed()
+
+
+def update_document_lock(
+    self,
+    selector,
+    task_description="",
+    progress_detail="",
+):
+    return _legacy_lease_authority_removed()
+
 
 __all__ = [
     "acknowledge_acquisition_claim",
@@ -53,4 +230,3 @@ __all__ = [
     "start_locked_error_handoff_continuation",
     "update_document_lock",
 ]
-

@@ -15,7 +15,7 @@ def initialize_rpc_v2_session(
     *,
     profile_id: str,
     auth_secret_file: str,
-    lease_mode: str,
+    authentication_mode: str,
     actual_host: str,
     actual_port: int,
 ) -> str:
@@ -25,7 +25,6 @@ def initialize_rpc_v2_session(
         return ""
     try:
         secret = rpc_mod.load_profile_secret(auth_secret_file)
-        lease_runtime = rpc_mod._require_authenticated_lease_runtime(profile_id)
         version_parts = list(rpc_mod._freecad_version_parts())
         freecad_version_text = ".".join(version_parts[:3]) or "unknown"
         freecad_revision = (
@@ -35,10 +34,10 @@ def initialize_rpc_v2_session(
         )
         rpc_mod.rpc_runtime_manifest = rpc_mod.make_runtime_manifest(
             profile_id=profile_id,
-            addon_runtime_id=lease_runtime.addon_runtime_id,
-            freecad_pid=lease_runtime.freecad_pid,
-            freecad_process_started_at=(lease_runtime.freecad_process_started_at),
-            boot_id=lease_runtime.boot_id,
+            addon_runtime_id=rpc_mod.rpc_server_runtime_id,
+            freecad_pid=rpc_mod.os.getpid(),
+            freecad_process_started_at=rpc_mod.rpc_server_started_at or None,
+            boot_id=rpc_mod._boot_identity(),
             rpc_host=str(actual_host),
             rpc_port=int(actual_port),
             freecad_version=freecad_version_text,
@@ -50,17 +49,14 @@ def initialize_rpc_v2_session(
         rpc_mod.rpc_session_manager = rpc_mod.SessionManager(
             manifest=rpc_mod.rpc_runtime_manifest, secret=secret
         )
-        rpc_mod.rpc_request_replay_cache.set_owner_lease_predicate(
-            rpc_mod.document_lease_service.has_unresolved_owner
-        )
         return ""
     except Exception as exc:
         logger.error("Could not initialize authenticated RPC v2: %s", exc)
-        if lease_mode == "enforce":
+        if authentication_mode == "enforce":
             abort_rpc_start(rpc_mod, close_listener=True)
-            return "RPC Server could not initialize authenticated lease protocol"
+            return "RPC Server could not initialize authenticated RPC protocol"
         return (
             " WARNING: authenticated RPC protocol v2 is unavailable; "
-            "check profile_instance_id, auth_secret_file, and trusted "
-            f"boot/process identity ({rpc_mod._redact_rpc_diagnostic(exc)})."
+            "check profile_instance_id and auth_secret_file "
+            f"({rpc_mod._redact_rpc_diagnostic(exc)})."
         )

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 # ruff: noqa: F403
 from ._support import *
-from .dispatch_gui_lease_enforced import run_enforced_lease_service_task
-from .dispatch_gui_lease_paths import run_legacy_lease_task, run_unenforced_lease_task
 
 
 def run_lease_aware_gui_task(
@@ -17,22 +15,15 @@ def run_lease_aware_gui_task(
     completion_lock,
     completion_handoff,
 ):
+    """Run the GUI task after transport cancellation revalidation.
+
+    The operation adapter itself owns the call into FreeCAD's native
+    compatibility-mutation boundary.  This dispatcher deliberately performs no
+    lease authorization, sidecar comparison, mutation-owner scoping, or dirty
+    state transition.
+    """
+
+    del self, collaborators, captured, context, completion_lock, completion_handoff
     if inflight is not None:
         inflight.token.checkpoint("gui_revalidation")
-    if captured["lease_enforced"] and collaborators.document_lease_service is not None:
-        return run_enforced_lease_service_task(
-            self,
-            collaborators,
-            original_task,
-            captured,
-            inflight,
-            completion_lock=completion_lock,
-            completion_handoff=completion_handoff,
-        )
-
-    if not captured["lease_enforced"]:
-        return run_unenforced_lease_task(
-            self, collaborators, original_task, captured, inflight
-        )
-
-    return run_legacy_lease_task(self, collaborators, original_task, captured, inflight)
+    return original_task()

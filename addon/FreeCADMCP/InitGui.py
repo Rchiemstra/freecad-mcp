@@ -71,22 +71,19 @@ def _auto_start_mcp():
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
 
 
-_document_lease_runtime_shutdown_state = {"connected": False, "callback": None}
+_rpc_runtime_shutdown_state = {"connected": False, "callback": None}
 
 
 def _shutdown_mcp_runtime(rpc_server):
-    """Stop the adapter graph before ending process-lifetime lease services."""
+    """Stop the adapter graph without changing native document state."""
 
-    try:
-        rpc_server.stop_rpc_server(wait_for_completion=True)
-    finally:
-        rpc_server.shutdown_document_lease_runtime()
+    rpc_server.stop_rpc_server(wait_for_completion=True)
 
 
-def _connect_document_lease_runtime_shutdown(
+def _connect_rpc_runtime_shutdown(
     rpc_server,
     _qt_core=QtCore,
-    _state=_document_lease_runtime_shutdown_state,
+    _state=_rpc_runtime_shutdown_state,
     _partial_callback=_partial,
     _shutdown_callback=_shutdown_mcp_runtime,
 ):
@@ -106,23 +103,22 @@ def _connect_document_lease_runtime_shutdown(
     _state["connected"] = True
 
 
-def _initialize_document_lease_runtime(
-    _connect_shutdown=_connect_document_lease_runtime_shutdown,
+def _initialize_rpc_runtime_shutdown(
+    _connect_shutdown=_connect_rpc_runtime_shutdown,
 ):
-    """Start process-lifetime identity/status even when RPC auto-start is off."""
+    """Install deterministic shutdown even when RPC auto-start is off."""
 
     try:
         from rpc_server import rpc_server
 
-        rpc_server.initialize_document_lease_runtime()
         _connect_shutdown(rpc_server)
     except Exception as e:
         FreeCAD.Console.PrintWarning(  # noqa: F821
-            f"[MCP] Document lease runtime not initialized: {e}\n"
+            f"[MCP] RPC shutdown hook not initialized: {e}\n"
         )
 
 
-QtCore.QTimer.singleShot(0, _initialize_document_lease_runtime)
+QtCore.QTimer.singleShot(0, _initialize_rpc_runtime_shutdown)
 
 
 def _register_git_sidecar_observer():
@@ -138,87 +134,3 @@ def _register_git_sidecar_observer():
 
 QtCore.QTimer.singleShot(0, _register_git_sidecar_observer)
 
-
-_document_lease_shutdown_state = {"connected": False}
-
-
-def _register_document_lease_observer(
-    _connect_shutdown=_connect_document_lease_runtime_shutdown,
-    _qt_core=QtCore,
-    _shutdown_state=_document_lease_shutdown_state,
-):
-    """Install the v2 observer independently of RPC auto-start ordering."""
-    try:
-        from document_lease.observer import register_observer, unregister_observer
-        from document_lease.observer_ops.runtime_providers import (
-            bind_default_service_provider,
-            bind_legacy_attribution,
-        )
-        from document_lock import (
-            is_agent_mutating,
-            is_internal_snapshot_save,
-        )
-        from rpc_server import rpc_server
-
-        freecad_module = FreeCAD  # noqa: F821 - injected by FreeCAD
-
-        def service_provider():
-            return rpc_server.document_lease_service
-
-        bind_default_service_provider(service_provider)
-        bind_legacy_attribution(
-            agent_mutation_checker=is_agent_mutating,
-            snapshot_save_checker=is_internal_snapshot_save,
-        )
-
-        def _refresh_indicator(_event):
-            try:
-                from lock_indicator import refresh_lock_indicator
-
-                refresh_lock_indicator()
-            except Exception:
-                pass
-
-        observer = register_observer(
-            freecad_module=freecad_module,
-            freecad_gui_module=Gui,  # noqa: F821 - injected by FreeCAD
-            service_provider=service_provider,
-            selected_document_provider=lambda: getattr(
-                freecad_module, "ActiveDocument", None
-            ),
-            notification_callback=_refresh_indicator,
-            notification_queue=lambda callback: _qt_core.QTimer.singleShot(
-                0, callback
-            ),
-        )
-        if observer is None:
-            return
-        _connect_shutdown(rpc_server)
-        app = _qt_core.QCoreApplication.instance()
-        if app is not None and not _shutdown_state["connected"]:
-            app.aboutToQuit.connect(unregister_observer)
-            _shutdown_state["connected"] = True
-    except Exception as e:
-        FreeCAD.Console.PrintWarning(  # noqa: F821
-            f"[MCP] Document lease observer not registered: {e}\n"
-        )
-
-
-# Register the v2 observer before the compatibility observer.  On an
-# unexpected close this ensures the active credential is fenced and its v2
-# sidecar retained before legacy cleanup callbacks are considered.
-QtCore.QTimer.singleShot(0, _register_document_lease_observer)
-
-
-def _register_document_lock():
-    try:
-        from document_lock import register_lock_feature
-
-        register_lock_feature()
-    except Exception as e:
-        FreeCAD.Console.PrintWarning(  # noqa: F821
-            f"[MCP] Document lock feature not registered: {e}\n"
-        )
-
-
-QtCore.QTimer.singleShot(0, _register_document_lock)

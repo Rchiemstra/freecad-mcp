@@ -50,29 +50,6 @@ def handle_gui_dispatch_error(
                     "mutation_started": recovery.mutation_started,
                 },
             )
-        if (
-            not completion_already_seen
-            and context
-            and collaborators.document_lease_service is not None
-            and isinstance(exc, GuiDispatchTimeout)
-            and exc.completion_uncertain
-        ):
-            for name in context["doc_names"]:
-                try:
-                    credential, _document_identity = (
-                        collaborators.credential_for_document(name, context["identity"])
-                    )
-                    collaborators.document_lease_service.record_error(
-                        credential,
-                        code="GUI_COMPLETION_UNCERTAIN",
-                        message=collaborators.redact_rpc_diagnostic(
-                            exc, identity=context["identity"], inflight=inflight
-                        ),
-                        request_id=context["request_id"],
-                        dirty=True,
-                    )
-                except Exception:
-                    pass
         timeout_snapshot = inflight.token.snapshot() if inflight is not None else None
     code = getattr(exc, "error_code", "GUI_DISPATCH_FAILED")
     return {

@@ -25,8 +25,6 @@ _COMPONENT_FIELDS = (
     "session_manager",
     "request_replay_cache",
     "inflight_requests",
-    "handoff_continuations",
-    "acquisition_claims",
     "collaboration_bridge",
 )
 _CONSTRUCTOR_FIELDS = (

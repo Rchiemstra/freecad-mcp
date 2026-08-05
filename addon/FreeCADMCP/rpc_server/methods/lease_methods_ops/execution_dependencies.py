@@ -27,10 +27,6 @@ class ExecutionCollaborators:
     shutdown_requested: Any
     request_replay_cache: Any | None
     inflight_request_registry: Any | None
-    acquisition_claim_store: Any | None
-    handoff_continuation_store: Any | None
-    document_lease_service: Any | None
-    document_identity_service: Any | None
     session_manager: Any | None
     runtime_manifest: Any | None
     actual_endpoint: dict[str, Any] | None
@@ -40,17 +36,10 @@ class ExecutionCollaborators:
     execute_timeout: float
     logger: Any
     stop_rpc_server: Callable[[], Any]
-    import_document_lock: Callable[[], Any]
-    import_document_lease: Callable[[], Any]
-    credential_for_document: Callable[..., Any]
-    credential_from_wire: Callable[..., Any]
+    request_identity_provider: Callable[[], Any]
     redact_rpc_diagnostic: Callable[..., str]
-    lease_service_error: Callable[..., dict[str, Any]]
     lease_protocol_public_error: Callable[..., dict[str, Any]]
-    external_scope_block: Callable[..., Any]
-    assert_mutation_file_metadata_unchanged: Callable[..., Any]
     generated_execute_signature: Callable[..., Any]
-    generated_operation_method_spec: Callable[..., Any]
     validate_generated_operation_envelope: Callable[..., Any]
     snapshot_mutation_context_for_request: Callable[[], dict[str, Any]]
     create_primary_snapshot_gui: Callable[..., Any]
@@ -78,19 +67,10 @@ class ExecutionCollaborators:
                 self.compatibility_api, "commit_compatibility_mutation", None
             ),
             "stop_rpc_server": self.stop_rpc_server,
-            "import_document_lock": self.import_document_lock,
-            "import_document_lease": self.import_document_lease,
-            "credential_for_document": self.credential_for_document,
-            "credential_from_wire": self.credential_from_wire,
+            "request_identity_provider": self.request_identity_provider,
             "redact_rpc_diagnostic": self.redact_rpc_diagnostic,
-            "lease_service_error": self.lease_service_error,
             "lease_protocol_public_error": self.lease_protocol_public_error,
-            "external_scope_block": self.external_scope_block,
-            "assert_mutation_file_metadata_unchanged": (
-                self.assert_mutation_file_metadata_unchanged
-            ),
             "generated_execute_signature": self.generated_execute_signature,
-            "generated_operation_method_spec": self.generated_operation_method_spec,
             "validate_generated_operation_envelope": (
                 self.validate_generated_operation_envelope
             ),

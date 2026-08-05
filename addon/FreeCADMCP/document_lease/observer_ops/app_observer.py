@@ -150,31 +150,11 @@ class LeaseObserver:
         detail: str,
         dirty: bool | None,
     ) -> Any:
-        reason = f"Unscoped FreeCAD {kind} detected"
-        if detail:
-            clean_detail = " ".join(str(detail).split())[:512]
-            if clean_detail:
-                reason += f": {clean_detail}"
-        reason = reason[:2048]
-        record = service.takeover(
-            identity.session_uuid,
-            dirty=dirty,
-            reason=reason,
+        del service, identity, document, kind, detail, dirty
+        logger.debug(
+            "legacy lease takeover authority removed; skipping unscoped change fence"
         )
-        try:
-            from document_lease import core_authority
-
-            core_authority.bump_takeover(document)
-        except Exception:
-            logger.debug("core mutation takeover sync failed", exc_info=True)
-        self._notify(
-            kind=kind,
-            identity=identity,
-            reason=reason,
-            dirty=dirty,
-            record=record,
-        )
-        return record
+        return None
 
     def _preserve_or_fence_after_gui_save(
         self,

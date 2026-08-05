@@ -63,7 +63,6 @@ def _exec_init_gui(
     def _record_register_commands() -> None:
         events.append("register_commands")
 
-    document_lease_service = object()
     def stop_rpc_server(*, wait_for_completion=False):
         assert wait_for_completion is True
         calls.append("stop")
@@ -73,9 +72,6 @@ def _exec_init_gui(
         load_settings=lambda: {"auto_start_rpc": auto_start},
         start_rpc_server=lambda: calls.append("start") or "started",
         stop_rpc_server=stop_rpc_server,
-        initialize_document_lease_runtime=lambda: calls.append("runtime"),
-        shutdown_document_lease_runtime=lambda: calls.append("shutdown"),
-        document_lease_service=document_lease_service,
     )
     rpc_package = types.ModuleType("rpc_server")
 
@@ -105,51 +101,6 @@ def _exec_init_gui(
     git_sidecar = types.ModuleType("git_sidecar")
     git_sidecar.register_observer = lambda: calls.append("git_observer")
     monkeypatch.setitem(sys.modules, "git_sidecar", git_sidecar)
-
-    document_lease = types.ModuleType("document_lease")
-    document_lease.__path__ = []
-    lease_observer = types.ModuleType("document_lease.observer")
-    observer_registrations: list[dict[str, Any]] = []
-
-    def register_lease_observer(**kwargs):
-        calls.append("lease_observer")
-        observer_registrations.append(kwargs)
-        return object()
-
-    lease_observer.register_observer = register_lease_observer
-    lease_observer.unregister_observer = lambda: calls.append("lease_unregister")
-    observer_ops = types.ModuleType("document_lease.observer_ops")
-    observer_ops.__path__ = []
-    runtime_providers = types.ModuleType(
-        "document_lease.observer_ops.runtime_providers"
-    )
-    service_providers: list[Callable[[], Any]] = []
-    legacy_attribution: list[tuple[Callable[..., Any], Callable[..., Any]]] = []
-
-    def bind_default_service_provider(provider):
-        calls.append("bind_service_provider")
-        service_providers.append(provider)
-
-    def bind_legacy_attribution(*, agent_mutation_checker, snapshot_save_checker):
-        calls.append("bind_legacy_attribution")
-        legacy_attribution.append((agent_mutation_checker, snapshot_save_checker))
-
-    runtime_providers.bind_default_service_provider = bind_default_service_provider
-    runtime_providers.bind_legacy_attribution = bind_legacy_attribution
-    monkeypatch.setitem(sys.modules, "document_lease", document_lease)
-    monkeypatch.setitem(sys.modules, "document_lease.observer", lease_observer)
-    monkeypatch.setitem(sys.modules, "document_lease.observer_ops", observer_ops)
-    monkeypatch.setitem(
-        sys.modules,
-        "document_lease.observer_ops.runtime_providers",
-        runtime_providers,
-    )
-
-    document_lock = types.ModuleType("document_lock")
-    document_lock.register_lock_feature = lambda: calls.append("document_lock")
-    document_lock.is_agent_mutating = lambda: False
-    document_lock.is_internal_snapshot_save = lambda: False
-    monkeypatch.setitem(sys.modules, "document_lock", document_lock)
 
     class Console:
         @staticmethod
@@ -199,12 +150,6 @@ def _exec_init_gui(
         "workbenches": workbenches,
         "timeline": events,
         "rpc_api": rpc_api,
-        "lease_observer": lease_observer,
-        "document_lease_service": document_lease_service,
-        "document_lock": document_lock,
-        "observer_registrations": observer_registrations,
-        "service_providers": service_providers,
-        "legacy_attribution": legacy_attribution,
         "freecad": freecad,
         "gui": gui,
         "script_locals": script_locals,
@@ -217,47 +162,12 @@ def test_init_gui_callbacks_work_with_split_exec_namespaces(monkeypatch) -> None
     context = _exec_init_gui(monkeypatch)
 
     assert context["warnings"] == []
-    assert context["calls"] == [
-        "runtime",
-        "git_observer",
-        "bind_service_provider",
-        "bind_legacy_attribution",
-        "lease_observer",
-        "document_lock",
-    ]
-    assert len(context["service_providers"]) == 1
-    service_provider = context["service_providers"][0]
-    assert service_provider() is context["document_lease_service"]
-    assert len(context["observer_registrations"]) == 1
-    registration = context["observer_registrations"][0]
-    assert set(registration) == {
-        "freecad_module",
-        "freecad_gui_module",
-        "service_provider",
-        "selected_document_provider",
-        "notification_callback",
-        "notification_queue",
-    }
-    assert registration["freecad_module"] is context["freecad"]
-    assert registration["freecad_gui_module"] is context["gui"]
-    assert registration["service_provider"] is service_provider
-    assert registration["selected_document_provider"]() is None
-    assert callable(registration["notification_callback"])
-    assert callable(registration["notification_queue"])
-    assert context["legacy_attribution"] == [
-        (
-            context["document_lock"].is_agent_mutating,
-            context["document_lock"].is_internal_snapshot_save,
-        )
-    ]
+    assert context["calls"] == ["git_observer"]
     callbacks = context["application"].aboutToQuit.callbacks
-    assert len(callbacks) == 2
-    assert callbacks[1] is context["lease_observer"].unregister_observer
+    assert len(callbacks) == 1
 
     callbacks[0]()
-    callbacks[1]()
-
-    assert context["calls"][-3:] == ["stop", "shutdown", "lease_unregister"]
+    assert context["calls"][-1:] == ["stop"]
 
 
 def test_initialize_registers_commands_before_toolbar(monkeypatch) -> None:
@@ -290,14 +200,25 @@ def test_auto_start_and_about_to_quit_share_one_root_without_duplicate_callback(
 ) -> None:
     context = _exec_init_gui(monkeypatch, auto_start=True)
 
-    assert context["calls"][:2] == ["start", "runtime"]
+    assert context["calls"][:2] == ["start", "git_observer"]
     callbacks = context["application"].aboutToQuit.callbacks
     connect_shutdown = context["script_locals"][
-        "_connect_document_lease_runtime_shutdown"
+        "_connect_rpc_runtime_shutdown"
     ]
     connect_shutdown(context["rpc_api"])
 
     assert context["application"].aboutToQuit.callbacks == callbacks
-    assert len(callbacks) == 2
+    assert len(callbacks) == 1
     callbacks[0]()
-    assert context["calls"][-2:] == ["stop", "shutdown"]
+    assert context["calls"][-1:] == ["stop"]
+
+
+def test_init_gui_does_not_start_lease_runtime_or_register_authority_observers(
+    monkeypatch,
+) -> None:
+    _exec_init_gui(monkeypatch)
+
+    source = _init_gui_path().read_text(encoding="utf-8")
+    assert "initialize_document_lease_runtime" not in source
+    assert "document_lease.observer" not in source
+    assert "register_lock_feature" not in source

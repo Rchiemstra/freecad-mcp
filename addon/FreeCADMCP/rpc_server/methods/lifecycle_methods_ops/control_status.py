@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from .control_status_state import continuation_flags, continuation_state, inflight_state
+from .control_status_state import inflight_state
 
 try:
     from build_info import addon_build_id, addon_version
@@ -12,7 +12,7 @@ except ImportError:
 
 def get_request_status(self, request_id):
     collaborators = self._execution_collaborators
-    identity = collaborators.import_document_lock().get_request_identity()
+    identity = collaborators.request_identity_provider().get_request_identity()
     session_id = identity.get("authenticated_session_id")
     mcp_runtime_id = identity.get("instance_id")
     if (
@@ -31,24 +31,12 @@ def get_request_status(self, request_id):
             session_id, request_id
         )
         state = inflight_state(inflight, status)
-        continuation = (
-            collaborators.handoff_continuation_store.get(mcp_runtime_id, request_id)
-            if collaborators.handoff_continuation_store is not None
-            else None
-        )
-        confirmation_pending = False
-        handoff_pending = False
-        if continuation is not None:
-            confirmation_pending, handoff_pending = continuation_flags(continuation)
-            state = continuation_state(continuation, state)
         return {
             "success": True,
             "request_id": request_id,
             "state": state,
             "stage": (
-                continuation.stage
-                if continuation is not None
-                else (inflight.phase if inflight is not None else None)
+                inflight.phase if inflight is not None else None
             ),
             "execution_started": bool(
                 inflight is not None and inflight.active_gui_phases
@@ -57,38 +45,19 @@ def get_request_status(self, request_id):
                 inflight is not None and inflight.mutation_started
             ),
             "cancellation_requested": bool(
-                (inflight is not None and inflight.cancellation_requested)
-                or (
-                    continuation is not None
-                    and continuation.cancel_requested.is_set()
-                )
+                inflight is not None and inflight.cancellation_requested
             ),
-            "completion_uncertain": bool(inflight is not None and inflight.uncertain)
-            or (
-                continuation is not None
-                and continuation.state == "claiming_uncertain"
-            ),
+            "completion_uncertain": bool(inflight is not None and inflight.uncertain),
             "late_completion_available": bool(
                 status.response
                 and isinstance(status.response, dict)
                 and status.response.get("late_completion")
             ),
             "result_available": bool(status.response is not None),
-            "result_claimable": bool(
-                collaborators.acquisition_claim_store is not None
-                and collaborators.acquisition_claim_store.claimable(
-                    mcp_runtime_id, request_id
-                )
-            ),
-            "confirmation_pending": confirmation_pending,
-            "handoff_pending": handoff_pending,
-            "acquisition_claim": (
-                collaborators.acquisition_claim_store.public_status(
-                    mcp_runtime_id, request_id
-                )
-                if collaborators.acquisition_claim_store is not None
-                else {"claimable": False}
-            ),
+            "result_claimable": False,
+            "confirmation_pending": False,
+            "handoff_pending": False,
+            "acquisition_claim": {"claimable": False},
             "recovery_incident_id": (
                 inflight.recovery_incident_id if inflight is not None else None
             ),
@@ -96,9 +65,7 @@ def get_request_status(self, request_id):
             "inflight": (
                 inflight.to_public_dict() if inflight is not None else None
             ),
-            "handoff_continuation": (
-                continuation.to_public_dict() if continuation is not None else None
-            ),
+            "handoff_continuation": None,
         }
     except Exception as exc:
         return collaborators.lease_protocol_public_error(
@@ -181,7 +148,7 @@ def check_rpc_sync(self, nonce):
     """Round-trip a nonce through the GUI queue to prove call correlation."""
     res = self._dispatch_gui(lambda: {"nonce": nonce})
     collaborators = self._execution_collaborators
-    identity = collaborators.import_document_lock().get_request_identity()
+    identity = collaborators.request_identity_provider().get_request_identity()
     recovery = collaborators.inflight_request_registry.latest_recovery_incident(
         identity.get("authenticated_session_id")
     )

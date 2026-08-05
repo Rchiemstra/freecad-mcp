@@ -5,39 +5,29 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ...lease_manager import RpcRequestContext
 from ...mcp_tasks import link_runtime
+from ...rpc_session import RpcAuthenticationContext
 from ...telemetry import emit_event
 from ...telemetry.context import get_context, update_context
 from ..generated_execute import _sign_generated_execute_params
 from ..rpc_invocation_error import RpcInvocationError
 
-_ACQUISITION_METHODS = frozenset(
-    {
-        "acquire_document_lock",
-        "adopt_dirty_document",
-        "create_document",
-    }
-)
 _SESSION_EXPIRED_CODES = frozenset({"SESSION_EXPIRED", "UNKNOWN_SESSION"})
 
 
 def _redact_native_remote_error(
     conn,
     error: Exception,
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
 ) -> Exception:
-    """Preserve a native error while scrubbing active session/lease secrets."""
+    """Preserve a native error while scrubbing the active session secret."""
 
     from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
 
-    secrets = (
-        context.session_token,
-        *(item.token for item in context.lease_credentials),
-    )
+    secrets = (context.session_token,)
     payload = {"message": error.message, "data": error.data}
-    manager = getattr(conn, "__dict__", {}).get("_lease_manager")
-    redact_value = getattr(manager, "redact_value", None)
+    session = getattr(conn, "__dict__", {}).get("_rpc_session")
+    redact_value = getattr(session, "redact_value", None)
     if callable(redact_value):
         safe = redact_value(payload, additional_secrets=secrets)
     else:
@@ -82,22 +72,17 @@ def invoke_v2_execution_category(method: str, params: Mapping[str, Any] | None) 
 
 
 def invoke_v2_prepare_telemetry(
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
     *,
     method: str,
     control: bool,
     category: str,
 ) -> str:
-    document_sessions = tuple(
-        item.document_session_uuid for item in context.lease_credentials
-    )
     update_context(
         request_id=context.request_id,
         execution_id=context.request_id,
         task_id=context.task_id or None,
-        document_session_uuid=(
-            document_sessions[0] if len(document_sessions) == 1 else None
-        ),
+        document_session_uuid=None,
         execution_category=category,
     )
     task_context_id = get_context().task_id
@@ -109,7 +94,7 @@ def invoke_v2_prepare_telemetry(
         payload={
             "method": method,
             "execution_category": category,
-            "document_session_uuids": list(document_sessions),
+            "document_session_uuids": [],
             "control_lane": bool(control),
         },
     )
@@ -120,7 +105,7 @@ def invoke_v2_transport(
     conn,
     method: str,
     params: Mapping[str, Any] | None,
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
     *,
     control: bool,
     timeout: float | None,
@@ -130,7 +115,6 @@ def invoke_v2_transport(
     wire_params = _sign_generated_execute_params(method, params, context)
     envelope = context.to_envelope(method, wire_params)
     transport_method = "invoke_v2_control" if control else "invoke_v2"
-    conn._maybe_recover_stale_before_protected_rpc(method, context)
     try:
         return conn.invoke_rpc(
             transport_method,
@@ -141,14 +125,6 @@ def invoke_v2_transport(
     except JsonRpcRemoteError as exc:
         raise _redact_native_remote_error(conn, exc, context) from None
     except Exception as exc:
-        if not control and method in _ACQUISITION_METHODS:
-            recovered = conn._recover_acquisition_after_transport_loss(
-                method,
-                context.request_id,
-                params=params,
-            )
-            if recovered is not None:
-                return recovered
         raise RpcInvocationError(method, exc, request_id=context.request_id) from None
 
 
@@ -189,11 +165,25 @@ def invoke_v2_session_error_code(response: Mapping[str, Any]) -> str | None:
     return str(error_code) if error_code is not None else None
 
 
+def _refreshed_context(conn, context: RpcAuthenticationContext):
+    with conn._identity_lock:
+        refresher = conn._session_refresher
+        session = conn._rpc_session
+    if refresher is None or session is None:
+        return None
+    refresher()
+    return session.build_request_context(
+        operation_name=context.operation_name,
+        task_id=context.task_id,
+        request_id=context.request_id,
+    )
+
+
 def invoke_v2_retry_expired_session(
     conn,
     method: str,
     params: Mapping[str, Any] | None,
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
     *,
     response: Mapping[str, Any],
     transport_method: str,
@@ -202,24 +192,12 @@ def invoke_v2_retry_expired_session(
 ) -> dict[str, Any]:
     from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
 
-    with conn._identity_lock:
-        refresher = conn._session_refresher
-        manager = conn._lease_manager
-    if refresher is None or manager is None:
-        return response
     try:
-        refresher()
+        refreshed = _refreshed_context(conn, context)
     except Exception as exc:
         raise RpcInvocationError(method, exc, request_id=context.request_id) from None
-
-    refreshed = manager.build_request_context(
-        document_session_uuids=tuple(
-            item.document_session_uuid for item in context.lease_credentials
-        ),
-        operation_name=context.operation_name,
-        task_id=context.task_id,
-        request_id=context.request_id,
-    )
+    if refreshed is None:
+        return dict(response)
     refreshed_params = _sign_generated_execute_params(method, params, refreshed)
     try:
         return conn.invoke_rpc(
@@ -238,34 +216,23 @@ def invoke_v2_retry_expired_remote_error(
     conn,
     method: str,
     params: Mapping[str, Any] | None,
-    context: RpcRequestContext,
+    context: RpcAuthenticationContext,
     *,
     remote_error: Exception,
     transport_method: str,
     control: bool,
     timeout: float | None,
 ) -> dict[str, Any]:
-    """Refresh once for a native session-expiry error, otherwise preserve it."""
+    """Refresh once for a session-expiry error, otherwise preserve it."""
 
     from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
 
-    with conn._identity_lock:
-        refresher = conn._session_refresher
-        manager = conn._lease_manager
-    if refresher is None or manager is None:
-        raise remote_error
     try:
-        refresher()
+        refreshed = _refreshed_context(conn, context)
     except Exception as exc:
         raise RpcInvocationError(method, exc, request_id=context.request_id) from None
-    refreshed = manager.build_request_context(
-        document_session_uuids=tuple(
-            item.document_session_uuid for item in context.lease_credentials
-        ),
-        operation_name=context.operation_name,
-        task_id=context.task_id,
-        request_id=context.request_id,
-    )
+    if refreshed is None:
+        raise remote_error
     refreshed_params = _sign_generated_execute_params(method, params, refreshed)
     try:
         return conn.invoke_rpc(

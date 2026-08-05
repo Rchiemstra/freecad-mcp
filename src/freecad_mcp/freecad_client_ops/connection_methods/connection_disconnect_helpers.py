@@ -8,13 +8,11 @@ def mark_connection_disconnected(conn) -> bool:
         if conn._disconnected:
             return False
         conn._disconnected = True
-        manager = conn._lease_manager
+        session = conn._rpc_session
+        conn._rpc_session = None
         conn._session_refresher = None
-    if manager is not None:
-        manager.mark_disconnected("FreeCAD RPC connection disconnected")
-    token_var = getattr(conn, "_legacy_lease_token", None)
-    if token_var is not None:
-        token_var.set(None)
+    if session is not None:
+        session.mark_disconnected("FreeCAD RPC connection disconnected")
     return True
 
 

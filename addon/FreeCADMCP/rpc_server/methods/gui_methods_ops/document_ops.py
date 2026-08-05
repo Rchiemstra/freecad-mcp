@@ -20,10 +20,6 @@ class _DocumentOpenRejectedError(RuntimeError):
     error_code = "DUPLICATE_OR_INVALID_DOCUMENT_OPEN"
 
 
-class _DocumentOpenIdentityRejectedError(RuntimeError):
-    error_code = "DOCUMENT_OPEN_IDENTITY_REJECTED"
-
-
 def _close_rejected_open(collaborators, document_name, existing_names):
     if not document_name or document_name in existing_names:
         return
@@ -62,9 +58,6 @@ def _complete_open(facade, result, actor, existing_names):
         prior_context = collaborators.snapshot_personal_view_context(
             document_name, actor
         )
-        identity = collaborators.ensure_v2_document(document)
-        result["document_session_uuid"] = identity.session_uuid
-        result["canonical_path"] = identity.canonical_path
         context = build_view_context(facade, document, actor)
         context_may_have_changed = True
         _member(collaborators, "store_personal_view_context")(
@@ -87,19 +80,12 @@ def _complete_open(facade, result, actor, existing_names):
             lambda: _close_rejected_open(collaborators, document_name, existing_names),
         )
         collaborators.reraise_if_cancelled(exc)
-        raise _DocumentOpenIdentityRejectedError(str(exc)) from exc
+        raise _DocumentOpenRejectedError(str(exc)) from exc
 
 
 def _open_checked(facade, path):
     collaborators = facade._gui_collaborators
     existing_names = set(collaborators.freecad.listDocuments())
-    identity_service = collaborators.document_identity_service
-    if identity_service is not None:
-        try:
-            identity_service.assert_open_path_available(path)
-        except Exception as exc:
-            collaborators.reraise_if_cancelled(exc)
-            raise _DocumentOpenRejectedError(str(exc)) from exc
     actor = request_actor(facade)
     result = collaborators.open_document(path)
     if not isinstance(result, dict) or not result.get("ok"):
@@ -169,7 +155,7 @@ def open_document(self, path: str) -> dict[str, Any]:
     except Exception as exc:
         defaults = {}
         if isinstance(
-            exc, (_DocumentOpenRejectedError, _DocumentOpenIdentityRejectedError)
+            exc, _DocumentOpenRejectedError
         ):
             defaults = {
                 "success": False,

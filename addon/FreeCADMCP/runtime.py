@@ -22,8 +22,6 @@ class AddonRuntime:
     session_manager: object | None
     request_replay_cache: object | None
     inflight_requests: object | None
-    handoff_continuations: object | None
-    acquisition_claims: object | None
     collaboration_bridge: object | None
     shutdown_requested: _threading.Event
     listener_thread: object | None
@@ -54,8 +52,6 @@ class AddonRuntime:
         session_manager: object | None = None,
         request_replay_cache: object | None = None,
         inflight_requests: object | None = None,
-        handoff_continuations: object | None = None,
-        acquisition_claims: object | None = None,
         collaboration_bridge: object | None = None,
         shutdown_requested: _threading.Event | None = None,
         owned_resources: _Iterable[
@@ -71,8 +67,6 @@ class AddonRuntime:
             session_manager,
             request_replay_cache,
             inflight_requests,
-            handoff_continuations,
-            acquisition_claims,
             collaboration_bridge,
         )
         owned = tuple(owned_resources)
@@ -100,8 +94,6 @@ class AddonRuntime:
         object.__setattr__(self, "session_manager", session_manager)
         object.__setattr__(self, "request_replay_cache", request_replay_cache)
         object.__setattr__(self, "inflight_requests", inflight_requests)
-        object.__setattr__(self, "handoff_continuations", handoff_continuations)
-        object.__setattr__(self, "acquisition_claims", acquisition_claims)
         object.__setattr__(self, "collaboration_bridge", collaboration_bridge)
         object.__setattr__(self, "shutdown_requested", stop_event)
         object.__setattr__(self, "listener_thread", None)
@@ -205,8 +197,6 @@ class AddonRuntime:
             for name in (
                 "session_manager",
                 "inflight_requests",
-                "handoff_continuations",
-                "acquisition_claims",
                 "listener_thread",
                 "runtime_manifest",
                 "actual_endpoint",
@@ -329,13 +319,11 @@ def _build_addon_runtime(
     listener_factory: _Callable[[object, object], object],
     authentication_factory: _Callable[[object, object], tuple[object | None, str]],
     capability_bridge_factory: _Callable[
-        [object, object | None, object, object, object, object], object
+        [object, object | None, object, object], object
     ],
     authentication_required: bool,
     request_replay_cache: object,
     inflight_requests: object,
-    handoff_continuations: object,
-    acquisition_claims: object,
 ) -> tuple[AddonRuntime, str]:
     """Construct one restart-scoped gateway graph without starting it."""
 
@@ -373,8 +361,6 @@ def _build_addon_runtime(
                 worker_manager,
                 request_replay_cache,
                 inflight_requests,
-                handoff_continuations,
-                acquisition_claims,
             ),
             "capability_bridge_factory",
         )
@@ -405,8 +391,6 @@ def _build_addon_runtime(
                 session_manager=session_manager,
                 request_replay_cache=request_replay_cache,
                 inflight_requests=inflight_requests,
-                handoff_continuations=handoff_continuations,
-                acquisition_claims=acquisition_claims,
                 collaboration_bridge=capability_bridge,
                 shutdown_requested=shutdown_requested,
                 owned_resources=owned_resources,

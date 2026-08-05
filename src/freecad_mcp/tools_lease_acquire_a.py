@@ -1,4 +1,4 @@
-"""MCP tool registration — lease acquire a (Phase 7 / 7D)."""
+"""Frozen MCP tools for retired document-lease authority."""
 
 from __future__ import annotations
 
@@ -8,28 +8,37 @@ from typing import TYPE_CHECKING, Literal
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
-from .operations import (
-    acquire_document_lock_operation,
-    adopt_dirty_document_operation,
-    get_document_lock_operation,
-    list_document_locks_operation,
-)
-from .tools_server_surfaces import server_connection, server_state
+from .responses import tool_fail
 from .tools_types import DocumentSelectorInput
 
 if TYPE_CHECKING:
     from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
     from .server_state import ServerState
-def _register_acquire_document_lock(
+
+
+def _removed() -> CallToolResult:
+    result = {
+        "success": False,
+        "ok": False,
+        "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
+        "error": "Document authority is owned by native FreeCAD collaboration.",
+    }
+    return tool_fail(
+        "[LEGACY_LEASE_AUTHORITY_REMOVED] " + str(result["error"]),
+        structured=result,
+    )
+
+
+def register(
     mcp: InstrumentedFastMCP,
     *,
     state: ServerState,
     get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
+    stale_recovery: object,
+) -> dict[str, object]:
+    del state, get_freecad_connection, stale_recovery
+
     @mcp.tool()
     def acquire_document_lock(
         ctx: Context,
@@ -52,29 +61,11 @@ def _register_acquire_document_lock(
         aliases. They still acquire through the authenticated protocol-v2 service
         and produce the same canonical schema-v2 sidecar as ``selector``.
         """
-        return acquire_document_lock_operation(
-            server_connection(),
-            doc_name=doc_name,
-            file_path=file_path,
-            session_id=session_id,
-            task_description=task_description,
-            client=server_state().mcp_client_label,
-            selector=selector,
-            agent_id=agent_id,
-            hash_policy=hash_policy,
-            lease_manager=server_state().lease_manager,
-            document_sessions=server_state().document_sessions,
-        )
 
-    exports['acquire_document_lock'] = acquire_document_lock
-def _register_adopt_dirty_document(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
+        del ctx, doc_name, file_path, session_id, task_description, selector
+        del agent_id, hash_policy
+        return _removed()
+
     @mcp.tool()
     def adopt_dirty_document(
         ctx: Context,
@@ -98,27 +89,9 @@ def _register_adopt_dirty_document(
         The main FCStd is not saved by adoption.
         """
 
-        return adopt_dirty_document_operation(
-            server_connection(),
-            selector=selector,
-            task_description=task_description,
-            client=server_state().mcp_client_label,
-            agent_id=agent_id,
-            hash_policy=hash_policy,
-            lease_manager=server_state().lease_manager,
-            document_sessions=server_state().document_sessions,
-            store_token=server_state().lease_tokens,
-        )
+        del ctx, selector, task_description, agent_id, hash_policy
+        return _removed()
 
-    exports['adopt_dirty_document'] = adopt_dirty_document
-def _register_get_document_lock(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
     @mcp.tool()
     def get_document_lock(
         ctx: Context,
@@ -133,68 +106,23 @@ def _register_get_document_lock(
         off/observe migration compatibility. Status never includes the bearer token
         or its fingerprint; malformed or conflicting sidecars report locked/unknown.
         """
-        return get_document_lock_operation(
-            server_connection(),
-            doc_name=doc_name,
-            file_path=file_path,
-            session_id=session_id,
-            selector=selector,
-        )
 
-    exports['get_document_lock'] = get_document_lock
-def _register_list_document_locks(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
+        del ctx, doc_name, file_path, session_id, selector
+        return _removed()
+
     @mcp.tool()
     def list_document_locks(ctx: Context) -> CallToolResult:
         """List redacted local, foreign, stale, error, and dirty-recovery records.
 
         The response contains no bearer tokens or token fingerprints.
         """
-        return list_document_locks_operation(server_connection())
 
-    exports['list_document_locks'] = list_document_locks
+        del ctx
+        return _removed()
 
-def register(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-) -> dict[str, object]:
-    """Register lease_acquire_a MCP tools; return exports for §3.3 façade shims."""
-    exports: dict[str, object] = {}
-    _register_acquire_document_lock(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    _register_adopt_dirty_document(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    _register_get_document_lock(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    _register_list_document_locks(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    return exports
+    return {
+        "acquire_document_lock": acquire_document_lock,
+        "adopt_dirty_document": adopt_dirty_document,
+        "get_document_lock": get_document_lock,
+        "list_document_locks": list_document_locks,
+    }

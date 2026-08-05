@@ -10,6 +10,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from addon.FreeCADMCP import document_lease as document_lease_root
 from addon.FreeCADMCP.document_lease import model as model_mod
 from addon.FreeCADMCP.document_lease.model import (
     DocumentIdentity,
@@ -20,6 +21,7 @@ from addon.FreeCADMCP.document_lease.model import (
     decode_historic_lease_record,
 )
 from addon.FreeCADMCP.document_lease.types.transitions import ALLOWED_TRANSITIONS
+from tests.helpers.architecture_baseline import load_manifest
 
 
 def _uuid() -> str:
@@ -48,6 +50,8 @@ def _historic_sidecar() -> dict[str, object]:
     payload = record.to_sidecar_dict(include_task_summary=True)
     payload["lease"]["current_operation"] = "token=historic-secret"
     payload["lease"]["task_summary"] = "diagnostic historic-secret"
+    payload["owner"]["client"] = "Bearer raw-owner-secret"
+    payload["owner"]["agent_id"] = "credential=raw-agent-secret"
     payload["document_state"]["error"] = {
         "code": "credential=historic-secret",
         "message": "diagnostic historic-secret",
@@ -55,6 +59,24 @@ def _historic_sidecar() -> dict[str, object]:
         "request_id": "token=historic-secret",
     }
     return payload
+
+
+@pytest.mark.unit
+def test_package_root_retains_only_recorded_safe_compatibility_exports() -> None:
+    surface = next(
+        item
+        for item in load_manifest()["retained_compatibility_surfaces"]
+        if item["module"] == "addon.FreeCADMCP.document_lease"
+    )
+
+    assert document_lease_root.__all__ == surface["current_symbols"]
+    assert all(
+        hasattr(document_lease_root, name) for name in surface["current_symbols"]
+    )
+    assert not any(
+        hasattr(document_lease_root, name)
+        for name in surface["planned_removed_authority_symbols"]
+    )
 
 
 @pytest.mark.unit
@@ -70,6 +92,19 @@ def test_decoder_round_trips_and_returns_independent_sidecar_copies() -> None:
     assert first is not second
     first["lease"]["state"] = LeaseState.STALE.value
     assert historic.to_sidecar_dict()["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+
+
+@pytest.mark.unit
+def test_decoder_snapshots_source_backing_before_caller_mutation() -> None:
+    payload = _historic_sidecar()
+    historic = decode_historic_lease_record(payload)
+
+    payload["lease"]["state"] = LeaseState.STALE.value
+    payload["owner"]["client"] = "changed after decode"
+
+    decoded = historic.to_sidecar_dict()
+    assert decoded["lease"]["state"] == LeaseState.LOCKED_IDLE.value
+    assert decoded["owner"]["client"] == "Bearer raw-owner-secret"
 
 
 @pytest.mark.unit
@@ -139,6 +174,10 @@ def test_decoder_repr_and_public_data_are_redacted() -> None:
 
     assert "historic-secret" not in repr(historic)
     assert "historic-secret" not in public_text
+    assert "raw-owner-secret" not in public_text
+    assert "raw-agent-secret" not in public_text
+    assert public["owner"]["client"] == "<redacted>"
+    assert public["owner"]["agent_id"] == "<redacted>"
     assert "token_fingerprint" not in public_text
     assert "current_operation" not in public["lease"]
     assert "task_summary" not in public["lease"]
@@ -172,11 +211,13 @@ def test_decoder_rejects_malformed_direct_inputs(payload, error) -> None:
 
 
 @pytest.mark.unit
-def test_transition_tables_are_read_only_without_changing_live_behavior() -> None:
+def test_transition_tables_and_lease_records_are_read_only_compatibility_data() -> None:
     with pytest.raises(TypeError):
         ALLOWED_TRANSITIONS[LeaseState.ACQUIRING] = frozenset()  # type: ignore[index]
     with pytest.raises(AttributeError):
-        ALLOWED_TRANSITIONS[LeaseState.ACQUIRING].add(LeaseState.UNLOCKED_SAVED)  # type: ignore[attr-defined]
+        ALLOWED_TRANSITIONS[LeaseState.ACQUIRING].add(  # type: ignore[attr-defined]
+            LeaseState.UNLOCKED_SAVED
+        )
 
     record = LeaseRecord(
         lease_id=_uuid(),
@@ -197,11 +238,8 @@ def test_transition_tables_are_read_only_without_changing_live_behavior() -> Non
         state=LeaseState.LOCKED_IDLE,
     )
 
-    revised = record.revised(current_operation="Pad")
-    transitioned = record.transitioned(LeaseState.LOCKED_EDITING)
-
-    assert revised.record_revision == record.record_revision + 1
-    assert revised.current_operation == "Pad"
-    assert transitioned.state == LeaseState.LOCKED_EDITING
-    assert transitioned.state_revision == record.state_revision + 1
-    assert transitioned.record_revision == record.record_revision + 1
+    assert not hasattr(record, "revised")
+    assert not hasattr(record, "transitioned")
+    assert not hasattr(record, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        record.state = LeaseState.LOCKED_EDITING  # type: ignore[misc]

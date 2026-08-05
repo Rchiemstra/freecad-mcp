@@ -96,7 +96,10 @@ def test_default_cad_graph_is_eager_and_shares_native_api(monkeypatch) -> None:
     first = type(
         "FreeCADSentinel",
         (),
-        {"getDocument": staticmethod(lambda _name: None)},
+        {
+            "getDocument": staticmethod(lambda _name: None),
+            "getUserAppDataDir": staticmethod(lambda: "/profile/"),
+        },
     )()
     monkeypatch.setattr(rpc_server, "FreeCAD", first)
     facade = rpc_server.FreeCADRPC()

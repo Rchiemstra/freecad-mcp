@@ -4,14 +4,10 @@ from __future__ import annotations
 
 import threading as _threading
 from collections import OrderedDict as _OrderedDict
-from collections.abc import Iterable as _Iterable
 from typing import Any as _Any
 
 from .cancellation_result import CancellationResult as _CancellationResult
 from .cancellation_token import CancellationToken as _CancellationToken
-from .inflight_lease_credential import (
-    InflightLeaseCredential as _InflightLeaseCredential,
-)
 from .inflight_request import InflightRequest as _InflightRequest
 from .inflight_snapshot import InflightSnapshot as _InflightSnapshot
 
@@ -40,9 +36,6 @@ class InflightRequestRegistry:
         session_id: str,
         request_id: str,
         method: str,
-        credentials: _Iterable[_InflightLeaseCredential] = (),
-        *,
-        lease_affecting: bool = False,
     ) -> _InflightRequest:
         key = self._key(session_id, request_id)
         with self._lock:
@@ -53,8 +46,6 @@ class InflightRequestRegistry:
                 request_id=key[1],
                 method=str(method),
                 token=_CancellationToken(key[0], key[1], str(method)),
-                lease_affecting=bool(lease_affecting),
-                _credentials=tuple(credentials),
             )
             self._active[key] = request
             return request
@@ -123,7 +114,6 @@ class InflightRequestRegistry:
         if not snapshot.terminal:
             return
         self._active.pop(key, None)
-        request.scrub_credentials()
         self._terminal[key] = request
         self._terminal.move_to_end(key)
         while len(self._terminal) > self._max_terminal_entries:
@@ -188,25 +178,6 @@ class InflightRequestRegistry:
             for request in requests:
                 request.token.request_cancel()
             return requests
-
-    def active_lifecycle_request_ids(
-        self,
-        methods: _Iterable[str] = (
-            "acquire_document_lock",
-            "adopt_dirty_document",
-            "create_document",
-        ),
-    ) -> frozenset[str]:
-        """Return request IDs for non-terminal acquisition/adoption work."""
-
-        allowed = {str(method) for method in methods}
-        with self._lock:
-            return frozenset(
-                request.request_id
-                for request in self._active.values()
-                if request.method in allowed
-                and not request.token.snapshot().terminal
-            )
 
     @property
     def active_count(self) -> int:

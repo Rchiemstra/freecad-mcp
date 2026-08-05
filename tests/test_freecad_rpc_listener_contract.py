@@ -44,20 +44,10 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     collaboration_collaborators = replace(
         default_instance._collaboration_collaborators,
         freecad=freecad,
-        import_document_lock=lambda: SimpleNamespace(
-            is_enabled=lambda: True,
-            get_request_identity=lambda: {
-                "instance_id": "mcp-contract",
-                "authenticated_session_id": "session-contract",
-            },
-        ),
-        document_lease_service=object(),
     )
     execution_collaborators = replace(
         default_instance._execution_collaborators,
         freecad=freecad,
-        import_document_lock=lambda: None,
-        document_lease_service=None,
         session_manager=object(),
         runtime_manifest=None,
         actual_endpoint={"host": "127.0.0.1", "port": 9988},
@@ -88,13 +78,16 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     dispatcher = SimpleXMLRPCDispatcher(allow_none=True, encoding=None)
     dispatcher.register_instance(instance)
 
-    instance._acquire_document_lock_v2 = (
-        lambda _selector, **_kwargs: expected["acquire_document_lock"]
-    )
     actual = {
         "acquire_document_lock": dispatcher._dispatch(
             "acquire_document_lock", ("ContractDocument",)
         )
+    }
+    assert actual["acquire_document_lock"] == {
+        "success": False,
+        "ok": False,
+        "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
+        "error": "Document authority is owned by native FreeCAD collaboration.",
     }
 
     create_module = inspect.getmodule(freecad_rpc_class.create_document)
@@ -102,7 +95,8 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     monkeypatch.setattr(create_module.FreeCAD, "getDocument", lambda _name: None)
     instance._request_checkpoint = lambda *_args, **_kwargs: None
     instance._current_inflight = lambda: None
-    instance._dispatch_gui = lambda *_args, **_kwargs: True
+    instance._create_document_gui = lambda _name: True
+    instance._dispatch_gui = lambda callback: callback()
     instance._unknown_mutation_evidence = lambda *_args, **_kwargs: {
         "document_health": {},
         "mutation_scope": {"declared_documents": ["Phase1ContractDocument"]},
@@ -110,6 +104,7 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     actual["create_document"] = dispatcher._dispatch(
         "create_document", ("Phase1ContractDocument",)
     )
+    instance._dispatch_gui = lambda *_args, **_kwargs: True
     actual["create_object"] = dispatcher._dispatch(
         "create_object",
         ("ContractDocument", {"Name": "ContractObject", "Type": "Part::Feature"}),
@@ -125,9 +120,18 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     monkeypatch.setattr(status_module.os, "getpid", lambda: 4242)
     actual["get_instance_info"] = dispatcher._dispatch("get_instance_info", ())
 
-    assert actual == expected
+    native_actual = {
+        name: value
+        for name, value in actual.items()
+        if name != "acquire_document_lock"
+    }
+    native_expected = {
+        name: value
+        for name, value in expected.items()
+        if name != "acquire_document_lock"
+    }
+    assert native_actual == native_expected
     snapshot = _snapshot()
     for method_name, value in actual.items():
-        Draft202012Validator(snapshot["methods"][method_name]["result_schema"]).validate(
-            value
-        )
+        schema = snapshot["methods"][method_name]["result_schema"]
+        Draft202012Validator(schema).validate(value)

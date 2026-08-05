@@ -6,6 +6,8 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from .connection_lease_ops import _legacy_authority_removed
+
 logger = logging.getLogger("FreeCADMCPserver")
 
 
@@ -19,12 +21,7 @@ def save_document(
         legacy_token: str = "",
     ) -> dict[str, Any]:
         selected = dict(selector)
-        if legacy_token:
-            conn.set_active_lease_token(legacy_token)
-            try:
-                return conn.server.save_document(selected, validation_profile)
-            finally:
-                conn.set_active_lease_token(None)
+        del legacy_token
         routed = conn._invoke_mutation_v2(
             "save_document",
             {
@@ -88,19 +85,7 @@ def finalize_document_edit(
         legacy_token: str = "",
     ) -> dict[str, Any]:
         selected = dict(selector)
-        if legacy_token:
-            conn.set_active_lease_token(legacy_token)
-            try:
-                return conn.server.finalize_document_edit(
-                    selected,
-                    save_mode,
-                    destination,
-                    overwrite,
-                    expected_destination_sha256,
-                    validation_profile,
-                )
-            finally:
-                conn.set_active_lease_token(None)
+        del legacy_token
         routed = conn._invoke_mutation_v2(
             "finalize_document_edit",
             {
@@ -136,29 +121,15 @@ def release_document_lock(
         disposition: str = "saved",
         request_id: str | None = None,
     ) -> dict[str, Any]:
-        selected = None if selector is None else dict(selector)
-        if selected is not None:
-            routed = conn._invoke_mutation_v2(
-                "release_document_lock",
-                {
-                    "doc_key": doc_key,
-                    "token": token,
-                    "selector": selected,
-                    "disposition": disposition,
-                },
-                selectors=(selected,),
-                operation_name="Release document lease",
-                request_id=request_id,
-            )
-            if routed is not None:
-                return routed
-        return conn.server.release_document_lock(
-            doc_key,
-            token,
-            selected,
-            disposition,
-        )
+        del conn, doc_key, token, selector, disposition, request_id
+        return _legacy_authority_removed()
 
 
 def force_release_stale_lock(conn, doc_key: str) -> dict[str, Any]:
-        return conn.server.force_release_stale_lock(doc_key)
+        del conn, doc_key
+        return {
+            "success": False,
+            "ok": False,
+            "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
+            "error": "Document authority is owned by native FreeCAD collaboration.",
+        }

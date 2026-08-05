@@ -54,8 +54,6 @@ class _BuildHarness:
 
         self.request_replay_cache = object()
         self.inflight_requests = object()
-        self.handoff_continuations = object()
-        self.acquisition_claims = object()
         self.dispatcher = _BuildDispatcher(self)
         self.worker_manager = _BuildWorkerManager(self)
         self.capability_bridge = object()
@@ -87,15 +85,11 @@ class _BuildHarness:
         worker_manager: object,
         request_replay_cache: object,
         inflight_requests: object,
-        handoff_continuations: object,
-        acquisition_claims: object,
     ) -> object:
         assert dispatcher is self.dispatcher
         assert worker_manager is self.worker_manager
         assert request_replay_cache is self.request_replay_cache
         assert inflight_requests is self.inflight_requests
-        assert handoff_continuations is self.handoff_continuations
-        assert acquisition_claims is self.acquisition_claims
         self.reach("capability_bridge")
         return self.capability_bridge
 
@@ -124,8 +118,6 @@ class _BuildHarness:
             authentication_required=authentication_required,
             request_replay_cache=self.request_replay_cache,
             inflight_requests=self.inflight_requests,
-            handoff_continuations=self.handoff_continuations,
-            acquisition_claims=self.acquisition_claims,
         )
 
 
@@ -202,8 +194,6 @@ def test_builder_wires_exact_dependencies_without_starting_components(
     assert runtime.session_manager is session_manager
     assert runtime.request_replay_cache is harness.request_replay_cache
     assert runtime.inflight_requests is harness.inflight_requests
-    assert runtime.handoff_continuations is harness.handoff_continuations
-    assert runtime.acquisition_claims is harness.acquisition_claims
     assert runtime.collaboration_bridge is harness.capability_bridge
     assert harness.listener.registered == [harness.capability_bridge]
     assert harness.timeline == [
@@ -408,10 +398,9 @@ def _prepare_live_start(
     monkeypatch,
     *,
     authentication_enabled: bool = False,
-    initialize_lease_during_start: bool = False,
     bridge_failure: BaseException | None = None,
     listener_address: object = ("127.0.0.1", 19875),
-    replay_binding_failure: BaseException | None = None,
+    manifest_binding_failure: BaseException | None = None,
     thread_start_failure: BaseException | None = None,
 ):
     from addon.FreeCADMCP import runtime as runtime_module
@@ -430,17 +419,8 @@ def _prepare_live_start(
     parent = object()
     replay = SimpleNamespace()
     inflight = SimpleNamespace(request_cancel_all=list)
-    handoffs = object()
-    claims = object()
     session_manager = object()
     runtime_manifest = object()
-    replay_predicates: list[object] = []
-    lease_service = SimpleNamespace(
-        list_records=list,
-        has_unresolved_owner=lambda _owner: False,
-    )
-    identity_service = object()
-    save_service = object()
     dispatcher = _LiveDispatcher(timeline, parent)
     worker_manager = _LiveWorkerManager(timeline)
     listener = _LiveListener(timeline)
@@ -450,9 +430,12 @@ def _prepare_live_start(
         _lifecycle_collaborators=None,
         _execution_collaborators=None,
         _cad_collaborators=None,
+        _gui_collaborators=None,
     )
 
     def bind_collaboration_runtime_manifest(manifest):
+        if manifest_binding_failure is not None:
+            raise manifest_binding_failure
         bridge._collaboration_collaborators = (
             bridge._collaboration_collaborators.with_runtime_manifest(manifest)
         )
@@ -506,13 +489,17 @@ def _prepare_live_start(
         lifecycle = kwargs["lifecycle_collaborators"]
         execution = kwargs["execution_collaborators"]
         cad = kwargs["cad_collaborators"]
+        gui = kwargs["gui_collaborators"]
         assert _args == ()
         assert kwargs["allow_execute_code"] is True
-        assert collaborators.document_lease_service is lease_service
-        assert collaborators.document_identity_service is identity_service
         assert collaborators.inflight_request_registry is inflight
-        assert collaborators.handoff_continuation_store is handoffs
-        assert collaborators.acquisition_claim_store is claims
+        for retired_name in (
+            "document_lease_service",
+            "document_identity_service",
+            "handoff_continuation_store",
+            "acquisition_claim_store",
+        ):
+            assert not hasattr(collaborators, retired_name)
         assert collaborators.request_replay_cache is replay
         assert collaborators.rpc_server_runtime_id == rpc_server._ADDON_RUNTIME_ID
         assert collaborators.runtime_manifest is None
@@ -521,16 +508,16 @@ def _prepare_live_start(
             is rpc_server.FreeCAD.getDocument
         )
         assert lifecycle.freecad is rpc_server.FreeCAD
-        assert lifecycle.document_lease_service is lease_service
-        assert lifecycle.document_identity_service is identity_service
-        assert lifecycle.save_service is save_service
+        assert not hasattr(lifecycle, "document_lease_service")
+        assert not hasattr(lifecycle, "document_identity_service")
+        assert not hasattr(lifecycle, "save_service")
         assert execution.compatibility_api is collaborators.compatibility_api
         assert execution.gui_dispatcher is dispatcher
         assert execution.worker_manager is worker_manager
         assert execution.request_replay_cache is replay
         assert execution.inflight_request_registry is inflight
-        assert execution.handoff_continuation_store is handoffs
-        assert execution.acquisition_claim_store is claims
+        assert not hasattr(execution, "handoff_continuation_store")
+        assert not hasattr(execution, "acquisition_claim_store")
         assert execution.runtime_id == rpc_server._ADDON_RUNTIME_ID
         assert execution.session_manager is None
         assert execution.runtime_manifest is None
@@ -538,10 +525,12 @@ def _prepare_live_start(
         assert execution.server_started_at == ""
         assert cad.compatibility_api is collaborators.compatibility_api
         assert cad.freecad is rpc_server.FreeCAD
+        assert gui.freecad is rpc_server.FreeCAD
         bridge._collaboration_collaborators = collaborators
         bridge._lifecycle_collaborators = lifecycle
         bridge._execution_collaborators = execution
         bridge._cad_collaborators = cad
+        bridge._gui_collaborators = gui
         return bridge
 
     class _Thread:
@@ -575,15 +564,6 @@ def _prepare_live_start(
     monkeypatch.setattr(rpc_server, "ShutdownEvent", lambda: shutdown_requested)
     monkeypatch.setattr(rpc_server, "RequestReplayCache", lambda: replay)
     monkeypatch.setattr(rpc_server, "InflightRequestRegistry", lambda: inflight)
-    monkeypatch.setattr(rpc_server, "HandoffContinuationStore", lambda: handoffs)
-    monkeypatch.setattr(rpc_server, "AcquisitionClaimStore", lambda: claims)
-    monkeypatch.setattr(
-        rpc_server,
-        "document_lease_service",
-        None if initialize_lease_during_start else lease_service,
-    )
-    monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
-    monkeypatch.setattr(rpc_server, "save_service", save_service)
     monkeypatch.setattr(
         rpc_server,
         "QtWidgets",
@@ -633,27 +613,10 @@ def _prepare_live_start(
         "FreeCAD",
         SimpleNamespace(getUserAppDataDir=lambda: "", getHomePath=lambda: ""),
     )
-    def initialize_document_lease_runtime(_settings):
-        if initialize_lease_during_start:
-            monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
-        return lease_service
-
-    monkeypatch.setattr(
-        rpc_server,
-        "initialize_document_lease_runtime",
-        initialize_document_lease_runtime,
-    )
     monkeypatch.setattr(
         rpc_server, "resolve_rpc_bind_host", lambda _settings: "127.0.0.1"
     )
     if authentication_enabled:
-        lease_runtime = SimpleNamespace(
-            addon_runtime_id="runtime",
-            freecad_pid=1,
-            freecad_process_started_at="started",
-            boot_id="boot",
-        )
-
         def construct_session_manager(*, manifest, secret):
             assert manifest is runtime_manifest
             assert secret == b"secret"
@@ -663,20 +626,8 @@ def _prepare_live_start(
             timeline.append("construct:session_manager")
             return session_manager
 
-        def bind_replay_predicate(predicate):
-            if replay_binding_failure is not None:
-                raise replay_binding_failure
-            replay_predicates.append(predicate)
-            timeline.append("publish:replay_predicate")
-
-        replay.set_owner_lease_predicate = bind_replay_predicate
         monkeypatch.setattr(rpc_server, "SessionManager", construct_session_manager)
         monkeypatch.setattr(rpc_server, "load_profile_secret", lambda _path: b"secret")
-        monkeypatch.setattr(
-            rpc_server,
-            "_require_authenticated_lease_runtime",
-            lambda _profile_id: lease_runtime,
-        )
         monkeypatch.setattr(
             rpc_server,
             "make_runtime_manifest",
@@ -706,11 +657,8 @@ def _prepare_live_start(
         bridge=bridge,
         replay=replay,
         inflight=inflight,
-        handoffs=handoffs,
-        claims=claims,
         session_manager=session_manager,
         runtime_manifest=runtime_manifest,
-        replay_predicates=replay_predicates,
     )
 
 
@@ -743,8 +691,6 @@ def test_runtime_start_builds_once_and_publishes_only_after_thread_start(
     assert runtime.collaboration_bridge is context.bridge
     assert runtime.request_replay_cache is context.replay
     assert runtime.inflight_requests is context.inflight
-    assert runtime.handoff_continuations is context.handoffs
-    assert runtime.acquisition_claims is context.claims
     assert context.listener.registered == [context.bridge]
     assert context.timeline.index("builder:return") < context.timeline.index(
         "start:worker_manager"
@@ -817,55 +763,111 @@ def test_restart_reuses_replay_cache_from_disposed_runtime(monkeypatch) -> None:
     second_runtime.dispose()
 
 
-def test_full_stop_restart_preserves_native_document_session_authority(
+def test_full_stop_restart_preserves_native_collaboration_contexts(
     monkeypatch,
 ) -> None:
     context = _prepare_live_start(monkeypatch)
     native_document = SimpleNamespace(
         Name="NativeSession",
-        mutation_authority_epoch=23,
-        mutation_authority_owner="native-owner",
-        mutation_session_id="native-session",
+        Label="Native document",
+        lifecycle_epoch=23,
+        persisted_revision=17,
+        recovery_state={"status": "Recoverable", "artifact": "native-recovery"},
+        revision_stream=(
+            {"kind": "DocumentStructure", "revision": 41},
+            {"kind": "ObjectState", "subject": "Body", "revision": 73},
+        ),
     )
+    personal_contexts = {
+        (native_document.Name, "actor-native"): {
+            "camera": "native-camera",
+            "selection": ("Body",),
+        }
+    }
+    personal_context_writes: list[tuple[object, ...]] = []
 
     def get_document(name):
         return native_document if name == native_document.Name else None
 
     monkeypatch.setattr(context.rpc_server.FreeCAD, "getDocument", get_document)
-    expected = (
-        native_document.mutation_authority_epoch,
-        native_document.mutation_authority_owner,
-        native_document.mutation_session_id,
+    monkeypatch.setattr(
+        context.rpc_server.FreeCADGui,
+        "getPersonalViewContext",
+        lambda document, actor: personal_contexts.get((document, actor)),
+        raising=False,
     )
+    monkeypatch.setattr(
+        context.rpc_server.FreeCADGui,
+        "storePersonalViewContext",
+        lambda *args: personal_context_writes.append(("store", *args)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        context.rpc_server.FreeCADGui,
+        "removePersonalViewContext",
+        lambda *args: personal_context_writes.append(("remove", *args)),
+        raising=False,
+    )
+    expected_document_state = {
+        "lifecycle_epoch": native_document.lifecycle_epoch,
+        "persisted_revision": native_document.persisted_revision,
+        "recovery_state": dict(native_document.recovery_state),
+        "revision_stream": native_document.revision_stream,
+    }
+    expected_personal_contexts = {
+        key: dict(value) for key, value in personal_contexts.items()
+    }
 
     assert "started" in context.rpc_server.start_rpc_server().lower()
     first_runtime = context.built["runtime"]
-    first_lookup = (
-        first_runtime.collaboration_bridge._collaboration_collaborators
-        .compatibility_api._document_lookup
-    )
+    first_bridge = first_runtime.collaboration_bridge
+    first_collaboration = first_bridge._collaboration_collaborators
+    first_lifecycle = first_bridge._lifecycle_collaborators
+    first_gui = first_bridge._gui_collaborators
+    first_lookup = first_collaboration.compatibility_api._document_lookup
+    assert first_lifecycle.freecad is context.rpc_server.FreeCAD
     assert first_lookup(native_document.Name) is native_document
+    assert first_gui.snapshot_personal_view_context(
+        native_document.Name, "actor-native"
+    ) == personal_contexts[(native_document.Name, "actor-native")]
+
     assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
-    assert (
-        native_document.mutation_authority_epoch,
-        native_document.mutation_authority_owner,
-        native_document.mutation_session_id,
-    ) == expected
+    assert {
+        "lifecycle_epoch": native_document.lifecycle_epoch,
+        "persisted_revision": native_document.persisted_revision,
+        "recovery_state": native_document.recovery_state,
+        "revision_stream": native_document.revision_stream,
+    } == expected_document_state
+    assert personal_contexts == expected_personal_contexts
+    assert personal_context_writes == []
 
     assert "started" in context.rpc_server.start_rpc_server().lower()
     second_runtime = context.built["runtime"]
-    second_lookup = (
-        second_runtime.collaboration_bridge._collaboration_collaborators
-        .compatibility_api._document_lookup
-    )
+    second_bridge = second_runtime.collaboration_bridge
+    second_collaboration = second_bridge._collaboration_collaborators
+    second_lifecycle = second_bridge._lifecycle_collaborators
+    second_gui = second_bridge._gui_collaborators
+    second_lookup = second_collaboration.compatibility_api._document_lookup
     assert second_runtime is not first_runtime
+    assert second_collaboration is not first_collaboration
+    assert second_lifecycle is not first_lifecycle
+    assert second_gui is not first_gui
+    assert second_lifecycle.freecad is context.rpc_server.FreeCAD
     assert second_lookup(native_document.Name) is native_document
-    assert (
-        native_document.mutation_authority_epoch,
-        native_document.mutation_authority_owner,
-        native_document.mutation_session_id,
-    ) == expected
+    assert second_gui.snapshot_personal_view_context(
+        native_document.Name, "actor-native"
+    ) == expected_personal_contexts[(native_document.Name, "actor-native")]
+    assert {
+        "lifecycle_epoch": native_document.lifecycle_epoch,
+        "persisted_revision": native_document.persisted_revision,
+        "recovery_state": native_document.recovery_state,
+        "revision_stream": native_document.revision_stream,
+    } == expected_document_state
+    assert personal_contexts == expected_personal_contexts
+    assert personal_context_writes == []
     assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
+    assert personal_contexts == expected_personal_contexts
+    assert personal_context_writes == []
 
 
 def test_failed_restart_preserves_tombstone_replay_cache(monkeypatch) -> None:
@@ -1049,40 +1051,28 @@ def test_authenticated_start_publishes_authentication_only_after_composition(
         context.rpc_server.rpc_server_started_at
         == context.bridge._execution_collaborators.server_started_at
     )
-    assert context.replay_predicates == [
-        context.rpc_server.document_lease_service.has_unresolved_owner
-    ]
     assert context.timeline.index("construct:session_manager") < context.timeline.index(
         "builder:return"
-    )
-    assert context.timeline.index("builder:return") < context.timeline.index(
-        "publish:replay_predicate"
     )
     context.built["runtime"].dispose()
 
 
-def test_authenticated_first_start_reads_lease_service_initialized_during_start(
+def test_authenticated_restart_rebinds_transport_authentication(
     monkeypatch,
 ) -> None:
-    context = _prepare_live_start(
-        monkeypatch,
-        authentication_enabled=True,
-        initialize_lease_during_start=True,
-    )
+    context = _prepare_live_start(monkeypatch, authentication_enabled=True)
 
-    result = context.rpc_server.start_rpc_server()
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    first_runtime = context.built["runtime"]
+    assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
+    assert first_runtime.disposed is True
 
-    assert result == "RPC Server started at 127.0.0.1:19875."
-    assert context.replay_predicates == [
-        context.rpc_server.document_lease_service.has_unresolved_owner
-    ]
-    assert context.timeline.index("construct:session_manager") < context.timeline.index(
-        "builder:return"
-    )
-    assert context.timeline.index("builder:return") < context.timeline.index(
-        "publish:replay_predicate"
-    )
-    context.built["runtime"].dispose()
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    second_runtime = context.built["runtime"]
+    assert second_runtime is not first_runtime
+    assert second_runtime.session_manager is context.session_manager
+    assert second_runtime.runtime_manifest is context.runtime_manifest
+    assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
 
 
 def test_listener_thread_target_retains_composed_listener_identity(monkeypatch) -> None:
@@ -1205,21 +1195,21 @@ def test_fatal_thread_start_failure_rolls_back_then_propagates(monkeypatch) -> N
     ]
 
 
-def test_fatal_deferred_auth_publication_rolls_back_then_propagates(
+def test_fatal_auth_manifest_publication_rolls_back_then_propagates(
     monkeypatch,
 ) -> None:
-    primary = _LaunchFailure("fatal replay publication")
+    primary = _LaunchFailure("fatal authentication manifest publication")
     context = _prepare_live_start(
         monkeypatch,
         authentication_enabled=True,
-        replay_binding_failure=primary,
+        manifest_binding_failure=primary,
     )
 
     with pytest.raises(_LaunchFailure) as captured:
         context.rpc_server.start_rpc_server()
 
     assert captured.value is primary
-    assert context.counts["thread"] == 1
+    assert context.counts["thread"] == 0
     assert context.rpc_server._addon_runtime is None
     assert context.rpc_server.rpc_server_instance is None
     assert context.rpc_server.rpc_session_manager is None

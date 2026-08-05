@@ -8,7 +8,7 @@ import time
 import FreeCAD
 
 from ...mutation_guard import validate_document_invariants
-from ...snapshot_service import restore_snapshot_in_place_gui
+from ...snapshot_service_ops.restore_snapshot import restore_snapshot_in_place_gui
 from .snapshot_restore_target import resolve_restore_target, validate_restore_target
 
 
@@ -71,28 +71,13 @@ def restore_gui(self, doc_name: str, snapshot_id):
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
             return {"ok": False, "error": f"Document '{doc_name}' not found."}
-        identity, active = _lease_restore_context(self, doc_name)
-        lease_snapshot_id = (
-            active.get("document_state", {}).get("snapshot_id")
-            if active is not None
-            else None
-        )
-        target, error = resolve_restore_target(
-            doc_name,
-            snapshot_id,
-            active=active,
-            lease_snapshot_id=lease_snapshot_id,
-        )
+        target, error = resolve_restore_target(doc_name, snapshot_id)
         if error:
             return error
         validation_error = validate_restore_target(target, doc_name)
         if validation_error:
             return validation_error
         snaps = getattr(FreeCAD, "_mcp_snapshots", [])
-        if active is not None:
-            return _restore_leased_snapshot(
-                self, doc, target, identity, doc_name, snaps
-            )
         return _restore_unleased_snapshot(doc, target, snaps)
     except Exception as e:
         return {
@@ -100,55 +85,6 @@ def restore_gui(self, doc_name: str, snapshot_id):
             "error_code": getattr(e, "code", "SNAPSHOT_RESTORE_FAILED"),
             "error": str(e),
         }
-
-
-def _lease_restore_context(self, doc_name):
-    try:
-        collaborators = self._lifecycle_collaborators
-        if collaborators.document_lease_service is None:
-            return None, None
-        identity = collaborators.document_identity_service.resolve(
-            {"document_name": doc_name}
-        )
-        active = collaborators.document_lease_service.get(
-            {"document_session_uuid": identity.session_uuid}
-        )
-        return identity, active
-    except Exception:
-        return None, None
-
-
-def _restore_leased_snapshot(self, doc, target, identity, doc_name, snaps):
-    result = restore_snapshot_in_place_gui(
-        doc,
-        target["path"],
-        expected_document_name=doc_name,
-        expected_source_path=identity.canonical_path,
-        validator=self._cad_collaborators.validate_document_invariants,
-    )
-    observed = (
-        self._lifecycle_collaborators.document_identity_service
-        .inspect_registered_document(identity.session_uuid, doc)
-    )
-    if (
-        observed.session_uuid != identity.session_uuid
-        or observed.comparison_key != identity.comparison_key
-        or observed.file_identity != identity.file_identity
-    ):
-        raise RuntimeError(
-            "restored live document no longer matches its lease identity"
-        )
-    return {
-        **result,
-        "restored_id": target["id"],
-        "doc": doc_name,
-        "new_doc": doc_name,
-        "document_session_uuid": identity.session_uuid,
-        "lease_preserved": True,
-        "count": len(snaps),
-    }
-
-
 def _restore_unleased_snapshot(doc, target, snaps):
     cur = doc.Name
     result = restore_snapshot_in_place_gui(

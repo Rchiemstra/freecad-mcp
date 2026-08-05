@@ -263,6 +263,70 @@ def test_request_identity_callbacks_bracket_success_and_dispatch_failure() -> No
     assert not hasattr(current, "identity")
 
 
+def test_request_identity_ignores_all_legacy_document_authority_inputs() -> None:
+    current = threading.local()
+
+    def capture(**identity: object) -> None:
+        current.identity = identity
+
+    def clear() -> None:
+        del current.identity
+
+    listener, loop = _running_listener(
+        capture_request_identity=capture,
+        clear_request_identity=clear,
+    )
+
+    def identity(_payload: object) -> dict[str, object]:
+        return dict(current.identity)
+
+    listener.register_function(identity, "identity")
+    headers = {
+        "X-MCP-Instance-Id": "runtime-a",
+        "X-MCP-Client": "pytest",
+        "X-MCP-Pid": "42",
+        "X-MCP-Host": "localhost",
+        "X-MCP-Rpc-Port": "9876",
+        "X-MCP-Request-Id": "request-a",
+        "X-MCP-Session-Token": "auth-token",
+        "X-MCP-Lease-Token": "legacy-lease-token",
+        "X-MCP-Lease-Id": "legacy-lease-id",
+        "X-MCP-Lease-Generation": "not-an-integer",
+        "X-MCP-Document-Session-Id": "legacy-document-session",
+        "X-MCP-Lease-Credentials": "not-json",
+    }
+    try:
+        status, response = _post_json(
+            listener,
+            {
+                "jsonrpc": "2.0",
+                "method": "identity",
+                "params": [{"lease_credentials": [{"token": "payload-secret"}]}],
+                "id": 1,
+            },
+            headers=headers,
+        )
+        assert status == 200
+        assert response == {
+            "jsonrpc": "2.0",
+            "result": {
+                "instance_id": "runtime-a",
+                "client": "pytest",
+                "pid": 42,
+                "host": "localhost",
+                "rpc_port": 9876,
+                "request_id": "request-a",
+                "rpc_session_token": "auth-token",
+            },
+            "id": 1,
+        }
+    finally:
+        listener.begin_shutdown()
+        listener.shutdown()
+        listener.server_close()
+        loop.join(timeout=2)
+
+
 def test_identity_callback_failures_are_suppressed_at_listener_boundary() -> None:
     clear_calls: list[bool] = []
 

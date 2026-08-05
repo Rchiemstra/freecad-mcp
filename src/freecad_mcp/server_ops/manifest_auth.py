@@ -8,12 +8,18 @@ from .._shared.protocol.handshake_request import build_handshake_request_from_ma
 from .._shared.protocol.handshake_response import (
     verify_handshake_response_from_manifest,
 )
-from .._shared.protocol.manifest import load_instance_manifest, make_mcp_runtime_identity
+from .._shared.protocol.manifest import (
+    load_instance_manifest,
+    make_mcp_runtime_identity,
+)
 from .._shared.protocol.profile_secret import load_profile_secret
 from .._shared.protocol.protocol_error import ProtocolError as RpcAuthError
 from ..build_info import as_dict as build_info_dict
 from ..build_info import build_id, protocol_version
 from ..freecad_client import FreeCADConnection
+from ..freecad_client_ops.connection_methods.connection_headers_ops import (
+    configure_rpc_session,
+)
 from ..outcomes import OutcomeStatus
 from . import surfaces
 from .compatibility import compatibility_for_manifest
@@ -75,7 +81,7 @@ def manifest_for_authentication() -> Any:
 
 
 def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> None:
-    """Refresh the short-lived RPC session without disturbing held leases."""
+    """Refresh the short-lived RPC authentication session."""
     if surfaces.state.instance_manifest is None or (not force and not session_needs_refresh()):
         return
     manifest = manifest_for_authentication()
@@ -114,18 +120,18 @@ def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> 
         # Commit the launcher-authorized runtime only after its HMAC response
         # proves every refreshed identity field.
         surfaces.state.instance_manifest = manifest
-        surfaces.state.lease_manager.mark_connected(verified.session_token)
+        surfaces.state.rpc_session.mark_connected(
+            verified.session_token,
+            session_id=verified.session_id,
+            expires_at=verified.session_expires_at,
+        )
         surfaces.state.rpc_session_id = verified.session_id
         surfaces.state.rpc_session_expires_at = verified.session_expires_at
         surfaces.state.authenticated_manifest = verified.manifest
-        conn.configure_lease_routing(
-            surfaces.state.lease_manager,
-            lambda name: surfaces.state.document_sessions.get(name),
-        )
+        configure_rpc_session(conn, surfaces.state.rpc_session)
         conn.configure_session_refresher(
             lambda: refresh_authenticated_connection(conn)
         )
-        conn.configure_stale_recovery(surfaces.stale_recovery)
         compatibility = compatibility_for_manifest(verified.manifest)
         surfaces.state.compatibility_warnings = compatibility["warnings"]
         surfaces.emit_event(

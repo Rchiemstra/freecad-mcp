@@ -12,7 +12,6 @@ from .gui_errors import (
 )
 from .gui_outcome import GuiOutcome
 from .gui_request import GuiRequest
-from .inflight_lease_credential import InflightLeaseCredential
 from .inflight_request import InflightRequest
 from .inflight_request_registry import InflightRequestRegistry
 from .inflight_snapshot import InflightSnapshot
@@ -30,7 +29,6 @@ __all__ = [
     "GuiOutcome",
     "GuiRequest",
     "GuiTaskError",
-    "InflightLeaseCredential",
     "InflightRequest",
     "InflightRequestRegistry",
     "InflightSnapshot",

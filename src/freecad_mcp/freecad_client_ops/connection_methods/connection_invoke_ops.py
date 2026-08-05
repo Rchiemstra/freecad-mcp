@@ -34,14 +34,9 @@ def set_identity(
 
 
 def set_active_lease_token(conn, token: str | None) -> None:
-        """Set the deprecated lease header for the current execution context.
+        """Retain the deprecated setter without routing document credentials."""
 
-        This API remains for v1 heartbeat/release callers. It no longer mutates
-        shared connection state, so two threads cannot route one document's
-        token onto another document's request.
-        """
-
-        conn._legacy_lease_token.set(token)
+        del conn, token
 
 
 def _make_proxy(conn, timeout: float) -> ProxyLane:

@@ -31,8 +31,6 @@ class _StartRuntimeBindings:
             "shutdown_requested",
             "rpc_request_replay_cache",
             "rpc_inflight_request_registry",
-            "rpc_handoff_continuation_store",
-            "rpc_acquisition_claim_store",
             "rpc_session_manager",
             "rpc_runtime_manifest",
             "rpc_server_instance",
@@ -60,12 +58,6 @@ class _StartRuntimeBindings:
         object.__setattr__(
             self, "rpc_inflight_request_registry", root.InflightRequestRegistry()
         )
-        object.__setattr__(
-            self, "rpc_handoff_continuation_store", root.HandoffContinuationStore()
-        )
-        object.__setattr__(
-            self, "rpc_acquisition_claim_store", root.AcquisitionClaimStore()
-        )
         object.__setattr__(self, "rpc_session_manager", None)
         object.__setattr__(self, "rpc_runtime_manifest", None)
         object.__setattr__(self, "rpc_server_instance", None)
@@ -84,17 +76,6 @@ class _StartRuntimeBindings:
             object.__setattr__(self, name, value)
             return
         setattr(object.__getattribute__(self, "_root"), name, value)
-
-    def initialize_document_lease_runtime(self, settings=None):
-        root = object.__getattribute__(self, "_root")
-        initializer = root.initialize_document_lease_runtime
-        if root._lease_initializer_accepts_replay:
-            return initializer(
-                settings,
-                _request_replay_cache=self.rpc_request_replay_cache,
-            )
-        return initializer(settings)
-
 
 def _gui_thread_parent(rpc_mod: Any) -> tuple[Any, str | None]:
     app = rpc_mod.QtWidgets.QApplication.instance()
@@ -183,8 +164,6 @@ def start_rpc_server(port=None, *, dependencies: Any | None = None):
     from .server_lifecycle_ops.abort_start import abort_rpc_start
     from .server_lifecycle_ops.start_gates import (
         refuse_enforce_without_profile,
-        refuse_off_mode_with_active_records,
-        register_live_documents,
     )
     from .server_lifecycle_ops.v2_session import initialize_rpc_v2_session
 
@@ -195,8 +174,6 @@ def start_rpc_server(port=None, *, dependencies: Any | None = None):
             port=port,
             abort_rpc_start=abort_rpc_start,
             refuse_enforce_without_profile=refuse_enforce_without_profile,
-            refuse_off_mode_with_active_records=refuse_off_mode_with_active_records,
-            register_live_documents=register_live_documents,
             initialize_rpc_v2_session=initialize_rpc_v2_session,
         )
 
@@ -208,8 +185,6 @@ def _start_rpc_server_locked(
     port,
     abort_rpc_start,
     refuse_enforce_without_profile,
-    refuse_off_mode_with_active_records,
-    register_live_documents,
     initialize_rpc_v2_session,
 ):
     if rpc_mod._runtime_shutdown_claim is not None:
@@ -246,13 +221,7 @@ def _start_rpc_server_locked(
     remote_enabled = bool(settings.get("remote_enabled", False))
     allowed_ips = str(settings.get("allowed_ips", "127.0.0.1"))
 
-    lease_mode = str(settings.get("document_lease_mode", "off"))
-    try:
-        rpc_mod.initialize_document_lease_runtime(settings)
-    except Exception as exc:
-        abort_rpc_start(rpc_mod)
-        return f"RPC Server refused document lease runtime configuration: {exc}"
-
+    authentication_mode = str(settings.get("document_lease_mode", "off"))
     profile_id = str(
         settings.get("profile_instance_id") or settings.get("instance_id") or ""
     )
@@ -260,17 +229,12 @@ def _start_rpc_server_locked(
 
     enforce_error = refuse_enforce_without_profile(
         rpc_mod,
-        lease_mode=lease_mode,
+        authentication_mode=authentication_mode,
         profile_id=profile_id,
         auth_secret_file=auth_secret_file,
     )
     if enforce_error is not None:
         return enforce_error
-
-    register_live_documents(rpc_mod, lease_mode)
-    off_mode_error = refuse_off_mode_with_active_records(rpc_mod, lease_mode)
-    if off_mode_error is not None:
-        return off_mode_error
 
     try:
         rpc_v2_initialization_warning, actual_host, actual_port = (
@@ -282,7 +246,7 @@ def _start_rpc_server_locked(
                 port=port,
                 allowed_ips=allowed_ips,
                 remote_enabled=remote_enabled,
-                lease_mode=lease_mode,
+                authentication_mode=authentication_mode,
                 profile_id=profile_id,
                 auth_secret_file=auth_secret_file,
                 initialize_rpc_v2_session=initialize_rpc_v2_session,
@@ -349,29 +313,6 @@ def _retain_failed_construction(rpc_mod: Any, failure: BaseException) -> bool:
     return True
 
 
-_PREDICATE_BINDING_NAME = "set_owner_lease_predicate"
-
-
-class _DeferredReplayBinding:
-    def __init__(self, source: Any) -> None:
-        self._source = source
-        self._predicate = None
-
-    def __getattr__(self, name: str) -> Any:
-        if name == _PREDICATE_BINDING_NAME:
-            return self._capture
-        return getattr(self._source, name)
-
-    def _capture(self, predicate) -> None:
-        if not callable(predicate):
-            raise TypeError("replay predicate must be callable")
-        self._predicate = predicate
-
-    def apply(self) -> None:
-        if self._predicate is not None:
-            getattr(self._source, _PREDICATE_BINDING_NAME)(self._predicate)
-
-
 class _UnpublishedRpcFacade:
     """Stage initializer writes locally until the complete graph is published."""
 
@@ -383,7 +324,7 @@ class _UnpublishedRpcFacade:
             {
                 "rpc_session_manager": None,
                 "rpc_runtime_manifest": None,
-                "rpc_request_replay_cache": _DeferredReplayBinding(replay_cache),
+                "rpc_request_replay_cache": replay_cache,
             },
         )
 
@@ -400,8 +341,7 @@ class _UnpublishedRpcFacade:
         return object.__getattribute__(self, "_values").get(name)
 
     def apply_deferred(self) -> None:
-        binding = self.staged("rpc_request_replay_cache")
-        binding.apply()
+        return None
 
 
 def _bind_authenticated_collaboration_manifest(bridge, manifest) -> None:
@@ -439,7 +379,7 @@ def _compose_runtime(
     port: int,
     allowed_ips: str,
     remote_enabled: bool,
-    lease_mode: str,
+    authentication_mode: str,
     profile_id: str,
     auth_secret_file: str,
     initialize_rpc_v2_session,
@@ -465,14 +405,10 @@ def _compose_runtime(
         _worker_manager,
         _request_replay_cache,
         _inflight_requests,
-        _handoff_continuations,
-        _acquisition_claims,
     ):
         collaboration_collaborators = rpc_mod._build_collaboration_collaborators(
             runtime_manifest=None,
             inflight_request_registry=_inflight_requests,
-            acquisition_claim_store=_acquisition_claims,
-            handoff_continuation_store=_handoff_continuations,
             request_replay_cache=_request_replay_cache,
             runtime_id=rpc_mod.rpc_server_runtime_id,
         )
@@ -494,8 +430,6 @@ def _compose_runtime(
                 shutdown_requested_value=rpc_mod.shutdown_requested,
                 request_replay_cache=_request_replay_cache,
                 inflight_request_registry=_inflight_requests,
-                handoff_continuation_store=_handoff_continuations,
-                acquisition_claim_store=_acquisition_claims,
                 session_manager_value=None,
                 runtime_manifest_value=None,
                 actual_endpoint_value=None,
@@ -532,7 +466,7 @@ def _compose_runtime(
             staged_rpc,
             profile_id=profile_id,
             auth_secret_file=auth_secret_file,
-            lease_mode=lease_mode,
+            authentication_mode=authentication_mode,
             actual_host=str(actual_host),
             actual_port=int(actual_port),
         )
@@ -565,11 +499,9 @@ def _compose_runtime(
         listener_factory=listener_factory,
         authentication_factory=authentication_factory,
         capability_bridge_factory=capability_bridge_factory,
-        authentication_required=(lease_mode == "enforce"),
+        authentication_required=(authentication_mode == "enforce"),
         request_replay_cache=rpc_mod.rpc_request_replay_cache,
         inflight_requests=rpc_mod.rpc_inflight_request_registry,
-        handoff_continuations=rpc_mod.rpc_handoff_continuation_store,
-        acquisition_claims=rpc_mod.rpc_acquisition_claim_store,
     )
     return (
         runtime,

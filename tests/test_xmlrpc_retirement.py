@@ -54,7 +54,7 @@ class _Methods:
 def live_server(monkeypatch):
     monkeypatch.setattr(
         xmlrpc_identity_handler,
-        "_import_document_lock",
+        "_identity_bindings",
         lambda: _IdentityContext(),
     )
     methods = _Methods()

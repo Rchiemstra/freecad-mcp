@@ -15,7 +15,6 @@ from .dependency_closure import dependency_closure, dependency_order
 from .document_state_helpers import document_state, selection_state
 from .link_manifest import collect_link_manifest
 from .link_policy import apply_link_policy
-from .snapshot_save_context import internal_snapshot_save_observer_scope, snapshot_save_context
 
 SAFE_DOCUMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -110,29 +109,19 @@ def create_snapshot_bundle_gui(
     started = time.monotonic()
     try:
         entries = []
-        with snapshot_save_context(
-            documents,
-            mutation_generations,
-            mutation_request_id,
-            mutation_document_keys,
-        ):
-            for index, item in enumerate(documents, 1):
-                canonical = snapshots / f"{index:04d}_{item.Name}.FCStd"
-                load_path = load / f"{item.Name}.FCStd"
-                with internal_snapshot_save_observer_scope(
-                    item,
-                    canonical,
-                    mutation_request_id,
-                ):
-                    item.saveCopy(str(canonical))
-                entries.append({
-                    **states_before[item.Name],
-                    "snapshot_filename": canonical.name,
-                    "snapshot_path": str(canonical),
-                    "load_filename": load_path.name,
-                    "load_path": str(load_path),
-                    "primary": item.Name == doc.Name,
-                })
+        del mutation_generations, mutation_request_id, mutation_document_keys
+        for index, item in enumerate(documents, 1):
+            canonical = snapshots / f"{index:04d}_{item.Name}.FCStd"
+            load_path = load / f"{item.Name}.FCStd"
+            item.saveCopy(str(canonical))
+            entries.append({
+                **states_before[item.Name],
+                "snapshot_filename": canonical.name,
+                "snapshot_path": str(canonical),
+                "load_filename": load_path.name,
+                "load_path": str(load_path),
+                "primary": item.Name == doc.Name,
+            })
     except Exception as exc:
         return {
             "ok": False,

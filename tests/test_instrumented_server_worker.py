@@ -15,7 +15,6 @@ from freecad_mcp.instrumented_server import (
 )
 from freecad_mcp.telemetry.context import get_context, update_context
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -42,13 +41,13 @@ def _registered_mcp_tool_names() -> set[str]:
 
 
 def test_event_loop_progresses_while_sync_tool_blocks_worker(monkeypatch):
-    """Lease heartbeats schedule on the loop; sync tools must not starve them."""
+    """Async control work progresses while a sync tool occupies its worker."""
 
-    server_instance = InstrumentedFastMCP("worker-heartbeat-test")
+    server_instance = InstrumentedFastMCP("worker-event-loop-test")
     started = threading.Event()
     release = threading.Event()
-    heartbeat_ticks: list[float] = []
-    lease_interval_s = 0.05
+    progress_ticks: list[float] = []
+    probe_interval_s = 0.05
 
     @server_instance.tool(name="slow_sync_probe")
     def slow_sync_probe() -> dict[str, str]:
@@ -57,12 +56,12 @@ def test_event_loop_progresses_while_sync_tool_blocks_worker(monkeypatch):
             raise TimeoutError("slow_sync_probe was not released")
         return {"status": "done"}
 
-    async def heartbeat_loop() -> None:
+    async def progress_loop() -> None:
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
             if started.is_set():
-                heartbeat_ticks.append(time.monotonic())
-            await asyncio.sleep(lease_interval_s)
+                progress_ticks.append(time.monotonic())
+            await asyncio.sleep(probe_interval_s)
 
     async def wait_for_started() -> None:
         deadline = time.monotonic() + 2.0
@@ -78,78 +77,21 @@ def test_event_loop_progresses_while_sync_tool_blocks_worker(monkeypatch):
         tool_task = asyncio.create_task(
             server_instance.call_tool("slow_sync_probe", {})
         )
-        heartbeat_task = asyncio.create_task(heartbeat_loop())
+        progress_task = asyncio.create_task(progress_loop())
 
         try:
             await wait_for_started()
-            await asyncio.sleep(lease_interval_s * 3)
-            assert len(heartbeat_ticks) >= 2, (
-                "expected multiple heartbeat ticks while sync tool blocked "
+            await asyncio.sleep(probe_interval_s * 3)
+            assert len(progress_ticks) >= 2, (
+                "expected multiple event-loop ticks while sync tool blocked "
                 "its worker"
             )
         finally:
             release.set()
             await asyncio.wait_for(tool_task, timeout=5.0)
-            heartbeat_task.cancel()
+            progress_task.cancel()
             with pytest.raises(asyncio.CancelledError):
-                await heartbeat_task
-
-    asyncio.run(run())
-
-
-def test_event_loop_heartbeats_across_lease_interval_while_sync_blocks(
-    monkeypatch,
-):
-    """Block longer than production lease heartbeat cadence; loop must keep ticking."""
-
-    lease_interval_s = server._LEASE_HEARTBEAT_INTERVAL_S
-    server_instance = InstrumentedFastMCP("worker-lease-heartbeat-test")
-    started = threading.Event()
-    release = threading.Event()
-    heartbeat_ticks: list[float] = []
-
-    @server_instance.tool(name="long_blocking_probe")
-    def long_blocking_probe() -> dict[str, str]:
-        started.set()
-        if not release.wait(timeout=lease_interval_s + 5.0):
-            raise TimeoutError("long_blocking_probe was not released")
-        return {"status": "done"}
-
-    async def heartbeat_loop() -> None:
-        tick_interval_s = min(1.0, lease_interval_s / 4)
-        deadline = time.monotonic() + lease_interval_s + 2.0
-        while time.monotonic() < deadline:
-            if started.is_set():
-                heartbeat_ticks.append(time.monotonic())
-            await asyncio.sleep(tick_interval_s)
-
-    async def run() -> None:
-        _silence_telemetry(monkeypatch)
-        monkeypatch.setattr(server_instance, "get_context", lambda: _context())
-
-        tool_task = asyncio.create_task(
-            server_instance.call_tool("long_blocking_probe", {})
-        )
-        heartbeat_task = asyncio.create_task(heartbeat_loop())
-
-        try:
-            deadline = time.monotonic() + 2.0
-            while not started.is_set():
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("long_blocking_probe did not start")
-                await asyncio.sleep(0.01)
-
-            await asyncio.sleep(lease_interval_s + 0.5)
-            assert len(heartbeat_ticks) >= 2, (
-                "expected heartbeat ticks across the production lease interval "
-                f"({lease_interval_s}s) while sync tool blocked its worker"
-            )
-        finally:
-            release.set()
-            await asyncio.wait_for(tool_task, timeout=lease_interval_s + 5.0)
-            heartbeat_task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await heartbeat_task
+                await progress_task
 
     asyncio.run(run())
 

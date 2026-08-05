@@ -8,36 +8,22 @@ import pytest
 
 from addon.FreeCADMCP.rpc_server.gui_document_runtime import (
     open_document as runtime_open_document,
+)
+from addon.FreeCADMCP.rpc_server.gui_document_runtime import (
     reload_document as runtime_reload_document,
 )
-from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_core_enforcement import (
-    dispatch_enforcement,
-)
+from addon.FreeCADMCP.rpc_server.gui_personal_registry import PersonalViewRegistry
 from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_core import (
     dispatch as dispatch_core,
 )
-from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_core_enforcement_auth import (
-    AUTHENTICATED_METHODS,
+from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_dispatch import (
+    GuiDispatchFailure,
 )
 from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.document_ops import (
     list_documents,
     open_document,
     reload_document,
 )
-from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_dispatch import (
-    GuiDispatchFailure,
-)
-from addon.FreeCADMCP.rpc_server.gui_personal_registry import PersonalViewRegistry
-from addon.FreeCADMCP.rpc_server.save_service_ops.baseline import (
-    compare_serialized_file_to_baseline,
-)
-from addon.FreeCADMCP.rpc_server.save_types.baseline_mismatch_error import (
-    BaselineMismatchError,
-)
-from addon.FreeCADMCP.rpc_server.save_types.baseline_required_error import (
-    BaselineRequiredError,
-)
-
 
 pytestmark = pytest.mark.unit
 
@@ -90,131 +76,22 @@ class _FreeCAD:
         return self._opened
 
 
-def test_actor_scoped_gui_methods_are_authenticated_by_enforced_dispatch() -> None:
-    actor_methods = {
-        "activate_document",
-        "animate_placement",
-        "capture_view_sequence",
-        "capture_view_sequence_to_disk",
-        "get_active_screenshot",
-        "get_gui_state",
-        "get_selection",
-        "open_document",
-        "refresh_view",
-        "reload_document",
-        "repair_view_placements",
-        "select_subshapes",
-        "set_section_view",
-        "set_tree_expanded",
-    }
-    assert actor_methods <= AUTHENTICATED_METHODS
-
-    identity = {
-        "rpc_session_token": "token",
-        "instance_id": "runtime-id",
-        "request_id": "request-1",
-    }
+def test_transport_dispatch_is_policy_free_and_calls_the_public_method_once() -> None:
     calls = []
-
-    class _Lock:
-        def get_request_identity(self):
-            return identity
-
-        def set_request_identity(self, **updated):
-            identity.update(updated)
-
-    read_only = object()
-    verb_kind = SimpleNamespace(
-        MUTATING=object(), READ_ONLY=read_only, LIFECYCLE=object()
-    )
-    session = SimpleNamespace(
-        session_id="session-id",
-        mcp=SimpleNamespace(process_started_at="2026-08-05T00:00:00Z"),
-    )
-    collaborators = SimpleNamespace(
-        session_manager=SimpleNamespace(
-            authenticate=lambda token, *, mcp_runtime_id: (
-                calls.append((token, mcp_runtime_id)) or session
-            )
-        ),
-        lease_protocol_public_error=lambda *_args, **_kwargs: {},
-        document_lease_service=None,
-    )
-    facade = SimpleNamespace()
-
-    result = dispatch_enforcement(
-        facade,
-        "get_gui_state",
-        (),
-        lambda: {"ok": True},
-        read_only,
-        lambda _params: None,
-        SimpleNamespace(),
-        _Lock(),
-        verb_kind,
-        lambda value, _key: value,
-        lambda _key: {"success": True},
-        lambda **_kwargs: "unused",
-        lambda _params: (),
-        lambda _params: None,
-        collaborators,
-    )
-
-    assert result == {"ok": True}
-    assert calls == [("token", "runtime-id")]
-    assert identity["authenticated_session_id"] == "session-id"
-
-
-def test_actor_scoped_gui_method_authenticates_in_default_observe_dispatch() -> None:
-    identity = {
-        "rpc_session_token": "token",
-        "instance_id": "runtime-id",
-        "authenticated_session_id": "caller-forged",
-    }
-    read_only = SimpleNamespace(value="read_only")
-    calls = []
-
-    class _Lock:
-        VerbKind = SimpleNamespace(
-            MUTATING=object(), READ_ONLY=read_only, LIFECYCLE=object()
-        )
-
-        def classify_verb(self, _method):
-            return read_only, lambda _params: None
-
-        def is_enforcement_enabled(self):
-            return False
-
-        def get_request_identity(self):
-            return identity
-
-        def set_request_identity(self, **updated):
-            identity.update(updated)
-
-    lock = _Lock()
-    session = SimpleNamespace(
-        session_id="trusted-session",
-        mcp=SimpleNamespace(process_started_at="trusted-start"),
-    )
-    collaborators = SimpleNamespace(
-        import_document_lock=lambda: lock,
-        session_manager=SimpleNamespace(
-            authenticate=lambda token, *, mcp_runtime_id: (
-                calls.append((token, mcp_runtime_id)) or session
-            )
-        ),
-        lease_protocol_public_error=lambda *_args, **_kwargs: {},
-    )
     facade = SimpleNamespace(
-        _execution_collaborators=collaborators,
-        get_gui_state=lambda: dict(identity),
+        get_gui_state=lambda: calls.append("get_gui_state") or {"ok": True}
     )
 
-    result = dispatch_core(facade, "get_gui_state", ())
+    assert dispatch_core(facade, "get_gui_state", ()) == {"ok": True}
+    assert calls == ["get_gui_state"]
 
-    assert calls == [("token", "runtime-id")]
-    assert result["authenticated_session_id"] == "trusted-session"
-    assert result["mcp_process_started_at"] == "trusted-start"
+
+def test_transport_dispatch_rejects_private_and_unknown_methods() -> None:
+    facade = SimpleNamespace(_private=lambda: None)
+    with pytest.raises(Exception, match="not supported"):
+        dispatch_core(facade, "_private", ())
+    with pytest.raises(Exception, match="not supported"):
+        dispatch_core(facade, "missing", ())
 
 
 def test_list_documents_preserves_structured_dispatch_failure() -> None:
@@ -237,29 +114,7 @@ def test_list_documents_preserves_structured_dispatch_failure() -> None:
     assert caught.value.result == failure
 
 
-def test_open_duplicate_cancellation_is_not_converted_to_a_public_error() -> None:
-    def reraise_if_cancelled(error):
-        if isinstance(error, _Cancelled):
-            raise error
-
-    collaborators = SimpleNamespace(
-        freecad=SimpleNamespace(listDocuments=lambda: {}),
-        dispatch_gui=lambda _facade, callback, **_kwargs: callback(),
-        document_identity_service=SimpleNamespace(
-            assert_open_path_available=lambda _path: (_ for _ in ()).throw(
-                _Cancelled("cancelled")
-            )
-        ),
-        reraise_if_cancelled=reraise_if_cancelled,
-        redact_rpc_diagnostic=lambda error: f"redacted:{error}",
-    )
-    facade = SimpleNamespace(_gui_collaborators=collaborators)
-
-    with pytest.raises(_Cancelled, match="cancelled"):
-        open_document(facade, "/model.FCStd")
-
-
-def test_open_identity_rejection_keeps_its_public_error_code() -> None:
+def test_open_native_rejection_keeps_its_public_error_code() -> None:
     document = _Document("Model")
     closed = []
     collaborators = SimpleNamespace(
@@ -269,15 +124,14 @@ def test_open_identity_rejection_keeps_its_public_error_code() -> None:
             closeDocument=closed.append,
         ),
         dispatch_gui=lambda _facade, callback, **_kwargs: callback(),
-        document_identity_service=None,
         get_request_identity=lambda: {
             "authenticated_session_id": "session",
             "instance_id": "runtime",
         },
         open_document=lambda _path: {"ok": True, "document": "Model"},
         snapshot_personal_view_context=lambda *_args: None,
-        ensure_v2_document=lambda _document: (_ for _ in ()).throw(
-            RuntimeError("identity")
+        snapshot_view_context=lambda _name: (_ for _ in ()).throw(
+            RuntimeError("presentation")
         ),
         reraise_if_cancelled=lambda _error: None,
         redact_rpc_diagnostic=lambda error: f"redacted:{error}",
@@ -287,8 +141,8 @@ def test_open_identity_rejection_keeps_its_public_error_code() -> None:
     assert open_document(facade, "/model.FCStd") == {
         "ok": False,
         "success": False,
-        "error_code": "DOCUMENT_OPEN_IDENTITY_REJECTED",
-        "error": "redacted:identity",
+        "error_code": "DUPLICATE_OR_INVALID_DOCUMENT_OPEN",
+        "error": "redacted:presentation",
     }
     assert closed == ["Model"]
 
@@ -324,16 +178,12 @@ def test_post_open_cancellation_rolls_back_actor_context_then_closes() -> None:
             closeDocument=lambda name: closed.append(name) or documents.pop(name),
         ),
         dispatch_gui=lambda _facade, callback, **_kwargs: callback(),
-        document_identity_service=None,
         get_request_identity=lambda: {
             "authenticated_session_id": "session",
             "instance_id": "runtime",
         },
         open_document=lambda _path: (
             documents.__setitem__("Model", model) or {"ok": True, "document": "Model"}
-        ),
-        ensure_v2_document=lambda _document: SimpleNamespace(
-            session_uuid="document-session", canonical_path="/model.FCStd"
         ),
         snapshot_view_context=lambda name: {"active_document": name},
         snapshot_personal_view_context=lambda name, actor: (
@@ -394,9 +244,6 @@ def test_runtime_reload_restores_human_active_document_after_failed_reopen(
         runtime_reload_document(
             freecad,
             gui,
-            None,
-            None,
-            lambda *_args, **_kwargs: None,
             "Model",
         )
         == f"FreeCAD did not reopen '{model_path}'."
@@ -423,9 +270,6 @@ def test_null_open_and_reopen_sentinels_survive_restore_failures(tmp_path) -> No
     reload_failure = runtime_reload_document(
         freecad,
         gui,
-        None,
-        None,
-        lambda *_args, **_kwargs: None,
         "Model",
     )
 
@@ -487,41 +331,3 @@ def test_returned_reload_failure_survives_actor_restore_failure(caplog) -> None:
     assert reload_document(facade, "Model") == "original reload failure"
     assert "redacted-secondary" in caplog.text
     assert "restore-secret" not in caplog.text
-
-
-def test_serialized_baseline_comparison_matches_and_fails_closed() -> None:
-    actual = SimpleNamespace(
-        size=10,
-        mtime_ns=20,
-        sha256="a" * 64,
-        file_identity=None,
-    )
-    expected = {"size": 10, "mtime_ns": 20, "sha256": "A" * 64}
-
-    assert (
-        compare_serialized_file_to_baseline(
-            "/model.FCStd",
-            expected,
-            platform="linux",
-            baseline_reader=lambda *_a, **_k: actual,
-        )
-        is actual
-    )
-    with pytest.raises(BaselineMismatchError, match="changed"):
-        compare_serialized_file_to_baseline(
-            "/model.FCStd",
-            {**expected, "size": 11},
-            platform="linux",
-            baseline_reader=lambda *_a, **_k: actual,
-        )
-    with pytest.raises(BaselineRequiredError, match="complete"):
-        compare_serialized_file_to_baseline(
-            "/model.FCStd", {"size": 10}, platform="linux"
-        )
-    with pytest.raises(BaselineMismatchError, match="unable to verify"):
-        compare_serialized_file_to_baseline(
-            "/model.FCStd",
-            expected,
-            platform="linux",
-            baseline_reader=lambda *_a, **_k: object(),
-        )

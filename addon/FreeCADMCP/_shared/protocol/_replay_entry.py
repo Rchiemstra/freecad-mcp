@@ -10,7 +10,6 @@ from typing import Any
 class _ReplayEntry:
     fingerprint: str
     expires_at: float
-    pin_to_owner_leases: bool = False
     process_pinned: bool = False
     state: str = "in_progress"
     response: Any = None

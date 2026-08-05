@@ -22,8 +22,6 @@ GUI_FIELDS = [
     "dispatch_gui",
     "get_request_identity",
     "reraise_if_cancelled",
-    "document_identity_service",
-    "ensure_v2_document",
     "redact_rpc_diagnostic",
     "open_document",
     "reload_document",
@@ -45,9 +43,7 @@ def _gui_collaborators(freecad) -> GuiCollaborators:
     values = {
         field.name: (freecad if field.name == "freecad" else lambda *a, **k: None)
         for field in fields(GuiCollaborators)
-        if field.name != "document_identity_service"
     }
-    values["document_identity_service"] = None
     values["personal_view_registry"] = PersonalViewRegistry()
     return GuiCollaborators(**values)
 
@@ -81,7 +77,10 @@ def test_gui_dependencies_validate_required_edges() -> None:
 
 
 def test_default_gui_graph_is_eager_and_shares_freecad(monkeypatch) -> None:
-    first = SimpleNamespace(getDocument=lambda _name: None)
+    first = SimpleNamespace(
+        getDocument=lambda _name: None,
+        getUserAppDataDir=lambda: "/profile/",
+    )
     monkeypatch.setattr(rpc_server, "FreeCAD", first)
     facade = rpc_server.FreeCADRPC()
     captured = facade._gui_collaborators
@@ -97,17 +96,17 @@ def test_default_gui_graph_is_eager_and_shares_freecad(monkeypatch) -> None:
     )
 
 
-def test_gui_identity_capture_does_not_import_document_lock_eagerly(
+def test_gui_identity_capture_uses_request_identity_module_lazily(
     monkeypatch,
 ) -> None:
     calls = []
-    document_lock = SimpleNamespace(
+    request_identity = SimpleNamespace(
         get_request_identity=lambda: {"instance_id": "actor"}
     )
     monkeypatch.setattr(
         rpc_server,
-        "_import_document_lock",
-        lambda: calls.append("import") or document_lock,
+        "_request_identity_provider",
+        lambda: calls.append("import") or request_identity,
     )
 
     collaborators = rpc_server._build_gui_collaborators()

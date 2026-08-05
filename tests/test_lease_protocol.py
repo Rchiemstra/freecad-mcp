@@ -739,9 +739,9 @@ def test_replay_semantics_survive_session_refresh_and_normalize_generated_hmac()
     cache = RequestReplayCache()
 
     assert first.semantic_fingerprint() == refreshed.semantic_fingerprint()
-    assert cache.claim(runtime_id, first, pin_to_owner_leases=True).status == "new"
+    assert cache.claim(runtime_id, first).status == "new"
     cache.complete(runtime_id, first, {"ok": True, "result": {"success": True}})
-    replay = cache.claim(runtime_id, refreshed, pin_to_owner_leases=True)
+    replay = cache.claim(runtime_id, refreshed)
     assert replay.status == "completed"
 
 
@@ -758,7 +758,7 @@ def test_replay_rejects_changed_multi_document_credential_across_sessions():
     )
     first = RequestEnvelope.from_dict(payload)
     cache = RequestReplayCache()
-    cache.claim(runtime_id, first, pin_to_owner_leases=True)
+    cache.claim(runtime_id, first)
     cache.complete(runtime_id, first, {"ok": True})
 
     changed_payload = copy.deepcopy(payload)
@@ -766,21 +766,19 @@ def test_replay_rejects_changed_multi_document_credential_across_sessions():
     changed_payload["lease_credentials"][1]["generation"] = 9
     changed = RequestEnvelope.from_dict(changed_payload)
     with pytest.raises(LeaseProtocolError) as raised:
-        cache.claim(runtime_id, changed, pin_to_owner_leases=True)
+        cache.claim(runtime_id, changed)
     assert raised.value.code == "REQUEST_ID_REUSE"
 
 
-def test_pinned_replay_compacts_after_ttl_and_is_not_evicted_until_release():
+def test_process_pinned_replay_compacts_after_ttl_and_is_not_evicted():
     now = [10.0]
-    active = {_mcp().runtime_id}
     runtime_id = _mcp().runtime_id
     envelope = RequestEnvelope.from_dict(_envelope("S" * 43))
     cache = RequestReplayCache(
         ttl_seconds=5,
         monotonic=lambda: now[0],
-        owner_has_unresolved_lease=lambda owner: owner in active,
     )
-    cache.claim(runtime_id, envelope, pin_to_owner_leases=True)
+    cache.claim(runtime_id, envelope)
     cache.complete(
         runtime_id,
         envelope,
@@ -794,6 +792,7 @@ def test_pinned_replay_compacts_after_ttl_and_is_not_evicted_until_release():
                 "token": envelope.lease_credentials[0].token,
             },
         },
+        process_pinned=True,
     )
     immediate = cache.status(runtime_id, envelope.request_id).response
     assert envelope.session_token not in str(immediate)
@@ -805,27 +804,36 @@ def test_pinned_replay_compacts_after_ttl_and_is_not_evicted_until_release():
     assert compacted.status == "completed"
     assert compacted.response["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
 
-    active.clear()
+
+def test_owner_lease_pinning_apis_are_inert_no_ops():
+    now = [10.0]
+    runtime_id = _mcp().runtime_id
+    envelope = RequestEnvelope.from_dict(_envelope("P" * 43))
+    cache = RequestReplayCache(
+        ttl_seconds=1,
+        monotonic=lambda: now[0],
+        owner_has_unresolved_lease=lambda _owner: True,
+    )
+    cache.bind_lease_retention_predicate(lambda _owner: True)
+    cache.claim(runtime_id, envelope, pin_to_owner_leases=True)
+    cache.complete(runtime_id, envelope, {"ok": True})
+    now[0] = 12.0
     assert cache.prune() == 1
     assert cache.status(runtime_id, envelope.request_id).status == "expired"
-    assert cache.status(runtime_id, str(uuid.uuid4())).status == "unknown"
 
 
 def test_replay_capacity_never_evicts_pinned_or_in_progress_entries():
     runtime_id = _mcp().runtime_id
-    cache = RequestReplayCache(
-        max_entries=2,
-        owner_has_unresolved_lease=lambda owner: owner == runtime_id,
-    )
+    cache = RequestReplayCache(max_entries=2)
     first = RequestEnvelope.from_dict(_envelope("A" * 43))
     second = RequestEnvelope.from_dict(_envelope("B" * 43))
     third = RequestEnvelope.from_dict(_envelope("C" * 43))
-    cache.claim(runtime_id, first, pin_to_owner_leases=True)
-    cache.complete(runtime_id, first, {"ok": True})
-    cache.claim(runtime_id, second, pin_to_owner_leases=True)
+    cache.claim(runtime_id, first)
+    cache.complete(runtime_id, first, {"ok": True}, process_pinned=True)
+    cache.claim(runtime_id, second)
 
     with pytest.raises(LeaseProtocolError) as raised:
-        cache.claim(runtime_id, third, pin_to_owner_leases=True)
+        cache.claim(runtime_id, third)
     assert raised.value.code == "REPLAY_JOURNAL_FULL"
     assert cache.status(runtime_id, first.request_id).status == "completed"
     assert cache.status(runtime_id, second.request_id).status == "in_progress"

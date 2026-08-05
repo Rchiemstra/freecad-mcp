@@ -8,7 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from freecad_mcp import build_info
-
+from freecad_mcp.rpc_session import RpcAuthenticationSession
 
 pytestmark = pytest.mark.unit
 
@@ -79,8 +79,10 @@ def test_runtime_info_matching_identity_and_no_credentials(monkeypatch):
     monkeypatch.setattr(server.state, "mcp_instance_id", "mcp-runtime")
     monkeypatch.setattr(server.state, "mcp_pid", 123)
     # Runtime info is built exclusively from public manifest/build fields, even
-    # if credential-shaped private state happens to contain a sentinel.
-    monkeypatch.setattr(server.state, "lease_tokens", {"doc": "do-not-expose"})
+    # if the short-lived authentication session contains a sentinel token.
+    authentication = RpcAuthenticationSession()
+    authentication.mark_connected("do-not-expose")
+    monkeypatch.setattr(server.state, "rpc_session", authentication)
     response = server.get_runtime_info(None)
     payload = response.structuredContent["data"]
     assert payload["mcp"]["build_id"] == server.build_id

@@ -6,6 +6,9 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.rpc_server import rpc_server as addon_rpc
+from addon.FreeCADMCP.rpc_server.rpc_helpers_ops.generated_execute import (
+    _generated_operation_method_spec,
+)
 from addon.FreeCADMCP.rpc_server.mutation_guard import (
     DocumentHealthVerdict,
     GuiMutationTransaction,
@@ -34,11 +37,11 @@ def test_typed_mutations_can_recover_locked_error_but_arbitrary_code_cannot():
 def test_signed_generated_operation_inherits_typed_recovery_permission():
     execute_spec = make_method_spec("execute_code", "MUTATING")
 
-    typed_spec = addon_rpc._generated_operation_method_spec(
+    typed_spec = _generated_operation_method_spec(
         execute_spec,
         "partdesign.create-pad",
     )
-    arbitrary_spec = addon_rpc._generated_operation_method_spec(
+    arbitrary_spec = _generated_operation_method_spec(
         execute_spec,
         "execute_code",
     )
@@ -260,6 +263,7 @@ def test_mutation_validator_failure_aborts_before_commit(monkeypatch):
         SimpleNamespace(
             listDocuments=lambda: {"Model": document},
             getDocument=lambda name: document if name == "Model" else None,
+            getUserAppDataDir=lambda: "",
         ),
     )
     spec = replace(
@@ -289,6 +293,7 @@ def _install_documents(monkeypatch, *documents):
         SimpleNamespace(
             listDocuments=lambda: dict(by_name),
             getDocument=by_name.get,
+            getUserAppDataDir=lambda: "",
         ),
     )
 

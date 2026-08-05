@@ -536,12 +536,32 @@ for a contradiction that cannot be resolved by re-scoping.
 
 ## 5. Multitask operating model
 
+This plan is executed by one integrator plus bounded workers under exclusive file
+ownership, in either of two agent lanes: the **Codex lane** (the prerequisite
+plan's policy) or the **Cursor Multitask lane** (the policy that delivered
+[`module-size-refactor-plan.md`](module-size-refactor-plan.md) §5.1–§5.2). The lane
+decides only which models fill the three roles. Roles, ownership, freeze
+discipline, review gates, reports, Docker evidence, and delivery rules in
+§5.2–§5.7 are identical in both, so a phase delivered by either lane is
+indistinguishable at the gate.
+
+A session picks one lane, records it in §11.3 before its first spawn, and does not
+mix lanes inside a phase.
+
 ### 5.1 Roles
 
-This plan adopts the prerequisite's Codex subagent policy
-(`freecad_document_collaboration_plan.md` §5.1–§5.2). The earlier Composer/Cursor
-policy in this document is superseded; the two plans run in one program and must
-not use divergent worker policies.
+Both lanes run the same three roles: one integrator on the critical path, bounded
+implementation workers with exclusive write ownership, and a read-only adversarial
+reviewer. Earlier revisions of this document declared the Composer/Cursor policy
+superseded outright; it is reinstated here as a peer lane with an explicit
+equivalence table, so the two plans in this program still share one operating
+model instead of diverging.
+
+#### Codex lane (default)
+
+Adopts the prerequisite's subagent policy
+(`freecad_document_collaboration_plan.md` §5.1–§5.2), including its §5.2.1 spawn
+test and its §5.2.2 model/reasoning table.
 
 | Role | Model and reasoning | Responsibilities |
 |---|---|---|
@@ -553,10 +573,34 @@ Risk classes requiring Sol: the wire migration and error-model change, the share
 protocol module, runtime construction and disposal, cancellation and GUI-thread
 seams, the generator's contract-equality proof, and every review gate.
 
+#### Cursor Multitask lane
+
+| Role | Model | Responsibilities |
+|---|---|---|
+| **Worker** (implementation subagent) | **Composer 2.5** only — **never** Composer 2.5 Fast | Implements one frozen workstream under exclusive file ownership. Does not edit shared files. Adds focused tests. Reports per §5.6. |
+| **Integrator** (parent / dedicated agent) | Session orchestrator | Identical to the Codex integrator: partitions work, freezes interfaces, owns §5.3 shared files, waits for every worker in a wave, combines outputs, runs every Docker suite, updates §11, creates the single phase commit. |
+| **Reviewer** (read-only subagent) | **Cursor Grok 4.5 High** | Reviews adversarially after every workstream and again after integrator merge or fix. Inspects the actual diff and tests. Reports blocking, important, and non-blocking findings. Never edits. |
+
+Maximize parallel workers only when file ownership is disjoint; default to one
+worker when fewer than two safe independent workstreams exist and state why
+(§5.2 rule 13).
+
+#### Lane equivalence
+
+| Codex | Cursor Multitask | Notes |
+|---|---|---|
+| Terra / medium | Composer 2.5 | Cursor has no lower implementation tier in this plan; read-only inventory work normally stays with the integrator anyway. |
+| Terra / high | Composer 2.5 | Default bounded implementation with a frozen contract. |
+| Sol / high or xhigh (implementation) | Composer 2.5 on a narrowed slice, with the frozen interface supplied in the prompt and a written approach note the integrator accepts before implementation begins | Cursor has no separate correctness tier. Buy the safety margin with scope, freeze, and review — never by widening a Composer 2.5 assignment to cover a Sol-class seam whole. |
+| Sol / xhigh (review) | Grok 4.5 High | Every review gate, in both lanes, is read-only and adversarial. |
+| Sol / max, Sol / ultra | Not available | An escalation-class blocker leaves the Cursor lane; see §5.2.1 rule 5. |
+
 ### 5.2 Hard rules
 
-1. Apply the prerequisite's §5.2.1 test before every spawn; record task, done
-   condition, model, reasoning level, exclusive paths, and dependencies.
+Rules 1–18 apply in both lanes.
+
+1. Apply the prerequisite plan's §5.2.1 spawn test before every spawn; record task,
+   done condition, lane, model, reasoning level, exclusive paths, and dependencies.
 2. Do not delegate a whole phase to one worker when at least two safe workstreams
    exist; do not split a tightly coupled workstream to manufacture parallelism.
 3. Assign exclusive file ownership before starting a wave.
@@ -566,7 +610,9 @@ seams, the generator's contract-equality proof, and every review gate.
 7. One integrator owns shared files, integration, Docker execution, §11 updates,
    and the single phase commit.
 8. The integrator waits for all workers in a wave before combining.
-9. After every workstream, run a read-only **Sol / xhigh** review of the actual diff.
+9. After every workstream, run a read-only adversarial review of the actual diff and
+   tests at the active lane's reviewer level (§5.1): **Sol / xhigh** in the Codex
+   lane, **Grok 4.5 High** in the Cursor lane.
 10. Fix every blocking and important finding, then re-review.
 11. Run the required Docker suites before the phase commit (§5.7).
 12. Do not mark a phase complete unless all reviews and suites pass.
@@ -574,8 +620,40 @@ seams, the generator's contract-equality proof, and every review gate.
     locally and record why.
 14. One commit per phase, inside `tools/mcp/freecad-mcp`.
 15. Every moved symbol keeps its old import path (§3.6); a removed re-export is blocking.
-16. Verify assigned models before each wave; never silently downgrade.
+16. Verify the assigned lane and models before each wave; never silently downgrade,
+    and never substitute a "fast" variant for the assigned implementation model.
 17. Keep one runtime slot free for the integrator.
+18. Do not mix lanes within a phase. A lane change takes effect at a phase boundary
+    and is recorded in §11.3 with its reason. The single exception is the §5.2.1
+    rule 5 escalation of one named unresolved blocker, which is also recorded there.
+
+#### 5.2.1 Cursor Multitask lane addenda
+
+These apply only while the Cursor lane is active. They add to rules 1–18; they
+never relax them.
+
+1. Every implementation subagent is **Composer 2.5**. **Composer 2.5 Fast is never
+   used for a subagent in this plan, at any risk level** — including small,
+   mechanical, or "obvious" workstreams.
+2. Every review gate is a read-only **Grok 4.5 High** subagent: after each
+   workstream, and again after each integrator merge or fix. It must be extremely
+   critical, inspect the actual diff and tests, and classify findings as blocking,
+   important, or non-blocking. The reviewer template in
+   [`module-size-refactor-plan.md`](module-size-refactor-plan.md) §5.6 is usable
+   verbatim.
+3. Fix all blocking and important findings, then review again; a `request changes`
+   verdict blocks integration and the phase commit.
+4. For the Sol-class risks listed in §5.1, the integrator additionally narrows the
+   workstream to one frozen seam, supplies the frozen interface in the prompt, and
+   accepts a written approach note before implementation starts. A Sol-class seam is
+   never handed to a worker whole on the assumption that a stronger model will
+   absorb the ambiguity.
+5. If a Grok 4.5 High review still reports a blocking correctness finding after one
+   fix-and-re-review cycle, stop. Do not retry the same configuration and do not
+   widen the assignment. Either the integrator takes the workstream directly, or it
+   is escalated to the Codex lane at **Sol / max** under the prerequisite's
+   escalation rules. Record the unresolved blocker, the prior attempt, and the exact
+   question in §11.3.
 
 ### 5.3 Shared files (integrator-only)
 
@@ -994,13 +1072,14 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `2d2eeba5b04fd5543c5eafd7d55efc9a220a2016` |
-| Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 4 complete; Phase 17 is the last complete phase |
-| Next phase | 18 — `refactor(collaboration): cut over native MCP authority` |
-| In-flight ownership | None; Phase 17 implementation, native-regression workstreams, and final reviewers are complete |
-| Last review | Phase 17 final delta and integrated reviews CLEAR on 2026-08-05 after every finding and both native E2E regressions were fixed and re-reviewed |
+| Execution MCP base revision | `bd128c3eb3087d42ebf70024ce89813866aa852d` |
+| Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phase 18; Phases 1–17 ran the Codex lane. Record the chosen lane in §11.3 before the first spawn of a phase; do not mix lanes inside a phase. |
+| Current stage / phase | **Stage 5 complete; Phase 18 complete** — see the newest §11.3 entry and §11.4 evidence |
+| Next phase | 19 — `refactor(mcp): pass a typed tool registration context` |
+| In-flight ownership | None; Phase 18 integrator delivery complete |
+| Last review | Integrated cutover review **pending coordinator re-review** after final §5.7 evidence (fe957382 process blockers closed in working tree) |
 | Blocker | None |
-| Resume hint | Start the cross-repository Phase 18 cutover under integrator ownership; read the parent collaboration plan, remove every named temporary Python/native authority surface, update both manifests/plans, and follow §5.4's two-object integration protocol |
+| Resume hint | Begin Phase 19 under integrator ownership per §6 |
 
 ### 11.2 Stage status
 
@@ -1011,7 +1090,7 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
 | 4 | 12–17 | phase 12 | complete |
-| 5 | 18 | phase 18 | pending (next) |
+| 5 | 18 | phase 18 | complete |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
 | 8 | 23 | phase 23 | pending |
@@ -1019,6 +1098,171 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-05 — Phase 18 COMPLETE: native authority cutover (Cursor Multitask integrator)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 + Grok 4.5 High).
+
+**Status: complete.** Delivered as the §5.4 two-object cutover: one squashed nested commit
+`refactor(collaboration): cut over native MCP authority`, then one canonical parent commit
+with the native authority removal, App freeze/`setPropertyStatus` publication fixes,
+the bumped gitlink, both plan/progress updates, and the final gate evidence in §11.4.
+
+- **Nested half:** removed live MCP lease ownership, heartbeat, sidecar-correctness,
+  observer, save/recovery, and credential-escrow authority; retained frozen decoder and
+  deprecation shims only. Refreshed `post_collaboration_compatibility_surface.json` to
+  `verified_post_cutover` with live census totals (core_authority **76**, heartbeats **99**,
+  lease_observers **30**, locked_error_handoff_rotation **13**, mcp_save_recovery_authority
+  **174**, sidecar_correctness **714**); pruned deleted `core_authority_ops/*`, `guard.py`,
+  `cas.py`, and tombstoned bootstrap paths from `temporary_authority_allowances[].current_paths`.
+- **Parent half:** removed `DocumentMutationAuthority`, `MutationCapability`, GUI takeover
+  dialog, and Python ownership surfaces; preserved atomic-presentation guard and added native
+  `saveAsWithPolicy`. App freeze/`PropertyContainer::setPropertyStatus` no longer fan out
+  per-property structural publications.
+- **§5.7 integration gate:** all four Compose services, architecture lint plus full Ruff,
+  branch-built `App_tests_run` / `Gui_tests_run` / `Part_tests_run`, and cross-track
+  preflight/core/e2e — exact counts in §11.4.
+- **Review:** coordinator integrated re-review remains pending; do not self-claim CLEAR.
+
+#### 2026-08-05 — Phase 18 IN PROGRESS: native authority cutover, uncommitted working state
+
+**Status: not complete, nothing committed.** Both worktrees are dirty and neither of
+the two §5.4 Git objects exists yet. This entry records the mid-phase state so the
+work is resumable from the doc; it is not a completion record and §11.4 gets no
+evidence block until the gate passes.
+
+- **Revisions at time of writing.** Parent `feature/assembly-interference-detection`
+  HEAD `2d2eeba5b04fd5543c5eafd7d55efc9a220a2016`; nested HEAD
+  `4be4b317de79fa9aa1b84c86d021213aaaa9522d`; the gitlink recorded in the parent tree
+  is `a8fa9ab19883195ffe87d0f51795db4956d22804` and is therefore **stale** relative to
+  nested HEAD — expected mid-phase, bumped in the parent commit per §5.4.
+- **Working-tree size.** Parent: 20 modified, 6 deleted, 2 untracked. Nested: 135
+  modified, 37 deleted (31 test suites + 6 source modules), 11 untracked.
+
+**Parent half — native authority removed.** Deleted `DocumentMutationAuthority.{h,cpp}`,
+`MutationCapability.{h,cpp}`, and `Gui/Dialogs/DlgMutationTakeover.{h,cpp}`, with their
+`src/App/CMakeLists.txt` and `src/Gui/CMakeLists.txt` registration. `MutationKind.h`
+reduced to its surviving classification, `MutationDeniedException` dropped from
+`src/Base/Exception.h`, ownership methods removed from `Document.pyi` and
+`DocumentPyImp.cpp`, and the `AlterDoc` authority gate removed from `Gui/Command.cpp`.
+`enforceDocumentMutation()` call sites are gone from `Application.cpp`,
+`Transactions.cpp`, `Document.cpp`, `DocumentObject.cpp`, `DocumentObjectPyImp.cpp`,
+`DynamicProperty.cpp`, `ExtensionContainerPyImp.cpp`, and `Property.cpp`.
+
+**Three decisions made during the cutover, recorded because they are not obvious:**
+
+1. **The atomic-presentation guard survives.** The cross-document
+   atomic-presentation-target check is a *separate* safety invariant from the retired
+   owner/capability gate, so it moved into `MutationClassification.{h,cpp}` rather than
+   being deleted with the authority. Removing it alongside the gate would have been a
+   silent correctness regression, not a cutover.
+2. **A native no-clobber Save As was required.** The frozen public contract defaults
+   `save_document_as(overwrite=False)`, and honoring that in Python would have restored
+   exactly the filesystem authority Phase 18 removes. Resolution: a native
+   `Document::saveAsWithPolicy` entry point (`Document.h/.cpp`, `Document.pyi`,
+   `DocumentPyImp.cpp`). This is a native addition delivered inside Phase 18's own
+   subject — the same shape as Phase 15's parent half — and changes no phase's number,
+   subject, or outcome, so §5.5 is not invoked.
+3. **UUID-only lifecycle selectors are a retired compatibility form.** The native API
+   exposes document sessions but no read-only mapping from the legacy add-on UUID, so
+   a UUID-only selector returns the frozen deprecation result instead of reconstructing
+   a Python-side identity index.
+
+**Nested half — live MCP authority removed.** The 22 public legacy lease RPC callables
+keep their exact names and signatures as declarative deprecation adapters returning the
+manifest's frozen `LEGACY_LEASE_AUTHORITY_REMOVED` result. Lease enforcement is out of
+authenticated v2 dispatch (new `rpc_server/request_identity.py`; credential escrow and
+inflight-credential pinning deleted with `credential_inflight.py` and
+`cancellation_resolve.py`). Startup no longer builds watchdogs, observers, sidecar
+stores, acquisition claims, or handoff continuations (`InitGui.py`, `rpc_server.py`,
+`server_lifecycle.py`, `runtime.py`). Native lifecycle verbs moved to the new
+`rpc_server/methods/native_lifecycle_methods.py`, separate from the frozen legacy shims.
+Owner-lease pinning is removed from **both** vendored `_shared/protocol` replay copies,
+byte-equality preserved. Snapshot lease-baseline, recovery-path, and sidecar-permission
+modules are deleted; client heartbeat and stale-recovery hooks are inert.
+
+**Frozen surface — one real regression caught and fixed.** Review found drift in
+published MCP tool descriptions and response keys. The exact descriptions were restored
+and retired fields retained as inert values, so `mcp_tool_registry_contract_snapshot.json`
+is byte-identical again. Tombstone behavior itself reviewed correct.
+
+**Test migration.** 31 pre-cutover suites that construct the deleted authority were
+removed (lease manager/service/observer, lock indicator, dirty adoption, stale recovery,
+lock enforcement, save threading, selector isolation, and related). Replacements added:
+7 `tests/test_phase18_*.py` suites covering client auth sessions, client and service
+deprecation shims, lease RPC tombstones, `create_document` cutover, operations import
+shims, and registered-tool runtime; plus native
+`tests/src/Gui/CollaborationAuthorityRemoval.cpp` and a rewritten
+`tests/src/App/DocumentMutationAuthority.cpp` as negative-reachability tests.
+
+**Evidence so far — partial, does not satisfy §5.7.**
+
+- Native: `freecad-collaboration-ci:ubuntu24.04-20260801` built `App_tests_run`; focused
+  filter `CollaborationAuthorityRemovalTest.*:DocumentCollaborationBoundaryTest.nativeSaveAsPolicyDoesNotClobberByDefault`
+  passed 4/4.
+- MCP: image `freecad-mcp-phase18-integrator`. The first whole-tree `unit` run was
+  1,702 passed / 112 failed, all 112 in pre-cutover fixtures; those were then migrated
+  across three lanes. A focused 7-file Phase 18 set passed 72 tests. **The full `unit`
+  re-run after that migration has not been recorded and is the next evidence to produce.**
+
+**Reviews.** Native removal-graph and nested compatibility-boundary read-only audits:
+CLEAR. Lease-RPC shim and client-shim workstream reviews: CLEAR after fixes and
+re-review. Integrated cutover review: open — it produced the frozen-description drift
+and old-import findings above; the operations-import-shim lane is still in flight.
+
+**Remaining before the phase can be marked complete.**
+
+1. Finish the operations-import-shim lane and clear the integrated review.
+2. Full `unit` re-run, then the §5.7 **integration gate**: all four Compose services,
+   architecture lint and full Ruff, and the registry / semantic RPC / import-deprecation
+   / protocol contract fixtures.
+3. Branch-built cross-track lane plus `App_tests_run`, `Gui_tests_run`, and
+   `Part_tests_run` on the branch build.
+4. Update `post_collaboration_compatibility_surface.json` from planned classification to
+   the **verified** post-cutover surface (§4.1 item 2).
+5. Update §11.1, §11.2, and add the §11.4 evidence block.
+6. Deliver as the §5.4 two-object cutover: one squashed nested commit
+   `refactor(collaboration): cut over native MCP authority`, then one canonical parent
+   commit carrying the native removal, the bumped gitlink, both plan updates, and the
+   cross-track evidence.
+
+**Housekeeping.** A malformed Docker invocation created a directory literally named
+`python -m pytest -q tests` inside the nested repo. It was verified to contain only
+generated `.pytest_cache` files, confirmed to resolve inside the repo root, and removed.
+No source or evidence was in it. Parent `tests/lib/` is untracked and unrelated to this
+phase; classify it before committing so it is not swept in.
+
+#### 2026-08-05 — Plan revision: Cursor Multitask reinstated as a peer execution lane
+
+- **Scope:** documentation only. No phase was executed, no code, fixture, contract,
+  shim, or gate changed, and the phase list, numbering, and subjects are untouched
+  (§5.5 re-scoping authority is not invoked).
+- **Why:** §5.1 previously declared the Composer/Cursor policy superseded outright,
+  which left a Cursor-driven session with no authoritative model policy for this
+  plan. The intent of that supersession was to stop the two plans running *divergent*
+  policies, not to bind the program to one vendor.
+- **Change:** §5.1 and §5.2 of
+  [`module-size-refactor-plan.md`](module-size-refactor-plan.md) are ported in as the
+  **Cursor Multitask lane**, alongside the unchanged **Codex lane** (still the
+  default). §5 gains a lane-selection rule, §5.1 gains both role tables plus a lane
+  equivalence table, §5.2 rules 1/9/16 are stated lane-neutrally, new rule 18 forbids
+  mixing lanes inside a phase (except the one named escalation below), and new
+  §5.2.1 carries the Cursor-specific hard rules:
+  Composer 2.5 for every implementation subagent, **never** Composer 2.5 Fast, Grok
+  4.5 High for every review gate, and narrowed-and-frozen handling of Sol-class risks.
+- **Escalation gap, resolved explicitly:** Cursor has no Sol/max or Sol/ultra
+  equivalent. §5.2.1 rule 5 therefore ends the Cursor lane at one fix-and-re-review
+  cycle on an unresolved blocking correctness finding: the integrator takes the
+  workstream, or it moves to the Codex lane at Sol / max. Escalation is never
+  simulated by widening a Composer 2.5 assignment.
+- **Unchanged in both lanes:** roles, exclusive ownership, §5.3 shared files, §5.4
+  cross-repository delivery, §5.6 worker report, §5.7 Docker gates, and the
+  one-commit-per-phase rule. A phase delivered by either lane is indistinguishable at
+  the gate.
+- **Also updated:** §11.1 gains an `Agent lane` row; §12 gains cheat-sheet step 4
+  (pick and record the lane) and makes step 8's review level lane-aware.
+- **Next:** unchanged — execute Phase 18 only, under integrator ownership, per the
+  §11.1 resume hint.
 
 #### 2026-08-05 — Phase 17 complete: startup and shutdown bootstrapped through the runtime
 
@@ -1955,6 +2199,35 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
 
+#### Phase 18 — `refactor(collaboration): cut over native MCP authority`
+
+- **Agent lane:** Cursor Multitask (Composer 2.5 + Grok 4.5 High).
+- **Images and source identity:** final Compose `freecad-mcp-tests:latest` is
+  `sha256:e8164e5ce0b5`; native `freecad-collaboration-ci:ubuntu24.04-20260801` is
+  `sha256:b34e0e1ecabafa22c760850548b7e8239c4a3428c7d4084927ed5d1109f5142f`;
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  Branch-built FreeCAD reports 26.3.0 revision 48070 inside
+  `freecad-collaboration-workspace`; Compose FreeCAD remains adapter-only 1.1.0 /
+  20260325.
+- **MCP lint and contracts:** `uv run ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked **978** production files and passed architecture policy
+  plus full Ruff. `post_collaboration_compatibility_surface.json` is
+  `verified_post_cutover` with zero reachable authority in all six inventories.
+- **Compose integration gate:** after `docker compose build`, `unit` selected **1,863**
+  and passed **1,863** with one expected screenshot xfail and 124 deselected;
+  `e2e` passed **111/111**; `core` passed **4** with two adapter-only native skips
+  and seven documented xfails; `benchmark` passed **1/1**.
+- **Native branch gate:** `rsync` of current `src/` and `tests/src/` into
+  `freecad-collaboration-workspace`, rebuild `App_tests_run` / `Gui_tests_run` /
+  `Part_tests_run`, then: `App_tests_run` **760 passed / 2 skipped / 0 failed**;
+  `Part_tests_run` **342/342**; Xvfb-backed `Gui_tests_run` **244/244**.
+- **Cross-track jobs:** unmodified preflight emitted `PREFLIGHT_OK`;
+  `freecad-mcp-freecad-tests.sh:core` verdict **0**; `:e2e` verdict **0** with
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1` against branch-built `FreeCADCmd`.
+- **Review result:** prior workstream reviews CLEAR; integrated cutover re-review is
+  **pending coordinator action** after this delivery — integrator does not self-claim CLEAR.
+
 #### Phase 17 — `refactor(mcp): bootstrap startup and shutdown through the runtime`
 
 - **Images and source identity:** final Compose unit image is
@@ -2571,15 +2844,17 @@ repository digest; host-side build or test output is never evidence.
 1. Read §11.1 and the newest §11.3 entry first.
 2. Verify native collaboration Phases 1–6 and record the parent and MCP base revisions.
 3. Select exactly the next numbered phase from §6; do not skip ahead.
-4. Freeze integrator-only shared paths from §5.3.
-5. Give each worker exact exclusive source, target, and test paths plus forbidden paths.
-6. State the native-authority rule and the public contracts the phase must preserve.
-7. Require the §5.6 worker report and an adversarial Sol/xhigh review.
-8. Clear blocking and important findings before integration.
-9. Apply shared façade, barrel, registry, fixture, generator, and composition changes yourself.
-10. Run the §5.7 gate for the phase; run the integration gate where §6 marks it.
-11. Verify old-path shims, registry order, semantic RPC contract, and layer direction.
-12. Update §11 inside the substantive phase commit.
-13. Create the exact phase commit subject from §6.
-14. Bump the parent gitlink at integration gates per §5.4.
-15. Never add a phase squash, merge, shim-removal, or validation-only commit.
+4. Pick the §5.1 agent lane for the phase and record it in §11.3 before the first spawn.
+5. Freeze integrator-only shared paths from §5.3.
+6. Give each worker exact exclusive source, target, and test paths plus forbidden paths.
+7. State the native-authority rule and the public contracts the phase must preserve.
+8. Require the §5.6 worker report and an adversarial review at the active lane's
+   reviewer level (Sol/xhigh, or Grok 4.5 High).
+9. Clear blocking and important findings before integration.
+10. Apply shared façade, barrel, registry, fixture, generator, and composition changes yourself.
+11. Run the §5.7 gate for the phase; run the integration gate where §6 marks it.
+12. Verify old-path shims, registry order, semantic RPC contract, and layer direction.
+13. Update §11 inside the substantive phase commit.
+14. Create the exact phase commit subject from §6.
+15. Bump the parent gitlink at integration gates per §5.4.
+16. Never add a phase squash, merge, shim-removal, or validation-only commit.

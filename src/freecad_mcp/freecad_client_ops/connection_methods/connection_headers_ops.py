@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
-from ...lease_manager import (
-    LeaseClientManager,
-    StaleLeaseRecoveryOrchestrator,
-)
+from ...rpc_session import RpcAuthenticationSession
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -29,28 +27,40 @@ def _refresh_headers(conn) -> None:
             conn._base_headers = tuple(headers)
 
 
-def configure_lease_routing(
-        conn,
-        manager: LeaseClientManager,
-        document_session_resolver: Callable[[str], str | None],
-    ) -> None:
-        """Install request-scoped session/credential routing for typed v1 calls."""
+def configure_rpc_session(
+    conn,
+    session: RpcAuthenticationSession,
+) -> None:
+    """Install the authentication-only session used by protocol-v2 calls."""
 
-        with conn._identity_lock:
-            conn._lease_manager = manager
-            conn._document_session_resolver = document_session_resolver
+    if not isinstance(session, RpcAuthenticationSession):
+        raise TypeError("session must be an RpcAuthenticationSession")
+    with conn._identity_lock:
+        conn._rpc_session = session
+
+
+def configure_lease_routing(
+    conn,
+    manager: Any,
+    document_session_resolver: Callable[[str], str | None],
+) -> None:
+    """Retain the retired configuration signature without document routing."""
+
+    del document_session_resolver
+    if isinstance(manager, RpcAuthenticationSession):
+        configure_rpc_session(conn, manager)
 
 
 def configure_session_refresher(conn, refresher: Callable[[], None]) -> None:
-        """Install a synchronized handshake refresh used only after auth rejection."""
-        with conn._identity_lock:
-            conn._session_refresher = refresher
+    """Install a synchronized handshake refresh used only after auth rejection."""
+    with conn._identity_lock:
+        conn._session_refresher = refresher
 
 
 def configure_stale_recovery(
-        conn, orchestrator: StaleLeaseRecoveryOrchestrator
-    ) -> None:
-        """Install automatic stale-lease recovery orchestration for protected RPC."""
+    conn,
+    orchestrator: Any,
+) -> None:
+    """Retain the removed recovery configuration signature as a no-op."""
 
-        with conn._identity_lock:
-            conn._stale_recovery = orchestrator
+    del conn, orchestrator

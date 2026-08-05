@@ -7,7 +7,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-LEASE_HEARTBEAT_INTERVAL_S = 10.0
 DIAGNOSTIC_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
 
@@ -16,7 +15,6 @@ class ServerSurfaceBindings:
     """Providers owned by the server composition root."""
 
     state: Callable[[], Any]
-    stale_recovery: Callable[[], Any]
     connection_lock: Any
     logger: Any
     get_freecad_connection: Callable[[], Any]
@@ -46,7 +44,6 @@ def _require_bindings() -> ServerSurfaceBindings:
 def __getattr__(name: str):
     if name not in {
         "state",
-        "stale_recovery",
         "connection_lock",
         "logger",
         "get_freecad_connection",
@@ -58,8 +55,6 @@ def __getattr__(name: str):
     bindings = _require_bindings()
     if name == "state":
         return bindings.state()
-    if name == "stale_recovery":
-        return bindings.stale_recovery()
     if name == "connection_lock":
         return bindings.connection_lock
     if name == "logger":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import time
 
-from ..snapshot_service import materialize_load_aliases
+from ..snapshot_service_ops.materialize_aliases import materialize_load_aliases
 from ..worker_protocol import (
     ProtocolError,
     UnsupportedWorkerGuiError,

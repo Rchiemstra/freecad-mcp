@@ -137,8 +137,6 @@ def _facade(
             authenticated_session_id="session", instance_id=actor
         ),
         reraise_if_cancelled=lambda _error: None,
-        document_identity_service=None,
-        ensure_v2_document=lambda document: calls.append(("ensure", document.Name)),
         redact_rpc_diagnostic=lambda error: f"redacted:{error}",
         snapshot_personal_view_context=snapshot,
         store_personal_view_context=store,

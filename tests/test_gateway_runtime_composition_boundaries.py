@@ -33,12 +33,12 @@ AUTHORITY_INVENTORIES = frozenset(
     }
 )
 FROZEN_AUTHORITY_TOTALS = {
-    "core_authority": 115,
-    "heartbeats": 167,
+    "core_authority": 76,
+    "heartbeats": 99,
     "lease_observers": 30,
-    "locked_error_handoff_rotation": 15,
-    "mcp_save_recovery_authority": 251,
-    "sidecar_correctness": 861,
+    "locked_error_handoff_rotation": 13,
+    "mcp_save_recovery_authority": 174,
+    "sidecar_correctness": 714,
 }
 
 pytestmark = pytest.mark.unit

@@ -19,13 +19,14 @@ from .schema_constants import (
 )
 from .task_summary import sanitize_persisted_task_summary
 from .token_utils import token_fingerprint, token_matches
-from .transitions import ALLOWED_TRANSITIONS, validate_transition
+from .transitions import ALLOWED_TRANSITIONS, TERMINAL_STATES
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
     "MAX_PERSISTED_TASK_SUMMARY_CHARS",
     "RECORD_KIND",
     "SCHEMA_VERSION",
+    "TERMINAL_STATES",
     "DocumentIdentity",
     "DocumentSelector",
     "FileBaseline",
@@ -41,5 +42,4 @@ __all__ = [
     "sanitize_persisted_task_summary",
     "token_fingerprint",
     "token_matches",
-    "validate_transition",
 ]

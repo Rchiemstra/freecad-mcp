@@ -15,9 +15,6 @@ from addon.FreeCADMCP.dispatch.continuations import (
     BoundedContinuationRegistry,
     ContinuationCapacityError,
 )
-from addon.FreeCADMCP.dispatch.inflight_lease_credential import (
-    InflightLeaseCredential,
-)
 from addon.FreeCADMCP.dispatch.inflight_request_registry import (
     InflightRequestRegistry,
 )
@@ -27,16 +24,6 @@ pytestmark = pytest.mark.unit
 
 def _uuid() -> str:
     return str(uuid.uuid4())
-
-
-def _credential(token: str) -> InflightLeaseCredential:
-    return InflightLeaseCredential(
-        lease_id=_uuid(),
-        document_session_uuid=_uuid(),
-        generation=3,
-        token=token,
-        mcp_instance_id=_uuid(),
-    )
 
 
 def test_cancellation_resolution_has_one_concurrent_owner_and_fresh_cache() -> None:
@@ -64,27 +51,23 @@ def test_cancellation_resolution_has_one_concurrent_owner_and_fresh_cache() -> N
     assert token.cancellation_resolution() == expected
 
 
-def test_terminal_tombstones_are_bounded_after_credentials_are_scrubbed() -> None:
+def test_terminal_tombstones_are_bounded_without_document_credentials() -> None:
     registry = InflightRequestRegistry(max_terminal_entries=2)
     session_id = _uuid()
-    requests = []
     for index in range(3):
         request = registry.register(
             session_id,
             f"request-{index}",
             "create_object",
-            (_credential(f"secret-{index}"),),
         )
-        request.touch_credentials(request.credentials)
-        requests.append(request)
         snapshot = registry.finish_handler(
             session_id,
             request.request_id,
             status="completed",
         )
         assert snapshot is not None and snapshot.terminal
-        assert request.credentials == ()
-        assert request.affected_credentials == ()
+        assert not hasattr(request, "credentials")
+        assert not hasattr(request, "affected_credentials")
 
     assert registry.status(session_id, "request-0") is None
     assert registry.status(session_id, "request-1") is not None

@@ -18,14 +18,7 @@ def build_replay_on_complete(
     addon_request_id = context.get("request_id")
     replay_secrets = tuple(
         str(value)
-        for value in (
-            context["identity"].get("rpc_session_token"),
-            *(
-                item.get("token")
-                for item in context["identity"].get("lease_credentials", ())
-                if isinstance(item, dict)
-            ),
-        )
+        for value in (context["identity"].get("rpc_session_token"),)
         if value
     )
     if not (session_id and replay_runtime_id and addon_request_id):

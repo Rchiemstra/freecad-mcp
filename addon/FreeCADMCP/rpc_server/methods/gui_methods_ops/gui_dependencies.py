@@ -15,8 +15,6 @@ class GuiCollaborators:
     dispatch_gui: Callable[..., Any]
     get_request_identity: Callable[[], Any]
     reraise_if_cancelled: Callable[[BaseException], None]
-    document_identity_service: Any | None
-    ensure_v2_document: Callable[..., Any]
     redact_rpc_diagnostic: Callable[..., str]
     open_document: Callable[[str], Any]
     reload_document: Callable[[str], Any]
@@ -39,7 +37,6 @@ class GuiCollaborators:
             "dispatch_gui": self.dispatch_gui,
             "get_request_identity": self.get_request_identity,
             "reraise_if_cancelled": self.reraise_if_cancelled,
-            "ensure_v2_document": self.ensure_v2_document,
             "redact_rpc_diagnostic": self.redact_rpc_diagnostic,
             "open_document": self.open_document,
             "reload_document": self.reload_document,

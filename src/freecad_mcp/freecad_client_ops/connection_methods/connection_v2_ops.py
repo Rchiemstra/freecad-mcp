@@ -9,29 +9,27 @@ import uuid
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from ...lease_manager import (
-    LeaseClientManager,
-    LeaseNotFoundError,
-    RpcRequestContext,
-)
+from ...rpc_session import RpcAuthenticationContext, RpcAuthenticationSession
 from ...telemetry.context import get_context
-from .connection_v2_context_helpers import (
-    resolve_document_name_sessions,
-    resolve_selector_session,
-)
 
 logger = logging.getLogger("FreeCADMCPserver")
 
 
 
-def _v2_lease_manager(conn) -> LeaseClientManager | None:
-        """Return the connected manager, if authenticated v2 is available."""
+def _v2_auth_session(conn) -> RpcAuthenticationSession | None:
+    """Return the connected authentication session, if v2 is available."""
 
-        with conn._identity_lock:
-            manager = conn._lease_manager
-        if manager is None or not manager.connected:
-            return None
-        return manager
+    with conn._identity_lock:
+        session = conn._rpc_session
+    if session is None or not session.connected:
+        return None
+    return session
+
+
+def _v2_lease_manager(conn) -> RpcAuthenticationSession | None:
+    """Retain the former private lookup name as an authentication-only shim."""
+
+    return _v2_auth_session(conn)
 
 
 def _build_v2_context(
@@ -43,38 +41,15 @@ def _build_v2_context(
         task_id: str = "",
         request_id: str | None = None,
         require_credentials: bool = True,
-    ) -> RpcRequestContext | None:
-        """Resolve all declared documents once and freeze one request context.
+    ) -> RpcAuthenticationContext | None:
+        """Freeze one authentication context without document-routing state."""
 
-        ``None`` means the connection has no authenticated v2 manager and the
-        caller should use its compatibility RPC route.  Once v2 is connected,
-        incomplete or conflicting document scope fails locally instead of
-        silently falling back to a credential-less mutation.
-        """
-
-        manager = conn._v2_lease_manager()
-        if manager is None:
+        del document_names, selectors, require_credentials
+        session = conn._v2_auth_session()
+        if session is None:
             return None
-        with conn._identity_lock:
-            resolver = conn._document_session_resolver
-
-        session_ids: list[str] = []
-
-        def add_session(session_uuid: str) -> None:
-            if session_uuid and session_uuid not in session_ids:
-                session_ids.append(session_uuid)
-
-        resolve_document_name_sessions(resolver, document_names, add_session)
-        for raw_selector in selectors:
-            resolve_selector_session(manager, resolver, raw_selector, add_session)
-
-        if require_credentials and not session_ids:
-            raise LeaseNotFoundError(
-                f"authenticated mutation {operation_name!r} has no declared leased document"
-            )
         effective_task_id = task_id or get_context().task_id
-        return manager.build_request_context(
-            document_session_uuids=session_ids,
+        return session.build_request_context(
             operation_name=operation_name,
             task_id=effective_task_id,
             request_id=request_id,
@@ -97,16 +72,13 @@ def _unwrap_v2_response(
             # how validation and save failures remain structured when the
             # outer envelope has ``ok=false``.
             unwrapped = dict(result)
-            for key in ("request_id", "addon_runtime_id", "leases"):
+            for key in ("request_id", "addon_runtime_id"):
                 if key in response:
                     unwrapped.setdefault(key, response[key])
-            # Do not acknowledge acquisition claims here: custody happens in
-            # lease_manager.store() after unwrap. Acking early can scrub the
-            # vault before the client retains the token.
             with conn._identity_lock:
-                manager = conn._lease_manager
-            if manager is not None:
-                return manager.redact_value(
+                session = conn._rpc_session
+            if session is not None:
+                return session.redact_value(
                     unwrapped, additional_secrets=additional_secrets
                 )
             return unwrapped
@@ -119,9 +91,9 @@ def _unwrap_v2_response(
                 "request_id": str(response.get("request_id") or ""),
             }
             with conn._identity_lock:
-                manager = conn._lease_manager
-            if manager is not None:
-                return manager.redact_value(
+                session = conn._rpc_session
+            if session is not None:
+                return session.redact_value(
                     unwrapped, additional_secrets=additional_secrets
                 )
             return unwrapped
@@ -196,8 +168,5 @@ def _invoke_mutation_v2(
         response = conn.invoke_v2(method, params, context, timeout=timeout)
         return conn._unwrap_v2_response(
             response,
-            additional_secrets=(
-                context.session_token,
-                *(item.token for item in context.lease_credentials),
-            ),
+            additional_secrets=(context.session_token,),
         )

@@ -8,6 +8,7 @@ from ..methods import (
     gui_methods,
     lease_methods,
     lifecycle_methods,
+    native_lifecycle_methods,
     v2_methods,
 )
 from ..methods.cad_methods_ops.recompute_helpers import collect_invalid_objects
@@ -59,9 +60,6 @@ def bind_freecad_rpc(FreeCADRPC):
         dispatch_helpers.adapt_gui_mutation_result
     )
     FreeCADRPC._execute_mutation_with_health = dispatch_helpers.execute_mutation_with_health
-    FreeCADRPC._model_credential = dispatch_helpers.model_credential
-    FreeCADRPC._retain_inflight_credential = dispatch_helpers.retain_inflight_credential
-    FreeCADRPC._touch_inflight_credential = dispatch_helpers.touch_inflight_credential
     FreeCADRPC._finish_cancellation_resolution = (
         dispatch_helpers.finish_cancellation_resolution
     )
@@ -86,28 +84,15 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.lease_reconcile = lease_methods.lease_reconcile
     FreeCADRPC.claim_acquisition_result = lease_methods.claim_acquisition_result
     FreeCADRPC.acknowledge_acquisition_claim = lease_methods.acknowledge_acquisition_claim
-    FreeCADRPC._start_locked_error_handoff_continuation = (
-        lease_methods.start_locked_error_handoff_continuation
-    )
-    FreeCADRPC._journal_handoff_terminal = lease_methods.journal_handoff_terminal
-    FreeCADRPC._escrow_locked_error_handoff_claim = (
-        lease_methods.escrow_locked_error_handoff_claim
-    )
-    FreeCADRPC._run_locked_error_handoff_continuation = (
-        lease_methods.run_locked_error_handoff_continuation
-    )
-    FreeCADRPC._acquire_document_lock_v2 = lease_methods.acquire_document_lock_v2
     FreeCADRPC.acquire_document_lock = lease_methods.acquire_document_lock
     FreeCADRPC.adopt_dirty_document = lease_methods.adopt_dirty_document
     FreeCADRPC.get_document_lock = lease_methods.get_document_lock
     FreeCADRPC.list_document_locks = lease_methods.list_document_locks
     FreeCADRPC.heartbeat_document_lock = lease_methods.heartbeat_document_lock
     FreeCADRPC.update_document_lock = lease_methods.update_document_lock
-    FreeCADRPC._run_legacy_save = lease_methods.run_legacy_save
-    FreeCADRPC._run_typed_save = lease_methods.run_typed_save
-    FreeCADRPC.save_document = lease_methods.save_document
-    FreeCADRPC.save_document_as = lease_methods.save_document_as
-    FreeCADRPC.finalize_document_edit = lease_methods.finalize_document_edit
+    FreeCADRPC.save_document = native_lifecycle_methods.save_document
+    FreeCADRPC.save_document_as = native_lifecycle_methods.save_document_as
+    FreeCADRPC.finalize_document_edit = native_lifecycle_methods.finalize_document_edit
     FreeCADRPC.release_document_lock = lease_methods.release_document_lock
     FreeCADRPC.force_release_stale_lock = lease_methods.force_release_stale_lock
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# ruff: noqa: E501, E701, E702, I001
+# ruff: noqa: I001
 
 import contextlib
 import hmac
@@ -18,8 +18,12 @@ except ImportError:
         require_document_modified,
     )
 
-try: from ....dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout; from ....dispatch.inflight_lease_credential import InflightLeaseCredential; from ....dispatch.request_cancellation_error import RequestCancellationError
-except ImportError: from dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout; from dispatch.inflight_lease_credential import InflightLeaseCredential; from dispatch.request_cancellation_error import RequestCancellationError
+try:
+    from ....dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout
+    from ....dispatch.request_cancellation_error import RequestCancellationError
+except ImportError:
+    from dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout
+    from dispatch.request_cancellation_error import RequestCancellationError
 from ...mutation_guard import (
     DocumentHealthVerdict,
     GuiMutationTransaction,
@@ -38,7 +42,6 @@ __all__ = [
     "GuiDispatchError",
     "GuiDispatchTimeout",
     "GuiMutationTransaction",
-    "InflightLeaseCredential",
     "RequestCancellationError",
     "RollbackCoverage",
     "RpcMutationKind",

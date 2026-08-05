@@ -18,12 +18,10 @@ from addon.FreeCADMCP.document_lease.identity import (
 from addon.FreeCADMCP.document_lease.model import (
     ALLOWED_TRANSITIONS,
     DocumentSelector,
-    InvalidTransitionError,
     LeaseCredential,
     LeaseState,
     token_fingerprint,
     token_matches,
-    validate_transition,
 )
 
 
@@ -48,11 +46,15 @@ class TestLeaseStateModel:
                         pending.append(successor)
             assert LeaseState.UNLOCKED_SAVED in reachable, start
 
-    def test_invalid_transition_is_rejected(self):
-        with pytest.raises(InvalidTransitionError):
-            validate_transition(LeaseState.LOCKED_EDITING, LeaseState.RELEASING)
-        with pytest.raises(InvalidTransitionError):
-            validate_transition(LeaseState.USER_INTERVENED, LeaseState.LOCKED_EDITING)
+    def test_transition_table_is_historic_immutable_data_only(self):
+        with pytest.raises(TypeError):
+            ALLOWED_TRANSITIONS[LeaseState.LOCKED_IDLE] = (  # type: ignore[index]
+                frozenset()
+            )
+        with pytest.raises(AttributeError):
+            ALLOWED_TRANSITIONS[LeaseState.LOCKED_IDLE].add(  # type: ignore[attr-defined]
+                LeaseState.STALE
+            )
 
     def test_token_fingerprint_is_stable_and_constant_time_comparable(self):
         token = "correct horse battery staple"

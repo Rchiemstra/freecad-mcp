@@ -12,12 +12,12 @@ import pytest
 
 from tests.helpers.architecture_authority import (
     authority_symbol_census as scan_authority_symbols,
+    reachable_python_modules,
 )
 from tests.helpers.architecture_baseline import (
     FROZEN_DEPRECATION_RESULT,
     ROOT,
     _mutable_lease_call_target,
-    authority_symbol_census,
     dynamic_module_lookup_census,
     load_manifest,
     local_import_locator_census,
@@ -27,6 +27,59 @@ from tests.helpers.architecture_baseline import (
 from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
 
 pytestmark = pytest.mark.unit
+
+_FROZEN_AUTHORITY_DEPRECATIONS = {
+    (
+        "addon/FreeCADMCP/rpc_server/methods/lease_methods.py",
+        symbol,
+    )
+    for symbol in (
+        "heartbeat_document_lock",
+        "lease_heartbeat_batch",
+        "run_legacy_save",
+        "run_typed_save",
+    )
+} | {
+    (path, symbol)
+    for path, symbols in {
+        "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py": (
+            "heartbeat_document_lock",
+            "lease_heartbeat_batch",
+        ),
+        "src/freecad_mcp/freecad_client_ops/connection_methods/connection_control_ops.py": (
+            "heartbeat_document_locks_batch",
+        ),
+        "src/freecad_mcp/freecad_client_ops/connection_methods/connection_lease_ops.py": (
+            "heartbeat_document_lock",
+        ),
+        "src/freecad_mcp/freecad_client_ops/facade_bindings.py": (
+            "heartbeat_document_lock",
+            "heartbeat_document_locks_batch",
+        ),
+        "src/freecad_mcp/operations/legacy_locking_deprecations.py": (
+            "heartbeat_document_lock_operation",
+        ),
+        "src/freecad_mcp/server_ops/tool_exports/__init__.py": (
+            "heartbeat_document_lock",
+        ),
+        "src/freecad_mcp/server_ops/tool_exports/bind_part_1.py": (
+            "heartbeat_document_lock",
+        ),
+        "src/freecad_mcp/tools_lease_acquire_b.py": ("heartbeat_document_lock",),
+    }.items()
+    for symbol in symbols
+}
+
+
+def _module_name_for_path(path: str) -> str:
+    module = path.removesuffix(".py").replace("/", ".")
+    if module.endswith(".__init__"):
+        module = module.removesuffix(".__init__")
+    return module.removeprefix("src.")
+
+
+def _is_frozen_authority_deprecation(record: dict[str, object]) -> bool:
+    return (record["path"], record["symbol"]) in _FROZEN_AUTHORITY_DEPRECATIONS
 
 
 def test_execution_revisions_and_adapter_only_compose_lane_are_frozen():
@@ -63,16 +116,46 @@ def test_rpc_locator_census_matches_the_recorded_current_state():
 
 
 def test_equivalent_dynamic_module_lookups_match_the_recorded_classifications():
-    manifest = load_manifest()
-    assert dynamic_module_lookup_census() == manifest["dynamic_module_lookups"]
-    assert local_import_locator_census() == manifest["local_import_locators"]
+    assert load_manifest()["verified_post_cutover"] is True
+    production_files = [
+        path
+        for root in (ROOT / "addon/FreeCADMCP", ROOT / "src/freecad_mcp")
+        for path in root.rglob("*.py")
+    ]
+    reachable = reachable_python_modules(
+        root=ROOT,
+        production_files=production_files,
+        entrypoints=(
+            "addon.FreeCADMCP.InitGui",
+            "addon.FreeCADMCP.rpc_server.rpc_server",
+            "freecad_mcp.server",
+        ),
+    )
+    assert not {
+        item["path"]
+        for item in local_import_locator_census()
+        if item["classification"] == "temporary_authority_locator"
+        and _module_name_for_path(item["path"]) in reachable
+    }
+    assert all(
+        item["classification"]
+        in {
+            "compatibility_alias",
+            "generated_registration_locator",
+            "module_probe",
+            "registration_barrel",
+            "runtime_dependency_locator",
+            "runtime_locator",
+        }
+        for item in dynamic_module_lookup_census()
+    )
 
 
-def test_every_temporary_authority_has_a_phase18_owner_and_negative_assertion():
+def test_phase18_authority_inventory_is_historical_and_unreachable():
     manifest = load_manifest()
     allowances = manifest["temporary_authority_allowances"]
-    assert manifest["manifest_state"] == "planned_pre_cutover"
-    assert manifest["verified_post_cutover"] is False
+    assert manifest["manifest_state"] == "verified_post_cutover"
+    assert manifest["verified_post_cutover"] is True
     assert {item["id"] for item in allowances} == {
         "core_authority",
         "locked_error_handoff_rotation",
@@ -81,41 +164,65 @@ def test_every_temporary_authority_has_a_phase18_owner_and_negative_assertion():
         "sidecar_correctness",
         "mcp_save_recovery_authority",
     }
-    assert authority_symbol_census() == manifest["authority_symbol_census"]
     for allowance in allowances:
         assert allowance["classification"] == "temporary_implementation"
         assert allowance["phase18_owner"] == "integrator"
         assert allowance["negative_end_state"]
-        census_paths = {
-            record["path"]
-            for record in manifest["authority_symbol_census"][allowance["id"]]
-        }
-        assert set(allowance["current_paths"]) == census_paths
-        for path in allowance["current_paths"]:
-            assert (ROOT / path).is_file(), (allowance["id"], path)
-
-    sidecar_paths = {
-        record["path"] for record in manifest["authority_symbol_census"]["sidecar_correctness"]
-    }
-    assert "addon/FreeCADMCP/git_sidecar.py" not in sidecar_paths
-    assert (
-        "addon/FreeCADMCP/document_lease/historic_sidecar.py" not in sidecar_paths
+    reachable = reachable_python_modules(
+        root=ROOT,
+        production_files=[
+            path
+            for root in (ROOT / "addon/FreeCADMCP", ROOT / "src/freecad_mcp")
+            for path in root.rglob("*.py")
+        ],
+        entrypoints=(
+            "addon.FreeCADMCP.InitGui",
+            "addon.FreeCADMCP.rpc_server.rpc_server",
+            "freecad_mcp.server",
+        ),
     )
-    assert "addon/FreeCADMCP/InitGui.py" not in sidecar_paths
-    assert "addon/FreeCADMCP/document_lock_ops/eligibility.py" not in sidecar_paths
-    save_paths = {
-        record["path"]
-        for record in manifest["authority_symbol_census"][
-            "mcp_save_recovery_authority"
+    forbidden = {
+        module
+        for module in reachable
+        if any(
+            marker in module
+            for marker in (
+                ".document_lock",
+                ".lock_indicator",
+                ".document_lease.core_authority",
+                ".document_lease.observer",
+                ".operations.locking",
+                ".rpc_server.lease_runtime",
+                ".server_ops.heartbeat",
+                ".server_ops.stale_recovery_hooks",
+                ".dispatch_core_enforcement_auth",
+                ".dispatch_gui_lease_enforced",
+                ".document_create_lease",
+            )
+        )
+    }
+    assert forbidden == set()
+    census = scan_authority_symbols(
+        root=ROOT,
+        production_files=[
+            path
+            for root in (ROOT / "addon/FreeCADMCP", ROOT / "src/freecad_mcp")
+            for path in root.rglob("*.py")
+        ],
+    )
+    verified_reachable = {
+        allowance["id"]: [
+            record
+            for record in census[allowance["id"]]
+            if _module_name_for_path(record["path"]) in reachable
+            and not _is_frozen_authority_deprecation(record)
         ]
+        for allowance in allowances
     }
-    assert (
-        "src/freecad_mcp/freecad_client_ops/json_rpc_http_transport.py"
-        not in save_paths
-    )
+    assert verified_reachable == manifest["verified_reachable_authority"]
 
 
-def test_every_mutable_lease_caller_is_owned_by_phase18():
+def test_mutable_lease_callers_are_not_reachable_after_phase18():
     manifest = load_manifest()
     allowance = manifest["phase7_mutable_lease_callers"]
     actual = mutable_lease_caller_census()
@@ -123,21 +230,23 @@ def test_every_mutable_lease_caller_is_owned_by_phase18():
     assert allowance["classification"] == "temporary_implementation"
     assert allowance["phase18_owner"] == "integrator"
     assert allowance["negative_end_state"]
-    assert actual == allowance["calls"]
-    assert {call["target"] for call in actual} == {
-        "LeaseRecord.revised",
-        "LeaseRecord.transitioned",
-        "SidecarStore.create",
-        "SidecarStore.delete",
-        "SidecarStore.replace",
-        "create_sidecar",
-        "delete_sidecar",
-        "replace_sidecar",
-        "validate_transition",
+    reachable = reachable_python_modules(
+        root=ROOT,
+        production_files=[
+            path
+            for root in (ROOT / "addon/FreeCADMCP", ROOT / "src/freecad_mcp")
+            for path in root.rglob("*.py")
+        ],
+        entrypoints=("addon.FreeCADMCP.document_lease",),
+    )
+    assert not {
+        call["path"]
+        for call in actual
+        if any(
+            call["path"].removesuffix(".py").replace("/", ".").endswith(module)
+            for module in reachable
+        )
     }
-    for call in actual:
-        assert call["path"].startswith("addon/FreeCADMCP/document_lease/")
-        assert (ROOT / call["path"]).is_file()
 
 
 def test_historic_decoder_authority_exclusion_does_not_hide_new_writes(
@@ -189,6 +298,41 @@ class HistoricLeaseRecord:
     assert any(record["symbol"] == "_sidecar" for record in records)
 
 
+def test_frozen_deprecation_exclusion_does_not_hide_new_authority_symbol(
+    tmp_path: Path,
+) -> None:
+    shim_path = (
+        tmp_path
+        / "src"
+        / "freecad_mcp"
+        / "freecad_client_ops"
+        / "connection_methods"
+        / "connection_lease_ops.py"
+    )
+    shim_path.parent.mkdir(parents=True)
+    shim_path.write_text(
+        """
+def heartbeat_document_lock():
+    return {"error_code": "LEGACY_LEASE_AUTHORITY_REMOVED"}
+
+def unexpected_heartbeat_authority():
+    rotate_live_heartbeat()
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    records = scan_authority_symbols(
+        root=tmp_path,
+        production_files=[shim_path],
+    )["heartbeats"]
+    visible = [record for record in records if not _is_frozen_authority_deprecation(record)]
+
+    assert any(
+        record["symbol"] == "unexpected_heartbeat_authority" for record in visible
+    )
+    assert all(record["symbol"] != "heartbeat_document_lock" for record in visible)
+
+
 def test_mutable_lease_census_recognizes_store_aliases_without_string_false_positives():
     calls = {
         source: _mutable_lease_call_target(ast.parse(source).body[0].value)
@@ -228,6 +372,21 @@ def _parameter_contract(value: object) -> list[dict[str, object]]:
     ]
 
 
+def _invoke_deprecation_contract(
+    symbol: object, contract: list[dict[str, object]]
+) -> object:
+    args: list[object] = []
+    kwargs: dict[str, object] = {}
+    for parameter in contract:
+        if not parameter["required"]:
+            continue
+        if parameter["kind"] in {"positional_only", "positional_or_keyword"}:
+            args.append(object())
+        elif parameter["kind"] == "keyword_only":
+            kwargs[str(parameter["name"])] = object()
+    return symbol(*args, **kwargs)
+
+
 def test_planned_compatibility_imports_resolve_with_frozen_symbols():
     bootstrap_unit_test_runtime()
     manifest = load_manifest()
@@ -257,10 +416,9 @@ def test_planned_compatibility_imports_resolve_with_frozen_symbols():
             assert _parameter_contract(symbol) == contract["parameter_contract"]
             assert contract["phase18_representative_call_required"] is True
             if manifest["verified_post_cutover"]:
-                invocation = contract["representative_call"]
-                result = symbol(
-                    *invocation["args"],
-                    **invocation["kwargs"],
+                result = _invoke_deprecation_contract(
+                    symbol,
+                    contract["parameter_contract"],
                 )
                 assert result == contract["exact_result"]
 

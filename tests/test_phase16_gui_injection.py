@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from addon.FreeCADMCP.rpc_server.gui_personal_registry import PersonalViewRegistry
 from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.document_ops import (
     list_documents,
     open_document,
@@ -17,7 +18,6 @@ from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.document_ops import (
 from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.gui_dependencies import (
     GuiCollaborators,
 )
-from addon.FreeCADMCP.rpc_server.gui_personal_registry import PersonalViewRegistry
 from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.gui_interaction import (
     activate_document,
     get_gui_state,
@@ -26,7 +26,6 @@ from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.gui_interaction import 
     set_section_view,
     set_tree_expanded,
 )
-
 
 pytestmark = pytest.mark.unit
 
@@ -39,7 +38,6 @@ CALLABLE_FIELDS = (
     "dispatch_gui",
     "get_request_identity",
     "reraise_if_cancelled",
-    "ensure_v2_document",
     "redact_rpc_diagnostic",
     "open_document",
     "reload_document",
@@ -59,8 +57,6 @@ EXPECTED_FIELDS = (
     "dispatch_gui",
     "get_request_identity",
     "reraise_if_cancelled",
-    "document_identity_service",
-    "ensure_v2_document",
     "redact_rpc_diagnostic",
     "open_document",
     "reload_document",
@@ -85,7 +81,7 @@ def _callable(*_args, **_kwargs):
 def _collaborators(**overrides):
     values = {
         "freecad": SimpleNamespace(
-            listDocuments=lambda: {},
+            listDocuments=dict,
             getDocument=lambda _name: None,
             closeDocument=_callable,
         ),
@@ -95,8 +91,6 @@ def _collaborators(**overrides):
             "instance_id": "actor",
         },
         "reraise_if_cancelled": _callable,
-        "document_identity_service": object(),
-        "ensure_v2_document": _callable,
         "redact_rpc_diagnostic": lambda value, **_kwargs: str(value),
         "open_document": _callable,
         "reload_document": _callable,
@@ -116,11 +110,12 @@ def _collaborators(**overrides):
     return GuiCollaborators(**values)
 
 
-def test_gui_collaborators_are_frozen_and_accept_optional_identity_service() -> None:
-    collaborators = _collaborators(document_identity_service=None)
+def test_gui_collaborators_are_frozen_and_exclude_document_authority() -> None:
+    collaborators = _collaborators()
 
     assert tuple(GuiCollaborators.__dataclass_fields__) == EXPECTED_FIELDS
-    assert collaborators.document_identity_service is None
+    assert "document_identity_service" not in GuiCollaborators.__dataclass_fields__
+    assert "ensure_v2_document" not in GuiCollaborators.__dataclass_fields__
     with pytest.raises(FrozenInstanceError):
         collaborators.freecad = object()
     with pytest.raises(ValueError, match="freecad collaborator is required"):
@@ -133,19 +128,14 @@ def test_gui_collaborators_validate_every_callable(field: str) -> None:
         _collaborators(**{field: None})
 
 
-def test_open_document_uses_exact_injected_identity_and_presentation_calls() -> None:
+def test_open_document_uses_native_open_and_exact_presentation_calls() -> None:
     calls: list[tuple[str, object]] = []
     document = SimpleNamespace(Name="Model")
-    identity = SimpleNamespace(session_uuid="session-1", canonical_path="/model.FCStd")
     freecad = SimpleNamespace(
-        listDocuments=lambda: {},
+        listDocuments=dict,
         getDocument=lambda name: calls.append(("get", name)) or document,
         closeDocument=lambda name: calls.append(("close", name)),
     )
-    identity_service = SimpleNamespace(
-        assert_open_path_available=lambda path: calls.append(("available", path))
-    )
-
     def dispatch(facade, callback, **_kwargs):
         calls.append(("dispatch", facade))
         return callback()
@@ -153,11 +143,9 @@ def test_open_document_uses_exact_injected_identity_and_presentation_calls() -> 
     collaborators = _collaborators(
         freecad=freecad,
         dispatch_gui=dispatch,
-        document_identity_service=identity_service,
         open_document=lambda path: (
             calls.append(("open", path)) or {"ok": True, "document": "Model"}
         ),
-        ensure_v2_document=lambda value: calls.append(("ensure", value)) or identity,
         snapshot_view_context=lambda name: (
             calls.append(("baseline", name)) or {"active_document": name}
         ),
@@ -171,15 +159,11 @@ def test_open_document_uses_exact_injected_identity_and_presentation_calls() -> 
     assert open_document(facade, "/model.FCStd") == {
         "ok": True,
         "document": "Model",
-        "document_session_uuid": "session-1",
-        "canonical_path": "/model.FCStd",
     }
     assert calls == [
         ("dispatch", facade),
-        ("available", "/model.FCStd"),
         ("open", "/model.FCStd"),
         ("get", "Model"),
-        ("ensure", document),
         ("baseline", "Model"),
         (
             "store",

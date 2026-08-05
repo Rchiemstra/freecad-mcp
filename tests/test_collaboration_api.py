@@ -137,7 +137,7 @@ def test_non_callable_callback_fails_before_document_resolution() -> None:
     assert lookup_calls == []
 
 
-def test_missing_document_or_native_method_fails_closed() -> None:
+def test_missing_document_fails_closed() -> None:
     api_type = _load_package_module().CollaborationAPI
 
     with pytest.raises(LookupError, match="returned no document"):
@@ -145,6 +145,24 @@ def test_missing_document_or_native_method_fails_closed() -> None:
             "Missing",
             lambda: None,
         )
+
+
+def test_compose_lane_uses_adapter_fallback_without_native_commit() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    for document in (object(), type("Document", (), {"commitCompatibilityMutation": 7})()):
+        callback_ran = []
+        result = api_type(
+            document_lookup=lambda _name, document=document: document
+        ).commit_compatibility_mutation("Model", lambda: callback_ran.append(None))
+        assert result == {"status": "Committed", "committed": True}
+        assert callback_ran == [None]
+
+
+def test_native_lane_requires_commit_compatibility_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api_type = _load_package_module().CollaborationAPI
+    monkeypatch.setenv("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION", "1")
 
     for document in (object(), type("Document", (), {"commitCompatibilityMutation": 7})()):
         with pytest.raises(

@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
-from dataclasses import replace
 import importlib
 from pathlib import Path
-from types import SimpleNamespace
 
 import FreeCADGui
-
 
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
-from addon.FreeCADMCP import document_lock
-from addon.FreeCADMCP.rpc_server import rpc_server
-from addon.FreeCADMCP.rpc_server import snapshot_service
+from addon.FreeCADMCP.rpc_server import rpc_server, snapshot_service
 
 _snapshot_save_context = importlib.import_module(
     "addon.FreeCADMCP.rpc_server.snapshot_service_ops.snapshot_save_context"
@@ -73,44 +67,9 @@ def test_snapshot_state_changes_twice_returns_structured_error(tmp_path, monkeyp
     assert manager.executions == 0
 
 
-def test_worker_snapshot_receives_only_callers_lease_generations(
-    tmp_path, monkeypatch
-):
+def test_worker_snapshot_uses_native_authority_neutral_context(tmp_path, monkeypatch):
     manager = _Manager(tmp_path)
     monkeypatch.setattr(rpc_server, "worker_manager", manager)
-    monkeypatch.setattr(
-        rpc_server,
-        "document_lease_service",
-        SimpleNamespace(
-            list_records=lambda: [
-                {
-                    "generation": 7,
-                    "owner": {"mcp_instance_id": "runtime-a"},
-                    "document": {
-                        "name": "Model",
-                        "session_uuid": "model-session",
-                        "canonical_path": "C:/models/Model.FCStd",
-                        "comparison_key": "c:/models/model.fcstd",
-                    },
-                },
-                {
-                    "generation": 11,
-                    "owner": {"mcp_instance_id": "runtime-b"},
-                    "document": {"name": "Foreign"},
-                },
-            ]
-        ),
-    )
-    monkeypatch.setattr(
-        rpc_server,
-        "_import_document_lock",
-        lambda: SimpleNamespace(
-            get_request_identity=lambda: {
-                "instance_id": "runtime-a",
-                "request_id": "request-123",
-            }
-        ),
-    )
     captured = []
 
     def create_snapshot(
@@ -141,22 +100,11 @@ def test_worker_snapshot_receives_only_callers_lease_generations(
 
     assert result["success"] is True
     assert captured[0][0] == "Model"
-    assert captured[0][3] == {"Model": 7}
-    assert captured[0][4] == "request-123"
-    assert captured[0][5] == (
-        "C:/models/Model.FCStd",
-        "Model",
-        "c:/models/model.fcstd",
-        "model-session",
-    )
+    assert captured[0][3:] == ({}, "", ())
 
 
-def test_snapshot_save_copy_runs_inside_generation_scoped_capability(
-    tmp_path, monkeypatch
-):
-    capability_active = False
-    capability_calls = []
-    request_id = "11111111-1111-4111-8111-111111111111"
+def test_snapshot_save_copy_does_not_open_legacy_authority(tmp_path, monkeypatch):
+    callback_calls = []
 
     class Document:
         Name = "Model"
@@ -165,7 +113,7 @@ def test_snapshot_save_copy_runs_inside_generation_scoped_capability(
         Id = 1
         FileName = ""
         Modified = True
-        Objects = []
+        Objects = ()
         HasPendingTransaction = False
         Transacting = False
         LastModifiedDate = ""
@@ -176,10 +124,6 @@ def test_snapshot_save_copy_runs_inside_generation_scoped_capability(
 
         @staticmethod
         def saveCopy(path):
-            assert capability_active is True
-            assert document_lock.is_agent_mutating(
-                "Model", request_id=request_id
-            )
             Path(path).write_bytes(b"snapshot")
 
     document = Document()
@@ -200,44 +144,34 @@ def test_snapshot_save_copy_runs_inside_generation_scoped_capability(
         raising=False,
     )
 
-    @contextmanager
-    def capability(documents, *, generations, kinds):
-        nonlocal capability_active
-        capability_calls.append((documents, generations, kinds))
-        capability_active = True
-        try:
-            yield [object()]
-        finally:
-            capability_active = False
+    def retired_callback(*args, **kwargs):
+        callback_calls.append((args, kwargs))
 
-    monkeypatch.setattr(
-        _snapshot_save_context,
-        "_bindings",
-        replace(
-            _snapshot_save_context._bindings,
-            open_documents_mutation_capability=capability,
-        ),
+    _snapshot_save_context.bind_snapshot_save_context(
+        _snapshot_save_context.SnapshotSaveBindings(
+            begin_agent_mutation_scope=retired_callback,
+            end_agent_mutation_scope=retired_callback,
+            begin_internal_snapshot_save_scope=retired_callback,
+            end_internal_snapshot_save_scope=retired_callback,
+            open_documents_mutation_capability=retired_callback,
+        )
     )
 
     result = snapshot_service.create_snapshot_bundle_gui(
         "Model",
         str(tmp_path),
         mutation_generations={"Model": 7},
-        mutation_request_id=request_id,
+        mutation_request_id="11111111-1111-4111-8111-111111111111",
         mutation_document_keys=("Model",),
     )
 
     assert result["ok"] is True
-    assert capability_calls == [([document], {"Model": 7}, ("SaveAs",))]
-    assert not document_lock.is_agent_mutating("Model", request_id=request_id)
+    assert callback_calls == []
     assert Path(result["documents"][0]["snapshot_path"]).read_bytes() == b"snapshot"
 
 
-def test_nonowner_snapshot_marks_only_the_exact_internal_save(
-    tmp_path, monkeypatch
-):
-    request_id = "22222222-2222-4222-8222-222222222222"
-    capability_calls = []
+def test_snapshot_observer_scope_is_state_free(tmp_path, monkeypatch):
+    observations = []
 
     class Document:
         Name = "Model"
@@ -246,7 +180,7 @@ def test_nonowner_snapshot_marks_only_the_exact_internal_save(
         Id = 1
         FileName = ""
         Modified = False
-        Objects = []
+        Objects = ()
         HasPendingTransaction = False
         Transacting = False
         LastModifiedDate = ""
@@ -257,10 +191,7 @@ def test_nonowner_snapshot_marks_only_the_exact_internal_save(
 
         @staticmethod
         def saveCopy(path):
-            assert document_lock.is_internal_snapshot_save(document, path)
-            assert not document_lock.is_agent_mutating(
-                "Model", request_id=request_id
-            )
+            observations.append(Path(path))
             Path(path).write_bytes(b"read-only snapshot")
 
     document = Document()
@@ -280,31 +211,16 @@ def test_nonowner_snapshot_marks_only_the_exact_internal_save(
         document,
         raising=False,
     )
-    monkeypatch.setattr(
-        _snapshot_save_context,
-        "_bindings",
-        replace(
-            _snapshot_save_context._bindings,
-            open_documents_mutation_capability=(
-                lambda documents, *, generations, kinds: (
-                    capability_calls.append((documents, generations, tuple(kinds)))
-                    or nullcontext([])
-                )
-            ),
-        ),
-    )
-
     result = snapshot_service.create_snapshot_bundle_gui(
         "Model",
         str(tmp_path),
         mutation_generations={},
-        mutation_request_id=request_id,
+        mutation_request_id="22222222-2222-4222-8222-222222222222",
         mutation_document_keys=(),
     )
 
     assert result["ok"] is True
     target = Path(result["documents"][0]["snapshot_path"])
     assert target.read_bytes() == b"read-only snapshot"
-    assert capability_calls == [([document], {}, ("SaveAs",))]
-    assert not document_lock.is_internal_snapshot_save(document, target)
-    assert not document_lock.is_agent_mutating("Model", request_id=request_id)
+    assert observations == [target]
+    assert not hasattr(_snapshot_save_context, "_bindings")

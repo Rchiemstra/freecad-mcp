@@ -13,17 +13,14 @@ from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops import (
     dispatch_gui_callbacks,
     dispatch_gui_errors,
 )
-from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_dispatch import (
-    GuiDispatchFailure,
-    _unwrap_callback_value,
-    dispatch_gui,
-)
 from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_gui_callbacks import (
     build_gui_on_complete,
     build_replay_on_complete,
 )
-from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_gui_lease_enforced import (
-    _complete_gui_lease_operations,
+from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_dispatch import (
+    GuiDispatchFailure,
+    _unwrap_callback_value,
+    dispatch_gui,
 )
 
 pytestmark = pytest.mark.unit
@@ -210,11 +207,6 @@ def _timeout_race_harness():
     )
     collaborators = SimpleNamespace(
         inflight_request_registry=registry,
-        document_lease_service=SimpleNamespace(
-            record_error=lambda *_args, **_kwargs: calls.append("lease-error")
-        ),
-        credential_for_document=lambda *_args: (object(), object()),
-        redact_rpc_diagnostic=lambda *_args, **_kwargs: "redacted",
         logger=SimpleNamespace(
             error=lambda *_args, **_kwargs: None,
             debug=lambda *_args, **_kwargs: None,
@@ -235,7 +227,7 @@ def _timeout_race_harness():
     return calls, inflight, collaborators, error, context
 
 
-def test_completion_first_skips_false_uncertainty_and_lease_error(monkeypatch):
+def test_completion_first_skips_false_uncertainty(monkeypatch):
     monkeypatch.setattr(dispatch_gui_errors, "emit_telemetry", lambda *_a, **_k: None)
     calls, inflight, collaborators, error, context = _timeout_race_harness()
     completion_seen = threading.Event()
@@ -254,10 +246,11 @@ def test_completion_first_skips_false_uncertainty_and_lease_error(monkeypatch):
     )
 
     assert "uncertain" not in calls
-    assert "lease-error" not in calls
 
 
-def test_timeout_first_is_recovered_by_late_completion(monkeypatch):
+def test_timeout_first_with_reduced_collaborators_preserves_structured_response(
+    monkeypatch,
+):
     monkeypatch.setattr(dispatch_gui_errors, "emit_telemetry", lambda *_a, **_k: None)
     monkeypatch.setattr(
         dispatch_gui_callbacks, "emit_telemetry", lambda *_a, **_k: None
@@ -266,7 +259,7 @@ def test_timeout_first_is_recovered_by_late_completion(monkeypatch):
     completion_seen = threading.Event()
     completion_lock = threading.Lock()
 
-    dispatch_gui_errors.handle_gui_dispatch_error(
+    response = dispatch_gui_errors.handle_gui_dispatch_error(
         SimpleNamespace(),
         error,
         inflight=inflight,
@@ -277,6 +270,18 @@ def test_timeout_first_is_recovered_by_late_completion(monkeypatch):
         completion_lock=completion_lock,
         collaborators=collaborators,
     )
+    assert response == {
+        "success": False,
+        "error_code": "GUI_TIMEOUT_DURING_EXECUTION",
+        "error": "late",
+        "request_id": "request-1",
+        "timeout_stage": None,
+        "execution_started": True,
+        "mutation_started": True,
+        "completion_uncertain": True,
+        "recovery_incident_id": "incident-1",
+    }
+
     callback = dispatch_gui_callbacks.build_gui_on_complete(
         SimpleNamespace(_complete_request_cancellation=lambda *_a, **_k: None),
         inflight=inflight,
@@ -293,56 +298,4 @@ def test_timeout_first_is_recovered_by_late_completion(monkeypatch):
         SimpleNamespace(ok=True, value={"ok": True}, error=None, late=True),
     )
 
-    assert calls == ["uncertain", "lease-error", "recovered"]
-
-
-def test_terminal_gui_success_recovers_exact_matching_uncertainty_lease():
-    calls = []
-
-    class Service:
-        def complete_operation(self, credential, *, dirty):
-            calls.append(("complete", credential, dirty))
-            if len([call for call in calls if call[0] == "complete"]) == 1:
-                raise RuntimeError("lease became uncertain")
-
-        def authorize(self, credential):
-            calls.append(("authorize", credential))
-            return SimpleNamespace(
-                state=SimpleNamespace(value="LOCKED_ERROR"),
-                error=SimpleNamespace(
-                    code="GUI_COMPLETION_UNCERTAIN", request_id="request-1"
-                ),
-            )
-
-        def begin_recovery(self, credential, *, operation):
-            calls.append(("recover", credential, operation))
-
-    collaborators = SimpleNamespace(
-        freecad=SimpleNamespace(
-            getDocument=lambda _name: SimpleNamespace(Modified=True)
-        ),
-        document_lease_service=Service(),
-        redact_rpc_diagnostic=lambda value, **_kwargs: str(value),
-    )
-    inflight = SimpleNamespace(
-        token=SimpleNamespace(
-            snapshot=lambda: SimpleNamespace(recovery_incident_id="incident-1")
-        )
-    )
-
-    _complete_gui_lease_operations(
-        collaborators,
-        {"request_id": "request-1", "identity": {}},
-        inflight,
-        [("Model", "credential", None)],
-        "animate_placement",
-        {"ok": True},
-        False,
-    )
-
-    assert calls == [
-        ("complete", "credential", True),
-        ("authorize", "credential"),
-        ("recover", "credential", "animate_placement:late_completion"),
-        ("complete", "credential", True),
-    ]
+    assert calls == ["uncertain", "recovered"]

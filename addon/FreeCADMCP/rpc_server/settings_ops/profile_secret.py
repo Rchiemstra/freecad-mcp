@@ -5,12 +5,25 @@ from __future__ import annotations
 import contextlib
 import os
 import secrets
+import stat
 from pathlib import Path
 
 import FreeCAD
 
 from .migration import migrate
 from .persistence import load_settings, save_settings
+
+
+def _harden_permissions(path: Path, *, strict: bool) -> None:
+    """Apply owner-only permissions without depending on lease sidecars."""
+
+    try:
+        os.chmod(path, 0o600)
+        if os.name != "nt" and stat.S_IMODE(path.stat().st_mode) != 0o600:
+            raise OSError("authentication secret mode is not 0600")
+    except OSError:
+        if strict:
+            raise
 
 
 def ensure_profile_secret(
@@ -46,11 +59,6 @@ def ensure_profile_secret(
         finally:
             os.close(fd)
         created = True
-    try:
-        from document_lease.sidecar import _harden_permissions
-    except ImportError:
-        from addon.FreeCADMCP.document_lease.sidecar import _harden_permissions
-
     try:
         _harden_permissions(secret_path, strict=True)
     except Exception:

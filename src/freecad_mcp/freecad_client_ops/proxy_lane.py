@@ -85,8 +85,8 @@ def _redact_remote_error(
 class ProxyLane:
     """Thread-safe JSON-RPC lane with independent connection state.
 
-    General work and control/heartbeat work use different instances so a long
-    modelling call cannot hold the transport lock needed by a lease renewal.
+    General work and control work use different instances so a long modelling
+    call cannot hold the transport lock needed by cancellation or status queries.
     """
 
     def __init__(

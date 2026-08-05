@@ -107,6 +107,7 @@ from .connection_methods.connection_v2_ops import (
     _build_v2_context,
     _invoke_mutation_v2,
     _unwrap_v2_response,
+    _v2_auth_session,
     _v2_lease_manager,
 )
 from .connection_methods.connection_view_ops import (
@@ -151,6 +152,7 @@ def bind_freecad_connection(FreeCADConnection):
         _retryable_stale_recovery_response
     )
     FreeCADConnection._handle_stale_rpc_refusal = _handle_stale_rpc_refusal
+    FreeCADConnection._v2_auth_session = _v2_auth_session
     FreeCADConnection._v2_lease_manager = _v2_lease_manager
     FreeCADConnection._build_v2_context = _build_v2_context
     FreeCADConnection._unwrap_v2_response = _unwrap_v2_response

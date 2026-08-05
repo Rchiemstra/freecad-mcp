@@ -1,4 +1,4 @@
-"""MCP tool registration — lease lifecycle (Phase 7 / 7D)."""
+"""MCP tools for FreeCAD-owned native persistence lifecycle."""
 
 from __future__ import annotations
 
@@ -8,39 +8,17 @@ from typing import TYPE_CHECKING, Any, Literal
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
-from .operations import (
-    force_release_stale_lock_operation,
-    forget_legacy_document_key,
-    legacy_selector_doc_key,
-)
 from .responses import json_response, tool_fail
-from .tools_server_surfaces import (
-    server_connection,
-    server_stale_recovery,
-    server_state,
-)
+from .tools_server_surfaces import server_connection
 from .tools_types import DocumentSelectorInput
 
 if TYPE_CHECKING:
     from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
     from .server_state import ServerState
 
 
-def _lifecycle_tool_result(result: dict[str, Any]) -> CallToolResult:
-    if not result.get("success") and "stale_recovery" not in result:
-        session_uuid = str(
-            result.get("document_session_uuid")
-            or (result.get("aliases") or {}).get("document_session_uuid")
-            or ""
-        )
-        if session_uuid:
-            snapshot = server_stale_recovery().recovery_status_snapshot_for(
-                (session_uuid,)
-            )
-            if snapshot.get("sessions"):
-                result = {**result, "stale_recovery_health": snapshot}
+def _result(result: dict[str, Any]) -> CallToolResult:
     if result.get("success"):
         return json_response(result)
     return tool_fail(
@@ -50,32 +28,15 @@ def _lifecycle_tool_result(result: dict[str, Any]) -> CallToolResult:
     )
 
 
-def _apply_save_aliases(result: dict[str, Any]) -> None:
-    aliases = result.get("aliases") or {}
-    session_uuid = str(aliases.get("document_session_uuid") or "")
-    new_path = str(aliases.get("canonical_path") or "")
-    old_path = str(aliases.get("previous_path") or "")
-    if not session_uuid or not new_path:
-        return
-    lease_manager = server_state().lease_manager
-    if old_path and old_path != new_path:
-        lease_manager.migrate_alias(
-            old_path,
-            new_path,
-            document_session_uuid=session_uuid,
-        )
-    elif new_path not in lease_manager.aliases_for(session_uuid):
-        lease_manager.add_alias(session_uuid, new_path)
-
-
-def _register_save_document(
+def register(
     mcp: InstrumentedFastMCP,
     *,
     state: ServerState,
     get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
+    stale_recovery: object,
+) -> dict[str, object]:
+    del state, get_freecad_connection, stale_recovery
+
     @mcp.tool()
     def save_document(
         ctx: Context,
@@ -88,29 +49,14 @@ def _register_save_document(
         ``document_session_uuid``, or ``canonical_path``. If more than one field is
         supplied, every field must identify the same live document.
         """
-        legacy_key = legacy_selector_doc_key(
-            dict(selector), server_state().legacy_document_keys
+
+        del ctx
+        return _result(
+            server_connection().save_document(
+                selector, validation_profile=validation_profile
+            )
         )
-        result = server_connection().save_document(
-            selector,
-            validation_profile=validation_profile,
-            legacy_token=server_state().lease_tokens.get(legacy_key, ""),
-        )
-        if result.get("success"):
-            _apply_save_aliases(result)
-        return _lifecycle_tool_result(result)
 
-    exports["save_document"] = save_document
-
-
-def _register_save_document_as(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
     @mcp.tool()
     def save_document_as(
         ctx: Context,
@@ -126,28 +72,18 @@ def _register_save_document_as(
         ``document_session_uuid``, or ``canonical_path``. If more than one field is
         supplied, every field must identify the same live document.
         """
-        result = server_connection().save_document_as(
-            selector,
-            destination,
-            overwrite=overwrite,
-            expected_destination_sha256=expected_destination_sha256,
-            validation_profile=validation_profile,
+
+        del ctx
+        return _result(
+            server_connection().save_document_as(
+                selector,
+                destination,
+                overwrite=overwrite,
+                expected_destination_sha256=expected_destination_sha256,
+                validation_profile=validation_profile,
+            )
         )
-        if result.get("success"):
-            _apply_save_aliases(result)
-        return _lifecycle_tool_result(result)
 
-    exports["save_document_as"] = save_document_as
-
-
-def _register_finalize_document_edit(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
     @mcp.tool()
     def finalize_document_edit(
         ctx: Context,
@@ -163,98 +99,35 @@ def _register_finalize_document_edit(
         Any validation, save, or sidecar-removal failure retains a visible locked
         error/recovery record instead of presenting a clean release.
         """
-        current_state = server_state()
-        legacy_key = legacy_selector_doc_key(
-            dict(selector), current_state.legacy_document_keys
-        )
-        result = server_connection().finalize_document_edit(
-            selector,
-            save_mode=save_mode,
-            destination=destination,
-            overwrite=overwrite,
-            expected_destination_sha256=expected_destination_sha256,
-            validation_profile=validation_profile,
-            legacy_token=current_state.lease_tokens.get(legacy_key, ""),
-        )
-        if result.get("success"):
-            _apply_save_aliases(result)
-            if legacy_key and result.get("released"):
-                current_state.lease_tokens.pop(legacy_key, None)
-                forget_legacy_document_key(
-                    legacy_key, current_state.legacy_document_keys
-                )
-            session_uuid = str(
-                (result.get("aliases") or {}).get("document_session_uuid")
-                or selector.get("document_session_uuid")
-                or current_state.document_sessions.get(
-                    selector.get("document_name", ""), ""
-                )
+
+        del ctx
+        return _result(
+            server_connection().finalize_document_edit(
+                selector,
+                save_mode=save_mode,
+                destination=destination,
+                overwrite=overwrite,
+                expected_destination_sha256=expected_destination_sha256,
+                validation_profile=validation_profile,
             )
-            if session_uuid:
-                current_state.lease_manager.revoke(
-                    session_uuid, reason="verified finalization completed"
-                )
-                for name, value in list(current_state.document_sessions.items()):
-                    if value == session_uuid:
-                        current_state.document_sessions.pop(name, None)
-        return _lifecycle_tool_result(result)
-
-    exports["finalize_document_edit"] = finalize_document_edit
-
-
-def _register_force_release_stale_lock(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-    exports: dict[str, object],
-) -> None:
-    def force_release_stale_lock(ctx: Context, doc_key: str) -> CallToolResult:
-        """Deprecated local-only recovery helper; intentionally not MCP-exposed."""
-        return force_release_stale_lock_operation(
-            server_connection(),
-            doc_key=doc_key,
         )
 
-    exports["force_release_stale_lock"] = force_release_stale_lock
+    def force_release_stale_lock(ctx: Context, doc_key: str) -> CallToolResult:
+        del ctx, doc_key
+        return tool_fail(
+            "[LEGACY_LEASE_AUTHORITY_REMOVED] Document authority is owned by "
+            "native FreeCAD collaboration.",
+            structured={
+                "success": False,
+                "ok": False,
+                "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
+                "error": "Document authority is owned by native FreeCAD collaboration.",
+            },
+        )
 
-
-def register(
-    mcp: InstrumentedFastMCP,
-    *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
-) -> dict[str, object]:
-    """Register lease_lifecycle MCP tools; return exports for §3.3 façade shims."""
-    exports: dict[str, object] = {}
-    _register_save_document(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    _register_save_document_as(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    _register_finalize_document_edit(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    _register_force_release_stale_lock(
-        mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
-        exports=exports,
-    )
-    return exports
+    return {
+        "save_document": save_document,
+        "save_document_as": save_document_as,
+        "finalize_document_edit": finalize_document_edit,
+        "force_release_stale_lock": force_release_stale_lock,
+    }

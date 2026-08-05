@@ -108,7 +108,7 @@ def test_jsonrpc_dispatch_and_identity_survive_xmlrpc_retirement(monkeypatch):
     identity = _IdentityContext()
     methods = _Methods(identity)
     monkeypatch.setattr(
-        xmlrpc_identity_handler, "_import_document_lock", lambda: identity
+        xmlrpc_identity_handler, "_identity_bindings", lambda: identity
     )
     server = FilteredXMLRPCServer(
         ("127.0.0.1", 0),

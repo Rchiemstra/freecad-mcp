@@ -394,7 +394,6 @@ def test_locator_allowance_subjects_match_the_frozen_phase_1_inventory() -> None
         for item in manifest["local_import_locators"]
         if item["classification"] == "static_compatibility_binding"
     } == {
-        ("addon/FreeCADMCP/document_lease/__init__.py", ".core_authority"),
         (
             "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
             "addon.FreeCADMCP.document_lease",
@@ -425,56 +424,20 @@ def test_locator_allowance_subjects_match_the_frozen_phase_1_inventory() -> None
         ),
         (
             "addon/FreeCADMCP/InitGui.py",
-            "_initialize_document_lease_runtime",
+            "_initialize_rpc_runtime_shutdown",
             "rpc_server.rpc_server",
-        ),
-        (
-            "addon/FreeCADMCP/InitGui.py",
-            "_register_document_lease_observer",
-            "rpc_server.rpc_server",
-        ),
-        (
-            "addon/FreeCADMCP/InitGui.py",
-            "_register_document_lease_observer",
-            "document_lock",
-        ),
-        (
-            "addon/FreeCADMCP/InitGui.py",
-            "_register_document_lock",
-            "document_lock",
         ),
     }
     assert {
         (item["path"], item["function"], item["target"])
         for item in manifest["local_import_locators"]
         if item["classification"] == "static_authority_binding"
-    } == {
-        (
-            "addon/FreeCADMCP/rpc_server/rpc_server.py",
-            "<module>",
-            "..document_lease.core_authority",
-        ),
-        (
-            "addon/FreeCADMCP/rpc_server/rpc_server.py",
-            "<module>",
-            "document_lease.core_authority",
-        ),
-    }
+    } == set()
     assert {
         (item["path"], item["function"], item["target"])
         for item in manifest["local_import_locators"]
         if item["classification"] == "temporary_authority_locator"
     } == {
-        (
-            "addon/FreeCADMCP/document_lease/observer_ops/app_observer.py",
-            "_takeover_unscoped_change",
-            "document_lease.core_authority",
-        ),
-        (
-            "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py",
-            "_mutation_capability_context",
-            "document_lease.core_authority",
-        ),
         (
             "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
             "complete_normal_acquisition",

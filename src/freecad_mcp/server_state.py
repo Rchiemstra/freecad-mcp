@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .freecad_client import FreeCADConnection
-from .lease_manager import LeaseClientManager
+from .rpc_session import RpcAuthenticationSession
 
 
 @dataclass
@@ -15,11 +15,11 @@ class ServerState:
     # reports this same instance id before trusting the connection. Guards
     # against dialing the wrong FreeCAD instance when running isolated instances
     # in parallel (ports are configurable but otherwise interchangeable).
-    # Note: this is the *expected FreeCAD addon* instance id, not the MCP
-    # process's own lease identity (see mcp_instance_id).
+    # Note: this is the expected FreeCAD add-on instance id, not the MCP
+    # process's own authentication runtime identity (see mcp_instance_id).
     instance_id: str | None = None
     freecad_connection: FreeCADConnection | None = None
-    # Stable MCP-process identity for document leases (created once in main()).
+    # Stable MCP-process identity used by the authenticated transport handshake.
     mcp_instance_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     mcp_client_label: str = "freecad-mcp"
     mcp_pid: int = 0
@@ -32,19 +32,9 @@ class ServerState:
     authenticated_manifest: Any | None = field(default=None, repr=False)
     rpc_session_id: str | None = None
     rpc_session_expires_at: str | None = None
+    rpc_session: RpcAuthenticationSession = field(
+        default_factory=RpcAuthenticationSession,
+        repr=False,
+    )
     compatibility_warnings: list[str] = field(default_factory=list)
-    recovery_incidents: dict[str, str] = field(default_factory=dict)
     mcp_task_requests: dict[str, str] = field(default_factory=dict)
-    # Live FreeCAD Document.Name -> addon-issued session UUID. Names are
-    # diagnostic aliases only; credentials remain keyed by the UUID.
-    document_sessions: dict[str, str] = field(default_factory=dict)
-    # v2 credentials and authenticated-session state. Raw tokens are redacted
-    # from repr/status and routed per request by this manager.
-    lease_manager: LeaseClientManager = field(default_factory=LeaseClientManager)
-    # Legacy v1 doc_key → token map retained until server.py is migrated to the
-    # manager. New code must not use this shared dictionary for request routing.
-    lease_tokens: dict[str, str] = field(default_factory=dict, repr=False)
-    # Selector alias → legacy v1 doc_key. This contains no credential material;
-    # it lets the documented selector form select a v1 token from
-    # ``lease_tokens`` during the temporary off/observe compatibility window.
-    legacy_document_keys: dict[str, str] = field(default_factory=dict)

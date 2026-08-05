@@ -216,10 +216,9 @@ def execute_code(
             else (options or {})
         )
         # Snapshot reads deliberately stay on the ordinary RPC route.  Every
-        # live mutation in an authenticated session carries one immutable
-        # request id and the exact credentials for the complete declared
-        # scope.  Generated operations use their audited operation id in the
-        # attribution context.
+        # Live mutation in an authenticated session carries one immutable
+        # request id. Generated operations use their audited operation id in
+        # the attribution context.
         if not bool(opts.get("read_only", False)):
             primary = str(opts.get("document") or "")
             raw_affected = opts.get("affected_documents") or ()
@@ -260,12 +259,12 @@ def cancel_worker_job(conn, job_id: str) -> dict[str, Any]:
 
 
 def execute_code_async(conn, code: str) -> dict[str, Any]:
-        if conn._v2_lease_manager() is not None:
+        if conn._v2_auth_session() is not None:
             return {
                 "success": False,
                 "error_code": "EXECUTE_CODE_ASYNC_DISABLED",
                 "error": (
-                    "Live execute_code_async is disabled for authenticated lease "
+                    "Live execute_code_async is disabled for authenticated RPC "
                     "sessions; use scoped execute_code so completion is attributable"
                 ),
             }

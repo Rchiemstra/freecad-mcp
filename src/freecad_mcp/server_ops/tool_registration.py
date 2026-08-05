@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..instrumented_server import InstrumentedFastMCP
-from ..lease_manager import StaleLeaseRecoveryOrchestrator
 from ..server_state import ServerState
 from ..tools_register_order import (
     REGISTER_TOOL_MODULE_OBJECTS,
     REGISTER_TOOL_MODULES,
 )
+
+if TYPE_CHECKING:
+    from ..lease_manager import StaleLeaseRecoveryOrchestrator
 
 
 def register_tool_modules(

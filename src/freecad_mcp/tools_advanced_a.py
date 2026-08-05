@@ -48,7 +48,7 @@ def _register_run_transaction(
         guard. Use typed modelling tools, or the explicitly enabled unsafe
         ``execute_code`` route with ``affected_documents``.
         """
-        if server_state().lease_manager.connected:
+        if state.rpc_session.connected:
             return tool_fail(
                 "run_transaction is disabled in authenticated lease mode because "
                 "nested arbitrary code cannot be proven to stay within its declared "

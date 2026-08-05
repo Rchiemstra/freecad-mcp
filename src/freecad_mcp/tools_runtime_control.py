@@ -9,9 +9,6 @@ from typing import TYPE_CHECKING
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
-from .operations import (
-    claim_acquisition_result_operation,
-)
 from .outcomes import OutcomeStatus
 from .responses import json_response, tool_fail
 
@@ -121,12 +118,10 @@ def _register_claim_acquisition_result(
         the tool result never includes the raw credential secret.
         """
 
-        return claim_acquisition_result_operation(
-            get_freecad_connection(),
-            request_id=request_id,
-            lease_manager=state.lease_manager,
-            document_sessions=state.document_sessions,
-            store_token=state.lease_tokens,
+        del ctx, request_id
+        return tool_fail(
+            "Document lease authority was removed in Phase 18",
+            error_code="LEGACY_LEASE_AUTHORITY_REMOVED",
         )
 
     exports['claim_acquisition_result'] = claim_acquisition_result

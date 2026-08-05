@@ -3,9 +3,107 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import re
 from pathlib import Path
 from typing import Any
+
+
+def _module_names(root: Path, path: Path) -> tuple[str, ...]:
+    relative = path.relative_to(root).with_suffix("")
+    parts = list(relative.parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    if parts[:2] == ["addon", "FreeCADMCP"]:
+        canonical = ".".join(parts)
+        return canonical, canonical.removeprefix("addon.")
+    if parts[:2] == ["src", "freecad_mcp"]:
+        return (".".join(parts[1:]),)
+    return ()
+
+
+def reachable_python_modules(
+    *, root: Path, production_files: list[Path], entrypoints: tuple[str, ...]
+) -> set[str]:
+    """Return the static local-import closure from the live composition roots."""
+
+    module_paths: dict[str, Path] = {}
+    path_modules: dict[Path, str] = {}
+    for path in production_files:
+        names = _module_names(root, path)
+        if not names:
+            continue
+        path_modules[path] = names[0]
+        for name in names:
+            module_paths[name] = path
+
+    reachable: set[str] = set()
+    pending = list(entrypoints)
+    while pending:
+        requested = pending.pop()
+        path = module_paths.get(requested)
+        if path is None:
+            continue
+        module = path_modules[path]
+        if module in reachable:
+            continue
+        reachable.add(module)
+        package = module if path.name == "__init__.py" else module.rpartition(".")[0]
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+        class RuntimeImportVisitor(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.nodes: list[ast.Import | ast.ImportFrom] = []
+
+            def visit_If(self, node: ast.If) -> None:
+                type_only = (
+                    isinstance(node.test, ast.Name)
+                    and node.test.id == "TYPE_CHECKING"
+                ) or (
+                    isinstance(node.test, ast.Attribute)
+                    and node.test.attr == "TYPE_CHECKING"
+                )
+                if type_only:
+                    for statement in node.orelse:
+                        self.visit(statement)
+                    return
+                self.generic_visit(node)
+
+            def visit_Import(self, node: ast.Import) -> None:
+                self.nodes.append(node)
+
+            def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+                self.nodes.append(node)
+
+        visitor = RuntimeImportVisitor()
+        visitor.visit(tree)
+        for node in visitor.nodes:
+            candidates: list[str] = []
+            if isinstance(node, ast.Import):
+                candidates.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    relative_name = "." * node.level + (node.module or "")
+                    try:
+                        base = importlib.util.resolve_name(relative_name, package)
+                    except (ImportError, ValueError):
+                        continue
+                else:
+                    base = node.module or ""
+                if base:
+                    candidates.append(base)
+                candidates.extend(
+                    f"{base}.{alias.name}" if base else alias.name
+                    for alias in node.names
+                    if alias.name != "*"
+                )
+            for candidate in candidates:
+                if candidate in module_paths:
+                    pending.append(candidate)
+                addon_candidate = f"addon.{candidate}"
+                if addon_candidate in module_paths:
+                    pending.append(addon_candidate)
+    return reachable
 
 _SYMBOL_PATTERNS = {
     "core_authority": re.compile(
@@ -34,18 +132,19 @@ _IMPLICIT_PATH_PATTERNS = {
         r"/document_lease/observer(?:\.py|_ops/)|document_lock_observer\.py|"
         r"document_lock_ops/registration\.py"
     ),
-    "heartbeats": re.compile(r"heartbeat|stale_lease_recovery|server_ops/lifespan\.py"),
+    "heartbeats": re.compile(r"heartbeat|stale_lease_recovery"),
     "sidecar_correctness": re.compile(
         r"/document_lease/sidecar|document_lock_ops/(?:sidecar_io|mutation_check|registry_)|"
         r"document_lease/service_ops/(?:effective_records|foreign_|acquisition)|"
         r"rpc_helpers_ops/document_identity\.py|dispatch_core_unenforced\.py|"
-        r"lock_indicator_ops/(?:active_leases|lease_|local_)|snapshot_service|save_service"
+        r"lock_indicator_ops/(?:active_leases|lease_|local_)|"
+        r"snapshot_service_ops/(?:baseline_snapshot|recovery_paths|sidecar_permissions)|"
+        r"save_service"
     ),
     "mcp_save_recovery_authority": re.compile(
         r"lease_methods_ops/(?:save_|release|reconcile|handoff)|"
         r"document_lease/service_ops/(?:recover_|recovery_|save_|release_clean)|"
-        r"lock_indicator_ops/local_|rpc_server/lease_runtime|server_lifecycle|"
-        r"freecad_client_ops/|stale_recovery|tools_lease_"
+        r"lock_indicator_ops/local_|rpc_server/lease_runtime|stale_recovery"
     ),
 }
 _HISTORIC_DECODER_SCOPES = {

@@ -8,7 +8,6 @@ from .formatting import _bounded_text
 from .lease_view import _lease_view
 from .local_recovery import (
     _acknowledge_selected_dirty,
-    _confirmed_foreign_takeover,
     _live_document_for_view,
     _local_recovery_capabilities,
     _v2_lease_service,
@@ -55,26 +54,10 @@ def _execute_v2_takeover(
     service: Any,
     document: Any,
 ) -> None:
-    if view["source"] == "foreign_recovery":
-        _confirmed_foreign_takeover(
-            lease,
-            service,
-            document,
-            reason="Confirmed local GUI takeover of dead foreign owner",
-        )
-        return
-    try:
-        from document_lease.observer import take_over_selected_document
-    except ImportError:
-        from addon.FreeCADMCP.document_lease.observer import take_over_selected_document
-
-    result = take_over_selected_document(
-        service_provider=lambda: service,
-        selected_document_provider=lambda: document,
-        reason="Confirmed local GUI takeover",
+    del ctx, lease, view, service, document
+    raise RuntimeError(
+        "Document authority is owned by native FreeCAD collaboration."
     )
-    if result is None:
-        raise RuntimeError("the selected v2 lease is no longer active")
 
 
 def on_takeover(ctx: InstallDockContext) -> None:

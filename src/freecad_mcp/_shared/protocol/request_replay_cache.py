@@ -39,9 +39,9 @@ class RequestReplayCache:
     """Bounded process-lifetime idempotency journal for authenticated requests.
 
     Keys use the authenticated MCP runtime UUID, which remains stable across
-    short-lived RPC sessions.  Lease-affecting entries can be pinned while the
-    runtime owns unresolved document authority.  Pinned entries are compacted,
-    never evicted; capacity exhaustion therefore rejects new work fail closed.
+    short-lived RPC sessions. Process-pinned entries from uncertain outcomes are
+    compacted, never evicted; capacity exhaustion therefore rejects new work fail
+    closed.
     """
 
     def __init__(
@@ -55,26 +55,24 @@ class RequestReplayCache:
     ) -> None:
         if ttl_seconds <= 0 or max_entries <= 0 or response_max_bytes <= 0:
             raise ValueError("Replay cache bounds must be positive")
+        del owner_has_unresolved_lease
         self._ttl = float(ttl_seconds)
         self._max_entries = int(max_entries)
         self._response_max_bytes = int(response_max_bytes)
         self._monotonic = monotonic
-        self._owner_has_unresolved_lease = owner_has_unresolved_lease or (
-            lambda _runtime_id: False
-        )
         self._entries: dict[tuple[str, str], _ReplayEntry] = {}
         # Bounded tombstones let request-status distinguish a genuinely
         # unknown UUID from a known result whose retention window elapsed.
         self._expired: dict[tuple[str, str], None] = {}
         self._lock = _threading.RLock()
 
-    def set_owner_lease_predicate(self, predicate: _Callable[[str], bool]) -> None:
-        """Bind the process journal to the current lease authority service."""
+    def bind_lease_retention_predicate(
+        self, predicate: _Callable[[str], bool]
+    ) -> None:
+        """Deprecated no-op: owner-lease replay pinning was removed at cutover."""
 
         if not callable(predicate):
             raise TypeError("owner lease predicate must be callable")
-        with self._lock:
-            self._owner_has_unresolved_lease = predicate
 
     @staticmethod
     def _key(mcp_runtime_id: str, request_id: str) -> tuple[str, str]:
@@ -90,6 +88,7 @@ class RequestReplayCache:
         *,
         pin_to_owner_leases: bool = False,
     ) -> _ReplayCheck:
+        del pin_to_owner_leases
         key = self._key(mcp_runtime_id, envelope.request_id)
         fingerprint = envelope.semantic_fingerprint()
         now = self._monotonic()
@@ -113,7 +112,6 @@ class RequestReplayCache:
             self._entries[key] = _ReplayEntry(
                 fingerprint=fingerprint,
                 expires_at=now + self._ttl,
-                pin_to_owner_leases=bool(pin_to_owner_leases),
             )
             return _ReplayCheck("new")
 
@@ -218,7 +216,7 @@ class RequestReplayCache:
         for key, entry in list(self._entries.items()):
             if entry.expires_at > now or entry.state == "in_progress":
                 continue
-            if self._entry_is_pinned_locked(key, entry):
+            if entry.process_pinned:
                 if not entry.response_compacted:
                     entry.response = _completion_tombstone(key[1])
                     entry.response_compacted = True
@@ -235,28 +233,13 @@ class RequestReplayCache:
             oldest = next(iter(self._expired))
             self._expired.pop(oldest, None)
 
-    def _entry_is_pinned_locked(
-        self, key: tuple[str, str], entry: _ReplayEntry
-    ) -> bool:
-        if entry.process_pinned:
-            return True
-        if not entry.pin_to_owner_leases:
-            return False
-        try:
-            return bool(self._owner_has_unresolved_lease(key[0]))
-        except Exception:
-            # Losing visibility into lease authority must reduce availability,
-            # never permit a duplicate document mutation.
-            return True
-
     def _ensure_capacity_locked(self) -> None:
         if len(self._entries) < self._max_entries:
             return
         completed = [
             (entry.expires_at, key)
             for key, entry in self._entries.items()
-            if entry.state == "completed"
-            and not self._entry_is_pinned_locked(key, entry)
+            if entry.state == "completed" and not entry.process_pinned
         ]
         if completed:
             _, oldest_key = min(completed)

@@ -21,17 +21,11 @@ def reload_document_gui(self, doc_name: str):
     error, file_path, identity = reload_preflight(self, doc_name)
     if error is not None:
         return error
-    session_uuid = identity.session_uuid if identity is not None else None
+    del identity
     FreeCAD.closeDocument(doc_name)
     reopened = FreeCAD.openDocument(file_path)
     if reopened is None:
         return f"FreeCAD did not reopen '{file_path}'."
-    if session_uuid is not None:
-        rebound = self._lifecycle_collaborators.document_identity_service.rebind_document(
-            session_uuid, reopened
-        )
-        if rebound.comparison_key != identity.comparison_key:
-            return "Reload rebound the document to an unexpected file."
     FreeCAD.Console.PrintMessage(
         f"Document '{doc_name}' reloaded from '{file_path}' via RPC.\n"
     )
@@ -47,27 +41,6 @@ def close_document_gui(self, doc_name: str):
                 "error_code": "DOCUMENT_NOT_FOUND",
                 "error": f"Document '{doc_name}' not found.",
             }
-        collaborators = self._lifecycle_collaborators
-        if collaborators.document_lease_service is not None:
-            try:
-                identity = collaborators.document_identity_service.resolve(
-                    {"document_name": doc_name}
-                )
-                active = collaborators.document_lease_service.get(
-                    {"document_session_uuid": identity.session_uuid}
-                )
-            except Exception:
-                active = None
-            if active is not None:
-                return {
-                    "success": False,
-                    "error_code": "DOCUMENT_LEASE_ACTIVE",
-                    "error": (
-                        "A leased document cannot be closed by the generic RPC. "
-                        "Finalize and verify the save first, then close the "
-                        "released document."
-                    ),
-                }
         FreeCAD.closeDocument(doc_name)
         if FreeCAD.getDocument(doc_name):
             return {

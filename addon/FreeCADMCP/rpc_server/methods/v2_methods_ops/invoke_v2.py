@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ...mutation_guard import make_method_spec
 from .invoke_v2_dispatch import (
     register_invoke_v2_inflight,
     run_invoke_v2_dispatch,
@@ -23,7 +22,6 @@ def invoke_v2(self, payload):
     session_manager = collaborators.session_manager
     replay_cache = collaborators.request_replay_cache
     invocation_runtime_id = collaborators.runtime_id
-    lease_service = collaborators.document_lease_service
     if session_manager is None or replay_cache is None:
         return collaborators.lease_protocol_public_error(
             LeaseProtocolError(
@@ -32,13 +30,18 @@ def invoke_v2(self, payload):
             ),
             request_id=request_id,
         )
-    dl = collaborators.import_document_lock()
-    transport_identity = dl.get_request_identity()
+    identity_provider = collaborators.request_identity_provider()
+    transport_identity = identity_provider.get_request_identity()
     try:
         session, envelope = session_manager.authenticate_envelope(
             payload,
             transport_mcp_runtime_id=transport_identity.get("instance_id"),
         )
+        if envelope.lease_credentials:
+            raise LeaseProtocolError(
+                "LEGACY_LEASE_AUTHORITY_REMOVED",
+                "Document lease credentials are no longer accepted",
+            )
         forbidden = {
             "handshake_v2",
             "invoke_v2",
@@ -57,17 +60,9 @@ def invoke_v2(self, payload):
                 "UNKNOWN_METHOD", "The requested RPC method is not registered"
             )
         collaborators.validate_generated_operation_envelope(envelope)
-        request_kind, _request_extractor = dl.classify_verb(envelope.method)
-        method_spec = make_method_spec(envelope.method, request_kind.value)
-        lease_affecting = method_spec.pin_replay_for_lease_lifetime
-        if envelope.method == "execute_code":
-            options = envelope.params.get("options")
-            if isinstance(options, dict) and options.get("read_only") is True:
-                lease_affecting = False
         replay = replay_cache.claim(
             session.mcp.runtime_id,
             envelope,
-            pin_to_owner_leases=lease_affecting,
         )
         if replay.status == "completed":
             return completed_replay_response(
@@ -75,7 +70,7 @@ def invoke_v2(self, payload):
                 envelope=envelope,
                 session=session,
                 invocation_runtime_id=invocation_runtime_id,
-                claim_store=collaborators.acquisition_claim_store,
+                claim_store=None,
             )
         if replay.status == "in_progress":
             return in_progress_replay_response(
@@ -89,12 +84,11 @@ def invoke_v2(self, payload):
             session=session,
             envelope=envelope,
             target=target,
-            lease_affecting=lease_affecting,
             replay_cache=replay_cache,
         )
-        previous_identity = dl.get_request_identity()
+        previous_identity = identity_provider.get_request_identity()
         set_invoke_v2_request_identity(
-            dl=dl,
+            identity_provider=identity_provider,
             session=session,
             envelope=envelope,
             transport_identity=transport_identity,
@@ -109,8 +103,6 @@ def invoke_v2(self, payload):
                 envelope=envelope,
                 params=params,
                 inflight=inflight,
-                lease_service=lease_service,
-                lease_affecting=lease_affecting,
                 invocation_runtime_id=invocation_runtime_id,
                 replay_cache=replay_cache,
                 handler_state=handler_state,
@@ -118,7 +110,7 @@ def invoke_v2(self, payload):
         finally:
             if hasattr(self._inflight_context, "value"):
                 del self._inflight_context.value
-            dl.set_request_identity(**previous_identity)
+            identity_provider.set_request_identity(**previous_identity)
     except Exception as exc:
         return collaborators.lease_protocol_public_error(
             exc, request_id=request_id

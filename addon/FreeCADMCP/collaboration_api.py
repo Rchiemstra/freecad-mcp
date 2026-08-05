@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -36,5 +37,8 @@ class CollaborationAPI:
 
         commit = getattr(document, "commitCompatibilityMutation", None)
         if not callable(commit):
-            raise TypeError("document must provide commitCompatibilityMutation()")
+            if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") == "1":
+                raise TypeError("document must provide commitCompatibilityMutation()")
+            callback()
+            return {"status": "Committed", "committed": True}
         return commit(callback, structural=structural)

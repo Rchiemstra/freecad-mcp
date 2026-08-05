@@ -1,4 +1,4 @@
-"""Phase 13 contracts for explicit save lifecycle collaborators."""
+"""Phase 18 contracts for FreeCAD-owned native persistence."""
 
 from __future__ import annotations
 
@@ -8,157 +8,198 @@ from types import SimpleNamespace
 
 import pytest
 
-from addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.lifecycle_dependencies import (
-    LifecycleCollaborators,
-)
-from addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.save_public import (
-    finalize_document_edit,
-    save_document,
-)
-from addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.save_typed_invoke_helpers import (
-    invoke_save_with_capability,
-)
+from addon.FreeCADMCP.rpc_server.methods import native_lifecycle_methods
 
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[1]
-OPS = ROOT / "addon" / "FreeCADMCP" / "rpc_server" / "methods" / "lease_methods_ops"
-ASSIGNED = tuple(sorted(OPS.glob("save*.py")))
+MODULE = (
+    ROOT
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "native_lifecycle_methods.py"
+)
 
 
-class _DocumentLock:
-    def __init__(self, identity: dict[str, str]) -> None:
-        self.identity = identity
-        self.release_calls: list[tuple[str, str]] = []
+class _Document:
+    Name = "Model"
+    FileName = "/work/Model.FCStd"
 
-    def get_request_identity(self) -> dict[str, str]:
-        return self.identity
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
 
-    def release_lease(self, doc_key: str, token: str) -> dict[str, object]:
-        self.release_calls.append((doc_key, token))
-        return {"success": True, "doc_key": doc_key}
+    def save(self):
+        self.calls.append(("save", self.FileName))
+        return True
+
+    def saveAsWithPolicy(self, destination, overwrite=False):
+        if str(destination).endswith("Existing.FCStd") and not overwrite:
+            return {"success": False, "status": "destination_exists"}
+        self.FileName = str(destination)
+        self.calls.append(("save_as", self.FileName))
+        return {"success": True, "status": "saved"}
 
 
-def _callable(*_args, **_kwargs):
-    return None
+def _facade(document: _Document | None):
+    freecad = SimpleNamespace(
+        getDocument=lambda name: document if document and name == document.Name else None,
+        listDocuments=lambda: ({document.Name: document} if document else {}),
+    )
+    return SimpleNamespace(
+        _execution_collaborators=SimpleNamespace(freecad=freecad),
+        _dispatch_gui=lambda callback: callback(),
+    )
 
 
-def _collaborators(lock: _DocumentLock, **overrides) -> LifecycleCollaborators:
-    values = {
-        "freecad": object(),
-        "import_document_lock": lambda: lock,
-        "import_document_lease": _callable,
-        "import_core_authority": _callable,
-        "document_lease_service": object(),
-        "document_identity_service": object(),
-        "save_service": object(),
-        "credential_for_selector": _callable,
-        "live_document_from_selector": _callable,
-        "ensure_v2_document": _callable,
-        "live_validation_evidence": _callable,
-        "discard_terminal_snapshot": _callable,
-        "saved_document_expectations": _callable,
-        "validate_saved_document_worker": _callable,
-        "inspect_references_gui": _callable,
-        "redact_rpc_diagnostic": lambda value, **_kwargs: str(value),
-        "lease_service_error": lambda exc, **_kwargs: {"success": False, "error": str(exc)},
-        "deprecated_force_release_result": _callable,
-        "refresh_lock_indicator": _callable,
+def test_native_lifecycle_module_has_no_python_document_authority() -> None:
+    source = MODULE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(MODULE))
+
+    forbidden = {
+        "document_lease",
+        "document_lock",
+        "core_authority",
+        "sidecar",
+        "credential",
+        "baseline",
+        "recovery",
     }
-    values.update(overrides)
-    return LifecycleCollaborators(**values)
+    imports = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    assert not any(marker in name for marker in forbidden for name in imports)
 
 
-def test_save_modules_have_no_runtime_locator_or_module_lifecycle_state() -> None:
-    assert ASSIGNED
-    for path in ASSIGNED:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
-        assert "_rpc_mod" not in source, path.name
-        assert "from document_lease import core_authority" not in source, path.name
-        assert "from lock_indicator" not in source, path.name
-        assert not any(
-            isinstance(node, ast.ImportFrom)
-            and node.module
-            and node.module.endswith("_common")
-            for node in ast.walk(tree)
-        ), path.name
-        assert not any(
-            isinstance(node, (ast.Assign, ast.AnnAssign)) for node in tree.body
-        ), path.name
+def test_save_and_finalize_delegate_only_to_native_freecad() -> None:
+    document = _Document()
+    facade = _facade(document)
 
-
-def test_public_save_and_finalize_use_the_exact_injected_lock_and_indicator() -> None:
-    lock = _DocumentLock({"lease_token": "v1-token", "request_id": "request-13"})
-    refreshed: list[str] = []
-    collaborators = _collaborators(
-        lock,
-        refresh_lock_indicator=lambda: refreshed.append("refresh"),
+    saved = native_lifecycle_methods.save_document(
+        facade, {"document_name": "Model"}
     )
-    legacy_calls: list[tuple[object, str]] = []
+    finalized = native_lifecycle_methods.finalize_document_edit(
+        facade,
+        {"document_name": "Model"},
+        save_mode="save_as",
+        destination="/work/Final.FCStd",
+        overwrite=True,
+    )
+
+    assert saved == {
+        "success": True,
+        "saved": True,
+        "document_name": "Model",
+        "canonical_path": "/work/Model.FCStd",
+        "authority": "native_freecad",
+    }
+    assert finalized["success"] is True
+    assert finalized["finalized"] is True
+    assert finalized["release"] == {
+        "authority": "native_freecad",
+        "lease_present": False,
+    }
+    assert document.calls == [
+        ("save", "/work/Model.FCStd"),
+        ("save_as", "/work/Final.FCStd"),
+    ]
+
+
+def test_native_lifecycle_rejects_missing_document_and_invalid_mode() -> None:
+    missing = native_lifecycle_methods.save_document(
+        _facade(None), {"document_name": "Missing"}
+    )
+    invalid = native_lifecycle_methods.finalize_document_edit(
+        _facade(_Document()),
+        {"document_name": "Model"},
+        save_mode="recover",
+    )
+
+    assert missing["error_code"] == "DOCUMENT_NOT_FOUND"
+    assert invalid["error_code"] == "INVALID_SAVE_MODE"
+
+
+def test_save_as_never_silently_ignores_legacy_safety_options() -> None:
+    facade = _facade(_Document())
+
+    default_save_as = native_lifecycle_methods.save_document_as(
+        facade,
+        {"document_name": "Model"},
+        "/work/New.FCStd",
+        overwrite=False,
+    )
+    conflict = native_lifecycle_methods.save_document_as(
+        facade,
+        {"document_name": "Model"},
+        "/work/Existing.FCStd",
+        overwrite=False,
+    )
+    hashed = native_lifecycle_methods.save_document_as(
+        facade,
+        {"document_name": "Model"},
+        "/work/Existing.FCStd",
+        overwrite=True,
+        expected_destination_sha256="abc",
+    )
+    profiled = native_lifecycle_methods.save_document(
+        facade,
+        {"document_name": "Model"},
+        validation_profile="strict",
+    )
+    null_selector = native_lifecycle_methods.save_document(facade, None)
+
+    assert default_save_as["success"] is True
+    assert conflict["error_code"] == "DESTINATION_EXISTS"
+    assert hashed["error_code"] == "EXPECTED_DESTINATION_HASH_UNSUPPORTED"
+    assert profiled["error_code"] == "VALIDATION_PROFILE_UNSUPPORTED"
+    assert null_selector["error_code"] == "DOCUMENT_NOT_FOUND"
+
+
+def test_legacy_uuid_selector_is_explicitly_deprecated() -> None:
+    document = _Document()
+    result = native_lifecycle_methods.save_document(
+        _facade(document),
+        {"document_session_uuid": "session-1"},
+    )
+
+    assert result["error_code"] == "DOCUMENT_SESSION_SELECTOR_DEPRECATED"
+    assert document.calls == []
+
+
+def test_resolution_and_save_run_only_inside_gui_dispatch() -> None:
+    state = {"inside_dispatch": False}
+    document = _Document()
+
+    def assert_dispatched(value):
+        assert state["inside_dispatch"] is True
+        return value
+
+    freecad = SimpleNamespace(
+        getDocument=lambda name: assert_dispatched(
+            document if name == document.Name else None
+        ),
+        listDocuments=lambda: assert_dispatched({document.Name: document}),
+    )
+
+    def dispatch(callback):
+        state["inside_dispatch"] = True
+        try:
+            return callback()
+        finally:
+            state["inside_dispatch"] = False
+
     facade = SimpleNamespace(
-        _lifecycle_collaborators=collaborators,
-        _run_legacy_save=lambda selector, *, validation_profile: (
-            legacy_calls.append((selector, validation_profile))
-            or {"success": True, "lease": {"doc_key": "document-13"}}
-        ),
-        _run_typed_save=lambda *_args, **_kwargs: pytest.fail(
-            "v1 identity must not enter typed save"
-        ),
+        _execution_collaborators=SimpleNamespace(freecad=freecad),
+        _dispatch_gui=dispatch,
     )
 
-    assert save_document(facade, {"document_name": "Doc"})["success"] is True
-    finalized = finalize_document_edit(facade, {"document_name": "Doc"})
-
-    assert finalized["released"] is True
-    assert legacy_calls == [
-        ({"document_name": "Doc"}, "default"),
-        ({"document_name": "Doc"}, "default"),
-    ]
-    assert lock.release_calls == [("document-13", "v1-token")]
-    assert refreshed == ["refresh"]
-    assert facade._lifecycle_collaborators is collaborators
-
-
-def test_save_invocation_uses_only_injected_native_capability_and_save_service() -> None:
-    calls: list[tuple[str, object]] = []
-
-    class _Capability:
-        def __enter__(self):
-            calls.append(("enter", None))
-
-        def __exit__(self, *_args):
-            calls.append(("exit", None))
-
-    core = SimpleNamespace(
-        kinds_for_rpc_method=lambda method, kind: calls.append((method, kind)) or {kind},
-        open_mutation_capability=lambda document, **kwargs: (
-            calls.append(("capability", (document, kwargs))) or _Capability()
-        ),
-    )
-    save_service = SimpleNamespace(
-        invoke_save_gui=lambda document, preflight: calls.append(
-            ("save", (document, preflight))
-        )
-        or "native-save-result"
-    )
-    collaborators = _collaborators(
-        _DocumentLock({}),
-        import_core_authority=lambda: core,
-        save_service=save_service,
-    )
-    document = object()
-    phase = {"credential": SimpleNamespace(generation=9), "preflight": object()}
-
-    result = invoke_save_with_capability(
-        SimpleNamespace(), document, phase, "save", collaborators
+    result = native_lifecycle_methods.save_document(
+        facade, {"document_name": "Model"}
     )
 
-    assert result == "native-save-result"
-    assert calls == [
-        ("save_document", "save"),
-        ("capability", (document, {"generation": 9, "kinds": {"save"}})),
-        ("enter", None),
-        ("save", (document, phase["preflight"])),
-        ("exit", None),
-    ]
+    assert result["success"] is True
+    assert state["inside_dispatch"] is False

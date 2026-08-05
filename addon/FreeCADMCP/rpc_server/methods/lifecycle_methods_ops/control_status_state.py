@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from ...handoff_continuations import HandoffContinuationStore
-
 
 def inflight_state(inflight, status):
     if status.status == "expired":
@@ -41,24 +39,3 @@ def _terminal_inflight_state(inflight, status):
     if inflight.terminal_status == "failed":
         return "failed"
     return "completed"
-
-
-def continuation_state(continuation, state):
-    if continuation.state in HandoffContinuationStore.ACTIVE:
-        return (
-            "claim_committed"
-            if continuation.state == "claim_committed"
-            else "running"
-        )
-    if continuation.state in {"claimable", "claimed"}:
-        return "completed"
-    if continuation.state == "cancelled":
-        return "cancelled"
-    if continuation.state in {"denied", "failed"}:
-        return "failed"
-    return state
-
-
-def continuation_flags(continuation):
-    public = continuation.to_public_dict()
-    return bool(public.get("confirmation_pending")), bool(public.get("handoff_pending"))
