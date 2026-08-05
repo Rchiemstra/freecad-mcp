@@ -29,13 +29,17 @@ from .install_wire import (
 from .local_recovery import _connect_queued_qt_signal
 from .refresh import _refresh_lock_indicator_now, _refresh_set_status_style
 from .refresh_bridge import refresh_bridge_type
+from .runtime_bindings import current_runtime_bindings
 
 
 def install_lock_indicator() -> None:
     """Create the permanent status widget and closable detail dock."""
 
-    if state._installed:
+    if state._shared_state.installed:
         return
+    bindings = current_runtime_bindings()
+    if bindings is None:
+        raise RuntimeError("lock indicator runtime bindings are not initialized")
     try:
         import FreeCADGui
         from PySide import QtCore, QtWidgets
@@ -56,12 +60,12 @@ def install_lock_indicator() -> None:
         main.statusBar().addPermanentWidget(status)
     except Exception:
         return
-    state._status_widget = status
+    state._shared_state.status_widget = status
     _refresh_set_status_style(None)
 
     bridge = refresh_bridge_type(QtCore)(main)
     bridge.refresh_requested.connect(bridge.refresh_now, QtCore.Qt.QueuedConnection)
-    state._refresh_bridge = bridge
+    state._shared_state.refresh_bridge = bridge
 
     dock = QtWidgets.QDockWidget("MCP Document Lock", main)
     dock.setObjectName("McpDocumentLockDock")
@@ -119,6 +123,9 @@ def install_lock_indicator() -> None:
         qt_core=QtCore,
         selected_lease=selected_lease,
         local_recovery_busy=local_recovery_busy,
+        mark_compatibility_lease_user_intervened=(
+            bindings.mark_compatibility_lease_user_intervened
+        ),
     )
 
     takeover_btn.clicked.connect(lambda: on_takeover(ctx))
@@ -156,7 +163,7 @@ def install_lock_indicator() -> None:
     mount_dock_widget(main, dock, QtCore)
     wire_status_details_click(status)
     wire_refresh_timer(main, QtCore)
-    wire_gui_update_callback()
+    wire_gui_update_callback(bindings.set_compatibility_gui_update_callback)
 
-    state._installed = True
+    state._shared_state.installed = True
     _refresh_lock_indicator_now()

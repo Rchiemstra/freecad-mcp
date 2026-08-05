@@ -99,16 +99,6 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
 
     create_module = inspect.getmodule(freecad_rpc_class.create_document)
     assert create_module is not None
-    monkeypatch.setattr(
-        create_module,
-        "_rpc_mod",
-        lambda: SimpleNamespace(
-            _import_document_lock=lambda: SimpleNamespace(
-                get_request_identity=dict
-            ),
-            document_lease_service=None,
-        ),
-    )
     monkeypatch.setattr(create_module.FreeCAD, "getDocument", lambda _name: None)
     instance._request_checkpoint = lambda *_args, **_kwargs: None
     instance._current_inflight = lambda: None

@@ -13,14 +13,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _rpc_mod():
-    from ... import rpc_server as rpc_mod
-
-    return rpc_mod
-
-
 __all__ = [
-    "_rpc_mod",
     "document_modified_or_dirty",
     "logger",
     "require_document_modified",

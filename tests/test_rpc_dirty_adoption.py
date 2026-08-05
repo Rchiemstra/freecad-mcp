@@ -27,7 +27,11 @@ from addon.FreeCADMCP.document_lease import observer as lease_observer
 from addon.FreeCADMCP.rpc_server import rpc_server
 from addon.FreeCADMCP.rpc_server import snapshot_service
 from addon.FreeCADMCP.rpc_server.acquisition_claims import AcquisitionClaimStore
+from addon.FreeCADMCP.rpc_server.handoff_continuations import (
+    HandoffContinuationStore,
+)
 from addon.FreeCADMCP.rpc_server.inflight_requests import InflightRequestRegistry
+from addon.FreeCADMCP.rpc_server.lease_protocol import RequestReplayCache
 
 pytestmark = pytest.mark.unit
 
@@ -156,10 +160,18 @@ def _configure_dirty_adoption(monkeypatch, tmp_path):
             hostname=rpc_server.platform.node(),
         ),
     )
-    rpc = _LegacyGlobalFixtureRPC()
     _DocumentLock.request_id = str(uuid.uuid4())
     monkeypatch.setattr(
-        rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
+        rpc_server, "rpc_acquisition_claim_store", AcquisitionClaimStore()
+    )
+    monkeypatch.setattr(
+        rpc_server, "rpc_handoff_continuation_store", HandoffContinuationStore()
+    )
+    monkeypatch.setattr(
+        rpc_server, "rpc_inflight_request_registry", InflightRequestRegistry()
+    )
+    monkeypatch.setattr(
+        rpc_server, "rpc_request_replay_cache", RequestReplayCache()
     )
     monkeypatch.setattr(rpc_server, "_import_document_lock", lambda: _DocumentLock())
     monkeypatch.setattr(rpc_server, "document_identity_service", identities)
@@ -172,6 +184,10 @@ def _configure_dirty_adoption(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
+    )
+    rpc = _LegacyGlobalFixtureRPC()
+    monkeypatch.setattr(
+        rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
     )
     return rpc, document, model, original, service
 
@@ -1542,10 +1558,10 @@ def test_dirty_adoption_self_recovers_cached_worker_intervention_without_close(
     sidecar.unlink()
 
     rpc = _LegacyGlobalFixtureRPC()
-    claims = AcquisitionClaimStore()
     monkeypatch.setattr(
         rpc, "_dispatch_gui", lambda task, timeout=None, **_kwargs: task()
     )
+    claims = AcquisitionClaimStore()
     monkeypatch.setattr(rpc_server, "_import_document_lock", lambda: _DocumentLock())
     monkeypatch.setattr(rpc_server, "document_identity_service", identities)
     monkeypatch.setattr(rpc_server, "document_lease_service", service)

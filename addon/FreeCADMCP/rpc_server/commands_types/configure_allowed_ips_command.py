@@ -3,9 +3,13 @@
 from PySide import QtWidgets
 
 from ..ip_filter import validate_allowed_ips
+from .dependencies import CommandDependencies, current_command_dependencies
 
 
 class ConfigureAllowedIPsCommand:
+    def __init__(self, dependencies: CommandDependencies | None = None) -> None:
+        self._dependencies = dependencies or current_command_dependencies()
+
     def GetResources(self):
         return {
             "MenuText": "Configure Allowed IPs",
@@ -16,8 +20,7 @@ class ConfigureAllowedIPsCommand:
         }
 
     def Activated(self):
-        from .. import commands, rpc_server
-        settings = commands.load_settings()
+        settings = self._dependencies.load_settings()
         current_ips = settings.get("allowed_ips", "127.0.0.1")
         text, ok = QtWidgets.QInputDialog.getText(
             None,
@@ -39,22 +42,24 @@ class ConfigureAllowedIPsCommand:
                        if valid else "\n\nNo valid entries found. Settings not changed."),
                 )
             if not valid:
-                commands.FreeCAD.Console.PrintWarning(
+                self._dependencies.freecad.Console.PrintWarning(
                     "Allowed IPs not changed — no valid entries.\n"
                 )
                 return
             normalised = ", ".join(valid)
             settings["allowed_ips"] = normalised
-            commands.save_settings(settings)
-            commands.FreeCAD.Console.PrintMessage(
+            self._dependencies.save_settings(settings)
+            self._dependencies.freecad.Console.PrintMessage(
                 f"Allowed IPs updated to: {normalised}\n"
             )
-            if rpc_server.rpc_server_instance:
-                commands.FreeCAD.Console.PrintMessage(
+            if self._dependencies.runtime_running():
+                self._dependencies.freecad.Console.PrintMessage(
                     "Restart the RPC server for changes to take effect.\n"
                 )
         else:
-            commands.FreeCAD.Console.PrintMessage("Allowed IPs not changed.\n")
+            self._dependencies.freecad.Console.PrintMessage(
+                "Allowed IPs not changed.\n"
+            )
 
     def IsActive(self):
         return True

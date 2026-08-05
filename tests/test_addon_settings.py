@@ -60,6 +60,13 @@ def _load_settings(tmp_path: Path, monkeypatch):
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    for operation in (
+        module.get_settings_path,
+        module.load_settings,
+        module.save_settings,
+        module.ensure_profile_secret,
+    ):
+        monkeypatch.setitem(operation.__globals__, "FreeCAD", freecad)
     return module, console
 
 
@@ -270,7 +277,6 @@ def test_rpc_start_rejects_configuration_error_before_binding(monkeypatch):
     app_thread = object()
     dispatcher = SimpleNamespace(deleteLater=lambda: None)
     bound = []
-    monkeypatch.setattr(rpc_server, "rpc_server_instance", None)
     monkeypatch.setattr(
         rpc_server.QtWidgets.QApplication,
         "instance",
@@ -309,7 +315,7 @@ def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
     app_thread = object()
     dispatcher = SimpleNamespace(deleteLater=lambda: None)
     lease_service = SimpleNamespace(
-        list_records=lambda: [],
+        list_records=list,
         has_unresolved_owner=lambda _owner: False,
     )
     replay_cache = SimpleNamespace(set_owner_lease_predicate=lambda _predicate: None)
@@ -332,7 +338,7 @@ def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
             self.daemon = daemon
 
         def start(self):
-            self.target()
+            pass
 
     settings = {
         "document_lease_mode": "observe",
@@ -353,18 +359,9 @@ def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
         features=("authenticated_rpc_v2",),
     )
 
-    monkeypatch.setattr(rpc_server, "rpc_server_instance", None)
-    monkeypatch.setattr(rpc_server, "rpc_server_thread", None)
-    monkeypatch.setattr(rpc_server, "gui_dispatcher", None)
-    monkeypatch.setattr(rpc_server, "worker_manager", None)
-    monkeypatch.setattr(rpc_server, "rpc_session_manager", None)
-    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", None)
-    monkeypatch.setattr(rpc_server, "rpc_server_actual_endpoint", None)
-    monkeypatch.setattr(rpc_server, "rpc_server_runtime_id", "")
-    monkeypatch.setattr(rpc_server, "rpc_server_started_at", "")
     monkeypatch.setattr(rpc_server, "_addon_runtime", None)
     monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
-    monkeypatch.setattr(rpc_server, "rpc_request_replay_cache", replay_cache)
+    monkeypatch.setattr(rpc_server, "RequestReplayCache", lambda: replay_cache)
     monkeypatch.setattr(
         rpc_server.QtWidgets.QApplication,
         "instance",
@@ -387,7 +384,7 @@ def _prepare_authenticated_rpc_start(monkeypatch, *, session_manager):
     monkeypatch.setattr(
         rpc_server.FreeCAD, "getHomePath", lambda: "", raising=False
     )
-    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", lambda: {})
+    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", dict)
     monkeypatch.setattr(
         rpc_server, "WorkerManager", lambda *_args, **_kwargs: object()
     )
@@ -450,6 +447,22 @@ def test_v2_init_failure_is_visible_in_observe_mode(monkeypatch):
     assert rpc_server.rpc_session_manager is None
 
 
+def _install_test_addon_runtime(monkeypatch, rpc_server, server, dispatcher):
+    from addon.FreeCADMCP.runtime import AddonRuntime
+
+    runtime = AddonRuntime(
+        listener=server,
+        dispatcher=dispatcher,
+        owned_resources=(
+            (dispatcher, dispatcher.deleteLater),
+            (server, server.server_close),
+        ),
+    )
+    monkeypatch.setattr(rpc_server, "_addon_runtime", runtime)
+    monkeypatch.setattr(rpc_server, "_runtime_shutdown_claim", None)
+    return runtime
+
+
 def test_rpc_stop_preserves_addon_process_lease_authority(monkeypatch):
     """Restarting the transport must not orphan UUIDs or active sidecars."""
 
@@ -475,10 +488,7 @@ def test_rpc_stop_preserves_addon_process_lease_authority(monkeypatch):
     identity_service = object()
     lease_service = object()
     save_service = object()
-    monkeypatch.setattr(rpc_server, "rpc_server_instance", _Server())
-    monkeypatch.setattr(rpc_server, "rpc_server_thread", None)
-    monkeypatch.setattr(rpc_server, "gui_dispatcher", _Dispatcher())
-    monkeypatch.setattr(rpc_server, "worker_manager", None)
+    _install_test_addon_runtime(monkeypatch, rpc_server, _Server(), _Dispatcher())
     monkeypatch.setattr(rpc_server, "lease_watchdog_thread", None)
     monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
     monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
@@ -501,7 +511,7 @@ def test_document_lease_runtime_outlives_transport_and_upgrades_when_clean(
     monkeypatch.setattr(rpc_server, "document_lease_runtime_policy", None)
     monkeypatch.setattr(rpc_server, "document_lease_runtime_mode", None)
     monkeypatch.setattr(rpc_server, "save_service", None)
-    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", lambda: {})
+    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", dict)
     monkeypatch.setattr(rpc_server, "_ensure_lease_watchdog_running", lambda: None)
 
     first = rpc_server.initialize_document_lease_runtime(
@@ -581,7 +591,7 @@ def test_runtime_watchdog_starts_without_rpc_auto_start_and_is_idempotent(
     monkeypatch.setattr(rpc_server, "document_lease_runtime_policy", None)
     monkeypatch.setattr(rpc_server, "document_lease_runtime_mode", None)
     monkeypatch.setattr(rpc_server, "save_service", None)
-    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", lambda: {})
+    monkeypatch.setattr(rpc_server.FreeCAD, "listDocuments", dict)
     settings = {
         "auto_start_rpc": False,
         "document_lease_mode": "observe",
@@ -645,10 +655,7 @@ def test_listener_stop_preserves_watchdog_stale_progression_and_records(
     identity_service = object()
     monkeypatch.setattr(rpc_server, "document_lease_service", service)
     monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
-    monkeypatch.setattr(rpc_server, "rpc_server_instance", _Server())
-    monkeypatch.setattr(rpc_server, "rpc_server_thread", None)
-    monkeypatch.setattr(rpc_server, "gui_dispatcher", _Dispatcher())
-    monkeypatch.setattr(rpc_server, "worker_manager", None)
+    _install_test_addon_runtime(monkeypatch, rpc_server, _Server(), _Dispatcher())
 
     try:
         watchdog = rpc_server._ensure_lease_watchdog_running(0.01)
@@ -797,7 +804,15 @@ def test_remote_gui_toggle_refuses_plain_transport_in_enforce_mode(monkeypatch):
         lambda message: warnings.append(message),
     )
 
-    commands.ToggleRemoteConnectionsCommand().Activated(True)
+    dependencies = commands.CommandDependencies(
+        freecad=commands.FreeCAD,
+        load_settings=commands.load_settings,
+        save_settings=commands.save_settings,
+        start_rpc_server=lambda: "",
+        stop_rpc_server=lambda: "",
+        runtime_running=lambda: False,
+    )
+    commands.ToggleRemoteConnectionsCommand(dependencies).Activated(True)
 
     assert saved == []
     assert warnings and "HMAC does not encrypt" in warnings[0]
@@ -817,7 +832,15 @@ def test_remote_gui_toggle_preserves_legacy_observe_behavior(monkeypatch):
     monkeypatch.setattr(commands, "load_settings", lambda: dict(policy))
     monkeypatch.setattr(commands, "save_settings", lambda value: saved.append(value))
 
-    commands.ToggleRemoteConnectionsCommand().Activated(True)
+    dependencies = commands.CommandDependencies(
+        freecad=commands.FreeCAD,
+        load_settings=commands.load_settings,
+        save_settings=commands.save_settings,
+        start_rpc_server=lambda: "",
+        stop_rpc_server=lambda: "",
+        runtime_running=lambda: False,
+    )
+    commands.ToggleRemoteConnectionsCommand(dependencies).Activated(True)
 
     assert saved[0]["remote_enabled"] is True
     assert saved[0]["rpc_bind_host"] == "0.0.0.0"

@@ -5,7 +5,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import state
-from .constants import _AGENT_OWNED_STATES, _MUTATING_ACTION_NAMES, _MUTATING_ACTION_PREFIXES
+from .constants import (
+    _AGENT_OWNED_STATES,
+    _MUTATING_ACTION_NAMES,
+    _MUTATING_ACTION_PREFIXES,
+)
 from .lease_view import _lease_view
 
 
@@ -131,22 +135,22 @@ def _disable_mutating_actions(actions: list[Any]) -> None:
         key = id(action)
         try:
             enabled = bool(action.isEnabled())
-            if key not in state._deterred_actions and enabled:
-                state._deterred_actions[key] = action
+            if key not in state._shared_state.deterred_actions and enabled:
+                state._shared_state.deterred_actions[key] = action
             if enabled:
                 action.setEnabled(False)
         except RuntimeError:
-            state._deterred_actions.pop(key, None)
+            state._shared_state.deterred_actions.pop(key, None)
 
 
 def _restore_mutating_actions() -> None:
-    for key, action in list(state._deterred_actions.items()):
+    for key, action in list(state._shared_state.deterred_actions.items()):
         try:
             action.setEnabled(True)
         except RuntimeError:
             pass
         finally:
-            state._deterred_actions.pop(key, None)
+            state._shared_state.deterred_actions.pop(key, None)
 
 
 def _update_command_deterrence(

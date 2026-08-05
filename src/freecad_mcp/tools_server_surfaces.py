@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .server_ops import surfaces
+
 if TYPE_CHECKING:
     from .freecad_client import FreeCADConnection
     from .lease_manager import StaleLeaseRecoveryOrchestrator
@@ -11,18 +13,12 @@ if TYPE_CHECKING:
 
 
 def server_state() -> ServerState:
-    from freecad_mcp import server
-
-    return server.state
+    return surfaces.state
 
 
 def server_connection() -> FreeCADConnection:
-    from freecad_mcp import server
-
-    return server.get_freecad_connection()
+    return surfaces.get_freecad_connection()
 
 
 def server_stale_recovery() -> StaleLeaseRecoveryOrchestrator:
-    from freecad_mcp import server
-
-    return server.stale_recovery
+    return surfaces.stale_recovery

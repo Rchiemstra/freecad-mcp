@@ -30,10 +30,8 @@ async def lease_heartbeat_once() -> bool:
         return False
     conn = surfaces.state.freecad_connection
     try:
-        from freecad_mcp import server
-
         with surfaces.connection_lock:
-            server._authenticate_connection(conn)
+            surfaces.authenticate_connection(conn)
         payload, context = surfaces.state.lease_manager.build_heartbeat_request()
         response = await asyncio.to_thread(
             conn.heartbeat_document_locks_batch, payload, context

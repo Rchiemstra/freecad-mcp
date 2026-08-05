@@ -76,13 +76,11 @@ def manifest_for_authentication() -> Any:
 
 def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> None:
     """Refresh the short-lived RPC session without disturbing held leases."""
-    from freecad_mcp import server
-
     if surfaces.state.instance_manifest is None or (not force and not session_needs_refresh()):
         return
     manifest = manifest_for_authentication()
     secret_path = surfaces.state.auth_file or manifest.auth_secret_file
-    server.emit_event(
+    surfaces.emit_event(
         "authentication",
         "authentication_started",
         payload={
@@ -130,7 +128,7 @@ def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> 
         conn.configure_stale_recovery(surfaces.stale_recovery)
         compatibility = compatibility_for_manifest(verified.manifest)
         surfaces.state.compatibility_warnings = compatibility["warnings"]
-        server.emit_event(
+        surfaces.emit_event(
             "authentication",
             "authentication_completed",
             payload={
@@ -167,7 +165,7 @@ def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> 
             },
         )
     except Exception as exc:
-        server.emit_event(
+        surfaces.emit_event(
             "authentication",
             "authentication_failed",
             status=OutcomeStatus.FAILED.value,

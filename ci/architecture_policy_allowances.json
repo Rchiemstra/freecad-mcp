@@ -173,15 +173,6 @@
       "removal_phase": 22
     },
     {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/__init__.py",
-      "line": 44,
-      "column": 5,
-      "fingerprint": "5b924ddf78b2364fea06",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: .core_authority",
-      "removal_phase": 17
-    },
-    {
       "code": "ARCH106",
       "path": "addon/FreeCADMCP/document_lease/__init__.py",
       "line": 68,
@@ -288,132 +279,6 @@
       "fingerprint": "405c24f54238316e0236",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, worker",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/registration.py",
-      "line": 39,
-      "column": 34,
-      "fingerprint": "666ef318b3e8af07c96a",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module('FreeCAD') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/registration.py",
-      "line": 60,
-      "column": 38,
-      "fingerprint": "85209899be53a70ed808",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module('FreeCADGui') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 22,
-      "column": 18,
-      "fingerprint": "c27418db57ad283025a1",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('module_name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 28,
-      "column": 15,
-      "fingerprint": "9ae5753192a5f60a78b5",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('rpc_server') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 48,
-      "column": 14,
-      "fingerprint": "c75ea5673d9d02fcaf9c",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('document_lock') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 48,
-      "column": 50,
-      "fingerprint": "0ff1cf9db62f7d6d9337",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('addon.FreeCADMCP.document_lock') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 53,
-      "column": 22,
-      "fingerprint": "ec59870a993f29421290",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module('document_lock') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 56,
-      "column": 26,
-      "fingerprint": "cae03e6c9b368648a724",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module('addon.FreeCADMCP.document_lock') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 72,
-      "column": 14,
-      "fingerprint": "abe914d62cdfa91e3b1e",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('document_lock') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 72,
-      "column": 50,
-      "fingerprint": "3462b11b231307ce955b",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('addon.FreeCADMCP.document_lock') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 88,
-      "column": 14,
-      "fingerprint": "e561c4225ce1e26c2dd8",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('FreeCAD') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 91,
-      "column": 22,
-      "fingerprint": "ecd851e5caff8a004087",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module('FreeCAD') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 103,
-      "column": 23,
-      "fingerprint": "dce0bd3393fe570d02ff",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(Name('package_name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "line": 106,
-      "column": 27,
-      "fingerprint": "418363b91b3463340f8f",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(JoinedStr([FormattedValue(Name('package_name', Load()), -1), Constant('.QtCore')])) is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH107",
@@ -555,43 +420,25 @@
       "path": "addon/FreeCADMCP/document_lock.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "df29d6ae5013efb370a1",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 62 symbols",
+      "fingerprint": "e509b7200025c8817609",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 60 symbols",
       "removal_phase": 22
     },
     {
       "code": "ARCH105",
       "path": "addon/FreeCADMCP/document_lock.py",
-      "line": 28,
+      "line": 36,
       "column": 1,
-      "fingerprint": "2aa02a7a2519a681ec2c",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: FunctionDef@28, Expr@46, Expr@196, For@198",
+      "fingerprint": "77bf6a67af400e42595c",
+      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Expr@36, Expr@202, Expr@206",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lock.py",
-      "line": 29,
-      "column": 15,
-      "fingerprint": "c69c9d9717edeb234fb6",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('__name__', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lock.py",
-      "line": 37,
-      "column": 27,
-      "fingerprint": "f12c0cd4b9a4290efad7",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('alias', Load())) is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH106",
       "path": "addon/FreeCADMCP/document_lock.py",
-      "line": 207,
+      "line": 215,
       "column": 1,
-      "fingerprint": "9e702d1995265dc0ef8a",
+      "fingerprint": "0818c79a60d182dbe6a2",
       "reason": "legacy package public surface: package exports 58 public symbols; budget is 16",
       "removal_phase": 23
     },
@@ -603,33 +450,6 @@
       "fingerprint": "500f471e0a8589864439",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, object",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lock_ops/facade_surfaces.py",
-      "line": 15,
-      "column": 18,
-      "fingerprint": "4c04683dee6628a0ee58",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
-      "line": 23,
-      "column": 15,
-      "fingerprint": "6094e38e26e92b886488",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('qualified', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
-      "line": 31,
-      "column": 27,
-      "fingerprint": "cb09bd13cf4213dfa0d6",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('name', Load())) is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -661,56 +481,11 @@
     {
       "code": "ARCH105",
       "path": "addon/FreeCADMCP/lock_indicator.py",
-      "line": 25,
+      "line": 33,
       "column": 1,
-      "fingerprint": "206e9206147d06a1a8d7",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: FunctionDef@25, Expr@43, Expr@199, For@201, Assign@211, FunctionDef@228, FunctionDef@234",
+      "fingerprint": "a80e25f5e40d2832a0f8",
+      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Expr@33, Expr@196, Expr@200, Assign@203, FunctionDef@220, FunctionDef@226",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator.py",
-      "line": 26,
-      "column": 15,
-      "fingerprint": "15b33c43f88bd5bef707",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('__name__', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator.py",
-      "line": 34,
-      "column": 27,
-      "fingerprint": "56801e2bcdfdbf063a35",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('alias', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/active_leases.py",
-      "line": 82,
-      "column": 15,
-      "fingerprint": "2b1db054729cea88969f",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('FreeCAD') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/facade_bindings.py",
-      "line": 9,
-      "column": 18,
-      "fingerprint": "803ca2138c2e87258f5f",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('module_name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/facade_bindings.py",
-      "line": 17,
-      "column": 18,
-      "fingerprint": "c31963744ba625295677",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('module_name', Load())) is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -756,105 +531,6 @@
       "fingerprint": "eabd0405702899937400",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, view",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
-      "line": 26,
-      "column": 18,
-      "fingerprint": "d60a21c486b82cc2b476",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('module_name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
-      "line": 30,
-      "column": 15,
-      "fingerprint": "e99c5670b281be1348dd",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('rpc_server') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
-      "line": 41,
-      "column": 15,
-      "fingerprint": "cba551d8a27431f62623",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get('FreeCAD') is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_restore.py",
-      "line": 23,
-      "column": 18,
-      "fingerprint": "52fa070078ecece1e733",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('module_name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
-      "line": 26,
-      "column": 18,
-      "fingerprint": "ce3c808a6009840e3f0e",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('module_name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
-      "line": 23,
-      "column": 15,
-      "fingerprint": "bbfc3029b9561c0ead86",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('qualified', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
-      "line": 31,
-      "column": 27,
-      "fingerprint": "34bdf7403e4195ae62a5",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules.get(Name('name', Load())) is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/configure_allowed_ips_command.py",
-      "line": 19,
-      "column": 9,
-      "fingerprint": "0dd06a791738cd3abfe7",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ..rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/start_rpc_server_command.py",
-      "line": 9,
-      "column": 9,
-      "fingerprint": "8631c0fdf01fbf9b575d",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ..rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/stop_rpc_server_command.py",
-      "line": 9,
-      "column": 9,
-      "fingerprint": "4076ee0be99046c64182",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ..rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/toggle_remote_connections_command.py",
-      "line": 15,
-      "column": 9,
-      "fingerprint": "a0dd043a2316fee83c13",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ..rpc_server",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -942,144 +618,9 @@
       "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "ce2380763828472fed46",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 26 symbols",
+      "fingerprint": "a587a59a8074670ae728",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 43 symbols",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 27,
-      "column": 1,
-      "fingerprint": "1f01dc8af11a1154e4cc",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 28,
-      "column": 5,
-      "fingerprint": "9312ed8cff9e9817e81d",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: .rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 35,
-      "column": 36,
-      "fingerprint": "d58859b41c2012a38e61",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 40,
-      "column": 75,
-      "fingerprint": "72e514d4eda4546e7c5e",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 45,
-      "column": 47,
-      "fingerprint": "e787d6f44b602eabd9e0",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 50,
-      "column": 68,
-      "fingerprint": "b2edc79c5cb80b47dc45",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 58,
-      "column": 15,
-      "fingerprint": "273d42519a0c0308f155",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 63,
-      "column": 12,
-      "fingerprint": "e4b8b799b5cdf7dbdc8b",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 67,
-      "column": 42,
-      "fingerprint": "d8949b5dbe78948b4123",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 71,
-      "column": 48,
-      "fingerprint": "38fd1f3802978c6d62d7",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 75,
-      "column": 65,
-      "fingerprint": "713b8922a32cb28a6197",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 79,
-      "column": 68,
-      "fingerprint": "db0618470d8d00c5e084",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "line": 83,
-      "column": 40,
-      "fingerprint": "b921eafaf49d02b66c45",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
-      "line": 9,
-      "column": 9,
-      "fingerprint": "1d56070152b3f4006b49",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: document_lock",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
-      "line": 29,
-      "column": 9,
-      "fingerprint": "fc43bcfd809b9fe02d7b",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: document_lease",
-      "removal_phase": 17
     },
     {
       "code": "ARCH107",
@@ -1098,33 +639,6 @@
       "fingerprint": "f600056dd17db6268331",
       "reason": "legacy package public surface: package exports 41 public symbols; budget is 16",
       "removal_phase": 23
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/_common.py",
-      "line": 9,
-      "column": 1,
-      "fingerprint": "fc401a22bbd3696689cd",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/_common.py",
-      "line": 10,
-      "column": 5,
-      "fingerprint": "9b41796ed2164df12f34",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ...rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/_common.py",
-      "line": 15,
-      "column": 1,
-      "fingerprint": "f42f78e421028fdbd62e",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be exported",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -1188,51 +702,6 @@
       "fingerprint": "7cefc3d7254bc06262a3",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: object, sketch",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py",
-      "line": 12,
-      "column": 1,
-      "fingerprint": "a06b2015a591273e78c9",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py",
-      "line": 105,
-      "column": 8,
-      "fingerprint": "22f0695ac3f81fa6a50c",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py",
-      "line": 108,
-      "column": 20,
-      "fingerprint": "975199d3f3762a679f07",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py",
-      "line": 111,
-      "column": 18,
-      "fingerprint": "5b2c86ee230c32095e1c",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py",
-      "line": 127,
-      "column": 16,
-      "fingerprint": "16ad2b62dda76fbd7cc6",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
     },
     {
       "code": "ARCH106",
@@ -1320,36 +789,9 @@
       "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py",
       "line": 13,
       "column": 1,
-      "fingerprint": "fbf96422bf38e7da911a",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@13, FunctionDef@16",
+      "fingerprint": "cf9c6086c4ef6ede8922",
+      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@13",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py",
-      "line": 16,
-      "column": 1,
-      "fingerprint": "ffbecdd5626fe2cd6fdf",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py",
-      "line": 17,
-      "column": 5,
-      "fingerprint": "069047dc8ae42b0aa2d8",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ...rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py",
-      "line": 22,
-      "column": 1,
-      "fingerprint": "06a4af87050878b41f67",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be exported",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -1365,171 +807,9 @@
       "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py",
       "line": 5,
       "column": 1,
-      "fingerprint": "d8179f27a94af35ec559",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@5, FunctionDef@8",
+      "fingerprint": "ca4d7adbbf5af21ec248",
+      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@5",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py",
-      "line": 8,
-      "column": 1,
-      "fingerprint": "aaffc7f30da04d29dd2f",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py",
-      "line": 9,
-      "column": 5,
-      "fingerprint": "020f9a8dc11c830e5392",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ...rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py",
-      "line": 14,
-      "column": 1,
-      "fingerprint": "d997f084263075c8882f",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be exported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create.py",
-      "line": 6,
-      "column": 1,
-      "fingerprint": "00bd3949a9acde070ab2",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create.py",
-      "line": 11,
-      "column": 10,
-      "fingerprint": "d1a6511d8e6f1a988ed8",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create.py",
-      "line": 15,
-      "column": 15,
-      "fingerprint": "0ec110d4751f90e096ae",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
-      "line": 13,
-      "column": 1,
-      "fingerprint": "0dccd39cbfff4bc14851",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
-      "line": 29,
-      "column": 15,
-      "fingerprint": "13274a178c9d5b21d9c5",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
-      "line": 40,
-      "column": 15,
-      "fingerprint": "3ef1185f54f63aba0046",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
-      "line": 90,
-      "column": 15,
-      "fingerprint": "6ca42143098e83c7387c",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
-      "line": 112,
-      "column": 15,
-      "fingerprint": "18a2060ed36ccbe14015",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui.py",
-      "line": 5,
-      "column": 1,
-      "fingerprint": "61cd21175d571856d93d",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui.py",
-      "line": 31,
-      "column": 19,
-      "fingerprint": "647619f166369da1e03f",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui.py",
-      "line": 49,
-      "column": 12,
-      "fingerprint": "3bc15564df3f7a0c0982",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui.py",
-      "line": 51,
-      "column": 28,
-      "fingerprint": "765a8dd0cf69dc80e749",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui.py",
-      "line": 54,
-      "column": 26,
-      "fingerprint": "0a0d8f15898b4c6ca1a6",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui_reload.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "510df8987985bf24f6f9",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui_reload.py",
-      "line": 26,
-      "column": 15,
-      "fingerprint": "5551cdfd362c6b7ce95c",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -1631,240 +911,6 @@
       "removal_phase": 23
     },
     {
-      "code": "ARCH105",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py",
-      "line": 5,
-      "column": 1,
-      "fingerprint": "1f98dcf5d51d760c2c7d",
-      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@5, FunctionDef@8",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py",
-      "line": 8,
-      "column": 1,
-      "fingerprint": "956b2cf10eba42c0f782",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py",
-      "line": 9,
-      "column": 5,
-      "fingerprint": "93d76753ead0d5e39331",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: ..rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py",
-      "line": 14,
-      "column": 1,
-      "fingerprint": "4ecba75a59adbd8625fa",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be exported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 6,
-      "column": 1,
-      "fingerprint": "dcba3188b1f042b2fe84",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 23,
-      "column": 8,
-      "fingerprint": "55e601ed80ddffc8e584",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 25,
-      "column": 8,
-      "fingerprint": "a50d0b707c874e5b3a33",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 26,
-      "column": 16,
-      "fingerprint": "9b8fe0df0dfc54742fab",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 34,
-      "column": 9,
-      "fingerprint": "7107fb5eacad9194e112",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 51,
-      "column": 13,
-      "fingerprint": "b57cae4b5fefb7ee3bc9",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 59,
-      "column": 8,
-      "fingerprint": "09de632f6e195716478b",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 65,
-      "column": 26,
-      "fingerprint": "a3ef7d321403ce649bc8",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 73,
-      "column": 20,
-      "fingerprint": "884cb92042f0d102be2d",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 82,
-      "column": 28,
-      "fingerprint": "221307fc7bf9c99ddef8",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 96,
-      "column": 16,
-      "fingerprint": "edb81b6434432fae02ed",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 133,
-      "column": 25,
-      "fingerprint": "0408d864acf19df91400",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 145,
-      "column": 12,
-      "fingerprint": "00d23b0c3b9edad96b70",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 150,
-      "column": 35,
-      "fingerprint": "b5bc5e7971bcaf7202ea",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 162,
-      "column": 12,
-      "fingerprint": "98cd5ed40f795256d613",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 176,
-      "column": 9,
-      "fingerprint": "44992f8aec3b5b9144a0",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 177,
-      "column": 12,
-      "fingerprint": "339a096275f1d4ba86c4",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 215,
-      "column": 8,
-      "fingerprint": "2983e23bb65b2e12f200",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 217,
-      "column": 24,
-      "fingerprint": "a2cddb4fdf407de43a93",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 218,
-      "column": 21,
-      "fingerprint": "a0b42182ed7f699e2c4d",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 222,
-      "column": 41,
-      "fingerprint": "397abbb2ce8a16e1c511",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-      "line": 225,
-      "column": 17,
-      "fingerprint": "e7c871cd0229c1ffcf38",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
       "code": "ARCH101",
       "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/save_validation.py",
       "line": 1,
@@ -1872,96 +918,6 @@
       "fingerprint": "e77bfb33324bf584eabe",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, worker",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/save_validation.py",
-      "line": 5,
-      "column": 1,
-      "fingerprint": "bae0ee9d5247fd362f94",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/save_validation.py",
-      "line": 35,
-      "column": 15,
-      "fingerprint": "da650a7155f391b82d64",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/selector_resolve.py",
-      "line": 8,
-      "column": 1,
-      "fingerprint": "aa37fefe6ee87dd31a57",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/selector_resolve.py",
-      "line": 40,
-      "column": 16,
-      "fingerprint": "33d2b86caeb921697d39",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/selector_resolve.py",
-      "line": 48,
-      "column": 34,
-      "fingerprint": "f523f8f7f5321ca8c4f2",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/selector_resolve.py",
-      "line": 51,
-      "column": 20,
-      "fingerprint": "d93e850f5e0a5a602ea2",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/selector_resolve.py",
-      "line": 59,
-      "column": 28,
-      "fingerprint": "d5bbb65b55d9cf370879",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/validation_evidence.py",
-      "line": 9,
-      "column": 1,
-      "fingerprint": "183debcbff197912da89",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod may not be imported",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/validation_evidence.py",
-      "line": 23,
-      "column": 12,
-      "fingerprint": "8cf7728c96a9a5b8d6d1",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/validation_evidence.py",
-      "line": 26,
-      "column": 5,
-      "fingerprint": "4c699454a274aa9e8027",
-      "reason": "Phase 1 frozen runtime locator: runtime locator _rpc_mod is forbidden; inject the collaborator",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -1977,8 +933,8 @@
       "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "be3261c8c701be2bec84",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 81 symbols",
+      "fingerprint": "50f81983845eeb4e0ea5",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 71 symbols",
       "removal_phase": 22
     },
     {
@@ -2018,24 +974,6 @@
       "removal_phase": 22
     },
     {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/server_lifecycle.py",
-      "line": 108,
-      "column": 5,
-      "fingerprint": "50896de567a8be335350",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: .rpc_server",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/server_shutdown.py",
-      "line": 70,
-      "column": 5,
-      "fingerprint": "ef9d684fb23b4d6cc4ca",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: .rpc_server",
-      "removal_phase": 17
-    },
-    {
       "code": "ARCH105",
       "path": "addon/FreeCADMCP/rpc_server/settings.py",
       "line": 14,
@@ -2052,24 +990,6 @@
       "fingerprint": "4bc9ce914d5fbaaa4574",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, path",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/settings_ops/persistence.py",
-      "line": 16,
-      "column": 12,
-      "fingerprint": "1dc463e44cac755b2155",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules['FreeCAD'] is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/settings_ops/profile_secret.py",
-      "line": 16,
-      "column": 12,
-      "fingerprint": "d31187046b2ad29ed7a3",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules['FreeCAD'] is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -2106,24 +1026,6 @@
       "fingerprint": "6ce3b6e5055228117ae1",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, path",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
-      "line": 51,
-      "column": 17,
-      "fingerprint": "b7ce8d552655752957a0",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: document_lock",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
-      "line": 84,
-      "column": 9,
-      "fingerprint": "365b23546b6f1fbb1370",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: document_lock",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -2277,24 +1179,6 @@
       "fingerprint": "a6b011f5717d83fcc295",
       "reason": "legacy mixed capability ownership: module owns multiple capability subjects: execution, path",
       "removal_phase": 22
-    },
-    {
-      "code": "ARCH103",
-      "path": "addon/FreeCADMCP/rpc_server/xmlrpc_identity_handler.py",
-      "line": 11,
-      "column": 9,
-      "fingerprint": "61749d500264732ba02e",
-      "reason": "Phase 1 frozen runtime locator: local import is an application runtime module locator: document_lock",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "src/freecad_mcp/assembly_api_bootstrap/headless_preferences.py",
-      "line": 10,
-      "column": 21,
-      "fingerprint": "83d42535deb9a2b97e09",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator membership test against sys.modules is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH101",
@@ -3570,35 +2454,26 @@
       "path": "src/freecad_mcp/server.py",
       "line": 1,
       "column": 1,
-      "fingerprint": "ee20e3fe6cbf14a82d29",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 40 symbols",
+      "fingerprint": "f70ff062e5aea22fe366",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 42 symbols",
       "removal_phase": 22
     },
     {
       "code": "ARCH104",
       "path": "src/freecad_mcp/server.py",
-      "line": 64,
+      "line": 67,
       "column": 1,
-      "fingerprint": "17304a9f67fe5ec00771",
+      "fingerprint": "1aa725652995bdc9c8e0",
       "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::__all__; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },
     {
       "code": "ARCH106",
       "path": "src/freecad_mcp/server.py",
-      "line": 64,
+      "line": 67,
       "column": 1,
-      "fingerprint": "2d1f7959740600a7e28b",
+      "fingerprint": "13241935cf31356305d9",
       "reason": "legacy package public surface: explicit __all__ is not statically auditable",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/server.py",
-      "line": 65,
-      "column": 1,
-      "fingerprint": "c23533a97841905899f9",
-      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::bind_tool_exports; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },
     {
@@ -3606,16 +2481,25 @@
       "path": "src/freecad_mcp/server.py",
       "line": 68,
       "column": 1,
-      "fingerprint": "d10f8576458ed0744813",
+      "fingerprint": "7c2a573c15ae0405d9b1",
+      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::bind_tool_exports; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH104",
+      "path": "src/freecad_mcp/server.py",
+      "line": 71,
+      "column": 1,
+      "fingerprint": "5ddc33d7678cd196048d",
       "reason": "legacy package-barrel import: internal barrel import .telemetry::emit_event; resolved barrel src/freecad_mcp/telemetry/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },
     {
       "code": "ARCH104",
       "path": "src/freecad_mcp/server.py",
-      "line": 119,
+      "line": 142,
       "column": 1,
-      "fingerprint": "8998581feea5434bd39d",
+      "fingerprint": "702f490c34acfb49a5c0",
       "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::*; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },
@@ -3667,29 +2551,11 @@
     {
       "code": "ARCH106",
       "path": "src/freecad_mcp/server_ops/tool_exports/__init__.py",
-      "line": 7,
+      "line": 17,
       "column": 1,
-      "fingerprint": "87ce00ea7c67037ac599",
+      "fingerprint": "c0c9a76e92491a7bfba5",
       "reason": "legacy package public surface: explicit __all__ is not statically auditable",
       "removal_phase": 23
-    },
-    {
-      "code": "ARCH103",
-      "path": "src/freecad_mcp/server_ops/tool_exports/bind_part_1.py",
-      "line": 9,
-      "column": 11,
-      "fingerprint": "11b10bb367c3beabeb54",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules['freecad_mcp.server_ops.tool_exports'] is forbidden",
-      "removal_phase": 17
-    },
-    {
-      "code": "ARCH103",
-      "path": "src/freecad_mcp/server_ops/tool_exports/bind_part_2.py",
-      "line": 9,
-      "column": 11,
-      "fingerprint": "5e3cb2ef2e1a12e4c64b",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator sys.modules['freecad_mcp.server_ops.tool_exports'] is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH107",
@@ -3708,15 +2574,6 @@
       "fingerprint": "8e6dec05b5f2c218c98f",
       "reason": "legacy package public surface: package exports 174 public symbols; budget is 16",
       "removal_phase": 23
-    },
-    {
-      "code": "ARCH103",
-      "path": "src/freecad_mcp/server_ops/tool_registration.py",
-      "line": 25,
-      "column": 18,
-      "fingerprint": "ab0d29ea78a8acb3e7f1",
-      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(JoinedStr([Constant('freecad_mcp.'), FormattedValue(Name('module_name', Load()), -1)])) is forbidden",
-      "removal_phase": 17
     },
     {
       "code": "ARCH104",
@@ -5008,27 +3865,27 @@
     {
       "code": "ARCH104",
       "path": "src/freecad_mcp/tools_runtime_control.py",
-      "line": 11,
+      "line": 12,
       "column": 1,
-      "fingerprint": "848cbbd8905080aa6632",
+      "fingerprint": "d32c7d7ba18b9aac2591",
       "reason": "legacy package-barrel import: internal barrel import .operations::claim_acquisition_result_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },
     {
       "code": "ARCH104",
       "path": "src/freecad_mcp/tools_runtime_control.py",
-      "line": 15,
+      "line": 16,
       "column": 1,
-      "fingerprint": "1a2dbc1ffc5c7aeedc08",
+      "fingerprint": "1bb8ce063af46788ced0",
       "reason": "legacy package-barrel import: internal barrel import .responses::json_response; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },
     {
       "code": "ARCH104",
       "path": "src/freecad_mcp/tools_runtime_control.py",
-      "line": 15,
+      "line": 16,
       "column": 1,
-      "fingerprint": "1f4d0b34b387a3d9edbe",
+      "fingerprint": "bb4eefe734c868f98b0f",
       "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
       "removal_phase": 23
     },

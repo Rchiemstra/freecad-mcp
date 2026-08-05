@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -17,6 +16,7 @@ except ImportError:
 from .formatting import _bounded_text
 from .lease_view import _lease_view
 from .local_recovery import _v2_lease_service
+from .runtime_bindings import current_runtime_bindings
 from .secret_redaction import _redact_secrets
 
 
@@ -42,10 +42,12 @@ def _append_v2_leases(
         pass
 
 
-def _append_legacy_leases(result: list[dict[str, Any]], seen: set[str]) -> None:
+def _append_legacy_leases(
+    result: list[dict[str, Any]], seen: set[str], list_leases: Any
+) -> None:
+    if not callable(list_leases):
+        return
     try:
-        from document_lock import list_leases
-
         for record in list_leases():
             if hasattr(record, "to_public_dict"):
                 payload = record.to_public_dict()
@@ -72,14 +74,19 @@ def _active_leases() -> list[dict[str, Any]]:
     if service is not None:
         _append_v2_leases(result, seen, service)
 
-    _append_legacy_leases(result, seen)
+    bindings = current_runtime_bindings()
+    list_compatibility_leases = (
+        bindings.list_compatibility_leases if bindings is not None else None
+    )
+    _append_legacy_leases(result, seen, list_compatibility_leases)
     return result
 
 
 def _foreign_shadow_leases(service: Any) -> list[dict[str, Any]]:
     """Read token-free sidecar shadows for currently open documents."""
 
-    freecad = sys.modules.get("FreeCAD")
+    bindings = current_runtime_bindings()
+    freecad = bindings.freecad if bindings is not None else None
     list_documents = getattr(freecad, "listDocuments", None)
     if not callable(list_documents):
         return []
@@ -105,12 +112,9 @@ def _foreign_shadow_leases(service: Any) -> list[dict[str, Any]]:
             sidecar = Path(f"{identity.canonical_path}.freecad-mcp.lock")
             if not os.path.lexists(sidecar):
                 continue
+            inspector = bindings.inspect_compatibility_lease
             try:
-                from document_lock import inspect_persisted_compatibility_lease
-
-                compatibility = inspect_persisted_compatibility_lease(
-                    identity.canonical_path
-                )
+                compatibility = inspector(identity.canonical_path)
             except Exception:
                 compatibility = None
             if compatibility is not None:

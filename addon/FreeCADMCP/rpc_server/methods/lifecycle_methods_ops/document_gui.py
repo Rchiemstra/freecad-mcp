@@ -2,7 +2,6 @@
 
 import FreeCAD
 
-from ._common import _rpc_mod
 from .document_gui_reload import reload_preflight
 
 
@@ -19,7 +18,7 @@ def create_document_gui(self, name):
 
 
 def reload_document_gui(self, doc_name: str):
-    error, file_path, identity = reload_preflight(doc_name)
+    error, file_path, identity = reload_preflight(self, doc_name)
     if error is not None:
         return error
     session_uuid = identity.session_uuid if identity is not None else None
@@ -28,7 +27,9 @@ def reload_document_gui(self, doc_name: str):
     if reopened is None:
         return f"FreeCAD did not reopen '{file_path}'."
     if session_uuid is not None:
-        rebound = _rpc_mod().document_identity_service.rebind_document(session_uuid, reopened)
+        rebound = self._lifecycle_collaborators.document_identity_service.rebind_document(
+            session_uuid, reopened
+        )
         if rebound.comparison_key != identity.comparison_key:
             return "Reload rebound the document to an unexpected file."
     FreeCAD.Console.PrintMessage(
@@ -46,12 +47,13 @@ def close_document_gui(self, doc_name: str):
                 "error_code": "DOCUMENT_NOT_FOUND",
                 "error": f"Document '{doc_name}' not found.",
             }
-        if _rpc_mod().document_lease_service is not None:
+        collaborators = self._lifecycle_collaborators
+        if collaborators.document_lease_service is not None:
             try:
-                identity = _rpc_mod().document_identity_service.resolve(
+                identity = collaborators.document_identity_service.resolve(
                     {"document_name": doc_name}
                 )
-                active = _rpc_mod().document_lease_service.get(
+                active = collaborators.document_lease_service.get(
                     {"document_session_uuid": identity.session_uuid}
                 )
             except Exception:

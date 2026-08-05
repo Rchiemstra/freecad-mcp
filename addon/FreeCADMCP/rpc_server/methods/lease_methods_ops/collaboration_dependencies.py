@@ -117,5 +117,12 @@ class CollaborationCollaborators:
             return self
         return replace(self, runtime_manifest=runtime_manifest)
 
+    def _without_runtime_manifest(self) -> CollaborationCollaborators:
+        """Drop restart-scoped authentication state during runtime disposal."""
+
+        if self.runtime_manifest is None:
+            return self
+        return replace(self, runtime_manifest=None)
+
 
 __all__ = ["CollaborationCollaborators", "CompatibilityMutationAPI"]

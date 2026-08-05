@@ -19,4 +19,3 @@ def abort_rpc_start(rpc_mod: Any, *, close_listener: bool = False) -> None:
     rpc_mod.rpc_server_actual_endpoint = None
     rpc_mod.rpc_session_manager = None
     rpc_mod.rpc_runtime_manifest = None
-    rpc_mod._addon_runtime = None

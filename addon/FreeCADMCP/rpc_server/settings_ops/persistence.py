@@ -5,19 +5,17 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import sys
 import tempfile
+
+import FreeCAD
 
 from .constants import DEFAULT_SETTINGS, SETTINGS_FILENAME
 from .validation import fail_closed_settings, validate_settings
 
 
-def _freecad():
-    return sys.modules["FreeCAD"]
-
-
-def get_settings_path():
-    return os.path.join(_freecad().getUserAppDataDir(), SETTINGS_FILENAME)
+def get_settings_path(*, freecad=None):
+    freecad = FreeCAD if freecad is None else freecad
+    return os.path.join(freecad.getUserAppDataDir(), SETTINGS_FILENAME)
 
 
 def atomic_write_settings(path, settings):
@@ -39,8 +37,9 @@ def atomic_write_settings(path, settings):
         raise
 
 
-def load_settings():
-    path = get_settings_path()
+def load_settings(*, freecad=None):
+    freecad = FreeCAD if freecad is None else freecad
+    path = get_settings_path(freecad=freecad)
     if os.path.exists(path):
         try:
             with open(path) as f:
@@ -55,18 +54,19 @@ def load_settings():
                 try:
                     atomic_write_settings(path, validated)
                 except Exception as exc:
-                    _freecad().Console.PrintWarning(
+                    freecad.Console.PrintWarning(
                         f"Loaded but could not persist MCP lease-mode migration: {exc}\n"
                     )
             return validated
         except Exception as e:
-            _freecad().Console.PrintWarning(f"Failed to load MCP settings: {e}\n")
+            freecad.Console.PrintWarning(f"Failed to load MCP settings: {e}\n")
             return fail_closed_settings(e)
     return validate_settings(DEFAULT_SETTINGS)
 
 
-def save_settings(settings):
-    path = get_settings_path()
+def save_settings(settings, *, freecad=None):
+    freecad = FreeCAD if freecad is None else freecad
+    path = get_settings_path(freecad=freecad)
     try:
         from .settings_policy_error import SettingsPolicyError
 
@@ -77,4 +77,4 @@ def save_settings(settings):
         settings = validate_settings(settings)
         atomic_write_settings(path, settings)
     except Exception as e:
-        _freecad().Console.PrintError(f"Failed to save MCP settings: {e}\n")
+        freecad.Console.PrintError(f"Failed to save MCP settings: {e}\n")

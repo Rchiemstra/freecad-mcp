@@ -5,29 +5,33 @@ from __future__ import annotations
 import contextlib
 import os
 import secrets
-import sys
 from pathlib import Path
+
+import FreeCAD
 
 from .migration import migrate
 from .persistence import load_settings, save_settings
 
 
-def _freecad():
-    return sys.modules["FreeCAD"]
-
-
-def ensure_profile_secret(settings=None):
+def ensure_profile_secret(
+    settings=None,
+    *,
+    freecad=None,
+    load_settings_callback=load_settings,
+    save_settings_callback=save_settings,
+):
     """Create the per-profile 256-bit authentication secret when configured.
 
     The function returns ``(settings, secret_path)`` and never exposes the
     secret value.  It is intentionally invoked by isolated-profile setup or by
     an explicit administrator action, not merely by importing the addon.
     """
-    current = migrate(settings or load_settings())
+    freecad = FreeCAD if freecad is None else freecad
+    current = migrate(settings or load_settings_callback())
     configured_secret = current.get("auth_secret_file")
     secret_path = Path(
         configured_secret
-        or os.path.join(_freecad().getUserAppDataDir(), "freecad_mcp_auth.secret")
+        or os.path.join(freecad.getUserAppDataDir(), "freecad_mcp_auth.secret")
     )
     created = False
     if not secret_path.exists():
@@ -55,5 +59,5 @@ def ensure_profile_secret(settings=None):
                 os.unlink(secret_path)
         raise
     current["auth_secret_file"] = str(secret_path)
-    save_settings(current)
+    save_settings_callback(current)
     return current, str(secret_path)

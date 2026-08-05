@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
-import sys
+from collections.abc import MutableMapping
+from types import SimpleNamespace
+
+_default_namespace: MutableMapping[str, object] | None = None
 
 
-def bind_tool_exports_part_2(exports: dict[str, object]) -> None:
-    pkg = sys.modules["freecad_mcp.server_ops.tool_exports"]
+def bind_default_export_namespace(namespace: MutableMapping[str, object]) -> None:
+    global _default_namespace
+    _default_namespace = namespace
+
+
+def bind_tool_exports_part_2(
+    exports: dict[str, object],
+    namespace: MutableMapping[str, object] | None = None,
+) -> None:
+    namespace = _default_namespace if namespace is None else namespace
+    if namespace is None:
+        raise RuntimeError("tool export namespace is not initialized")
+    pkg = SimpleNamespace()
     pkg.match_subshape = exports['match_subshape']
     pkg.measure_angle = exports['measure_angle']
     pkg.measure_area = exports['measure_area']
@@ -94,3 +108,4 @@ def bind_tool_exports_part_2(exports: dict[str, object]) -> None:
     pkg.update_document_lock = exports['update_document_lock']
     pkg.validate_geometry = exports['validate_geometry']
     pkg.validate_movement_follow = exports['validate_movement_follow']
+    namespace.update(vars(pkg))

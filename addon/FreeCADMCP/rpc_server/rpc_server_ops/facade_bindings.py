@@ -11,7 +11,9 @@ from ..methods import (
     v2_methods,
 )
 from ..methods.cad_methods_ops.recompute_helpers import collect_invalid_objects
-from ..methods.cad_methods_ops.sketch_gui_constraints import sketch_delete_constraint_gui
+from ..methods.cad_methods_ops.sketch_gui_constraints import (
+    sketch_delete_constraint_gui,
+)
 from ..methods.cad_methods_ops.sketch_gui_geometry import sketch_delete_geometry_gui
 from ..methods.cad_methods_ops.snapshot_restore import restore_gui, snapshot_gui
 
@@ -190,5 +192,5 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC._sketch_delete_geometry_gui = _sketch_delete_geometry_gui
     FreeCADRPC._snapshot_gui = lambda self, doc_name: snapshot_gui(doc_name)
     FreeCADRPC._restore_gui = lambda self, doc_name, snapshot_id=None: restore_gui(
-        doc_name, snapshot_id
+        self, doc_name, snapshot_id
     )

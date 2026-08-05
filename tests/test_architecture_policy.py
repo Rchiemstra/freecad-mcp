@@ -137,6 +137,152 @@ def test_shape_policy_fixtures(case: dict[str, object]) -> None:
 
 
 @pytest.mark.unit
+def test_static_package_runtime_module_reexport_is_not_a_locator(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "document_lease"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "from . import core_authority as core_authority\n",
+        encoding="utf-8",
+    )
+    (package / "core_authority.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    assert _findings(tmp_path) == []
+
+
+@pytest.mark.unit
+def test_unrelated_package_runtime_module_reexport_is_a_locator(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "unrelated"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "from addon.FreeCADMCP.rpc_server import rpc_server\n",
+        encoding="utf-8",
+    )
+
+    findings = _findings(tmp_path)
+
+    assert {finding.code for finding in findings} == {"ARCH103"}
+
+
+@pytest.mark.unit
+def test_lowercase_client_local_server_import_is_a_locator(tmp_path: Path) -> None:
+    module = tmp_path / "client_surface.py"
+    module.write_text(
+        "def state():\n    from freecad_mcp import server\n    return server.state\n",
+        encoding="utf-8",
+    )
+
+    findings = _findings(tmp_path)
+
+    assert {finding.code for finding in findings} == {"ARCH103"}
+    assert "freecad_mcp.server" in findings[0].message
+
+
+@pytest.mark.unit
+def test_lowercase_client_direct_server_symbol_import_is_a_locator(
+    tmp_path: Path,
+) -> None:
+    module = tmp_path / "client_surface.py"
+    module.write_text(
+        "def state():\n"
+        "    from freecad_mcp.server import state\n"
+        "    return state\n",
+        encoding="utf-8",
+    )
+
+    findings = _findings(tmp_path)
+
+    assert {finding.code for finding in findings} == {"ARCH103"}
+    assert "freecad_mcp.server" in findings[0].message
+
+
+@pytest.mark.unit
+def test_addon_direct_runtime_facade_symbol_import_is_a_locator(tmp_path: Path) -> None:
+    module = tmp_path / "addon" / "FreeCADMCP" / "feature.py"
+    module.parent.mkdir(parents=True)
+    module.write_text(
+        "def mutate(path):\n"
+        "    from document_lock import mark_user_intervened\n"
+        "    return mark_user_intervened(path)\n",
+        encoding="utf-8",
+    )
+
+    findings = _findings(tmp_path)
+
+    assert {finding.code for finding in findings} == {"ARCH103"}
+    assert "document_lock" in findings[0].message
+
+
+@pytest.mark.unit
+def test_import_alias_publication_is_not_runtime_discovery(tmp_path: Path) -> None:
+    alias_path = tmp_path / "addon" / "FreeCADMCP" / "document_lock_ops"
+    alias_path.mkdir(parents=True)
+    module = alias_path / "module_aliases.py"
+    module.write_text(
+        "import sys\n"
+        "def _publish_aliases(qualified, aliases):\n"
+        "    module = sys.modules.get(qualified)\n"
+        "    sys.modules['document_lock'] = module\n",
+        encoding="utf-8",
+    )
+
+    parsed = lint_python._parse_files([module], tmp_path)[0][0]
+
+    assert lint_python._check_runtime_locators(parsed) == []
+
+
+@pytest.mark.unit
+def test_import_alias_exemption_is_function_exact(tmp_path: Path) -> None:
+    alias_path = tmp_path / "addon" / "FreeCADMCP" / "document_lock_ops"
+    alias_path.mkdir(parents=True)
+    module = alias_path / "module_aliases.py"
+    module.write_text(
+        "import sys\n"
+        "def locate_server():\n"
+        "    return sys.modules.get('freecad_mcp.server')\n",
+        encoding="utf-8",
+    )
+
+    parsed = lint_python._parse_files([module], tmp_path)[0][0]
+    findings = lint_python._check_runtime_locators(parsed)
+
+    assert {finding.code for finding in findings} == {"ARCH103"}
+
+
+@pytest.mark.unit
+def test_import_alias_exemption_rejects_literal_runtime_lookup(tmp_path: Path) -> None:
+    alias_path = tmp_path / "addon" / "FreeCADMCP" / "document_lock_ops"
+    alias_path.mkdir(parents=True)
+    module = alias_path / "module_aliases.py"
+    module.write_text(
+        "import sys\n"
+        "def _publish_aliases(qualified, aliases):\n"
+        "    return sys.modules.get('freecad_mcp.server')\n",
+        encoding="utf-8",
+    )
+
+    parsed = lint_python._parse_files([module], tmp_path)[0][0]
+    findings = lint_python._check_runtime_locators(parsed)
+
+    assert {finding.code for finding in findings} == {"ARCH103"}
+
+
+@pytest.mark.unit
+def test_static_lease_runtime_import_seam_is_not_a_locator(tmp_path: Path) -> None:
+    seam = tmp_path / "rpc_server" / "lease_runtime_ops"
+    seam.mkdir(parents=True)
+    (seam / "imports.py").write_text(
+        "import document_lock\nimport document_lease\n",
+        encoding="utf-8",
+    )
+
+    assert _findings(tmp_path) == []
+
+
+@pytest.mark.unit
 def test_size_and_class_count_are_not_architecture_rules(tmp_path: Path) -> None:
     module = tmp_path / "cohesive.py"
     classes = "\n\n".join(f"class Value{index}:\n    pass" for index in range(12))
@@ -187,8 +333,44 @@ def test_locator_allowance_subjects_match_the_frozen_phase_1_inventory() -> None
     dynamic_expected = {
         (item["path"], item["line"], item["column"])
         for item in manifest["dynamic_module_lookups"]
+        if item["classification"] != "compatibility_alias"
     }
     assert dynamic_actual == dynamic_expected
+    assert {
+        (
+            item["path"],
+            item["function"],
+            item["kind"],
+            item["target"],
+        )
+        for item in manifest["dynamic_module_lookups"]
+        if item["classification"] == "compatibility_alias"
+    } == {
+        (
+            "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
+            "_publish_aliases",
+            "sys_modules_get",
+            "qualified",
+        ),
+        (
+            "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
+            "_publish_aliases",
+            "sys_modules_get",
+            "name",
+        ),
+        (
+            "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
+            "_publish_aliases",
+            "sys_modules_get",
+            "qualified",
+        ),
+        (
+            "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
+            "_publish_aliases",
+            "sys_modules_get",
+            "name",
+        ),
+    }
 
     local_actual = {
         (finding.path, finding.line, finding.column - 1)
@@ -198,8 +380,132 @@ def test_locator_allowance_subjects_match_the_frozen_phase_1_inventory() -> None
     local_expected = {
         (item["path"], item["line"], item["column"])
         for item in manifest["local_import_locators"]
+        if item["classification"]
+        not in {
+            "bootstrap_root_binding",
+            "static_authority_binding",
+            "static_compatibility_binding",
+            "temporary_authority_locator",
+        }
     }
     assert local_actual == local_expected
+    assert {
+        (item["path"], item["target"])
+        for item in manifest["local_import_locators"]
+        if item["classification"] == "static_compatibility_binding"
+    } == {
+        ("addon/FreeCADMCP/document_lease/__init__.py", ".core_authority"),
+        (
+            "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
+            "addon.FreeCADMCP.document_lease",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
+            "addon.FreeCADMCP.document_lock",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
+            "document_lease",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
+            "document_lock",
+        ),
+    }
+    assert {
+        (item["path"], item["function"], item["target"])
+        for item in manifest["local_import_locators"]
+        if item["classification"] == "bootstrap_root_binding"
+    } == {
+        ("addon/FreeCADMCP/InitGui.py", "Initialize", "rpc_server.rpc_server"),
+        (
+            "addon/FreeCADMCP/InitGui.py",
+            "_auto_start_mcp",
+            "rpc_server.rpc_server",
+        ),
+        (
+            "addon/FreeCADMCP/InitGui.py",
+            "_initialize_document_lease_runtime",
+            "rpc_server.rpc_server",
+        ),
+        (
+            "addon/FreeCADMCP/InitGui.py",
+            "_register_document_lease_observer",
+            "rpc_server.rpc_server",
+        ),
+        (
+            "addon/FreeCADMCP/InitGui.py",
+            "_register_document_lease_observer",
+            "document_lock",
+        ),
+        (
+            "addon/FreeCADMCP/InitGui.py",
+            "_register_document_lock",
+            "document_lock",
+        ),
+    }
+    assert {
+        (item["path"], item["function"], item["target"])
+        for item in manifest["local_import_locators"]
+        if item["classification"] == "static_authority_binding"
+    } == {
+        (
+            "addon/FreeCADMCP/rpc_server/rpc_server.py",
+            "<module>",
+            "..document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/rpc_server.py",
+            "<module>",
+            "document_lease.core_authority",
+        ),
+    }
+    assert {
+        (item["path"], item["function"], item["target"])
+        for item in manifest["local_import_locators"]
+        if item["classification"] == "temporary_authority_locator"
+    } == {
+        (
+            "addon/FreeCADMCP/document_lease/observer_ops/app_observer.py",
+            "_takeover_unscoped_change",
+            "document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py",
+            "_mutation_capability_context",
+            "document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
+            "complete_normal_acquisition",
+            "document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
+            "grant_locked_error_handoff",
+            "document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
+            "claim_handoff_gui",
+            "document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
+            "complete_create_grant",
+            "document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/diagnostics.py",
+            "_import_core_authority",
+            "addon.FreeCADMCP.document_lease.core_authority",
+        ),
+        (
+            "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/diagnostics.py",
+            "_import_core_authority",
+            "document_lease.core_authority",
+        ),
+    }
 
 
 @pytest.mark.unit

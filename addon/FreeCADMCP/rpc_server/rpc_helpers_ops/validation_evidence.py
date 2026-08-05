@@ -5,12 +5,16 @@ try:
 except ImportError:
     from addon.FreeCADMCP.document_state import require_document_modified
 
-from ..lease_runtime import _import_document_lease
-from ._common import _rpc_mod
+from ._common import RpcHelperDependencies
 
 """Live validation and mutation file metadata helpers."""
 
-def _live_validation_evidence(document, document_identity, record):
+def _live_validation_evidence(
+    document,
+    document_identity,
+    record,
+    dependencies: RpcHelperDependencies,
+):
     """Build release evidence without hashing the document on Qt.
 
     Clean release is allowed only for a record whose verified baseline is at
@@ -19,11 +23,11 @@ def _live_validation_evidence(document, document_identity, record):
     full SHA and worker validation were already completed at save promotion.
     """
 
-    lease = _import_document_lease()
-    live = _rpc_mod().document_identity_service.inspect_registered_document(
+    lease = dependencies.import_document_lease()
+    live = dependencies.document_identity_service.inspect_registered_document(
         document_identity.session_uuid, document
     )
-    _rpc_mod()._assert_mutation_file_metadata_unchanged(record)
+    _assert_mutation_file_metadata_unchanged(record, dependencies)
     baseline_current = bool(
         record.baseline is not None
         and record.validation_complete
@@ -37,17 +41,19 @@ def _live_validation_evidence(document, document_identity, record):
     )
 
 
-def _assert_mutation_file_metadata_unchanged(record):
+def _assert_mutation_file_metadata_unchanged(
+    record, dependencies: RpcHelperDependencies
+):
     """Reject an externally changed saved file before a GUI mutation starts.
 
     Full SHA-256 verification remains outside the GUI thread at acquisition and
     save boundaries.  This immediate GUI-thread check compares the stable file
-    identity (already re-resolved by ``_rpc_mod()._credential_for_document``), size, and
+    identity (already re-resolved by the injected credential collaborator), size, and
     nanosecond mtime so queued work cannot proceed after an ordinary external
     replacement or edit.
     """
 
-    lease = _import_document_lease()
+    lease = dependencies.import_document_lease()
     path = record.document.canonical_path
     if not path:
         return

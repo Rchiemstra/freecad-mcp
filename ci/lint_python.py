@@ -954,7 +954,9 @@ def _rpc_mod_node_finding(parsed: ParsedFile, node: ast.AST) -> Violation | None
 
 
 def _import_locator_findings(
-    parsed: ParsedFile, node: ast.Import | ast.ImportFrom
+    parsed: ParsedFile,
+    node: ast.Import | ast.ImportFrom,
+    parents: Mapping[ast.AST, ast.AST],
 ) -> list[Violation]:
     findings = [
         _violation(
@@ -968,14 +970,21 @@ def _import_locator_findings(
         if alias.name == "_rpc_mod" or alias.name.endswith("._rpc_mod")
     ]
     paired_fallbacks = _paired_fallback_from_imports(parsed.tree)
+    display = parsed.display.replace("\\", "/")
     if isinstance(node, ast.ImportFrom):
+        base_module = (node.module or "").lstrip(".")
         imported_runtime_names = {
             alias.name
             for alias in node.names
             if alias.name in RUNTIME_LOCATOR_MODULES
         }
         is_anchored_absolute = (node.module or "").startswith(
-            ("addon.FreeCADMCP", "FreeCADMCP")
+            ("addon.FreeCADMCP", "FreeCADMCP", "freecad_mcp")
+        )
+        is_bare_addon_root = (
+            display.startswith("addon/FreeCADMCP/")
+            and not node.level
+            and base_module in RUNTIME_LOCATOR_MODULES
         )
         import_targets = (
             [
@@ -983,15 +992,42 @@ def _import_locator_findings(
                 for target in _local_import_targets(node)
                 if target.rsplit(".", maxsplit=1)[-1] in imported_runtime_names
             ]
-            if node.level or is_anchored_absolute
+            if node.level or is_anchored_absolute or is_bare_addon_root
             else []
         )
+        if (
+            not import_targets
+            and (is_anchored_absolute or is_bare_addon_root)
+            and _is_application_runtime_module(base_module)
+        ):
+            import_targets.append(base_module)
+        import_targets = list(dict.fromkeys(import_targets))
     else:
         import_targets = _local_import_targets(node)
+    module_scope_imports = {id(item) for item in _fallback_arm_imports(parsed.tree.body)}
+    approved_static_targets: frozenset[str] = frozenset()
+    if display.endswith("document_lease/__init__.py"):
+        approved_static_targets = frozenset({".core_authority"})
+    elif display.endswith("rpc_server/lease_runtime_ops/imports.py"):
+        approved_static_targets = frozenset(
+            {
+                "addon.FreeCADMCP.document_lease",
+                "addon.FreeCADMCP.document_lock",
+                "document_lease",
+                "document_lock",
+            }
+        )
+    is_static_compatibility_binding = (
+        id(node) in module_scope_imports
+        and bool(import_targets)
+        and set(import_targets) <= approved_static_targets
+    )
     locator_targets = [
         target
         for target in import_targets
         if _is_application_runtime_module(target)
+        and not is_static_compatibility_binding
+        and not _is_bootstrap_root_import(display, node, target, parents)
         and not (
             isinstance(node, ast.ImportFrom)
             and id(node) in paired_fallbacks
@@ -1008,6 +1044,30 @@ def _import_locator_findings(
         for target in locator_targets
     )
     return findings
+
+
+def _is_bootstrap_root_import(
+    display: str,
+    node: ast.Import | ast.ImportFrom,
+    target: str,
+    parents: Mapping[ast.AST, ast.AST],
+) -> bool:
+    if display != "addon/FreeCADMCP/InitGui.py":
+        return False
+    current = parents.get(node)
+    while current is not None and not isinstance(
+        current, ast.FunctionDef | ast.AsyncFunctionDef
+    ):
+        current = parents.get(current)
+    function = current.name if isinstance(current, ast.FunctionDef) else ""
+    return (function, target) in {
+        ("Initialize", "rpc_server.rpc_server"),
+        ("_auto_start_mcp", "rpc_server.rpc_server"),
+        ("_initialize_document_lease_runtime", "rpc_server.rpc_server"),
+        ("_register_document_lease_observer", "rpc_server.rpc_server"),
+        ("_register_document_lease_observer", "document_lock"),
+        ("_register_document_lock", "document_lock"),
+    }
 
 
 def _paired_fallback_from_imports(tree: ast.Module) -> set[int]:
@@ -1079,7 +1139,7 @@ def _is_application_runtime_module(module: str) -> bool:
         return parts[0] in RUNTIME_LOCATOR_MODULES
     is_project_module = (
         parts[:2] == ["addon", "FreeCADMCP"]
-        or parts[0] == "FreeCADMCP"
+        or parts[0] in {"FreeCADMCP", "freecad_mcp"}
     )
     return is_project_module and parts[-1] in RUNTIME_LOCATOR_MODULES
 
@@ -1215,21 +1275,66 @@ def _compare_locator_finding(
     )
 
 
+def _is_compatibility_alias_registry_read(
+    parsed: ParsedFile,
+    node: ast.AST,
+    parents: Mapping[ast.AST, ast.AST],
+    bindings: Mapping[str, str],
+) -> bool:
+    """Exclude only import-name alias publication from runtime discovery."""
+
+    path = parsed.display.replace("\\", "/")
+    if path not in {
+        "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
+        "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
+    }:
+        return False
+    current = parents.get(node)
+    while current is not None and not isinstance(
+        current, ast.FunctionDef | ast.AsyncFunctionDef
+    ):
+        current = parents.get(current)
+    if (
+        not isinstance(current, ast.FunctionDef | ast.AsyncFunctionDef)
+        or current.name != "_publish_aliases"
+    ):
+        return False
+    return (
+        isinstance(node, ast.Call)
+        and _qualified_name(node.func, bindings) == "sys.modules.get"
+        and len(node.args) == 1
+        and not node.keywords
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id in {"qualified", "name"}
+    )
+
+
 def _check_runtime_locators(parsed: ParsedFile) -> list[Violation]:
     findings: list[Violation] = []
     bindings = _import_bindings(parsed.tree)
+    parents = {
+        child: parent
+        for parent in ast.walk(parsed.tree)
+        for child in ast.iter_child_nodes(parent)
+    }
     for node in ast.walk(parsed.tree):
         rpc_mod_finding = _rpc_mod_node_finding(parsed, node)
         if rpc_mod_finding is not None:
             findings.append(rpc_mod_finding)
         if isinstance(node, ast.Import | ast.ImportFrom):
-            findings.extend(_import_locator_findings(parsed, node))
+            findings.extend(_import_locator_findings(parsed, node, parents))
         elif isinstance(node, ast.Call):
-            findings.extend(_call_locator_findings(parsed, node, bindings))
+            if not _is_compatibility_alias_registry_read(
+                parsed, node, parents, bindings
+            ):
+                findings.extend(_call_locator_findings(parsed, node, bindings))
         elif isinstance(node, ast.Subscript):
-            finding = _subscript_locator_finding(parsed, node, bindings)
-            if finding is not None:
-                findings.append(finding)
+            if not _is_compatibility_alias_registry_read(
+                parsed, node, parents, bindings
+            ):
+                finding = _subscript_locator_finding(parsed, node, bindings)
+                if finding is not None:
+                    findings.append(finding)
         elif isinstance(node, ast.Compare):
             finding = _compare_locator_finding(parsed, node, bindings)
             if finding is not None:

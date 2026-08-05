@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
-import sys
+from collections.abc import MutableMapping
+from types import SimpleNamespace
+
+_default_namespace: MutableMapping[str, object] | None = None
 
 
-def bind_tool_exports_part_1(exports: dict[str, object]) -> None:
-    pkg = sys.modules["freecad_mcp.server_ops.tool_exports"]
+def bind_default_export_namespace(namespace: MutableMapping[str, object]) -> None:
+    global _default_namespace
+    _default_namespace = namespace
+
+
+def bind_tool_exports_part_1(
+    exports: dict[str, object],
+    namespace: MutableMapping[str, object] | None = None,
+) -> None:
+    namespace = _default_namespace if namespace is None else namespace
+    if namespace is None:
+        raise RuntimeError("tool export namespace is not initialized")
+    pkg = SimpleNamespace()
     pkg._compatibility_for_manifest = exports['_compatibility_for_manifest']
     pkg._runtime_info_payload = exports['_runtime_info_payload']
     pkg.acquire_document_lock = exports['acquire_document_lock']
@@ -94,3 +108,4 @@ def bind_tool_exports_part_1(exports: dict[str, object]) -> None:
     pkg.list_documents = exports['list_documents']
     pkg.list_expressions = exports['list_expressions']
     pkg.loft_feature = exports['loft_feature']
+    namespace.update(vars(pkg))

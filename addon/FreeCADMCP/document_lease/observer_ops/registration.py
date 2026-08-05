@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import importlib
 from typing import Any
 
 from .. import observer as observer_mod
@@ -35,10 +34,7 @@ def register_observer(
         if observer_mod._app_observer is not None:
             return observer_mod._app_observer
         if freecad_module is None:
-            try:
-                freecad_module = importlib.import_module("FreeCAD")
-            except Exception:
-                return None
+            return None
         add_observer = getattr(freecad_module, "addDocumentObserver", None)
         if not callable(add_observer):
             return None
@@ -55,11 +51,6 @@ def register_observer(
         with contextlib.suppress(Exception):
             freecad_module._mcp_document_lease_observer = observer
 
-        if freecad_gui_module is None:
-            try:
-                freecad_gui_module = importlib.import_module("FreeCADGui")
-            except Exception:
-                freecad_gui_module = None
         add_gui_observer = (
             getattr(freecad_gui_module, "addDocumentObserver", None)
             if freecad_gui_module is not None

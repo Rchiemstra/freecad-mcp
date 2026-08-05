@@ -366,9 +366,9 @@
         "symbol": "authority_rollback"
       },
       {
-        "column": 4,
+        "column": 8,
         "kind": "Attribute",
-        "line": 114,
+        "line": 109,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "set_owner_lease_predicate"
       },
@@ -718,21 +718,21 @@
       {
         "column": 35,
         "kind": "ImportAlias",
-        "line": 62,
+        "line": 60,
         "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
         "kind": "Name",
-        "line": 64,
+        "line": 62,
         "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
         "symbol": "core_authority"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 64,
+        "line": 62,
         "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
         "symbol": "sync_owner_from_lease_record"
       },
@@ -751,16 +751,30 @@
         "symbol": "_import_core_authority"
       },
       {
+        "column": 8,
+        "kind": "ImportAlias",
+        "line": 32,
+        "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
+        "symbol": "_open_documents_mutation_capability"
+      },
+      {
+        "column": 27,
+        "kind": "Name",
+        "line": 40,
+        "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
+        "symbol": "_open_documents_mutation_capability"
+      },
+      {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 165,
+        "line": 186,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
       {
         "column": 30,
         "kind": "Name",
-        "line": 675,
+        "line": 1172,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_import_core_authority"
       },
@@ -772,30 +786,16 @@
         "symbol": "set_owner_lease_predicate"
       },
       {
-        "column": 52,
-        "kind": "ImportAlias",
-        "line": 20,
-        "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
-        "symbol": "core_authority"
-      },
-      {
-        "column": 39,
-        "kind": "ImportAlias",
-        "line": 23,
-        "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
-        "symbol": "core_authority"
-      },
-      {
-        "column": 11,
+        "column": 4,
         "kind": "Name",
-        "line": 26,
+        "line": 18,
         "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
-        "symbol": "core_authority"
+        "symbol": "open_documents_mutation_capability"
       },
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 26,
+        "line": 46,
         "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
         "symbol": "open_documents_mutation_capability"
       }
@@ -1047,16 +1047,16 @@
         "symbol": "heartbeat_expired"
       },
       {
-        "column": 51,
+        "column": 67,
         "kind": "ImportAlias",
-        "line": 70,
+        "line": 65,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "heartbeat_lease"
       },
       {
         "column": 50,
         "kind": "ImportAlias",
-        "line": 141,
+        "line": 147,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "heartbeat_lease"
       },
@@ -1194,28 +1194,28 @@
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 83,
+        "line": 85,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "lease_heartbeat_batch"
       },
       {
         "column": 39,
         "kind": "Attribute",
-        "line": 83,
+        "line": 85,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "lease_heartbeat_batch"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 102,
+        "line": 104,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "heartbeat_document_lock"
       },
       {
         "column": 41,
         "kind": "Attribute",
-        "line": 102,
+        "line": 104,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "heartbeat_document_lock"
       },
@@ -1756,16 +1756,16 @@
         "symbol": "STALE_RECOVERY_TRIGGER_HEARTBEAT"
       },
       {
-        "column": 34,
+        "column": 4,
         "kind": "ImportAlias",
-        "line": 46,
+        "line": 47,
         "path": "src/freecad_mcp/server.py",
         "symbol": "_lease_heartbeat_once"
       },
       {
         "column": 4,
         "kind": "ImportAlias",
-        "line": 62,
+        "line": 64,
         "path": "src/freecad_mcp/server.py",
         "symbol": "_LEASE_HEARTBEAT_INTERVAL_S"
       },
@@ -1813,35 +1813,35 @@
       {
         "column": 27,
         "kind": "Attribute",
-        "line": 37,
+        "line": 35,
         "path": "src/freecad_mcp/server_ops/heartbeat.py",
         "symbol": "build_heartbeat_request"
       },
       {
         "column": 12,
         "kind": "Attribute",
-        "line": 39,
+        "line": 37,
         "path": "src/freecad_mcp/server_ops/heartbeat.py",
         "symbol": "heartbeat_document_locks_batch"
       },
       {
         "column": 12,
         "kind": "Attribute",
-        "line": 46,
+        "line": 44,
         "path": "src/freecad_mcp/server_ops/heartbeat.py",
         "symbol": "apply_heartbeat_response"
       },
       {
         "column": 29,
         "kind": "Attribute",
-        "line": 47,
+        "line": 45,
         "path": "src/freecad_mcp/server_ops/heartbeat.py",
         "symbol": "observe_heartbeat_batch"
       },
       {
         "column": 36,
         "kind": "Name",
-        "line": 50,
+        "line": 48,
         "path": "src/freecad_mcp/server_ops/heartbeat.py",
         "symbol": "STALE_RECOVERY_TRIGGER_HEARTBEAT"
       },
@@ -1903,21 +1903,21 @@
       {
         "column": 0,
         "kind": "Name",
-        "line": 7,
+        "line": 10,
         "path": "src/freecad_mcp/server_ops/surfaces.py",
         "symbol": "LEASE_HEARTBEAT_INTERVAL_S"
       },
       {
         "column": 0,
         "kind": "Name",
-        "line": 84,
+        "line": 94,
         "path": "src/freecad_mcp/server_ops/tool_exports/__init__.py",
         "symbol": "heartbeat_document_lock"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 85,
+        "line": 99,
         "path": "src/freecad_mcp/server_ops/tool_exports/bind_part_1.py",
         "symbol": "heartbeat_document_lock"
       },
@@ -2090,16 +2090,16 @@
         "symbol": "<module>"
       },
       {
-        "column": 58,
+        "column": 8,
         "kind": "ImportAlias",
-        "line": 61,
+        "line": 50,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "DocumentLockObserver"
       },
       {
         "column": 57,
         "kind": "ImportAlias",
-        "line": 132,
+        "line": 137,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "DocumentLockObserver"
       },
@@ -2137,16 +2137,16 @@
         "symbol": "DocumentLockObserver"
       },
       {
-        "column": 44,
+        "column": 40,
         "kind": "ImportAlias",
-        "line": 28,
+        "line": 6,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "register_live_document_recovery"
       },
       {
-        "column": 12,
+        "column": 8,
         "kind": "ImportAlias",
-        "line": 31,
+        "line": 9,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "register_live_document_recovery"
       },
@@ -2663,16 +2663,16 @@
         "symbol": "refresh_local_recovery_document_identity"
       },
       {
-        "column": 54,
+        "column": 70,
         "kind": "ImportAlias",
-        "line": 78,
+        "line": 73,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "mark_save_verified"
       },
       {
         "column": 53,
         "kind": "ImportAlias",
-        "line": 149,
+        "line": 155,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "mark_save_verified"
       },
@@ -2686,98 +2686,98 @@
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 90,
+        "line": 81,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_local_recovery_guidance_lines"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 91,
+        "line": 82,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_requires_local_recovery_intervention"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 98,
+        "line": 89,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_local_recovery_capabilities"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 108,
+        "line": 101,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_inspect_local_save_document_gui"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 110,
+        "line": 103,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_start_verified_local_save_and_clear_async"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 111,
+        "line": 104,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_submit_local_save_gui"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 112,
+        "line": 105,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_verified_local_save_and_clear"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 164,
+        "line": 161,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_local_recovery_guidance_lines"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 165,
+        "line": 162,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_requires_local_recovery_intervention"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 172,
+        "line": 169,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_local_recovery_capabilities"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 182,
+        "line": 179,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_inspect_local_save_document_gui"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 184,
+        "line": 181,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_start_verified_local_save_and_clear_async"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 185,
+        "line": 182,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_submit_local_save_gui"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 186,
+        "line": 183,
         "path": "addon/FreeCADMCP/lock_indicator.py",
         "symbol": "_verified_local_save_and_clear"
       },
@@ -2798,70 +2798,70 @@
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 70,
+        "line": 74,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "_mcp_local_save_in_progress"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 71,
+        "line": 75,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "_mcp_local_restore_in_progress"
       },
       {
         "column": 4,
         "kind": "FunctionDef",
-        "line": 103,
+        "line": 107,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "local_recovery_busy"
       },
       {
         "column": 28,
         "kind": "Name",
-        "line": 121,
+        "line": 125,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "local_recovery_busy"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 133,
+        "line": 140,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "local_save_completed"
       },
       {
         "column": 24,
         "kind": "Name",
-        "line": 134,
+        "line": 141,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "on_local_save_completed"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 138,
+        "line": 145,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "local_restore_completed"
       },
       {
         "column": 24,
         "kind": "Name",
-        "line": 139,
+        "line": 146,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "on_local_restore_completed"
       },
       {
         "column": 28,
         "kind": "Name",
-        "line": 146,
+        "line": 153,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "local_recovery_busy"
       },
       {
         "column": 32,
         "kind": "Name",
-        "line": 152,
+        "line": 159,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install.py",
         "symbol": "local_recovery_busy"
       },
@@ -2889,84 +2889,84 @@
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 134,
+        "line": 133,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "local_recovery_busy"
       },
       {
         "column": 15,
         "kind": "Name",
-        "line": 138,
+        "line": 137,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "_local_recovery_capabilities"
       },
       {
         "column": 11,
         "kind": "Attribute",
-        "line": 166,
+        "line": 165,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "local_recovery_busy"
       },
       {
         "column": 15,
         "kind": "Name",
-        "line": 172,
+        "line": 171,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "_local_recovery_capabilities"
       },
       {
         "column": 12,
         "kind": "Name",
-        "line": 192,
+        "line": 191,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "local_save_service"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 198,
+        "line": 197,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "_mcp_local_save_in_progress"
       },
       {
         "column": 8,
         "kind": "Name",
-        "line": 202,
+        "line": 201,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "_start_verified_local_save_and_clear_async"
       },
       {
         "column": 28,
         "kind": "Attribute",
-        "line": 206,
+        "line": 205,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "local_save_completed"
       },
       {
         "column": 25,
         "kind": "Name",
-        "line": 207,
+        "line": 206,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "local_save_service"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 218,
+        "line": 217,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "_mcp_local_save_in_progress"
       },
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 225,
+        "line": 224,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "on_local_save_completed"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 226,
+        "line": 225,
         "path": "addon/FreeCADMCP/lock_indicator_ops/install_dock_handlers.py",
         "symbol": "_mcp_local_save_in_progress"
       },
@@ -3140,7 +3140,7 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 58,
+        "line": 47,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
         "symbol": "_local_recovery_capabilities"
       },
@@ -3186,77 +3186,77 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 47,
+        "line": 40,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_submit_local_save_gui"
       },
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 60,
+        "line": 53,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_inspect_local_save_document_gui"
       },
       {
         "column": 19,
         "kind": "Name",
-        "line": 132,
+        "line": 125,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_inspect_local_save_document_gui"
       },
       {
         "column": 11,
         "kind": "Name",
-        "line": 161,
+        "line": 154,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_submit_local_save_gui"
       },
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 164,
+        "line": 157,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_verified_local_save_and_clear"
       },
       {
         "column": 17,
         "kind": "Name",
-        "line": 218,
+        "line": 211,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_submit_local_save_gui"
       },
       {
         "column": 24,
         "kind": "Name",
-        "line": 235,
+        "line": 228,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_inspect_local_save_document_gui"
       },
       {
         "column": 15,
         "kind": "Attribute",
-        "line": 246,
+        "line": 239,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "complete_local_save_and_clear"
       },
       {
         "column": 15,
         "kind": "Name",
-        "line": 253,
+        "line": 246,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_submit_local_save_gui"
       },
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 259,
+        "line": 252,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_start_verified_local_save_and_clear_async"
       },
       {
         "column": 12,
         "kind": "Name",
-        "line": 274,
+        "line": 267,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "_verified_local_save_and_clear"
       },
@@ -3637,28 +3637,28 @@
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 104,
+        "line": 106,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "_run_legacy_save"
       },
       {
         "column": 34,
         "kind": "Attribute",
-        "line": 104,
+        "line": 106,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "run_legacy_save"
       },
       {
         "column": 4,
         "kind": "Attribute",
-        "line": 105,
+        "line": 107,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "_run_typed_save"
       },
       {
         "column": 33,
         "kind": "Attribute",
-        "line": 105,
+        "line": 107,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
         "symbol": "run_typed_save"
       },
@@ -7968,9 +7968,9 @@
         "symbol": "FileBaseline"
       },
       {
-        "column": 64,
+        "column": 8,
         "kind": "ImportAlias",
-        "line": 60,
+        "line": 47,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "SIDECAR_SUFFIX"
       },
@@ -7982,44 +7982,44 @@
         "symbol": "discover_sidecar_leases"
       },
       {
-        "column": 46,
+        "column": 8,
         "kind": "ImportAlias",
-        "line": 115,
+        "line": 116,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "_public_sidecar_payload"
       },
       {
-        "column": 71,
+        "column": 8,
         "kind": "ImportAlias",
-        "line": 115,
+        "line": 117,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "sidecar_path_for"
       },
       {
         "column": 63,
         "kind": "ImportAlias",
-        "line": 131,
+        "line": 136,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "SIDECAR_SUFFIX"
       },
       {
         "column": 8,
         "kind": "ImportAlias",
-        "line": 160,
+        "line": 166,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "discover_sidecar_leases"
       },
       {
         "column": 45,
         "kind": "ImportAlias",
-        "line": 186,
+        "line": 192,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "_public_sidecar_payload"
       },
       {
         "column": 70,
         "kind": "ImportAlias",
-        "line": 186,
+        "line": 192,
         "path": "addon/FreeCADMCP/document_lock.py",
         "symbol": "sidecar_path_for"
       },
@@ -8917,28 +8917,28 @@
       {
         "column": 12,
         "kind": "Name",
-        "line": 105,
+        "line": 112,
         "path": "addon/FreeCADMCP/lock_indicator_ops/active_leases.py",
         "symbol": "sidecar"
       },
       {
         "column": 35,
         "kind": "Name",
-        "line": 106,
+        "line": 113,
         "path": "addon/FreeCADMCP/lock_indicator_ops/active_leases.py",
         "symbol": "sidecar"
       },
       {
         "column": 25,
         "kind": "Attribute",
-        "line": 119,
+        "line": 123,
         "path": "addon/FreeCADMCP/lock_indicator_ops/active_leases.py",
         "symbol": "sidecar_store"
       },
       {
         "column": 52,
         "kind": "Name",
-        "line": 119,
+        "line": 123,
         "path": "addon/FreeCADMCP/lock_indicator_ops/active_leases.py",
         "symbol": "sidecar"
       },
@@ -8987,63 +8987,63 @@
       {
         "column": 41,
         "kind": "ImportAlias",
-        "line": 100,
+        "line": 93,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "FileBaseline"
       },
       {
         "column": 58,
         "kind": "ImportAlias",
-        "line": 102,
+        "line": 95,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "FileBaseline"
       },
       {
         "column": 24,
         "kind": "Name",
-        "line": 104,
+        "line": 97,
         "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
         "symbol": "FileBaseline"
       },
       {
         "column": 12,
         "kind": "Name",
-        "line": 59,
+        "line": 54,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 11,
         "kind": "Name",
-        "line": 77,
+        "line": 72,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 96,
+        "line": 91,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "SidecarStore"
       },
       {
         "column": 4,
         "kind": "Name",
-        "line": 145,
+        "line": 140,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 58,
         "kind": "Name",
-        "line": 147,
+        "line": 142,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
       {
         "column": 66,
         "kind": "Name",
-        "line": 150,
+        "line": 145,
         "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/initialize.py",
         "symbol": "effective_records"
       },
@@ -9287,7 +9287,7 @@
       {
         "column": 19,
         "kind": "Attribute",
-        "line": 37,
+        "line": 38,
         "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui_reload.py",
         "symbol": "FileBaseline"
       },
@@ -9307,63 +9307,63 @@
       {
         "column": 0,
         "kind": "FunctionDef",
-        "line": 165,
+        "line": 186,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "_effective_sidecar_block"
       },
       {
         "column": 4,
         "kind": "Name",
-        "line": 172,
+        "line": 195,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "sidecar"
       },
       {
         "column": 14,
         "kind": "Attribute",
-        "line": 172,
+        "line": 195,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "sidecar_path_for"
       },
       {
         "column": 27,
         "kind": "Name",
-        "line": 173,
+        "line": 196,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "sidecar"
       },
       {
         "column": 8,
         "kind": "Attribute",
-        "line": 176,
+        "line": 199,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "sidecar_store"
       },
       {
         "column": 13,
         "kind": "Attribute",
-        "line": 178,
+        "line": 201,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "SidecarStore"
       },
       {
         "column": 31,
         "kind": "Name",
-        "line": 181,
+        "line": 204,
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
         "symbol": "sidecar"
       },
       {
-        "column": 4,
-        "kind": "ImportAlias",
-        "line": 159,
+        "column": 0,
+        "kind": "FunctionDef",
+        "line": 523,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
       {
         "column": 29,
         "kind": "Name",
-        "line": 619,
+        "line": 1116,
         "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
         "symbol": "_effective_sidecar_block"
       },
@@ -9870,337 +9870,40 @@
   },
   "dynamic_module_lookups": [
     {
-      "classification": "module_probe",
-      "column": 33,
-      "function": "register_observer",
-      "kind": "importlib_import_module",
-      "line": 39,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/registration.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "module_probe",
-      "column": 37,
-      "function": "register_observer",
-      "kind": "importlib_import_module",
-      "line": 60,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/registration.py",
-      "target": "FreeCADGui"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "default_service_provider",
+      "classification": "compatibility_alias",
+      "column": 14,
+      "function": "_publish_aliases",
       "kind": "sys_modules_get",
       "line": 22,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "module_name"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 14,
-      "function": "default_service_provider",
-      "kind": "sys_modules_get",
-      "line": 28,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "rpc_server"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 13,
-      "function": "default_agent_mutation_checker",
-      "kind": "sys_modules_get",
-      "line": 48,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "document_lock"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 49,
-      "function": "default_agent_mutation_checker",
-      "kind": "sys_modules_get",
-      "line": 48,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "addon.FreeCADMCP.document_lock"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 21,
-      "function": "default_agent_mutation_checker",
-      "kind": "importlib_import_module",
-      "line": 53,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "document_lock"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 25,
-      "function": "default_agent_mutation_checker",
-      "kind": "importlib_import_module",
-      "line": 56,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "addon.FreeCADMCP.document_lock"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 13,
-      "function": "is_internal_snapshot_save",
-      "kind": "sys_modules_get",
-      "line": 72,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "document_lock"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 49,
-      "function": "is_internal_snapshot_save",
-      "kind": "sys_modules_get",
-      "line": 72,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "addon.FreeCADMCP.document_lock"
-    },
-    {
-      "classification": "module_probe",
-      "column": 13,
-      "function": "default_selected_document_provider",
-      "kind": "sys_modules_get",
-      "line": 88,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "module_probe",
-      "column": 21,
-      "function": "default_selected_document_provider",
-      "kind": "importlib_import_module",
-      "line": 91,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "module_probe",
-      "column": 22,
-      "function": "qt_or_direct_queue",
-      "kind": "importlib_import_module",
-      "line": 103,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "package_name"
-    },
-    {
-      "classification": "module_probe",
-      "column": 26,
-      "function": "qt_or_direct_queue",
-      "kind": "importlib_import_module",
-      "line": 106,
-      "path": "addon/FreeCADMCP/document_lease/observer_ops/runtime_providers.py",
-      "target": "f'{package_name}.QtCore'"
+      "path": "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
+      "target": "qualified"
     },
     {
       "classification": "compatibility_alias",
-      "column": 14,
-      "function": "_install_module_aliases",
+      "column": 26,
+      "function": "_publish_aliases",
       "kind": "sys_modules_get",
       "line": 29,
-      "path": "addon/FreeCADMCP/document_lock.py",
-      "target": "__name__"
-    },
-    {
-      "classification": "compatibility_alias",
-      "column": 26,
-      "function": "_install_module_aliases",
-      "kind": "sys_modules_get",
-      "line": 37,
-      "path": "addon/FreeCADMCP/document_lock.py",
-      "target": "alias"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "_facade_module",
-      "kind": "sys_modules_get",
-      "line": 15,
-      "path": "addon/FreeCADMCP/document_lock_ops/facade_surfaces.py",
-      "target": "name"
-    },
-    {
-      "classification": "compatibility_alias",
-      "column": 14,
-      "function": "install_module_aliases",
-      "kind": "sys_modules_get",
-      "line": 23,
-      "path": "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
-      "target": "qualified"
-    },
-    {
-      "classification": "compatibility_alias",
-      "column": 26,
-      "function": "install_module_aliases",
-      "kind": "sys_modules_get",
-      "line": 31,
       "path": "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
       "target": "name"
     },
     {
       "classification": "compatibility_alias",
       "column": 14,
-      "function": "_install_module_aliases",
+      "function": "_publish_aliases",
       "kind": "sys_modules_get",
-      "line": 26,
-      "path": "addon/FreeCADMCP/lock_indicator.py",
-      "target": "__name__"
-    },
-    {
-      "classification": "compatibility_alias",
-      "column": 26,
-      "function": "_install_module_aliases",
-      "kind": "sys_modules_get",
-      "line": 34,
-      "path": "addon/FreeCADMCP/lock_indicator.py",
-      "target": "alias"
-    },
-    {
-      "classification": "module_probe",
-      "column": 14,
-      "function": "_foreign_shadow_leases",
-      "kind": "sys_modules_get",
-      "line": 82,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/active_leases.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "facade_callable",
-      "kind": "sys_modules_get",
-      "line": 9,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/facade_bindings.py",
-      "target": "module_name"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "facade_attr",
-      "kind": "sys_modules_get",
-      "line": 17,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/facade_bindings.py",
-      "target": "module_name"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "_v2_lease_service",
-      "kind": "sys_modules_get",
-      "line": 26,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
-      "target": "module_name"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 14,
-      "function": "_v2_lease_service",
-      "kind": "sys_modules_get",
-      "line": 30,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
-      "target": "rpc_server"
-    },
-    {
-      "classification": "module_probe",
-      "column": 14,
-      "function": "_live_document_for_view",
-      "kind": "sys_modules_get",
-      "line": 41,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_recovery.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "_runtime_restore_components",
-      "kind": "sys_modules_get",
-      "line": 23,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_restore.py",
-      "target": "module_name"
-    },
-    {
-      "classification": "runtime_locator",
-      "column": 17,
-      "function": "_runtime_save_components",
-      "kind": "sys_modules_get",
-      "line": 26,
-      "path": "addon/FreeCADMCP/lock_indicator_ops/local_save.py",
-      "target": "module_name"
-    },
-    {
-      "classification": "compatibility_alias",
-      "column": 14,
-      "function": "install_module_aliases",
-      "kind": "sys_modules_get",
-      "line": 23,
+      "line": 22,
       "path": "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
       "target": "qualified"
     },
     {
       "classification": "compatibility_alias",
       "column": 26,
-      "function": "install_module_aliases",
+      "function": "_publish_aliases",
       "kind": "sys_modules_get",
-      "line": 31,
+      "line": 29,
       "path": "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
       "target": "name"
-    },
-    {
-      "classification": "runtime_dependency_locator",
-      "column": 11,
-      "function": "_freecad",
-      "kind": "sys_modules_subscript",
-      "line": 16,
-      "path": "addon/FreeCADMCP/rpc_server/settings_ops/persistence.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "runtime_dependency_locator",
-      "column": 11,
-      "function": "_freecad",
-      "kind": "sys_modules_subscript",
-      "line": 16,
-      "path": "addon/FreeCADMCP/rpc_server/settings_ops/profile_secret.py",
-      "target": "FreeCAD"
-    },
-    {
-      "classification": "module_probe",
-      "column": 20,
-      "function": "ensure_headless_preferences_shim",
-      "kind": "sys_modules_contains",
-      "line": 10,
-      "path": "src/freecad_mcp/assembly_api_bootstrap/headless_preferences.py",
-      "target": "Preferences"
-    },
-    {
-      "classification": "registration_barrel",
-      "column": 10,
-      "function": "bind_tool_exports_part_1",
-      "kind": "sys_modules_subscript",
-      "line": 9,
-      "path": "src/freecad_mcp/server_ops/tool_exports/bind_part_1.py",
-      "target": "freecad_mcp.server_ops.tool_exports"
-    },
-    {
-      "classification": "registration_barrel",
-      "column": 10,
-      "function": "bind_tool_exports_part_2",
-      "kind": "sys_modules_subscript",
-      "line": 9,
-      "path": "src/freecad_mcp/server_ops/tool_exports/bind_part_2.py",
-      "target": "freecad_mcp.server_ops.tool_exports"
-    },
-    {
-      "classification": "generated_registration_locator",
-      "column": 17,
-      "function": "register_tool_modules",
-      "kind": "importlib_import_module",
-      "line": 25,
-      "path": "src/freecad_mcp/server_ops/tool_registration.py",
-      "target": "f'freecad_mcp.{module_name}'"
     }
   ],
   "execution_baseline": {
@@ -10284,7 +9987,55 @@
   },
   "local_import_locators": [
     {
-      "classification": "temporary_authority_locator",
+      "classification": "bootstrap_root_binding",
+      "column": 8,
+      "function": "Initialize",
+      "line": 29,
+      "path": "addon/FreeCADMCP/InitGui.py",
+      "target": "rpc_server.rpc_server"
+    },
+    {
+      "classification": "bootstrap_root_binding",
+      "column": 8,
+      "function": "_auto_start_mcp",
+      "line": 59,
+      "path": "addon/FreeCADMCP/InitGui.py",
+      "target": "rpc_server.rpc_server"
+    },
+    {
+      "classification": "bootstrap_root_binding",
+      "column": 8,
+      "function": "_initialize_document_lease_runtime",
+      "line": 115,
+      "path": "addon/FreeCADMCP/InitGui.py",
+      "target": "rpc_server.rpc_server"
+    },
+    {
+      "classification": "bootstrap_root_binding",
+      "column": 8,
+      "function": "_register_document_lease_observer",
+      "line": 157,
+      "path": "addon/FreeCADMCP/InitGui.py",
+      "target": "document_lock"
+    },
+    {
+      "classification": "bootstrap_root_binding",
+      "column": 8,
+      "function": "_register_document_lease_observer",
+      "line": 161,
+      "path": "addon/FreeCADMCP/InitGui.py",
+      "target": "rpc_server.rpc_server"
+    },
+    {
+      "classification": "bootstrap_root_binding",
+      "column": 8,
+      "function": "_register_document_lock",
+      "line": 215,
+      "path": "addon/FreeCADMCP/InitGui.py",
+      "target": "document_lock"
+    },
+    {
+      "classification": "static_compatibility_binding",
       "column": 4,
       "function": "<module>",
       "line": 44,
@@ -10292,242 +10043,127 @@
       "target": ".core_authority"
     },
     {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "Activated",
-      "line": 19,
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/configure_allowed_ips_command.py",
-      "target": "..rpc_server"
+      "classification": "temporary_authority_locator",
+      "column": 12,
+      "function": "_takeover_unscoped_change",
+      "line": 165,
+      "path": "addon/FreeCADMCP/document_lease/observer_ops/app_observer.py",
+      "target": "document_lease.core_authority"
     },
     {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "Activated",
-      "line": 9,
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/start_rpc_server_command.py",
-      "target": "..rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "Activated",
-      "line": 9,
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/stop_rpc_server_command.py",
-      "target": "..rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "Activated",
-      "line": 15,
-      "path": "addon/FreeCADMCP/rpc_server/commands_types/toggle_remote_connections_command.py",
-      "target": "..rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
+      "classification": "static_compatibility_binding",
       "column": 4,
-      "function": "_rpc_mod",
-      "line": 28,
-      "path": "addon/FreeCADMCP/rpc_server/lease_runtime.py",
-      "target": ".rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "import_document_lock",
-      "line": 9,
+      "function": "<module>",
+      "line": 6,
       "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
-      "target": "document_lock"
+      "target": "addon.FreeCADMCP.document_lease"
     },
     {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "import_document_lease",
-      "line": 29,
+      "classification": "static_compatibility_binding",
+      "column": 4,
+      "function": "<module>",
+      "line": 7,
+      "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
+      "target": "addon.FreeCADMCP.document_lock"
+    },
+    {
+      "classification": "static_compatibility_binding",
+      "column": 4,
+      "function": "<module>",
+      "line": 9,
       "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
       "target": "document_lease"
     },
     {
-      "classification": "runtime_singleton_locator",
+      "classification": "static_compatibility_binding",
       "column": 4,
-      "function": "_rpc_mod",
+      "function": "<module>",
       "line": 10,
-      "path": "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/_common.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
-      "line": 17,
-      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
-      "line": 9,
-      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py",
-      "target": "...rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "_rpc_mod",
-      "line": 9,
-      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py",
-      "target": "..rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "start_rpc_server",
-      "line": 108,
-      "path": "addon/FreeCADMCP/rpc_server/server_lifecycle.py",
-      "target": ".rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 4,
-      "function": "stop_rpc_server",
-      "line": 70,
-      "path": "addon/FreeCADMCP/rpc_server/server_shutdown.py",
-      "target": ".rpc_server"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 16,
-      "function": "snapshot_save_context",
-      "line": 51,
-      "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
+      "path": "addon/FreeCADMCP/rpc_server/lease_runtime_ops/imports.py",
       "target": "document_lock"
     },
     {
-      "classification": "runtime_singleton_locator",
+      "classification": "temporary_authority_locator",
       "column": 8,
-      "function": "internal_snapshot_save_observer_scope",
-      "line": 84,
-      "path": "addon/FreeCADMCP/rpc_server/snapshot_service_ops/snapshot_save_context.py",
-      "target": "document_lock"
-    },
-    {
-      "classification": "runtime_singleton_locator",
-      "column": 8,
-      "function": "_import_document_lock",
+      "function": "_mutation_capability_context",
       "line": 11,
-      "path": "addon/FreeCADMCP/rpc_server/xmlrpc_identity_handler.py",
-      "target": "document_lock"
+      "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_gui_lease_enforced.py",
+      "target": "document_lease.core_authority"
+    },
+    {
+      "classification": "temporary_authority_locator",
+      "column": 8,
+      "function": "complete_normal_acquisition",
+      "line": 30,
+      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_complete.py",
+      "target": "document_lease.core_authority"
+    },
+    {
+      "classification": "temporary_authority_locator",
+      "column": 8,
+      "function": "grant_locked_error_handoff",
+      "line": 31,
+      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/acquire_v2_snapshot_locked_handoff.py",
+      "target": "document_lease.core_authority"
+    },
+    {
+      "classification": "temporary_authority_locator",
+      "column": 8,
+      "function": "claim_handoff_gui",
+      "line": 59,
+      "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
+      "target": "document_lease.core_authority"
+    },
+    {
+      "classification": "temporary_authority_locator",
+      "column": 8,
+      "function": "complete_create_grant",
+      "line": 60,
+      "path": "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py",
+      "target": "document_lease.core_authority"
+    },
+    {
+      "classification": "temporary_authority_locator",
+      "column": 8,
+      "function": "_import_core_authority",
+      "line": 19,
+      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/diagnostics.py",
+      "target": "addon.FreeCADMCP.document_lease.core_authority"
+    },
+    {
+      "classification": "temporary_authority_locator",
+      "column": 8,
+      "function": "_import_core_authority",
+      "line": 23,
+      "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/diagnostics.py",
+      "target": "document_lease.core_authority"
+    },
+    {
+      "classification": "static_authority_binding",
+      "column": 4,
+      "function": "<module>",
+      "line": 31,
+      "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
+      "target": "..document_lease.core_authority"
+    },
+    {
+      "classification": "static_authority_binding",
+      "column": 4,
+      "function": "<module>",
+      "line": 36,
+      "path": "addon/FreeCADMCP/rpc_server/rpc_server.py",
+      "target": "document_lease.core_authority"
     }
   ],
   "locator_census": {
     "baseline_locator_nodes": 514,
     "baseline_references": 504,
     "baseline_runtime_calls": 432,
-    "current_definitions": 5,
-    "current_locator_nodes": 72,
-    "current_modules": {
-      "addon/FreeCADMCP/rpc_server/lease_runtime.py": {
-        "definitions": 1,
-        "exported_names": 0,
-        "import_bindings": 0,
-        "loaded_references": 11,
-        "runtime_calls": 11
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/_common.py": {
-        "definitions": 1,
-        "exported_names": 1,
-        "import_bindings": 0,
-        "loaded_references": 0,
-        "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/snapshot_restore.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/_common.py": {
-        "definitions": 1,
-        "exported_names": 1,
-        "import_bindings": 0,
-        "loaded_references": 0,
-        "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/_common.py": {
-        "definitions": 1,
-        "exported_names": 1,
-        "import_bindings": 0,
-        "loaded_references": 0,
-        "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_create_lease.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/methods/lifecycle_methods_ops/document_gui_reload.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/_common.py": {
-        "definitions": 1,
-        "exported_names": 1,
-        "import_bindings": 0,
-        "loaded_references": 0,
-        "runtime_calls": 0
-      },
-      "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 21,
-        "runtime_calls": 21
-      },
-      "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/save_validation.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 1,
-        "runtime_calls": 1
-      },
-      "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/selector_resolve.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 4,
-        "runtime_calls": 4
-      },
-      "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/validation_evidence.py": {
-        "definitions": 0,
-        "exported_names": 0,
-        "import_bindings": 1,
-        "loaded_references": 2,
-        "runtime_calls": 2
-      }
-    },
-    "current_references": 67,
-    "current_runtime_calls": 54,
+    "current_definitions": 0,
+    "current_locator_nodes": 0,
+    "current_modules": {},
+    "current_references": 0,
+    "current_runtime_calls": 0,
     "method": "AST count of _rpc_mod definitions, loaded references/runtime calls, import bindings, and explicit exports"
   },
   "manifest_state": "planned_pre_cutover",

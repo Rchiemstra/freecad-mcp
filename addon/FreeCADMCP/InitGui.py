@@ -1,5 +1,6 @@
 import os as _os
 import sys as _sys
+from functools import partial as _partial
 
 from PySide import QtCore
 
@@ -70,13 +71,24 @@ def _auto_start_mcp():
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
 
 
-_document_lease_runtime_shutdown_state = {"connected": False}
+_document_lease_runtime_shutdown_state = {"connected": False, "callback": None}
+
+
+def _shutdown_mcp_runtime(rpc_server):
+    """Stop the adapter graph before ending process-lifetime lease services."""
+
+    try:
+        rpc_server.stop_rpc_server(wait_for_completion=True)
+    finally:
+        rpc_server.shutdown_document_lease_runtime()
 
 
 def _connect_document_lease_runtime_shutdown(
     rpc_server,
     _qt_core=QtCore,
     _state=_document_lease_runtime_shutdown_state,
+    _partial_callback=_partial,
+    _shutdown_callback=_shutdown_mcp_runtime,
 ):
     """Connect shutdown without relying on InitGui's execution globals.
 
@@ -88,7 +100,9 @@ def _connect_document_lease_runtime_shutdown(
     app = _qt_core.QCoreApplication.instance()
     if app is None or _state["connected"]:
         return
-    app.aboutToQuit.connect(rpc_server.shutdown_document_lease_runtime)
+    callback = _partial_callback(_shutdown_callback, rpc_server)
+    app.aboutToQuit.connect(callback)
+    _state["callback"] = callback
     _state["connected"] = True
 
 
@@ -136,6 +150,26 @@ def _register_document_lease_observer(
     """Install the v2 observer independently of RPC auto-start ordering."""
     try:
         from document_lease.observer import register_observer, unregister_observer
+        from document_lease.observer_ops.runtime_providers import (
+            bind_default_service_provider,
+            bind_legacy_attribution,
+        )
+        from document_lock import (
+            is_agent_mutating,
+            is_internal_snapshot_save,
+        )
+        from rpc_server import rpc_server
+
+        freecad_module = FreeCAD  # noqa: F821 - injected by FreeCAD
+
+        def service_provider():
+            return rpc_server.document_lease_service
+
+        bind_default_service_provider(service_provider)
+        bind_legacy_attribution(
+            agent_mutation_checker=is_agent_mutating,
+            snapshot_save_checker=is_internal_snapshot_save,
+        )
 
         def _refresh_indicator(_event):
             try:
@@ -145,11 +179,20 @@ def _register_document_lease_observer(
             except Exception:
                 pass
 
-        observer = register_observer(notification_callback=_refresh_indicator)
+        observer = register_observer(
+            freecad_module=freecad_module,
+            freecad_gui_module=Gui,  # noqa: F821 - injected by FreeCAD
+            service_provider=service_provider,
+            selected_document_provider=lambda: getattr(
+                freecad_module, "ActiveDocument", None
+            ),
+            notification_callback=_refresh_indicator,
+            notification_queue=lambda callback: _qt_core.QTimer.singleShot(
+                0, callback
+            ),
+        )
         if observer is None:
             return
-        from rpc_server import rpc_server
-
         _connect_shutdown(rpc_server)
         app = _qt_core.QCoreApplication.instance()
         if app is not None and not _shutdown_state["connected"]:

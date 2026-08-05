@@ -10,81 +10,81 @@ sidecars are written, and callers should treat this module as inert.
 
 from __future__ import annotations
 
-import sys
 import time
 
-# FreeCAD adds this addon directory directly to ``sys.path`` and imports this
-# file as ``document_lock``.  Package-aware callers (including the test suite)
-# import the same file as ``addon.FreeCADMCP.document_lock``.  Without an early
-# alias Python executes the file twice, producing two lease registries, two
-# settings functions, and two request-identity thread locals.  Whichever name
-# loads first owns the single module object; publishing both names here makes
-# every later import resolve to that same object in either environment.
-_CANONICAL_MODULE_NAME = "addon.FreeCADMCP.document_lock"
-_FREECAD_MODULE_NAME = "document_lock"
-_MODULE_ALIASES = (_CANONICAL_MODULE_NAME, _FREECAD_MODULE_NAME)
+# FreeCAD imports this file as ``document_lock`` while package callers use the
+# qualified spelling.  Publish the first-loaded object under both names before
+# importing its collaborators so the facade and every compatibility surface
+# have one identity in either environment.
+_MODULE_ALIASES = ("addon.FreeCADMCP.document_lock", "document_lock")
 
-
-def _install_module_aliases() -> None:
-    current = sys.modules.get(__name__)
-    if current is None:  # pragma: no cover - import machinery always sets it
-        return
-
-    owner = next(
-        (
-            module
-            for alias in _MODULE_ALIASES
-            if (module := sys.modules.get(alias)) is not None
-            and module is not current
-        ),
-        current,
+try:
+    from addon.FreeCADMCP.document_lock_ops.module_aliases import (
+        install_facade_aliases as _install_facade_aliases,
     )
-    for alias in _MODULE_ALIASES:
-        sys.modules[alias] = owner
+    from addon.FreeCADMCP.document_lock_ops.module_aliases import (
+        install_loaded_module_aliases as _install_loaded_module_aliases,
+    )
+except ImportError:  # pragma: no cover - flat FreeCAD addon layout
+    from document_lock_ops.module_aliases import (
+        install_facade_aliases as _install_facade_aliases,
+    )
+    from document_lock_ops.module_aliases import (
+        install_loaded_module_aliases as _install_loaded_module_aliases,
+    )
 
-
-_install_module_aliases()
+_install_facade_aliases(__name__, _MODULE_ALIASES)
 
 try:
-    from .document_lock_ops.module_aliases import install_module_aliases, install_package_aliases
-except ImportError:
-    from document_lock_ops.module_aliases import install_module_aliases, install_package_aliases
-
-try:
-    from .document_lock_ops.acquire_lease import acquire_lease
-    from .document_lock_ops.agent_mutation_ops import (
+    from addon.FreeCADMCP.document_lock_ops.acquire_lease import acquire_lease
+    from addon.FreeCADMCP.document_lock_ops.agent_mutation_ops import (
         begin_agent_mutation_scope,
         end_agent_mutation_scope,
         get_agent_mutation_context,
     )
-    from .document_lock_ops.constants import LEASE_TTL_SECONDS, SIDECAR_SUFFIX
-    from .document_lock_ops.document_lock_observer import DocumentLockObserver
-    from .document_lock_ops.eligibility import _is_eligible_target
-    from .document_lock_ops.file_baseline import (
+    from addon.FreeCADMCP.document_lock_ops.constants import (
+        LEASE_TTL_SECONDS,
+        SIDECAR_SUFFIX,
+    )
+    from addon.FreeCADMCP.document_lock_ops.document_lock_observer import (
+        DocumentLockObserver,
+    )
+    from addon.FreeCADMCP.document_lock_ops.eligibility import _is_eligible_target
+    from addon.FreeCADMCP.document_lock_ops.facade_surfaces import (
+        configure_facade_surfaces,
+    )
+    from addon.FreeCADMCP.document_lock_ops.file_baseline import (
         file_baseline,
         pid_alive,
         verify_saved_file,
     )
-    from .document_lock_ops.force_release_stale_lock import force_release_stale_lock
-    from .document_lock_ops.gui_callback import set_gui_update_callback
-    from .document_lock_ops.heartbeat_lease import heartbeat_lease
-    from .document_lock_ops.internal_snapshot_save_ops import (
+    from addon.FreeCADMCP.document_lock_ops.force_release_stale_lock import (
+        force_release_stale_lock,
+    )
+    from addon.FreeCADMCP.document_lock_ops.gui_callback import set_gui_update_callback
+    from addon.FreeCADMCP.document_lock_ops.heartbeat_lease import heartbeat_lease
+    from addon.FreeCADMCP.document_lock_ops.internal_snapshot_save_ops import (
         begin_internal_snapshot_save_scope,
         end_internal_snapshot_save_scope,
         is_internal_snapshot_save,
     )
-    from .document_lock_ops.lease_record import LeaseRecord
-    from .document_lock_ops.lease_state import LeaseState
-    from .document_lock_ops.mark_save_verified import mark_save_verified
-    from .document_lock_ops.mark_user_intervened import mark_user_intervened
-    from .document_lock_ops.migrate_lease_key import migrate_lease_key
-    from .document_lock_ops.mutation_check import (
+    from addon.FreeCADMCP.document_lock_ops.lease_record import LeaseRecord
+    from addon.FreeCADMCP.document_lock_ops.lease_state import LeaseState
+    from addon.FreeCADMCP.document_lock_ops.mark_save_verified import mark_save_verified
+    from addon.FreeCADMCP.document_lock_ops.mark_user_intervened import (
+        mark_user_intervened,
+    )
+    from addon.FreeCADMCP.document_lock_ops.migrate_lease_key import migrate_lease_key
+    from addon.FreeCADMCP.document_lock_ops.mutation_check import (
         annotate_read_result,
         check_mutation_allowed,
         check_persisted_mutation_allowed,
     )
-    from .document_lock_ops.registration import register_lock_feature, register_observer
-    from .document_lock_ops.registry_queries import (
+    from addon.FreeCADMCP.document_lock_ops.registration import (
+        register_lock_feature,
+        register_observer,
+    )
+    from addon.FreeCADMCP.document_lock_ops.registry_queries import (
         _is_stale,
         discover_sidecar_leases,
         ensure_session_id,
@@ -95,8 +95,8 @@ try:
         reset_registry_for_tests,
         resolve_doc_key,
     )
-    from .document_lock_ops.release_lease import release_lease
-    from .document_lock_ops.request_identity import (
+    from addon.FreeCADMCP.document_lock_ops.release_lease import release_lease
+    from addon.FreeCADMCP.document_lock_ops.request_identity import (
         begin_agent_mutation,
         clear_request_identity,
         end_agent_mutation,
@@ -104,7 +104,7 @@ try:
         is_agent_mutating,
         set_request_identity,
     )
-    from .document_lock_ops.settings import (
+    from addon.FreeCADMCP.document_lock_ops.settings import (
         _read_settings,
         _settings_path_impl,
         configure_runtime_lease_mode,
@@ -112,11 +112,16 @@ try:
         is_enabled,
         is_enforcement_enabled,
     )
-    from .document_lock_ops.sidecar_io import _public_sidecar_payload, sidecar_path_for
-    from .document_lock_ops.transition_lease import transition_lease
-    from .document_lock_ops.verb_classification import VERB_CLASSIFICATION
-    from .document_lock_ops.verb_kind import VerbKind
-    from .document_lock_ops.verb_ops import (
+    from addon.FreeCADMCP.document_lock_ops.sidecar_io import (
+        _public_sidecar_payload,
+        sidecar_path_for,
+    )
+    from addon.FreeCADMCP.document_lock_ops.transition_lease import transition_lease
+    from addon.FreeCADMCP.document_lock_ops.verb_classification import (
+        VERB_CLASSIFICATION,
+    )
+    from addon.FreeCADMCP.document_lock_ops.verb_kind import VerbKind
+    from addon.FreeCADMCP.document_lock_ops.verb_ops import (
         classify_verb,
         extract_referenced_documents_from_code,
         validate_unsafe_execute_scope,
@@ -131,6 +136,7 @@ except ImportError:
     from document_lock_ops.constants import LEASE_TTL_SECONDS, SIDECAR_SUFFIX
     from document_lock_ops.document_lock_observer import DocumentLockObserver
     from document_lock_ops.eligibility import _is_eligible_target
+    from document_lock_ops.facade_surfaces import configure_facade_surfaces
     from document_lock_ops.file_baseline import (
         file_baseline,
         pid_alive,
@@ -193,16 +199,18 @@ except ImportError:
         validate_unsafe_execute_scope,
     )
 
-install_package_aliases()
-
-for _mod_name in list(sys.modules):
-    if _mod_name.startswith("document_lock_ops.") or _mod_name.startswith(
-        "addon.FreeCADMCP.document_lock_ops."
-    ):
-        install_module_aliases(_mod_name)
+_install_loaded_module_aliases()
 
 # §3.3 compatibility shims — monkeypatch surfaces bind through the facade.
 _settings_path = _settings_path_impl
+configure_facade_surfaces(
+    time_module_provider=lambda: time,
+    settings_path_provider=lambda: _settings_path(),
+    pid_alive_provider=lambda pid: pid_alive(pid),
+    facade_namespace=globals(),
+    default_settings_path=_settings_path,
+    default_pid_alive=pid_alive,
+)
 
 __all__ = [
     "LEASE_TTL_SECONDS",

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager, nullcontext
+from dataclasses import replace
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,10 +14,13 @@ import FreeCADGui
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
-from addon.FreeCADMCP.document_lease import core_authority
 from addon.FreeCADMCP import document_lock
 from addon.FreeCADMCP.rpc_server import rpc_server
 from addon.FreeCADMCP.rpc_server import snapshot_service
+
+_snapshot_save_context = importlib.import_module(
+    "addon.FreeCADMCP.rpc_server.snapshot_service_ops.snapshot_save_context"
+)
 
 
 class _Manager:
@@ -206,9 +211,12 @@ def test_snapshot_save_copy_runs_inside_generation_scoped_capability(
             capability_active = False
 
     monkeypatch.setattr(
-        core_authority,
-        "open_documents_mutation_capability",
-        capability,
+        _snapshot_save_context,
+        "_bindings",
+        replace(
+            _snapshot_save_context._bindings,
+            open_documents_mutation_capability=capability,
+        ),
     )
 
     result = snapshot_service.create_snapshot_bundle_gui(
@@ -273,11 +281,16 @@ def test_nonowner_snapshot_marks_only_the_exact_internal_save(
         raising=False,
     )
     monkeypatch.setattr(
-        core_authority,
-        "open_documents_mutation_capability",
-        lambda documents, *, generations, kinds: (
-            capability_calls.append((documents, generations, tuple(kinds)))
-            or nullcontext([])
+        _snapshot_save_context,
+        "_bindings",
+        replace(
+            _snapshot_save_context._bindings,
+            open_documents_mutation_capability=(
+                lambda documents, *, generations, kinds: (
+                    capability_calls.append((documents, generations, tuple(kinds)))
+                    or nullcontext([])
+                )
+            ),
         ),
     )
 

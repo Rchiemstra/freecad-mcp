@@ -408,6 +408,7 @@ def _prepare_live_start(
     monkeypatch,
     *,
     authentication_enabled: bool = False,
+    initialize_lease_during_start: bool = False,
     bridge_failure: BaseException | None = None,
     listener_address: object = ("127.0.0.1", 19875),
     replay_binding_failure: BaseException | None = None,
@@ -428,7 +429,7 @@ def _prepare_live_start(
     app_thread = object()
     parent = object()
     replay = SimpleNamespace()
-    inflight = object()
+    inflight = SimpleNamespace(request_cancel_all=list)
     handoffs = object()
     claims = object()
     session_manager = object()
@@ -552,38 +553,35 @@ def _prepare_live_start(
 
         def start(self) -> None:
             timeline.append("thread:start")
-            runtime = built["runtime"]
-            assert rpc_server.rpc_server_instance is runtime.listener
-            assert rpc_server.gui_dispatcher is runtime.dispatcher
-            assert rpc_server.worker_manager is runtime.worker_manager
-            assert rpc_server.rpc_session_manager is runtime.session_manager
-            assert rpc_server.rpc_request_replay_cache is runtime.request_replay_cache
-            assert rpc_server.rpc_inflight_request_registry is runtime.inflight_requests
-            assert rpc_server.rpc_handoff_continuation_store is (
-                runtime.handoff_continuations
-            )
-            assert rpc_server.rpc_acquisition_claim_store is runtime.acquisition_claims
-            assert listener.registered == [bridge]
+            current_runtime = rpc_server._addon_runtime
+            assert current_runtime is None or current_runtime.disposed
+            assert rpc_server.rpc_server_instance is None
+            assert rpc_server.gui_dispatcher is None
+            assert rpc_server.worker_manager is None
+            assert rpc_server.rpc_session_manager is None
+            assert listener.registered[-1] is bridge
             if thread_start_failure is not None:
                 raise thread_start_failure
 
+        def join(self, *, timeout) -> None:
+            assert timeout == 2.0
+
+        def is_alive(self) -> bool:
+            return False
+
     monkeypatch.setattr(runtime_module, "_build_addon_runtime", tracked_builder)
-    monkeypatch.setattr(rpc_server, "rpc_server_instance", None)
-    monkeypatch.setattr(rpc_server, "rpc_server_thread", None)
-    monkeypatch.setattr(rpc_server, "gui_dispatcher", None)
-    monkeypatch.setattr(rpc_server, "worker_manager", None)
-    monkeypatch.setattr(rpc_server, "rpc_session_manager", None)
-    monkeypatch.setattr(rpc_server, "rpc_runtime_manifest", None)
-    monkeypatch.setattr(rpc_server, "rpc_server_runtime_id", "")
-    monkeypatch.setattr(rpc_server, "rpc_server_actual_endpoint", None)
-    monkeypatch.setattr(rpc_server, "rpc_server_started_at", "")
     monkeypatch.setattr(rpc_server, "_addon_runtime", None, raising=False)
-    monkeypatch.setattr(rpc_server, "shutdown_requested", shutdown_requested)
-    monkeypatch.setattr(rpc_server, "rpc_request_replay_cache", replay)
-    monkeypatch.setattr(rpc_server, "rpc_inflight_request_registry", inflight)
-    monkeypatch.setattr(rpc_server, "rpc_handoff_continuation_store", handoffs)
-    monkeypatch.setattr(rpc_server, "rpc_acquisition_claim_store", claims)
-    monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
+    monkeypatch.setattr(rpc_server, "_runtime_shutdown_claim", None, raising=False)
+    monkeypatch.setattr(rpc_server, "ShutdownEvent", lambda: shutdown_requested)
+    monkeypatch.setattr(rpc_server, "RequestReplayCache", lambda: replay)
+    monkeypatch.setattr(rpc_server, "InflightRequestRegistry", lambda: inflight)
+    monkeypatch.setattr(rpc_server, "HandoffContinuationStore", lambda: handoffs)
+    monkeypatch.setattr(rpc_server, "AcquisitionClaimStore", lambda: claims)
+    monkeypatch.setattr(
+        rpc_server,
+        "document_lease_service",
+        None if initialize_lease_during_start else lease_service,
+    )
     monkeypatch.setattr(rpc_server, "document_identity_service", identity_service)
     monkeypatch.setattr(rpc_server, "save_service", save_service)
     monkeypatch.setattr(
@@ -609,7 +607,11 @@ def _prepare_live_start(
     monkeypatch.setattr(rpc_server, "WorkerManager", worker_constructor)
     monkeypatch.setattr(rpc_server, "FilteredXMLRPCServer", listener_constructor)
     monkeypatch.setattr(rpc_server, "FreeCADRPC", bridge_constructor)
-    monkeypatch.setattr(rpc_server, "threading", SimpleNamespace(Thread=_Thread))
+    monkeypatch.setattr(
+        rpc_server,
+        "threading",
+        SimpleNamespace(Thread=_Thread, Event=threading.Event),
+    )
     monkeypatch.setattr(
         rpc_server,
         "load_settings",
@@ -631,10 +633,15 @@ def _prepare_live_start(
         "FreeCAD",
         SimpleNamespace(getUserAppDataDir=lambda: "", getHomePath=lambda: ""),
     )
+    def initialize_document_lease_runtime(_settings):
+        if initialize_lease_during_start:
+            monkeypatch.setattr(rpc_server, "document_lease_service", lease_service)
+        return lease_service
+
     monkeypatch.setattr(
         rpc_server,
         "initialize_document_lease_runtime",
-        lambda _settings: lease_service,
+        initialize_document_lease_runtime,
     )
     monkeypatch.setattr(
         rpc_server, "resolve_rpc_bind_host", lambda _settings: "127.0.0.1"
@@ -707,7 +714,7 @@ def _prepare_live_start(
     )
 
 
-def test_transitional_start_builds_once_publishes_exact_graph_then_starts_thread(
+def test_runtime_start_builds_once_and_publishes_only_after_thread_start(
     monkeypatch,
 ) -> None:
     context = _prepare_live_start(monkeypatch)
@@ -747,6 +754,264 @@ def test_transitional_start_builds_once_publishes_exact_graph_then_starts_thread
     )
     assert "serve:listener" not in context.timeline
     runtime.dispose()
+
+
+def test_repeated_start_reuses_the_one_published_runtime(monkeypatch) -> None:
+    context = _prepare_live_start(monkeypatch)
+
+    first = context.rpc_server.start_rpc_server()
+    second = context.rpc_server.start_rpc_server()
+
+    assert "started" in first.lower()
+    assert second == "RPC Server already running."
+    assert context.counts["builder"] == 1
+    assert context.counts["thread"] == 1
+    assert context.worker_manager.start_calls == 1
+    context.built["runtime"].dispose()
+
+
+def test_concurrent_start_constructs_and_publishes_one_runtime(monkeypatch) -> None:
+    context = _prepare_live_start(monkeypatch)
+    ready = threading.Barrier(3)
+    results = []
+
+    def start():
+        ready.wait()
+        results.append(context.rpc_server.start_rpc_server())
+
+    callers = [threading.Thread(target=start) for _index in range(2)]
+    for caller in callers:
+        caller.start()
+    ready.wait()
+    for caller in callers:
+        caller.join(timeout=1.0)
+
+    assert sorted(results) == [
+        "RPC Server already running.",
+        "RPC Server started at 127.0.0.1:19875.",
+    ]
+    assert context.counts["builder"] == 1
+    assert context.counts["thread"] == 1
+    context.built["runtime"].dispose()
+
+
+def test_restart_reuses_replay_cache_from_disposed_runtime(monkeypatch) -> None:
+    context = _prepare_live_start(monkeypatch)
+
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    first_runtime = context.built["runtime"]
+    replay_cache = first_runtime.request_replay_cache
+    assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
+    assert context.rpc_server._addon_runtime is first_runtime
+    assert first_runtime.disposed is True
+    monkeypatch.setattr(
+        context.rpc_server,
+        "RequestReplayCache",
+        lambda: pytest.fail("restart must reuse the replay journal"),
+    )
+
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    second_runtime = context.built["runtime"]
+    assert second_runtime is not first_runtime
+    assert second_runtime.request_replay_cache is replay_cache
+    second_runtime.dispose()
+
+
+def test_full_stop_restart_preserves_native_document_session_authority(
+    monkeypatch,
+) -> None:
+    context = _prepare_live_start(monkeypatch)
+    native_document = SimpleNamespace(
+        Name="NativeSession",
+        mutation_authority_epoch=23,
+        mutation_authority_owner="native-owner",
+        mutation_session_id="native-session",
+    )
+
+    def get_document(name):
+        return native_document if name == native_document.Name else None
+
+    monkeypatch.setattr(context.rpc_server.FreeCAD, "getDocument", get_document)
+    expected = (
+        native_document.mutation_authority_epoch,
+        native_document.mutation_authority_owner,
+        native_document.mutation_session_id,
+    )
+
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    first_runtime = context.built["runtime"]
+    first_lookup = (
+        first_runtime.collaboration_bridge._collaboration_collaborators
+        .compatibility_api._document_lookup
+    )
+    assert first_lookup(native_document.Name) is native_document
+    assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
+    assert (
+        native_document.mutation_authority_epoch,
+        native_document.mutation_authority_owner,
+        native_document.mutation_session_id,
+    ) == expected
+
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    second_runtime = context.built["runtime"]
+    second_lookup = (
+        second_runtime.collaboration_bridge._collaboration_collaborators
+        .compatibility_api._document_lookup
+    )
+    assert second_runtime is not first_runtime
+    assert second_lookup(native_document.Name) is native_document
+    assert (
+        native_document.mutation_authority_epoch,
+        native_document.mutation_authority_owner,
+        native_document.mutation_session_id,
+    ) == expected
+    assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
+
+
+def test_failed_restart_preserves_tombstone_replay_cache(monkeypatch) -> None:
+    context = _prepare_live_start(monkeypatch)
+
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    first_runtime = context.built["runtime"]
+    replay_cache = first_runtime.request_replay_cache
+    assert context.rpc_server.stop_rpc_server() == "RPC Server stopped."
+    real_listener_factory = context.rpc_server.FilteredXMLRPCServer
+    monkeypatch.setattr(
+        context.rpc_server,
+        "FilteredXMLRPCServer",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("restart bind failed")
+        ),
+    )
+
+    failed = context.rpc_server.start_rpc_server()
+
+    assert "could not construct its runtime" in failed.lower()
+    assert context.rpc_server._addon_runtime is first_runtime
+    assert first_runtime.request_replay_cache is replay_cache
+    monkeypatch.setattr(
+        context.rpc_server,
+        "FilteredXMLRPCServer",
+        real_listener_factory,
+    )
+    monkeypatch.setattr(
+        context.rpc_server,
+        "RequestReplayCache",
+        lambda: pytest.fail("retry must preserve the replay journal"),
+    )
+    assert "started" in context.rpc_server.start_rpc_server().lower()
+    assert context.built["runtime"].request_replay_cache is replay_cache
+    context.built["runtime"].dispose()
+
+
+def test_worker_start_failure_disposes_unpublished_runtime(monkeypatch) -> None:
+    context = _prepare_live_start(monkeypatch)
+
+    def fail_start():
+        raise RuntimeError("worker start failed")
+
+    context.worker_manager._start = fail_start
+
+    result = context.rpc_server.start_rpc_server()
+
+    assert "could not start its listener" in result.lower()
+    assert context.counts["builder"] == 1
+    assert context.counts["thread"] == 0
+    assert context.rpc_server._addon_runtime is None
+    assert context.rpc_server.rpc_server_instance is None
+    assert context.listener.cleanup_calls == 1
+    assert context.worker_manager.cleanup_calls == 1
+    assert context.dispatcher.cleanup_calls == 1
+
+
+def test_launch_cleanup_failure_retains_exact_runtime_and_blocks_restart(
+    monkeypatch,
+) -> None:
+    context = _prepare_live_start(monkeypatch)
+    start_failure = RuntimeError("worker start failed")
+    cleanup_failure = RuntimeError("listener close failed")
+
+    def fail_start():
+        raise start_failure
+
+    def fail_close():
+        context.listener.cleanup_calls += 1
+        context.timeline.append("cleanup:listener")
+        raise cleanup_failure
+
+    context.worker_manager._start = fail_start
+    context.listener.server_close = fail_close
+
+    result = context.rpc_server.start_rpc_server()
+    claim = context.rpc_server._runtime_shutdown_claim
+
+    assert "could not start its listener" in result.lower()
+    assert claim is not None
+    assert claim.runtime is context.built["runtime"]
+    assert claim.runtime.listener is context.listener
+    assert claim.completed.is_set()
+    assert cleanup_failure in claim.failure.exceptions[1].exceptions
+    assert (
+        context.rpc_server.start_rpc_server()
+        == "RPC Server shutdown is still in progress."
+    )
+
+
+def test_construction_cleanup_failure_retains_exact_resource_and_blocks_restart(
+    monkeypatch,
+) -> None:
+    primary = RuntimeError("capability bridge construction failed")
+    cleanup_failure = RuntimeError("worker stop failed")
+    context = _prepare_live_start(monkeypatch, bridge_failure=primary)
+
+    def fail_stop(timeout=4.0):
+        assert timeout == 4.0
+        context.worker_manager.cleanup_calls += 1
+        context.timeline.append("cleanup:worker_manager")
+        raise cleanup_failure
+
+    context.worker_manager.stop = fail_stop
+
+    result = context.rpc_server.start_rpc_server()
+    claim = context.rpc_server._runtime_shutdown_claim
+
+    assert "could not construct its runtime" in result.lower()
+    assert claim is not None
+    assert claim.completed.is_set()
+    assert claim.runtime.resources[0][0] is context.worker_manager
+    assert cleanup_failure in claim.failure.exceptions
+    assert (
+        context.rpc_server.start_rpc_server()
+        == "RPC Server shutdown is still in progress."
+    )
+
+
+def test_fatal_construction_cleanup_failure_retains_resource_before_propagating(
+    monkeypatch,
+) -> None:
+    primary = _ConstructionFailure("fatal bridge construction")
+    cleanup_failure = _CleanupFailure("fatal worker stop")
+    context = _prepare_live_start(monkeypatch, bridge_failure=primary)
+
+    def fail_stop(timeout=4.0):
+        assert timeout == 4.0
+        context.worker_manager.cleanup_calls += 1
+        context.timeline.append("cleanup:worker_manager")
+        raise cleanup_failure
+
+    context.worker_manager.stop = fail_stop
+
+    with pytest.raises(BaseExceptionGroup) as captured:
+        context.rpc_server.start_rpc_server()
+
+    claim = context.rpc_server._runtime_shutdown_claim
+    assert captured.value is claim.failure
+    assert claim.runtime.resources[0][0] is context.worker_manager
+    assert claim.completed.is_set()
+    assert (
+        context.rpc_server.start_rpc_server()
+        == "RPC Server shutdown is still in progress."
+    )
 
 
 def test_authenticated_start_publishes_authentication_only_after_composition(
@@ -796,6 +1061,30 @@ def test_authenticated_start_publishes_authentication_only_after_composition(
     context.built["runtime"].dispose()
 
 
+def test_authenticated_first_start_reads_lease_service_initialized_during_start(
+    monkeypatch,
+) -> None:
+    context = _prepare_live_start(
+        monkeypatch,
+        authentication_enabled=True,
+        initialize_lease_during_start=True,
+    )
+
+    result = context.rpc_server.start_rpc_server()
+
+    assert result == "RPC Server started at 127.0.0.1:19875."
+    assert context.replay_predicates == [
+        context.rpc_server.document_lease_service.has_unresolved_owner
+    ]
+    assert context.timeline.index("construct:session_manager") < context.timeline.index(
+        "builder:return"
+    )
+    assert context.timeline.index("builder:return") < context.timeline.index(
+        "publish:replay_predicate"
+    )
+    context.built["runtime"].dispose()
+
+
 def test_listener_thread_target_retains_composed_listener_identity(monkeypatch) -> None:
     context = _prepare_live_start(monkeypatch)
     context.rpc_server.start_rpc_server()
@@ -810,7 +1099,7 @@ def test_listener_thread_target_retains_composed_listener_identity(monkeypatch) 
     context.built["runtime"].dispose()
 
 
-def test_transitional_start_does_not_publish_or_launch_partial_failed_graph(
+def test_runtime_start_does_not_publish_or_launch_partial_failed_graph(
     monkeypatch,
 ) -> None:
     primary = RuntimeError("capability bridge construction failed")
@@ -843,7 +1132,7 @@ def test_transitional_start_does_not_publish_or_launch_partial_failed_graph(
     assert "thread:constructed" not in context.timeline
 
 
-def test_transitional_start_failure_cleans_published_graph_exactly_once(
+def test_runtime_start_failure_cleans_unpublished_graph_exactly_once(
     monkeypatch,
 ) -> None:
     context = _prepare_live_start(
@@ -930,7 +1219,7 @@ def test_fatal_deferred_auth_publication_rolls_back_then_propagates(
         context.rpc_server.start_rpc_server()
 
     assert captured.value is primary
-    assert context.counts["thread"] == 0
+    assert context.counts["thread"] == 1
     assert context.rpc_server._addon_runtime is None
     assert context.rpc_server.rpc_server_instance is None
     assert context.rpc_server.rpc_session_manager is None

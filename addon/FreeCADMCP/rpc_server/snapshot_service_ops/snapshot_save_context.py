@@ -4,8 +4,34 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotSaveBindings:
+    begin_agent_mutation_scope: Any
+    end_agent_mutation_scope: Any
+    begin_internal_snapshot_save_scope: Any
+    end_internal_snapshot_save_scope: Any
+    open_documents_mutation_capability: Any
+
+
+_bindings: SnapshotSaveBindings | None = None
+
+
+def bind_snapshot_save_context(bindings: SnapshotSaveBindings) -> None:
+    if not isinstance(bindings, SnapshotSaveBindings):
+        raise TypeError("bindings must be SnapshotSaveBindings")
+    global _bindings
+    _bindings = bindings
+
+
+def _require_bindings() -> SnapshotSaveBindings:
+    if _bindings is None:
+        raise RuntimeError("snapshot save collaborators are not initialized")
+    return _bindings
 
 
 def snapshot_save_capability(
@@ -16,14 +42,8 @@ def snapshot_save_capability(
 
     if mutation_generations is None:
         return nullcontext([])
-    try:
-        from addon.FreeCADMCP.document_lease import core_authority
-    except ImportError:
-        try:
-            from document_lease import core_authority
-        except ImportError:
-            return nullcontext([])
-    return core_authority.open_documents_mutation_capability(
+    bindings = _require_bindings()
+    return bindings.open_documents_mutation_capability(
         documents,
         generations=mutation_generations,
         kinds=("SaveAs",),
@@ -39,18 +59,14 @@ def snapshot_save_context(
 ):
     """Keep snapshot saves core-authorized and observer-attributed."""
 
-    document_lock = None
     marker_entered = False
+    bindings = _require_bindings() if mutation_generations else None
     try:
         if mutation_generations:
             if not mutation_request_id or not mutation_document_keys:
                 raise RuntimeError("leased snapshot mutation attribution is unavailable")
-            try:
-                from addon.FreeCADMCP import document_lock
-            except ImportError:
-                import document_lock
             marker_entered = True
-            if not document_lock.begin_agent_mutation_scope(
+            if not bindings.begin_agent_mutation_scope(
                 mutation_request_id, mutation_document_keys
             ):
                 raise RuntimeError(
@@ -61,8 +77,8 @@ def snapshot_save_context(
         ) as capabilities:
             yield capabilities
     finally:
-        if marker_entered and document_lock is not None:
-            document_lock.end_agent_mutation_scope(
+        if marker_entered:
+            bindings.end_agent_mutation_scope(
                 mutation_request_id, mutation_document_keys
             )
 
@@ -78,17 +94,14 @@ def internal_snapshot_save_observer_scope(
     if not request_id:
         yield
         return
-    try:
-        from addon.FreeCADMCP import document_lock
-    except ImportError:
-        import document_lock
-    entered = document_lock.begin_internal_snapshot_save_scope(
+    bindings = _require_bindings()
+    entered = bindings.begin_internal_snapshot_save_scope(
         request_id,
         document,
         target_path,
     )
     if not entered:
-        document_lock.end_internal_snapshot_save_scope(
+        bindings.end_internal_snapshot_save_scope(
             request_id,
             document,
             target_path,
@@ -97,7 +110,7 @@ def internal_snapshot_save_observer_scope(
     try:
         yield
     finally:
-        document_lock.end_internal_snapshot_save_scope(
+        bindings.end_internal_snapshot_save_scope(
             request_id,
             document,
             target_path,

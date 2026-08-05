@@ -10,11 +10,6 @@ import FreeCAD
 from ..save_service import SaveService
 from ..settings import SettingsPolicyError
 
-try:
-    from ..._shared.protocol.request_replay_cache import RequestReplayCache
-except ImportError:  # pragma: no cover - flat addon import path
-    from _shared.protocol.request_replay_cache import RequestReplayCache
-
 logger = logging.getLogger("FreeCADMCP.rpc_server")
 
 
@@ -101,19 +96,19 @@ def _create_lease_service(
         local_runtime_identity=rpc_mod._make_local_runtime_identity(
             settings, lease
         ),
-        process_liveness_probe=rpc_mod._probe_process_liveness,
+        process_liveness_probe=(
+            rpc_mod.service_process_liveness_probe
+            or rpc_mod._probe_process_liveness
+        ),
     )
     rpc_mod.document_lease_runtime_policy = desired_policy
 
 
 def _configure_replay_and_save_services(rpc_mod: Any) -> None:
-    if rpc_mod.rpc_request_replay_cache is None:
-        # Compatibility for tests or an older module state hot-reloaded into
-        # this FreeCAD process.  Ordinary listener restarts reuse the object.
-        rpc_mod.rpc_request_replay_cache = RequestReplayCache()
-    rpc_mod.rpc_request_replay_cache.set_owner_lease_predicate(
-        rpc_mod.document_lease_service.has_unresolved_owner
-    )
+    if rpc_mod.rpc_request_replay_cache is not None:
+        rpc_mod.rpc_request_replay_cache.set_owner_lease_predicate(
+            rpc_mod.document_lease_service.has_unresolved_owner
+        )
     if rpc_mod.save_service is None:
         rpc_mod.save_service = SaveService(
             platform=rpc_mod.document_identity_service.platform

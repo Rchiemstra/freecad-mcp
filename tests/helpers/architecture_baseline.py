@@ -105,9 +105,14 @@ def dynamic_lookup_classification(
     path: str, function: str, kind: str, target: str
 ) -> str:
     if (
-        "module_aliases.py" in path
-        or path.endswith("/document_lock.py")
-        or path.endswith("/lock_indicator.py")
+        path
+        in {
+            "addon/FreeCADMCP/document_lock_ops/module_aliases.py",
+            "addon/FreeCADMCP/lock_indicator_ops/module_aliases.py",
+        }
+        and function == "_publish_aliases"
+        and kind == "sys_modules_get"
+        and target in {"qualified", "name"}
     ):
         return "compatibility_alias"
     if "/settings_ops/" in path and kind == "sys_modules_subscript":
@@ -173,6 +178,9 @@ def dynamic_module_lookup_census() -> list[dict[str, Any]]:
             if kind:
                 path_text = relative(path)
                 function = nearest_function(node, parents)
+                classification = dynamic_lookup_classification(
+                    path_text, function, kind, target
+                )
                 occurrences.append(
                     {
                         "path": path_text,
@@ -181,9 +189,7 @@ def dynamic_module_lookup_census() -> list[dict[str, Any]]:
                         "function": function,
                         "kind": kind,
                         "target": target,
-                        "classification": dynamic_lookup_classification(
-                            path_text, function, kind, target
-                        ),
+                        "classification": classification,
                     }
                 )
     return sorted(
@@ -210,21 +216,96 @@ def local_import_locator_census() -> list[dict[str, Any]]:
                 imported.extend(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 prefix = "." * node.level + (node.module or "")
-                imported.extend(f"{prefix}{alias.name}" for alias in node.names)
+                separator = "" if not prefix or prefix.endswith(".") else "."
+                joined_targets = [
+                    f"{prefix}{separator}{alias.name}" for alias in node.names
+                ]
+                imported.extend(joined_targets)
+                normalized_prefix = prefix.lstrip(".")
+                prefix_parts = normalized_prefix.split(".")
+                is_project_runtime_base = (
+                    prefix.startswith(".")
+                    or len(prefix_parts) == 1
+                    or prefix_parts[0] in targets
+                    or normalized_prefix.startswith(
+                        ("addon.FreeCADMCP.", "FreeCADMCP.", "freecad_mcp.")
+                    )
+                )
+                if (
+                    is_project_runtime_base
+                    and prefix.rsplit(".", maxsplit=1)[-1] in targets
+                    and not any(
+                        target.rsplit(".", maxsplit=1)[-1] in targets
+                        for target in joined_targets
+                    )
+                ):
+                    imported.append(prefix)
             for target in imported:
                 if target.rsplit(".", maxsplit=1)[-1] not in targets:
                     continue
+                path_text = relative(path)
+                function = nearest_function(node, parents)
+                is_bootstrap_root_binding = path_text == (
+                    "addon/FreeCADMCP/InitGui.py"
+                ) and (function, target) in {
+                    ("Initialize", "rpc_server.rpc_server"),
+                    ("_auto_start_mcp", "rpc_server.rpc_server"),
+                    ("_initialize_document_lease_runtime", "rpc_server.rpc_server"),
+                    ("_register_document_lease_observer", "rpc_server.rpc_server"),
+                    ("_register_document_lease_observer", "document_lock"),
+                    ("_register_document_lock", "document_lock"),
+                }
+                is_static_compatibility_binding = function == "<module>" and (
+                    (
+                        path_text.endswith("/document_lease/__init__.py")
+                        and target == ".core_authority"
+                    )
+                    or (
+                        path_text.endswith(
+                            "/rpc_server/lease_runtime_ops/imports.py"
+                        )
+                        and target
+                        in {
+                            "addon.FreeCADMCP.document_lease",
+                            "addon.FreeCADMCP.document_lock",
+                            "document_lease",
+                            "document_lock",
+                        }
+                    )
+                )
+                is_static_authority_binding = (
+                    path_text
+                    == "addon/FreeCADMCP/rpc_server/rpc_server.py"
+                    and function == "<module>"
+                    and target
+                    in {
+                        "..document_lease.core_authority",
+                        "document_lease.core_authority",
+                    }
+                )
                 occurrences.append(
                     {
-                        "path": relative(path),
+                        "path": path_text,
                         "line": node.lineno,
                         "column": node.col_offset,
-                        "function": nearest_function(node, parents),
+                        "function": function,
                         "target": target,
                         "classification": (
-                            "temporary_authority_locator"
-                            if target.endswith("core_authority")
-                            else "runtime_singleton_locator"
+                            "bootstrap_root_binding"
+                            if is_bootstrap_root_binding
+                            else (
+                                "static_authority_binding"
+                                if is_static_authority_binding
+                                else (
+                                    "static_compatibility_binding"
+                                    if is_static_compatibility_binding
+                                    else (
+                                        "temporary_authority_locator"
+                                        if target.endswith("core_authority")
+                                        else "runtime_singleton_locator"
+                                    )
+                                )
+                            )
                         ),
                     }
                 )

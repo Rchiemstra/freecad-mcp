@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import FreeCAD
 
-from ..lease_runtime import _import_document_lease
-from ._common import _rpc_mod
+from ._common import RpcHelperDependencies
 
 
 def validate_selector_fields(selector):
@@ -33,22 +32,31 @@ def validate_selector_fields(selector):
     )
 
 
-def resolve_named_document(name):
+def resolve_named_document(name, dependencies: RpcHelperDependencies):
     document = FreeCAD.getDocument(str(name))
     if document is None:
         raise ValueError(f"Document {name!r} is not open")
-    identity = _rpc_mod()._ensure_v2_document(document)
+    identity = dependencies.ensure_v2_document(document)
     return document, identity
 
 
-def scan_open_documents(selector, session_uuid, canonical_path):
-    lease = _import_document_lease()
+def scan_open_documents(
+    selector,
+    session_uuid,
+    canonical_path,
+    dependencies: RpcHelperDependencies,
+):
+    from .document_identity import _candidate_matches_selector_target
+
+    lease = dependencies.import_document_lease()
     for candidate in FreeCAD.listDocuments().values():
         try:
-            candidate_identity = _rpc_mod()._ensure_v2_document(candidate)
+            candidate_identity = dependencies.ensure_v2_document(candidate)
         except Exception as exc:
             if isinstance(exc, lease.DocumentIdentityError):
-                if _rpc_mod()._candidate_matches_selector_target(candidate, selector):
+                if _candidate_matches_selector_target(
+                    candidate, selector, dependencies
+                ):
                     raise
                 continue
             raise
@@ -56,7 +64,7 @@ def scan_open_documents(selector, session_uuid, canonical_path):
             return candidate, candidate_identity
         if canonical_path:
             try:
-                resolved = _rpc_mod().document_identity_service.resolve(
+                resolved = dependencies.document_identity_service.resolve(
                     {"canonical_path": canonical_path}
                 )
             except Exception:

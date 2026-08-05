@@ -2,41 +2,53 @@
 
 from __future__ import annotations
 
-import importlib
-import sys
 from collections.abc import Callable
 from typing import Any
 
 from ._log import logger
 from .events import ServiceProvider
 
+_bound_service_provider: ServiceProvider | None = None
+_bound_agent_mutation_checker: Callable[[str], bool] | None = None
+_bound_snapshot_save_checker: Callable[[Any, Any], bool] | None = None
+
+
+def bind_default_service_provider(provider: ServiceProvider) -> None:
+    """Install the explicit process-lifetime lease-service collaborator."""
+
+    global _bound_service_provider
+    if not callable(provider):
+        raise TypeError("service provider must be callable")
+    _bound_service_provider = provider
+
+
+def bind_legacy_attribution(
+    *,
+    agent_mutation_checker: Callable[[str], bool],
+    snapshot_save_checker: Callable[[Any, Any], bool],
+) -> None:
+    """Inject the two temporary Phase-18 document-lock attribution bridges."""
+
+    if not callable(agent_mutation_checker) or not callable(snapshot_save_checker):
+        raise TypeError("legacy attribution collaborators must be callable")
+    global _bound_agent_mutation_checker
+    global _bound_snapshot_save_checker
+    _bound_agent_mutation_checker = agent_mutation_checker
+    _bound_snapshot_save_checker = snapshot_save_checker
+
 
 def default_service_provider() -> Any | None:
-    """Find the already-loaded RPC module without importing it eagerly."""
+    """Return the explicitly bound service without locating the RPC module."""
 
-    candidates = (
-        "rpc_server.rpc_server",
-        "addon.FreeCADMCP.rpc_server.rpc_server",
-    )
-    for module_name in candidates:
-        module = sys.modules.get(module_name)
-        if module is not None:
-            service = getattr(module, "document_lease_service", None)
-            if service is not None:
-                return service
-
-    package = sys.modules.get("rpc_server")
-    module = getattr(package, "rpc_server", None) if package is not None else None
-    return getattr(module, "document_lease_service", None) if module else None
+    return _bound_service_provider() if _bound_service_provider is not None else None
 
 
 def get_runtime_service(provider: ServiceProvider | None = None) -> Any | None:
     """Return the current lease service, or ``None`` when RPC is not running."""
 
-    from .. import observer as observer_mod
-
     try:
-        return (provider or observer_mod._default_service_provider)()
+        selected = provider or _bound_service_provider
+        return selected() if selected is not None else None
     except Exception:
         logger.debug("lease service provider failed", exc_info=True)
         return None
@@ -45,18 +57,7 @@ def get_runtime_service(provider: ServiceProvider | None = None) -> Any | None:
 def default_agent_mutation_checker(key: str) -> bool:
     """Delegate attribution to the legacy request-scoped mutation context."""
 
-    module = sys.modules.get("document_lock") or sys.modules.get(
-        "addon.FreeCADMCP.document_lock"
-    )
-    if module is None:
-        try:
-            module = importlib.import_module("document_lock")
-        except Exception:
-            try:
-                module = importlib.import_module("addon.FreeCADMCP.document_lock")
-            except Exception:
-                return False
-    checker = getattr(module, "is_agent_mutating", None)
+    checker = _bound_agent_mutation_checker
     if not callable(checker):
         return False
     try:
@@ -69,12 +70,7 @@ def default_agent_mutation_checker(key: str) -> bool:
 def is_internal_snapshot_save(document: Any, filename: Any) -> bool:
     """Recognize only the exact synchronous save callback of worker saveCopy."""
 
-    module = sys.modules.get("document_lock") or sys.modules.get(
-        "addon.FreeCADMCP.document_lock"
-    )
-    if module is None:
-        return False
-    checker = getattr(module, "is_internal_snapshot_save", None)
+    checker = _bound_snapshot_save_checker
     if not callable(checker):
         return False
     try:
@@ -85,31 +81,10 @@ def is_internal_snapshot_save(document: Any, filename: Any) -> bool:
 
 
 def default_selected_document_provider() -> Any | None:
-    module = sys.modules.get("FreeCAD")
-    if module is None:
-        try:
-            module = importlib.import_module("FreeCAD")
-        except Exception:
-            return None
-    return getattr(module, "ActiveDocument", None)
+    return None
 
 
 def qt_or_direct_queue(callback: Callable[[], None]) -> None:
     """Queue through Qt when available, with a headless-safe fallback."""
 
-    qt_core = None
-    for package_name in ("PySide", "PySide2", "PySide6"):
-        try:
-            package = importlib.import_module(package_name)
-            qt_core = getattr(package, "QtCore", None)
-            if qt_core is None:
-                qt_core = importlib.import_module(f"{package_name}.QtCore")
-            break
-        except Exception:
-            continue
-    timer = getattr(qt_core, "QTimer", None) if qt_core is not None else None
-    single_shot = getattr(timer, "singleShot", None) if timer is not None else None
-    if callable(single_shot):
-        single_shot(0, callback)
-    else:
-        callback()
+    callback()

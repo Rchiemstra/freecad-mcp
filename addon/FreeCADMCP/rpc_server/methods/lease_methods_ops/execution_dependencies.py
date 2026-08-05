@@ -161,5 +161,23 @@ class ExecutionCollaborators:
             server_started_at=server_started_at,
         )
 
+    def _without_authenticated_runtime(self) -> ExecutionCollaborators:
+        """Drop adapter session handles while preserving process collaborators."""
+
+        if (
+            self.session_manager is None
+            and self.runtime_manifest is None
+            and self.actual_endpoint is None
+            and not self.server_started_at
+        ):
+            return self
+        return replace(
+            self,
+            session_manager=None,
+            runtime_manifest=None,
+            actual_endpoint=None,
+            server_started_at="",
+        )
+
 
 __all__ = ["ExecutionCollaborators"]

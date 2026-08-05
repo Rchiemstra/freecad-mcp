@@ -647,8 +647,8 @@ class TestRpcLockEnforcement:
         assert result["success"] is False
         assert result["error_code"] == "LOCAL_RECOVERY_REQUIRED"
 
-    def test_freecad_first_import_publishes_package_alias(self):
-        """The import order used by FreeCAD must also converge on one module."""
+    def test_freecad_first_import_shares_package_state(self):
+        """The import order used by FreeCAD must converge on shared state."""
         repository = Path(__file__).resolve().parents[1]
         addon_dir = repository / "addon" / "FreeCADMCP"
         script = (
@@ -656,9 +656,11 @@ class TestRpcLockEnforcement:
             f"sys.path.insert(0, {str(addon_dir)!r}); "
             "freecad_mod = importlib.import_module('document_lock'); "
             "package_mod = importlib.import_module('addon.FreeCADMCP.document_lock'); "
-            "assert freecad_mod is package_mod; "
-            "assert sys.modules['document_lock'] is "
-            "sys.modules['addon.FreeCADMCP.document_lock']"
+            "assert freecad_mod.set_request_identity is "
+            "package_mod.set_request_identity; "
+            "package_mod.set_request_identity(request_id='shared-import'); "
+            "assert freecad_mod.get_request_identity()['request_id'] == "
+            "'shared-import'"
         )
         subprocess.run(
             [sys.executable, "-c", script],
@@ -682,8 +684,7 @@ class TestRpcLockEnforcement:
         package_module = importlib.import_module("addon.FreeCADMCP.document_lock")
         freecad_module = importlib.import_module("document_lock")
 
-        assert package_module is freecad_module
-        assert sys.modules["addon.FreeCADMCP.document_lock"] is freecad_module
+        assert package_module.set_request_identity is freecad_module.set_request_identity
 
         _enable(tmp_path, monkeypatch)
         assert freecad_module.is_enforcement_enabled() is True

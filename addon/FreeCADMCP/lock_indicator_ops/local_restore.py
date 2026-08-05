@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import sys
 import threading
 import uuid
 from collections.abc import Callable, Mapping
@@ -11,29 +10,22 @@ from .constants import _LOCAL_SAVE_GUI_TIMEOUT
 from .facade_bindings import facade_callable
 from .lease_view import _lease_view
 from .local_restore_gui import _run_restore_gui_phase
+from .runtime_bindings import current_runtime_bindings
 
 
 def _runtime_restore_components() -> tuple[Any, Any, Any, Any]:
-    """Resolve the bounded in-place restore implementation from the live addon."""
+    """Return the explicitly composed in-place restore implementation."""
 
-    for module_name in (
-        "rpc_server.rpc_server",
-        "addon.FreeCADMCP.rpc_server.rpc_server",
-    ):
-        module = sys.modules.get(module_name)
-        if module is None:
-            continue
-        dispatcher = getattr(module, "gui_dispatcher", None)
-        path_resolver = getattr(module, "recovery_snapshot_path", None)
-        restore = getattr(module, "restore_snapshot_in_place_gui", None)
-        validator = getattr(module, "validate_document_invariants", None)
-        if (
-            callable(getattr(dispatcher, "submit", None))
-            and callable(path_resolver)
-            and callable(restore)
-            and callable(validator)
-        ):
-            return dispatcher, path_resolver, restore, validator
+    bindings = current_runtime_bindings()
+    if bindings is not None:
+        dispatcher = bindings.current_gui_dispatcher()
+        if callable(getattr(dispatcher, "submit", None)):
+            return (
+                dispatcher,
+                bindings.recovery_snapshot_path,
+                bindings.restore_snapshot_in_place_gui,
+                bindings.validate_document_invariants,
+            )
     raise RuntimeError(
         "baseline restore is unavailable because the lease snapshot service "
         "and GUI dispatcher are not running"

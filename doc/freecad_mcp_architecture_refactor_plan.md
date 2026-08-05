@@ -993,14 +993,14 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | MCP authoring branch | `feature/dirty-document-adoption`; Phase 1 execution base `5357d0c16a64b4981a5f508bc83dd07ddf4f1ca6` |
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
-| Execution parent revision | `6cbd05adfce1240339fe74b850c2ec96bbdf27ab` |
+| Execution parent revision | `2d2eeba5b04fd5543c5eafd7d55efc9a220a2016` |
 | Execution MCP base revision | `83fbe01e41690399acf1544e4e637e75fe06d988` |
-| Current stage / phase | Stage 4 in progress; Phase 16 is the last complete phase |
-| Next phase | 17 — `refactor(mcp): bootstrap startup and shutdown through the runtime` |
-| In-flight ownership | None; Phase 16 implementation workstreams and final delta reviewers are complete |
-| Last review | Phase 16 final integrated and circular-import delta reviews CLEAR on 2026-08-05 after every finding was fixed and re-reviewed |
+| Current stage / phase | Stage 4 complete; Phase 17 is the last complete phase |
+| Next phase | 18 — `refactor(collaboration): cut over native MCP authority` |
+| In-flight ownership | None; Phase 17 implementation, native-regression workstreams, and final reviewers are complete |
+| Last review | Phase 17 final delta and integrated reviews CLEAR on 2026-08-05 after every finding and both native E2E regressions were fixed and re-reviewed |
 | Blocker | None |
-| Resume hint | Start Phase 17 sequentially under integrator ownership; make the runtime factory the sole startup path, publish only after success, and prove idempotent reverse-order shutdown and `InitGui.py` routing |
+| Resume hint | Start the cross-repository Phase 18 cutover under integrator ownership; read the parent collaboration plan, remove every named temporary Python/native authority surface, update both manifests/plans, and follow §5.4's two-object integration protocol |
 
 ### 11.2 Stage status
 
@@ -1010,8 +1010,8 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 1 | 4–5 | phase 5 | complete |
 | 2 | 6–7 | none | complete |
 | 3 | 8–11 | none | complete |
-| 4 | 12–17 | phase 12 | in progress (Phase 16 complete) |
-| 5 | 18 | phase 18 | pending |
+| 4 | 12–17 | phase 12 | complete |
+| 5 | 18 | phase 18 | pending (next) |
 | 6 | 19 | phase 19 | pending |
 | 7 | 20–22 | phase 22 | pending |
 | 8 | 23 | phase 23 | pending |
@@ -1019,6 +1019,49 @@ job commands in §11 before phase 1. Do not substitute a host build.
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-05 — Phase 17 complete: startup and shutdown bootstrapped through the runtime
+
+- **Single runtime lifecycle:** `AddonRuntime` is the sole owner of the listener,
+  dispatcher, worker manager, authentication/session material, replay/inflight/
+  continuation/acquisition stores, collaboration bridge, shutdown event, listener
+  thread, and publication metadata. `start_rpc_server()` constructs one restart-scoped
+  graph, starts it through the factory only, and publishes it only after authentication,
+  worker launch, listener launch, deferred bindings, and metadata binding succeed.
+  Failed construction and launch retain failed resources fail-closed when cleanup is
+  incomplete; a later start cannot overlap an active or failed shutdown claim.
+- **Deterministic stop and restart:** concurrent and repeated stops share one claim,
+  signal shutdown, fence inflight requests, stop listener admission, quiesce active and
+  queued workers before listener handler disposal, join the listener, dispose owned
+  resources in reverse order, drop adapter authentication/session references, and
+  unpublish only after complete success. Thread construction/start failures fall back
+  synchronously. Worker quiescence remains a private pre-disposal hook; the sole worker
+  disposer is still `stop()`. Native document collaboration state survives MCP restart.
+- **Bootstrap and dependency routing:** `InitGui.py` routes manual start/stop,
+  auto-start, lease initialization/observer setup, and `aboutToQuit` through the root.
+  Client tool registration receives typed `ServerSurfaceBindings`; GUI lock-indicator,
+  settings, snapshot, lease, lifecycle, CAD, and assembly/bootstrap leaves use explicit
+  callbacks or injected providers. The live snapshot compatibility path falls back to
+  unleased restore when a direct legacy façade has no lifecycle collaborator bundle.
+- **Compatibility and architecture:** all 64 frozen flat/package module identities and
+  shared state holders remain exact. The only dynamic lookups are four exact
+  `_publish_aliases` compatibility records; historic moved-symbol paths remain shims or
+  root-bound compatibility entry points under §3.6. `_rpc_mod` definitions, references,
+  and calls are zero. The 21 classified local imports are six bootstrap root bindings,
+  five static compatibility bindings, two static authority bindings, and eight named
+  Phase 18 temporary-authority locators; runtime-singleton locators are zero. Frozen
+  authority totals remain 115/15/30/167/861/251. The exact allowance ledger is 473:
+  ARCH101 87, ARCH103 1, ARCH104 301, ARCH105 15, ARCH106 31, and ARCH107 38.
+- **Agents, review, and gates:** independent alias/contract, final-delta, integrated,
+  snapshot-native, and RPC-lifecycle-native workstreams found and closed exact alias
+  identity, scanner fail-open cases, shutdown thread failures, a live client closure
+  seam, snapshot compatibility fallback, and worker/listener disposal ordering. Final
+  delta and integrated reviews are literal CLEAR with no Blocking, Important, or
+  nonblocking finding. Exact Docker evidence is recorded in §11.4.
+- **Stage result and next:** Stage 4 is complete. Begin Phase 18 automatically as one
+  cross-repository collaboration-authority cutover; do not start typed registration
+  before its integration gate passes and the parent canonical commit advances the
+  nested gitlink.
 
 #### 2026-08-05 — Phase 16 complete: GUI and view collaborators injected
 
@@ -1911,6 +1954,39 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 17 — `refactor(mcp): bootstrap startup and shutdown through the runtime`
+
+- **Images and source identity:** final Compose unit image is
+  `sha256:a1ef8227c429922c63b1d7e62143d92560853743a2008fbc1bf2d818131fcde6`;
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  Native preflight reports FreeCAD 26.3.0 revision 48070 at parent
+  `863535a2d4b6c33b5bfce8171762320060a34afb`; the Compose image reports
+  FreeCAD 1.1.0 revision 20260325 at
+  `34a9716668b1ddeb55b914f1c5be644826bdbbbf`.
+- **MCP lint and focused contracts:** baked `python ci/lint_python.py
+  addon/FreeCADMCP src/freecad_mcp` checked 996 production files and passed
+  architecture policy plus full Ruff. The final combined runtime, worker, client,
+  registration, and RPC-sync regression selection passed 63/63. The exact frozen
+  inventories report zero `_rpc_mod`, four compatibility-alias dynamic lookups, 21
+  classified local imports with zero runtime-singleton locator, authority totals
+  115/15/30/167/861/251, and 473 exact architecture allowances.
+- **Compose phase gate:** `docker compose run --rm unit` collected 2,597, selected
+  2,467, and passed 2,463; the three documented Windows-DACL cases skipped, the
+  existing screenshot case xfailed, and 130 marker-incompatible cases were deselected.
+- **Cross-track jobs:** the unmodified preflight wrapper emitted `PREFLIGHT_OK`.
+  With `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, strict core selected 13 and
+  passed eight with the five documented FreeCAD xfails; strict e2e passed 117/117.
+  Both verdicts were zero. The initial full native E2E gate exposed snapshot fallback
+  and listener/worker shutdown-order regressions; focused Docker reproductions passed
+  after their fixes, and the complete corrected-source gate above includes both nodes.
+  The two XML and two verdict artifacts were verified and removed by resolved literal
+  paths inside the nested workspace.
+- **Review result:** independent workstream and adversarial delta reviews, followed by
+  final integrated re-review on the corrected source and complete gate evidence, report
+  literal CLEAR with no Blocking, Important, or nonblocking finding. `git diff --check`
+  is clean apart from expected Windows line-ending warnings.
 
 #### Phase 16 — `refactor(mcp): inject GUI and view collaborators`
 

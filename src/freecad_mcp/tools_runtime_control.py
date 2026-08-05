@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -13,7 +14,6 @@ from .operations import (
 )
 from .outcomes import OutcomeStatus
 from .responses import json_response, tool_fail
-from .tools_server_surfaces import server_connection, server_state
 
 if TYPE_CHECKING:
     from .freecad_client import FreeCADConnection
@@ -36,10 +36,8 @@ def _register_check_rpc_sync(
         after an execute timeout or before relying on model inspection results. A
         timeout or nonce mismatch means the queue is not safe for further work.
         """
-        from freecad_mcp import server
-
-        nonce = server.uuid.uuid4().hex
-        result = server_connection().check_rpc_sync(nonce)
+        nonce = uuid.uuid4().hex
+        result = get_freecad_connection().check_rpc_sync(nonce)
         if result.get("success") and result.get("nonce") == nonce:
             return json_response({"ok": True, "synchronized": True, "nonce": nonce})
         if result.get("success") and result.get("nonce") != nonce:
@@ -86,7 +84,7 @@ def _register_get_request_status(
         """Query a timed-out or long-running authenticated request without replaying it."""
 
         try:
-            result = server_connection().get_request_status(request_id)
+            result = get_freecad_connection().get_request_status(request_id)
         except Exception as exc:
             return tool_fail(
                 f"Failed to query request status: {exc}",
@@ -124,11 +122,11 @@ def _register_claim_acquisition_result(
         """
 
         return claim_acquisition_result_operation(
-            server_connection(),
+            get_freecad_connection(),
             request_id=request_id,
-            lease_manager=server_state().lease_manager,
-            document_sessions=server_state().document_sessions,
-            store_token=server_state().lease_tokens,
+            lease_manager=state.lease_manager,
+            document_sessions=state.document_sessions,
+            store_token=state.lease_tokens,
         )
 
     exports['claim_acquisition_result'] = claim_acquisition_result
@@ -145,7 +143,7 @@ def _register_cancel_request(
         """Request cooperative cancellation for an authenticated RPC request."""
 
         try:
-            result = server_connection().cancel_request(request_id)
+            result = get_freecad_connection().cancel_request(request_id)
         except Exception as exc:
             return tool_fail(
                 f"Failed to cancel request: {exc}",

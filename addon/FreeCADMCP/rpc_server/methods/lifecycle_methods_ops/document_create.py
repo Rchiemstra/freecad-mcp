@@ -3,18 +3,17 @@ from __future__ import annotations
 import FreeCAD
 
 from ...mutation_guard import RollbackCoverage
-from ._common import _rpc_mod
 from .document_create_lease import create_and_lease
 
 
 def create_document(self, name="New_Document"):
-    dl = _rpc_mod()._import_document_lock()
+    lifecycle = self._lifecycle_collaborators
+    dl = lifecycle.import_document_lock()
     identity = dl.get_request_identity()
     inflight = self._current_inflight()
     self._request_checkpoint("create_document_start")
-    rpc_mod = _rpc_mod()
 
-    if rpc_mod.document_lease_service is not None and identity.get(
+    if lifecycle.document_lease_service is not None and identity.get(
         "authenticated_session_id"
     ):
         response = self._dispatch_gui(

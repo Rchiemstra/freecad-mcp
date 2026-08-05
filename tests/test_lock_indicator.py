@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sys
+import socket
 import threading
 from types import SimpleNamespace
 
@@ -10,6 +10,113 @@ import pytest
 
 from addon.FreeCADMCP import lock_indicator
 from addon.FreeCADMCP.document_lease.model import FileBaseline
+from addon.FreeCADMCP.lock_indicator_ops import runtime_bindings
+
+
+def _bind_lock_indicator_runtime(
+    monkeypatch,
+    *,
+    freecad,
+    lease_service=None,
+    dispatcher=None,
+    save_service=None,
+    inspector=lambda _path: None,
+    recovery_snapshot_path=lambda _snapshot_id: None,
+    restore_snapshot=lambda **_kwargs: {},
+    validate_document=lambda _document: {},
+    saved_expectations=lambda _document: {},
+    validate_saved=lambda *_args: {},
+    discard_snapshot=lambda _terminal: None,
+    process_alive=lambda _pid: False,
+    mark_user_intervened=lambda _path: None,
+    set_gui_update_callback=lambda _callback: None,
+):
+    bindings = runtime_bindings.LockIndicatorRuntimeBindings(
+        freecad=freecad,
+        current_lease_service=lambda: lease_service,
+        current_gui_dispatcher=lambda: dispatcher,
+        current_save_service=lambda: save_service,
+        list_compatibility_leases=list,
+        inspect_compatibility_lease=inspector,
+        compatibility_process_alive=process_alive,
+        mark_compatibility_lease_user_intervened=mark_user_intervened,
+        set_compatibility_gui_update_callback=set_gui_update_callback,
+        recovery_snapshot_path=recovery_snapshot_path,
+        restore_snapshot_in_place_gui=restore_snapshot,
+        validate_document_invariants=validate_document,
+        saved_document_expectations=saved_expectations,
+        validate_saved_document_worker=validate_saved,
+        discard_terminal_snapshot=discard_snapshot,
+    )
+    monkeypatch.setattr(runtime_bindings, "_runtime_bindings", bindings)
+    return bindings
+
+
+def test_runtime_components_are_explicit_typed_bindings(monkeypatch):
+    lease_service = object()
+    save_service = object()
+    dispatcher = SimpleNamespace(submit=lambda task, **_kwargs: task())
+
+    def snapshot_path(snapshot_id):
+        return snapshot_id
+
+    def restore_snapshot(**_kwargs):
+        return {}
+
+    def validate_document(_document):
+        return {}
+
+    def saved_expectations(_document):
+        return {}
+
+    def validate_saved(*_args):
+        return {}
+
+    def discard_snapshot(_terminal):
+        return None
+
+    _bind_lock_indicator_runtime(
+        monkeypatch,
+        freecad=SimpleNamespace(),
+        lease_service=lease_service,
+        dispatcher=dispatcher,
+        save_service=save_service,
+        recovery_snapshot_path=snapshot_path,
+        restore_snapshot=restore_snapshot,
+        validate_document=validate_document,
+        saved_expectations=saved_expectations,
+        validate_saved=validate_saved,
+        discard_snapshot=discard_snapshot,
+    )
+
+    assert lock_indicator._v2_lease_service() is lease_service
+    assert lock_indicator._runtime_restore_components() == (
+        dispatcher,
+        snapshot_path,
+        restore_snapshot,
+        validate_document,
+    )
+    assert lock_indicator._runtime_save_components() == (
+        save_service,
+        saved_expectations,
+        validate_saved,
+        discard_snapshot,
+        dispatcher,
+    )
+
+
+def test_compatibility_process_liveness_uses_explicit_runtime_binding(monkeypatch):
+    observed = []
+    _bind_lock_indicator_runtime(
+        monkeypatch,
+        freecad=SimpleNamespace(),
+        process_alive=lambda pid: observed.append(pid) or True,
+    )
+
+    assert lock_indicator._credential_owning_mcp_process_alive(
+        {"pid": 42, "mcp_hostname": socket.gethostname()}
+    )
+    assert observed == [42]
 
 
 def _v2_record(
@@ -194,13 +301,13 @@ def test_malformed_foreign_sidecar_becomes_red_shadow(tmp_path, monkeypatch):
             raise ValueError("invalid sidecar")
 
     service = SimpleNamespace(
-        list_records=lambda: [],
+        list_records=list,
         identity_service=SimpleNamespace(resolve=lambda _selector: Identity()),
         sidecar_store=Store(),
     )
     document = SimpleNamespace(Name="Foreign", Modified=False)
     freecad = SimpleNamespace(listDocuments=lambda: {"Foreign": document})
-    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
+    _bind_lock_indicator_runtime(monkeypatch, freecad=freecad)
 
     shadows = lock_indicator._foreign_shadow_leases(service)
 
@@ -229,19 +336,19 @@ def test_matching_live_compatibility_sidecar_does_not_add_red_shadow(
             raise AssertionError("strict v2 parser must not read a proven local v1 sidecar")
 
     service = SimpleNamespace(
-        list_records=lambda: [],
+        list_records=list,
         identity_service=SimpleNamespace(resolve=lambda _selector: Identity()),
         sidecar_store=Store(),
     )
     document = SimpleNamespace(Name="Local", Modified=True)
     freecad = SimpleNamespace(listDocuments=lambda: {"Local": document})
-    compatibility_module = SimpleNamespace(
-        inspect_persisted_compatibility_lease=lambda path: (
-            {"lease_id": "legacy-local"} if path == str(model) else None
-        )
+    def inspect_compatibility_lease(path):
+        return {"lease_id": "legacy-local"} if path == str(model) else None
+    _bind_lock_indicator_runtime(
+        monkeypatch,
+        freecad=freecad,
+        inspector=inspect_compatibility_lease,
     )
-    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
-    monkeypatch.setitem(sys.modules, "document_lock", compatibility_module)
 
     assert lock_indicator._foreign_shadow_leases(service) == []
 

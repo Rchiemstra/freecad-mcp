@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .facade_bindings import facade_callable
+from .runtime_bindings import current_runtime_bindings as _current_runtime_bindings
 from .secret_redaction import _redact_secrets
 
 
@@ -134,11 +135,10 @@ def _credential_owning_mcp_process_alive(view: Mapping[str, Any]) -> bool:
     owner_host = str(view.get("mcp_hostname") or "").casefold()
     if not owner_host or owner_host != local_host:
         return False
-    try:
-        from document_lock import pid_alive
-    except ImportError:
-        from addon.FreeCADMCP.document_lock import pid_alive
-    return pid_alive(pid_value)
+    bindings = _current_runtime_bindings()
+    if bindings is None:
+        raise RuntimeError("lock indicator runtime bindings are not initialized")
+    return bool(bindings.compatibility_process_alive(pid_value))
 
 
 def _is_eligible_exact_owner_stale_timeout(view: Mapping[str, Any]) -> bool:

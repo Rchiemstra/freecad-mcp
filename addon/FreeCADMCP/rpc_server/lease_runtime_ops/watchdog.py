@@ -19,7 +19,7 @@ def lease_watchdog_loop(
 
     stop_event = stop_event or rpc_mod.lease_watchdog_stop
     while not stop_event.wait(float(interval_seconds)):
-        service = rpc_mod.document_lease_service
+        service = rpc_mod._current_document_lease_service()
         if service is None:
             continue
         try:

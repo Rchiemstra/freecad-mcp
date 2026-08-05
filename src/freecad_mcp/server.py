@@ -34,7 +34,7 @@ from .build_info import (  # noqa: F401 - §3.3 test / runtime shims
     package_version,
     protocol_version,
 )
-from .freecad_client import FreeCADConnection  # noqa: F401 - §3.3 test shims
+from .freecad_client import FreeCADConnection
 from .instrumented_server import InstrumentedFastMCP
 from .lease_manager import (  # noqa: F401 - §3.3 test shims
     STALE_RECOVERY_TRIGGER_HEARTBEAT,
@@ -43,17 +43,19 @@ from .lease_manager import (  # noqa: F401 - §3.3 test shims
 )
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_ops.connection import get_freecad_connection
-from .server_ops.heartbeat import lease_heartbeat_once as _lease_heartbeat_once  # noqa: F401
+from .server_ops.heartbeat import (
+    lease_heartbeat_once as _lease_heartbeat_once,  # noqa: F401
+)
 from .server_ops.lifespan import server_lifespan
 from .server_ops.main_cli import main as _main_impl
-from .server_ops.manifest_auth import (
-    authenticate_connection as _authenticate_connection,  # noqa: F401
-)
+from .server_ops.manifest_auth import authenticate_connection as _authenticate_connection
 from .server_ops.manifest_auth import (
     refresh_authenticated_connection as _refresh_authenticated_connection,  # noqa: F401
 )
 from .server_ops.paths import path_identity as _path_identity
-from .server_ops.session import session_needs_refresh as _session_needs_refresh  # noqa: F401
+from .server_ops.session import (
+    session_needs_refresh as _session_needs_refresh,  # noqa: F401
+)
 from .server_ops.stale_recovery_hooks import post_tool_stale_recovery
 from .server_ops.stale_recovery_hooks import (
     post_tool_stale_recovery as _post_tool_stale_recovery,  # noqa: F401 - §3.3 test shims
@@ -61,12 +63,18 @@ from .server_ops.stale_recovery_hooks import (
 from .server_ops.surfaces import (
     LEASE_HEARTBEAT_INTERVAL_S as _LEASE_HEARTBEAT_INTERVAL_S,  # noqa: F401
 )
+from .server_ops.surfaces import ServerSurfaceBindings, bind_server_surfaces
 from .server_ops.tool_exports import __all__ as __all__
 from .server_ops.tool_exports import bind_tool_exports
 from .server_ops.tool_registration import register_tool_modules
 from .server_state import ServerState
-from .telemetry import emit_event  # noqa: F401 - §3.3 test shims
-from .tools_register_order import REGISTER_TOOL_MODULES
+from .telemetry import emit_event
+from .tools_register_order import (
+    REGISTER_TOOL_MODULE_OBJECTS as _REGISTER_TOOL_MODULE_OBJECTS,
+)
+from .tools_register_order import (
+    REGISTER_TOOL_MODULES as REGISTER_TOOL_MODULES,
+)
 
 logging.basicConfig(
     level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -77,6 +85,21 @@ logger.setLevel(logging.INFO)
 state = ServerState()
 _connection_lock = threading.RLock()
 stale_recovery = StaleLeaseRecoveryOrchestrator()
+
+bind_server_surfaces(
+    ServerSurfaceBindings(
+        state=lambda: state,
+        stale_recovery=lambda: stale_recovery,
+        connection_lock=_connection_lock,
+        logger=logger,
+        get_freecad_connection=lambda: get_freecad_connection(),
+        authenticate_connection=(
+            lambda *args, **kwargs: _authenticate_connection(*args, **kwargs)
+        ),
+        freecad_connection_factory=lambda **kwargs: FreeCADConnection(**kwargs),
+        emit_event=lambda *args, **kwargs: emit_event(*args, **kwargs),
+    )
+)
 
 
 class DocumentSelectorInput(TypedDict, total=False):
@@ -109,9 +132,9 @@ mcp.task_request_canceller = (
 
 _TOOL_EXPORTS = register_tool_modules(
     mcp,
-    module_names=REGISTER_TOOL_MODULES,
+    modules=_REGISTER_TOOL_MODULE_OBJECTS,
     state=state,
-    get_freecad_connection=get_freecad_connection,
+    get_freecad_connection=lambda: get_freecad_connection(),
     stale_recovery=stale_recovery,
     document_selector_input=DocumentSelectorInput,
 )

@@ -2,27 +2,42 @@
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Callable, Sequence
+from types import ModuleType
 from typing import Any
 
 from ..instrumented_server import InstrumentedFastMCP
 from ..lease_manager import StaleLeaseRecoveryOrchestrator
 from ..server_state import ServerState
+from ..tools_register_order import (
+    REGISTER_TOOL_MODULE_OBJECTS,
+    REGISTER_TOOL_MODULES,
+)
 
 
 def register_tool_modules(
     mcp: InstrumentedFastMCP,
     *,
-    module_names: Sequence[str],
+    modules: Sequence[ModuleType] | None = None,
+    module_names: Sequence[str] | None = None,
     state: ServerState,
     get_freecad_connection: Callable[[], Any],
     stale_recovery: StaleLeaseRecoveryOrchestrator,
     document_selector_input: type,
 ) -> dict[str, object]:
+    if modules is not None and module_names is not None:
+        raise TypeError("pass modules or module_names, not both")
+    if modules is None:
+        requested = REGISTER_TOOL_MODULES if module_names is None else module_names
+        catalog = dict(
+            zip(REGISTER_TOOL_MODULES, REGISTER_TOOL_MODULE_OBJECTS, strict=True)
+        )
+        try:
+            modules = tuple(catalog[name] for name in requested)
+        except KeyError as exc:
+            raise ValueError(f"unknown tool module: {exc.args[0]}") from exc
     exports: dict[str, object] = {}
-    for module_name in module_names:
-        module = importlib.import_module(f"freecad_mcp.{module_name}")
+    for module in modules:
         module.DocumentSelectorInput = document_selector_input
         module_exports = module.register(
             mcp,

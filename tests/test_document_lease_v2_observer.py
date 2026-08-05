@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import types
 import uuid
 from dataclasses import replace
@@ -13,6 +12,9 @@ from addon.FreeCADMCP import document_lock
 from addon.FreeCADMCP.document_lease import observer as observer_mod
 from addon.FreeCADMCP.document_lease.observer_ops.identity_registration_failure import (
     IdentityRegistrationFailure as _IdentityRegistrationFailure,
+)
+from addon.FreeCADMCP.document_lease.observer_ops.runtime_providers import (
+    bind_legacy_attribution,
 )
 
 
@@ -83,6 +85,10 @@ class FakeService:
 
 
 def make_observer(document, *, checker=lambda _key: False):
+    bind_legacy_attribution(
+        agent_mutation_checker=document_lock.is_agent_mutating,
+        snapshot_save_checker=document_lock.is_internal_snapshot_save,
+    )
     service = FakeService(document)
     queued = []
     delivered = []
@@ -1234,10 +1240,11 @@ def test_missing_or_failing_runtime_service_is_safe(tmp_path):
     assert bad_service.slotRecomputedDocument(document) is None
 
 
-def test_default_service_lookup_uses_loaded_module_without_import(monkeypatch):
+def test_default_service_lookup_uses_explicit_bound_provider(monkeypatch):
+    from addon.FreeCADMCP.document_lease.observer_ops import runtime_providers
+
     service = object()
-    module = types.SimpleNamespace(document_lease_service=service)
-    monkeypatch.setitem(sys.modules, "rpc_server.rpc_server", module)
+    monkeypatch.setattr(runtime_providers, "_bound_service_provider", lambda: service)
 
     assert observer_mod.get_runtime_service() is service
 

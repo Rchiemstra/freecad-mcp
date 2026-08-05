@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
-from .bind_part_1 import bind_tool_exports_part_1
-from .bind_part_2 import bind_tool_exports_part_2
+from .bind_part_1 import (
+    bind_default_export_namespace as _bind_part_1_namespace,
+)
+from .bind_part_1 import (
+    bind_tool_exports_part_1,
+)
+from .bind_part_2 import (
+    bind_default_export_namespace as _bind_part_2_namespace,
+)
+from .bind_part_2 import (
+    bind_tool_exports_part_2,
+)
 from .export_names import __all__ as __all__
 
 _compatibility_for_manifest = None
@@ -181,8 +191,12 @@ update_document_lock = None
 validate_geometry = None
 validate_movement_follow = None
 
+_bind_part_1_namespace(globals())
+_bind_part_2_namespace(globals())
+
 
 def bind_tool_exports(exports: dict[str, object]) -> None:
     """Assign explicit tool exports for monkeypatch-friendly §3.3 shims."""
-    bind_tool_exports_part_1(exports)
-    bind_tool_exports_part_2(exports)
+    namespace = globals()
+    bind_tool_exports_part_1(exports, namespace)
+    bind_tool_exports_part_2(exports, namespace)

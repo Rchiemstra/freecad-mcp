@@ -2,19 +2,33 @@
 
 import contextlib
 import json
+from dataclasses import dataclass
+from typing import Any
 from xmlrpc.server import SimpleXMLRPCRequestHandler
 
 
+@dataclass(frozen=True, slots=True)
+class IdentityHandlerBindings:
+    set_request_identity: Any
+    clear_request_identity: Any
+
+
+_bindings: IdentityHandlerBindings | None = None
+
+
+def bind_identity_handler(bindings: IdentityHandlerBindings) -> None:
+    if not isinstance(bindings, IdentityHandlerBindings):
+        raise TypeError("bindings must be IdentityHandlerBindings")
+    global _bindings
+    _bindings = bindings
+
+
 def _import_document_lock():
-    """Import document_lock under FreeCAD (addon on path) or unit-test package path."""
-    try:
-        import document_lock as mod
+    """Return the narrow identity collaborator installed by the root."""
 
-        return mod
-    except ImportError:
-        from addon.FreeCADMCP import document_lock as mod
-
-        return mod
+    if _bindings is None:
+        raise RuntimeError("identity handler collaborators are not initialized")
+    return _bindings
 
 
 class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):

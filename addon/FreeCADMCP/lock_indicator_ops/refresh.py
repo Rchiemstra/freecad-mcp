@@ -11,13 +11,13 @@ from .lease_view import _lease_view
 
 
 def _refresh_set_status_style(state_name: str | None) -> None:
-    if state._status_widget is None:
+    if state._shared_state.status_widget is None:
         return
     if not state_name:
         color = "#59636e"
     else:
         _icon, color, _label = _state_presentation(state_name)
-    state._status_widget.setStyleSheet(
+    state._shared_state.status_widget.setStyleSheet(
         "QLabel#McpDocumentLockStatus {"
         f"color: {color}; font-weight: 600; padding: 1px 5px;"
         "}"
@@ -29,33 +29,35 @@ def _refresh_lock_indicator_now() -> None:
 
     leases = _active_leases()
     _update_command_deterrence(leases)
-    if state._status_widget is None:
+    if state._shared_state.status_widget is None:
         return
     preferred = _select_preferred_lease(leases)
     if preferred is None:
-        state._status_widget.setText("No agent lock")
-        state._status_widget.setToolTip("No MCP document lease is active")
+        state._shared_state.status_widget.setText("No agent lock")
+        state._shared_state.status_widget.setToolTip("No MCP document lease is active")
         _refresh_set_status_style(None)
-        state._status_widget.setVisible(True)
+        state._shared_state.status_widget.setVisible(True)
     else:
         view = _lease_view(preferred)
         text, tip = _lease_lines(preferred)
         icon, _color, _label = _state_presentation(view["state"])
         if len(leases) > 1:
             text += f" (+{len(leases) - 1} more)"
-        state._status_widget.setText(f"{icon} {text}")
-        state._status_widget.setToolTip(tip)
+        state._shared_state.status_widget.setText(f"{icon} {text}")
+        state._shared_state.status_widget.setToolTip(tip)
         _refresh_set_status_style(view["state"])
-        state._status_widget.setVisible(True)
+        state._shared_state.status_widget.setVisible(True)
 
-    if state._dock_widget is not None and hasattr(state._dock_widget, "refresh_from_leases"):
-        state._dock_widget.refresh_from_leases(leases)
+    if state._shared_state.dock_widget is not None and hasattr(
+        state._shared_state.dock_widget, "refresh_from_leases"
+    ):
+        state._shared_state.dock_widget.refresh_from_leases(leases)
 
 
 def refresh_lock_indicator() -> None:
     """Queue a refresh without touching a Qt widget in the calling thread."""
 
-    bridge = facade_attr("_refresh_bridge") or state._refresh_bridge
+    bridge = facade_attr("_refresh_bridge") or state._shared_state.refresh_bridge
     if bridge is not None:
         with contextlib.suppress(RuntimeError):
             bridge.refresh_requested.emit()

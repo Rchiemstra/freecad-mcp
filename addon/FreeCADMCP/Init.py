@@ -35,6 +35,6 @@ try:
     _ensure_freecad_mcp_package_path()
     from freecad_mcp.assembly_api_bootstrap import install as _install_assembly_api
 
-    _install_assembly_api()
+    _install_assembly_api(module_registry=sys.modules)
 except Exception as exc:
     App.Console.PrintWarning(f"[FreeCADMCP] Assembly API bootstrap failed: {exc}\n")

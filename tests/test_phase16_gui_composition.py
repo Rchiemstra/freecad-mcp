@@ -9,10 +9,10 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.rpc_server import rpc_server
+from addon.FreeCADMCP.rpc_server.gui_personal_registry import PersonalViewRegistry
 from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.gui_dependencies import (
     GuiCollaborators,
 )
-from addon.FreeCADMCP.rpc_server.gui_personal_registry import PersonalViewRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -200,7 +200,7 @@ def test_live_start_composes_gui_collaborators_before_bridge_publication() -> No
     source = inspect.getsource(
         __import__(
             "addon.FreeCADMCP.rpc_server.server_lifecycle",
-            fromlist=["_compose_transitional_runtime"],
-        )._compose_transitional_runtime
+            fromlist=["_compose_runtime"],
+        )._compose_runtime
     )
     assert "gui_collaborators=rpc_mod._build_gui_collaborators()" in source

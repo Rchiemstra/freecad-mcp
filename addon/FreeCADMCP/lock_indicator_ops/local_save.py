@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import sys
 import threading
 import uuid
 from collections.abc import Callable, Mapping
@@ -16,28 +15,22 @@ except ImportError:
 from .constants import _LOCAL_SAVE_GUI_TIMEOUT
 from .facade_bindings import facade_callable
 from .lease_view import _lease_view
+from .runtime_bindings import current_runtime_bindings
 
 
 def _runtime_save_components() -> tuple[Any, Any, Any, Any, Any]:
-    for module_name in (
-        "rpc_server.rpc_server",
-        "addon.FreeCADMCP.rpc_server.rpc_server",
-    ):
-        module = sys.modules.get(module_name)
-        if module is None:
-            continue
-        save = getattr(module, "save_service", None)
-        expectations = getattr(module, "_saved_document_expectations", None)
-        validator = getattr(module, "_validate_saved_document_worker", None)
-        discard = getattr(module, "_discard_terminal_snapshot", None)
-        dispatcher = getattr(module, "gui_dispatcher", None)
-        if (
-            save is not None
-            and callable(expectations)
-            and callable(validator)
-            and callable(getattr(dispatcher, "submit", None))
-        ):
-            return save, expectations, validator, discard, dispatcher
+    bindings = current_runtime_bindings()
+    if bindings is not None:
+        save = bindings.current_save_service()
+        dispatcher = bindings.current_gui_dispatcher()
+        if save is not None and callable(getattr(dispatcher, "submit", None)):
+            return (
+                save,
+                bindings.saved_document_expectations,
+                bindings.validate_saved_document_worker,
+                bindings.discard_terminal_snapshot,
+                dispatcher,
+            )
     raise RuntimeError(
         "verified local save is unavailable because the typed save/worker service "
         "and GUI dispatcher are not running"

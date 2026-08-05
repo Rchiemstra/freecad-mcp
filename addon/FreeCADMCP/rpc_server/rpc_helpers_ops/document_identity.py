@@ -2,8 +2,14 @@ import os
 
 import FreeCAD
 
-from ..lease_runtime import _import_document_lease, _import_document_lock
-from ._common import _rpc_mod
+try:
+    from document_lease.observer import register_live_document_recovery
+except ImportError:
+    from addon.FreeCADMCP.document_lease.observer import (
+        register_live_document_recovery,
+    )
+
+from ._common import RpcHelperDependencies
 from .diagnostics import _format_identity_registration_error
 from .selector_resolve import (
     resolve_named_document,
@@ -19,22 +25,16 @@ def _freecad_version_parts():
     value = value() if callable(value) else value
     return tuple(str(part) for part in (value or ()))
 
-def _ensure_v2_document(document):
-    if _rpc_mod().document_identity_service is None:
+def _ensure_v2_document(document, dependencies: RpcHelperDependencies):
+    if dependencies.document_identity_service is None:
         raise RuntimeError("document lease service is not initialized")
-    if _rpc_mod().document_lease_service is None:
-        return _rpc_mod().document_identity_service.register_document(document)
-    try:
-        from document_lease.observer import register_live_document_recovery
-    except ImportError:
-        from addon.FreeCADMCP.document_lease.observer import (
-            register_live_document_recovery,
-        )
+    if dependencies.document_lease_service is None:
+        return dependencies.document_identity_service.register_document(document)
     identity, imported, failure = register_live_document_recovery(
-        _rpc_mod().document_lease_service, document
+        dependencies.document_lease_service, document
     )
     if identity is None:
-        lease = _import_document_lease()
+        lease = dependencies.import_document_lease()
         details = failure.to_details() if failure is not None else {}
         raise lease.DocumentIdentityError(
             _format_identity_registration_error(failure)
@@ -44,25 +44,25 @@ def _ensure_v2_document(document):
         )
     if imported is not None:
         try:
-            from lock_indicator import refresh_lock_indicator
-
-            refresh_lock_indicator()
+            dependencies.refresh_lock_indicator()
         except Exception:
-            _rpc_mod().logger.debug(
+            dependencies.logger.debug(
                 "Could not queue foreign recovery status refresh", exc_info=True
             )
     return identity
 
 
-def _candidate_matches_selector_target(candidate, selector):
+def _candidate_matches_selector_target(
+    candidate, selector, dependencies: RpcHelperDependencies
+):
     """Return True when an open document is the selector's intended target."""
-    if _rpc_mod().document_identity_service is None:
+    if dependencies.document_identity_service is None:
         return False
-    lease = _import_document_lease()
+    lease = dependencies.import_document_lease()
     session_uuid = str(selector.get("document_session_uuid") or "")
     if session_uuid:
         try:
-            registered = _rpc_mod().document_identity_service.registered_session_uuid(
+            registered = dependencies.document_identity_service.registered_session_uuid(
                 candidate
             )
         except (lease.UnknownDocumentError, lease.DocumentIdentityError):
@@ -70,7 +70,7 @@ def _candidate_matches_selector_target(candidate, selector):
         if registered == session_uuid:
             return True
     try:
-        expected = _rpc_mod().document_identity_service.resolve(selector)
+        expected = dependencies.document_identity_service.resolve(selector)
     except (lease.UnknownDocumentError, lease.DocumentIdentityError):
         return False
     name = getattr(candidate, "Name", None) or getattr(candidate, "Label", None)
@@ -79,33 +79,37 @@ def _candidate_matches_selector_target(candidate, selector):
     path = str(getattr(candidate, "FileName", "") or "").strip()
     if path and expected.comparison_key:
         _, comparison = lease.canonicalize_path(
-            path, platform=_rpc_mod().document_identity_service.platform
+            path, platform=dependencies.document_identity_service.platform
         )
         if comparison == expected.comparison_key:
             return True
     return False
 
 
-def _live_document_from_selector(selector):
+def _live_document_from_selector(selector, dependencies: RpcHelperDependencies):
     """Resolve a selector only against currently open FreeCAD documents."""
     name, session_uuid, canonical_path = validate_selector_fields(selector)
     if name:
-        document, identity = resolve_named_document(name)
+        document, identity = resolve_named_document(name, dependencies)
     else:
-        document, identity = scan_open_documents(selector, session_uuid, canonical_path)
-    asserted = _rpc_mod().document_identity_service.resolve(selector)
+        document, identity = scan_open_documents(
+            selector, session_uuid, canonical_path, dependencies
+        )
+    asserted = dependencies.document_identity_service.resolve(selector)
     if asserted.session_uuid != identity.session_uuid:
         raise ValueError("DocumentSelector fields identify different documents")
     return document, asserted
 
 
-def _credential_from_wire(payload, identity=None):
-    lease = _import_document_lease()
+def _credential_from_wire(
+    payload, identity=None, *, dependencies: RpcHelperDependencies
+):
+    lease = dependencies.import_document_lease()
     if not isinstance(payload, dict):
         raise lease.AuthorizationError("a complete LeaseCredential is required")
     try:
         request_identity = dict(
-            identity or _import_document_lock().get_request_identity()
+            identity or dependencies.import_document_lock().get_request_identity()
         )
         authenticated_runtime_id = str(
             request_identity.get("instance_id")
@@ -125,12 +129,16 @@ def _credential_from_wire(payload, identity=None):
         ) from exc
 
 
-def _credential_for_document(document_name, identity=None):
-    identity = dict(identity or _import_document_lock().get_request_identity())
+def _credential_for_document(
+    document_name, identity=None, *, dependencies: RpcHelperDependencies
+):
+    identity = dict(
+        identity or dependencies.import_document_lock().get_request_identity()
+    )
     document = FreeCAD.getDocument(document_name)
     if document is None:
         raise ValueError(f"Document {document_name!r} is not open")
-    document_identity = _rpc_mod()._ensure_v2_document(document)
+    document_identity = _ensure_v2_document(document, dependencies)
     matches = [
         item
         for item in identity.get("lease_credentials") or []
@@ -138,16 +146,25 @@ def _credential_for_document(document_name, identity=None):
         and item.get("document_session_uuid") == document_identity.session_uuid
     ]
     if len(matches) != 1:
-        lease = _import_document_lease()
+        lease = dependencies.import_document_lease()
         raise lease.AuthorizationError(
             "request must contain exactly one credential for the selected document"
         )
-    return _rpc_mod()._credential_from_wire(matches[0], identity), document_identity
+    return (
+        _credential_from_wire(matches[0], identity, dependencies=dependencies),
+        document_identity,
+    )
 
 
-def _credential_for_selector(selector, identity=None):
-    identity = dict(identity or _import_document_lock().get_request_identity())
-    document, document_identity = _rpc_mod()._live_document_from_selector(selector)
+def _credential_for_selector(
+    selector, identity=None, *, dependencies: RpcHelperDependencies
+):
+    identity = dict(
+        identity or dependencies.import_document_lock().get_request_identity()
+    )
+    document, document_identity = _live_document_from_selector(
+        selector, dependencies
+    )
     matches = [
         item
         for item in identity.get("lease_credentials") or []
@@ -155,26 +172,32 @@ def _credential_for_selector(selector, identity=None):
         and item.get("document_session_uuid") == document_identity.session_uuid
     ]
     if len(matches) != 1:
-        lease = _import_document_lease()
+        lease = dependencies.import_document_lease()
         raise lease.AuthorizationError(
             "request must contain exactly one credential for the selected document"
         )
-    return _rpc_mod()._credential_from_wire(matches[0], identity), document_identity, document
+    return (
+        _credential_from_wire(matches[0], identity, dependencies=dependencies),
+        document_identity,
+        document,
+    )
 
 
-def _effective_sidecar_block(document, request_identity):
+def _effective_sidecar_block(
+    document, request_identity, *, dependencies: RpcHelperDependencies
+):
     """Block foreign/unknown sidecars while honoring a proven live v1 lease."""
 
     path = str(getattr(document, "FileName", "") or "")
     if not path:
         return None
-    lease = _import_document_lease()
+    lease = dependencies.import_document_lease()
     sidecar = lease.sidecar_path_for(path)
     if not os.path.lexists(sidecar):
         return None
     store = (
-        _rpc_mod().document_lease_service.sidecar_store
-        if _rpc_mod().document_lease_service is not None
+        dependencies.document_lease_service.sidecar_store
+        if dependencies.document_lease_service is not None
         else lease.SidecarStore(strict_permissions=False, allow_network=True)
     )
     try:
@@ -186,7 +209,7 @@ def _effective_sidecar_block(document, request_identity):
         # exact instance identity, bearer token, generation, and fingerprint.
         # This does not parse or migrate v1 data into the v2 authority.
         try:
-            dl = _import_document_lock()
+            dl = dependencies.import_document_lock()
             doc_key = dl.resolve_doc_key(
                 doc_name=str(getattr(document, "Name", "") or "") or None,
                 file_path=path,
@@ -212,17 +235,19 @@ def _effective_sidecar_block(document, request_identity):
             ),
         }
 
-    if _rpc_mod().document_lease_service is not None:
+    if dependencies.document_lease_service is not None:
         try:
-            identity = _rpc_mod()._ensure_v2_document(document)
-            local = _rpc_mod().document_lease_service.get(
+            identity = _ensure_v2_document(document, dependencies)
+            local = dependencies.document_lease_service.get(
                 {"document_session_uuid": identity.session_uuid}
             )
             if local is not None:
-                credential, _identity = _rpc_mod()._credential_for_document(
-                    document.Name, request_identity
+                credential, _identity = _credential_for_document(
+                    document.Name,
+                    request_identity,
+                    dependencies=dependencies,
                 )
-                _rpc_mod().document_lease_service.authorize(
+                dependencies.document_lease_service.authorize(
                     credential,
                     selector={"document_session_uuid": identity.session_uuid},
                 )

@@ -1,9 +1,13 @@
 """Remote connections toggle workbench command."""
 
 from ..settings import LEASE_MODE_ENFORCE, is_loopback_host
+from .dependencies import CommandDependencies, current_command_dependencies
 
 
 class ToggleRemoteConnectionsCommand:
+    def __init__(self, dependencies: CommandDependencies | None = None) -> None:
+        self._dependencies = dependencies or current_command_dependencies()
+
     def GetResources(self):
         return {
             "MenuText": "Remote Connections",
@@ -12,8 +16,7 @@ class ToggleRemoteConnectionsCommand:
         }
 
     def Activated(self, checked=0):
-        from .. import commands, rpc_server
-        settings = commands.load_settings()
+        settings = self._dependencies.load_settings()
         requested = bool(checked)
         if (
             requested
@@ -22,7 +25,7 @@ class ToggleRemoteConnectionsCommand:
                 "allow_authenticated_remote_without_transport_security", False
             )
         ):
-            commands.FreeCAD.Console.PrintWarning(
+            self._dependencies.freecad.Console.PrintWarning(
                 "Remote Connections was not enabled: enforce mode keeps the addon "
                 "on loopback because HMAC does not encrypt JSON-RPC. Use an SSH/TLS "
                 "tunnel, or deliberately configure the unsafe transport override.\n"
@@ -34,18 +37,20 @@ class ToggleRemoteConnectionsCommand:
             # Preserve the pre-rpc_bind_host behavior for off/observe profiles:
             # the explicit remote toggle means listen on all IPv4 interfaces.
             settings["rpc_bind_host"] = "0.0.0.0"
-        commands.save_settings(settings)
+        self._dependencies.save_settings(settings)
 
         if settings["remote_enabled"]:
             allowed_ips = settings.get("allowed_ips", "127.0.0.1")
-            commands.FreeCAD.Console.PrintMessage(
+            self._dependencies.freecad.Console.PrintMessage(
                 f"Remote connections enabled. Allowed IPs: {allowed_ips}\n"
             )
         else:
-            commands.FreeCAD.Console.PrintMessage("Remote connections disabled.\n")
+            self._dependencies.freecad.Console.PrintMessage(
+                "Remote connections disabled.\n"
+            )
 
-        if rpc_server.rpc_server_instance:
-            commands.FreeCAD.Console.PrintMessage(
+        if self._dependencies.runtime_running():
+            self._dependencies.freecad.Console.PrintMessage(
                 "Restart the RPC server for changes to take effect.\n"
             )
 

@@ -13,19 +13,35 @@ import FreeCADGui
 from PySide import QtCore, QtWidgets
 
 from .commands_types.configure_allowed_ips_command import ConfigureAllowedIPsCommand
+from .commands_types.dependencies import (
+    CommandDependencies,
+    bind_command_dependencies,
+    current_command_dependencies,
+)
 from .commands_types.start_rpc_server_command import StartRPCServerCommand
 from .commands_types.stop_rpc_server_command import StopRPCServerCommand
 from .commands_types.toggle_auto_start_command import ToggleAutoStartCommand
-from .commands_types.toggle_remote_connections_command import ToggleRemoteConnectionsCommand
+from .commands_types.toggle_remote_connections_command import (
+    ToggleRemoteConnectionsCommand,
+)
 from .settings import load_settings, save_settings  # noqa: F401 - §3.3 shims
 
 
-def register_commands() -> None:
-    FreeCADGui.addCommand("Start_RPC_Server", StartRPCServerCommand())
-    FreeCADGui.addCommand("Stop_RPC_Server", StopRPCServerCommand())
-    FreeCADGui.addCommand("Toggle_Auto_Start", ToggleAutoStartCommand())
-    FreeCADGui.addCommand("Toggle_Remote_Connections", ToggleRemoteConnectionsCommand())
-    FreeCADGui.addCommand("Configure_Allowed_IPs", ConfigureAllowedIPsCommand())
+def register_commands(dependencies: CommandDependencies | None = None) -> None:
+    if dependencies is not None:
+        bind_command_dependencies(dependencies)
+    dependencies = current_command_dependencies()
+    FreeCADGui.addCommand("Start_RPC_Server", StartRPCServerCommand(dependencies))
+    FreeCADGui.addCommand("Stop_RPC_Server", StopRPCServerCommand(dependencies))
+    FreeCADGui.addCommand("Toggle_Auto_Start", ToggleAutoStartCommand(dependencies))
+    FreeCADGui.addCommand(
+        "Toggle_Remote_Connections",
+        ToggleRemoteConnectionsCommand(dependencies),
+    )
+    FreeCADGui.addCommand(
+        "Configure_Allowed_IPs",
+        ConfigureAllowedIPsCommand(dependencies),
+    )
 
 
 # Map command objectName -> settings key. Matching on objectName rather than

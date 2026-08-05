@@ -31,6 +31,7 @@ class InstallDockContext:
     qt_core: Any
     selected_lease: Callable[[], dict[str, Any] | None]
     local_recovery_busy: Callable[[], bool]
+    mark_compatibility_lease_user_intervened: Callable[[str], Any | None]
 
 
 def _selected_v2_context(ctx: InstallDockContext) -> tuple[dict[str, Any], Any, Any]:
@@ -119,9 +120,7 @@ def on_takeover(ctx: InstallDockContext) -> None:
                 raise RuntimeError("the selected v2 document is no longer open")
             _execute_v2_takeover(ctx, lease, view, service, document)
         else:
-            from document_lock import mark_user_intervened
-
-            result = mark_user_intervened(str(target))
+            result = ctx.mark_compatibility_lease_user_intervened(str(target))
             if result is None:
                 raise RuntimeError("the selected lease is no longer active")
         refresh_lock_indicator()

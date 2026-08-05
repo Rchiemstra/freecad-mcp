@@ -12,6 +12,12 @@ from types import SimpleNamespace
 import pytest
 from PySide import QtCore
 
+from addon.FreeCADMCP.document_lease import (
+    DocumentIdentityService,
+    DocumentLeaseService,
+    LocalRuntimeIdentity,
+)
+from addon.FreeCADMCP.rpc_server import rpc_server as rpc_server_module
 from addon.FreeCADMCP.rpc_server.gui_dispatcher import GuiDispatcher, GuiTaskError
 from addon.FreeCADMCP.rpc_server.inflight_requests import (
     InflightLeaseCredential,
@@ -22,12 +28,6 @@ from addon.FreeCADMCP.rpc_server.lease_protocol import (
     RequestReplayCache,
 )
 from addon.FreeCADMCP.rpc_server.rpc_server import _redact_rpc_diagnostic
-from addon.FreeCADMCP.document_lease import (
-    DocumentIdentityService,
-    DocumentLeaseService,
-    LocalRuntimeIdentity,
-)
-from addon.FreeCADMCP.rpc_server import rpc_server as rpc_server_module
 
 
 def _uuid() -> str:
@@ -488,6 +488,20 @@ def test_shutdown_skips_wedged_begin_owner_and_retains_fail_closed_fence(
     ):
         monkeypatch.setattr(rpc_server_module, name, getattr(rpc_server_module, name))
 
+    from addon.FreeCADMCP.runtime import AddonRuntime
+
+    cancelling_rpc = rpc_server_module.FreeCADRPC()
+    runtime = AddonRuntime(
+        listener=server,
+        request_replay_cache=rpc_server_module.rpc_request_replay_cache,
+        inflight_requests=registry,
+        collaboration_bridge=cancelling_rpc,
+        shutdown_requested=stop_event,
+        owned_resources=((server, server.server_close),),
+    )
+    monkeypatch.setattr(rpc_server_module, "_addon_runtime", runtime)
+    monkeypatch.setattr(rpc_server_module, "_runtime_shutdown_claim", None)
+
     started_at = time.monotonic()
     result = rpc_server_module.stop_rpc_server()
     elapsed = time.monotonic() - started_at
@@ -653,7 +667,7 @@ def test_cancel_race_before_replay_publish_is_monotonic_and_idempotent(monkeypat
         def get(self, key, default=None):
             if key in {"success", "ok"} and not self.fired:
                 self.fired = True
-                rpc_server_module.rpc_inflight_request_registry.request_cancel(
+                rpc._execution_collaborators.inflight_request_registry.request_cancel(
                     session_id, request_id
                 )
             return super().get(key, default)
@@ -679,7 +693,7 @@ def test_cancel_race_before_replay_publish_is_monotonic_and_idempotent(monkeypat
     assert cached.response == first
     assert second == first
     assert rpc.dispatch_count == 1
-    request_status = rpc_server_module.rpc_inflight_request_registry.status(
+    request_status = rpc._execution_collaborators.inflight_request_registry.status(
         session_id, request_id
     )
     assert request_status.terminal is True

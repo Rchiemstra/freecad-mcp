@@ -9,7 +9,6 @@ import FreeCAD
 
 from ...mutation_guard import validate_document_invariants
 from ...snapshot_service import restore_snapshot_in_place_gui
-from ._common import _rpc_mod
 from .snapshot_restore_target import resolve_restore_target, validate_restore_target
 
 
@@ -27,7 +26,7 @@ def restore(self, doc_name: str, snapshot_id: str | None = None) -> dict:
     """I7 — restore a snapshot in place (closes the current doc and reopens
     the snapshot file). Latest snapshot when snapshot_id is None. Shares the
     FreeCAD._mcp_snapshots ring buffer with the execute_code restore tool."""
-    res = self._dispatch_gui(lambda: restore_gui(doc_name, snapshot_id))
+    res = self._dispatch_gui(lambda: restore_gui(self, doc_name, snapshot_id))
     if isinstance(res, dict):
         return res
     return {"ok": False, "error": res}
@@ -67,12 +66,12 @@ def snapshot_gui(doc_name: str):
         return {"ok": False, "error": str(e)}
 
 
-def restore_gui(doc_name: str, snapshot_id):
+def restore_gui(self, doc_name: str, snapshot_id):
     try:
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
             return {"ok": False, "error": f"Document '{doc_name}' not found."}
-        identity, active = _lease_restore_context(doc_name)
+        identity, active = _lease_restore_context(self, doc_name)
         lease_snapshot_id = (
             active.get("document_state", {}).get("snapshot_id")
             if active is not None
@@ -91,7 +90,9 @@ def restore_gui(doc_name: str, snapshot_id):
             return validation_error
         snaps = getattr(FreeCAD, "_mcp_snapshots", [])
         if active is not None:
-            return _restore_leased_snapshot(doc, target, identity, doc_name, snaps)
+            return _restore_leased_snapshot(
+                self, doc, target, identity, doc_name, snaps
+            )
         return _restore_unleased_snapshot(doc, target, snaps)
     except Exception as e:
         return {
@@ -101,14 +102,15 @@ def restore_gui(doc_name: str, snapshot_id):
         }
 
 
-def _lease_restore_context(doc_name):
-    if _rpc_mod().document_lease_service is None:
-        return None, None
+def _lease_restore_context(self, doc_name):
     try:
-        identity = _rpc_mod().document_identity_service.resolve(
+        collaborators = self._lifecycle_collaborators
+        if collaborators.document_lease_service is None:
+            return None, None
+        identity = collaborators.document_identity_service.resolve(
             {"document_name": doc_name}
         )
-        active = _rpc_mod().document_lease_service.get(
+        active = collaborators.document_lease_service.get(
             {"document_session_uuid": identity.session_uuid}
         )
         return identity, active
@@ -116,16 +118,17 @@ def _lease_restore_context(doc_name):
         return None, None
 
 
-def _restore_leased_snapshot(doc, target, identity, doc_name, snaps):
+def _restore_leased_snapshot(self, doc, target, identity, doc_name, snaps):
     result = restore_snapshot_in_place_gui(
         doc,
         target["path"],
         expected_document_name=doc_name,
         expected_source_path=identity.canonical_path,
-        validator=validate_document_invariants,
+        validator=self._cad_collaborators.validate_document_invariants,
     )
-    observed = _rpc_mod().document_identity_service.inspect_registered_document(
-        identity.session_uuid, doc
+    observed = (
+        self._lifecycle_collaborators.document_identity_service
+        .inspect_registered_document(identity.session_uuid, doc)
     )
     if (
         observed.session_uuid != identity.session_uuid

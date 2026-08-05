@@ -8,14 +8,12 @@ from . import surfaces
 
 def get_freecad_connection() -> FreeCADConnection:
     """Get or create a persistent FreeCAD connection."""
-    from freecad_mcp import server
-
     with surfaces.connection_lock:
         if surfaces.state.freecad_connection is not None:
-            server._authenticate_connection(surfaces.state.freecad_connection)
+            surfaces.authenticate_connection(surfaces.state.freecad_connection)
             return surfaces.state.freecad_connection
 
-        conn = server.FreeCADConnection(
+        conn = surfaces.freecad_connection_factory(
             host=surfaces.state.rpc_host,
             port=surfaces.state.rpc_port,
             expected_instance_id=surfaces.state.instance_id,
@@ -33,7 +31,7 @@ def get_freecad_connection() -> FreeCADConnection:
             if surfaces.state.instance_id:
                 conn.verify_instance()
             if surfaces.state.instance_manifest is not None:
-                server._authenticate_connection(conn, force=True)
+                surfaces.authenticate_connection(conn, force=True)
         except Exception:
             surfaces.state.lease_manager.mark_disconnected(
                 "FreeCAD connection initialization failed"

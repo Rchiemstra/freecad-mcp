@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from ._common import _rpc_mod
+from ._common import RpcHelperDependencies
 
 """Saved-document worker validation helpers."""
 
@@ -30,9 +30,15 @@ def _saved_document_expectations(document):
     return {"objects": objects, "bodies": bodies}
 
 
-def _validate_saved_document_worker(path, document_name, profile, expected):
+def _validate_saved_document_worker(
+    path,
+    document_name,
+    profile,
+    expected,
+    dependencies: RpcHelperDependencies,
+):
     """Reopen and recompute the saved file in the matching FreeCADCmd worker."""
-    manager = _rpc_mod().worker_manager
+    manager = dependencies.worker_manager
     if manager is None:
         return {"ok": False, "error": "matching FreeCADCmd worker is unavailable"}
     workspace = manager.create_workspace()

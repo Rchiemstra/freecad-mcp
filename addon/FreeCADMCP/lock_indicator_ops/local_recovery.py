@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -14,31 +13,21 @@ except ImportError:
 
 from .constants import _AGENT_OWNED_STATES
 from .lease_view import _is_eligible_exact_owner_stale_timeout, _lease_view
+from .runtime_bindings import current_runtime_bindings
 
 
 def _v2_lease_service() -> Any | None:
-    """Return the running addon's v2 service without triggering an import."""
+    """Return the service explicitly exposed by the add-on composition root."""
 
-    for module_name in (
-        "rpc_server.rpc_server",
-        "addon.FreeCADMCP.rpc_server.rpc_server",
-    ):
-        module = sys.modules.get(module_name)
-        service = getattr(module, "document_lease_service", None)
-        if service is not None:
-            return service
-    package = sys.modules.get("rpc_server")
-    module = getattr(package, "rpc_server", None) if package is not None else None
-    service = getattr(module, "document_lease_service", None)
-    if service is not None:
-        return service
-    return None
+    bindings = current_runtime_bindings()
+    return bindings.current_lease_service() if bindings is not None else None
 
 
 def _live_document_for_view(view: Mapping[str, Any], service: Any) -> Any | None:
     """Resolve the exact live document selected in the dock."""
 
-    freecad = sys.modules.get("FreeCAD")
+    bindings = current_runtime_bindings()
+    freecad = bindings.freecad if bindings is not None else None
     list_documents = getattr(freecad, "listDocuments", None)
     if not callable(list_documents):
         return None

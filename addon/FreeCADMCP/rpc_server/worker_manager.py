@@ -252,7 +252,9 @@ class WorkerManager:
             "last_error": self._last_error,
         }
 
-    def stop(self, timeout: float = 4.0) -> bool:
+    def _begin_shutdown(self, timeout: float = 2.0) -> bool:
+        """Reject queued work and cancel the active process without joining."""
+
         self._stopping = True
         with self._state_lock:
             invocations = list(self._invocations.values())
@@ -265,9 +267,12 @@ class WorkerManager:
                         "server_stopping", "Worker manager is stopping", job_id=invocation.job_id
                     )
                     invocation.completed.set()
-        stopped = True if process is None else terminate_process_tree(
+        return True if process is None else terminate_process_tree(
             process, grace=min(timeout, 2.0)
         )
+
+    def stop(self, timeout: float = 4.0) -> bool:
+        stopped = self._begin_shutdown(timeout=timeout)
         with self._start_lock:
             worker_started = self._worker_started
         if worker_started:

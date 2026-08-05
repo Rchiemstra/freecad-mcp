@@ -1,4 +1,4 @@
-"""Structural contracts for the transitional Phase 11 composition root."""
+"""Structural contracts for the sole Phase 17 runtime bootstrap path."""
 
 from __future__ import annotations
 
@@ -98,23 +98,16 @@ def _static_all(tree: ast.Module) -> list[str] | None:
     return [element.value for element in value.elts]
 
 
-def _frozen_rpc_locator(
-    tree: ast.Module,
-    *,
-    line: int,
-) -> ast.ImportFrom:
-    matches = [
+def _bootstrap_rpc_locators(tree: ast.Module) -> list[ast.ImportFrom]:
+    return [
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom)
-        and node.lineno == line
         and node.level == 1
         and node.module is None
         and [(alias.name, alias.asname) for alias in node.names]
         == [("rpc_server", "rpc_mod")]
     ]
-    assert len(matches) == 1
-    return matches[0]
 
 
 def test_private_builder_is_a_top_level_non_exported_runtime_seam() -> None:
@@ -131,10 +124,14 @@ def test_private_builder_is_a_top_level_non_exported_runtime_seam() -> None:
     assert _static_all(tree) == ["AddonRuntime"]
 
 
-def test_startup_passes_only_the_private_builder_through_its_transitional_hook() -> None:
+def test_startup_passes_the_private_builder_to_the_locked_root_only() -> None:
     tree = _parse(LIFECYCLE_PATH)
     parents = _parents(tree)
-    locator = _frozen_rpc_locator(tree, line=108)
+    start = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "start_rpc_server"
+    )
     imports = [
         node
         for node in ast.walk(tree)
@@ -155,7 +152,7 @@ def test_startup_passes_only_the_private_builder_through_its_transitional_hook()
         assert [(alias.name, alias.asname) for alias in node.names] == [
             (BUILDER_NAME, None)
         ]
-        assert node.lineno > locator.lineno
+        assert node.lineno > start.lineno
         assert _enclosing_function(node, parents) == "start_rpc_server"
     assert len(builder_references) == 1
     reference = builder_references[0]
@@ -164,8 +161,7 @@ def test_startup_passes_only_the_private_builder_through_its_transitional_hook()
     hook_call = parents[reference]
     assert isinstance(hook_call, ast.Call)
     assert isinstance(hook_call.func, ast.Name)
-    assert hook_call.func.id.startswith("_")
-    assert hook_call.func.id.endswith("transitional_runtime")
+    assert hook_call.func.id == "_start_rpc_server_locked"
     assert hook_call.args and hook_call.args[0] is reference
 
     hook_builders = [
@@ -187,14 +183,28 @@ def test_startup_passes_only_the_private_builder_through_its_transitional_hook()
     assert len(builder_calls) == 1
 
 
-def test_frozen_start_and_stop_locators_remain_the_only_bootstrap_locators() -> None:
+def test_start_and_stop_receive_the_root_without_bootstrap_locators() -> None:
     start_tree = _parse(LIFECYCLE_PATH)
     stop_tree = _parse(SHUTDOWN_PATH)
-    start_locator = _frozen_rpc_locator(start_tree, line=108)
-    stop_locator = _frozen_rpc_locator(stop_tree, line=70)
-
-    assert _enclosing_function(start_locator, _parents(start_tree)) == "start_rpc_server"
-    assert _enclosing_function(stop_locator, _parents(stop_tree)) == "stop_rpc_server"
+    assert _bootstrap_rpc_locators(start_tree) == []
+    assert _bootstrap_rpc_locators(stop_tree) == []
+    start = next(
+        node
+        for node in start_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "start_rpc_server"
+    )
+    stop = next(
+        node
+        for node in stop_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "stop_rpc_server"
+    )
+    assert [argument.arg for argument in start.args.args] == ["port"]
+    assert [argument.arg for argument in start.args.kwonlyargs] == ["dependencies"]
+    assert stop.args.args == []
+    assert [argument.arg for argument in stop.args.kwonlyargs] == [
+        "dependencies",
+        "wait_for_completion",
+    ]
 
 
 def test_gateway_layers_and_compatibility_surfaces_do_not_import_runtime() -> None:
@@ -253,7 +263,7 @@ def test_server_lifecycle_uses_no_barrel_or_dynamic_runtime_lookup() -> None:
     assert forbidden_module_lookups == []
 
 
-def test_phase11_keeps_the_exact_frozen_runtime_locator_inventories() -> None:
+def test_phase17_matches_the_zero_runtime_locator_inventories() -> None:
     manifest = load_manifest()
     locator = manifest["locator_census"]
     actual = rpc_mod_census()
@@ -271,11 +281,20 @@ def test_phase11_keeps_the_exact_frozen_runtime_locator_inventories() -> None:
     assert sum(item["runtime_calls"] for item in actual.values()) == locator[
         "current_runtime_calls"
     ]
-    assert dynamic_module_lookup_census() == manifest["dynamic_module_lookups"]
-    assert local_import_locator_census() == manifest["local_import_locators"]
+    dynamic_lookups = dynamic_module_lookup_census()
+    assert dynamic_lookups == manifest["dynamic_module_lookups"]
+    assert not any(
+        item["classification"] == "runtime_locator" for item in dynamic_lookups
+    )
+    local_imports = local_import_locator_census()
+    assert local_imports == manifest["local_import_locators"]
+    assert not any(
+        item["classification"] == "runtime_singleton_locator"
+        for item in local_imports
+    )
 
 
-def test_phase11_keeps_all_six_authority_inventories_byte_exact() -> None:
+def test_phase17_keeps_all_six_authority_inventories_byte_exact() -> None:
     manifest = load_manifest()
     expected = manifest["authority_symbol_census"]
     actual = authority_symbol_census()

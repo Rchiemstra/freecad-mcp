@@ -26,6 +26,11 @@ class AddonRuntime:
     acquisition_claims: object | None
     collaboration_bridge: object | None
     shutdown_requested: _threading.Event
+    listener_thread: object | None
+    runtime_manifest: object | None
+    actual_endpoint: dict[str, object] | None
+    runtime_id: str
+    server_started_at: str
     _owned_resources: tuple[tuple[object, _Callable[[], None]], ...] = _field(
         repr=False,
         compare=False,
@@ -99,12 +104,39 @@ class AddonRuntime:
         object.__setattr__(self, "acquisition_claims", acquisition_claims)
         object.__setattr__(self, "collaboration_bridge", collaboration_bridge)
         object.__setattr__(self, "shutdown_requested", stop_event)
+        object.__setattr__(self, "listener_thread", None)
+        object.__setattr__(self, "runtime_manifest", None)
+        object.__setattr__(self, "actual_endpoint", None)
+        object.__setattr__(self, "runtime_id", "")
+        object.__setattr__(self, "server_started_at", "")
         object.__setattr__(self, "_owned_resources", owned)
         object.__setattr__(self, "_dispose_lock", _threading.Lock())
         object.__setattr__(self, "_dispose_complete", _threading.Event())
         object.__setattr__(self, "_dispose_failures", ())
         object.__setattr__(self, "_dispose_owner", None)
         object.__setattr__(self, "_disposed", False)
+
+    def bind_publication(
+        self,
+        *,
+        listener_thread: object,
+        runtime_manifest: object | None,
+        actual_endpoint: dict[str, object],
+        runtime_id: str,
+        server_started_at: str,
+    ) -> None:
+        """Attach immutable launch metadata exactly once before publication."""
+
+        with self._dispose_lock:
+            if self._disposed:
+                raise RuntimeError("a disposed runtime cannot be published")
+            if self.listener_thread is not None:
+                raise RuntimeError("runtime launch metadata is already bound")
+            object.__setattr__(self, "listener_thread", listener_thread)
+            object.__setattr__(self, "runtime_manifest", runtime_manifest)
+            object.__setattr__(self, "actual_endpoint", actual_endpoint)
+            object.__setattr__(self, "runtime_id", str(runtime_id))
+            object.__setattr__(self, "server_started_at", str(server_started_at))
 
     @property
     def disposed(self) -> bool:
@@ -113,44 +145,90 @@ class AddonRuntime:
         with self._dispose_lock:
             return self._disposed
 
-    def dispose(self) -> None:
-        """Signal shutdown and release explicitly owned resources exactly once."""
+    def _claim_disposal(self) -> bool | None:
+        """Return True to dispose, False to wait, or None for recursive disposal."""
 
         with self._dispose_lock:
-            if self._disposed:
-                if (
-                    self._dispose_owner == _threading.get_ident()
-                    and not self._dispose_complete.is_set()
-                ):
-                    return
-                owns_disposal = False
-            else:
+            if not self._disposed:
                 object.__setattr__(self, "_disposed", True)
                 object.__setattr__(self, "_dispose_owner", _threading.get_ident())
-                owns_disposal = True
+                return True
+            if (
+                self._dispose_owner == _threading.get_ident()
+                and not self._dispose_complete.is_set()
+            ):
+                return None
+            return False
 
-        if not owns_disposal:
-            self._dispose_complete.wait()
-            with self._dispose_lock:
-                failures = self._dispose_failures
-            if failures:
-                raise BaseExceptionGroup("AddonRuntime disposal failed", failures)
-            return
+    def _wait_for_disposal(self) -> None:
+        self._dispose_complete.wait()
+        with self._dispose_lock:
+            failures = self._dispose_failures
+        if failures:
+            raise BaseExceptionGroup("AddonRuntime disposal failed", failures)
 
+    def _dispose_owned(self) -> tuple[
+        list[BaseException],
+        list[tuple[object, _Callable[[], None]]],
+    ]:
         failures: list[BaseException] = []
         try:
             self.shutdown_requested.set()
         except BaseException as exc:
             failures.append(exc)
-        for _resource, disposer in reversed(self._owned_resources):
+        failed_resources: list[tuple[object, _Callable[[], None]]] = []
+        for resource, disposer in reversed(self._owned_resources):
             try:
                 disposer()
             except BaseException as exc:
                 failures.append(exc)
+                failed_resources.append((resource, disposer))
+        return failures, failed_resources
+
+    def _complete_disposal(
+        self,
+        failures: list[BaseException],
+        failed_resources: list[tuple[object, _Callable[[], None]]],
+    ) -> None:
+        failed_resource_ids = {id(resource) for resource, _ in failed_resources}
         with self._dispose_lock:
             object.__setattr__(self, "_dispose_failures", tuple(failures))
+            for name in (
+                "listener",
+                "dispatcher",
+                "worker_manager",
+                "collaboration_bridge",
+            ):
+                component = getattr(self, name)
+                if component is None or id(component) not in failed_resource_ids:
+                    object.__setattr__(self, name, None)
+            for name in (
+                "session_manager",
+                "inflight_requests",
+                "handoff_continuations",
+                "acquisition_claims",
+                "listener_thread",
+                "runtime_manifest",
+                "actual_endpoint",
+            ):
+                object.__setattr__(self, name, None)
+            object.__setattr__(self, "runtime_id", "")
+            object.__setattr__(self, "server_started_at", "")
+            object.__setattr__(self, "_owned_resources", tuple(failed_resources))
             object.__setattr__(self, "_dispose_owner", None)
             self._dispose_complete.set()
+
+    def dispose(self) -> None:
+        """Signal shutdown and release explicitly owned resources exactly once."""
+
+        owns_disposal = self._claim_disposal()
+        if owns_disposal is None:
+            return
+        if not owns_disposal:
+            self._wait_for_disposal()
+            return
+        failures, failed_resources = self._dispose_owned()
+        self._complete_disposal(failures, failed_resources)
         if failures:
             raise BaseExceptionGroup("AddonRuntime disposal failed", failures)
 
@@ -177,6 +255,12 @@ def _dispose_worker_manager(component: object) -> None:
             raise RuntimeError("worker manager did not stop within the disposal timeout")
 
 
+def _dispose_capability_bridge(component: object) -> None:
+    method = getattr(component, "_dispose_runtime_bindings", None)
+    if callable(method):
+        method()
+
+
 def _dispose_listener(component: object) -> None:
     method = getattr(component, "server_close", None)
     if callable(method):
@@ -189,18 +273,26 @@ def _cleanup_partial_construction(
     primary_failure: BaseException,
 ) -> None:
     failures = [primary_failure]
+    failed_resources: list[tuple[object, _Callable[[], None]]] = []
     try:
         stop_event.set()
     except BaseException as exc:
         failures.append(exc)
-    for _resource, disposer in reversed(owned_resources):
+    for resource, disposer in reversed(owned_resources):
         try:
             disposer()
         except BaseException as exc:
             failures.append(exc)
+            failed_resources.append((resource, disposer))
     if len(failures) == 1:
         raise primary_failure
-    raise BaseExceptionGroup("Addon runtime construction failed", failures)
+    failure_group = BaseExceptionGroup(
+        "Addon runtime construction failed",
+        failures,
+    )
+    failure_group.failed_runtime_resources = tuple(failed_resources)
+    failure_group.failed_shutdown_event = stop_event
+    raise failure_group
 
 
 def _required_component(component: object | None, factory_name: str) -> object:
@@ -285,6 +377,12 @@ def _build_addon_runtime(
                 acquisition_claims,
             ),
             "capability_bridge_factory",
+        )
+        owned_resources.append(
+            (
+                capability_bridge,
+                _partial(_dispose_capability_bridge, capability_bridge),
+            )
         )
 
         listener = _required_component(
