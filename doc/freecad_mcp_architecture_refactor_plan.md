@@ -1074,12 +1074,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
 | Execution MCP base revision | `246d4991e6e8cc45cb0d6eecba5f1c16e2e864a4` |
 | Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–19; Phases 1–17 ran the Codex lane. |
-| Current stage / phase | **Stage 6 / Phase 19 integrator delivered** — Grok integrated review pending |
-| Next phase | 19 — await Grok integrated review CLEAR; then mark complete and begin Phase 20 |
-| In-flight ownership | Integrator: registration seam landed; coordinator Grok integrated review |
-| Last review | Phase 19 integrator delivery **pending Grok 4.5 High integrated review** |
-| Blocker | Cross-track lane not re-run this integrator pass (MCP four-service + lint green) |
-| Resume hint | Coordinator Grok integrated review on nested Phase 19 commit |
+| Current stage / phase | **Stage 6 / Phase 19 complete** — Grok integrated review pending |
+| Next phase | 20 — await Grok integrated review CLEAR; then begin `refactor(mcp): extract the tool manifest module` |
+| In-flight ownership | Coordinator Grok integrated review on Phase 19 delivery |
+| Last review | Phase 19 cross-track gate closed blocking finding from integrated review 0881cde7; coordinator re-review pending |
+| Blocker | none |
+| Resume hint | Coordinator Grok integrated review on nested Phase 19 commit plus §11.4 cross-track evidence |
 
 ### 11.2 Stage status
 
@@ -1091,13 +1091,25 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 3 | 8–11 | none | complete |
 | 4 | 12–17 | phase 12 | complete |
 | 5 | 18 | phase 18 | complete |
-| 6 | 19 | phase 19 | pending |
+| 6 | 19 | phase 19 | complete |
 | 7 | 20–22 | phase 22 | pending |
 | 8 | 23 | phase 23 | pending |
 
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-06 — Phase 19 cross-track gate closed (integrator; pending Grok re-review)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator).
+
+**Status: Stage 6 / Phase 19 marked complete pending coordinator CLEAR.** Integrated
+review 0881cde7 blocked on the missing §5.7 cross-track lane; this pass re-ran
+preflight/core/e2e against the preserved `freecad-collaboration-workspace` volume
+with the Phase 19 nested worktree mounted at `ee9d1da8`. All three jobs passed with
+strict native collaboration enabled. Integrator does **not** self-claim Grok CLEAR.
+
+**§5.7 cross-track evidence:** see §11.4.
 
 #### 2026-08-06 — Phase 19 integrator delivered: typed tool registration context (pending Grok review)
 
@@ -2239,7 +2251,12 @@ repository digest; host-side build or test output is never evidence.
 - **Agent lane:** Cursor Multitask (Composer 2.5 integrator).
 - **Images and source identity:** final Compose `freecad-mcp-tests:latest` is
   `sha256:607389385d7271360521848c500cdea232b6df8c7665fbb1a9b26ee36d2d8d9a`;
-  cross-track `freecad-ci-mcp:24.04-phase1` **not** re-run on this integrator pass.
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  No native source changed, so the preserved `freecad-collaboration-workspace` volume
+  was reused and the Phase 19 nested worktree at `ee9d1da8` was mounted over
+  `/workspace/tools/mcp/freecad-mcp`. Branch-built FreeCAD reports 26.3.0 revision
+  48070 inside the workspace; Compose FreeCAD remains adapter-only 1.1.0 / 20260325.
 - **MCP lint and contracts:** baked `python ci/lint_python.py addon/FreeCADMCP
   src/freecad_mcp` checked **979** production files and passed architecture policy
   plus full Ruff. `mcp_tool_registry_contract_snapshot.json` byte-identical;
@@ -2248,10 +2265,16 @@ repository digest; host-side build or test output is never evidence.
   and passed **1,965** with one expected screenshot xfail and 124 deselected;
   `e2e` passed **111/111**; `core` passed **4** with two adapter-only native skips
   and seven documented xfails; `benchmark` passed **1/1**.
-- **Cross-track jobs:** **not run** — pending coordinator decision whether Phase 19
-  integrator pass must repeat branch-built preflight/core/e2e before Grok CLEAR.
-- **Review result:** integrator does **not** self-claim CLEAR; coordinator Grok
-  integrated review is the next gate.
+- **Cross-track jobs:** the unmodified preflight wrapper emitted `PREFLIGHT_OK` with
+  pytest 9.1.1 and FreeCAD 26.3.0 revision 48070. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, the unmodified core wrapper selected
+  13: eight passed and five documented xfailed; the e2e wrapper passed **111/111**.
+  Both strict verdict files were zero. Generated XML/verdict artifacts were removed
+  after recording.
+- **Review result:** workstream reviews CLEAR; integrated review 0881cde7 was **NOT
+  CLEAR** solely on the missing cross-track lane — now closed by this evidence.
+  Coordinator Grok integrated re-review is the next gate; integrator does **not**
+  self-claim CLEAR.
 
 #### Phase 18 — `refactor(collaboration): cut over native MCP authority`
 
