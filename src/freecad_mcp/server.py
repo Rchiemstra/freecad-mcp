@@ -34,13 +34,16 @@ from .build_info import (  # noqa: F401 - §3.3 test / runtime shims
     package_version,
     protocol_version,
 )
+from .collaboration_client import CollaborationClient
 from .freecad_client import FreeCADConnection
 from .instrumented_server import InstrumentedFastMCP
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_ops.connection import get_freecad_connection
 from .server_ops.lifespan import server_lifespan
 from .server_ops.main_cli import main as _main_impl
-from .server_ops.manifest_auth import authenticate_connection as _authenticate_connection
+from .server_ops.manifest_auth import (
+    authenticate_connection as _authenticate_connection,
+)
 from .server_ops.manifest_auth import (
     refresh_authenticated_connection as _refresh_authenticated_connection,  # noqa: F401
 )
@@ -51,7 +54,10 @@ from .server_ops.session import (
 from .server_ops.surfaces import ServerSurfaceBindings, bind_server_surfaces
 from .server_ops.tool_exports import __all__ as __all__
 from .server_ops.tool_exports import bind_tool_exports
-from .server_ops.tool_registration import register_tool_modules
+from .server_ops.tool_registration import (
+    _lazy_collaboration_connection,
+    register_tool_modules,
+)
 from .server_state import ServerState
 from .telemetry import emit_event
 from .tools_register_order import (
@@ -111,12 +117,16 @@ mcp.task_request_canceller = (
     lambda request_id: get_freecad_connection()._notify_cancel_request(request_id)
 )
 
+_collaboration_client = CollaborationClient(
+    _lazy_collaboration_connection(lambda: get_freecad_connection())
+)
 _TOOL_EXPORTS = register_tool_modules(
     mcp,
     modules=_REGISTER_TOOL_MODULE_OBJECTS,
     state=state,
     get_freecad_connection=lambda: get_freecad_connection(),
-    stale_recovery=None,
+    recovery_compatibility=None,
+    collaboration=_collaboration_client,
     document_selector_input=DocumentSelectorInput,
 )
 bind_tool_exports(_TOOL_EXPORTS)

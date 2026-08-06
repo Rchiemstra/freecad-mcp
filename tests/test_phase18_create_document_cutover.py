@@ -53,18 +53,24 @@ class _CreateBackend:
 
 
 def test_registered_create_document_uses_no_removed_server_state(monkeypatch) -> None:
+    from unittest.mock import MagicMock
+
     from freecad_mcp import tools_core_document
+    from freecad_mcp.collaboration_client import CollaborationClient
+    from freecad_mcp.server_ops.tool_dependencies import ToolDependencies
 
     backend = _CreateBackend()
     mcp = _CaptureMcp()
     monkeypatch.setattr(tools_core_document, "server_connection", lambda: backend)
 
-    exports = tools_core_document.register(
-        mcp,
+    dependencies = ToolDependencies(
         state=_RemovedLeaseState(),
         get_freecad_connection=lambda: backend,
-        stale_recovery=object(),
+        recovery_compatibility=None,
+        collaboration=CollaborationClient(MagicMock()),
+        document_selector_input=dict,
     )
+    exports = tools_core_document.register(mcp, dependencies=dependencies)
     result = exports["create_document"](None, "NativeDocument")
 
     assert backend.names == ["NativeDocument"]

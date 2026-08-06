@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 from mcp.server.fastmcp import Context
@@ -14,19 +13,15 @@ from .operations import (
     repair_view_placements_operation,
 )
 from .responses import tool_fail
+from .server_ops.tool_dependencies import ToolDependencies
 from .tools_server_surfaces import server_connection, server_state
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
-    from .server_state import ServerState
 def _register_refresh_view(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -70,9 +65,7 @@ def _register_refresh_view(
 def _register_repair_view_placements(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -94,9 +87,7 @@ def _register_repair_view_placements(
 def _register_animate_placement(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -152,31 +143,23 @@ def _register_animate_placement(
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
     """Register gui_view_b MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
     _register_refresh_view(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_repair_view_placements(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_animate_placement(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     return exports

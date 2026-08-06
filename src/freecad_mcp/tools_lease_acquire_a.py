@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
 from .responses import tool_fail
-from .tools_types import DocumentSelectorInput
+from .server_ops.tool_dependencies import ToolDependencies, module_document_selector
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .server_state import ServerState
 
 
 def _removed() -> CallToolResult:
@@ -33,12 +30,13 @@ def _removed() -> CallToolResult:
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: object,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
-    del state, get_freecad_connection, stale_recovery
+    with module_document_selector(globals(), dependencies.document_selector_input):
+        return _register_tools(mcp)
 
+
+def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
     @mcp.tool()
     def acquire_document_lock(
         ctx: Context,
@@ -46,7 +44,7 @@ def register(
         file_path: str = "",
         session_id: str = "",
         task_description: str = "",
-        selector: DocumentSelectorInput | None = None,
+        selector: DocumentSelectorInput | None = None,  # noqa: F821
         agent_id: str = "",
         hash_policy: Literal["sha256"] = "sha256",
     ) -> CallToolResult:
@@ -69,7 +67,7 @@ def register(
     @mcp.tool()
     def adopt_dirty_document(
         ctx: Context,
-        selector: DocumentSelectorInput,
+        selector: DocumentSelectorInput,  # noqa: F821
         task_description: str = "",
         agent_id: str = "",
         hash_policy: Literal["sha256"] = "sha256",
@@ -98,7 +96,7 @@ def register(
         doc_name: str = "",
         file_path: str = "",
         session_id: str = "",
-        selector: DocumentSelectorInput | None = None,
+        selector: DocumentSelectorInput | None = None,  # noqa: F821
     ) -> CallToolResult:
         """Return redacted effective local/foreign lease state for one document.
 

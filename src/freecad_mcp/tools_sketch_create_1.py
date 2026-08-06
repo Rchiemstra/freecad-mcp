@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import Context
@@ -14,19 +13,15 @@ from .operations import (
     sketch_add_geometry_operation,
     sketch_create_operation,
 )
+from .server_ops.tool_dependencies import ToolDependencies
 from .tools_server_surfaces import server_connection, server_state
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
-    from .server_state import ServerState
 def _register_sketch_create(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -84,9 +79,7 @@ def _register_sketch_create(
 def _register_sketch_add_geometry(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -145,9 +138,7 @@ def _register_sketch_add_geometry(
 def _register_sketch_add_constraint(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -227,31 +218,23 @@ def _register_sketch_add_constraint(
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
     """Register sketch_create_1 MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
     _register_sketch_create(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_sketch_add_geometry(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_sketch_add_constraint(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     return exports

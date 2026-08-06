@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import Context
@@ -15,19 +14,15 @@ from .operations import (
     measure_distance_operation,
     measure_volume_operation,
 )
+from .server_ops.tool_dependencies import ToolDependencies
 from .tools_server_surfaces import server_connection
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
-    from .server_state import ServerState
 def _register_measure_distance(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -55,9 +50,7 @@ def _register_measure_distance(
 def _register_measure_angle(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -87,9 +80,7 @@ def _register_measure_angle(
 def _register_measure_area(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -113,9 +104,7 @@ def _register_measure_area(
 def _register_measure_volume(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -139,9 +128,7 @@ def _register_measure_volume(
 def _register_bounding_box(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -169,45 +156,33 @@ def _register_bounding_box(
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
     """Register measure_a MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
     _register_measure_distance(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_measure_angle(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_measure_area(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_measure_volume(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_bounding_box(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     return exports

@@ -1487,14 +1487,14 @@
       },
       {
         "path": "src/freecad_mcp/tools_lease_acquire_b.py",
-        "line": 75,
+        "line": 74,
         "column": 4,
         "symbol": "heartbeat_document_lock",
         "kind": "FunctionDef"
       },
       {
         "path": "src/freecad_mcp/tools_lease_acquire_b.py",
-        "line": 89,
+        "line": 88,
         "column": 35,
         "symbol": "heartbeat_document_lock",
         "kind": "Name"

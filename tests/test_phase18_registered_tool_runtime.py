@@ -6,6 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from freecad_mcp.collaboration_client import CollaborationClient
+from freecad_mcp.server_ops.tool_dependencies import ToolDependencies
+from freecad_mcp.server_state import ServerState
 from tests.helpers.response import response_text
 from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
 
@@ -23,20 +26,21 @@ def test_registered_run_transaction_uses_auth_session_not_retired_lease_state(
     monkeypatch,
 ) -> None:
     bootstrap_unit_test_runtime()
-    from freecad_mcp.instrumented_server import InstrumentedFastMCP
-    from freecad_mcp.server_state import ServerState
     from freecad_mcp import tools_advanced_a
+    from freecad_mcp.instrumented_server import InstrumentedFastMCP
 
     state = ServerState()
     connection = MagicMock(name="FreeCADConnection")
     mcp = InstrumentedFastMCP("phase18-run-transaction")
     monkeypatch.setattr(tools_advanced_a, "server_connection", lambda: connection)
-    exports = tools_advanced_a.register(
-        mcp,
+    dependencies = ToolDependencies(
         state=state,
         get_freecad_connection=lambda: connection,
-        stale_recovery=MagicMock(),
+        recovery_compatibility=None,
+        collaboration=CollaborationClient(connection),
+        document_selector_input=dict,
     )
+    exports = tools_advanced_a.register(mcp, dependencies=dependencies)
 
     state.rpc_session.mark_connected("auth-secret")
     result = _tool_function(mcp, "run_transaction")(

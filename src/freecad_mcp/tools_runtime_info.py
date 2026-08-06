@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import Context
@@ -19,13 +18,11 @@ from .build_info import (
     protocol_version,
 )
 from .responses import json_response
+from .server_ops.tool_dependencies import ToolDependencies
 from .tools_server_surfaces import server_connection, server_state
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
-    from .server_state import ServerState
 
 
 def _compatibility_for_manifest(manifest: Any | None) -> dict[str, Any]:
@@ -188,9 +185,7 @@ def _runtime_info_payload() -> dict[str, Any]:
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
     """Register runtime_info MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}

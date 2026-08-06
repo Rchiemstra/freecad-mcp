@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import Context
@@ -17,19 +16,15 @@ from .operations import (
     open_document_operation,
     reload_document_operation,
 )
+from .server_ops.tool_dependencies import ToolDependencies
 from .tools_server_surfaces import server_connection, server_state
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
-    from .server_state import ServerState
 def _register_insert_part_from_library(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -57,9 +52,7 @@ def _register_insert_part_from_library(
 def _register_get_objects(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -81,9 +74,7 @@ def _register_get_objects(
 def _register_get_object(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -109,9 +100,7 @@ def _register_get_object(
 def _register_get_parts_list(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -123,9 +112,7 @@ def _register_get_parts_list(
 def _register_reload_document(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -160,9 +147,7 @@ def _register_reload_document(
 def _register_list_documents(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -178,9 +163,7 @@ def _register_list_documents(
 def _register_open_document(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -196,59 +179,43 @@ def _register_open_document(
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
     """Register gui_document_a MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
     _register_insert_part_from_library(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_get_objects(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_get_object(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_get_parts_list(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_reload_document(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_list_documents(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_open_document(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     return exports

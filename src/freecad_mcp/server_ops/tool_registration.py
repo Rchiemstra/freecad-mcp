@@ -4,17 +4,42 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from ..collaboration_client import _CONNECTION_METHODS, CollaborationClient
 from ..instrumented_server import InstrumentedFastMCP
 from ..server_state import ServerState
 from ..tools_register_order import (
     REGISTER_TOOL_MODULE_OBJECTS,
     REGISTER_TOOL_MODULES,
 )
+from .tool_dependencies import ToolDependencies
 
-if TYPE_CHECKING:
-    from ..lease_manager import StaleLeaseRecoveryOrchestrator
+
+def _lazy_collaboration_connection(
+    get_freecad_connection: Callable[[], Any],
+) -> Any:
+    """Expose collaboration RPC methods without eager FreeCAD connect."""
+
+    class _Accessor:
+        __slots__ = ("_get_freecad_connection",)
+
+        def __init__(self, getter: Callable[[], Any]) -> None:
+            self._get_freecad_connection = getter
+
+    accessor = _Accessor(get_freecad_connection)
+    for method_name in _CONNECTION_METHODS:
+
+        def _forward(
+            self: _Accessor,
+            *args: object,
+            _method: str = method_name,
+            **kwargs: object,
+        ) -> object:
+            return getattr(self._get_freecad_connection(), _method)(*args, **kwargs)
+
+        setattr(_Accessor, method_name, _forward)
+    return accessor
 
 
 def register_tool_modules(
@@ -24,7 +49,8 @@ def register_tool_modules(
     module_names: Sequence[str] | None = None,
     state: ServerState,
     get_freecad_connection: Callable[[], Any],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    recovery_compatibility: Any,
+    collaboration: CollaborationClient | None = None,
     document_selector_input: type,
 ) -> dict[str, object]:
     if modules is not None and module_names is not None:
@@ -38,14 +64,19 @@ def register_tool_modules(
             modules = tuple(catalog[name] for name in requested)
         except KeyError as exc:
             raise ValueError(f"unknown tool module: {exc.args[0]}") from exc
+    if collaboration is None:
+        collaboration = CollaborationClient(
+            _lazy_collaboration_connection(get_freecad_connection)
+        )
+    dependencies = ToolDependencies(
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        recovery_compatibility=recovery_compatibility,
+        collaboration=collaboration,
+        document_selector_input=document_selector_input,
+    )
     exports: dict[str, object] = {}
     for module in modules:
-        module.DocumentSelectorInput = document_selector_input
-        module_exports = module.register(
-            mcp,
-            state=state,
-            get_freecad_connection=get_freecad_connection,
-            stale_recovery=stale_recovery,
-        )
+        module_exports = module.register(mcp, dependencies=dependencies)
         exports.update(module_exports)
     return exports

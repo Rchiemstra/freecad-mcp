@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import Context
@@ -11,18 +10,14 @@ from mcp.types import CallToolResult
 
 from .outcomes import OutcomeStatus
 from .responses import json_response, tool_fail
+from .server_ops.tool_dependencies import ToolDependencies
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .lease_manager import StaleLeaseRecoveryOrchestrator
-    from .server_state import ServerState
 def _register_check_rpc_sync(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -34,7 +29,7 @@ def _register_check_rpc_sync(
         timeout or nonce mismatch means the queue is not safe for further work.
         """
         nonce = uuid.uuid4().hex
-        result = get_freecad_connection().check_rpc_sync(nonce)
+        result = dependencies.get_freecad_connection().check_rpc_sync(nonce)
         if result.get("success") and result.get("nonce") == nonce:
             return json_response({"ok": True, "synchronized": True, "nonce": nonce})
         if result.get("success") and result.get("nonce") != nonce:
@@ -71,9 +66,7 @@ def _register_check_rpc_sync(
 def _register_get_request_status(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -81,7 +74,7 @@ def _register_get_request_status(
         """Query a timed-out or long-running authenticated request without replaying it."""
 
         try:
-            result = get_freecad_connection().get_request_status(request_id)
+            result = dependencies.get_freecad_connection().get_request_status(request_id)
         except Exception as exc:
             return tool_fail(
                 f"Failed to query request status: {exc}",
@@ -103,9 +96,7 @@ def _register_get_request_status(
 def _register_claim_acquisition_result(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -128,9 +119,7 @@ def _register_claim_acquisition_result(
 def _register_cancel_request(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
@@ -138,7 +127,7 @@ def _register_cancel_request(
         """Request cooperative cancellation for an authenticated RPC request."""
 
         try:
-            result = get_freecad_connection().cancel_request(request_id)
+            result = dependencies.get_freecad_connection().cancel_request(request_id)
         except Exception as exc:
             return tool_fail(
                 f"Failed to cancel request: {exc}",
@@ -164,38 +153,28 @@ def _register_cancel_request(
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: StaleLeaseRecoveryOrchestrator,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
     """Register runtime_control MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
     _register_check_rpc_sync(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_get_request_status(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_claim_acquisition_result(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     _register_cancel_request(
         mcp,
-        state=state,
-        get_freecad_connection=get_freecad_connection,
-        stale_recovery=stale_recovery,
+        dependencies=dependencies,
         exports=exports,
     )
     return exports

@@ -5,10 +5,14 @@ from __future__ import annotations
 import inspect
 import json
 from pathlib import Path
+from types import MappingProxyType
 from unittest.mock import MagicMock
 
 import pytest
+from typing_extensions import TypedDict
 
+from freecad_mcp.collaboration_client import CollaborationClient
+from freecad_mcp.server_ops.tool_dependencies import ToolDependencies
 from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
 
 pytestmark = pytest.mark.unit
@@ -16,6 +20,14 @@ pytestmark = pytest.mark.unit
 _FIXTURE = (
     Path(__file__).resolve().parent / "fixtures" / "mcp_tool_registry_contract_snapshot.json"
 )
+
+
+class _SelectorInput(TypedDict, total=False):
+    __pydantic_config__ = MappingProxyType({"extra": "forbid"})
+
+    document_name: str
+    document_session_uuid: str
+    canonical_path: str
 
 
 def _load_snapshot() -> dict:
@@ -43,6 +55,17 @@ def _capture_tools(mcp) -> dict[str, dict[str, object]]:
     return out
 
 
+def _dependencies(*, selector: type = _SelectorInput) -> ToolDependencies:
+    connection = MagicMock(name="FreeCADConnection")
+    return ToolDependencies(
+        state=object(),
+        get_freecad_connection=lambda: connection,
+        recovery_compatibility=None,
+        collaboration=CollaborationClient(connection),
+        document_selector_input=selector,
+    )
+
+
 def _expected_from_live_server() -> dict[str, dict[str, object]]:
     bootstrap_unit_test_runtime()
     from freecad_mcp import server
@@ -54,22 +77,13 @@ def _expected_from_live_server() -> dict[str, dict[str, object]]:
 def extracted_tool_registry():
     bootstrap_unit_test_runtime()
     from freecad_mcp.instrumented_server import InstrumentedFastMCP
-    from freecad_mcp.lease_manager import StaleLeaseRecoveryOrchestrator
-    from freecad_mcp.server_state import ServerState
     from freecad_mcp.tools_register_order import REGISTER_TOOL_MODULE_OBJECTS
 
     mcp = InstrumentedFastMCP("extracted-tools-test")
-    state = ServerState()
-    stale_recovery = StaleLeaseRecoveryOrchestrator()
-    connection = MagicMock(name="FreeCADConnection")
+    dependencies = _dependencies()
 
     for module in REGISTER_TOOL_MODULE_OBJECTS:
-        module.register(
-            mcp,
-            state=state,
-            get_freecad_connection=lambda: connection,
-            stale_recovery=stale_recovery,
-        )
+        module.register(mcp, dependencies=dependencies)
 
     return _capture_tools(mcp)
 
@@ -99,34 +113,43 @@ def test_registration_consumes_explicit_module_objects_in_order():
     from freecad_mcp.server_ops.tool_registration import register_tool_modules
 
     calls: list[str] = []
+    seen: list[ToolDependencies] = []
 
     def tool_module(name: str) -> ModuleType:
         module = ModuleType(name)
 
-        def register(mcp, **dependencies):
+        def register(mcp, *, dependencies: ToolDependencies) -> dict[str, object]:
             calls.append(name)
+            seen.append(dependencies)
             assert mcp == "mcp"
-            assert dependencies["state"] == "state"
-            return {name: dependencies["get_freecad_connection"]}
+            assert dependencies.state == "state"
+            return {name: dependencies.get_freecad_connection()}
 
         module.register = register
         return module
 
     first = tool_module("first")
     second = tool_module("second")
-    selector = object()
+    selector = _SelectorInput
+    connection = MagicMock(name="FreeCADConnection")
+    collaboration = CollaborationClient(connection)
     exports = register_tool_modules(
         "mcp",
         modules=(first, second),
         state="state",
-        get_freecad_connection=lambda: "connection",
-        stale_recovery="recovery",
+        get_freecad_connection=lambda: connection,
+        recovery_compatibility=None,
+        collaboration=collaboration,
         document_selector_input=selector,
     )
 
     assert calls == ["first", "second"]
-    assert first.DocumentSelectorInput is selector
-    assert second.DocumentSelectorInput is selector
+    assert len(seen) == 2
+    assert seen[0] is seen[1]
+    assert seen[0].collaboration is collaboration
+    assert seen[0].document_selector_input is selector
+    assert not hasattr(first, "DocumentSelectorInput")
+    assert not hasattr(second, "DocumentSelectorInput")
     assert list(exports) == ["first", "second"]
 
 
@@ -136,16 +159,18 @@ def test_registration_keeps_historic_module_names_keyword(monkeypatch):
     from freecad_mcp.server_ops import tool_registration
 
     module = ModuleType("historic")
-    module.register = lambda _mcp, **_dependencies: {"historic": object()}
+    module.register = lambda _mcp, *, dependencies: {"historic": dependencies}
     monkeypatch.setattr(tool_registration, "REGISTER_TOOL_MODULES", ("historic",))
     monkeypatch.setattr(tool_registration, "REGISTER_TOOL_MODULE_OBJECTS", (module,))
 
+    connection = MagicMock(name="FreeCADConnection")
     exports = tool_registration.register_tool_modules(
         "mcp",
         module_names=("historic",),
         state="state",
-        get_freecad_connection=lambda: None,
-        stale_recovery="recovery",
+        get_freecad_connection=lambda: connection,
+        recovery_compatibility=None,
+        collaboration=CollaborationClient(connection),
         document_selector_input=dict,
     )
 

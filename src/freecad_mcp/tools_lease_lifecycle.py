@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
 from .responses import json_response, tool_fail
+from .server_ops.tool_dependencies import ToolDependencies, module_document_selector
 from .tools_server_surfaces import server_connection
-from .tools_types import DocumentSelectorInput
 
 if TYPE_CHECKING:
-    from .freecad_client import FreeCADConnection
     from .instrumented_server import InstrumentedFastMCP
-    from .server_state import ServerState
 
 
 def _result(result: dict[str, Any]) -> CallToolResult:
@@ -31,16 +28,17 @@ def _result(result: dict[str, Any]) -> CallToolResult:
 def register(
     mcp: InstrumentedFastMCP,
     *,
-    state: ServerState,
-    get_freecad_connection: Callable[[], FreeCADConnection],
-    stale_recovery: object,
+    dependencies: ToolDependencies,
 ) -> dict[str, object]:
-    del state, get_freecad_connection, stale_recovery
+    with module_document_selector(globals(), dependencies.document_selector_input):
+        return _register_tools(mcp)
 
+
+def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
     @mcp.tool()
     def save_document(
         ctx: Context,
-        selector: DocumentSelectorInput,
+        selector: DocumentSelectorInput,  # noqa: F821
         validation_profile: str = "default",
     ) -> CallToolResult:
         """Compare, save, hash, reopen-verify, and retain the renewable lease.
@@ -60,7 +58,7 @@ def register(
     @mcp.tool()
     def save_document_as(
         ctx: Context,
-        selector: DocumentSelectorInput,
+        selector: DocumentSelectorInput,  # noqa: F821
         destination: str,
         overwrite: bool = False,
         expected_destination_sha256: str = "",
@@ -87,7 +85,7 @@ def register(
     @mcp.tool()
     def finalize_document_edit(
         ctx: Context,
-        selector: DocumentSelectorInput,
+        selector: DocumentSelectorInput,  # noqa: F821
         save_mode: Literal["save", "save_as", "first_save"] = "save",
         destination: str = "",
         overwrite: bool = False,
