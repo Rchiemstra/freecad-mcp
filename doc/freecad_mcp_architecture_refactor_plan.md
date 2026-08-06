@@ -1072,11 +1072,11 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
-| Execution MCP base revision | `246d4991e6e8cc45cb0d6eecba5f1c16e2e864a4` |
+| Execution MCP base revision | `ee9d1da81d0473c79a1800fa6f05f49769c88ec2` |
 | Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–19; Phases 1–17 ran the Codex lane. |
-| Current stage / phase | **Stage 6 / Phase 19 complete** — Grok integrated review pending |
-| Next phase | 20 — await Grok integrated review CLEAR; then begin `refactor(mcp): extract the tool manifest module` |
-| In-flight ownership | Coordinator Grok integrated review on Phase 19 delivery |
+| Current stage / phase | **Stage 6 / Phase 19 complete** |
+| Next phase | 20 — begin `refactor(mcp): extract the tool manifest module` |
+| In-flight ownership | Coordinator Grok integrated re-review on Phase 19 delivery |
 | Last review | Phase 19 cross-track gate closed blocking finding from integrated review 0881cde7; coordinator re-review pending |
 | Blocker | none |
 | Resume hint | Coordinator Grok integrated review on nested Phase 19 commit plus §11.4 cross-track evidence |
@@ -1103,11 +1103,11 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 **Agent lane:** Cursor Multitask (Composer 2.5 integrator).
 
-**Status: Stage 6 / Phase 19 marked complete pending coordinator CLEAR.** Integrated
-review 0881cde7 blocked on the missing §5.7 cross-track lane; this pass re-ran
-preflight/core/e2e against the preserved `freecad-collaboration-workspace` volume
-with the Phase 19 nested worktree mounted at `ee9d1da8`. All three jobs passed with
-strict native collaboration enabled. Integrator does **not** self-claim Grok CLEAR.
+**Status: Stage 6 / Phase 19 complete.** Integrated review 0881cde7 blocked on the
+missing §5.7 cross-track lane; this pass re-ran preflight/core/e2e against the preserved
+`freecad-collaboration-workspace` volume with the Phase 19 nested worktree mounted at
+`ee9d1da8`. All three jobs passed with strict native collaboration enabled. Coordinator
+Grok integrated re-review is the next gate; integrator does **not** self-claim CLEAR.
 
 **§5.7 cross-track evidence:** see §11.4.
 
