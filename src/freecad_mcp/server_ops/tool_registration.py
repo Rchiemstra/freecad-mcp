@@ -42,6 +42,27 @@ def _lazy_collaboration_connection(
     return accessor
 
 
+def _build_tool_dependencies(
+    *,
+    state: ServerState,
+    get_freecad_connection: Callable[[], Any],
+    recovery_compatibility: Any,
+    collaboration: CollaborationClient | None,
+    document_selector_input: type,
+) -> ToolDependencies:
+    if collaboration is None:
+        collaboration = CollaborationClient(
+            _lazy_collaboration_connection(get_freecad_connection)
+        )
+    return ToolDependencies(
+        state=state,
+        get_freecad_connection=get_freecad_connection,
+        recovery_compatibility=recovery_compatibility,
+        collaboration=collaboration,
+        document_selector_input=document_selector_input,
+    )
+
+
 def register_tool_modules(
     mcp: InstrumentedFastMCP,
     *,
@@ -55,28 +76,36 @@ def register_tool_modules(
 ) -> dict[str, object]:
     if modules is not None and module_names is not None:
         raise TypeError("pass modules or module_names, not both")
-    if modules is None:
-        requested = REGISTER_TOOL_MODULES if module_names is None else module_names
-        catalog = dict(
-            zip(REGISTER_TOOL_MODULES, REGISTER_TOOL_MODULE_OBJECTS, strict=True)
+    if modules is not None or module_names is not None:
+        if modules is None:
+            requested = REGISTER_TOOL_MODULES if module_names is None else module_names
+            catalog = dict(
+                zip(REGISTER_TOOL_MODULES, REGISTER_TOOL_MODULE_OBJECTS, strict=True)
+            )
+            try:
+                modules = tuple(catalog[name] for name in requested)
+            except KeyError as exc:
+                raise ValueError(f"unknown tool module: {exc.args[0]}") from exc
+        dependencies = _build_tool_dependencies(
+            state=state,
+            get_freecad_connection=get_freecad_connection,
+            recovery_compatibility=recovery_compatibility,
+            collaboration=collaboration,
+            document_selector_input=document_selector_input,
         )
-        try:
-            modules = tuple(catalog[name] for name in requested)
-        except KeyError as exc:
-            raise ValueError(f"unknown tool module: {exc.args[0]}") from exc
-    if collaboration is None:
-        collaboration = CollaborationClient(
-            _lazy_collaboration_connection(get_freecad_connection)
-        )
-    dependencies = ToolDependencies(
+        exports: dict[str, object] = {}
+        for module in modules:
+            module_exports = module.register(mcp, dependencies=dependencies)
+            exports.update(module_exports)
+        return exports
+
+    from ..generated.capabilities.registration import register_tools
+
+    dependencies = _build_tool_dependencies(
         state=state,
         get_freecad_connection=get_freecad_connection,
         recovery_compatibility=recovery_compatibility,
         collaboration=collaboration,
         document_selector_input=document_selector_input,
     )
-    exports: dict[str, object] = {}
-    for module in modules:
-        module_exports = module.register(mcp, dependencies=dependencies)
-        exports.update(module_exports)
-    return exports
+    return register_tools(mcp, dependencies=dependencies)

@@ -1073,13 +1073,13 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
 | Execution MCP base revision | `412c9e5e` |
-| Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–20; Phases 1–17 ran the Codex lane. |
-| Current stage / phase | **Stage 7 / Phase 20 complete** |
-| Next phase | 21 — `refactor(mcp): switch registration to generated output` |
-| In-flight ownership | Coordinator-owned Phase 21 manifest-driven registration cutover |
-| Last review | Phase 20 CLEAR (935d14d3); Phase 19 CLEAR (b417e6f4) |
+| Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–21; Phases 1–17 ran the Codex lane. |
+| Current stage / phase | **Stage 7 / Phase 21 complete** |
+| Next phase | 22 — `refactor(mcp): delete the hand-written capability mirrors` (kickoff in progress) |
+| In-flight ownership | Coordinator-owned Phase 22 subject-mirror deletion |
+| Last review | Phase 21 CLEAR (66259f28); Phase 20 CLEAR (935d14d3) |
 | Blocker | none |
-| Resume hint | Coordinator begins Phase 21; shadow artifacts remain inert until registration cutover |
+| Resume hint | Grok review Phase 22 kickoff after mirror→shim conversion lands |
 
 ### 11.2 Stage status
 
@@ -1092,12 +1092,55 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 4 | 12–17 | phase 12 | complete |
 | 5 | 18 | phase 18 | complete |
 | 6 | 19 | phase 19 | complete |
-| 7 | 20–22 | phase 22 | in progress (Phase 20 complete; 21–22 pending) |
+| 7 | 20–22 | phase 22 | in progress (Phase 21 complete; 22 pending) |
 | 8 | 23 | phase 23 | pending |
 
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-06 — Phase 21 COMPLETE: switch registration to generated output (landing integrator)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 landing integrator).
+
+**Status: Stage 7 / Phase 21 complete.** Review 66259f28 CLEAR after kickoff delivery
+(generated production registration, declarative shims, binder identity tests). Nested
+landing commit follows; parent gitlink bump in same integrator wave.
+
+**Delivered:** extended `capabilities/generator.py` with production emitters
+(`register_order`, `registration`, `tool_export_bind_part_1/2`); production artifacts under
+`generated/capabilities/`; `tools_register_order.py` and `bind_part_*.py` converted to declarative
+shims; `tool_registration.py` wired to `generated.capabilities.registration.register_tools`;
+focused tests in `tests/test_generated_registration_cutover.py`.
+
+**§5.7 MCP evidence:** see §11.4 (not an integration gate).
+
+**Next:** Phase 22 — `refactor(mcp): delete the hand-written capability mirrors`.
+
+#### 2026-08-06 — Phase 21 IN PROGRESS: switch registration to generated output (Cursor Multitask kickoff)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator + Grok 4.5 High review pending).
+
+**Status: in progress.** Stage 7 Phase 20 verified complete at nested `46924a8547ad4076ce7e8050229cfc1898d960f2`,
+parent `0481bb61ab66c5776aa069e291979fd04bd372bf`, review 935d14d3 CLEAR.
+
+**Parallelization:** **integrator-only single stream** — registration cutover owns §5.3 shared files
+(`tools_register_order.py`, `server_ops/tool_registration.py`, `server_ops/tool_exports/bind_part_*.py`,
+`server.py`, generator/schema). Subject-mirror deletion remains Phase 22; frozen W2 map not spawned
+(only one safe workstream for registration wiring).
+
+**Delivered this pass:** extended `capabilities/generator.py` with production emitters
+(`register_order`, `registration`, `tool_export_bind_part_1/2`); production artifacts under
+`generated/capabilities/`; `tools_register_order.py` and `bind_part_*.py` converted to declarative
+shims; `tool_registration.py` and `server.py` wired to `generated.capabilities.registration.register_tools`;
+focused tests in `tests/test_generated_registration_cutover.py`.
+
+**§5.7 MCP evidence:** Docker `unit` image `freecad-mcp-tests`
+`sha256:0a54cb64e208b1448aa2299277988959fd01123fe51db978d8e913f0a86242f4` —
+`tests/test_generated_registration_cutover.py` + `tests/test_capability_manifest_generator.py`
+**20 passed** (not an integration gate).
+
+**Next:** Grok review; integrator does **not** self-claim CLEAR.
 
 #### 2026-08-06 — Phase 20 COMPLETE: capability manifests and generator (landing integrator)
 
@@ -2314,6 +2357,26 @@ repository digest; host-side build or test output is never evidence.
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 21 — `refactor(mcp): switch registration to generated output`
+
+- **Agent lane:** Cursor Multitask (Composer 2.5 landing integrator).
+- **Images and source identity:** Compose `freecad-mcp-tests` is
+  `sha256:f87945672054ac98360f4a650fcea119932067340687dcbeffd9533d440e0ade`.
+- **Focused Docker gate (not integration):** `docker compose build unit` then
+  `docker compose run --rm unit tests/test_generated_registration_cutover.py
+  tests/test_capability_manifest_generator.py` — **20 passed**.
+- **Key artifacts:** production emitters in `capabilities/generator.py`
+  (`render_register_order`, `render_production_registration`,
+  `render_tool_export_bind_part`, `write_production_outputs`); generated files
+  under `generated/capabilities/` (`register_order.py`, `registration.py`,
+  `tool_export_bind_part_1.py`, `tool_export_bind_part_2.py`); declarative shims
+  in `tools_register_order.py` and `server_ops/tool_exports/bind_part_*.py`;
+  `server_ops/tool_registration.py` default path delegates to
+  `generated.capabilities.registration.register_tools`.
+- **Phase 22 boundary:** subject-mirror deletion (`tools_*_a.py`, `_b.py`,
+  `_1.py`, `_2.py` and duplicated client/gateway surfaces) remains Phase 22.
+- **Review result:** integrated re-review **66259f28 CLEAR**.
 
 #### Phase 20 — `feat(mcp): add capability manifests and the generator`
 

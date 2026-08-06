@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .bootstrap import load_frozen_registry_snapshot
 from .load import all_subject_manifests
-from .registry_capture import capture_registry_snapshot
 from .schema import SubjectManifest, ToolEntry
 
 _GENERATED_HEADER = (
@@ -56,6 +56,99 @@ def _render_gateway_entry(entry: ToolEntry) -> dict[str, Any]:
     return payload
 
 
+def _export_names() -> tuple[str, ...]:
+    from freecad_mcp.server_ops.tool_exports.export_names import __all__ as names
+
+    return tuple(names)
+
+
+def _bind_part_split(names: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    split_at = "match_subshape"
+    if split_at not in names:
+        raise ValueError(f"export split marker {split_at!r} missing from export names")
+    index = names.index(split_at)
+    return names[:index], names[index:]
+
+
+def render_register_order(register_modules: tuple[str, ...]) -> str:
+    lines = [_GENERATED_HEADER.rstrip()]
+    for name in register_modules:
+        lines.append(f"from freecad_mcp import {name} as _{name}")
+    lines.extend(
+        [
+            "",
+            "REGISTER_TOOL_MODULE_OBJECTS = (",
+        ]
+    )
+    for name in register_modules:
+        lines.append(f"    _{name},")
+    lines.extend(
+        [
+            ")",
+            "",
+            "REGISTER_TOOL_MODULES = tuple(",
+            "    module.__name__.rsplit('.', maxsplit=1)[-1]",
+            "    for module in REGISTER_TOOL_MODULE_OBJECTS",
+            ")",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_production_registration(manifests: tuple[SubjectManifest, ...]) -> str:
+    lines = [
+        _GENERATED_HEADER.rstrip(),
+        "from freecad_mcp.capabilities.load import all_subject_manifests",
+        "from freecad_mcp.capabilities.registration_runtime import register_all_manifests",
+        "",
+        "",
+        "def register_tools(mcp, *, dependencies):",
+        '    """Register every manifest-declared MCP tool on ``mcp``."""',
+        "    return register_all_manifests(",
+        "        mcp,",
+        "        all_subject_manifests(),",
+        "        dependencies=dependencies,",
+        "    )",
+        "",
+        f"# manifest subjects: {', '.join(m.subject for m in manifests)}",
+        f"# tool count: {sum(len(m.tools) for m in manifests)}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def render_tool_export_bind_part(
+    names: tuple[str, ...],
+    *,
+    part: int,
+) -> str:
+    lines = [
+        _GENERATED_HEADER.rstrip(),
+        "from collections.abc import MutableMapping",
+        "from types import SimpleNamespace",
+        "",
+        "_default_namespace: MutableMapping[str, object] | None = None",
+        "",
+        "def bind_default_export_namespace(namespace: MutableMapping[str, object]) -> None:",
+        "    global _default_namespace",
+        "    _default_namespace = namespace",
+        "",
+        f"def bind_tool_exports_part_{part}(",
+        "    exports: dict[str, object],",
+        "    namespace: MutableMapping[str, object] | None = None,",
+        ") -> None:",
+        "    namespace = _default_namespace if namespace is None else namespace",
+        "    if namespace is None:",
+        "        raise RuntimeError('tool export namespace is not initialized')",
+        "    pkg = SimpleNamespace()",
+    ]
+    for name in names:
+        lines.append(f"    pkg.{name} = exports['{name}']")
+    lines.extend(["    namespace.update(vars(pkg))", "", ""])
+    return "\n".join(lines)
+
+
 def render_shadow_registration(manifests: tuple[SubjectManifest, ...]) -> str:
     lines = [
         _GENERATED_HEADER.rstrip(),
@@ -99,6 +192,44 @@ def render_gateway_dispatch(manifests: tuple[SubjectManifest, ...]) -> dict[str,
     }
 
 
+def write_production_outputs(
+    *,
+    root: Path | None = None,
+    manifests: tuple[SubjectManifest, ...] | None = None,
+) -> dict[str, Path]:
+    root = root or shadow_output_root()
+    root.mkdir(parents=True, exist_ok=True)
+    manifests = manifests or all_subject_manifests()
+    snapshot = load_frozen_registry_snapshot()
+    register_modules = tuple(snapshot["register_order"])
+    export_names = _export_names()
+    part_1, part_2 = _bind_part_split(export_names)
+
+    paths = {
+        "register_order": root / "register_order.py",
+        "registration": root / "registration.py",
+        "tool_export_bind_part_1": root / "tool_export_bind_part_1.py",
+        "tool_export_bind_part_2": root / "tool_export_bind_part_2.py",
+    }
+    paths["register_order"].write_text(
+        render_register_order(register_modules),
+        encoding="utf-8",
+    )
+    paths["registration"].write_text(
+        render_production_registration(manifests),
+        encoding="utf-8",
+    )
+    paths["tool_export_bind_part_1"].write_text(
+        render_tool_export_bind_part(part_1, part=1),
+        encoding="utf-8",
+    )
+    paths["tool_export_bind_part_2"].write_text(
+        render_tool_export_bind_part(part_2, part=2),
+        encoding="utf-8",
+    )
+    return paths
+
+
 def write_shadow_outputs(
     *,
     root: Path | None = None,
@@ -110,13 +241,16 @@ def write_shadow_outputs(
     root.mkdir(parents=True, exist_ok=True)
     manifests = manifests or all_subject_manifests()
 
-    paths = {
-        "registration": root / "shadow_registration.py",
-        "client_stubs": root / "shadow_client_stubs.py",
-        "gateway_dispatch": root / "shadow_gateway_dispatch.json",
-        "registry_snapshot": root / "registry_snapshot.json",
-    }
-    paths["registration"].write_text(
+    paths = write_production_outputs(root=root, manifests=manifests)
+    paths.update(
+        {
+            "shadow_registration": root / "shadow_registration.py",
+            "client_stubs": root / "shadow_client_stubs.py",
+            "gateway_dispatch": root / "shadow_gateway_dispatch.json",
+            "registry_snapshot": root / "registry_snapshot.json",
+        }
+    )
+    paths["shadow_registration"].write_text(
         render_shadow_registration(manifests),
         encoding="utf-8",
     )
@@ -132,6 +266,7 @@ def write_shadow_outputs(
 
     if mcp is not None and dependencies is not None:
         from .registration_runtime import register_all_manifests
+        from .registry_capture import capture_registry_snapshot
 
         register_all_manifests(mcp, manifests, dependencies=dependencies)
         snapshot = capture_registry_snapshot(mcp)
@@ -146,7 +281,11 @@ def write_shadow_outputs(
 __all__ = [
     "render_client_stubs",
     "render_gateway_dispatch",
+    "render_production_registration",
+    "render_register_order",
     "render_shadow_registration",
+    "render_tool_export_bind_part",
     "shadow_output_root",
+    "write_production_outputs",
     "write_shadow_outputs",
 ]

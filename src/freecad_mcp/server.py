@@ -60,12 +60,7 @@ from .server_ops.tool_registration import (
 )
 from .server_state import ServerState
 from .telemetry import emit_event
-from .tools_register_order import (
-    REGISTER_TOOL_MODULE_OBJECTS as _REGISTER_TOOL_MODULE_OBJECTS,
-)
-from .tools_register_order import (
-    REGISTER_TOOL_MODULES as REGISTER_TOOL_MODULES,
-)
+from .tools_register_order import REGISTER_TOOL_MODULES as REGISTER_TOOL_MODULES
 
 logging.basicConfig(
     level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -122,7 +117,6 @@ _collaboration_client = CollaborationClient(
 )
 _TOOL_EXPORTS = register_tool_modules(
     mcp,
-    modules=_REGISTER_TOOL_MODULE_OBJECTS,
     state=state,
     get_freecad_connection=lambda: get_freecad_connection(),
     recovery_compatibility=None,

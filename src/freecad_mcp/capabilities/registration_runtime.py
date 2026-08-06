@@ -1,4 +1,4 @@
-"""Register MCP tools from capability manifests (shadow path)."""
+"""Register MCP tools from capability manifests."""
 
 from __future__ import annotations
 
@@ -55,7 +55,6 @@ def register_all_manifests(
     *,
     dependencies: ToolDependencies,
 ) -> dict[str, object]:
-    manifest_tool_names = {entry.name for manifest in manifests for entry in manifest.tools}
     module_names = {
         module_name
         for manifest in manifests
@@ -74,10 +73,7 @@ def register_all_manifests(
         if module_name not in module_names:
             continue
         module_exports = module.register(mcp, dependencies=dependencies)
-        for name, tool in module_exports.items():
-            if name.startswith("_") or name not in manifest_tool_names:
-                continue
-            exports[name] = tool
+        exports.update(module_exports)
     return exports
 
 
