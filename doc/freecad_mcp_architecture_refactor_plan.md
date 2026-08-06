@@ -1072,14 +1072,14 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Module-size baseline | Complete at `fc3a5236`; its size rules are retired by phase 2 |
 | Collaboration prerequisite | Native Phases 1–6 complete; former Phase 7 absorbed into this plan as Phase 18 cutover |
 | Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
-| Execution MCP base revision | `ee9d1da81d0473c79a1800fa6f05f49769c88ec2` |
-| Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–19; Phases 1–17 ran the Codex lane. |
-| Current stage / phase | **Stage 6 / Phase 19 complete** |
-| Next phase | 20 — begin `refactor(mcp): extract the tool manifest module` |
-| In-flight ownership | Coordinator Grok integrated re-review on Phase 19 delivery |
-| Last review | Phase 19 cross-track gate closed blocking finding from integrated review 0881cde7; coordinator re-review pending |
+| Execution MCP base revision | `412c9e5e` |
+| Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–20; Phases 1–17 ran the Codex lane. |
+| Current stage / phase | **Stage 7 / Phase 20 complete** |
+| Next phase | 21 — `refactor(mcp): switch registration to generated output` |
+| In-flight ownership | Coordinator-owned Phase 21 manifest-driven registration cutover |
+| Last review | Phase 20 CLEAR (935d14d3); Phase 19 CLEAR (b417e6f4) |
 | Blocker | none |
-| Resume hint | Coordinator Grok integrated review on nested Phase 19 commit plus §11.4 cross-track evidence |
+| Resume hint | Coordinator begins Phase 21; shadow artifacts remain inert until registration cutover |
 
 ### 11.2 Stage status
 
@@ -1092,12 +1092,81 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 4 | 12–17 | phase 12 | complete |
 | 5 | 18 | phase 18 | complete |
 | 6 | 19 | phase 19 | complete |
-| 7 | 20–22 | phase 22 | pending |
+| 7 | 20–22 | phase 22 | in progress (Phase 20 complete; 21–22 pending) |
 | 8 | 23 | phase 23 | pending |
 
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-06 — Phase 20 COMPLETE: capability manifests and generator (landing integrator)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 landing integrator).
+
+**Status: Stage 7 / Phase 20 complete.** Review 935d14d3 CLEAR after the fix
+integrator pass (relative `operation_path` resolution, regenerated shadow artifacts,
+inert `shadow_client_stubs`, strengthened importability tests, §11 Phase 21
+boundary). Manifest-driven registration cutover is **Phase 21**; this phase
+delivered schema, generator, bootstrap, 17 subject manifests, and shadow artifacts
+only.
+
+**Delivered:** `capabilities/schema.py`, introspection/bootstrap/load/generator/
+registration_runtime; 17 bootstrapped manifests under
+`capabilities/<subject>/manifest.py`; shadow artifacts under
+`generated/capabilities/` (registration, inert client stubs, gateway dispatch,
+registry snapshot byte-equal to contract fixture); scripts
+`bootstrap_capability_manifests.py` and `generate_capability_shadow.py`; focused
+tests in `tests/test_capability_manifest_generator.py` and
+`tests/test_capability_introspection.py`.
+
+**§5.7 MCP evidence:** see §11.4 (not an integration gate).
+
+**Next:** Phase 21 — `refactor(mcp): switch registration to generated output`.
+
+#### 2026-08-06 — Phase 20 IN PROGRESS: capability manifests and generator (Cursor Multitask kickoff)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator + Grok 4.5 High review pending).
+
+**Status: in progress.** Stage 6 verified complete at nested delivery `ee9d1da8`, nested HEAD
+`e085975a`, parent HEAD `10afb64397`. Parallelization: **integrator-only single stream**
+(schema, generator, bootstrap, and shadow emission share the frozen registry snapshot and
+§5.3 shared files; splitting manifests from generator would race on snapshot equality).
+
+**Delivered this pass:** `capabilities/schema.py`, introspection/bootstrap/load/generator/
+registration_runtime; 17 bootstrapped subject manifests under
+`capabilities/<subject>/manifest.py`; shadow artifacts under
+`generated/capabilities/` (registration, client stubs, gateway dispatch, registry snapshot
+byte-equal to `mcp_tool_registry_contract_snapshot.json`); scripts
+`bootstrap_capability_manifests.py` and `generate_capability_shadow.py`; focused unit
+tests in `tests/test_capability_manifest_generator.py` (awkward-subject schema coverage,
+escape hatch, no hand-edit markers).
+
+**§5.7 MCP evidence:** Docker `unit` — `tests/test_capability_manifest_generator.py`
+10 passed (not an integration gate).
+
+**Remaining Phase 20:** Grok re-review after fix integrator pass (operation_path
+resolution, inert shadow stubs, importability tests). Manifest-driven registration
+beyond module-delegating shadow path is **Phase 21**; document generator regen
+workflow in §11.4 if needed.
+
+#### 2026-08-06 — Phase 20 fix integrator pass (Cursor Multitask)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 fix integrator).
+
+**Status: in progress.** Addresses review ffff448c blocking + important findings;
+does not self-claim CLEAR.
+
+**Delivered this pass:** `_resolve_import_path` honors AST `ImportFrom.level`
+against `freecad_mcp`; `import_operation_symbol` helper; re-bootstrapped manifests
+and regenerated shadow artifacts; inert `shadow_client_stubs` (no fake
+`_invoke_mutation_v2`); importability tests for awkward subjects + representative
+relative-import modules; escape-hatch test uses real `tests.fixtures` impl;
+§11.1/§11.3 boundary wording moves manifest cutover to Phase 21.
+
+**§5.7 MCP evidence:** Docker `unit` image `freecad-mcp-tests` digest
+`sha256:570650fce4e8ecc4ca8ede581024696a4266e2921d1fc147a5d106e109e99d89` —
+`tests/test_capability_manifest_generator.py` + `tests/test_capability_introspection.py`
+16 passed (not an integration gate).
 
 #### 2026-08-06 — Phase 19 cross-track gate closed (integrator; pending Grok re-review)
 
@@ -2245,6 +2314,30 @@ repository digest; host-side build or test output is never evidence.
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 20 — `feat(mcp): add capability manifests and the generator`
+
+- **Agent lane:** Cursor Multitask (Composer 2.5 landing integrator).
+- **Images and source identity:** Compose `freecad-mcp-tests` is
+  `sha256:570650fce4e8ecc4ca8ede581024696a4266e2921d1fc147a5d106e109e99d89`.
+- **Focused Docker gate (not integration):** `docker compose run --rm unit
+  tests/test_capability_manifest_generator.py tests/test_capability_introspection.py`
+  — **16 passed**.
+- **Key artifacts:** `capabilities/schema.py`, `introspection.py`, `bootstrap.py`,
+  `load.py`, `generator.py`, `registration_runtime.py`; 17 subject manifests under
+  `capabilities/<subject>/manifest.py`; shadow output under `generated/capabilities/`
+  (`shadow_registration.py`, inert `shadow_client_stubs.py`,
+  `shadow_gateway_dispatch.json`, `registry_snapshot.json` byte-equal to
+  `tests/fixtures/mcp_tool_registry_contract_snapshot.json`); scripts
+  `bootstrap_capability_manifests.py`, `generate_capability_shadow.py`.
+- **Schema coverage:** sketch constraints, FEM (`run_fem_analysis`), assembly joints;
+  escape-hatch fixture in `tests/fixtures/capability_escape_hatch_fixture.py`;
+  relative-import `operation_path` tests; inert stubs raise `NotImplementedError`
+  (no fake `_invoke_mutation_v2`).
+- **Phase 21 boundary:** shadow artifacts prove byte-equality only; manifest-driven
+  registration cutover (`tools_register_order.py`, binder replacement) is Phase 21.
+- **Review result:** fix integrator pass addressed ffff448c; integrated re-review
+  **935d14d3 CLEAR**.
 
 #### Phase 19 — `refactor(mcp): pass a typed tool registration context`
 
