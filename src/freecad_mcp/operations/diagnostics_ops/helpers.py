@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...responses import ToolResponse
+from ...responses.constants import ToolResponse
 from ...template_resources import render_template_lines
 from ..p7_assembly import _doc_preamble, _shared_helpers
 

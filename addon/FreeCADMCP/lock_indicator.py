@@ -53,7 +53,9 @@ try:
         _bounded_text,
         _format_elapsed,
     )
-    from addon.FreeCADMCP.lock_indicator_ops.install import install_lock_indicator
+    from addon.FreeCADMCP.lock_indicator_ops.install import (
+        install_lock_indicator,
+    )
     from addon.FreeCADMCP.lock_indicator_ops.lease_matching import (
         _action_object_name,
         _active_document_hints,
@@ -133,7 +135,7 @@ except ImportError:
         _bounded_text,
         _format_elapsed,
     )
-    from lock_indicator_ops.install import install_lock_indicator
+    from lock_indicator_ops.install import install_lock_indicator  # noqa: F401
     from lock_indicator_ops.lease_matching import (  # noqa: F401
         _action_object_name,
         _active_document_hints,
@@ -195,11 +197,11 @@ except ImportError:
 
 _install_loaded_module_aliases()
 
-# §3.3 rename shim — tests may monkeypatch the legacy name.
+# Tests may monkeypatch the legacy rename binding.
 _set_status_style = _refresh_set_status_style
 bind_facade_namespace(globals())
 
-# §3.3 compatibility surfaces — live state is read/written via proxies below.
+# Live state is read/written via proxies below.
 _STATE_PROXY_NAMES = frozenset(
     {
         "_deterred_actions",
@@ -210,12 +212,6 @@ _STATE_PROXY_NAMES = frozenset(
         "_status_widget",
     }
 )
-
-__all__ = [
-    "install_lock_indicator",
-    "refresh_lock_indicator",
-]
-
 
 def __getattr__(name: str) -> Any:
     if name in _STATE_PROXY_NAMES:

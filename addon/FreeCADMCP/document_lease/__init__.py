@@ -1,26 +1,24 @@
 """Frozen historic lease decoders and Phase 18 deprecation adapters."""
 
-from .errors import (
-    AuthorizationError,
-    CleanReleaseError,
-    CoordinationError,
-    DirtyAcquisitionError,
-    DirtyAdoptionError,
-    DocumentIdentityRefreshEvent,
-    ForeignRecoveryError,
-    ForeignRecoveryRecord,
-    LeaseConflictError,
-    LeaseServiceError,
-    LeaseStateError,
-    LiveDocumentValidationError,
-    LocalRecoveryError,
-    LocalRuntimeIdentity,
-    LockedErrorHandoffRequired,
-    OrphanedForeignRecoveryRequired,
-    OrphanedLocalMcpRecoveryRequired,
-    ProcessLivenessEvidence,
-    SavedForeignRecoveryRequired,
-)
+from .errors.authorization_error import AuthorizationError
+from .errors.clean_release_error import CleanReleaseError
+from .errors.coordination_error import CoordinationError
+from .errors.dirty_acquisition_error import DirtyAcquisitionError
+from .errors.dirty_adoption_error import DirtyAdoptionError
+from .errors.document_identity_refresh_event import DocumentIdentityRefreshEvent
+from .errors.foreign_recovery_error import ForeignRecoveryError
+from .errors.foreign_recovery_record import ForeignRecoveryRecord
+from .errors.lease_conflict_error import LeaseConflictError
+from .errors.lease_service_error import LeaseServiceError
+from .errors.lease_state_error import LeaseStateError
+from .errors.live_document_validation_error import LiveDocumentValidationError
+from .errors.local_recovery_error import LocalRecoveryError
+from .errors.local_runtime_identity import LocalRuntimeIdentity
+from .errors.locked_error_handoff_required import LockedErrorHandoffRequired
+from .errors.orphaned_foreign_recovery_required import OrphanedForeignRecoveryRequired
+from .errors.orphaned_local_mcp_recovery_required import OrphanedLocalMcpRecoveryRequired
+from .errors.process_liveness_evidence import ProcessLivenessEvidence
+from .errors.saved_foreign_recovery_required import SavedForeignRecoveryRequired
 from .identity_helpers.path_canonicalize import canonicalize_path
 from .identity_types.document_identity_error import DocumentIdentityError
 from .identity_types.duplicate_document_error import DuplicateDocumentError
@@ -38,19 +36,17 @@ from .sidecar import (
     sidecar_path_for,
     validate_sidecar_payload,
 )
-from .sidecar_types import (
-    SidecarAtomicityError,
-    SidecarCommitUncertainError,
-    SidecarConflictError,
-    SidecarError,
-    SidecarExistsError,
-    SidecarLockError,
-    SidecarMalformedError,
-    SidecarNetworkPathError,
-    SidecarNotFoundError,
-    SidecarPermissionError,
-    SidecarTooLargeError,
-)
+from .sidecar_types.sidecar_atomicity_error import SidecarAtomicityError
+from .sidecar_types.sidecar_commit_uncertain_error import SidecarCommitUncertainError
+from .sidecar_types.sidecar_conflict_error import SidecarConflictError
+from .sidecar_types.sidecar_error import SidecarError
+from .sidecar_types.sidecar_exists_error import SidecarExistsError
+from .sidecar_types.sidecar_lock_error import SidecarLockError
+from .sidecar_types.sidecar_malformed_error import SidecarMalformedError
+from .sidecar_types.sidecar_network_path_error import SidecarNetworkPathError
+from .sidecar_types.sidecar_not_found_error import SidecarNotFoundError
+from .sidecar_types.sidecar_permission_error import SidecarPermissionError
+from .sidecar_types.sidecar_too_large_error import SidecarTooLargeError
 from .types.document_identity import DocumentIdentity
 from .types.document_selector import DocumentSelector
 from .types.file_baseline import FileBaseline

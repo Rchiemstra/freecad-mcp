@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse
+from ..responses.constants import ToolResponse
 from ..template_resources import read_template_lines, render_template_lines
 from .core import (
     _partdesign_bool_property_helper_code,
@@ -171,7 +171,7 @@ def compute_gear_geometry_operation(
     r_a = r + module
     r_f = max(r - 1.25 * module - clearance, module * 0.05)
     inv_α = math.tan(α) - α
-    from ..responses import json_response
+    from ..responses.tool_results import json_response
     return json_response({
         "teeth":          teeth,
         "module":         module,
@@ -203,7 +203,7 @@ def check_gear_pair_operation(
     pressure_angle: float = 20.0,
     center_distance: float | None = None,
 ) -> ToolResponse:
-    from ..responses import json_response
+    from ..responses.tool_results import json_response
     same_module = abs(module1 - module2) < 1e-6
     r1 = module1 * teeth1 / 2.0
     r2 = module2 * teeth2 / 2.0

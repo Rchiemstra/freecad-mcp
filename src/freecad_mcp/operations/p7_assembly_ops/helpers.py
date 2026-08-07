@@ -5,7 +5,8 @@ import logging
 
 from ...execute_options import ExecuteOptions
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse, add_screenshot_if_available, tool_fail, tool_ok
+from ...responses.constants import ToolResponse
+from ...responses.tool_results import add_screenshot_if_available, tool_fail, tool_ok
 from ...template_resources import render_template_lines
 
 logger = logging.getLogger("FreeCADMCPserver")

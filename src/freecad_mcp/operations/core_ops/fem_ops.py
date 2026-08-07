@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse, add_screenshot_if_available, json_response, tool_fail
+from ...responses.constants import ToolResponse
+from ...responses.tool_results import add_screenshot_if_available, json_response, tool_fail
 
 logger = logging.getLogger("FreeCADMCPserver")
 

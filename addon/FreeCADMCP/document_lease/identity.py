@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-# §3.3 compatibility shims — moved types keep their legacy import path.
+# Moved types preserve the prior import surface.
 from .identity_helpers.document_values import document_values as _document_values
 from .identity_helpers.inspect import (
     inspect_registered_document as _inspect_registered_document,

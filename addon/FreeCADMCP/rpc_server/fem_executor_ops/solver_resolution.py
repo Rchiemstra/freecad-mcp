@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager as _AbstractContextManager
-from importlib import import_module as _import_module
 from importlib import reload as _reload
 from inspect import getmodule as _getmodule
 from inspect import isclass as _isclass
 
 import FreeCAD
 import ObjectsFem
+
+
+def _import_module(name: str):
+    return __import__(name, fromlist=["ViewProxy"])
 
 
 def _fem_objects(doc) -> list[object]:

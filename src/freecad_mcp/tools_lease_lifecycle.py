@@ -1,7 +1,5 @@
 """Declarative shim — generated register module lives in generated/capabilities."""
 
-from freecad_mcp.generated.capabilities.register_modules.tools_lease_lifecycle import (
-    register,
-)
+from freecad_mcp.generated.capabilities.register_modules.tools_lease_lifecycle import register
 
 __all__ = ['register']

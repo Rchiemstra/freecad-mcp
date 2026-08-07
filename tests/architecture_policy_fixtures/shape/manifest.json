@@ -165,6 +165,35 @@
       "message_fragment": "not statically auditable"
     },
     {
+      "path": "fail/oversized_declarative_reexport_facade.py",
+      "verdict": "fail",
+      "rules": ["public_symbol_budget"],
+      "public_symbols": 17,
+      "expect": ["ARCH106"],
+      "message_fragment": "budget is 16"
+    },
+    {
+      "path": "fail/section33_comment_impure_shim.py",
+      "verdict": "fail",
+      "rules": ["shim_purity"],
+      "expect": ["ARCH105"],
+      "message_fragment": "not declarative and side-effect free"
+    },
+    {
+      "path": "fail/former_prefix_impure_shim/document_lease/impure_runtime.py",
+      "verdict": "fail",
+      "rules": ["shim_purity"],
+      "expect": ["ARCH105"],
+      "message_fragment": "not declarative and side-effect free"
+    },
+    {
+      "path": "pass/frozen_registry_table/export_names.py",
+      "verdict": "pass",
+      "rules": ["public_symbol_budget", "giant_facade"],
+      "public_symbols": 17,
+      "expect": []
+    },
+    {
       "path": "pass/cohesive_value_types.py",
       "verdict": "pass",
       "rules": ["mixed_responsibility", "cohesive_value_types"],

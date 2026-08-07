@@ -6,7 +6,8 @@ from __future__ import annotations
 import logging
 
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, tool_fail
+from ..responses.constants import ToolResponse
+from ..responses.tool_results import tool_fail
 from ..template_resources import render_template_lines
 from .core import _build_assertion_code, _partdesign_pattern_helper_code, _run_code
 

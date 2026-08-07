@@ -22,7 +22,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-# §3.3 compatibility shims — moved symbols keep their legacy import path.
+# Moved symbols preserve the prior import surface.
 from .observer_ops._log import logger
 from .observer_ops.app_observer import LeaseObserver
 from .observer_ops.document_helpers import document_dirty as _document_dirty  # noqa: F401

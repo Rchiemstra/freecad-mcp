@@ -66,8 +66,8 @@
         {
           "path": "capabilities/sketch/mixed.py",
           "line": 1,
-          "subjects": ["sketch", "mesh"],
-          "message_fragment": "multiple capability subjects"
+          "import": "capabilities.mesh.topology",
+          "message_fragment": "sketch imports capability subject mesh"
         }
       ]
     },
@@ -80,8 +80,8 @@
         {
           "path": "capabilities/sketch/runtime.py",
           "line": 1,
-          "subjects": ["sketch", "mesh"],
-          "message_fragment": "multiple capability subjects"
+          "import": "capabilities.mesh.topology",
+          "message_fragment": "sketch imports capability subject mesh"
         }
       ]
     },
@@ -94,8 +94,8 @@
         {
           "path": "capabilities/sketch/dispatch/helper.py",
           "line": 1,
-          "subjects": ["sketch", "mesh"],
-          "message_fragment": "multiple capability subjects"
+          "import": "capabilities.mesh.topology",
+          "message_fragment": "sketch imports capability subject mesh"
         }
       ]
     },
@@ -594,6 +594,13 @@
           "message_fragment": "runtime module locator sys.modules.get"
         }
       ]
+    },
+    {
+      "id": "composition_root_star_import_passes",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/pass_composition_root_star",
+      "outcome": "pass",
+      "files": ["server.py"]
     },
     {
       "id": "leaf_import_passes",

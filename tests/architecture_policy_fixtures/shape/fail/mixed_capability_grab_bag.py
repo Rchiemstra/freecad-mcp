@@ -1,5 +1,13 @@
 """Unrelated CAD capability families cannot share a production module."""
 
+from capabilities.assembly.joints import add_assembly_joint as _add_assembly_joint
+from capabilities.diagnostics.health import inspect_mesh_topology as _inspect_mesh_topology
+from capabilities.drawing.pages import export_drawing_page as _export_drawing_page
+from capabilities.fem.materials import apply_fem_material as _apply_fem_material
+from capabilities.path.jobs import create_path_job as _create_path_job
+from capabilities.render.video import render_video_frame as _render_video_frame
+from capabilities.sketch.geometry import create_sketch_geometry as _create_sketch_geometry
+
 
 def add_assembly_joint():
     return None

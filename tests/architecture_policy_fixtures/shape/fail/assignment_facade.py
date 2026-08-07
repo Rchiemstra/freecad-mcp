@@ -1,4 +1,8 @@
-"""Assignment-bound exports count toward capability ownership and facade size."""
+"""Explicit assignment exports cannot hide mixed capability ownership."""
+
+from capabilities.export.files import export_close as _export_close
+from capabilities.mesh.topology import mesh_create as _mesh_create
+from capabilities.sketch.geometry import sketch_create as _sketch_create
 
 
 def _factory():
@@ -20,12 +24,12 @@ mesh_tool12 = _factory()
 sketch_tool13 = _factory()
 mesh_tool14 = _factory()
 sketch_tool15 = _factory()
-mesh_tool16 = _factory()
+sketch_tool16 = _factory()
 sketch_tool17 = _factory()
 mesh_tool18 = _factory()
 sketch_tool19 = _factory()
 mesh_tool20 = _factory()
 sketch_tool21 = _factory()
-mesh_tool22 = _factory()
+sketch_tool22 = _factory()
 sketch_tool23 = _factory()
 mesh_tool24 = _factory()

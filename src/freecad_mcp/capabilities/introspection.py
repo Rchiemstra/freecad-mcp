@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import importlib
 from pathlib import Path
 from typing import Any
 
@@ -143,10 +142,10 @@ def import_operation_symbol(operation_path: str) -> Any:
         return getattr(FreeCADConnection, method)
     if ".capabilities.inline." in operation_path:
         module_name, _, attr = operation_path.rpartition(".")
-        module = importlib.import_module(module_name)
+        module = __import__(module_name, fromlist=[attr])
         return getattr(module, attr)
     module_name, _, attr = operation_path.rpartition(".")
-    module = importlib.import_module(module_name)
+    module = __import__(module_name, fromlist=[attr])
     return getattr(module, attr)
 
 

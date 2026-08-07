@@ -4,7 +4,8 @@ import json
 import logging
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse, json_response, tool_fail
+from ...responses.constants import ToolResponse
+from ...responses.tool_results import json_response, tool_fail
 from ...template_resources import render_template_text
 from ..p7_assembly import _doc_preamble, _run_json_code
 from .helpers import _response_text

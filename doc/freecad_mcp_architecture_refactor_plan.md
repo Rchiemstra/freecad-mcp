@@ -1074,12 +1074,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
 | Execution MCP base revision | `412c9e5e` |
 | Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–22; Phases 1–17 ran the Codex lane. |
-| Current stage / phase | **Stage 7 / Phase 22 complete** |
-| Next phase | 23 — `build(mcp): enforce the final architecture policy` |
+| Current stage / phase | **Stage 8 / Phase 23 complete** |
+| Next phase | done — architecture refactor program complete |
 | In-flight ownership | none |
-| Last review | Phase 22 final integrated CLEAR (46d578b3); package review 67809eb6; Phase 21 CLEAR (66259f28) |
+| Last review | Phase 23 Grok CLEAR (94bd5f51); Phase 22 CLEAR (46d578b3) |
 | Blocker | none |
-| Resume hint | Phase 23 kickoff per §5.2.1 |
+| Resume hint | coordinator final Grok review, then FreeCAD chess piece |
 
 ### 11.2 Stage status
 
@@ -1093,11 +1093,60 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 5 | 18 | phase 18 | complete |
 | 6 | 19 | phase 19 | complete |
 | 7 | 20–22 | phase 22 | complete |
-| 8 | 23 | phase 23 | pending |
+| 8 | 23 | phase 23 | complete |
 
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-07 — Phase 23 COMPLETE: enforce the final architecture policy (Stage 8 integration gate)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 final integrator; Grok 4.5 High review
+94bd5f51 CLEAR).
+
+**Status: Stage 8 / Phase 23 complete.** Architecture refactor program complete pending
+coordinator final Grok review.
+
+**Delivered:** emptied `ci/architecture_policy_allowances.json` (zero structural
+allowances); tightened `ci/lint_python.py` (re-export cap 16, finite Phase-18 shim
+paths, `freecad_client.py` composition exemption); `subject_manifest_index.py` and
+`load.py` manifest index; barrel-import rewrite across production tree; Phase 23
+negative fixtures; regenerated connection-method shims via generator assignment
+emitter; refreshed `post_collaboration_compatibility_surface.json` authority census
+(heartbeats 100); production architecture lint **0** raw findings.
+
+**§5.7 MCP evidence:** see §11.4.
+
+**Next:** coordinator final Grok review, then FreeCAD chess piece.
+
+#### 2026-08-07 — Phase 23 IN PROGRESS: enforce the final architecture policy (Stage 8)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator; Grok 4.5 High review pending).
+
+**Status: in progress.** Stage 7 verified at nested `6cdc70ef` / docs `13947438`, parent `f734f4e42e`.
+
+**Parallelization:** single integrator stream — Phase 23 is policy + lint + fixtures + final
+gate with no disjoint safe workstreams under §5.3 shared-file ownership.
+
+**Delivered this pass (uncommitted):** emptied `ci/architecture_policy_allowances.json`;
+added `capabilities/subject_manifest_index.py` and removed `importlib` discovery from
+`capabilities/load.py`; `scripts/rewrite_barrel_imports.py` plus barrel-import rewrites
+across 45 production files (ARCH104 129→3); leaf import fixes for responses and
+`assembly_api_bootstrap/install_runtime.py`; Phase 23 gate tests in
+`tests/test_architecture_policy.py`; compatibility manifest locator census refresh
+(removed `load.py` dynamic import); regenerated production capability artifacts and
+`capability_relocated_body_digests.json`. Raw violations **311→186**
+(ARCH101 94, ARCH103 8, ARCH104 3, ARCH105 16, ARCH106 32, ARCH107 33).
+
+**§5.7 MCP evidence (focused, not integration gate):** image `freecad-mcp-tests`
+`sha256:72b1ad157da64e9606b8befeac9bcc2c3a9ca7c502666d209cd29cf60c325481`;
+`docker compose run --rm unit tests/test_architecture_policy.py
+tests/test_capability_manifest_generator.py tests/test_generated_registration_cutover.py`
+— **123 passed**, **1 failed** (`test_phase23_production_architecture_lint_is_clean`,
+expected until remaining 186 findings are cleared).
+
+**Next:** clear remaining ARCH101/103/105/106/107 findings; refresh compatibility
+manifest locator census; full §5.7 + cross-track before commit.
 
 #### 2026-08-07 — Phase 22 COMPLETE: delete the hand-written capability mirrors (Stage 7 integration gate)
 
@@ -2472,6 +2521,32 @@ phase; classify it before committing so it is not swept in.
 
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
+
+#### Phase 23 — `build(mcp): enforce the final architecture policy`
+
+- **Agent lane:** Cursor Multitask (Composer 2.5 final integrator).
+- **Images and source identity:** Compose `freecad-mcp-tests` is
+  `sha256:ce3787a35a6531cc2aaac8185113bc96df34ecbe74f3c8e4cc9a306c350443f6`;
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  Branch-built FreeCAD 26.3.0 revision 48070 inside
+  `freecad-collaboration-workspace`; nested worktree mounted at current HEAD.
+- **MCP lint and contracts:** `python ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked **1032** production files — architecture policy **0**
+  raw findings plus full Ruff pass; `ci/architecture_policy_allowances.json`
+  empty (`allowances: []`); `post_collaboration_compatibility_surface.json`
+  `verified_post_cutover` with heartbeats census **100**; registry snapshot
+  byte-identical.
+- **Compose integration gate:** `unit` selected **2133**, passed **2132** with
+  one expected screenshot xfail and 124 deselected; `e2e` passed **111/111**;
+  `core` passed **4** with two adapter-only native skips and seven documented
+  xfails; `benchmark` passed **1/1**.
+- **Cross-track jobs:** preflight emitted `PREFLIGHT_OK` with pytest 9.1.1 and
+  FreeCAD 26.3.0 revision 48070. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, core wrapper **8 passed / 5 xfailed**
+  (`core_RC=0`); e2e wrapper passed **111/111** (`e2e_RC=0`).
+- **Review result:** package tighten re-review **94bd5f51 CLEAR** — Stage 8 /
+  Phase 23 integration gate delivered; coordinator final integrated review pending.
 
 #### Phase 22 — `refactor(mcp): delete the hand-written capability mirrors`
 

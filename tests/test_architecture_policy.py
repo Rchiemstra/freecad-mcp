@@ -114,7 +114,8 @@ def test_shape_policy_fixtures(case: dict[str, object]) -> None:
         assert "C901" in lint_python.RUFF_RULES
         result = lint_python.run_ruff_source(path, "ruff_c901_complexity.py")
         assert result.returncode == 1
-        diagnostic_codes = re.findall(r": ([A-Z]+\d+) ", result.stdout)
+        plain_stdout = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        diagnostic_codes = re.findall(r": ([A-Z]+\d+) ", plain_stdout)
         assert diagnostic_codes == ["C901"], result.stdout
     else:
         assert architecture_codes == expected
@@ -549,6 +550,51 @@ def test_stale_allowance_is_a_policy_failure() -> None:
     assert len(findings) == 1
     assert findings[0].code == "ARCH099"
     assert "stale architecture allowance" in findings[0].message
+
+
+@pytest.mark.unit
+def test_phase23_production_architecture_has_no_structural_allowances() -> None:
+    allowance_path = REPOSITORY_ROOT / "ci" / "architecture_policy_allowances.json"
+    payload = json.loads(allowance_path.read_text(encoding="utf-8"))
+    assert payload.get("allowances") == []
+
+
+@pytest.mark.unit
+def test_phase23_authority_allowances_are_historical_and_unreachable() -> None:
+    manifest = json.loads(
+        (
+            REPOSITORY_ROOT
+            / "tests"
+            / "fixtures"
+            / "post_collaboration_compatibility_surface.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert manifest["manifest_state"] == "verified_post_cutover"
+    assert manifest["verified_post_cutover"] is True
+    assert all(
+        items == []
+        for items in manifest["verified_reachable_authority"].values()
+    )
+    assert {item["id"] for item in manifest["temporary_authority_allowances"]} == {
+        "core_authority",
+        "locked_error_handoff_rotation",
+        "lease_observers",
+        "heartbeats",
+        "sidecar_correctness",
+        "mcp_save_recovery_authority",
+    }
+
+
+@pytest.mark.unit
+def test_phase23_production_architecture_lint_is_clean() -> None:
+    root = REPOSITORY_ROOT
+    files = lint_python.discover_files(["addon/FreeCADMCP", "src/freecad_mcp"], root, [])
+    findings = lint_python.check_architecture(
+        files,
+        root,
+        scope_prefixes=["addon/FreeCADMCP", "src/freecad_mcp"],
+    )
+    assert findings == [], findings
 
 
 @pytest.mark.unit

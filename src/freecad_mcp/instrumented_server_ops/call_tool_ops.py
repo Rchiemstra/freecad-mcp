@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from ..telemetry import bind_context
+from ..telemetry.context import bind_context
 from .call_tool_helpers import (
     emit_tool_completion_event,
     emit_validation_events,

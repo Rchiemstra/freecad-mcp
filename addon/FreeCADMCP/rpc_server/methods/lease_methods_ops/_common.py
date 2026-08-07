@@ -2,19 +2,4 @@
 
 import logging
 
-try:
-    from document_state import document_modified_or_dirty, require_document_modified
-except ImportError:
-    from addon.FreeCADMCP.document_state import (
-        document_modified_or_dirty,
-        require_document_modified,
-    )
-
 logger = logging.getLogger(__name__)
-
-
-__all__ = [
-    "document_modified_or_dirty",
-    "logger",
-    "require_document_modified",
-]

@@ -352,7 +352,6 @@ def render_connection_method_shim(
     *,
     exports: tuple[str, ...] | None = None,
 ) -> str:
-    generated = f"freecad_mcp.generated.capabilities.connection_methods.{module_name}"
     if exports is None:
         exports = _bindings_from_source(_read_connection_method_source(module_name))
     if not exports:
@@ -364,14 +363,17 @@ def render_connection_method_shim(
     lines = [
         '"""Declarative shim — generated connection method lives in generated/capabilities."""',
         "",
-        f"from {generated} import (",
+        "from freecad_mcp.generated.capabilities.connection_methods import (",
+        f"    {module_name} as _generated,",
+        ")",
+        "",
     ]
-    lines.extend(f"    {name}," for name in exports)
+    all_marker = "  # noqa: RUF022" if tuple(exports) != tuple(sorted(exports)) else ""
+    lines.extend(f"{name} = _generated.{name}" for name in exports)
     lines.extend(
         [
-            ")",
             "",
-            "__all__ = [",
+            f"__all__ = [{all_marker}",
         ]
     )
     lines.extend(f"    {name!r}," for name in exports)
@@ -386,8 +388,12 @@ def render_connection_methods_package_init(
     lines = ['"""Re-export connection method implementations."""', ""]
     all_exports: list[str] = []
     for module_name in module_names:
-        exports = _public_bindings_from_source(
-            _read_connection_method_source(module_name)
+        exports = tuple(
+            sorted(
+                _public_bindings_from_source(
+                    _read_connection_method_source(module_name)
+                )
+            )
         )
         if not exports:
             continue
@@ -396,7 +402,7 @@ def render_connection_methods_package_init(
         lines.append(")")
         all_exports.extend(exports)
     lines.extend(["", "__all__ = ["])
-    lines.extend(f"    {name!r}," for name in all_exports)
+    lines.extend(f"    {name!r}," for name in sorted(all_exports))
     lines.append("]")
     return "\n".join(lines) + "\n"
 

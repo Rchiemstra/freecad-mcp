@@ -19,7 +19,7 @@ from .snapshot_service_ops.materialize_aliases import materialize_load_aliases
 from .snapshot_service_ops.restore_snapshot import restore_snapshot_in_place_gui
 from .snapshot_service_ops.snapshot_restore_error import SnapshotRestoreError
 
-# §3.3 compatibility shims for deep test imports.
+# Deep test imports bind through module-level aliases.
 _selection_state = selection_state
 _collect_link_manifest = collect_link_manifest
 

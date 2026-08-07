@@ -13,7 +13,7 @@ from mcp.types import CallToolResult
 from ..mcp_tasks import HEAVY_TASK_TOOLS, finish, register
 from ..mcp_tasks import get as get_task_link
 from ..outcomes import OutcomeStatus, extract_error_code
-from ..telemetry import bind_context
+from ..telemetry.context import bind_context
 from .helpers import execution_category, first, meta_values
 from .surfaces import emit_event
 

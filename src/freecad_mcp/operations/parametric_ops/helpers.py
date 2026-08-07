@@ -4,7 +4,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse, tool_fail, tool_ok
+from ...responses.constants import ToolResponse
+from ...responses.tool_results import tool_fail, tool_ok
 from ...template_resources import (
     read_template_text,
     render_template_lines,

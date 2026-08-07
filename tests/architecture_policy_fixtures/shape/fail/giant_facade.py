@@ -1,5 +1,19 @@
 """A short but giant public facade spanning unrelated server responsibilities."""
 
+from capabilities.diagnostics.health import inspect_health as _inspect_health
+from capabilities.document.lifecycle import create_document as _create_document
+from capabilities.execution.worker import list_worker_processes as _list_worker_processes
+from capabilities.export.files import export_mesh as _export_mesh
+from capabilities.sketch.constraints import create_sketch_constraint as _create_sketch_constraint
+from capabilities.transport.auth import authenticate_connection as _authenticate_connection
+from capabilities.transport.control import cancel_request as _cancel_request
+from capabilities.transport.lifecycle import start_listener as _start_listener
+from capabilities.transport.lifecycle import stop_listener as _stop_listener
+from capabilities.view.camera import get_camera_view as _get_camera_view
+from capabilities.view.selection import set_selection as _set_selection
+from capabilities.worker.recovery import recover_document as _recover_document
+from capabilities.worker.save import save_document as _save_document
+
 
 def authenticate_connection():
     return None

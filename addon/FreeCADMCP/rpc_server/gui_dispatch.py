@@ -24,7 +24,6 @@ Robustness and performance guarantees:
 
 from __future__ import annotations
 
-# §3.3 compatibility shims — moved symbols keep their legacy import path.
 from .gui_dispatch_ops import queue_state
 from .gui_dispatch_ops import wake_signal as _wake_signal_module
 from .gui_dispatch_ops.dispatch_to_gui import dispatch_to_gui  # noqa: F401

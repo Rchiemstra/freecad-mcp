@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse
+from ...responses.constants import ToolResponse
 from ...template_resources import render_template_lines
 from ..p7_assembly import _run_json_code
 from .code_gen import (

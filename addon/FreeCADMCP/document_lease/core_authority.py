@@ -1,7 +1,7 @@
 """Frozen compatibility adapters for removed MCP core mutation authority.
 
 Native FreeCAD collaboration owns document authority after the Phase 18
-cutover.  Historic import paths remain available so callers receive
+cutover.  Prior import paths remain available so callers receive
 deterministic deprecation behavior instead of exercising core mutation
 ownership or capability APIs.
 """

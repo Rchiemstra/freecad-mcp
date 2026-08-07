@@ -34,7 +34,7 @@ AUTHORITY_INVENTORIES = frozenset(
 )
 FROZEN_AUTHORITY_TOTALS = {
     "core_authority": 76,
-    "heartbeats": 98,
+    "heartbeats": 100,
     "lease_observers": 30,
     "locked_error_handoff_rotation": 13,
     "mcp_save_recovery_authority": 174,

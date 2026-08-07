@@ -4,7 +4,8 @@ import logging
 from typing import Any
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse, tool_fail
+from ...responses.constants import ToolResponse
+from ...responses.tool_results import tool_fail
 from .helpers import (
     _typed_rpc_unavailable,
     _typed_rpc_unavailable_result,

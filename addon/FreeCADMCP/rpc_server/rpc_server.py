@@ -847,3 +847,11 @@ register_commands(
     )
 )
 schedule_toggle_sync()
+
+__all__ = [
+    "RPC_SHUTDOWN_CANCELLATION_WAIT_SECONDS",
+    "FreeCADRPC",
+    "runtime_running",
+    "start_rpc_server",
+    "stop_rpc_server",
+]

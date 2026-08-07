@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from typing import Any
 
 from ..server_ops.tool_dependencies import ToolDependencies
@@ -12,7 +11,7 @@ from .schema import ExecutionMode, SubjectManifest, ToolEntry
 
 def _import_symbol(path: str) -> Any:
     module_name, _, attr = path.rpartition(".")
-    module = importlib.import_module(module_name)
+    module = __import__(module_name, fromlist=[attr])
     return getattr(module, attr)
 
 

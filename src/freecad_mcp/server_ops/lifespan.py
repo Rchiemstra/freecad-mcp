@@ -10,7 +10,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from ..build_info import as_dict as build_info_dict
-from ..telemetry import close_default_writer, emit_event
+from ..telemetry.writer import close_default_writer, emit_event
 from . import surfaces
 from .session import safe_diagnostic_code
 

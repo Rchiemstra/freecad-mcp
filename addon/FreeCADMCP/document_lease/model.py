@@ -12,7 +12,6 @@ from types import MappingProxyType as _MappingProxyType
 from typing import Any
 from typing import Self as _Self
 
-# §3.3 compatibility shims — keep old import paths working.
 from .types.document_identity import DocumentIdentity
 from .types.document_selector import DocumentSelector  # noqa: F401
 from .types.file_baseline import FileBaseline

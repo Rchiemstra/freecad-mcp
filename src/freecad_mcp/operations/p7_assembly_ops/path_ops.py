@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse
+from ...responses.constants import ToolResponse
 from ...template_resources import render_template_lines, render_template_text
 from .helpers import _doc_preamble, _run_json_code, _shared_helpers, _validate_if_exists
 

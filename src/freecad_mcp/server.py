@@ -36,7 +36,9 @@ from .build_info import (  # noqa: F401 - §3.3 test / runtime shims
 )
 from .collaboration_client import CollaborationClient
 from .freecad_client import FreeCADConnection
+from .freecad_client_ops.facade_bindings import bind_freecad_connection
 from .instrumented_server import InstrumentedFastMCP
+from .instrumented_server_ops.facade_bindings import bind_instrumented_fast_mcp
 from .prompt_text import ASSET_CREATION_STRATEGY
 from .server_ops.connection import get_freecad_connection
 from .server_ops.lifespan import server_lifespan
@@ -52,14 +54,13 @@ from .server_ops.session import (
     session_needs_refresh as _session_needs_refresh,  # noqa: F401
 )
 from .server_ops.surfaces import ServerSurfaceBindings, bind_server_surfaces
-from .server_ops.tool_exports import __all__ as __all__
 from .server_ops.tool_exports import bind_tool_exports
 from .server_ops.tool_registration import (
     _lazy_collaboration_connection,
     register_tool_modules,
 )
 from .server_state import ServerState
-from .telemetry import emit_event
+from .telemetry.writer import emit_event
 from .tools_register_order import REGISTER_TOOL_MODULES as REGISTER_TOOL_MODULES
 
 logging.basicConfig(
@@ -67,6 +68,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("FreeCADMCPserver")
 logger.setLevel(logging.INFO)
+
+bind_freecad_connection(FreeCADConnection)
+bind_instrumented_fast_mcp(InstrumentedFastMCP)
 
 state = ServerState()
 _connection_lock = threading.RLock()

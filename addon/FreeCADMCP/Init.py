@@ -33,7 +33,7 @@ def _ensure_freecad_mcp_package_path():
 
 try:
     _ensure_freecad_mcp_package_path()
-    from freecad_mcp.assembly_api_bootstrap import install as _install_assembly_api
+    from freecad_mcp.assembly_api_bootstrap.install_runtime import install as _install_assembly_api
 
     _install_assembly_api(module_registry=sys.modules)
 except Exception as exc:

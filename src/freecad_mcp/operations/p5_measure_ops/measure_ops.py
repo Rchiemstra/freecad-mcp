@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
-from ...responses import ToolResponse
+from ...responses.constants import ToolResponse
 from ...template_resources import render_template_lines, render_template_text
 from ..core_ops.run_code import _run_code
 
@@ -130,10 +130,10 @@ def common_volume_along_path_operation(
 ) -> ToolResponse:
     """Sweep a moving solid along a path and report common volumes with obstacles."""
     if not obstacle_objects:
-        from ...responses import tool_fail
+        from ...responses.tool_results import tool_fail
         return tool_fail("obstacle_objects must contain at least one object name")
     if not samples and not path_object:
-        from ...responses import tool_fail
+        from ...responses.tool_results import tool_fail
         return tool_fail("Provide samples (list of {x,y,z}) or path_object")
     lines = _doc_sk_preamble(doc_name) + render_template_lines(
         "p5_measure/common_volume_along_path.py.txt",

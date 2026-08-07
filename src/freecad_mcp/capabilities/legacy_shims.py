@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from mcp.types import CallToolResult
 
-from ..responses import tool_fail
+from ..responses.tool_results import tool_fail
 
 _LEGACY_REMOVED = {
     "success": False,

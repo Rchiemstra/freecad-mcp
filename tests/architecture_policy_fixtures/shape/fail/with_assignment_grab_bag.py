@@ -1,5 +1,9 @@
 """With-statement targets remain module-owned capability bindings."""
 
+from capabilities.export.files import export_close as _export_close
+from capabilities.mesh.topology import mesh_create as _mesh_create
+from capabilities.sketch.geometry import sketch_create as _sketch_create
+
 
 class _Factory:
     def __enter__(self):
