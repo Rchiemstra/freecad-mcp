@@ -1,5 +1,6 @@
 """Capability manifest for advanced (bootstrapped)."""
 
+# ruff: noqa: E501
 from __future__ import annotations
 
 from ..schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry

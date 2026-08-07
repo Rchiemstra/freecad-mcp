@@ -1,7 +1,3 @@
-"""Shared imports for connection method modules."""
+"""Declarative shim — generated connection method lives in generated/capabilities."""
 
-from __future__ import annotations
-
-import logging
-
-logger = logging.getLogger("FreeCADMCPserver")
+__all__: list[str] = []

@@ -197,12 +197,20 @@ def test_generated_shadow_files_are_marked_do_not_edit():
 
 def test_gateway_dispatch_has_one_entry_per_tool(manifests):
     payload = json.loads(
-        (shadow_output_root() / "shadow_gateway_dispatch.json").read_text(encoding="utf-8")
+        (shadow_output_root() / "gateway_dispatch.json").read_text(encoding="utf-8")
     )
     assert payload["tool_count"] == 170
     assert len(payload["entries"]) == 170
     tools = {entry.name for manifest in manifests for entry in manifest.tools}
     assert {item["tool"] for item in payload["entries"]} == tools
+
+
+def test_shadow_gateway_dispatch_matches_production_gateway_dispatch():
+    root = shadow_output_root()
+    assert (
+        (root / "shadow_gateway_dispatch.json").read_bytes()
+        == (root / "gateway_dispatch.json").read_bytes()
+    )
 
 
 def test_bootstrap_is_deterministic():

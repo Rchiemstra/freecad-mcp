@@ -27,12 +27,13 @@ def test_registered_run_transaction_uses_auth_session_not_retired_lease_state(
 ) -> None:
     bootstrap_unit_test_runtime()
     from freecad_mcp import tools_advanced_a
+    from freecad_mcp.generated.capabilities.register_modules import tools_advanced_a as generated_tools_advanced_a
     from freecad_mcp.instrumented_server import InstrumentedFastMCP
 
     state = ServerState()
     connection = MagicMock(name="FreeCADConnection")
     mcp = InstrumentedFastMCP("phase18-run-transaction")
-    monkeypatch.setattr(tools_advanced_a, "server_connection", lambda: connection)
+    monkeypatch.setattr(generated_tools_advanced_a, "server_connection", lambda: connection)
     dependencies = ToolDependencies(
         state=state,
         get_freecad_connection=lambda: connection,

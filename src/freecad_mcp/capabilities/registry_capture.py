@@ -25,10 +25,11 @@ def _quote_annotation(annotation: str) -> str:
 def _format_annotation(annotation: object) -> str:
     if annotation is inspect.Parameter.empty:
         return "Any"
-    if isinstance(annotation, str):
-        text = annotation
-    else:
-        text = str(annotation).replace("typing.", "")
+    text = (
+        annotation
+        if isinstance(annotation, str)
+        else str(annotation).replace("typing.", "")
+    )
     return text
 
 

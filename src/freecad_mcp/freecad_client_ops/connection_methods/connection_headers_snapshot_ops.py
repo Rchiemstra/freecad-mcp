@@ -1,26 +1,9 @@
-"""FreeCADConnection request-header snapshots."""
+"""Declarative shim — generated connection method lives in generated/capabilities."""
 
-from __future__ import annotations
-
-from typing import Any
-
-from .connection_headers_snapshot_helpers import (
-    authenticated_request_headers,
-    is_v2_self_contained_method,
+from freecad_mcp.generated.capabilities.connection_methods.connection_headers_snapshot_ops import (
+    _request_headers_snapshot,
 )
 
-
-def _request_headers_snapshot(
-    conn,
-    method: str = "",
-    args: tuple[Any, ...] = (),
-) -> tuple[tuple[str, str], ...]:
-    del args
-    with conn._identity_lock:
-        headers = conn._base_headers
-        session = conn._rpc_session
-    if is_v2_self_contained_method(method):
-        return headers
-    if session is None or not session.connected:
-        return headers
-    return authenticated_request_headers(headers, session, method)
+__all__ = [
+    '_request_headers_snapshot',
+]

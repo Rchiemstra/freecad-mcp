@@ -1175,18 +1175,32 @@
         "kind": "Attribute"
       },
       {
-        "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_control_ops.py",
+        "path": "src/freecad_mcp/freecad_client_ops/connection_methods/__init__.py",
         "line": 17,
-        "column": 0,
+        "column": 4,
         "symbol": "heartbeat_document_locks_batch",
-        "kind": "FunctionDef"
+        "kind": "ImportAlias"
+      },
+      {
+        "path": "src/freecad_mcp/freecad_client_ops/connection_methods/__init__.py",
+        "line": 70,
+        "column": 4,
+        "symbol": "heartbeat_document_lock",
+        "kind": "ImportAlias"
+      },
+      {
+        "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_control_ops.py",
+        "line": 4,
+        "column": 4,
+        "symbol": "heartbeat_document_locks_batch",
+        "kind": "ImportAlias"
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_lease_ops.py",
-        "line": 66,
-        "column": 0,
+        "line": 8,
+        "column": 4,
         "symbol": "heartbeat_document_lock",
-        "kind": "FunctionDef"
+        "kind": "ImportAlias"
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
@@ -1475,27 +1489,6 @@
         "path": "src/freecad_mcp/server_ops/tool_exports/__init__.py",
         "line": 94,
         "column": 0,
-        "symbol": "heartbeat_document_lock",
-        "kind": "Name"
-      },
-      {
-        "path": "src/freecad_mcp/server_ops/tool_exports/bind_part_1.py",
-        "line": 99,
-        "column": 4,
-        "symbol": "heartbeat_document_lock",
-        "kind": "Attribute"
-      },
-      {
-        "path": "src/freecad_mcp/tools_lease_acquire_b.py",
-        "line": 74,
-        "column": 4,
-        "symbol": "heartbeat_document_lock",
-        "kind": "FunctionDef"
-      },
-      {
-        "path": "src/freecad_mcp/tools_lease_acquire_b.py",
-        "line": 88,
-        "column": 35,
         "symbol": "heartbeat_document_lock",
         "kind": "Name"
       }
@@ -7636,6 +7629,42 @@
       "kind": "sys_modules_get",
       "target": "name",
       "classification": "compatibility_alias"
+    },
+    {
+      "path": "src/freecad_mcp/capabilities/introspection.py",
+      "line": 146,
+      "column": 17,
+      "function": "import_operation_symbol",
+      "kind": "importlib_import_module",
+      "target": "module_name",
+      "classification": "generated_registration_locator"
+    },
+    {
+      "path": "src/freecad_mcp/capabilities/introspection.py",
+      "line": 149,
+      "column": 13,
+      "function": "import_operation_symbol",
+      "kind": "importlib_import_module",
+      "target": "module_name",
+      "classification": "generated_registration_locator"
+    },
+    {
+      "path": "src/freecad_mcp/capabilities/load.py",
+      "line": 31,
+      "column": 17,
+      "function": "all_subject_manifests",
+      "kind": "importlib_import_module",
+      "target": "f'freecad_mcp.capabilities.{child.name}.manifest'",
+      "classification": "generated_registration_locator"
+    },
+    {
+      "path": "src/freecad_mcp/capabilities/registration_runtime.py",
+      "line": 15,
+      "column": 13,
+      "function": "_import_symbol",
+      "kind": "importlib_import_module",
+      "target": "module_name",
+      "classification": "generated_registration_locator"
     }
   ],
   "execution_baseline": {

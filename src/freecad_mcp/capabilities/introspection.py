@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Any
 
 
-def _repository_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def _tool_module_path(module_name: str) -> Path:
-    return _repository_root() / "src" / "freecad_mcp" / f"{module_name}.py"
+    return (
+        Path(__file__).resolve().parents[1]
+        / "generated"
+        / "capabilities"
+        / "register_modules"
+        / f"{module_name}.py"
+    )
 
 
 def _operation_from_call(call: ast.Call) -> str | None:
@@ -21,23 +23,26 @@ def _operation_from_call(call: ast.Call) -> str | None:
     if isinstance(func, ast.Name) and func.id.endswith("_operation"):
         return func.id
     if isinstance(func, ast.Name) and func.id in {"_removed", "tool_fail", "_result"}:
-        if func.id == "_result" and call.args:
+        if (
+            func.id == "_result"
+            and call.args
+            and isinstance(call.args[0], ast.Call)
+            and isinstance(call.args[0].func, ast.Attribute)
+            and isinstance(call.args[0].func.value, ast.Call)
+            and isinstance(call.args[0].func.value.func, ast.Name)
+            and call.args[0].func.value.func.id == "server_connection"
+        ):
             inner = call.args[0]
-            if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute):
-                if (
-                    isinstance(inner.func.value, ast.Call)
-                    and isinstance(inner.func.value.func, ast.Name)
-                    and inner.func.value.func.id == "server_connection"
-                ):
-                    return f"connection:{inner.func.attr}"
+            return f"connection:{inner.func.attr}"
         if func.id in {"_removed", "tool_fail"}:
             return "legacy_removed_tool"
-    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Call):
-        if (
-            isinstance(func.value.func, ast.Name)
-            and func.value.func.id == "server_connection"
-        ):
-            return f"connection:{func.attr}"
+    if (
+        isinstance(func, ast.Attribute)
+        and isinstance(func.value, ast.Call)
+        and isinstance(func.value.func, ast.Name)
+        and func.value.func.id == "server_connection"
+    ):
+        return f"connection:{func.attr}"
     return None
 
 
@@ -64,9 +69,10 @@ def _operation_from_function(function: ast.FunctionDef) -> str | None:
 
 
 def _defining_package(module_name: str) -> str:
-    """Package that owns a ``tools_*.py`` register module."""
+    """Package that owns a generated ``register_modules`` entry."""
 
-    return "freecad_mcp"
+    del module_name
+    return "freecad_mcp.generated.capabilities.register_modules"
 
 
 def _resolve_relative_import(
@@ -84,10 +90,7 @@ def _resolve_relative_import(
         return symbol
     parts = package.split(".")
     ascend = level - 1
-    if ascend > len(parts):
-        base = ""
-    else:
-        base = ".".join(parts[: len(parts) - ascend])
+    base = "" if ascend > len(parts) else ".".join(parts[: len(parts) - ascend])
     if module:
         return f"{base}.{module}.{symbol}" if base else f"{module}.{symbol}"
     return f"{base}.{symbol}" if base else symbol
@@ -139,7 +142,9 @@ def import_operation_symbol(operation_path: str) -> Any:
             )
         return getattr(FreeCADConnection, method)
     if ".capabilities.inline." in operation_path:
-        raise ImportError(f"inline placeholder is not importable: {operation_path}")
+        module_name, _, attr = operation_path.rpartition(".")
+        module = importlib.import_module(module_name)
+        return getattr(module, attr)
     module_name, _, attr = operation_path.rpartition(".")
     module = importlib.import_module(module_name)
     return getattr(module, attr)

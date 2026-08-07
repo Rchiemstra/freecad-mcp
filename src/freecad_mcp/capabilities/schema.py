@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ExecutionMode(str, Enum):
+class ExecutionMode(StrEnum):
     """How a capability reaches FreeCAD."""
 
     TYPED_GATEWAY = "typed_gateway"
@@ -15,7 +15,7 @@ class ExecutionMode(str, Enum):
     ESCAPE_HATCH = "escape_hatch"
 
 
-class MutationClass(str, Enum):
+class MutationClass(StrEnum):
     """Mutation classification carried into gateway dispatch."""
 
     READ = "read"

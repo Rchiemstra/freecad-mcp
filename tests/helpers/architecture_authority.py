@@ -227,6 +227,8 @@ def _historic_decoder_nodes(tree: ast.Module, relative: str) -> set[ast.AST]:
 def _skip_authority_path(authority_id: str, relative: str, path: Path) -> bool:
     if relative.startswith("src/freecad_mcp/_shared/protocol/"):
         return True
+    if "/generated/capabilities/" in relative:
+        return True
     return authority_id == "sidecar_correctness" and path.name == "git_sidecar.py"
 
 

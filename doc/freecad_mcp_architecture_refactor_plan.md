@@ -1074,12 +1074,12 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Execution parent revision | `8026f110df5a75d43a0ac0ff9e980cd8e237fa23` |
 | Execution MCP base revision | `412c9e5e` |
 | Agent lane | **Cursor Multitask (Composer 2.5 + Grok 4.5 High)** for Phases 18–21; Phases 1–17 ran the Codex lane. |
-| Current stage / phase | **Stage 7 / Phase 21 complete** |
-| Next phase | 22 — `refactor(mcp): delete the hand-written capability mirrors` (kickoff in progress) |
-| In-flight ownership | Coordinator-owned Phase 22 subject-mirror deletion |
-| Last review | Phase 21 CLEAR (66259f28); Phase 20 CLEAR (935d14d3) |
+| Current stage / phase | **Stage 7 / Phase 22 complete** |
+| Next phase | 23 — `build(mcp): enforce the final architecture policy` |
+| In-flight ownership | none |
+| Last review | Phase 22 CLEAR (67809eb6); Phase 21 CLEAR (66259f28) |
 | Blocker | none |
-| Resume hint | Grok review Phase 22 kickoff after mirror→shim conversion lands |
+| Resume hint | Phase 23 kickoff per §5.2.1 |
 
 ### 11.2 Stage status
 
@@ -1092,12 +1092,129 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | 4 | 12–17 | phase 12 | complete |
 | 5 | 18 | phase 18 | complete |
 | 6 | 19 | phase 19 | complete |
-| 7 | 20–22 | phase 22 | in progress (Phase 21 complete; 22 pending) |
+| 7 | 20–22 | phase 22 | complete |
 | 8 | 23 | phase 23 | pending |
 
 ### 11.3 Progress log
 
 Append entries newest-first. Each must be sufficient to resume without prior context.
+
+#### 2026-08-07 — Phase 22 COMPLETE: delete the hand-written capability mirrors (Stage 7 integration gate)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 final integrator; Grok 4.5 High review
+67809eb6 CLEAR).
+
+**Status: Stage 7 / Phase 22 complete.** Nested commit
+`refactor(mcp): delete the hand-written capability mirrors`; parent gitlink bump in
+same delivery.
+
+**Delivered:** 47 `tools_*.py` register-module shims and 21
+`freecad_client_ops/connection_methods/*` declarative import shims pointing at
+`generated/capabilities/register_modules/` and
+`generated/capabilities/connection_methods/`; production emitters in
+`capabilities/generator.py` (register modules, connection methods, inline runtime
+info, `client_stubs.py`, `gateway_dispatch.json`); vendored add-on generated
+capabilities tree; `capabilities/inline/` package; migration scripts
+`migrate_register_modules_to_generated.py` and
+`migrate_connection_methods_to_generated.py`; `tests/test_capability_mirror_shims.py`
+and cutover/manifest/introspection test updates; architecture allowance refresh
+(307 records); manifest `# ruff: noqa: E501` headers for bootstrapped tool
+descriptions. Registry snapshot remains byte-equal to fixture.
+
+**§5.7 MCP evidence:** see §11.4.
+
+**Next:** Phase 23 — `build(mcp): enforce the final architecture policy`.
+
+#### 2026-08-06 — Phase 22 IN PROGRESS: client/gateway mirror deletion (integrator continuation)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator; Grok 4.5 High review pending).
+
+**Status: in progress.** Prior wave landed 47 `tools_*.py` register-module shims (71 tests).
+
+**Delivered this pass:** extended `capabilities/generator.py` with connection-method
+emitters (`write_connection_method_outputs`, import rewriting), production
+`client_stubs.py` and `gateway_dispatch.json`, vendored add-on
+`addon/FreeCADMCP/generated/capabilities/gateway_dispatch.json`, and loader shims
+(`capabilities/gateway_dispatch.py` on MCP and add-on sides); 21
+`freecad_client_ops/connection_methods/*` modules converted to declarative import
+shims; migration script
+`scripts/migrate_connection_methods_to_generated.py`; extended
+`tests/test_capability_mirror_shims.py` and related cutover/manifest tests.
+Registry snapshot remains byte-equal to fixture. **No Phase 22 commit** — awaiting
+Grok review.
+
+**§5.7 MCP evidence (focused, not integration gate):** Docker `unit` —
+`tests/test_capability_mirror_shims.py` +
+`tests/test_generated_registration_cutover.py` +
+`tests/test_capability_manifest_generator.py` +
+`tests/test_capability_introspection.py` — focused Phase 22 package including
+introspection and `connection_methods` package import coverage.
+
+**Remaining before integration gate:** Grok CLEAR on full Phase 22 package; full
+§5.7 four-service suite and cross-track lane.
+
+**Next:** Grok review; then integration gate.
+
+#### 2026-08-06 — Phase 22 IN PROGRESS: delete hand-written capability mirrors (integrator conversion)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator; Grok 4.5 High review pending).
+
+**Status: in progress.** Stage 7 Phase 21 verified complete at nested
+`1736e1226f3d2024f0277125007195d7860ae5e3`, parent
+`469a6ea5b29495f10dab791bab44961ebc1a0449`, review 66259f28 CLEAR.
+
+**Parallelization:** **integrator-only single stream** — register-module emission,
+all 47 `tools_*.py` shims, and `capabilities/inline/` conversion share
+`capabilities/generator.py` and `generated/capabilities/*`; client/gateway mirror
+deletion remains on the same stream (not spawned).
+
+**Delivered this pass:** production register-module emitters in
+`capabilities/generator.py` (`write_register_module_outputs`, import rewriting);
+47 generated modules under `generated/capabilities/register_modules/`; inline
+`get_runtime_info` under `generated/capabilities/inline/`; all 47 `tools_*.py`
+converted to declarative shims; `capabilities/inline/` package with
+`tools_runtime_info` shim; `introspection.import_operation_symbol` resolves inline
+paths; extended `tests/test_capability_mirror_shims.py` and
+`tests/test_generated_registration_cutover.py`. Registry snapshot remains byte-equal
+to fixture. **No Phase 22 commit** — awaiting Grok review.
+
+**§5.7 MCP evidence (focused, not integration gate):** Docker `unit` —
+`tests/test_capability_mirror_shims.py` +
+`tests/test_generated_registration_cutover.py` +
+`tests/test_capability_manifest_generator.py` — **71 passed**.
+
+**Remaining before integration gate:** duplicated
+`freecad_client_ops/connection_methods/*` and addon gateway dispatch mirrors;
+full §5.7 four-service suite and cross-track lane (after Grok CLEAR).
+
+**Next:** Grok review; then client/gateway mirror deletion and integration gate.
+
+#### 2026-08-06 — Phase 22 IN PROGRESS: delete hand-written capability mirrors (kickoff)
+
+**Agent lane:** Cursor Multitask (Composer 2.5 integrator; Grok 4.5 High review pending).
+
+**Status: in progress.** Stage 7 Phase 21 verified complete at nested
+`1736e1226f3d2024f0277125007195d7860ae5e3`, parent
+`469a6ea5b29495f10dab791bab44961ebc1a0449`, review 66259f28 CLEAR.
+
+**Parallelization:** **integrator-only single stream** — mirror deletion owns §5.3
+shared files (`capabilities/generator.py`, `registration_runtime.py`,
+`generated/capabilities/*`, all 47 `tools_*.py` register modules,
+`freecad_client_ops/connection_methods/*`, addon gateway dispatch). The 31
+mechanically split modules (`_*_a.py`, `_b.py`, `_1.py`, `_2.py`) plus duplicated
+client/gateway surfaces must land atomically with generator output and registry
+snapshot proof; frozen W2 subject map recorded in
+`tests/test_capability_mirror_shims.py` for coordinator reference but **not**
+spawned (generator/schema races).
+
+**Delivered this pass:** focused import-path scaffold in
+`tests/test_capability_mirror_shims.py` (47 register modules, 31 split mirrors,
+subject ownership map). **No Phase 22 commit** — awaiting Grok review after
+mirror→shim conversion.
+
+**Next:** extend generator with production register-module emitters; convert
+`tools_*` bodies to declarative shims; delete duplicated client/gateway mirrors;
+run integration gate per §5.7.
 
 #### 2026-08-06 — Phase 21 COMPLETE: switch registration to generated output (landing integrator)
 
@@ -1105,7 +1222,8 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 
 **Status: Stage 7 / Phase 21 complete.** Review 66259f28 CLEAR after kickoff delivery
 (generated production registration, declarative shims, binder identity tests). Nested
-landing commit follows; parent gitlink bump in same integrator wave.
+`1736e1226f3d2024f0277125007195d7860ae5e3`; parent
+`469a6ea5b29495f10dab791bab44961ebc1a0449`.
 
 **Delivered:** extended `capabilities/generator.py` with production emitters
 (`register_order`, `registration`, `tool_export_bind_part_1/2`); production artifacts under
@@ -2355,8 +2473,31 @@ phase; classify it before committing so it is not swept in.
 Append evidence newest-first. Image IDs are used when the local image has no
 repository digest; host-side build or test output is never evidence.
 
-Append evidence newest-first. Image IDs are used when the local image has no
-repository digest; host-side build or test output is never evidence.
+#### Phase 22 — `refactor(mcp): delete the hand-written capability mirrors`
+
+- **Agent lane:** Cursor Multitask (Composer 2.5 final integrator).
+- **Images and source identity:** Compose `freecad-mcp-tests` is
+  `sha256:64d0f1873d3d587fc12480abde117fce18330ec40ca6f8844e291b1c9d528295`;
+  cross-track `freecad-ci-mcp:24.04-phase1` is
+  `sha256:4ea79d64874ce74eddd8689bbcb8560cc7215a8603d28e6a0b45da8f64defcc3`.
+  Branch-built FreeCAD 26.3.0 revision 48070 inside
+  `freecad-collaboration-workspace`; nested worktree mounted at current HEAD.
+- **MCP lint and contracts:** `python ci/lint_python.py addon/FreeCADMCP
+  src/freecad_mcp` checked **1029** production files and passed architecture policy
+  plus full Ruff; `ci/architecture_policy_allowances.json` refreshed to **307**
+  exact records. `mcp_tool_registry_contract_snapshot.json` byte-identical;
+  `post_collaboration_compatibility_surface.json` authority census refresh for
+  generated mirror paths.
+- **Compose integration gate:** `unit` selected **2124** and passed **2124** with one
+  expected screenshot xfail and 124 deselected; `e2e` passed **111/111**; `core`
+  passed **4** with two adapter-only native skips and seven documented xfails;
+  `benchmark` passed **1/1**.
+- **Cross-track jobs:** preflight emitted `PREFLIGHT_OK` with pytest 9.1.1 and
+  FreeCAD 26.3.0 revision 48070. With
+  `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, core wrapper **8 passed / 5 xfailed**
+  (`core_RC=0`); e2e wrapper passed **111/111** (`e2e_RC=0`).
+- **Review result:** integrated re-review **67809eb6 CLEAR**; coordinator Grok
+  final integrated review is the next gate — integrator does **not** self-claim CLEAR.
 
 #### Phase 21 — `refactor(mcp): switch registration to generated output`
 

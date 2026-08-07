@@ -1,87 +1,31 @@
-"""Retired LOCKED_ERROR handoff helpers retained as inert shims."""
+"""Declarative shim — generated connection method lives in generated/capabilities."""
 
-from __future__ import annotations
+from freecad_mcp.generated.capabilities.connection_methods.connection_acquisition_helpers import (
+    _legacy_authority_removed,
+    auth_failure_handoff_result,
+    disconnected_handoff_result,
+    handoff_claimable,
+    handoff_still_pending,
+    handoff_terminal_result,
+    handoff_terminal_state,
+    is_permanent_auth_failure,
+    pending_handoff_result,
+    poll_locked_error_handoff,
+    process_handoff_status_poll,
+    try_claim_handoff_result,
+)
 
-from collections.abc import Mapping
-from typing import Any, Literal
-
-
-def is_permanent_auth_failure(exc: BaseException) -> bool:
-    return "auth" in str(exc).lower() or "session" in str(exc).lower()
-
-
-def handoff_claimable(last_status: Mapping[str, Any]) -> bool:
-    del last_status
-    return False
-
-
-def try_claim_handoff_result(conn, target: str, last_status: Mapping[str, Any]):
-    del conn, target, last_status
-
-
-def handoff_terminal_result(
-    last_status: Mapping[str, Any],
-    target: str,
-) -> dict[str, Any]:
-    del last_status, target
-    return _legacy_authority_removed()
-
-
-def handoff_still_pending(last_status: Mapping[str, Any]) -> bool:
-    del last_status
-    return False
-
-
-def handoff_terminal_state(last_status: Mapping[str, Any]) -> bool:
-    del last_status
-    return True
-
-
-def disconnected_handoff_result(
-    target: str,
-    last_status: dict[str, Any] | None,
-) -> dict[str, Any]:
-    del target, last_status
-    return _legacy_authority_removed()
-
-
-def auth_failure_handoff_result(target: str, exc: BaseException) -> dict[str, Any]:
-    del target, exc
-    return _legacy_authority_removed()
-
-
-def pending_handoff_result(
-    target: str,
-    last_status: dict[str, Any] | None,
-) -> dict[str, Any]:
-    del target, last_status
-    return _legacy_authority_removed()
-
-
-def poll_locked_error_handoff(
-    conn,
-    target: str,
-    *,
-    poll_interval_s: float,
-    deadline: float | None,
-) -> dict[str, Any]:
-    del conn, target, poll_interval_s, deadline
-    return _legacy_authority_removed()
-
-
-def process_handoff_status_poll(
-    conn,
-    target: str,
-    last_status: Mapping[str, Any],
-) -> dict[str, Any] | Literal["break"] | None:
-    del conn, target, last_status
-    return _legacy_authority_removed()
-
-
-def _legacy_authority_removed() -> dict[str, Any]:
-    return {
-        "success": False,
-        "ok": False,
-        "error_code": "LEGACY_LEASE_AUTHORITY_REMOVED",
-        "error": "Document authority is owned by native FreeCAD collaboration.",
-    }
+__all__ = [
+    '_legacy_authority_removed',
+    'auth_failure_handoff_result',
+    'disconnected_handoff_result',
+    'handoff_claimable',
+    'handoff_still_pending',
+    'handoff_terminal_result',
+    'handoff_terminal_state',
+    'is_permanent_auth_failure',
+    'pending_handoff_result',
+    'poll_locked_error_handoff',
+    'process_handoff_status_poll',
+    'try_claim_handoff_result',
+]

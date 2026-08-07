@@ -305,7 +305,7 @@
       "column": 1,
       "fingerprint": "d800a85b2ce570b491e9",
       "reason": "legacy mixed-responsibility facade: giant public facade exposes 29 symbols",
-      "removal_phase": 23
+      "removal_phase": 22
     },
     {
       "code": "ARCH105",
@@ -314,7 +314,7 @@
       "column": 1,
       "fingerprint": "05a0c00cd7e20df1b7e7",
       "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@16, FunctionDef@54, FunctionDef@63, FunctionDef@68, FunctionDef@73, FunctionDef@78, FunctionDef@85, FunctionDef@95, FunctionDef@100, FunctionDef@105, FunctionDef@110, FunctionDef@116, FunctionDef@127, FunctionDef@137, FunctionDef@147, FunctionDef@152, FunctionDef@157, FunctionDef@164, FunctionDef@169",
-      "removal_phase": 23
+      "removal_phase": 22
     },
     {
       "code": "ARCH106",
@@ -1280,6 +1280,267 @@
       "removal_phase": 23
     },
     {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/advanced/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "27aef6adf10dc2109359",
+      "reason": "legacy mixed capability ownership: advanced imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/assembly/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "f49279ec92acfe3596f0",
+      "reason": "legacy mixed capability ownership: assembly imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/bootstrap.py",
+      "line": 1,
+      "column": 1,
+      "fingerprint": "c209af9754fc1f903358",
+      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: introspection, path, render, schema, subjects",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH107",
+      "path": "src/freecad_mcp/capabilities/bootstrap.py",
+      "line": 1,
+      "column": 1,
+      "fingerprint": "891ea57d1c40c6cc7df8",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 21 symbols",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/core/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "3ff415a069335df666ac",
+      "reason": "legacy mixed capability ownership: core imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/diagnostics/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "20db45e8e4442118c332",
+      "reason": "legacy mixed capability ownership: diagnostics imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/document_history/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "7c37aca2ece586d1c86b",
+      "reason": "legacy mixed capability ownership: document_history imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/features/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "719cb6e0ad0836036f54",
+      "reason": "legacy mixed capability ownership: features imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH105",
+      "path": "src/freecad_mcp/capabilities/gateway_refs.py",
+      "line": 5,
+      "column": 1,
+      "fingerprint": "c92247d6cbdfd80a7f03",
+      "reason": "legacy compatibility module with runtime behavior: compatibility shim is not declarative and side-effect free: Assign@5",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/gear/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "f1b70202a36e7c895d27",
+      "reason": "legacy mixed capability ownership: gear imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/generator.py",
+      "line": 1,
+      "column": 1,
+      "fingerprint": "8831f93f2e97f9ab5017",
+      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: bootstrap, export, load, path, registration_runtime, registry_capture, render, schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH107",
+      "path": "src/freecad_mcp/capabilities/generator.py",
+      "line": 1,
+      "column": 1,
+      "fingerprint": "7985fad416d43aab97aa",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 42 symbols",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH106",
+      "path": "src/freecad_mcp/capabilities/generator.py",
+      "line": 768,
+      "column": 1,
+      "fingerprint": "776c4294146de0d40bac",
+      "reason": "legacy package public surface: package exports 31 public symbols; budget is 16",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/gui/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "634f9cf7eb118472d1e1",
+      "reason": "legacy mixed capability ownership: gui imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/introspection.py",
+      "line": 1,
+      "column": 1,
+      "fingerprint": "38062ef769c9dd9e63e4",
+      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: execution, path",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH103",
+      "path": "src/freecad_mcp/capabilities/introspection.py",
+      "line": 146,
+      "column": 18,
+      "fingerprint": "94d64baa2095d387888d",
+      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(Name('module_name', Load())) is forbidden",
+      "removal_phase": 17
+    },
+    {
+      "code": "ARCH103",
+      "path": "src/freecad_mcp/capabilities/introspection.py",
+      "line": 149,
+      "column": 14,
+      "fingerprint": "ecc5299362e700e759db",
+      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(Name('module_name', Load())) is forbidden",
+      "removal_phase": 17
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/io/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "d575e72d95b16ecb0fcd",
+      "reason": "legacy mixed capability ownership: io imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/lease/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "aad269eba3cc26c00171",
+      "reason": "legacy mixed capability ownership: lease imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH104",
+      "path": "src/freecad_mcp/capabilities/legacy_shims.py",
+      "line": 7,
+      "column": 1,
+      "fingerprint": "03d8a08f0103a5fb4f4b",
+      "reason": "legacy package-barrel import: internal barrel import ..responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH103",
+      "path": "src/freecad_mcp/capabilities/load.py",
+      "line": 31,
+      "column": 18,
+      "fingerprint": "3f81bf8f51d45ca90c32",
+      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(JoinedStr([Constant('freecad_mcp.capabilities.'), FormattedValue(Attribute(Name('child', Load()), 'name', Load()), -1), Constant('.manifest')])) is forbidden",
+      "removal_phase": 17
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/measure/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "6329ac439b5dc3713a9d",
+      "reason": "legacy mixed capability ownership: measure imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/parametric/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "5fa47eb8af61b1248271",
+      "reason": "legacy mixed capability ownership: parametric imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/partdesign/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "67422be6e2762ebf15a9",
+      "reason": "legacy mixed capability ownership: partdesign imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH103",
+      "path": "src/freecad_mcp/capabilities/registration_runtime.py",
+      "line": 15,
+      "column": 14,
+      "fingerprint": "14751bce7916fbf05249",
+      "reason": "Phase 1 frozen runtime locator: runtime module locator importlib.import_module(Name('module_name', Load())) is forbidden",
+      "removal_phase": 17
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/runtime/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "e9c8164ea5df0dccce75",
+      "reason": "legacy mixed capability ownership: runtime imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/sketch/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "47cdf8712cd038f01de7",
+      "reason": "legacy mixed capability ownership: sketch imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/transform/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "42314985fd0919d17ba6",
+      "reason": "legacy mixed capability ownership: transform imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH101",
+      "path": "src/freecad_mcp/capabilities/worker/manifest.py",
+      "line": 6,
+      "column": 1,
+      "fingerprint": "c77630d8e88beb4dfdc1",
+      "reason": "legacy mixed capability ownership: worker imports capability subject schema via freecad_mcp.capabilities.schema",
+      "removal_phase": 22
+    },
+    {
       "code": "ARCH105",
       "path": "src/freecad_mcp/freecad_client.py",
       "line": 26,
@@ -1289,76 +1550,40 @@
       "removal_phase": 22
     },
     {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_invoke_ops.py",
-      "line": 9,
+      "code": "ARCH107",
+      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/__init__.py",
+      "line": 1,
       "column": 1,
-      "fingerprint": "6eb498e61072e36ac793",
-      "reason": "legacy package-barrel import: internal barrel import ...telemetry::emit_event; resolved barrel src/freecad_mcp/telemetry/__init__.py; import the defining leaf module",
+      "fingerprint": "923d4604bc47d9ce9477",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 119 symbols",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH106",
+      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/__init__.py",
+      "line": 157,
+      "column": 1,
+      "fingerprint": "780ae0e8310176193fa2",
+      "reason": "legacy package public surface: package exports 119 public symbols; budget is 16",
       "removal_phase": 23
     },
     {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_invoke_v2_helpers.py",
-      "line": 10,
+      "code": "ARCH106",
+      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_read_ops.py",
+      "line": 23,
       "column": 1,
-      "fingerprint": "6e46d27bc6c17d22ca5c",
-      "reason": "legacy package-barrel import: internal barrel import ...telemetry::emit_event; resolved barrel src/freecad_mcp/telemetry/__init__.py; import the defining leaf module",
+      "fingerprint": "d2c4349ee8635dab0072",
+      "reason": "legacy package public surface: package exports 17 public symbols; budget is 16",
       "removal_phase": 23
     },
     {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_model_ops.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "6915bb20a60ac54afc5c",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, fem, sketch",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_model_ops.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "8bbe35a04971e08684cf",
-      "reason": "legacy mixed-responsibility facade: mixed-responsibility grab bag exposes 11 symbols across document, fem, sketch",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_read_ops.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "9a30e8acd4c48739da0c",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, execution, object, path, worker",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_read_ops.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "e2d8d06ec0865c2ba1d1",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 24 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH101",
+      "code": "ARCH106",
       "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_view_ops.py",
-      "line": 1,
+      "line": 24,
       "column": 1,
-      "fingerprint": "5576fd80ee6120befe07",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, object, view",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "src/freecad_mcp/freecad_client_ops/connection_methods/connection_view_ops.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "99107eae3013865bcf27",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 22 symbols",
-      "removal_phase": 22
+      "fingerprint": "d1d6f063108856679f87",
+      "reason": "legacy package public surface: package exports 18 public symbols; budget is 16",
+      "removal_phase": 23
     },
     {
       "code": "ARCH107",
@@ -2414,6 +2639,60 @@
       "removal_phase": 23
     },
     {
+      "code": "ARCH107",
+      "path": "src/freecad_mcp/server.py",
+      "line": 1,
+      "column": 1,
+      "fingerprint": "dd5c1ad759f00ce3f00d",
+      "reason": "legacy mixed-responsibility facade: giant public facade exposes 38 symbols",
+      "removal_phase": 22
+    },
+    {
+      "code": "ARCH104",
+      "path": "src/freecad_mcp/server.py",
+      "line": 55,
+      "column": 1,
+      "fingerprint": "8dd56a5dcf7aece8313f",
+      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::__all__; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH106",
+      "path": "src/freecad_mcp/server.py",
+      "line": 55,
+      "column": 1,
+      "fingerprint": "de8d2b5a3ba1abdd9d3a",
+      "reason": "legacy package public surface: explicit __all__ is not statically auditable",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH104",
+      "path": "src/freecad_mcp/server.py",
+      "line": 56,
+      "column": 1,
+      "fingerprint": "5b85b9d986b0beb972ed",
+      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::bind_tool_exports; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH104",
+      "path": "src/freecad_mcp/server.py",
+      "line": 62,
+      "column": 1,
+      "fingerprint": "55957c1fe0f7a234c5cb",
+      "reason": "legacy package-barrel import: internal barrel import .telemetry::emit_event; resolved barrel src/freecad_mcp/telemetry/__init__.py; import the defining leaf module",
+      "removal_phase": 23
+    },
+    {
+      "code": "ARCH104",
+      "path": "src/freecad_mcp/server.py",
+      "line": 127,
+      "column": 1,
+      "fingerprint": "73bb06e95240724091c9",
+      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::*; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
+      "removal_phase": 23
+    },
+    {
       "code": "ARCH104",
       "path": "src/freecad_mcp/server_ops/lifespan.py",
       "line": 13,
@@ -2483,1635 +2762,6 @@
       "column": 1,
       "fingerprint": "8e6dec05b5f2c218c98f",
       "reason": "legacy package public surface: package exports 174 public symbols; budget is 16",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "c85b7c6c067847e17ab8",
-      "reason": "legacy package-barrel import: internal barrel import .operations::audit_hardcoded_dimensions_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "e8721fd83322c6060588",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_dependency_graph_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7610e5f2570ceec29970",
-      "reason": "legacy package-barrel import: internal barrel import .operations::inspect_geometry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "53e91f9f4e47aff1db6a",
-      "reason": "legacy package-barrel import: internal barrel import .operations::match_subshape_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5cbf51369bb0d3e4f0e6",
-      "reason": "legacy package-barrel import: internal barrel import .operations::run_transaction_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "777aa2364545da6c2e10",
-      "reason": "legacy package-barrel import: internal barrel import .operations::validate_movement_follow_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_a.py",
-      "line": 18,
-      "column": 1,
-      "fingerprint": "56cd9229d01cace9b370",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "40622182b03b9b74cc87",
-      "reason": "legacy package-barrel import: internal barrel import .operations::capture_state_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "74d6f88b01dcb61bde66",
-      "reason": "legacy package-barrel import: internal barrel import .operations::geometric_diff_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "37be284794eabb5022ad",
-      "reason": "legacy package-barrel import: internal barrel import .operations::relink_references_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_b2.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "2800b8b233944660733c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::restore_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_b2.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "3a118212e1f8f3ccf28a",
-      "reason": "legacy package-barrel import: internal barrel import .operations::run_fem_analysis_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_advanced_b2.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "81d8fdc36f05e6ca655c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::snapshot_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_assembly.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "68603243cafc8cf41d10",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_assembly_grounded_joint_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_assembly.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ffacaa76da5df80b213a",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_assembly_joint_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_assembly.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "532f58301cd302a5d7a3",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_assembly_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_assembly.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5687af58a98281c49824",
-      "reason": "legacy package-barrel import: internal barrel import .operations::solve_assembly_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_core_document.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "b347dc4898503d2bb768",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, object",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_document.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "2de22d2e118353ac1bcc",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_document_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_document.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "3b768bbb0a7aad9fbd7c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_object_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_execute.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "638b10792bfbc9aebbb5",
-      "reason": "legacy package-barrel import: internal barrel import .operations::execute_code_async_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_execute.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "d0619dd5fe1b9a0aa320",
-      "reason": "legacy package-barrel import: internal barrel import .operations::execute_code_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_objects.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "cce004b144badfe3de71",
-      "reason": "legacy package-barrel import: internal barrel import .operations::delete_object_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_objects.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "2daa5537c4cc0f86b363",
-      "reason": "legacy package-barrel import: internal barrel import .operations::edit_object_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_objects.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "81f742739317bc972e52",
-      "reason": "legacy package-barrel import: internal barrel import .operations::inspect_references_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_core_objects.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "4f8bd01e6984e8024e86",
-      "reason": "legacy package-barrel import: internal barrel import .operations::repair_references_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_diagnostics.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "eb575fc683aa6facc921",
-      "reason": "legacy package-barrel import: internal barrel import .operations::compare_documents_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_diagnostics.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "12a8e359eaa326a91f2d",
-      "reason": "legacy package-barrel import: internal barrel import .operations::diagnose_helix_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_diagnostics.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "bacfd2a885e04683c1cb",
-      "reason": "legacy package-barrel import: internal barrel import .operations::diagnose_pocket_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_document_history.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "aedb65a1434bb19aed71",
-      "reason": "legacy package-barrel import: internal barrel import .operations::close_document_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_document_history.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "689d95049341ca2c19ba",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_recompute_log_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_document_history.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "846e5421f3a88dea6ec6",
-      "reason": "legacy package-barrel import: internal barrel import .operations::recompute_document_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_document_history.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7bed586f0deb193988d1",
-      "reason": "legacy package-barrel import: internal barrel import .operations::redo_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_document_history.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "fede599325cfd1472d22",
-      "reason": "legacy package-barrel import: internal barrel import .operations::undo_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "cbce9fe431d0a97d4a29",
-      "reason": "legacy package-barrel import: internal barrel import .operations::loft_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "bbbbc516a28a1be568d3",
-      "reason": "legacy package-barrel import: internal barrel import .operations::revolve_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_advanced_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "d064327a5c56a2e13b8f",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sweep_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_advanced_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "281f1b32646316fa753a",
-      "reason": "legacy package-barrel import: internal barrel import .operations::chamfer_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_advanced_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "14dea5490aaabcf839d1",
-      "reason": "legacy package-barrel import: internal barrel import .operations::fillet_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_advanced_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "51c64e2b91b9faee58d4",
-      "reason": "legacy package-barrel import: internal barrel import .operations::helical_sweep_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_basic_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "bf8486d74d40fd8c22cc",
-      "reason": "legacy package-barrel import: internal barrel import .operations::linear_pattern_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_basic_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "9cb197fd5b305f03bf55",
-      "reason": "legacy package-barrel import: internal barrel import .operations::pad_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_basic_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "741c261b4aec4aeea77c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::pocket_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_basic_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7e1a9ce2221798d8de25",
-      "reason": "legacy package-barrel import: internal barrel import .operations::mirror_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_basic_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "47b883ce822665ab4b37",
-      "reason": "legacy package-barrel import: internal barrel import .operations::polar_pattern_feature_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_boolean.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ae01193799c7fd2c8a01",
-      "reason": "legacy package-barrel import: internal barrel import .operations::boolean_difference_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_boolean.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ffddd98225bec59009ae",
-      "reason": "legacy package-barrel import: internal barrel import .operations::boolean_intersection_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_features_boolean.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "a116b38e2ad36a2dfdef",
-      "reason": "legacy package-barrel import: internal barrel import .operations::boolean_union_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gear_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ac26ce550a5fdacc1248",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_helical_gear_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gear_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "6145649d8117d6713ecc",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_involute_gear_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gear_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "117d34882d7f95ad9da0",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_spur_gear_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gear_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "6eb84facdba6490168d0",
-      "reason": "legacy package-barrel import: internal barrel import .operations::check_gear_pair_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gear_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "11ec066977ef65dd6fe5",
-      "reason": "legacy package-barrel import: internal barrel import .operations::compute_gear_geometry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "aa8579dc546d6ee31e5d",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, object",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "62f2a1c8b3b0e2d249db",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_object_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ba29221956e641e6257e",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_objects_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "4560f04dcaedea137aa5",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_parts_list_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "1a688fca1af8477245e1",
-      "reason": "legacy package-barrel import: internal barrel import .operations::insert_part_from_library_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5bb3dc61cb2db23d5434",
-      "reason": "legacy package-barrel import: internal barrel import .operations::list_documents_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "662a0cc600e26c873162",
-      "reason": "legacy package-barrel import: internal barrel import .operations::open_document_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "82e4d157098ef32d9fbc",
-      "reason": "legacy package-barrel import: internal barrel import .operations::reload_document_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "42a40f31565db1fae21c",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, view",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "3d581856da06c3c37c57",
-      "reason": "legacy package-barrel import: internal barrel import .operations::activate_document_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "9f612ac1b649aee799bf",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_gui_state_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "da84e232e852a705f563",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_selection_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "f3fe8a2c622d2368684e",
-      "reason": "legacy package-barrel import: internal barrel import .operations::recompute_and_wait_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "eb902fd7b1dba37060b9",
-      "reason": "legacy package-barrel import: internal barrel import .operations::select_subshapes_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "116db66dd7e83ddff305",
-      "reason": "legacy package-barrel import: internal barrel import .operations::set_section_view_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_document_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "9b94d8769c0d1b00c05b",
-      "reason": "legacy package-barrel import: internal barrel import .operations::set_tree_expanded_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_gui_view_a.py",
-      "line": 2,
-      "column": 1,
-      "fingerprint": "df424991fa26b16401fb",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, render, view",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH107",
-      "path": "src/freecad_mcp/tools_gui_view_a.py",
-      "line": 2,
-      "column": 1,
-      "fingerprint": "4dce430ab17a44b8e0e2",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 14 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_a.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "6dd09064b710ead57071",
-      "reason": "legacy package-barrel import: internal barrel import .operations::encode_view_video_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_a.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "eb4aead30bc86c6e357d",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_view_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_a.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "9bb0371dcb13fe59adf3",
-      "reason": "legacy package-barrel import: internal barrel import .operations::save_view_sequence_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "f6972dd4b1d13f4b1824",
-      "reason": "legacy package-barrel import: internal barrel import .operations::animate_placement_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "d4849318d1caef6dcaa2",
-      "reason": "legacy package-barrel import: internal barrel import .operations::refresh_view_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "f0f4de537b225f74299b",
-      "reason": "legacy package-barrel import: internal barrel import .operations::repair_view_placements_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_gui_view_b.py",
-      "line": 15,
-      "column": 1,
-      "fingerprint": "454dfd2c05d1d29538d7",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_io_export.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "16d99a862b563e58fffa",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: document, export",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_export.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "6834da82bc430453fbe1",
-      "reason": "legacy package-barrel import: internal barrel import .operations::export_brep_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_export.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "8590e3f8c603b035c1eb",
-      "reason": "legacy package-barrel import: internal barrel import .operations::export_step_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_export.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ab4ff09ab233d73deae7",
-      "reason": "legacy package-barrel import: internal barrel import .operations::export_stl_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_export.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "80d6cc60717c1b4f11a2",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_document_tree_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_export.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5e98a678d50d8b214ed1",
-      "reason": "legacy package-barrel import: internal barrel import .operations::set_color_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_import.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "d7f3da476a28016bbac8",
-      "reason": "legacy package-barrel import: internal barrel import .operations::import_brep_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_io_import.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "1c7f4c3ece2358767f6d",
-      "reason": "legacy package-barrel import: internal barrel import .operations::import_step_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_lease_acquire_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "f77758e4ad6a3f22f33c",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_lease_acquire_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "a8c874f58643a3abf57c",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_lease_lifecycle.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7fb91d683935881925e3",
-      "reason": "legacy package-barrel import: internal barrel import .responses::json_response; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_lease_lifecycle.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7417964ba7f111bca731",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "4adfcab4f0339820cf5c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::bounding_box_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "2006c1d6636814566fc6",
-      "reason": "legacy package-barrel import: internal barrel import .operations::measure_angle_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "067fa5b3f0a0b29926bc",
-      "reason": "legacy package-barrel import: internal barrel import .operations::measure_area_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7975577ac64c07177900",
-      "reason": "legacy package-barrel import: internal barrel import .operations::measure_distance_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5a4d9ff2bf02176d8516",
-      "reason": "legacy package-barrel import: internal barrel import .operations::measure_volume_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_measure_b.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "66093f718b922f6b7699",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: path, sketch",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "58249317163c255b54de",
-      "reason": "legacy package-barrel import: internal barrel import .operations::center_of_mass_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "a50a3d4c6f732450ca63",
-      "reason": "legacy package-barrel import: internal barrel import .operations::common_volume_along_path_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7b121eedf540a48a8a68",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_global_shape_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_measure_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "006062d58f17492cca97",
-      "reason": "legacy package-barrel import: internal barrel import .operations::validate_geometry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "b605d765acac950c21f0",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: diagnostics, sketch",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "191f002a76539b48b01e",
-      "reason": "legacy package-barrel import: internal barrel import .operations::body_create_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "12f61eace22353522446",
-      "reason": "legacy package-barrel import: internal barrel import .operations::body_set_tip_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ee880cc7816a142facb0",
-      "reason": "legacy package-barrel import: internal barrel import .operations::diagnose_parametric_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "7e1d3170aeca908d39cb",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_sketch_diagnostics_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "78a70055ce9f25dc81a0",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_attach_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_body.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "181d66126cb9a65e727d",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_edit_constraint_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "741838140b44492d3475",
-      "reason": "legacy package-barrel import: internal barrel import .operations::spreadsheet_create_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5564367bf3f8c63e1a64",
-      "reason": "legacy package-barrel import: internal barrel import .operations::spreadsheet_get_cells_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "6d838e3665bfdfd57754",
-      "reason": "legacy package-barrel import: internal barrel import .operations::spreadsheet_set_alias_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "0a8b54e31833e9575a86",
-      "reason": "legacy package-barrel import: internal barrel import .operations::spreadsheet_set_cells_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ae95de3d8d34be434037",
-      "reason": "legacy package-barrel import: internal barrel import .operations::clear_expression_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "97ad1f90ed710fb6031c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::list_expressions_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "dad492a59db85c937375",
-      "reason": "legacy package-barrel import: internal barrel import .operations::set_expression_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_parametric_sheet_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "41ed79bfca8b58b5f214",
-      "reason": "legacy package-barrel import: internal barrel import .operations::spreadsheet_list_aliases_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "e0d65824e14bf4444971",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_datum_plane_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "f4448a10f7a6c6b7a760",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_part_container_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "01303845433efbb1e611",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_subshape_binder_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "3ec3dd29e2e1fb131122",
-      "reason": "legacy package-barrel import: internal barrel import .operations::move_object_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_partdesign_a2.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "d4dc3616e4188e89a78d",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: path, sketch",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "292d4426e0f4d3cb483e",
-      "reason": "legacy package-barrel import: internal barrel import .operations::build_path_wire_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "b65c2ecc2a7c2b968d78",
-      "reason": "legacy package-barrel import: internal barrel import .operations::get_sketch_geometry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "2a5ea53bfe6ddb783830",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_external_projection_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "d4221251c0f79d631de9",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sweep_pipe_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "6fb5630c7a8caa687838",
-      "reason": "legacy package-barrel import: internal barrel import .operations::face_normal_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ab69f41a0d113d611906",
-      "reason": "legacy package-barrel import: internal barrel import .operations::find_edges_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "47873862d9b6c4b4ef6e",
-      "reason": "legacy package-barrel import: internal barrel import .operations::find_faces_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "571d3a29f7ca4d0b0525",
-      "reason": "legacy package-barrel import: internal barrel import .operations::preview_attachment_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "068528c5d07dc0080f82",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_placement_binder_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "05217bb233d098a5375e",
-      "reason": "legacy package-barrel import: internal barrel import .operations::create_placement_datum_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ce9eaad0ea9b41ec4e8b",
-      "reason": "legacy package-barrel import: internal barrel import .operations::edge_axis_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_partdesign_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "8f7f1023a437f983c448",
-      "reason": "legacy package-barrel import: internal barrel import .operations::placement_audit_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_runtime_control.py",
-      "line": 12,
-      "column": 1,
-      "fingerprint": "8456d0908fd6d444c20b",
-      "reason": "legacy package-barrel import: internal barrel import .responses::json_response; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_runtime_control.py",
-      "line": 12,
-      "column": 1,
-      "fingerprint": "e45806b33bccb012a5aa",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_runtime_info.py",
-      "line": 20,
-      "column": 1,
-      "fingerprint": "ea84d1ca46bef4c532c6",
-      "reason": "legacy package-barrel import: internal barrel import .responses::json_response; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "8728dd3a4a846f5fe591",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_coincident_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "0f41bdd89061f491859f",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_distance_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "8fd0baff7218d78988fe",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_horizontal_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "200e093737c0dc78bd16",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_radius_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_1.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "4ec8bf0c6a9f9a89e7eb",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_vertical_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "b69344496fe244573a99",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_equal_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "0d81e1551dbcf7898990",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_parallel_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "15070ea20478bf1c5d73",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_perpendicular_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_constraints_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "d80467d24e07e52b23cd",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_constrain_tangent_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_create_1.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "78d1dba465537e9412fa",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_constraint_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_create_1.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "dcb832b5bd86e48b3057",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_geometry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_create_1.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "8d4561d68154aa78ef76",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_create_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_create_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "61b0b05e8dfa0b8a6294",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_delete_constraint_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_create_2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "4f67d5728206250dd3ec",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_delete_geometry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "2632eefc042866a006b0",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_bezier_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "54258251eb41044a1fab",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_bspline_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "a958da54bdacaa2f2972",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_bspline_through_points_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "48925765c77c870f8c8a",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_polyline_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "e812fcda8f32c62cf885",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_arc_of_ellipse_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "9d8ae705f14b0b81a9ea",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_ellipse_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_a2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "78a87dce40787ca4babf",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_slot_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "906c3a32f4ac0790f3ac",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_parametric_curve_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "2064d968db93e9af1763",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_regular_polygon_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "6c7ce88cfadce5ee5d79",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_import_points_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b.py",
-      "line": 11,
-      "column": 1,
-      "fingerprint": "8381b7ff2513e1efb2a4",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_toggle_construction_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "cb8ded6216528375f655",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_extend_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "5d59fee1f6eb3c67c4a4",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_fillet_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "00987ca9d051e75d9245",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_split_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "40cdc48a7ec28b89c435",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_symmetry_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_curves_b2.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "ba74af5966ce8f2562eb",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_trim_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_primitives.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "bb4feef381340eb51e06",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_arc_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_primitives.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "77f41cba2345ecad0dd3",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_circle_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_primitives.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "fe80bbd7d9cc1f17a22a",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_line_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_sketch_primitives.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "bb4dbf152e2ee24f60a4",
-      "reason": "legacy package-barrel import: internal barrel import .operations::sketch_add_rectangle_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_transform.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "03a8fba6ee6c625e88c9",
-      "reason": "legacy package-barrel import: internal barrel import .operations::rotate_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_transform.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "3ca9a1701b900c04abc4",
-      "reason": "legacy package-barrel import: internal barrel import .operations::scale_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_transform.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "9e4a75d596c24a34150c",
-      "reason": "legacy package-barrel import: internal barrel import .operations::translate_operation; resolved barrel src/freecad_mcp/operations/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH101",
-      "path": "src/freecad_mcp/tools_worker.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "ab730ecaa82671de34c5",
-      "reason": "legacy mixed capability ownership: module owns multiple capability subjects: path, worker",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_worker.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "40a692ddee23910ec218",
-      "reason": "legacy package-barrel import: internal barrel import .responses::json_response; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/tools_worker.py",
-      "line": 10,
-      "column": 1,
-      "fingerprint": "e9ebe82808ad3e57e193",
-      "reason": "legacy package-barrel import: internal barrel import .responses::tool_fail; resolved barrel src/freecad_mcp/responses/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH107",
-      "path": "src/freecad_mcp/server.py",
-      "line": 1,
-      "column": 1,
-      "fingerprint": "88bab586518afd757d21",
-      "reason": "legacy mixed-responsibility facade: giant public facade exposes 38 symbols",
-      "removal_phase": 22
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/server.py",
-      "line": 55,
-      "column": 1,
-      "fingerprint": "16027a6ae81229156307",
-      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::__all__; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH106",
-      "path": "src/freecad_mcp/server.py",
-      "line": 55,
-      "column": 1,
-      "fingerprint": "689c39b384ba7f97a4eb",
-      "reason": "legacy package public surface: explicit __all__ is not statically auditable",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/server.py",
-      "line": 56,
-      "column": 1,
-      "fingerprint": "08bcbfe38acdeee2c77c",
-      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::bind_tool_exports; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/server.py",
-      "line": 62,
-      "column": 1,
-      "fingerprint": "b6c870d4aaa840118af2",
-      "reason": "legacy package-barrel import: internal barrel import .telemetry::emit_event; resolved barrel src/freecad_mcp/telemetry/__init__.py; import the defining leaf module",
-      "removal_phase": 23
-    },
-    {
-      "code": "ARCH104",
-      "path": "src/freecad_mcp/server.py",
-      "line": 133,
-      "column": 1,
-      "fingerprint": "4022887c748bbac2d06f",
-      "reason": "legacy package-barrel import: internal barrel import .server_ops.tool_exports::*; resolved barrel src/freecad_mcp/server_ops/tool_exports/__init__.py; import the defining leaf module",
       "removal_phase": 23
     }
   ]

@@ -58,10 +58,11 @@ def test_registered_create_document_uses_no_removed_server_state(monkeypatch) ->
     from freecad_mcp import tools_core_document
     from freecad_mcp.collaboration_client import CollaborationClient
     from freecad_mcp.server_ops.tool_dependencies import ToolDependencies
+    from freecad_mcp.generated.capabilities.register_modules import tools_core_document as generated_tools_core_document
 
     backend = _CreateBackend()
     mcp = _CaptureMcp()
-    monkeypatch.setattr(tools_core_document, "server_connection", lambda: backend)
+    monkeypatch.setattr(generated_tools_core_document, "server_connection", lambda: backend)
 
     dependencies = ToolDependencies(
         state=_RemovedLeaseState(),

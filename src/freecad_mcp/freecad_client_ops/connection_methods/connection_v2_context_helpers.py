@@ -1,27 +1,11 @@
-"""Retired document-routing helpers retained for import compatibility."""
+"""Declarative shim — generated connection method lives in generated/capabilities."""
 
-from __future__ import annotations
+from freecad_mcp.generated.capabilities.connection_methods.connection_v2_context_helpers import (
+    resolve_document_name_sessions,
+    resolve_selector_session,
+)
 
-from collections.abc import Iterable, Mapping
-from typing import Any
-
-
-def resolve_document_name_sessions(
-    resolver,
-    document_names: Iterable[str],
-    add_session,
-) -> None:
-    """Document names no longer resolve to MCP-owned routing state."""
-
-    del resolver, document_names, add_session
-
-
-def resolve_selector_session(
-    manager,
-    resolver,
-    raw_selector: Mapping[str, Any],
-    add_session,
-) -> None:
-    """Selectors no longer resolve to MCP-owned routing state."""
-
-    del manager, resolver, raw_selector, add_session
+__all__ = [
+    'resolve_document_name_sessions',
+    'resolve_selector_session',
+]

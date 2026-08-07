@@ -14,6 +14,7 @@ from typing_extensions import TypedDict
 from freecad_mcp.capabilities.bootstrap import load_frozen_registry_snapshot
 from freecad_mcp.capabilities.generator import (
     render_production_registration,
+    render_production_client_stubs,
     render_register_order,
     render_tool_export_bind_part,
     shadow_output_root,
@@ -80,26 +81,40 @@ def test_generated_production_artifacts_match_emitter_output():
     snapshot = load_frozen_registry_snapshot()
     register_modules = tuple(snapshot["register_order"])
     part_1, part_2 = _bind_export_parts()
+    from freecad_mcp.capabilities.generator import (
+        current_relocated_body_digests,
+        load_relocated_body_digests,
+    )
+
     expectations = {
         "register_order.py": render_register_order(register_modules),
         "registration.py": render_production_registration(manifests),
         "tool_export_bind_part_1.py": render_tool_export_bind_part(part_1, part=1),
         "tool_export_bind_part_2.py": render_tool_export_bind_part(part_2, part=2),
+        "client_stubs.py": render_production_client_stubs(manifests),
     }
     for name, expected in expectations.items():
         actual = (_GENERATED_ROOT / name).read_text(encoding="utf-8")
         assert actual == expected, f"{name} drifted from emitter output"
+    frozen = load_relocated_body_digests()
+    current = current_relocated_body_digests(register_modules=register_modules)
+    assert current["register_modules"] == frozen["register_modules"]
 
 
 def test_generated_production_files_are_marked_do_not_edit():
+    from freecad_mcp.capabilities.generator import register_modules_root
+
     for name in (
         "register_order.py",
         "registration.py",
         "tool_export_bind_part_1.py",
         "tool_export_bind_part_2.py",
+        "client_stubs.py",
     ):
         text = (_GENERATED_ROOT / name).read_text(encoding="utf-8")
         assert "do not edit" in text.lower()
+    sample = next(register_modules_root().glob("tools_*.py"))
+    assert "do not edit" in sample.read_text(encoding="utf-8").lower()
 
 
 def test_old_binder_import_paths_remain_importable():

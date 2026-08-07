@@ -31,7 +31,7 @@ def all_subject_manifests() -> tuple[SubjectManifest, ...]:
         module = importlib.import_module(
             f"freecad_mcp.capabilities.{child.name}.manifest"
         )
-        manifest = getattr(module, "MANIFEST")
+        manifest = module.MANIFEST
         if not isinstance(manifest, SubjectManifest):
             raise TypeError(f"{module.__name__}.MANIFEST must be SubjectManifest")
         manifests.append(manifest)

@@ -127,6 +127,12 @@ def dynamic_lookup_classification(
         return "registration_barrel"
     if path.endswith("/tool_registration.py"):
         return "generated_registration_locator"
+    if path.startswith("src/freecad_mcp/capabilities/") and function in {
+        "import_operation_symbol",
+        "all_subject_manifests",
+        "_import_symbol",
+    }:
+        return "generated_registration_locator"
     return "runtime_locator"
 
 

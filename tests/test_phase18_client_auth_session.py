@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from freecad_mcp.freecad_client import FreeCADConnection
-from freecad_mcp.freecad_client_ops.connection_methods import connection_invoke_v2_ops
+from freecad_mcp.generated.capabilities.connection_methods import connection_invoke_v2_ops
 from freecad_mcp.freecad_client_ops.connection_methods.connection_headers_ops import (
     configure_rpc_session,
 )
