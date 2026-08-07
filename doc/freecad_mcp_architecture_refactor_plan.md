@@ -1077,9 +1077,9 @@ job commands in §11 before phase 1. Do not substitute a host build.
 | Current stage / phase | **Stage 8 / Phase 23 complete** |
 | Next phase | done — architecture refactor program complete |
 | In-flight ownership | none |
-| Last review | Phase 23 Grok CLEAR (94bd5f51); Phase 22 CLEAR (46d578b3) |
+| Last review | Phase 23 coordinator Grok CLEAR (c5442b21); package tighten CLEAR (94bd5f51); Phase 22 CLEAR (46d578b3) |
 | Blocker | none |
-| Resume hint | coordinator final Grok review, then FreeCAD chess piece |
+| Resume hint | FreeCAD chess piece (post–Phase 23) |
 
 ### 11.2 Stage status
 
@@ -1104,8 +1104,8 @@ Append entries newest-first. Each must be sufficient to resume without prior con
 **Agent lane:** Cursor Multitask (Composer 2.5 final integrator; Grok 4.5 High review
 94bd5f51 CLEAR).
 
-**Status: Stage 8 / Phase 23 complete.** Architecture refactor program complete pending
-coordinator final Grok review.
+**Status: Stage 8 / Phase 23 complete.** Architecture refactor program complete;
+coordinator final Grok review **c5442b21 CLEAR**.
 
 **Delivered:** emptied `ci/architecture_policy_allowances.json` (zero structural
 allowances); tightened `ci/lint_python.py` (re-export cap 16, finite Phase-18 shim
@@ -1117,7 +1117,7 @@ emitter; refreshed `post_collaboration_compatibility_surface.json` authority cen
 
 **§5.7 MCP evidence:** see §11.4.
 
-**Next:** coordinator final Grok review, then FreeCAD chess piece.
+**Next:** FreeCAD chess piece (post–Phase 23).
 
 #### 2026-08-07 — Phase 23 IN PROGRESS: enforce the final architecture policy (Stage 8)
 
@@ -2546,7 +2546,8 @@ repository digest; host-side build or test output is never evidence.
   `FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1`, core wrapper **8 passed / 5 xfailed**
   (`core_RC=0`); e2e wrapper passed **111/111** (`e2e_RC=0`).
 - **Review result:** package tighten re-review **94bd5f51 CLEAR** — Stage 8 /
-  Phase 23 integration gate delivered; coordinator final integrated review pending.
+  Phase 23 integration gate delivered; coordinator final integrated review
+  **c5442b21 CLEAR** (nested `0820cd97`, parent gitlink `968b9ba96b`).
 
 #### Phase 22 — `refactor(mcp): delete the hand-written capability mirrors`
 
