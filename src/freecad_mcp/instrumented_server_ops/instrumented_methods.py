@@ -88,7 +88,9 @@ def run(self, transport="stdio", mount_path=None, *args, **kwargs):
                 *args,
                 **kwargs,
             )
-        return super().run(transport=transport, mount_path=mount_path)
+        # Bound free-function methods have no ``__class__`` cell, so ``super()``
+        # raises RuntimeError. Call the FastMCP base unbound, like ``add_tool``.
+        return FastMCP.run(self, transport=transport, mount_path=mount_path)
 
 async def _call_registered_tool(
         self, name: str, arguments: dict[str, Any]

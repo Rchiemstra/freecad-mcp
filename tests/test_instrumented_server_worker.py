@@ -313,3 +313,31 @@ def test_control_lane_tools_allowlist_matches_registered_mcp_control_tools():
     assert "execute_code" not in CONTROL_LANE_TOOLS
     assert "acquire_document_lock" in registered
     assert "acquire_document_lock" not in CONTROL_LANE_TOOLS
+
+
+def test_string_transport_run_uses_fastmcp_base_without_super_cell(monkeypatch):
+    """stdio reconnect must not crash on ``super()`` from a late-bound method.
+
+    ``InstrumentedFastMCP.run`` is a free function assigned onto the class, so
+    ``super()`` has no ``__class__`` cell and raises RuntimeError at startup.
+    """
+
+    from mcp.server.fastmcp import FastMCP
+
+    server_instance = InstrumentedFastMCP("stdio-run-regression")
+    captured: dict[str, object] = {}
+
+    def fake_run(self, transport="stdio", mount_path=None):
+        captured["self"] = self
+        captured["transport"] = transport
+        captured["mount_path"] = mount_path
+        return "started"
+
+    monkeypatch.setattr(FastMCP, "run", fake_run)
+
+    result = server_instance.run(transport="stdio", mount_path=None)
+
+    assert result == "started"
+    assert captured["self"] is server_instance
+    assert captured["transport"] == "stdio"
+    assert captured["mount_path"] is None
