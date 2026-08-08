@@ -115,7 +115,12 @@ def public_error(facade: Any, exc: Exception, **defaults: Any) -> dict[str, Any]
         for name, value in defaults.items():
             result.setdefault(name, value)
         return result
-    return {"ok": False, "error": redacted_error(facade, exc), **defaults}
+    result = {"ok": False, "error": redacted_error(facade, exc), **defaults}
+    error_code = getattr(exc, "code", None)
+    if error_code:
+        result["success"] = False
+        result["error_code"] = str(error_code)
+    return result
 
 
 __all__ = [

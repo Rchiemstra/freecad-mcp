@@ -56,6 +56,56 @@ def requires_authenticated_session(method, kind, VerbKind, read_only_execute):
     ) and method not in {"handshake_v2", "invoke_v2"}
 
 
+def elevate_rpc_session_identity_or_error(collaborators, identity_provider, identity=None):
+    """Authenticate a transport session token into rpc_server request identity.
+
+    Uses ``request_identity_provider`` (transport/GUI/invoke_v2 store), not
+    ``document_lock`` request identity.  Idempotent when ``invoke_v2`` already
+    elevated ``authenticated_session_id``.
+    """
+    if identity is None:
+        identity = dict(identity_provider.get_request_identity())
+    else:
+        identity = dict(identity)
+    if identity.get("authenticated_session_id"):
+        return None
+    if collaborators.session_manager is None:
+        return {
+            "success": False,
+            "error_code": "LEASE_PROTOCOL_REQUIRED",
+            "error": "This operation requires authenticated RPC v2",
+        }
+    session_token = identity.get("rpc_session_token")
+    runtime_id = identity.get("instance_id")
+    if not session_token or not runtime_id:
+        return {
+            "success": False,
+            "error_code": "LEASE_PROTOCOL_REQUIRED",
+            "error": (
+                "This operation requires a handshake_v2 session and an "
+                "immutable authenticated request envelope"
+            ),
+        }
+    try:
+        session = collaborators.session_manager.authenticate(
+            session_token, mcp_runtime_id=runtime_id
+        )
+        identity["authenticated_session_id"] = session.session_id
+        identity["mcp_process_started_at"] = session.mcp.process_started_at
+        identity_provider.set_request_identity(**identity)
+    except Exception as exc:
+        error = collaborators.lease_protocol_public_error(
+            exc, request_id=identity.get("request_id")
+        )
+        return {
+            "success": False,
+            "error_code": error["error"]["code"],
+            "error": error["error"]["message"],
+            "request_id": error.get("request_id"),
+        }
+    return None
+
+
 def authenticate_session_or_error(collaborators, dl, identity):
     if collaborators.session_manager is None:
         return {

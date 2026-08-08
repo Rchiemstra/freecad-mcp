@@ -74,6 +74,21 @@ def _nested_error(result: Mapping[str, Any]) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def _unwrap_invoke_v2_failure(result: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Lift invoke_v2 inner ``result`` failures for public error extraction."""
+
+    inner = result.get("result")
+    if not isinstance(inner, Mapping):
+        return result
+    if inner.get("success") is not False and inner.get("ok") is not False:
+        return result
+    merged = dict(inner)
+    for key in ("request_id", "addon_runtime_id"):
+        if key in result and key not in merged:
+            merged[key] = result[key]
+    return merged
+
+
 def _semantic_code(result: Mapping[str, Any]) -> str:
     nested = _nested_error(result)
     value = (
@@ -145,10 +160,11 @@ def json_rpc_error_from_result(result: object) -> dict[str, Any] | None:
     if result.get("ok") is not False and result.get("success") is not False:
         return None
 
-    semantic_code = _semantic_code(result)
-    details = _error_details(result)
+    failure = _unwrap_invoke_v2_failure(result)
+    semantic_code = _semantic_code(failure)
+    details = _error_details(failure)
     return {
         "code": _application_code(semantic_code, details),
-        "message": _error_message(result),
-        "data": _error_data(result, semantic_code),
+        "message": _error_message(failure),
+        "data": _error_data(failure, semantic_code),
     }

@@ -76,14 +76,37 @@ class _FreeCAD:
         return self._opened
 
 
-def test_transport_dispatch_is_policy_free_and_calls_the_public_method_once() -> None:
+def test_transport_dispatch_elevates_authenticated_gui_methods() -> None:
+    identity = {
+        "instance_id": "runtime-1",
+        "rpc_session_token": "session-token",
+    }
+    provider = SimpleNamespace(
+        get_request_identity=lambda: dict(identity),
+        set_request_identity=lambda **values: identity.update(values),
+    )
+    session = SimpleNamespace(
+        session_id="session-1",
+        mcp=SimpleNamespace(process_started_at="process-1"),
+    )
     calls = []
     facade = SimpleNamespace(
-        get_gui_state=lambda: calls.append("get_gui_state") or {"ok": True}
+        _execution_collaborators=SimpleNamespace(
+            request_identity_provider=lambda: provider,
+            session_manager=SimpleNamespace(
+                authenticate=lambda *_args, **_kwargs: session
+            ),
+            lease_protocol_public_error=lambda exc, request_id=None: {
+                "error": {"code": "ERR", "message": str(exc)},
+                "request_id": request_id,
+            },
+        ),
+        get_gui_state=lambda: calls.append("get_gui_state") or {"ok": True},
     )
 
     assert dispatch_core(facade, "get_gui_state", ()) == {"ok": True}
     assert calls == ["get_gui_state"]
+    assert identity["authenticated_session_id"] == "session-1"
 
 
 def test_transport_dispatch_rejects_private_and_unknown_methods() -> None:

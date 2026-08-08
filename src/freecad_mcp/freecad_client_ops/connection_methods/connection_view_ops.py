@@ -18,8 +18,30 @@ open_document = _generated.open_document
 activate_document = _generated.activate_document
 set_tree_expanded = _generated.set_tree_expanded
 select_subshapes = _generated.select_subshapes
-get_selection = _generated.get_selection
-get_gui_state = _generated.get_gui_state
+
+
+def get_selection(conn):
+    routed = conn._invoke_mutation_v2(
+        "get_selection",
+        {},
+        operation_name="Get selection",
+    )
+    if routed is not None:
+        return routed
+    return _generated.get_selection(conn)
+
+
+def get_gui_state(conn):
+    routed = conn._invoke_mutation_v2(
+        "get_gui_state",
+        {},
+        operation_name="Get GUI state",
+    )
+    if routed is not None:
+        return routed
+    return _generated.get_gui_state(conn)
+
+
 recompute_and_wait = _generated.recompute_and_wait
 set_section_view = _generated.set_section_view
 
