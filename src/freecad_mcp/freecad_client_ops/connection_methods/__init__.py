@@ -51,6 +51,7 @@ from .connection_invoke_ops import (
     set_identity,
 )
 from .connection_invoke_v2_helpers import (
+    ensure_session_fresh,
     invoke_v2_execution_category,
     invoke_v2_prepare_telemetry,
     invoke_v2_retry_expired_remote_error,
@@ -58,6 +59,7 @@ from .connection_invoke_v2_helpers import (
     invoke_v2_session_error_code,
     invoke_v2_transport,
     invoke_v2_update_runtime_links,
+    is_recoverable_session_error,
 )
 from .connection_invoke_v2_ops import (
     invoke_v2,
@@ -186,6 +188,7 @@ __all__ = [
     'disconnected_handoff_result',
     'document_names_from_args',
     'edit_object',
+    'ensure_session_fresh',
     'execute_code',
     'execute_code_async',
     'finalize_document_edit',
@@ -220,6 +223,7 @@ __all__ = [
     'invoke_v2_update_runtime_links',
     'is_direct_read',
     'is_permanent_auth_failure',
+    'is_recoverable_session_error',
     'is_v2_self_contained_method',
     'legacy_lease_token_headers',
     'list_document_locks',

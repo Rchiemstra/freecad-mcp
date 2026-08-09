@@ -19,6 +19,7 @@ class GuiCollaborators:
     open_document: Callable[[str], Any]
     reload_document: Callable[[str], Any]
     personal_view_registry: Any
+    get_report_view: Callable[..., Any]
     set_section_view: Callable[..., Any]
     repair_placements: Callable[..., Any]
     prepare_placement_animation: Callable[..., Any]
@@ -40,6 +41,7 @@ class GuiCollaborators:
             "redact_rpc_diagnostic": self.redact_rpc_diagnostic,
             "open_document": self.open_document,
             "reload_document": self.reload_document,
+            "get_report_view": self.get_report_view,
             "set_section_view": self.set_section_view,
             "repair_placements": self.repair_placements,
             "prepare_placement_animation": self.prepare_placement_animation,

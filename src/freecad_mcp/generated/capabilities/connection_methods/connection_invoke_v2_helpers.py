@@ -256,31 +256,26 @@ def _session_recovery_lane(method: str, *, control: bool) -> str:
     """WI-4 taxonomy: gui vs mutation (control transport is still mutation)."""
 
     del control
-    try:
-        from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_core_enforcement_auth import (
-            GUI_AUTHENTICATED_METHODS,
-        )
-    except ImportError:  # pragma: no cover - flat layouts
-        GUI_AUTHENTICATED_METHODS = frozenset(
-            {
-                "activate_document",
-                "animate_placement",
-                "capture_view_sequence",
-                "capture_view_sequence_to_disk",
-                "get_active_screenshot",
-                "get_gui_state",
-                "get_report_view",
-                "get_selection",
-                "open_document",
-                "refresh_view",
-                "reload_document",
-                "repair_view_placements",
-                "select_subshapes",
-                "set_section_view",
-                "set_tree_expanded",
-            }
-        )
-    return "gui" if method in GUI_AUTHENTICATED_METHODS else "mutation"
+    gui_authenticated_methods = frozenset(
+        {
+            "activate_document",
+            "animate_placement",
+            "capture_view_sequence",
+            "capture_view_sequence_to_disk",
+            "get_active_screenshot",
+            "get_gui_state",
+            "get_report_view",
+            "get_selection",
+            "open_document",
+            "refresh_view",
+            "reload_document",
+            "repair_view_placements",
+            "select_subshapes",
+            "set_section_view",
+            "set_tree_expanded",
+        }
+    )
+    return "gui" if method in gui_authenticated_methods else "mutation"
 
 
 def _refreshed_context(conn, context: RpcAuthenticationContext):

@@ -1183,7 +1183,7 @@
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/connection_methods/__init__.py",
-        "line": 69,
+        "line": 71,
         "column": 4,
         "symbol": "heartbeat_document_lock",
         "kind": "ImportAlias"
@@ -1232,28 +1232,28 @@
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
-        "line": 171,
+        "line": 172,
         "column": 4,
         "symbol": "heartbeat_document_locks_batch",
         "kind": "Attribute"
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
-        "line": 171,
+        "line": 172,
         "column": 55,
         "symbol": "heartbeat_document_locks_batch",
         "kind": "Name"
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
-        "line": 241,
+        "line": 243,
         "column": 4,
         "symbol": "heartbeat_document_lock",
         "kind": "Attribute"
       },
       {
         "path": "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
-        "line": 241,
+        "line": 243,
         "column": 48,
         "symbol": "heartbeat_document_lock",
         "kind": "Name"
@@ -1501,7 +1501,7 @@
       },
       {
         "path": "src/freecad_mcp/server_ops/tool_exports/__init__.py",
-        "line": 94,
+        "line": 95,
         "column": 0,
         "symbol": "heartbeat_document_lock",
         "kind": "Name"

@@ -11,6 +11,20 @@ from .dispatch_core_enforcement_auth import (
 
 """RPC dispatch chokepoint after native collaboration cutover."""
 
+# Frozen Phase-18 lease stubs must reach their LEGACY_LEASE_AUTHORITY_REMOVED
+# bodies. Session elevation applies only to live authenticated methods.
+_LEGACY_LEASE_STUB_METHODS = frozenset(
+    {
+        "acquire_document_lock",
+        "adopt_dirty_document",
+        "update_document_lock",
+        "heartbeat_document_lock",
+        "lease_heartbeat_batch",
+        "lease_reconcile",
+        "release_document_lock",
+    }
+)
+
 
 def dispatch(self, method, params):
     """Dispatch without creating a second document-authority layer.
@@ -20,14 +34,18 @@ def dispatch(self, method, params):
     their operation adapters, so this transport layer only resolves and calls
     the public method.
 
-    Plain RPC calls for actor-scoped GUI methods still need transport session
-    elevation so ``request_identity_provider`` exposes
-    ``authenticated_session_id`` to ``request_actor``.
+    Plain RPC calls for actor-scoped GUI methods and other live authenticated
+    verbs still need transport session elevation so ``request_identity_provider``
+    exposes ``authenticated_session_id`` to ``request_actor``.  Legacy lease
+    RPCs must reach their frozen deprecation stubs without that gate.
     """
     func = getattr(self, method, None)
     if func is None or method.startswith("_"):
         raise Exception(f'method "{method}" is not supported')
-    if method in AUTHENTICATED_METHODS:
+    if (
+        method in AUTHENTICATED_METHODS
+        and method not in _LEGACY_LEASE_STUB_METHODS
+    ):
         collaborators = self._execution_collaborators
         identity_provider = collaborators.request_identity_provider()
         auth_error = elevate_rpc_session_identity_or_error(

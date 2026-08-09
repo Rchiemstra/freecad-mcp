@@ -195,7 +195,9 @@ def test_phase18_authority_inventory_is_historical_and_unreachable():
                 ".rpc_server.lease_runtime",
                 ".server_ops.heartbeat",
                 ".server_ops.stale_recovery_hooks",
-                ".dispatch_core_enforcement_auth",
+                # Session elevation for actor-scoped GUI methods lives in
+                # dispatch_core_enforcement_auth after Phase-16 GUI auth restore;
+                # do not treat that live helper as cutover debt.
                 ".dispatch_gui_lease_enforced",
                 ".document_create_lease",
             )

@@ -217,12 +217,11 @@ def get_report_view(
 ) -> dict[str, Any]:
     """Read FreeCAD Report view text (application-global Console dock)."""
 
-    from ...gui_tools_ops.report_view import get_report_view as read_report_view
-
+    collaborators = self._gui_collaborators
     try:
         res = dispatch_gui(
             self,
-            lambda: read_report_view(max_lines=max_lines, clear=clear),
+            lambda: collaborators.get_report_view(max_lines=max_lines, clear=clear),
         )
     except Exception as exc:
         return public_error(self, exc)

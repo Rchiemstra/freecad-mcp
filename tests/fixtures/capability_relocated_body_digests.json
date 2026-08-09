@@ -52,14 +52,14 @@
     "_support": "a501c0e06360cffe3479336ffb2d01d2dd71a7f34996c39396805f3d73a5051b",
     "connection_acquisition_helpers": "6d657f563acb88390db9ceb323d51e2c19786f60ee4b2b68a365d5bf34687331",
     "connection_acquisition_ops": "a8c1d77b94e557f13938af1ede8d51964d6deacf57b7b1cc904ad984adf2a01c",
-    "connection_control_ops": "24373118f44476cec4da9a303dcb5783f39063a3968f2265c6795adeceb14964",
+    "connection_control_ops": "164be1cfdc617a78026caa130620f2a4ea08f9eb9a5571d2fe57c040ff1dfef7",
     "connection_disconnect_helpers": "0c2726e1f15ae0b111e24b915e8b4f07354d9653afc145689908a39214819c1a",
     "connection_headers_ops": "824dd422d8c7ba6f82938c7a21e3b23ae0b32dde6f90ab0173746be4539afa72",
     "connection_headers_snapshot_helpers": "e6bc792f43ea0cf9d1c67d4c7c77afb324542475ed176511925cc182a486f47a",
     "connection_headers_snapshot_ops": "efc3f8ce1e834e893eef705d3d60d8f531b1eb04d3387661d141b62a76789d3d",
     "connection_invoke_ops": "1c310eac440471dd29b688820d1126b25c3742c541e36fc0a36a9a081db750f0",
-    "connection_invoke_v2_helpers": "34ce2b9eeabe7621728a512e90da09b3eaef75d74d6f7d0801dd4c7c6052d1ff",
-    "connection_invoke_v2_ops": "ab647272d6059bc47b3933f06ebd813d747adf2fa2a420670b77297888b7f9b1",
+    "connection_invoke_v2_helpers": "dd7a2ea68896c4ddb6bee9fc9a6c14115ed20d0ecf47077d385ecc08d01c90a7",
+    "connection_invoke_v2_ops": "1b85f8d61495a9cabebbbbdca6a4af62eb77b0e80df57d796e45a9f8f91776f1",
     "connection_lease_ops": "afbdd5d6274d626c56bc4c2631526e540220400c3f65665220db69a9ce412f9f",
     "connection_model_ops": "48e652c78f7b090c34e35eba50899f1ea897276baa1ce8787065a367bc9ae9b0",
     "connection_read_ops": "cb857378a39bc50d3ab91eb61b11361316bb5359d1e6715b05c6aeeaad09ea52",
@@ -68,7 +68,7 @@
     "connection_spreadsheet_ops": "1ae3b47ada524673d901b2e013fa6e2fd529c1a99be9abee64d14defcfc2ac57",
     "connection_stale_ops": "2acaca31435271e4bebf58ed376e14b8186d52c802c7a54b282e01340dae4bfe",
     "connection_v2_context_helpers": "c5c292607982c0de4b361be08eee86196d0ac86abe5834bb9f4cd3e718fcf784",
-    "connection_v2_ops": "057f0af1b4111f7a7cd832b937c437b24e84fb5a35fa3fdbffc5d323c54a7001",
-    "connection_view_ops": "94e2447ac3ace32b884e1022a979da7a2d69faff95b31739563351ceec1ed5e5"
+    "connection_v2_ops": "9b3ecbcae408544ddccb0edef672227dc6c4ff34503ca532e01b2610a01b02fa",
+    "connection_view_ops": "c141eb2195b427ea54f4cf62d50b65b153b1bf9103dc51ed138aedfbc7cf8852"
   }
 }

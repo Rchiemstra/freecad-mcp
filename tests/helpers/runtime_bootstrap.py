@@ -34,6 +34,7 @@ def ensure_freecad_stub() -> None:
         console.PrintError = MagicMock()
         fc.Console = console
         fc.ActiveDocument = None
+        fc.GuiUp = False
         fc.getUserAppDataDir = lambda: "/tmp"
         fc.listDocuments = lambda: {}
         fc.getDocument = MagicMock(side_effect=KeyError("document"))

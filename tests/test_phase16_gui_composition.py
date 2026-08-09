@@ -26,6 +26,7 @@ GUI_FIELDS = [
     "open_document",
     "reload_document",
     "personal_view_registry",
+    "get_report_view",
     "set_section_view",
     "repair_placements",
     "prepare_placement_animation",

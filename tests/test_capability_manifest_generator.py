@@ -63,7 +63,7 @@ def manifests() -> tuple[SubjectManifest, ...]:
 def test_bootstrapped_manifests_cover_frozen_snapshot(manifests):
     snapshot = load_frozen_registry_snapshot()
     manifest_tools = {entry.name for manifest in manifests for entry in manifest.tools}
-    assert len(manifest_tools) == snapshot["tool_count"] == 170
+    assert len(manifest_tools) == snapshot["tool_count"] == 171
     assert manifest_tools == set(snapshot["tool_order"])
 
 
@@ -199,8 +199,8 @@ def test_gateway_dispatch_has_one_entry_per_tool(manifests):
     payload = json.loads(
         (shadow_output_root() / "gateway_dispatch.json").read_text(encoding="utf-8")
     )
-    assert payload["tool_count"] == 170
-    assert len(payload["entries"]) == 170
+    assert payload["tool_count"] == 171
+    assert len(payload["entries"]) == 171
     tools = {entry.name for manifest in manifests for entry in manifest.tools}
     assert {item["tool"] for item in payload["entries"]} == tools
 

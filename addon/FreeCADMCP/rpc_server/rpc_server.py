@@ -54,6 +54,7 @@ from .gui_document_runtime import (
 )
 from .gui_dispatch import _flush_gui_events
 from .gui_section_runtime import set_section_view as _set_named_section_view
+from .gui_tools_ops.report_view import get_report_view as _get_report_view
 from .execute_code_analysis import analyze_execute_code, typed_tool_warning
 from .execution_safety import find_gui_blocking_risk, find_gui_geometry_loop_risk
 
@@ -615,6 +616,7 @@ def _build_gui_collaborators(*, freecad_value=None) -> _GuiCollaborators:
         open_document=partial(_open_gui_document, freecad, FreeCADGui),
         reload_document=partial(_reload_gui_document, freecad, FreeCADGui),
         personal_view_registry=_PersonalViewRegistry(),
+        get_report_view=_get_report_view,
         set_section_view=partial(
             _set_named_section_view,
             freecad,
