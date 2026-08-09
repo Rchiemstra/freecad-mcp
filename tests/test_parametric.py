@@ -1,13 +1,6 @@
 """Unit tests for parametric Spreadsheet / expression / Body MCP operations."""
 from unittest.mock import MagicMock
 
-from mcp.types import TextContent
-
-from freecad_mcp.operations.core import (
-    sketch_add_constraint_operation,
-    sketch_constrain_distance_operation,
-    sketch_constrain_radius_operation,
-)
 from freecad_mcp.operations.parametric import (
     body_create_operation,
     body_set_tip_operation,
@@ -23,6 +16,12 @@ from freecad_mcp.operations.parametric import (
     spreadsheet_set_alias_operation,
     spreadsheet_set_cells_operation,
 )
+from freecad_mcp.operations.core import (
+    sketch_add_constraint_operation,
+    sketch_constrain_distance_operation,
+    sketch_constrain_radius_operation,
+)
+from mcp.types import TextContent
 
 
 def _text(response):
@@ -110,45 +109,10 @@ def test_body_and_attach():
     assert "PartDesign::Body" in _code(conn)
     body_set_tip_operation(conn, True, "Doc", "Body", "Pad")
     assert "Tip" in _code(conn)
-
-    conn.sketch_attach.return_value = {
-        "success": True,
-        "sketch": "Sketch",
-        "attached": {"kind": "origin_plane", "plane": "XY_Plane"},
-    }
-    resp = sketch_attach_operation(conn, True, "Doc", "Sketch", "XY_Plane")
-    assert not resp.isError
-    conn.sketch_attach.assert_called_with("Doc", "Sketch", "XY_Plane")
-
-    conn.sketch_attach.reset_mock()
-    conn.sketch_attach.return_value = {
-        "success": True,
-        "sketch": "Sketch",
-        "attached": {"kind": "face_ref", "subname": "Face1"},
-    }
-    sketch_attach_operation(
-        conn, True, "Doc", "Sketch", {"object": "Box", "subname": "Face1"}
-    )
-    args = conn.sketch_attach.call_args.args
-    assert args[2]["subname"] == "Face1"
-
-    offset = {
-        "Base": {"x": 0, "y": 0, "z": 10},
-        "Rotation": {"Axis": {"x": 0, "y": 0, "z": 1}, "Angle": 0},
-    }
-    conn.sketch_attach.reset_mock()
-    conn.sketch_attach.return_value = {
-        "success": True,
-        "sketch": "Sketch",
-        "attached": {"kind": "origin_plane"},
-        "attachment_offset": offset,
-    }
-    before = conn.execute_code.call_count
-    sketch_attach_operation(
-        conn, True, "Doc", "Sketch", "XY_Plane", attachment_offset=offset
-    )
-    conn.sketch_attach.assert_called_once_with("Doc", "Sketch", "XY_Plane", offset)
-    assert conn.execute_code.call_count == before
+    sketch_attach_operation(conn, True, "Doc", "Sketch", "XY_Plane")
+    assert "XY_Plane" in _code(conn)
+    sketch_attach_operation(conn, True, "Doc", "Sketch", {"object": "Box", "subname": "Face1"})
+    assert "Face1" in _code(conn)
 
 
 def test_named_constraints_in_code():
@@ -192,6 +156,3 @@ def test_failures_surface():
     assert spreadsheet_create_operation(_fail_conn(), True, "Doc", "Dims").isError
     assert set_expression_operation(_fail_conn(), True, "Doc", "Pad", "Length", "x").isError
     assert body_create_operation(_fail_conn(), True, "Doc", "Body").isError
-    fail = _fail_conn()
-    fail.sketch_attach.return_value = {"success": False, "error": "nope"}
-    assert sketch_attach_operation(fail, True, "Doc", "Sketch", "XY_Plane").isError

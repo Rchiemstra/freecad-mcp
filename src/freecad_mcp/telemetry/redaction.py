@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import hashlib
 import json
 import os
-from collections.abc import Iterable, Mapping
 from typing import Any
+
 
 SENSITIVE_FIELD_NAMES = frozenset(
     {
@@ -84,11 +85,10 @@ def _replace_secrets(value: str, secrets: tuple[str, ...]) -> str:
 
 
 def _binary_summary(value: Any, kind: str) -> dict[str, Any]:
-    raw = (
-        value
-        if isinstance(value, bytes)
-        else str(value).encode("utf-8", errors="replace")
-    )
+    if isinstance(value, bytes):
+        raw = value
+    else:
+        raw = str(value).encode("utf-8", errors="replace")
     return {
         "redacted": True,
         "kind": kind,

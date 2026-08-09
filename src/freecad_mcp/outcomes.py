@@ -3,12 +3,37 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any
 
-from .outcomes_types.layer_status import LayerStatus
-from .outcomes_types.outcome_status import OutcomeStatus
 
 RESULT_SCHEMA_VERSION = 1
+
+
+class OutcomeStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    CONDITION_FALSE = "condition_false"
+    WARNING = "warning"
+    DEGRADED = "degraded"
+    REJECTED = "rejected"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    UNKNOWN = "unknown"
+
+
+class LayerStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    CONDITION_FALSE = "condition_false"
+    WARNING = "warning"
+    DEGRADED = "degraded"
+    REJECTED = "rejected"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    NOT_APPLICABLE = "not_applicable"
+    UNKNOWN = "unknown"
+
 
 NORMALIZED_STATUSES = frozenset(item.value for item in OutcomeStatus)
 LAYER_NAMES = (
@@ -182,10 +207,10 @@ def make_result_envelope(
 __all__ = [
     "COMMON_ERROR_CODES",
     "LAYER_NAMES",
-    "NORMALIZED_STATUSES",
-    "RESULT_SCHEMA_VERSION",
     "LayerStatus",
+    "NORMALIZED_STATUSES",
     "OutcomeStatus",
+    "RESULT_SCHEMA_VERSION",
     "extract_error_code",
     "is_result_envelope",
     "make_result_envelope",

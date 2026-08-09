@@ -8,30 +8,6 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 
-def test_sketch_normal_axis_is_not_reported_as_an_invalid_reference(freecad):
-    from addon.FreeCADMCP.rpc_server.reference_repair import inspect_references_gui
-
-    doc = freecad.newDocument("ReferenceRepairSketchAxis")
-    try:
-        sketch = doc.addObject("Sketcher::SketchObject", "Sketch")
-        pad = doc.addObject("App::FeaturePython", "Pad")
-        pad.addProperty("App::PropertyLinkSub", "ReferenceAxis")
-        pad.ReferenceAxis = (sketch, ["N_Axis"])
-
-        inspected = inspect_references_gui(
-            doc.Name,
-            [pad.Name],
-            only_invalid=True,
-            validate=True,
-        )
-
-        assert inspected["ok"] is True
-        assert inspected["invalid_count"] == 0
-        assert inspected["references"] == []
-    finally:
-        freecad.closeDocument(doc.Name)
-
-
 def test_invalid_linksublist_can_be_inspected_and_repaired_without_recompute(freecad):
     from addon.FreeCADMCP.rpc_server.reference_repair import (
         inspect_references_gui,

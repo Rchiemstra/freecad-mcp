@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+
 FFMPEG_ENV = "FREECAD_MCP_FFMPEG"
 _INSTALL_HINT = (
     "Install ffmpeg and ensure it is on PATH "

@@ -1,49 +1,389 @@
-"""Operations barrel — public re-exports for server.py and tools_*."""
-
-from __future__ import annotations
-
-from . import (
-    core,
-    diagnostics,
-    interactive,
-    legacy_locking_deprecations,
-    p1_curves,
-    p2_editing,
-    p3_features,
-    p4_gears,
-    p5_measure,
-    p6_io,
-    p7_assembly,
-    parametric,
-    snapshot,
-    video_anim,
+from .core import (
+    close_document_operation,
+    create_document_operation,
+    create_object_operation,
+    delete_object_operation,
+    edit_object_operation,
+    execute_code_async_operation,
+    execute_code_operation,
+    get_object_operation,
+    get_objects_operation,
+    inspect_references_operation,
+    get_parts_list_operation,
+    get_recompute_log_operation,
+    get_sketch_diagnostics_operation,
+    get_view_operation,
+    save_view_sequence_operation,
+    insert_part_from_library_operation,
+    list_documents_operation,
+    sketch_create_operation,
+    sketch_add_geometry_operation,
+    sketch_add_constraint_operation,
+    sketch_add_line_operation,
+    sketch_add_circle_operation,
+    sketch_add_arc_operation,
+    sketch_add_rectangle_operation,
+    sketch_constrain_coincident_operation,
+    sketch_constrain_horizontal_operation,
+    sketch_constrain_vertical_operation,
+    sketch_constrain_distance_operation,
+    sketch_constrain_radius_operation,
+    sketch_constrain_equal_operation,
+    sketch_constrain_parallel_operation,
+    sketch_constrain_perpendicular_operation,
+    sketch_constrain_tangent_operation,
+    pad_feature_operation,
+    pocket_feature_operation,
+    linear_pattern_feature_operation,
+    polar_pattern_feature_operation,
+    mirror_feature_operation,
+    create_spur_gear_operation,
+    recompute_document_operation,
+    undo_operation,
+    redo_operation,
+    repair_references_operation,
+    reload_document_operation,
+    run_fem_analysis_operation,
 )
 
-_SUBMODULES = (
-    core,
-    diagnostics,
-    interactive,
-    legacy_locking_deprecations,
-    p1_curves,
-    p2_editing,
-    p3_features,
-    p4_gears,
-    p5_measure,
-    p6_io,
-    p7_assembly,
-    parametric,
-    snapshot,
-    video_anim,
+# P1 — Sketch curves
+from .p1_curves import (
+    sketch_add_polyline_operation,
+    sketch_add_bspline_operation,
+    sketch_add_bspline_through_points_operation,
+    sketch_add_bezier_operation,
+    sketch_add_ellipse_operation,
+    sketch_add_arc_of_ellipse_operation,
+    sketch_add_slot_operation,
+    sketch_add_regular_polygon_operation,
+    sketch_add_parametric_curve_operation,
+    sketch_import_points_operation,
+    sketch_toggle_construction_operation,
 )
 
-_BARREL_EXCLUDE = frozenset({"solve_assembly_operation"})
+# P2 — Sketch editing
+from .p2_editing import (
+    sketch_trim_operation,
+    sketch_extend_operation,
+    sketch_split_operation,
+    sketch_fillet_operation,
+    sketch_offset_operation,
+    sketch_symmetry_operation,
+)
 
-__all__: list[str] = []
-for _module in _SUBMODULES:
-    for _name in _module.__all__:
-        if _name.startswith("_") or _name in _BARREL_EXCLUDE:
-            continue
-        globals()[_name] = getattr(_module, _name)
-        __all__.append(_name)
+# P3 — 3-D features
+from .p3_features import (
+    revolve_feature_operation,
+    loft_feature_operation,
+    sweep_feature_operation,
+    helical_sweep_feature_operation,
+    fillet_feature_operation,
+    chamfer_feature_operation,
+    boolean_union_operation,
+    boolean_difference_operation,
+    boolean_intersection_operation,
+)
 
-from .p7_assembly import solve_assembly_operation  # noqa: E402, F401 - §3.3 shim
+# P4 — Gear library
+from .p4_gears import (
+    create_involute_gear_operation,
+    create_helical_gear_operation,
+    compute_gear_geometry_operation,
+    check_gear_pair_operation,
+)
+
+# P5 — Measurement & transforms
+from .p5_measure import (
+    measure_distance_operation,
+    measure_angle_operation,
+    measure_area_operation,
+    measure_volume_operation,
+    bounding_box_operation,
+    get_global_shape_operation,
+    common_volume_along_path_operation,
+    center_of_mass_operation,
+    validate_geometry_operation,
+    translate_operation,
+    rotate_operation,
+    scale_operation,
+)
+
+# P6 — IO
+from .p6_io import (
+    export_step_operation,
+    import_step_operation,
+    export_stl_operation,
+    export_brep_operation,
+    import_brep_operation,
+    set_color_operation,
+)
+
+# P7 - Assembly references, sketch geometry, path wires
+from .p7_assembly import (
+    build_path_wire_operation,
+    create_assembly_grounded_joint_operation,
+    create_assembly_joint_operation,
+    create_assembly_operation,
+    create_datum_plane_operation,
+    create_part_container_operation,
+    create_subshape_binder_operation,
+    get_document_tree_operation,
+    get_sketch_geometry_operation,
+    move_object_operation,
+    sketch_add_external_projection_operation,
+    solve_assembly_operation,
+    sweep_pipe_operation,
+)
+
+# Video / placement animation / view refresh
+from .video_anim import (
+    animate_placement_operation,
+    encode_view_video_operation,
+    refresh_view_operation,
+    repair_view_placements_operation,
+)
+
+# Diagnostics — read-only P1/P8/P10 guards
+from .diagnostics import (
+    audit_hardcoded_dimensions_operation,
+    capture_state_operation,
+    create_placement_binder_operation,
+    create_placement_datum_operation,
+    edge_axis_operation,
+    face_normal_operation,
+    find_edges_operation,
+    find_faces_operation,
+    geometric_diff_operation,
+    get_dependency_graph_operation,
+    inspect_geometry_operation,
+    match_subshape_operation,
+    placement_audit_operation,
+    preview_attachment_operation,
+    relink_references_operation,
+    run_transaction_operation,
+    validate_movement_follow_operation,
+)
+
+# Interactive GUI — tree / selection / section / dual-doc / pocket+helix diagnose
+from .interactive import (
+    activate_document_operation,
+    compare_documents_operation,
+    diagnose_helix_operation,
+    diagnose_pocket_operation,
+    get_gui_state_operation,
+    get_selection_operation,
+    open_document_operation,
+    recompute_and_wait_operation,
+    select_subshapes_operation,
+    set_section_view_operation,
+    set_tree_expanded_operation,
+)
+
+# Snapshot — I7 in-process document copies (P12)
+from .snapshot import (
+    restore_operation,
+    snapshot_operation,
+)
+
+# Parametric — Spreadsheet / expressions / Body / named constraints
+from .parametric import (
+    body_create_operation,
+    body_set_tip_operation,
+    clear_expression_operation,
+    diagnose_parametric_operation,
+    list_expressions_operation,
+    set_expression_operation,
+    sketch_attach_operation,
+    sketch_edit_constraint_operation,
+    spreadsheet_create_operation,
+    spreadsheet_get_cells_operation,
+    spreadsheet_list_aliases_operation,
+    spreadsheet_set_alias_operation,
+    spreadsheet_set_cells_operation,
+)
+
+# Document lock / lease
+from .locking import (
+    acquire_document_lock_operation,
+    force_release_stale_lock_operation,
+    get_document_lock_operation,
+    heartbeat_document_lock_operation,
+    list_document_locks_operation,
+    release_document_lock_operation,
+    update_document_lock_operation,
+)
+
+__all__ = [
+    # Core
+    "close_document_operation",
+    "create_document_operation",
+    "create_object_operation",
+    "delete_object_operation",
+    "edit_object_operation",
+    "execute_code_async_operation",
+    "execute_code_operation",
+    "get_object_operation",
+    "get_objects_operation",
+    "inspect_references_operation",
+    "get_parts_list_operation",
+    "get_recompute_log_operation",
+    "get_sketch_diagnostics_operation",
+    "get_view_operation",
+    "save_view_sequence_operation",
+    "encode_view_video_operation",
+    "animate_placement_operation",
+    "refresh_view_operation",
+    "repair_view_placements_operation",
+    "insert_part_from_library_operation",
+    "list_documents_operation",
+    "sketch_create_operation",
+    "sketch_add_geometry_operation",
+    "sketch_add_constraint_operation",
+    "sketch_add_line_operation",
+    "sketch_add_circle_operation",
+    "sketch_add_arc_operation",
+    "sketch_add_rectangle_operation",
+    "sketch_constrain_coincident_operation",
+    "sketch_constrain_horizontal_operation",
+    "sketch_constrain_vertical_operation",
+    "sketch_constrain_distance_operation",
+    "sketch_constrain_radius_operation",
+    "sketch_constrain_equal_operation",
+    "sketch_constrain_parallel_operation",
+    "sketch_constrain_perpendicular_operation",
+    "sketch_constrain_tangent_operation",
+    "pad_feature_operation",
+    "pocket_feature_operation",
+    "linear_pattern_feature_operation",
+    "polar_pattern_feature_operation",
+    "mirror_feature_operation",
+    "create_spur_gear_operation",
+    "recompute_document_operation",
+    "undo_operation",
+    "redo_operation",
+    "repair_references_operation",
+    # P1
+    "sketch_add_polyline_operation",
+    "sketch_add_bspline_operation",
+    "sketch_add_bspline_through_points_operation",
+    "sketch_add_bezier_operation",
+    "sketch_add_ellipse_operation",
+    "sketch_add_arc_of_ellipse_operation",
+    "sketch_add_slot_operation",
+    "sketch_add_regular_polygon_operation",
+    "sketch_add_parametric_curve_operation",
+    "sketch_import_points_operation",
+    "sketch_toggle_construction_operation",
+    # P2
+    "sketch_trim_operation",
+    "sketch_extend_operation",
+    "sketch_split_operation",
+    "sketch_fillet_operation",
+    "sketch_offset_operation",
+    "sketch_symmetry_operation",
+    # P3
+    "revolve_feature_operation",
+    "loft_feature_operation",
+    "sweep_feature_operation",
+    "helical_sweep_feature_operation",
+    "fillet_feature_operation",
+    "chamfer_feature_operation",
+    "boolean_union_operation",
+    "boolean_difference_operation",
+    "boolean_intersection_operation",
+    # P4
+    "create_involute_gear_operation",
+    "create_helical_gear_operation",
+    "compute_gear_geometry_operation",
+    "check_gear_pair_operation",
+    # P5
+    "measure_distance_operation",
+    "measure_angle_operation",
+    "measure_area_operation",
+    "measure_volume_operation",
+    "bounding_box_operation",
+    "get_global_shape_operation",
+    "common_volume_along_path_operation",
+    "center_of_mass_operation",
+    "validate_geometry_operation",
+    "translate_operation",
+    "rotate_operation",
+    "scale_operation",
+    # P6
+    "export_step_operation",
+    "import_step_operation",
+    "export_stl_operation",
+    "export_brep_operation",
+    "import_brep_operation",
+    "set_color_operation",
+    # P7
+    "build_path_wire_operation",
+    "create_assembly_grounded_joint_operation",
+    "create_assembly_joint_operation",
+    "create_assembly_operation",
+    "create_datum_plane_operation",
+    "create_part_container_operation",
+    "create_subshape_binder_operation",
+    "get_document_tree_operation",
+    "get_sketch_geometry_operation",
+    "move_object_operation",
+    "sketch_add_external_projection_operation",
+    "sweep_pipe_operation",
+    # Diagnostics
+    "preview_attachment_operation",
+    "find_faces_operation",
+    "find_edges_operation",
+    "face_normal_operation",
+    "edge_axis_operation",
+    "placement_audit_operation",
+    "relink_references_operation",
+    "capture_state_operation",
+    "geometric_diff_operation",
+    "create_placement_binder_operation",
+    "create_placement_datum_operation",
+    "run_transaction_operation",
+    "validate_movement_follow_operation",
+    "audit_hardcoded_dimensions_operation",
+    "inspect_geometry_operation",
+    "get_dependency_graph_operation",
+    "match_subshape_operation",
+    # Interactive GUI
+    "open_document_operation",
+    "activate_document_operation",
+    "set_tree_expanded_operation",
+    "select_subshapes_operation",
+    "get_selection_operation",
+    "get_gui_state_operation",
+    "recompute_and_wait_operation",
+    "set_section_view_operation",
+    "diagnose_pocket_operation",
+    "diagnose_helix_operation",
+    "compare_documents_operation",
+    # Snapshot
+    "snapshot_operation",
+    "restore_operation",
+    "reload_document_operation",
+    "run_fem_analysis_operation",
+    # Parametric
+    "spreadsheet_create_operation",
+    "spreadsheet_set_cells_operation",
+    "spreadsheet_get_cells_operation",
+    "spreadsheet_set_alias_operation",
+    "spreadsheet_list_aliases_operation",
+    "set_expression_operation",
+    "clear_expression_operation",
+    "list_expressions_operation",
+    "body_create_operation",
+    "body_set_tip_operation",
+    "sketch_attach_operation",
+    "sketch_edit_constraint_operation",
+    "diagnose_parametric_operation",
+    # Document lock
+    "acquire_document_lock_operation",
+    "get_document_lock_operation",
+    "list_document_locks_operation",
+    "heartbeat_document_lock_operation",
+    "release_document_lock_operation",
+    "update_document_lock_operation",
+    "force_release_stale_lock_operation",
+]

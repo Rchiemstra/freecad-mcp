@@ -16,56 +16,16 @@ importable the live fixtures skip automatically.
 """
 from __future__ import annotations
 
+from tests.helpers import runtime_bootstrap  # noqa: F401  - install PySide/FreeCADGui stubs
+
 import contextlib
 import io
 import json
 import math
-import sys
 from unittest.mock import MagicMock
 
 import pytest
 from mcp.types import ImageContent, TextContent
-
-from tests.helpers import (
-    runtime_bootstrap,  # noqa: F401  - install PySide/FreeCADGui stubs
-)
-
-_RPC_RUNTIME_COMPATIBILITY_NAMES = frozenset(
-    {
-        "gui_dispatcher",
-        "rpc_acquisition_claim_store",
-        "rpc_handoff_continuation_store",
-        "rpc_inflight_request_registry",
-        "rpc_request_replay_cache",
-        "rpc_runtime_manifest",
-        "rpc_server_actual_endpoint",
-        "rpc_server_instance",
-        "rpc_server_runtime_id",
-        "rpc_server_started_at",
-        "rpc_server_thread",
-        "rpc_session_manager",
-        "shutdown_requested",
-        "worker_manager",
-    }
-)
-
-
-@pytest.fixture(autouse=True)
-def _clear_legacy_rpc_runtime_test_overrides():
-    """Prevent legacy module-alias monkeypatches from shadowing runtime views."""
-
-    yield
-    for module_name in (
-        "addon.FreeCADMCP.rpc_server.rpc_server",
-        "rpc_server.rpc_server",
-    ):
-        module = sys.modules.get(module_name)
-        if module is None:
-            continue
-        namespace = vars(module)
-        for name in _RPC_RUNTIME_COMPATIBILITY_NAMES:
-            if name in namespace:
-                delattr(module, name)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +150,7 @@ class LiveFreeCADConnection:
         # Mirror addon/FreeCADMCP/Init.py for direct in-process operation tests.
         from freecad_mcp.assembly_api_bootstrap import install
 
-        install(module_registry=sys.modules)
+        install()
         self.doc = FreeCAD.newDocument(doc_name)
         self._globals = {
             "FreeCAD": FreeCAD,

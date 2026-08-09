@@ -1,5 +1,4 @@
 import FreeCAD, json
-$placement_helpers
 _doc = FreeCAD.getDocument($doc_name)
 if not _doc: raise RuntimeError($doc_missing)
 _sk = _doc.getObject($sketch_name)
@@ -58,15 +57,5 @@ elif isinstance(_support, dict):
     _attached = {'object': _ref.Name, 'subname': _sub, 'kind': 'dict_ref'}
 else:
     raise RuntimeError('support must be str or dict')
-_offset = $attachment_offset
-_offset_out = None
-if _offset is not None:
-    if not hasattr(_sk, 'AttachmentOffset'):
-        raise RuntimeError('Sketch has no AttachmentOffset: ' + $sketch_name)
-    _sk.AttachmentOffset = _mcp_dict_to_placement(_offset)
-    _offset_out = _mcp_placement_to_dict(_sk.AttachmentOffset)
 _doc.recompute()
-_payload = {'ok': True, 'sketch': _sk.Name, 'attached': _attached}
-if _offset_out is not None:
-    _payload['attachment_offset'] = _offset_out
-print(json.dumps(_payload))
+print(json.dumps({'ok': True, 'sketch': _sk.Name, 'attached': _attached}))

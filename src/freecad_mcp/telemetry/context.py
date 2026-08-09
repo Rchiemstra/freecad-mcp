@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import uuid
-from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
-from typing import Any
+import os
+from typing import Any, Iterator
+import uuid
+
 
 _PROCESS_SESSION_ID = os.environ.get("FREECAD_MCP_TELEMETRY_SESSION_ID") or str(
     uuid.uuid4()
@@ -31,16 +31,13 @@ class TelemetryContext:
     execution_category: str = ""
 
 
-_DEFAULT_TELEMETRY_CONTEXT = TelemetryContext()
-
-_CURRENT: ContextVar[TelemetryContext] = ContextVar("freecad_mcp_telemetry_context")
+_CURRENT: ContextVar[TelemetryContext] = ContextVar(
+    "freecad_mcp_telemetry_context", default=TelemetryContext()
+)
 
 
 def get_context() -> TelemetryContext:
-    try:
-        return _CURRENT.get()
-    except LookupError:
-        return _DEFAULT_TELEMETRY_CONTEXT
+    return _CURRENT.get()
 
 
 def _clean_updates(values: dict[str, Any]) -> dict[str, Any]:

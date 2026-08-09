@@ -35,38 +35,22 @@ if $check_direction:
                 + '). FreeCAD reported Up-to-date but the geometry likely went the '
                 + 'wrong way (P2). Check the sketch attachment plane and pad direction.'
             )
-# Bounding-box sanity: the profile sketch's start position must lie on or near
-# the feature bbox. PartDesign feature shapes use Body-local coordinates while
-# sketch global placements include the Body placement, so compare in the
-# feature's parent Body frame when one exists.
+# Bounding-box sanity: the profile sketch's global position must lie on or near
+# the feature bbox (the sketch is the start profile). Flags a large positional
+# miss (P3-style rotated-placement drop) without failing on rounding.
 _fc_bb = _fc_shape.BoundBox
-_fc_skpos_global = _fc_sk.getGlobalPlacement().Base
-_fc_skpos = _fc_skpos_global
-_fc_skpos_frame = 'global'
-try:
-    _fc_parent = _fc_feat.getParentGeoFeatureGroup()
-    if (
-        _fc_parent is not None
-        and getattr(_fc_parent, 'TypeId', '') == 'PartDesign::Body'
-    ):
-        _fc_skpos = _fc_parent.getGlobalPlacement().inverse().multVec(_fc_skpos_global)
-        _fc_skpos_frame = 'Body-local'
-except Exception:
-    # Older FreeCAD builds and non-PartDesign features may not expose a parent
-    # group. Their shape bbox and sketch placement are normally both global.
-    _fc_skpos = _fc_skpos_global
+_fc_skpos = _fc_sk.getGlobalPlacement().Base
 _fc_span = max(_fc_bb.XLength, _fc_bb.YLength, _fc_bb.ZLength, 1.0)
-_fc_dx = max(_fc_bb.XMin - _fc_skpos.x, 0.0, _fc_skpos.x - _fc_bb.XMax)
-_fc_dy = max(_fc_bb.YMin - _fc_skpos.y, 0.0, _fc_skpos.y - _fc_bb.YMax)
-_fc_dz = max(_fc_bb.ZMin - _fc_skpos.z, 0.0, _fc_skpos.z - _fc_bb.ZMax)
-_fc_miss = (_fc_dx * _fc_dx + _fc_dy * _fc_dy + _fc_dz * _fc_dz) ** 0.5
+_fc_miss = min(
+    abs(_fc_skpos.x - _fc_bb.XMin), abs(_fc_skpos.x - _fc_bb.XMax),
+    abs(_fc_skpos.y - _fc_bb.YMin), abs(_fc_skpos.y - _fc_bb.YMax),
+    abs(_fc_skpos.z - _fc_bb.ZMin), abs(_fc_skpos.z - _fc_bb.ZMax),
+)
 if _fc_miss > max(1e-3, 0.05 * _fc_span):
     raise RuntimeError(
         'SILENT BUILD MISMATCH: ' + $feature_name_repr + ' bbox ('
         + str((_fc_bb.XMin, _fc_bb.YMin, _fc_bb.ZMin, _fc_bb.XMax, _fc_bb.YMax, _fc_bb.ZMax))
-        + ') does not contain the profile sketch ' + _fc_skpos_frame
-        + ' position ' + str(_fc_skpos)
-        + ' (global ' + str(_fc_skpos_global) + ')'
+        + ') does not contain the profile sketch global position ' + str(_fc_skpos)
         + ' (miss ' + str(round(_fc_miss, 6)) + ' mm). The feature may have been built in '
         + 'the wrong place (P2/P3).'
     )

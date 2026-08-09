@@ -22,9 +22,10 @@ import sys
 import tempfile
 import time
 import uuid
-from contextlib import suppress
+import xmlrpc.client
 from pathlib import Path
 from typing import Any
+
 
 # The launcher is run directly from ``scripts/`` as well as from an installed
 # package.  Put this checkout's ``src`` first so its authentication codec is
@@ -33,22 +34,18 @@ _MCP_SOURCE = Path(__file__).resolve().parents[1] / "src"
 if str(_MCP_SOURCE) not in sys.path:
     sys.path.insert(0, str(_MCP_SOURCE))
 
-from freecad_mcp._shared.protocol.json_rpc_client import (  # noqa: E402
-    JsonRpcProtocolMismatchError,
-    JsonRpcRemoteError,
-)
-from freecad_mcp.build_info import build_id as MCP_BUILD_ID  # noqa: E402
-from freecad_mcp.freecad_client import FreeCADConnection  # noqa: E402
 from freecad_mcp.rpc_auth import (  # noqa: E402
+    McpRuntimeIdentity,
     PROTOCOL_VERSION,
     REQUIRED_PROTOCOL_FEATURES,
-    McpRuntimeIdentity,
     RpcAuthError,
     build_handshake_request,
     load_profile_secret,
     make_mcp_runtime_identity,
     verify_handshake_response,
 )
+from freecad_mcp.build_info import build_id as MCP_BUILD_ID  # noqa: E402
+
 
 PROFILE_NAME = ".freecad-mcp-isolated"
 MANIFEST_FILENAME = "instance-manifest.json"
@@ -82,6 +79,17 @@ class InstanceValidationError(RuntimeError):
     """The endpoint answered, but it is not the launched isolated runtime."""
 
 
+class _TimeoutTransport(xmlrpc.client.Transport):
+    def __init__(self, timeout: float = 2.0) -> None:
+        super().__init__()
+        self.timeout = timeout
+
+    def make_connection(self, host):
+        connection = super().make_connection(host)
+        connection.timeout = self.timeout
+        return connection
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
@@ -90,7 +98,7 @@ def _manifest_path(profile: Path) -> Path:
     return profile / MANIFEST_FILENAME
 
 
-def _load_manifest(profile: Path) -> dict[str, Any]:  # noqa: C901
+def _load_manifest(profile: Path) -> dict[str, Any]:
     path = _manifest_path(profile)
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -173,12 +181,16 @@ def _write_manifest(profile: Path, value: dict[str, Any]) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        with suppress(OSError):
+        try:
             os.chmod(temporary, 0o600)
+        except OSError:
+            pass
         os.replace(temporary, path)
     except Exception:
-        with suppress(OSError):
+        try:
             temporary.unlink()
+        except OSError:
+            pass
         raise
 
 
@@ -229,7 +241,7 @@ def _profile_path_fingerprint(profile: Path) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _validate_instance_info(  # noqa: C901
+def _validate_instance_info(
     info: object, manifest: dict[str, Any], launched_pid: int
 ) -> dict[str, Any]:
     if not isinstance(info, dict) or info.get("ok") is not True:
@@ -414,14 +426,7 @@ def _prove_authenticated_instance(
                 "expected_profile_path_fingerprint"
             ],
         )
-    except (
-        JsonRpcProtocolMismatchError,
-        JsonRpcRemoteError,
-        OSError,
-        RpcAuthError,
-        TypeError,
-        ValueError,
-    ) as exc:
+    except (RpcAuthError, xmlrpc.client.Error, TypeError, ValueError) as exc:
         # Authentication errors are deliberately bounded and never include the
         # profile secret or issued session credential.
         raise InstanceValidationError(
@@ -469,7 +474,7 @@ def _load_parent_start_freecad():
     return module
 
 
-def main() -> int:  # noqa: C901
+def main() -> int:
     repo = _repo_root()
     profile = repo / PROFILE_NAME
     freecad = repo / "build" / "release" / "bin" / "FreeCAD.exe"
@@ -501,13 +506,8 @@ def main() -> int:  # noqa: C901
     endpoint_reservation = _reserve_endpoint(host, port)
     try:
         helper = _load_parent_start_freecad()
-        # Launch FreeCAD directly so Popen.pid is the exact process identity
-        # authenticated by the addon.  The general launcher may wrap build-tree
-        # executables in ``pixi run``; on Windows that leaves Pixi as the parent
-        # PID and makes strict runtime binding reject the real FreeCAD child.
-        cmd = [str(freecad), *sys.argv[1:]]
-        cwd = str(freecad.parent)
-        env = dict(helper._launch_env(freecad))
+        cmd, cwd, env = helper._launch_details(freecad, sys.argv[1:])
+        env = dict(env)
         env["FREECAD_USER_HOME"] = str(profile)
         env["FREECAD_USER_DATA"] = str(profile)
         env["FREECAD_USER_TEMP"] = str(profile / "temp")
@@ -562,57 +562,48 @@ def main() -> int:  # noqa: C901
 
     deadline = time.monotonic() + 60.0
     launcher_identity = make_mcp_runtime_identity(client_build_id=LAUNCHER_BUILD_ID)
-    connection = FreeCADConnection(
-        host=host,
-        port=port,
-        timeout=2.0,
-        mcp_instance_id=launcher_identity.runtime_id,
-        mcp_client=launcher_identity.client_build_id,
-        mcp_pid=launcher_identity.pid,
-        mcp_host=launcher_identity.hostname,
+    proxy = xmlrpc.client.ServerProxy(
+        f"http://{host}:{port}",
+        allow_none=True,
+        transport=_TimeoutTransport(2.0),
     )
-    try:
-        proxy = connection.server
-        while time.monotonic() < deadline:
-            if process.poll() is not None:
-                print(
-                    f"ERROR: FreeCAD exited before RPC identity was proven "
-                    f"(code {process.returncode})",
-                    file=sys.stderr,
-                )
-                return process.returncode or 1
-            try:
-                info = proxy.get_instance_info()
-            except (JsonRpcProtocolMismatchError, JsonRpcRemoteError, OSError):
-                time.sleep(0.5)
-                continue
-            try:
-                expectations = _prove_authenticated_instance(
-                    proxy,
-                    info=info,
-                    manifest=launch_manifest,
-                    launched_pid=process.pid,
-                    secret=profile_secret,
-                    launcher_identity=launcher_identity,
-                )
-            except InstanceValidationError as exc:
-                print(
-                    "ERROR: authenticated RPC endpoint identity validation failed: "
-                    f"{exc}. The process was not reused or stopped.",
-                    file=sys.stderr,
-                )
-                return 1
-            validated_manifest = dict(launch_manifest)
-            validated_manifest.update(expectations)
-            _write_manifest(profile, validated_manifest)
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
             print(
-                f"Isolated MCP RPC identity authenticated on {host}:{port} "
-                f"(pid={process.pid}, "
-                f"runtime={expectations['expected_addon_runtime_id']})"
+                f"ERROR: FreeCAD exited before RPC identity was proven "
+                f"(code {process.returncode})",
+                file=sys.stderr,
             )
-            return 0
-    finally:
-        connection.disconnect()
+            return process.returncode or 1
+        try:
+            info = proxy.get_instance_info()
+        except (OSError, xmlrpc.client.Error):
+            time.sleep(0.5)
+            continue
+        try:
+            expectations = _prove_authenticated_instance(
+                proxy,
+                info=info,
+                manifest=launch_manifest,
+                launched_pid=process.pid,
+                secret=profile_secret,
+                launcher_identity=launcher_identity,
+            )
+        except InstanceValidationError as exc:
+            print(
+                f"ERROR: authenticated RPC endpoint identity validation failed: {exc}. "
+                "The process was not reused or stopped.",
+                file=sys.stderr,
+            )
+            return 1
+        validated_manifest = dict(launch_manifest)
+        validated_manifest.update(expectations)
+        _write_manifest(profile, validated_manifest)
+        print(
+            f"Isolated MCP RPC identity authenticated on {host}:{port} "
+            f"(pid={process.pid}, runtime={expectations['expected_addon_runtime_id']})"
+        )
+        return 0
 
     print(
         f"ERROR: FreeCAD started, but no authenticated isolated RPC appeared on "

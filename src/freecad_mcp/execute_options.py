@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+
 RecomputeMode = Literal["none", "target", "all"]
 ExecutionMode = Literal["gui", "worker", "auto"]
 LinkPolicy = Literal["strict", "warn"]

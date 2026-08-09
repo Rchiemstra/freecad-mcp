@@ -1,1 +1,0 @@
-"""Capability subject package: diagnostics."""

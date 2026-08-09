@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import json
 import os
 from pathlib import Path
@@ -11,10 +10,7 @@ import sys
 import jsonschema
 import pytest
 
-from freecad_mcp.telemetry.context import (
-    bind_context,
-    get_context,
-)
+from freecad_mcp.telemetry.context import bind_context, get_context
 from freecad_mcp.telemetry.events import EVENT_NAMES
 from freecad_mcp.telemetry.legacy_parser import parse_legacy_lines
 from freecad_mcp.telemetry.redaction import redact_payload
@@ -84,27 +80,6 @@ def test_redaction_removes_credentials_code_images_and_embedded_secret(monkeypat
     assert "raw source sentinel" not in rendered
     assert "A" * 128 not in rendered
     assert value["truncated"] is True
-
-
-def test_get_context_returns_default_identity_when_unbound() -> None:
-    from freecad_mcp.telemetry.context import _DEFAULT_TELEMETRY_CONTEXT
-
-    def assert_unbound_default() -> None:
-        ctx = get_context()
-        assert ctx is _DEFAULT_TELEMETRY_CONTEXT
-        assert ctx.session_id
-        assert ctx.call_id == ""
-
-    contextvars.Context().run(assert_unbound_default)
-
-
-def test_bind_context_resets_to_prior_default_after_exit() -> None:
-    prior = get_context()
-    with bind_context(call_id="phase0", task_id="task-a"):
-        bound = get_context()
-        assert bound.call_id == "phase0"
-        assert bound.task_id == "task-a"
-    assert get_context() == prior
 
 
 def test_contextvars_isolate_concurrent_calls():

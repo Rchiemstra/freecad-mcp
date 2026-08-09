@@ -9,20 +9,16 @@ dist/
 
 # Virtual environments
 .venv/
-.venv-*/
 venv/
 env/
 
 # Testing
 .pytest_cache/
-.ruff_cache/
 .coverage
 htmlcov/
 debug_logs/
 benchmark-results.json
 benchmark-report.md
-results_*.xml
-ci_rc_*.txt
 
 # IDE
 .vscode/

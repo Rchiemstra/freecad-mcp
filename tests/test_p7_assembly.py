@@ -194,33 +194,15 @@ class TestExternalProjection:
         conn = _ok_conn()
         sketch_add_external_projection_operation(conn, True, "Doc", "Sketch", "Binder:Face1")
         code = _code(conn)
-        options = conn.execute_code.call_args[0][1]
         assert_code_compiles(code)
         assert_code_contains(
             code,
-            "_sk.addExternal(_src.Name, _sub",
+            "addExternal",
             "binder and sketch must share parent container",
             "Sketcher::SketchObject",
             "datum normal not parallel to face",
             "candidate_edges",
         )
-        assert options.execution_mode == "auto"
-        assert options.allow_gui_geometry_loop is False
-
-    def test_explicit_gui_loop_override_forces_gui_execution(self):
-        conn = _ok_conn()
-        sketch_add_external_projection_operation(
-            conn,
-            True,
-            "Doc",
-            "Sketch",
-            "Binder:Face1",
-            allow_gui_geometry_loop=True,
-        )
-
-        options = conn.execute_code.call_args[0][1]
-        assert options.execution_mode == "gui"
-        assert options.allow_gui_geometry_loop is True
 
     def test_invalid_projection_mode(self):
         resp = sketch_add_external_projection_operation(
