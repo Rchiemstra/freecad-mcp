@@ -72,7 +72,18 @@ def ensure_objects_fem_stub() -> None:
     try:
         import ObjectsFem  # noqa: F401
     except ModuleNotFoundError:
-        sys.modules["ObjectsFem"] = types.ModuleType("ObjectsFem")
+        fem = types.ModuleType("ObjectsFem")
+        # Phase 15 unit tests monkeypatch these factory helpers; plain ModuleType
+        # blocks setattr on missing attrs under pytest 9.
+        for name in (
+            "makeMaterialSolid",
+            "makeAnalysis",
+            "makeMeshGmsh",
+            "makeConstraintFlowVelocity",
+            "makeSolverMystran",
+        ):
+            setattr(fem, name, MagicMock())
+        sys.modules["ObjectsFem"] = fem
 
 
 def ensure_part_stub() -> None:
