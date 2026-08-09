@@ -108,7 +108,16 @@ def ensure_pyside_shim() -> None:
     try:
         import PySide6.QtCore as qt_core
     except ModuleNotFoundError:
-        return
+        qt_core = None
+    if qt_core is None:
+        qt_core = types.ModuleType("PySide.QtCore")
+        qt_core.QObject = MagicMock
+        qt_core.Signal = MagicMock
+        qt_core.Slot = MagicMock
+        qtimer = MagicMock()
+        qtimer.singleShot = MagicMock()
+        qt_core.QTimer = qtimer
+        qt_core.Qt = MagicMock()
 
     pyside = types.ModuleType("PySide")
     pyside.QtCore = qt_core
@@ -124,6 +133,8 @@ def ensure_pyside_shim() -> None:
     qt_widgets.QLineEdit = MagicMock()
     qt_widgets.QMessageBox = MagicMock()
     qt_widgets.QAction = MagicMock()
+    qt_widgets.QTextEdit = MagicMock
+    qt_widgets.QWidget = MagicMock
     pyside.QtWidgets = qt_widgets
     sys.modules["PySide.QtWidgets"] = qt_widgets
 

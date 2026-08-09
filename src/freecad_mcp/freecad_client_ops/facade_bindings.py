@@ -120,6 +120,7 @@ from .connection_methods.connection_view_ops import (
     get_object,
     get_objects,
     get_parts_list,
+    get_report_view,
     get_selection,
     list_documents,
     open_document,
@@ -208,6 +209,7 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.select_subshapes = select_subshapes
     FreeCADConnection.get_selection = get_selection
     FreeCADConnection.get_gui_state = get_gui_state
+    FreeCADConnection.get_report_view = get_report_view
     FreeCADConnection.recompute_and_wait = recompute_and_wait
     FreeCADConnection.set_section_view = set_section_view
     FreeCADConnection.sketch_create = sketch_create

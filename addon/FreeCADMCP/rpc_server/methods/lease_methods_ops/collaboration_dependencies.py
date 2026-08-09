@@ -42,10 +42,14 @@ class CollaborationCollaborators:
             )
 
     def commit_compatibility_mutation(
-        self, document_name: str, callback: Callable[[], Any]
+        self,
+        document_name: str,
+        callback: Callable[[], Any],
+        *,
+        structural: bool = False,
     ) -> Any:
         return self.compatibility_api.commit_compatibility_mutation(
-            document_name, callback
+            document_name, callback, structural=structural
         )
 
     def with_runtime_manifest(self, runtime_manifest: Any) -> CollaborationCollaborators:

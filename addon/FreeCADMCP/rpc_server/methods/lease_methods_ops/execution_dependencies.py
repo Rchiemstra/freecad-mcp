@@ -94,12 +94,16 @@ class ExecutionCollaborators:
             )
 
     def commit_compatibility_mutation(
-        self, document_name: str, callback: Callable[[], Any]
+        self,
+        document_name: str,
+        callback: Callable[[], Any],
+        *,
+        structural: bool = False,
     ) -> Any:
         """Delegate exactly once through the injected native boundary."""
 
         return self.compatibility_api.commit_compatibility_mutation(
-            document_name, callback
+            document_name, callback, structural=structural
         )
 
     def with_authenticated_runtime(

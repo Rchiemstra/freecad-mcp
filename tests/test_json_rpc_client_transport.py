@@ -142,6 +142,44 @@ def test_structured_remote_error_is_a_native_exception_with_data():
     }
 
 
+def test_remote_error_unwraps_nested_invoke_v2_failure_message():
+    lane, _transport = _lane_with_responses(
+        _response(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "RPC failed",
+                    "data": {
+                        "request_id": "request-1",
+                        "addon_runtime_id": "runtime-1",
+                        "result": {
+                            "success": False,
+                            "error_code": "gui_timeout_not_supported",
+                            "error": "timeout_seconds is a hard worker timeout",
+                        },
+                    },
+                },
+            }
+        )
+    )
+
+    with pytest.raises(JsonRpcRemoteError) as raised:
+        lane.call("get_gui_state")
+
+    assert raised.value.message == "timeout_seconds is a hard worker timeout"
+    assert raised.value.semantic_code == "gui_timeout_not_supported"
+    assert raised.value.data["error_code"] == "gui_timeout_not_supported"
+    assert (
+        str(raised.value)
+        == "FreeCAD RPC error -32000: timeout_seconds is a hard worker timeout"
+    )
+    assert raised.value.data["result"]["error"] == (
+        "timeout_seconds is a hard worker timeout"
+    )
+
+
 class _HeaderErrorEchoHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers["Content-Length"])

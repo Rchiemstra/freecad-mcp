@@ -9,6 +9,7 @@ from mcp.types import CallToolResult
 from freecad_mcp.operations import (
     activate_document_operation,
     get_gui_state_operation,
+    get_report_view_operation,
     get_selection_operation,
     recompute_and_wait_operation,
     select_subshapes_operation,
@@ -111,6 +112,31 @@ def _register_get_gui_state(
         return get_gui_state_operation(server_connection())
 
     exports['get_gui_state'] = get_gui_state
+def _register_get_report_view(
+    mcp: InstrumentedFastMCP,
+    *,
+    dependencies: ToolDependencies,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def get_report_view(
+        ctx: Context,
+        max_lines: int | None = 200,
+        clear: bool = False,
+    ) -> CallToolResult:
+        """Read FreeCAD Report view (Console dock) text.
+
+        Use after a failed mutation or Invalid object when Console output may not
+        land on ``getStatusString()``. Returns the recent Report view lines;
+        optionally clear the dock after capture to isolate the next failure.
+        """
+        return get_report_view_operation(
+            server_connection(),
+            max_lines=max_lines,
+            clear=clear,
+        )
+
+    exports['get_report_view'] = get_report_view
 def _register_recompute_and_wait(
     mcp: InstrumentedFastMCP,
     *,
@@ -190,6 +216,11 @@ def register(
         exports=exports,
     )
     _register_get_gui_state(
+        mcp,
+        dependencies=dependencies,
+        exports=exports,
+    )
+    _register_get_report_view(
         mcp,
         dependencies=dependencies,
         exports=exports,

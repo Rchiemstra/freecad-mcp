@@ -16,6 +16,32 @@ def object_state(value: Any) -> tuple[str, ...]:
         return ()
 
 
+def object_status_string(value: Any) -> str | None:
+    """Return ``getStatusString()`` when bound; otherwise ``None``."""
+
+    method = getattr(value, "getStatusString", None)
+    if not callable(method):
+        return None
+    try:
+        text = method()
+    except Exception:
+        return None
+    if text is None:
+        return None
+    text = str(text).strip()
+    return text or None
+
+
+def object_is_valid(value: Any) -> bool | None:
+    method = getattr(value, "isValid", None)
+    if not callable(method):
+        return None
+    try:
+        return bool(method())
+    except Exception:
+        return None
+
+
 def shape_hash(value: Any) -> str:
     shape = getattr(value, "Shape", None)
     if shape is None:

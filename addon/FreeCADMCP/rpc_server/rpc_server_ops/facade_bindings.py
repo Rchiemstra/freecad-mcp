@@ -148,6 +148,7 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.select_subshapes = gui_methods.select_subshapes
     FreeCADRPC.get_selection = gui_methods.get_selection
     FreeCADRPC.get_gui_state = gui_methods.get_gui_state
+    FreeCADRPC.get_report_view = gui_methods.get_report_view
     FreeCADRPC.set_section_view = gui_methods.set_section_view
     FreeCADRPC.get_active_screenshot = gui_methods.get_active_screenshot
     FreeCADRPC.capture_view_sequence = gui_methods.capture_view_sequence

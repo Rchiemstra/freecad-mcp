@@ -29,6 +29,11 @@ __all__ = (
     "JsonRpcRemoteError",
     "decode_json_rpc_response",
     "encode_json_rpc_request",
+    "unwrap_nested_remote_error",
+)
+
+_USELESS_REMOTE_MESSAGES = frozenset(
+    {"", "RPC failed", "Authenticated RPC failed"}
 )
 
 
@@ -59,6 +64,56 @@ class JsonRpcRemoteError(RuntimeError):
         semantic = self.data.get("error_code") if isinstance(self.data, Mapping) else None
         self.semantic_code = str(semantic or code)
         super().__init__(f"FreeCAD RPC error {code}: {message}")
+
+
+def _nested_failure_payload(container: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    inner = container.get("result")
+    if isinstance(inner, Mapping) and (
+        inner.get("success") is False or inner.get("ok") is False
+    ):
+        return inner
+    if container.get("success") is False or container.get("ok") is False:
+        return container
+    return None
+
+
+def _nested_failure_message(payload: Mapping[str, Any]) -> str | None:
+    for key in ("error", "message"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, Mapping):
+            nested = value.get("message")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+    return None
+
+
+def unwrap_nested_remote_error(error: JsonRpcRemoteError) -> JsonRpcRemoteError:
+    """Surface invoke_v2 inner failures when the transport returned a useless message."""
+
+    message = str(error.message or "").strip()
+    if message and message not in _USELESS_REMOTE_MESSAGES:
+        return error
+    data = error.data
+    if not isinstance(data, Mapping):
+        return error
+    nested = _nested_failure_payload(data)
+    if nested is None:
+        return error
+    nested_message = _nested_failure_message(nested)
+    if not nested_message:
+        return error
+    new_data = copy.deepcopy(data)
+    nested_code = nested.get("error_code") or nested.get("code")
+    if nested_code and "error_code" not in new_data:
+        new_data["error_code"] = str(nested_code)
+    return JsonRpcRemoteError(
+        error.code,
+        nested_message,
+        data=new_data,
+        request_id=error.request_id,
+    )
 
 
 def _valid_id(value: object) -> bool:
@@ -150,9 +205,11 @@ def decode_json_rpc_response(
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC response contained an invalid error code or message"
         )
-    raise JsonRpcRemoteError(
-        code,
-        message,
-        data=error.get("data", _MISSING),
-        request_id=actual_id,
+    raise unwrap_nested_remote_error(
+        JsonRpcRemoteError(
+            code,
+            message,
+            data=error.get("data", _MISSING),
+            request_id=actual_id,
+        )
     )

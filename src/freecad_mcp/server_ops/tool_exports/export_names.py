@@ -70,6 +70,7 @@ __all__ = [
     "get_objects",
     "get_parts_list",
     "get_recompute_log",
+    "get_report_view",
     "get_request_status",
     "get_runtime_info",
     "get_selection",

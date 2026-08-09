@@ -109,6 +109,17 @@ MANIFEST = SubjectManifest(
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
+            name="get_report_view",
+            docstring='Read FreeCAD Report view (Console dock) text.\n\nUse after a failed mutation or Invalid object when Console output may not\nland on ``getStatusString()``. Returns the recent Report view lines;\noptionally clear the dock after capture to isolate the next failure.\n\nArgs:\n    max_lines: Tail of the report (default 200). Pass None/0 for all lines.\n    clear: If True, clear the Report view after capturing text.\n\nReturns:\n    JSON with ``text``, ``line_count``, ``total_lines``, ``truncated``.\n    On miss: ``REPORT_VIEW_UNAVAILABLE``.',
+            signature="(ctx: 'Context', max_lines: 'int | None' = 200, clear: 'bool' = False) -> 'CallToolResult'",
+            operation_path="freecad_mcp.operations.get_report_view_operation",
+            rpc_method="get_report_view",
+            execution_mode=ExecutionMode.TYPED_GATEWAY,
+            gui_thread=True,
+            mutation_class=MutationClass.READ,
+            register_module="tools_gui_document_b",
+        ),
+        ToolEntry(
             name="get_selection",
             docstring='Return the current FreeCADGui selection (document/object/sub).',
             signature="(ctx: 'Context') -> 'CallToolResult'",

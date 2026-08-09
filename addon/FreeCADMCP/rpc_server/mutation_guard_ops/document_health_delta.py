@@ -27,6 +27,7 @@ class DocumentHealthDelta:
     preexisting_invalid_state_objects: tuple[str, ...] = ()
     preexisting_invalid_shapes: tuple[str, ...] = ()
     body_tip_issues: tuple[str, ...] = ()
+    invalid_object_status: dict[str, str] | None = None
     validation_profile: str = ValidationProfile.DEFAULT.value
     validation_available: bool = True
     validation_error: str | None = None
@@ -54,4 +55,5 @@ class DocumentHealthDelta:
             ),
             "preexisting_invalid_shapes": list(self.preexisting_invalid_shapes),
             "body_tip_issues": list(self.body_tip_issues),
+            "invalid_object_status": dict(self.invalid_object_status or {}),
         }

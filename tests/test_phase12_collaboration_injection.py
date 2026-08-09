@@ -20,8 +20,8 @@ class _CompatibilityAPI:
         self.calls: list[tuple[object, object]] = []
         self.result = object()
 
-    def commit_compatibility_mutation(self, document_name, callback):
-        self.calls.append((document_name, callback))
+    def commit_compatibility_mutation(self, document_name, callback, *, structural=False):
+        self.calls.append((document_name, callback, structural))
         return self.result
 
 
@@ -109,4 +109,10 @@ def test_compatibility_mutation_uses_the_exact_injected_route_once() -> None:
     actual = collaborators.commit_compatibility_mutation(document_name, callback)
 
     assert actual is api.result
-    assert api.calls == [(document_name, callback)]
+    assert api.calls == [(document_name, callback, False)]
+
+    actual_structural = collaborators.commit_compatibility_mutation(
+        document_name, callback, structural=True
+    )
+    assert actual_structural is api.result
+    assert api.calls[-1] == (document_name, callback, True)

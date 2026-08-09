@@ -210,6 +210,27 @@ def get_gui_state(self) -> dict[str, Any]:
         return public_error(self, exc)
 
 
+def get_report_view(
+    self,
+    max_lines: int | None = 200,
+    clear: bool = False,
+) -> dict[str, Any]:
+    """Read FreeCAD Report view text (application-global Console dock)."""
+
+    from ...gui_tools_ops.report_view import get_report_view as read_report_view
+
+    try:
+        res = dispatch_gui(
+            self,
+            lambda: read_report_view(max_lines=max_lines, clear=clear),
+        )
+    except Exception as exc:
+        return public_error(self, exc)
+    if isinstance(res, dict):
+        return res
+    return {"ok": False, "error": str(res)}
+
+
 def set_section_view(
     self,
     enabled: bool | None = None,
@@ -249,6 +270,7 @@ def set_section_view(
 __all__ = [
     "activate_document",
     "get_gui_state",
+    "get_report_view",
     "get_selection",
     "select_subshapes",
     "set_section_view",

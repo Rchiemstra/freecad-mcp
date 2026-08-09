@@ -482,6 +482,14 @@
     },
     {
       "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_report_view_operation",
+      "rpc_method": "get_report_view",
+      "tool": "get_report_view"
+    },
+    {
+      "execution_mode": "typed_gateway",
       "gui_thread": false,
       "mutation_class": "read",
       "operation_path": "freecad_mcp.operations.get_selection_operation",
@@ -1361,5 +1369,5 @@
       "tool": "get_worker_status"
     }
   ],
-  "tool_count": 170
+  "tool_count": 171
 }

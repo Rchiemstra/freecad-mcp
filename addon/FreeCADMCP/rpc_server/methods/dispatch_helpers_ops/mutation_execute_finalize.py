@@ -83,10 +83,15 @@ def finalize_mutation_health(
         unexpected_documents=unexpected_documents,
     )
     if attempted_deltas:
-        health["attempted_verdict"] = self._aggregate_document_health(
+        attempted_health = self._aggregate_document_health(
             attempted_deltas,
             unexpected_documents=unexpected_documents,
-        )["verdict"]
+        )
+        health["attempted_verdict"] = attempted_health["verdict"]
+        if attempted_health.get("invalid_object_status"):
+            health["attempted_invalid_object_status"] = attempted_health[
+                "invalid_object_status"
+            ]
     health["rollback_restored_health"] = bool(
         transaction.abort_succeeded
         and health["verdict"]

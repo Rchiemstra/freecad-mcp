@@ -327,6 +327,13 @@ def get_gui_state(conn, *args, **kwargs):
     )
     return _impl(conn, *args, **kwargs)
 
+def get_report_view(conn, *args, **kwargs):
+    """Generated client stub for get_report_view (read)."""
+    from freecad_mcp.generated.capabilities.connection_methods.connection_view_ops import (
+        get_report_view as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
+
 def get_selection(conn, *args, **kwargs):
     """Generated client stub for get_selection (read)."""
     from freecad_mcp.generated.capabilities.connection_methods.connection_view_ops import (

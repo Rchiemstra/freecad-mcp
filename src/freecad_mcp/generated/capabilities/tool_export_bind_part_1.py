@@ -86,6 +86,7 @@ def bind_tool_exports_part_1(
     pkg.get_objects = exports['get_objects']
     pkg.get_parts_list = exports['get_parts_list']
     pkg.get_recompute_log = exports['get_recompute_log']
+    pkg.get_report_view = exports['get_report_view']
     pkg.get_request_status = exports['get_request_status']
     pkg.get_runtime_info = exports['get_runtime_info']
     pkg.get_selection = exports['get_selection']

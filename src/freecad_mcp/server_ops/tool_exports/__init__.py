@@ -84,6 +84,7 @@ get_object = None
 get_objects = None
 get_parts_list = None
 get_recompute_log = None
+get_report_view = None
 get_request_status = None
 get_runtime_info = None
 get_selection = None
