@@ -1,10 +1,11 @@
-"""E2E: GUI + write lanes stay unblocked across session prune (WI-5 / §7.2–§7.3).
+"""Opt-in session e2e: GUI + write lanes across prune (WI-5 / §7.2–§7.3).
 
-Opt-in only — never touches the live instance on port 9876 /
-``.freecad-mcp-isolated``.
+Not part of ``MARKER=e2e`` — marked ``session_e2e`` so the push-gate verdict
+(skipped_non_xfail == 0) does not fail when these stay opt-in. Never touches
+the live instance on port 9876 / ``.freecad-mcp-isolated``.
 
     set FREECAD_MCP_SESSION_E2E=1
-    python -m pytest tests/e2e/test_gui_lane_stays_unblocked.py -m e2e -v
+    python -m pytest tests/e2e/test_gui_lane_stays_unblocked.py -m session_e2e -v
 
 Soak (idle past short TTL + concurrent second runtime):
 
@@ -43,7 +44,7 @@ def _truthy(name: str) -> bool:
 
 
 pytestmark = [
-    pytest.mark.e2e,
+    pytest.mark.session_e2e,
     pytest.mark.skipif(
         not _truthy("FREECAD_MCP_SESSION_E2E"),
         reason="Set FREECAD_MCP_SESSION_E2E=1 to run throwaway-profile session e2e",

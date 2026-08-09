@@ -1,13 +1,15 @@
 """Shared pytest fixtures for the freecad-mcp test suite.
 
-Three test layers are supported via markers (declared in pyproject.toml and
-re-registered here defensively):
+Test layers via markers (declared in pyproject.toml and re-registered here
+defensively):
 
-* ``unit``  - mock-based tests of generated code; no FreeCAD required.
-* ``e2e``   - live tests driving a real headless FreeCAD (FreeCADCmd).
-* ``core``  - live tests reproducing FreeCAD core C++ behavior
-              (placement/attacher/sketcher/pad). These are the regression
-              gates for the bugs listed in doc/mcp-feedback.md.
+* ``unit``         - mock-based tests of generated code; no FreeCAD required.
+* ``e2e``          - live tests driving a real headless FreeCAD (FreeCADCmd).
+* ``core``         - live tests reproducing FreeCAD core C++ behavior
+                     (placement/attacher/sketcher/pad). These are the regression
+                     gates for the bugs listed in doc/mcp-feedback.md.
+* ``session_e2e``  - opt-in throwaway-profile session recovery / soak; not
+                     selected by ``MARKER=e2e`` (avoids skip → verdict=1).
 
 The live layers use the in-process ``exec`` pattern: the test interpreter is
 expected to be FreeCAD's own Python (e.g. running pytest inside the
@@ -73,7 +75,7 @@ def _clear_legacy_rpc_runtime_test_overrides():
 # ---------------------------------------------------------------------------
 
 def pytest_configure(config: pytest.Config) -> None:
-    for marker in ("unit", "e2e", "core", "benchmark"):
+    for marker in ("unit", "e2e", "core", "session_e2e", "benchmark"):
         config.addinivalue_line("markers", marker)
 
 
@@ -88,10 +90,10 @@ def pytest_collection_modifyitems(
     job goes green while exercising only the handful of explicitly-tagged unit
     tests. Auto-tagging the unmarked (mock-based, FreeCAD-free by convention)
     tests as ``unit`` makes the job actually run them, and keeps new test files
-    covered without needing a marker on each. Tests already tagged unit/e2e/core
-    are left untouched.
+    covered without needing a marker on each. Tests already tagged with a layer
+    marker are left untouched.
     """
-    layers = {"unit", "e2e", "core", "benchmark"}
+    layers = {"unit", "e2e", "core", "session_e2e", "benchmark"}
     for item in items:
         if not layers.intersection(m.name for m in item.iter_markers()):
             item.add_marker(pytest.mark.unit)

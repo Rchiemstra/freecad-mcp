@@ -46,6 +46,7 @@ markers = [
     "unit: mock-based tests that do not require a FreeCAD install (fast, run anywhere)",
     "e2e: live tests that drive a real headless FreeCAD (FreeCADCmd) inside Docker",
     "core: tests reproducing FreeCAD core C++ behavior (placement/attacher/sketcher/pad)",
+    "session_e2e: opt-in throwaway-profile session recovery / soak (not part of MARKER=e2e)",
     "benchmark: reproducible end-to-end task and KPI benchmark suite",
 ]
 asyncio_mode = "auto"
