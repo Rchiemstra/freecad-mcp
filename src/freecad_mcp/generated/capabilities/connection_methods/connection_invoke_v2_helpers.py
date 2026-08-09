@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from freecad_mcp.freecad_client_ops.generated_execute import (
@@ -13,7 +14,83 @@ from freecad_mcp.rpc_session import RpcAuthenticationContext
 from freecad_mcp.telemetry import emit_event
 from freecad_mcp.telemetry.context import get_context, update_context
 
-_SESSION_EXPIRED_CODES = frozenset({"SESSION_EXPIRED", "UNKNOWN_SESSION"})
+# Codes the addon SessionManager / authenticate_envelope can emit for a stale
+# or unbound session. UNKNOWN_SESSION is retained for forward compatibility
+# even though nothing emits it today.
+_SESSION_RECOVERABLE_CODES = frozenset(
+    {
+        "SESSION_EXPIRED",
+        "INVALID_SESSION",
+        "SESSION_REVOKED",
+        "SESSION_BINDING_MISMATCH",
+        "UNKNOWN_SESSION",
+    }
+)
+# Back-compat alias for imports that still use the old name.
+_SESSION_EXPIRED_CODES = _SESSION_RECOVERABLE_CODES
+
+_SESSION_REFRESH_SKEW_SECONDS = 60.0
+_LEASE_PROTOCOL_REQUIRED = "LEASE_PROTOCOL_REQUIRED"
+
+
+def is_recoverable_session_error(
+    code: str | None,
+    *,
+    has_session_token: bool,
+) -> bool:
+    """Return True when one re-handshake retry is warranted for ``code``."""
+
+    if code is None:
+        return False
+    if code in _SESSION_RECOVERABLE_CODES:
+        return True
+    # LEASE_PROTOCOL_REQUIRED also means "no credentials configured". Only
+    # retry when this process already holds a session token — bare retry would
+    # mask genuine misconfiguration.
+    return code == _LEASE_PROTOCOL_REQUIRED and has_session_token
+
+
+def _parse_session_expiry(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def ensure_session_fresh(
+    conn,
+    context: RpcAuthenticationContext,
+    *,
+    skew_seconds: float = _SESSION_REFRESH_SKEW_SECONDS,
+) -> RpcAuthenticationContext:
+    """Re-handshake before expiry when within the skew margin; else no-op.
+
+    Unparseable or empty ``expires_at`` skips proactive refresh (reactive
+    recovery remains the safety net).
+    """
+
+    with conn._identity_lock:
+        session = conn._rpc_session
+        refresher = conn._session_refresher
+    if session is None or refresher is None:
+        return context
+    expires = _parse_session_expiry(session.expires_at)
+    if expires is None:
+        return context
+    if expires > datetime.now(UTC) + timedelta(seconds=skew_seconds):
+        return context
+    try:
+        refreshed = _refreshed_context(conn, context)
+    except Exception:
+        # Proactive refresh is best-effort; keep the existing context so the
+        # reactive single-retry path remains the safety net.
+        return context
+    return refreshed if refreshed is not None else context
 
 
 def _redact_native_remote_error(
@@ -159,11 +236,51 @@ def invoke_v2_update_runtime_links(
 
 
 def invoke_v2_session_error_code(response: Mapping[str, Any]) -> str | None:
+    """Extract a protocol code from either refusal shape.
+
+    * invoke_v2 / public_error: ``{"ok": False, "error": {"code": X, ...}}``
+    * plain dispatch elevation: ``{"success": False, "error_code": X, "error": "<str>"}``
+    """
+
+    top_level = response.get("error_code")
+    if top_level is not None and top_level != "":
+        return str(top_level)
     error = response.get("error")
-    if not isinstance(error, Mapping):
-        return None
-    error_code = error.get("code")
-    return str(error_code) if error_code is not None else None
+    if isinstance(error, Mapping):
+        error_code = error.get("code")
+        return str(error_code) if error_code is not None else None
+    return None
+
+
+def _session_recovery_lane(method: str, *, control: bool) -> str:
+    """WI-4 taxonomy: gui vs mutation (control transport is still mutation)."""
+
+    del control
+    try:
+        from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.dispatch_core_enforcement_auth import (
+            GUI_AUTHENTICATED_METHODS,
+        )
+    except ImportError:  # pragma: no cover - flat layouts
+        GUI_AUTHENTICATED_METHODS = frozenset(
+            {
+                "activate_document",
+                "animate_placement",
+                "capture_view_sequence",
+                "capture_view_sequence_to_disk",
+                "get_active_screenshot",
+                "get_gui_state",
+                "get_report_view",
+                "get_selection",
+                "open_document",
+                "refresh_view",
+                "reload_document",
+                "repair_view_placements",
+                "select_subshapes",
+                "set_section_view",
+                "set_tree_expanded",
+            }
+        )
+    return "gui" if method in GUI_AUTHENTICATED_METHODS else "mutation"
 
 
 def _refreshed_context(conn, context: RpcAuthenticationContext):
@@ -193,10 +310,18 @@ def invoke_v2_retry_expired_session(
 ) -> dict[str, Any]:
     from freecad_mcp._shared.protocol.json_rpc_client import JsonRpcRemoteError
 
+    protocol_code = invoke_v2_session_error_code(response)
+    lane = _session_recovery_lane(method, control=control)
     try:
         refreshed = _refreshed_context(conn, context)
     except Exception as exc:
-        raise RpcInvocationError(method, exc, request_id=context.request_id) from None
+        raise RpcInvocationError(
+            method,
+            exc,
+            request_id=context.request_id,
+            protocol_code=protocol_code,
+            lane=lane,
+        ) from None
     if refreshed is None:
         return dict(response)
     refreshed_params = _sign_generated_execute_params(method, params, refreshed)
@@ -210,7 +335,13 @@ def invoke_v2_retry_expired_session(
     except JsonRpcRemoteError as exc:
         raise _redact_native_remote_error(conn, exc, refreshed) from None
     except Exception as exc:
-        raise RpcInvocationError(method, exc, request_id=context.request_id) from None
+        raise RpcInvocationError(
+            method,
+            exc,
+            request_id=context.request_id,
+            protocol_code=protocol_code,
+            lane=lane,
+        ) from None
 
 
 def invoke_v2_retry_expired_remote_error(
@@ -224,14 +355,22 @@ def invoke_v2_retry_expired_remote_error(
     control: bool,
     timeout: float | None,
 ) -> dict[str, Any]:
-    """Refresh once for a session-expiry error, otherwise preserve it."""
+    """Refresh once for a recoverable session error, otherwise preserve it."""
 
     from freecad_mcp._shared.protocol.json_rpc_client import JsonRpcRemoteError
 
+    protocol_code = getattr(remote_error, "semantic_code", None)
+    lane = _session_recovery_lane(method, control=control)
     try:
         refreshed = _refreshed_context(conn, context)
     except Exception as exc:
-        raise RpcInvocationError(method, exc, request_id=context.request_id) from None
+        raise RpcInvocationError(
+            method,
+            exc,
+            request_id=context.request_id,
+            protocol_code=str(protocol_code) if protocol_code else None,
+            lane=lane,
+        ) from None
     if refreshed is None:
         raise remote_error
     refreshed_params = _sign_generated_execute_params(method, params, refreshed)
@@ -245,5 +384,11 @@ def invoke_v2_retry_expired_remote_error(
     except JsonRpcRemoteError as exc:
         raise _redact_native_remote_error(conn, exc, refreshed) from None
     except Exception as exc:
-        raise RpcInvocationError(method, exc, request_id=context.request_id) from None
+        raise RpcInvocationError(
+            method,
+            exc,
+            request_id=context.request_id,
+            protocol_code=str(protocol_code) if protocol_code else None,
+            lane=lane,
+        ) from None
 

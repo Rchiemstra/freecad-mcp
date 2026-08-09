@@ -14,11 +14,23 @@ try:
 except ImportError:  # pragma: no cover - flat addon import path
     from _shared.protocol.protocol_error import ProtocolError as LeaseProtocolError
 
+try:
+    from ..dispatch_helpers_ops.dispatch_core_enforcement_auth import (
+        auth_refusal_lane,
+        emit_auth_gate_refusal,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from dispatch_helpers_ops.dispatch_core_enforcement_auth import (  # type: ignore
+        auth_refusal_lane,
+        emit_auth_gate_refusal,
+    )
+
 
 def invoke_v2(self, payload):
     """Authenticate, de-duplicate, and dispatch one immutable RPC envelope."""
     collaborators = self._execution_collaborators
     request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    method_hint = payload.get("method") if isinstance(payload, dict) else None
     session_manager = collaborators.session_manager
     replay_cache = collaborators.request_replay_cache
     invocation_runtime_id = collaborators.runtime_id
@@ -112,6 +124,29 @@ def invoke_v2(self, payload):
                 del self._inflight_context.value
             identity_provider.set_request_identity(**previous_identity)
     except Exception as exc:
-        return collaborators.lease_protocol_public_error(
+        public = collaborators.lease_protocol_public_error(
             exc, request_id=request_id
         )
+        error = public.get("error") if isinstance(public, dict) else None
+        code = (
+            error.get("code")
+            if isinstance(error, dict)
+            else getattr(exc, "code", None)
+        )
+        if code in {
+            "SESSION_EXPIRED",
+            "INVALID_SESSION",
+            "SESSION_REVOKED",
+            "SESSION_BINDING_MISMATCH",
+            "MISSING_RUNTIME_BINDING",
+            "LEASE_PROTOCOL_REQUIRED",
+        }:
+            emit_auth_gate_refusal(
+                method=str(method_hint) if method_hint else None,
+                error_code=str(code),
+                lane=auth_refusal_lane(
+                    str(method_hint) if method_hint else None
+                ),
+                request_id=request_id if isinstance(request_id, str) else None,
+            )
+        return public

@@ -9,7 +9,7 @@ from freecad_mcp._shared.protocol.json_rpc_client import JsonRpcRemoteError
 from freecad_mcp.rpc_session import RpcAuthenticationContext
 
 from .connection_invoke_v2_helpers import (
-    _SESSION_EXPIRED_CODES,
+    ensure_session_fresh,
     invoke_v2_execution_category,
     invoke_v2_prepare_telemetry,
     invoke_v2_retry_expired_remote_error,
@@ -17,6 +17,7 @@ from .connection_invoke_v2_helpers import (
     invoke_v2_session_error_code,
     invoke_v2_transport,
     invoke_v2_update_runtime_links,
+    is_recoverable_session_error,
 )
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -43,6 +44,7 @@ def invoke_v2(
             request_id=str(getattr(context, "request_id", "") or "") or None,
         )
 
+    context = ensure_session_fresh(conn, context)
     category = invoke_v2_execution_category(method, params)
     task_context_id = invoke_v2_prepare_telemetry(
         context,
@@ -50,6 +52,7 @@ def invoke_v2(
         control=control,
         category=category,
     )
+    has_session_token = bool(context.session_token)
     try:
         response = invoke_v2_transport(
             conn,
@@ -60,7 +63,10 @@ def invoke_v2(
             timeout=timeout,
         )
     except JsonRpcRemoteError as exc:
-        if exc.semantic_code not in _SESSION_EXPIRED_CODES:
+        if not is_recoverable_session_error(
+            exc.semantic_code,
+            has_session_token=has_session_token,
+        ):
             raise
         transport_method = "invoke_v2_control" if control else "invoke_v2"
         return invoke_v2_retry_expired_remote_error(
@@ -84,7 +90,10 @@ def invoke_v2(
         if isinstance(response, Mapping)
         else None
     )
-    if error_code not in _SESSION_EXPIRED_CODES:
+    if not is_recoverable_session_error(
+        error_code,
+        has_session_token=has_session_token,
+    ):
         return response
     transport_method = "invoke_v2_control" if control else "invoke_v2"
     return invoke_v2_retry_expired_session(

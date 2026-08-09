@@ -5,6 +5,66 @@ from ._support import *
 
 """Authentication helpers for enforced dispatch."""
 
+# Actor-scoped GUI methods that share the auth gate with lease/save verbs.
+# Single source of truth for lane classification (GUI vs mutation).
+GUI_AUTHENTICATED_METHODS = frozenset(
+    {
+        "activate_document",
+        "animate_placement",
+        "capture_view_sequence",
+        "capture_view_sequence_to_disk",
+        "get_active_screenshot",
+        "get_gui_state",
+        "get_report_view",
+        "get_selection",
+        "open_document",
+        "refresh_view",
+        "reload_document",
+        "repair_view_placements",
+        "select_subshapes",
+        "set_section_view",
+        "set_tree_expanded",
+    }
+)
+
+
+def auth_refusal_lane(method: str | None) -> str:
+    """Classify an auth-gate refusal as GUI vs mutation for diagnostics."""
+
+    if method in GUI_AUTHENTICATED_METHODS:
+        return "gui"
+    return "mutation"
+
+
+def emit_auth_gate_refusal(
+    *,
+    method: str | None,
+    error_code: str,
+    lane: str,
+    request_id: str | None = None,
+) -> None:
+    """Record an auth-gate refusal with the real protocol code for diagnosis."""
+
+    try:
+        from ...telemetry import emit as emit_telemetry
+    except ImportError:  # pragma: no cover - flat addon import path
+        try:
+            from rpc_server.telemetry import emit as emit_telemetry
+        except ImportError:
+            return
+    emit_telemetry(
+        "rpc_auth",
+        "auth_gate_refused",
+        status="failed",
+        error_code=error_code,
+        request_id=request_id,
+        payload={
+            "lane": lane,
+            "method": method,
+        },
+    )
+
+
 AUTHENTICATED_METHODS = frozenset(
     {
         "acquire_document_lock",
@@ -22,21 +82,7 @@ AUTHENTICATED_METHODS = frozenset(
         "shutdown_rpc_server",
         # Phase 16 actor-scoped GUI operations are read-only from the document
         # authority perspective, but must never accept a caller-supplied actor.
-        "activate_document",
-        "animate_placement",
-        "capture_view_sequence",
-        "capture_view_sequence_to_disk",
-        "get_active_screenshot",
-        "get_gui_state",
-        "get_report_view",
-        "get_selection",
-        "open_document",
-        "refresh_view",
-        "reload_document",
-        "repair_view_placements",
-        "select_subshapes",
-        "set_section_view",
-        "set_tree_expanded",
+        *GUI_AUTHENTICATED_METHODS,
     }
 )
 

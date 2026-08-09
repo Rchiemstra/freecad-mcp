@@ -81,6 +81,9 @@ def _unwrap_v2_response(
                     unwrapped, additional_secrets=additional_secrets
                 )
             return unwrapped
+        if isinstance(result, str):
+            # GUI screenshot and similar methods return a bare string payload.
+            return {"success": True, "result": result}
         error = response.get("error")
         if isinstance(error, Mapping):
             unwrapped = {

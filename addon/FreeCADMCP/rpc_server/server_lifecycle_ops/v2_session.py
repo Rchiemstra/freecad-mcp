@@ -46,9 +46,39 @@ def initialize_rpc_v2_session(
             addon_build_id=rpc_mod.addon_build_id,
             profile_path_fingerprint=rpc_mod._profile_fingerprint(),
         )
-        rpc_mod.rpc_session_manager = rpc_mod.SessionManager(
-            manifest=rpc_mod.rpc_runtime_manifest, secret=secret
-        )
+        session_kwargs: dict[str, Any] = {
+            "manifest": rpc_mod.rpc_runtime_manifest,
+            "secret": secret,
+        }
+        # Throwaway / soak profiles may inject a short TTL so e2e can exercise
+        # cross-runtime prune without waiting the production 5-minute default.
+        ttl_raw = rpc_mod.os.environ.get("FREECAD_MCP_SESSION_TTL_SECONDS", "").strip()
+        if ttl_raw:
+            try:
+                ttl_value = float(ttl_raw)
+                session_kwargs["session_ttl_seconds"] = ttl_value
+            except ValueError:
+                logger.warning(
+                    "Ignoring invalid FREECAD_MCP_SESSION_TTL_SECONDS=%r", ttl_raw
+                )
+        try:
+            rpc_mod.rpc_session_manager = rpc_mod.SessionManager(**session_kwargs)
+        except Exception as ttl_exc:
+            # Out-of-range TTL (e.g. 0.5 or 7200) raises INVALID_SESSION_TTL —
+            # fall back to the production default rather than aborting startup
+            # for a throwaway e2e misconfiguration.
+            if "session_ttl_seconds" in session_kwargs and "INVALID_SESSION_TTL" in str(
+                ttl_exc
+            ):
+                logger.warning(
+                    "Ignoring out-of-range FREECAD_MCP_SESSION_TTL_SECONDS=%r (%s)",
+                    ttl_raw,
+                    ttl_exc,
+                )
+                session_kwargs.pop("session_ttl_seconds", None)
+                rpc_mod.rpc_session_manager = rpc_mod.SessionManager(**session_kwargs)
+            else:
+                raise
         return ""
     except Exception as exc:
         logger.error("Could not initialize authenticated RPC v2: %s", exc)

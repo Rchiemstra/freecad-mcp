@@ -78,6 +78,40 @@ _MANIFEST_FIELDS = frozenset(
 )
 
 
+def _resolve_profile(repo: Path, *, profile_name: str | None = None) -> Path:
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from _profile_resolve import resolve_isolated_profile
+
+    return resolve_isolated_profile(
+        repo, profile_name=profile_name, default_name=PROFILE_NAME
+    )
+
+
+def _consume_launcher_args(argv: list[str]) -> tuple[str | None, list[str]]:
+    """Peel launcher-only flags; return (profile_name, freecad_argv)."""
+
+    profile_name: str | None = None
+    remainder: list[str] = []
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if arg == "--profile-name":
+            if index + 1 >= len(argv):
+                raise SystemExit("--profile-name requires a value")
+            profile_name = argv[index + 1]
+            index += 2
+            continue
+        if arg.startswith("--profile-name="):
+            profile_name = arg.split("=", 1)[1]
+            index += 1
+            continue
+        remainder.append(arg)
+        index += 1
+    return profile_name, remainder
+
+
 class InstanceValidationError(RuntimeError):
     """The endpoint answered, but it is not the launched isolated runtime."""
 
@@ -471,7 +505,8 @@ def _load_parent_start_freecad():
 
 def main() -> int:  # noqa: C901
     repo = _repo_root()
-    profile = repo / PROFILE_NAME
+    profile_name, freecad_argv = _consume_launcher_args(sys.argv[1:])
+    profile = _resolve_profile(repo, profile_name=profile_name)
     freecad = repo / "build" / "release" / "bin" / "FreeCAD.exe"
 
     if not freecad.is_file():
@@ -479,7 +514,8 @@ def main() -> int:  # noqa: C901
     if not profile.is_dir():
         raise SystemExit(
             f"Isolated profile missing: {profile}\n"
-            "Run scripts/setup_isolated_profile.py first."
+            "Run scripts/setup_isolated_profile.py first "
+            "(pass --profile-name when using a throwaway profile)."
         )
     for required in (profile / "Mod", profile / "temp"):
         required.mkdir(parents=True, exist_ok=True)
@@ -505,7 +541,7 @@ def main() -> int:  # noqa: C901
         # authenticated by the addon.  The general launcher may wrap build-tree
         # executables in ``pixi run``; on Windows that leaves Pixi as the parent
         # PID and makes strict runtime binding reject the real FreeCAD child.
-        cmd = [str(freecad), *sys.argv[1:]]
+        cmd = [str(freecad), *freecad_argv]
         cwd = str(freecad.parent)
         env = dict(helper._launch_env(freecad))
         env["FREECAD_USER_HOME"] = str(profile)

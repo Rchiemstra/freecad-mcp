@@ -18,62 +18,30 @@ open_document = _generated.open_document
 activate_document = _generated.activate_document
 set_tree_expanded = _generated.set_tree_expanded
 select_subshapes = _generated.select_subshapes
-
-
-def get_selection(conn):
-    routed = conn._invoke_mutation_v2(
-        "get_selection",
-        {},
-        operation_name="Get selection",
-    )
-    if routed is not None:
-        return routed
-    return _generated.get_selection(conn)
-
-
-def get_gui_state(conn):
-    routed = conn._invoke_mutation_v2(
-        "get_gui_state",
-        {},
-        operation_name="Get GUI state",
-    )
-    if routed is not None:
-        return routed
-    return _generated.get_gui_state(conn)
-
-
-def get_report_view(conn, max_lines: int | None = 200, clear: bool = False):
-    routed = conn._invoke_mutation_v2(
-        "get_report_view",
-        {"max_lines": max_lines, "clear": clear},
-        operation_name="Get Report view",
-    )
-    if routed is not None:
-        return routed
-    return _generated.get_report_view(conn, max_lines=max_lines, clear=clear)
-
-
+get_selection = _generated.get_selection
+get_gui_state = _generated.get_gui_state
+get_report_view = _generated.get_report_view
 recompute_and_wait = _generated.recompute_and_wait
 set_section_view = _generated.set_section_view
 
 __all__ = [  # noqa: RUF022
-    'get_active_screenshot',
-    'capture_view_sequence',
-    'capture_view_sequence_to_disk',
-    'refresh_view',
-    'repair_view_placements',
-    'animate_placement',
-    'get_objects',
-    'get_object',
-    'get_parts_list',
-    'list_documents',
-    'open_document',
-    'activate_document',
-    'set_tree_expanded',
-    'select_subshapes',
-    'get_selection',
-    'get_gui_state',
-    'get_report_view',
-    'recompute_and_wait',
-    'set_section_view',
+    "get_active_screenshot",
+    "capture_view_sequence",
+    "capture_view_sequence_to_disk",
+    "refresh_view",
+    "repair_view_placements",
+    "animate_placement",
+    "get_objects",
+    "get_object",
+    "get_parts_list",
+    "list_documents",
+    "open_document",
+    "activate_document",
+    "set_tree_expanded",
+    "select_subshapes",
+    "get_selection",
+    "get_gui_state",
+    "get_report_view",
+    "recompute_and_wait",
+    "set_section_view",
 ]

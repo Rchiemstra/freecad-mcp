@@ -4,7 +4,9 @@ from __future__ import annotations
 from ._support import *
 from .dispatch_core_enforcement_auth import (
     AUTHENTICATED_METHODS,
+    auth_refusal_lane,
     elevate_rpc_session_identity_or_error,
+    emit_auth_gate_refusal,
 )
 
 """RPC dispatch chokepoint after native collaboration cutover."""
@@ -34,5 +36,11 @@ def dispatch(self, method, params):
             identity_provider.get_request_identity(),
         )
         if auth_error is not None:
+            emit_auth_gate_refusal(
+                method=method,
+                error_code=str(auth_error.get("error_code") or "AUTH_GATE_REFUSED"),
+                lane=auth_refusal_lane(method),
+                request_id=auth_error.get("request_id"),
+            )
             return auth_error
     return func(*params)

@@ -111,6 +111,11 @@ def notify_cancel_request(
     *,
     request_id: str | None = None,
 ) -> bool:
+    from freecad_mcp.generated.capabilities.connection_methods.connection_invoke_v2_helpers import (
+        _refreshed_context,
+    )
+    from freecad_mcp.rpc_session import RpcAuthenticationContext
+
     target = _validated_request_id(target_request_id, "target_request_id")
     context = conn._build_v2_context(
         operation_name="Cancel request",
@@ -119,13 +124,17 @@ def notify_cancel_request(
     )
     if context is None:
         return False
-    envelope = context.to_envelope(
-        "cancel_request",
-        {"target_request_id": target},
-    )
+    params = {"target_request_id": target}
+    # Notifications return empty/204 even on auth failure, so reactive
+    # JsonRpcRemoteError recovery cannot run. Always re-handshake first when a
+    # real session is present, then fire-and-forget (no JSON-RPC id).
+    if isinstance(context, RpcAuthenticationContext):
+        refreshed = _refreshed_context(conn, context)
+        if refreshed is not None:
+            context = refreshed
     conn.invoke_rpc(
         "invoke_v2_control",
-        envelope,
+        context.to_envelope("cancel_request", params),
         control=True,
         notification=True,
     )
