@@ -34,6 +34,7 @@ def ensure_freecad_stub() -> None:
         console.PrintError = MagicMock()
         fc.Console = console
         fc.ActiveDocument = None
+        fc.GuiUp = False
         fc.getUserAppDataDir = lambda: "/tmp"
         fc.listDocuments = lambda: {}
         fc.getDocument = MagicMock(side_effect=KeyError("document"))
@@ -54,20 +55,56 @@ def ensure_freecad_stub() -> None:
 
 def ensure_freecad_gui_stub() -> None:
     try:
-        import FreeCADGui  # noqa: F401
+        import FreeCADGui
     except ModuleNotFoundError:
         gui = types.ModuleType("FreeCADGui")
         gui.addCommand = lambda *_args, **_kwargs: None
         gui.Selection = MagicMock()
         gui.activeDocument = MagicMock(return_value=None)
         sys.modules["FreeCADGui"] = gui
+    else:
+        # Headless FreeCADCmd exposes FreeCADGui without GUI command registration.
+        if not hasattr(FreeCADGui, "addCommand"):
+            FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 
 def ensure_objects_fem_stub() -> None:
     try:
         import ObjectsFem  # noqa: F401
     except ModuleNotFoundError:
-        sys.modules["ObjectsFem"] = types.ModuleType("ObjectsFem")
+        fem = types.ModuleType("ObjectsFem")
+        # Phase 15 unit tests monkeypatch these factory helpers; plain ModuleType
+        # blocks setattr on missing attrs under pytest 9.
+        for name in (
+            "makeMaterialSolid",
+            "makeAnalysis",
+            "makeMeshGmsh",
+            "makeConstraintFlowVelocity",
+            "makeSolverMystran",
+        ):
+            setattr(fem, name, MagicMock())
+        sys.modules["ObjectsFem"] = fem
+
+
+def ensure_part_stub() -> None:
+    try:
+        import Part  # noqa: F401
+    except ModuleNotFoundError:
+        part = types.ModuleType("Part")
+        part.LineSegment = MagicMock()
+        part.Circle = MagicMock()
+        part.ArcOfCircle = MagicMock()
+        part.Point = MagicMock()
+        sys.modules["Part"] = part
+
+
+def ensure_sketcher_stub() -> None:
+    try:
+        import Sketcher  # noqa: F401
+    except ModuleNotFoundError:
+        sketcher = types.ModuleType("Sketcher")
+        sketcher.Constraint = MagicMock()
+        sys.modules["Sketcher"] = sketcher
 
 
 def ensure_pyside_shim() -> None:
@@ -83,7 +120,16 @@ def ensure_pyside_shim() -> None:
     try:
         import PySide6.QtCore as qt_core
     except ModuleNotFoundError:
-        return
+        qt_core = None
+    if qt_core is None:
+        qt_core = types.ModuleType("PySide.QtCore")
+        qt_core.QObject = MagicMock
+        qt_core.Signal = MagicMock
+        qt_core.Slot = MagicMock
+        qtimer = MagicMock()
+        qtimer.singleShot = MagicMock()
+        qt_core.QTimer = qtimer
+        qt_core.Qt = MagicMock()
 
     pyside = types.ModuleType("PySide")
     pyside.QtCore = qt_core
@@ -99,6 +145,8 @@ def ensure_pyside_shim() -> None:
     qt_widgets.QLineEdit = MagicMock()
     qt_widgets.QMessageBox = MagicMock()
     qt_widgets.QAction = MagicMock()
+    qt_widgets.QTextEdit = MagicMock
+    qt_widgets.QWidget = MagicMock
     pyside.QtWidgets = qt_widgets
     sys.modules["PySide.QtWidgets"] = qt_widgets
 
@@ -107,6 +155,8 @@ def bootstrap_unit_test_runtime() -> None:
     ensure_freecad_stub()
     ensure_freecad_gui_stub()
     ensure_objects_fem_stub()
+    ensure_part_stub()
+    ensure_sketcher_stub()
     ensure_pyside_shim()
 
 

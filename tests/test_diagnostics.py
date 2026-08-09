@@ -3,8 +3,10 @@ later I4/I10/M5/M6 helpers added in the same module)."""
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from mcp.types import TextContent
 
 from freecad_mcp.operations.diagnostics import (
@@ -19,6 +21,7 @@ from freecad_mcp.operations.diagnostics import (
     relink_references_operation,
 )
 from freecad_mcp.operations.core import (
+    _build_assertion_code,
     delete_object_operation,
     get_view_operation,
     pad_feature_operation,
@@ -156,6 +159,111 @@ class TestI2SilentBuildAssertion:
         # with the SILENT BUILD MISMATCH prefix instead of "Pad created".
         resp = pad_feature_operation(_fail_conn(), True, "Doc", "Profile", "MyPad", 5.0)
         assert "Failed to create pad" in _text(resp)
+
+    def test_bbox_assertion_accepts_profile_position_inside_feature(self):
+        class _Vector:
+            def __init__(self, x, y, z):
+                self.x, self.y, self.z = x, y, z
+
+            def __str__(self):
+                return f"Vector ({self.x}, {self.y}, {self.z})"
+
+        bbox = SimpleNamespace(
+            XMin=-25.052299,
+            YMin=-20.090269,
+            ZMin=0.0,
+            XMax=17.947701,
+            YMax=21.909731,
+            ZMax=12.6,
+            XLength=43.0,
+            YLength=42.0,
+            ZLength=12.6,
+        )
+        shape = SimpleNamespace(BoundBox=bbox, isNull=lambda: False)
+        feature = SimpleNamespace(Shape=shape)
+        sketch = SimpleNamespace(
+            getGlobalPlacement=lambda: SimpleNamespace(Base=_Vector(0.0, 0.0, 9.6))
+        )
+        document = SimpleNamespace(
+            getObject=lambda name: {"BossPad": feature, "BossSketch": sketch}.get(name)
+        )
+        code = "\n".join(
+            _build_assertion_code(
+                "BossPad",
+                "BossSketch",
+                check_direction=False,
+            )
+        )
+
+        exec(code, {"_doc": document, "FreeCAD": SimpleNamespace()})
+
+        sketch.getGlobalPlacement = lambda: SimpleNamespace(
+            Base=_Vector(0.0, 0.0, 20.0)
+        )
+        with pytest.raises(RuntimeError, match="SILENT BUILD MISMATCH"):
+            exec(code, {"_doc": document, "FreeCAD": SimpleNamespace()})
+
+    def test_bbox_assertion_compares_partdesign_shape_in_body_local_frame(self):
+        class _Vector:
+            def __init__(self, x, y, z):
+                self.x, self.y, self.z = x, y, z
+
+            def __str__(self):
+                return f"Vector ({self.x}, {self.y}, {self.z})"
+
+        body_offset = _Vector(-72.31647872924805, 42.20933532714844, 21.07969951629639)
+
+        class _BodyPlacement:
+            def inverse(self):
+                return self
+
+            def multVec(self, point):
+                return _Vector(
+                    point.x - body_offset.x,
+                    point.y - body_offset.y,
+                    point.z - body_offset.z,
+                )
+
+        body = SimpleNamespace(
+            TypeId="PartDesign::Body",
+            getGlobalPlacement=lambda: _BodyPlacement(),
+        )
+        bbox = SimpleNamespace(
+            XMin=-25.052299,
+            YMin=-20.090269,
+            ZMin=0.0,
+            XMax=17.947701,
+            YMax=21.909731,
+            ZMax=12.6,
+            XLength=43.0,
+            YLength=42.0,
+            ZLength=12.6,
+        )
+        feature = SimpleNamespace(
+            Shape=SimpleNamespace(BoundBox=bbox, isNull=lambda: False),
+            getParentGeoFeatureGroup=lambda: body,
+        )
+        sketch = SimpleNamespace(
+            getGlobalPlacement=lambda: SimpleNamespace(
+                Base=_Vector(
+                    body_offset.x,
+                    body_offset.y,
+                    body_offset.z + 9.6,
+                )
+            )
+        )
+        document = SimpleNamespace(
+            getObject=lambda name: {"BossPad": feature, "BossSketch": sketch}.get(name)
+        )
+        code = "\n".join(
+            _build_assertion_code(
+                "BossPad",
+                "BossSketch",
+                check_direction=False,
+            )
+        )
+
+        exec(code, {"_doc": document, "FreeCAD": SimpleNamespace()})
 
 
 class TestI3RecomputeLog:

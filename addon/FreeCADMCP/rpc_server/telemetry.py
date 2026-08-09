@@ -8,16 +8,16 @@ fields are removed before writing.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
 import threading
 import time
-from typing import Any, Iterable, Mapping
 import uuid
-
+from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 _SESSION_ID = str(uuid.uuid4())
 _SEQUENCE = 0
@@ -48,7 +48,7 @@ _IMAGE_FIELDS = {
 
 def _timestamp() -> str:
     return (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )
@@ -63,7 +63,7 @@ def _path() -> Path:
         or os.environ.get("FREECAD_MCP_TELEMETRY_DIR")
         or "debug_logs"
     )
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date = datetime.now(UTC).strftime("%Y-%m-%d")
     return directory / (
         f"addon_debug_{date}_{os.getpid()}_{_SESSION_ID.replace('-', '')[:12]}.jsonl"
     )

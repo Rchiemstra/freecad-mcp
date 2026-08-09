@@ -1,0 +1,1373 @@
+{
+  "entries": [
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.audit_hardcoded_dimensions_operation",
+      "rpc_method": "audit_hardcoded_dimensions",
+      "tool": "audit_hardcoded_dimensions"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_dependency_graph_operation",
+      "rpc_method": "get_dependency_graph",
+      "tool": "get_dependency_graph"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.inspect_geometry_operation",
+      "rpc_method": "inspect_geometry",
+      "tool": "inspect_geometry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.match_subshape_operation",
+      "rpc_method": "match_subshape",
+      "tool": "match_subshape"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "execution",
+      "operation_path": "freecad_mcp.operations.run_transaction_operation",
+      "rpc_method": "run_transaction",
+      "tool": "run_transaction"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.validate_movement_follow_operation",
+      "rpc_method": "validate_movement_follow",
+      "tool": "validate_movement_follow"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.capture_state_operation",
+      "rpc_method": "capture_state",
+      "tool": "capture_state"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.geometric_diff_operation",
+      "rpc_method": "geometric_diff",
+      "tool": "geometric_diff"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.relink_references_operation",
+      "rpc_method": "relink_references",
+      "tool": "relink_references"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.restore_operation",
+      "rpc_method": "restore",
+      "tool": "restore"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.run_fem_analysis_operation",
+      "rpc_method": "run_fem_analysis",
+      "tool": "run_fem_analysis"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.snapshot_operation",
+      "rpc_method": "snapshot",
+      "tool": "snapshot"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_assembly_operation",
+      "rpc_method": "create_assembly",
+      "tool": "create_assembly"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_assembly_grounded_joint_operation",
+      "rpc_method": "create_assembly_grounded_joint",
+      "tool": "create_assembly_grounded_joint"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_assembly_joint_operation",
+      "rpc_method": "create_assembly_joint",
+      "tool": "create_assembly_joint"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.solve_assembly_operation",
+      "rpc_method": "solve_assembly",
+      "tool": "solve_assembly"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_document_operation",
+      "rpc_method": "create_document",
+      "tool": "create_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_object_operation",
+      "rpc_method": "create_object",
+      "tool": "create_object"
+    },
+    {
+      "execution_mode": "generated_script",
+      "gui_thread": true,
+      "mutation_class": "execution",
+      "operation_path": "freecad_mcp.operations.execute_code_operation",
+      "rpc_method": "execute_code",
+      "tool": "execute_code"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "execution",
+      "operation_path": "freecad_mcp.operations.execute_code_async_operation",
+      "rpc_method": "execute_code_async",
+      "tool": "execute_code_async"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.delete_object_operation",
+      "rpc_method": "delete_object",
+      "tool": "delete_object"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.edit_object_operation",
+      "rpc_method": "edit_object",
+      "tool": "edit_object"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.inspect_references_operation",
+      "rpc_method": "inspect_references",
+      "tool": "inspect_references"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.repair_references_operation",
+      "rpc_method": "repair_references",
+      "tool": "repair_references"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.compare_documents_operation",
+      "rpc_method": "compare_documents",
+      "tool": "compare_documents"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.diagnose_helix_operation",
+      "rpc_method": "diagnose_helix",
+      "tool": "diagnose_helix"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.diagnose_pocket_operation",
+      "rpc_method": "diagnose_pocket",
+      "tool": "diagnose_pocket"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.close_document_operation",
+      "rpc_method": "close_document",
+      "tool": "close_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_recompute_log_operation",
+      "rpc_method": "get_recompute_log",
+      "tool": "get_recompute_log"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.recompute_document_operation",
+      "rpc_method": "recompute_document",
+      "tool": "recompute_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.redo_operation",
+      "rpc_method": "redo",
+      "tool": "redo"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.undo_operation",
+      "rpc_method": "undo",
+      "tool": "undo"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.loft_feature_operation",
+      "rpc_method": "loft_feature",
+      "tool": "loft_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.revolve_feature_operation",
+      "rpc_method": "revolve_feature",
+      "tool": "revolve_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sweep_feature_operation",
+      "rpc_method": "sweep_feature",
+      "tool": "sweep_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.chamfer_feature_operation",
+      "rpc_method": "chamfer_feature",
+      "tool": "chamfer_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.fillet_feature_operation",
+      "rpc_method": "fillet_feature",
+      "tool": "fillet_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.helical_sweep_feature_operation",
+      "rpc_method": "helical_sweep_feature",
+      "tool": "helical_sweep_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.linear_pattern_feature_operation",
+      "rpc_method": "linear_pattern_feature",
+      "tool": "linear_pattern_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.pad_feature_operation",
+      "rpc_method": "pad_feature",
+      "tool": "pad_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.pocket_feature_operation",
+      "rpc_method": "pocket_feature",
+      "tool": "pocket_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.mirror_feature_operation",
+      "rpc_method": "mirror_feature",
+      "tool": "mirror_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.polar_pattern_feature_operation",
+      "rpc_method": "polar_pattern_feature",
+      "tool": "polar_pattern_feature"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.boolean_difference_operation",
+      "rpc_method": "boolean_difference",
+      "tool": "boolean_difference"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.boolean_intersection_operation",
+      "rpc_method": "boolean_intersection",
+      "tool": "boolean_intersection"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.boolean_union_operation",
+      "rpc_method": "boolean_union",
+      "tool": "boolean_union"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_helical_gear_operation",
+      "rpc_method": "create_helical_gear",
+      "tool": "create_helical_gear"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_involute_gear_operation",
+      "rpc_method": "create_involute_gear",
+      "tool": "create_involute_gear"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_spur_gear_operation",
+      "rpc_method": "create_spur_gear",
+      "tool": "create_spur_gear"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.check_gear_pair_operation",
+      "rpc_method": "check_gear_pair",
+      "tool": "check_gear_pair"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.compute_gear_geometry_operation",
+      "rpc_method": "compute_gear_geometry",
+      "tool": "compute_gear_geometry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_object_operation",
+      "rpc_method": "get_object",
+      "tool": "get_object"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_objects_operation",
+      "rpc_method": "get_objects",
+      "tool": "get_objects"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_parts_list_operation",
+      "rpc_method": "get_parts_list",
+      "tool": "get_parts_list"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.insert_part_from_library_operation",
+      "rpc_method": "insert_part_from_library",
+      "tool": "insert_part_from_library"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.list_documents_operation",
+      "rpc_method": "list_documents",
+      "tool": "list_documents"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.open_document_operation",
+      "rpc_method": "open_document",
+      "tool": "open_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.reload_document_operation",
+      "rpc_method": "reload_document",
+      "tool": "reload_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.activate_document_operation",
+      "rpc_method": "activate_document",
+      "tool": "activate_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_gui_state_operation",
+      "rpc_method": "get_gui_state",
+      "tool": "get_gui_state"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_report_view_operation",
+      "rpc_method": "get_report_view",
+      "tool": "get_report_view"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_selection_operation",
+      "rpc_method": "get_selection",
+      "tool": "get_selection"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.recompute_and_wait_operation",
+      "rpc_method": "recompute_and_wait",
+      "tool": "recompute_and_wait"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.select_subshapes_operation",
+      "rpc_method": "select_subshapes",
+      "tool": "select_subshapes"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.set_section_view_operation",
+      "rpc_method": "set_section_view",
+      "tool": "set_section_view"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.set_tree_expanded_operation",
+      "rpc_method": "set_tree_expanded",
+      "tool": "set_tree_expanded"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.encode_view_video_operation",
+      "rpc_method": "encode_view_video",
+      "tool": "encode_view_video"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_view_operation",
+      "rpc_method": "get_view",
+      "tool": "get_view"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.save_view_sequence_operation",
+      "rpc_method": "save_view_sequence",
+      "tool": "save_view_sequence"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.animate_placement_operation",
+      "rpc_method": "animate_placement",
+      "tool": "animate_placement"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.refresh_view_operation",
+      "rpc_method": "refresh_view",
+      "tool": "refresh_view"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.repair_view_placements_operation",
+      "rpc_method": "repair_view_placements",
+      "tool": "repair_view_placements"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.export_brep_operation",
+      "rpc_method": "export_brep",
+      "tool": "export_brep"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.export_step_operation",
+      "rpc_method": "export_step",
+      "tool": "export_step"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.export_stl_operation",
+      "rpc_method": "export_stl",
+      "tool": "export_stl"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_document_tree_operation",
+      "rpc_method": "get_document_tree",
+      "tool": "get_document_tree"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.set_color_operation",
+      "rpc_method": "set_color",
+      "tool": "set_color"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.import_brep_operation",
+      "rpc_method": "import_brep",
+      "tool": "import_brep"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.import_step_operation",
+      "rpc_method": "import_step",
+      "tool": "import_step"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "acquire_document_lock",
+      "tool": "acquire_document_lock"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "adopt_dirty_document",
+      "tool": "adopt_dirty_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "get_document_lock",
+      "tool": "get_document_lock"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "list_document_locks",
+      "tool": "list_document_locks"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "release_document_lock",
+      "tool": "release_document_lock"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "update_document_lock",
+      "tool": "update_document_lock"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:finalize_document_edit",
+      "rpc_method": "finalize_document_edit",
+      "tool": "finalize_document_edit"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:save_document",
+      "rpc_method": "save_document",
+      "tool": "save_document"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:save_document_as",
+      "rpc_method": "save_document_as",
+      "tool": "save_document_as"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.bounding_box_operation",
+      "rpc_method": "bounding_box",
+      "tool": "bounding_box"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.measure_angle_operation",
+      "rpc_method": "measure_angle",
+      "tool": "measure_angle"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.measure_area_operation",
+      "rpc_method": "measure_area",
+      "tool": "measure_area"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.measure_distance_operation",
+      "rpc_method": "measure_distance",
+      "tool": "measure_distance"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.measure_volume_operation",
+      "rpc_method": "measure_volume",
+      "tool": "measure_volume"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.center_of_mass_operation",
+      "rpc_method": "center_of_mass",
+      "tool": "center_of_mass"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.common_volume_along_path_operation",
+      "rpc_method": "common_volume_along_path",
+      "tool": "common_volume_along_path"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_global_shape_operation",
+      "rpc_method": "get_global_shape",
+      "tool": "get_global_shape"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.validate_geometry_operation",
+      "rpc_method": "validate_geometry",
+      "tool": "validate_geometry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.body_create_operation",
+      "rpc_method": "body_create",
+      "tool": "body_create"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.body_set_tip_operation",
+      "rpc_method": "body_set_tip",
+      "tool": "body_set_tip"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.diagnose_parametric_operation",
+      "rpc_method": "diagnose_parametric",
+      "tool": "diagnose_parametric"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_sketch_diagnostics_operation",
+      "rpc_method": "get_sketch_diagnostics",
+      "tool": "get_sketch_diagnostics"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_attach_operation",
+      "rpc_method": "sketch_attach",
+      "tool": "sketch_attach"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_edit_constraint_operation",
+      "rpc_method": "sketch_edit_constraint",
+      "tool": "sketch_edit_constraint"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.spreadsheet_create_operation",
+      "rpc_method": "spreadsheet_create",
+      "tool": "spreadsheet_create"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.spreadsheet_get_cells_operation",
+      "rpc_method": "spreadsheet_get_cells",
+      "tool": "spreadsheet_get_cells"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.spreadsheet_set_alias_operation",
+      "rpc_method": "spreadsheet_set_alias",
+      "tool": "spreadsheet_set_alias"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.spreadsheet_set_cells_operation",
+      "rpc_method": "spreadsheet_set_cells",
+      "tool": "spreadsheet_set_cells"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.clear_expression_operation",
+      "rpc_method": "clear_expression",
+      "tool": "clear_expression"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.list_expressions_operation",
+      "rpc_method": "list_expressions",
+      "tool": "list_expressions"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.set_expression_operation",
+      "rpc_method": "set_expression",
+      "tool": "set_expression"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.spreadsheet_list_aliases_operation",
+      "rpc_method": "spreadsheet_list_aliases",
+      "tool": "spreadsheet_list_aliases"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_datum_plane_operation",
+      "rpc_method": "create_datum_plane",
+      "tool": "create_datum_plane"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_part_container_operation",
+      "rpc_method": "create_part_container",
+      "tool": "create_part_container"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_subshape_binder_operation",
+      "rpc_method": "create_subshape_binder",
+      "tool": "create_subshape_binder"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.move_object_operation",
+      "rpc_method": "move_object",
+      "tool": "move_object"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.build_path_wire_operation",
+      "rpc_method": "build_path_wire",
+      "tool": "build_path_wire"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_sketch_geometry_operation",
+      "rpc_method": "get_sketch_geometry",
+      "tool": "get_sketch_geometry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_external_projection_operation",
+      "rpc_method": "sketch_add_external_projection",
+      "tool": "sketch_add_external_projection"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sweep_pipe_operation",
+      "rpc_method": "sweep_pipe",
+      "tool": "sweep_pipe"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.face_normal_operation",
+      "rpc_method": "face_normal",
+      "tool": "face_normal"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.find_edges_operation",
+      "rpc_method": "find_edges",
+      "tool": "find_edges"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.find_faces_operation",
+      "rpc_method": "find_faces",
+      "tool": "find_faces"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.preview_attachment_operation",
+      "rpc_method": "preview_attachment",
+      "tool": "preview_attachment"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_placement_binder_operation",
+      "rpc_method": "create_placement_binder",
+      "tool": "create_placement_binder"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.create_placement_datum_operation",
+      "rpc_method": "create_placement_datum",
+      "tool": "create_placement_datum"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.edge_axis_operation",
+      "rpc_method": "edge_axis",
+      "tool": "edge_axis"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.placement_audit_operation",
+      "rpc_method": "placement_audit",
+      "tool": "placement_audit"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "cancel_request",
+      "tool": "cancel_request"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "check_rpc_sync",
+      "tool": "check_rpc_sync"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "claim_acquisition_result",
+      "tool": "claim_acquisition_result"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
+      "rpc_method": "get_request_status",
+      "tool": "get_request_status"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.capabilities.inline.tools_runtime_info.get_runtime_info",
+      "rpc_method": "get_runtime_info",
+      "tool": "get_runtime_info"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_coincident_operation",
+      "rpc_method": "sketch_constrain_coincident",
+      "tool": "sketch_constrain_coincident"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_distance_operation",
+      "rpc_method": "sketch_constrain_distance",
+      "tool": "sketch_constrain_distance"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_horizontal_operation",
+      "rpc_method": "sketch_constrain_horizontal",
+      "tool": "sketch_constrain_horizontal"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_radius_operation",
+      "rpc_method": "sketch_constrain_radius",
+      "tool": "sketch_constrain_radius"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_vertical_operation",
+      "rpc_method": "sketch_constrain_vertical",
+      "tool": "sketch_constrain_vertical"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_equal_operation",
+      "rpc_method": "sketch_constrain_equal",
+      "tool": "sketch_constrain_equal"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_parallel_operation",
+      "rpc_method": "sketch_constrain_parallel",
+      "tool": "sketch_constrain_parallel"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_perpendicular_operation",
+      "rpc_method": "sketch_constrain_perpendicular",
+      "tool": "sketch_constrain_perpendicular"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_constrain_tangent_operation",
+      "rpc_method": "sketch_constrain_tangent",
+      "tool": "sketch_constrain_tangent"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_constraint_operation",
+      "rpc_method": "sketch_add_constraint",
+      "tool": "sketch_add_constraint"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_geometry_operation",
+      "rpc_method": "sketch_add_geometry",
+      "tool": "sketch_add_geometry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_create_operation",
+      "rpc_method": "sketch_create",
+      "tool": "sketch_create"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_delete_constraint_operation",
+      "rpc_method": "sketch_delete_constraint",
+      "tool": "sketch_delete_constraint"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_delete_geometry_operation",
+      "rpc_method": "sketch_delete_geometry",
+      "tool": "sketch_delete_geometry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_bezier_operation",
+      "rpc_method": "sketch_add_bezier",
+      "tool": "sketch_add_bezier"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_bspline_operation",
+      "rpc_method": "sketch_add_bspline",
+      "tool": "sketch_add_bspline"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_bspline_through_points_operation",
+      "rpc_method": "sketch_add_bspline_through_points",
+      "tool": "sketch_add_bspline_through_points"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_polyline_operation",
+      "rpc_method": "sketch_add_polyline",
+      "tool": "sketch_add_polyline"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_arc_of_ellipse_operation",
+      "rpc_method": "sketch_add_arc_of_ellipse",
+      "tool": "sketch_add_arc_of_ellipse"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_ellipse_operation",
+      "rpc_method": "sketch_add_ellipse",
+      "tool": "sketch_add_ellipse"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_slot_operation",
+      "rpc_method": "sketch_add_slot",
+      "tool": "sketch_add_slot"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_parametric_curve_operation",
+      "rpc_method": "sketch_add_parametric_curve",
+      "tool": "sketch_add_parametric_curve"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_regular_polygon_operation",
+      "rpc_method": "sketch_add_regular_polygon",
+      "tool": "sketch_add_regular_polygon"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_import_points_operation",
+      "rpc_method": "sketch_import_points",
+      "tool": "sketch_import_points"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_toggle_construction_operation",
+      "rpc_method": "sketch_toggle_construction",
+      "tool": "sketch_toggle_construction"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_extend_operation",
+      "rpc_method": "sketch_extend",
+      "tool": "sketch_extend"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_fillet_operation",
+      "rpc_method": "sketch_fillet",
+      "tool": "sketch_fillet"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_split_operation",
+      "rpc_method": "sketch_split",
+      "tool": "sketch_split"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_symmetry_operation",
+      "rpc_method": "sketch_symmetry",
+      "tool": "sketch_symmetry"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_trim_operation",
+      "rpc_method": "sketch_trim",
+      "tool": "sketch_trim"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_arc_operation",
+      "rpc_method": "sketch_add_arc",
+      "tool": "sketch_add_arc"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_circle_operation",
+      "rpc_method": "sketch_add_circle",
+      "tool": "sketch_add_circle"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_line_operation",
+      "rpc_method": "sketch_add_line",
+      "tool": "sketch_add_line"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_add_rectangle_operation",
+      "rpc_method": "sketch_add_rectangle",
+      "tool": "sketch_add_rectangle"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.rotate_operation",
+      "rpc_method": "rotate",
+      "tool": "rotate"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.scale_operation",
+      "rpc_method": "scale",
+      "tool": "scale"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.translate_operation",
+      "rpc_method": "translate",
+      "tool": "translate"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:cancel_worker_job",
+      "rpc_method": "cancel_worker_job",
+      "tool": "cancel_worker_job"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:get_worker_status",
+      "rpc_method": "get_worker_status",
+      "tool": "get_worker_status"
+    }
+  ],
+  "tool_count": 171
+}

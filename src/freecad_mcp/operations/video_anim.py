@@ -9,7 +9,8 @@ from typing import Any
 
 from ..ffmpeg_util import FFmpegNotFoundError, encode_png_sequence_to_mp4, resolve_ffmpeg
 from ..freecad_client import FreeCADConnection
-from ..responses import ToolResponse, tool_fail, tool_ok
+from ..responses.constants import ToolResponse
+from ..responses.tool_results import tool_fail, tool_ok
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -108,7 +109,7 @@ def refresh_view_operation(
     screenshot = result.pop("image_base64", None) if capture else None
     response = tool_ok("View refreshed", structured=result)
     if capture and screenshot and not only_text_feedback:
-        from ..responses import add_screenshot_if_available
+        from ..responses.tool_results import add_screenshot_if_available
 
         return add_screenshot_if_available(response, screenshot, only_text_feedback)
     return response
@@ -210,3 +211,11 @@ def animate_placement_operation(
         only_text_feedback=only_text_feedback,
         structured=summary,
     )
+
+
+__all__ = [
+    "animate_placement_operation",
+    "encode_view_video_operation",
+    "refresh_view_operation",
+    "repair_view_placements_operation",
+]

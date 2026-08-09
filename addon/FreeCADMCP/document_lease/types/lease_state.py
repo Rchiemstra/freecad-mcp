@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class LeaseState(StrEnum):
+    __module__ = "document_lease.model"
+    ACQUIRING = "ACQUIRING"
+    LOCKED_IDLE = "LOCKED_IDLE"
+    LOCKED_EDITING = "LOCKED_EDITING"
+    LOCKED_RECOMPUTING = "LOCKED_RECOMPUTING"
+    LOCKED_SAVING = "LOCKED_SAVING"
+    LOCKED_ERROR = "LOCKED_ERROR"
+    USER_INTERVENED = "USER_INTERVENED"
+    CANCELLING = "CANCELLING"
+    RELEASING = "RELEASING"
+    UNLOCKED_SAVED = "UNLOCKED_SAVED"
+    UNLOCKED_DIRTY = "UNLOCKED_DIRTY"
+    STALE = "STALE"

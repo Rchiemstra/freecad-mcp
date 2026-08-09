@@ -1,0 +1,83 @@
+"""GUI reservation phase for ``acquire_document_lock_v2``."""
+try: from ....dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+except ImportError: from dispatch.request_cancellation_error import RequestCancellationError  # noqa: E701, I001 - frozen census lines
+from .acquire_v2_reserve_helpers import (
+    begin_lease_reservation,
+    build_lease_owner,
+    validate_dirty_adoption,
+)
+
+
+def reserve_gui(
+    self,
+    *,
+    requested_selector,
+    request_identity,
+    task_description,
+    client,
+    agent_id,
+    adopt_dirty,
+    request_id,
+    phase,
+    inflight,
+):
+    collaborators = self._collaboration_collaborators
+    reservation = None
+    try:
+        if inflight is not None:
+            inflight.token.checkpoint("acquisition_reserve_gui")
+        document, document_identity = collaborators.live_document_from_selector(
+            requested_selector
+        )
+        lease = collaborators.import_document_lease()
+        validate_dirty_adoption(
+            document, document_identity, adopt_dirty, lease, collaborators
+        )
+        if adopt_dirty:
+            phase["initial_dirty_adoption_authorized"] = True
+        owner = build_lease_owner(
+            request_identity, client, agent_id, lease, collaborators
+        )
+        exact_selector = {
+            "document_session_uuid": document_identity.session_uuid,
+            "document_name": document_identity.name,
+            **(
+                {"canonical_path": document_identity.canonical_path}
+                if document_identity.canonical_path
+                else {}
+            ),
+        }
+        phase.update(
+            document_identity=document_identity,
+            document_name=document_identity.name,
+            canonical_path=document_identity.canonical_path,
+            exact_selector=exact_selector,
+            owner=owner,
+        )
+        reservation = begin_lease_reservation(
+            self,
+            adopt_dirty=adopt_dirty,
+            exact_selector=exact_selector,
+            owner=owner,
+            task_description=task_description,
+            request_id=request_id,
+            phase=phase,
+            lease=lease,
+        )
+        if inflight is not None:
+            inflight.token.checkpoint("acquisition_reserved")
+        return {"success": True}
+    except RequestCancellationError:
+        self._complete_request_cancellation(inflight)
+        raise
+    except Exception as exc:
+        if reservation is not None:
+            try:
+                collaborators.document_lease_service.abort_acquisition(
+                    reservation.credential
+                )
+            except Exception as rollback_exc:
+                return collaborators.lease_service_error(
+                    rollback_exc, request_id=request_id
+                )
+        return collaborators.lease_service_error(exc, request_id=request_id)

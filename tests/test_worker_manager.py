@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from types import SimpleNamespace
 
-import pytest
 import FreeCADGui
-
+import pytest
 
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
-from addon.FreeCADMCP.rpc_server import worker_manager as manager_module
-from addon.FreeCADMCP.rpc_server.rpc_server import FreeCADRPC, _DEFAULT_SETTINGS
 from addon.FreeCADMCP.rpc_server import parts_library
+from addon.FreeCADMCP.rpc_server import worker_manager as manager_module
+from addon.FreeCADMCP.rpc_server.rpc_server import _DEFAULT_SETTINGS, FreeCADRPC
 from addon.FreeCADMCP.rpc_server.worker_manager import (
     VERSION_PROBE_TIMEOUT_SECONDS,
     WorkerManager,
@@ -77,6 +77,58 @@ def test_configured_executable_from_different_build_is_rejected(tmp_path, monkey
 
 def test_version_probe_timeout_has_operational_headroom():
     assert VERSION_PROBE_TIMEOUT_SECONDS == 15
+
+
+def test_worker_manager_can_defer_start_until_runtime_graph_is_complete(
+    tmp_path,
+    monkeypatch,
+):
+    class _Thread:
+        def __init__(self, *, target, args, name, daemon):
+            self.target = target
+            self.args = args
+            self.name = name
+            self.daemon = daemon
+            self.alive = False
+            self.start_calls = 0
+
+        def start(self):
+            self.start_calls += 1
+            if self.start_calls > 1:
+                raise RuntimeError("thread started more than once")
+            self.alive = True
+
+        def join(self, timeout):
+            assert timeout == 4.0
+            self.alive = False
+
+        def is_alive(self):
+            return self.alive
+
+    monkeypatch.setattr(
+        manager_module,
+        "threading",
+        SimpleNamespace(
+            Lock=threading.Lock,
+            BoundedSemaphore=threading.BoundedSemaphore,
+            Thread=_Thread,
+        ),
+    )
+    manager = WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=tmp_path / "workers",
+        autostart=False,
+    )
+
+    assert manager._worker_started is False
+    assert manager._worker_thread.is_alive() is False
+    manager._start()
+    assert manager._worker_started is True
+    assert manager._worker_thread.is_alive() is True
+    manager._start()
+    assert manager._worker_thread.start_calls == 1
+    assert manager.stop() is True
 
 
 def test_probe_version_passes_configured_timeout(tmp_path, monkeypatch):
@@ -175,6 +227,28 @@ def test_code_and_manifest_limits(tmp_path):
             validate_job(job)
     finally:
         manager.stop()
+
+
+def test_worker_environment_uses_disposable_workspace_profile(
+    tmp_path,
+    monkeypatch,
+):
+    inherited_home = tmp_path / "normal-user-profile"
+    inherited_data = tmp_path / "normal-user-data"
+    monkeypatch.setenv("FREECAD_USER_HOME", str(inherited_home))
+    monkeypatch.setenv("FREECAD_USER_DATA", str(inherited_data))
+    monkeypatch.setenv("WORKER_RUNTIME_SENTINEL", "preserved")
+    workspace = tmp_path / "worker"
+
+    environment = WorkerManager._worker_environment(workspace)
+
+    expected = workspace / "profile"
+    assert expected.is_dir()
+    assert environment["FREECAD_USER_HOME"] == str(expected)
+    assert environment["FREECAD_USER_DATA"] == str(expected)
+    assert environment["WORKER_RUNTIME_SENTINEL"] == "preserved"
+    assert os.environ["FREECAD_USER_HOME"] == str(inherited_home)
+    assert os.environ["FREECAD_USER_DATA"] == str(inherited_data)
 
 
 def test_result_json_limit(tmp_path):

@@ -48,6 +48,17 @@ def _appdata_freecad() -> Path:
     return Path(appdata) / "FreeCAD" if appdata else Path()
 
 
+def _resolve_profile(repo: Path, *, profile_name: str | None = None) -> Path:
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from _profile_resolve import resolve_isolated_profile
+
+    return resolve_isolated_profile(
+        repo, profile_name=profile_name, default_name=PROFILE_NAME
+    )
+
+
 def _ensure_not_appdata(path: Path) -> None:
     app = _appdata_freecad()
     if not app or not app.exists():
@@ -340,6 +351,16 @@ def main() -> int:
         help=f"RPC port for the isolated addon (default: {ISOLATED_PORT})",
     )
     parser.add_argument(
+        "--profile-name",
+        default=None,
+        help=(
+            "Profile directory name under the FreeCAD repo root "
+            f"(default: {PROFILE_NAME}). Also honours FREECAD_MCP_PROFILE_DIR "
+            "for a full path override. Required when targeting a throwaway "
+            "profile so the live .freecad-mcp-isolated instance is not clobbered."
+        ),
+    )
+    parser.add_argument(
         "--instance-id",
         default=None,
         help=(
@@ -358,7 +379,7 @@ def main() -> int:
     if not addon_src.is_dir():
         raise SystemExit(f"Addon source not found: {addon_src}")
 
-    profile = repo / PROFILE_NAME
+    profile = _resolve_profile(repo, profile_name=args.profile_name)
     _ensure_not_appdata(profile)
     profile_id, existing_manifest = _persistent_profile_id(profile, args.instance_id)
 

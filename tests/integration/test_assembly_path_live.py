@@ -18,6 +18,14 @@ FreeCAD = pytest.importorskip("FreeCAD")
 Part = pytest.importorskip("Part")
 Sketcher = pytest.importorskip("Sketcher")
 
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.skipif(
+        getattr(FreeCAD, "__mcp_test_stub__", False),
+        reason="requires a real FreeCAD runtime",
+    ),
+]
+
 from freecad_mcp.operations.p5_measure import validate_geometry_operation
 from freecad_mcp.operations.p7_assembly import (
     build_path_wire_operation,

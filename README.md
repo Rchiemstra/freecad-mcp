@@ -174,6 +174,7 @@ Documentation:
 - [Sidecar schema v2](doc/document-lease-sidecar-v2.md)
 - [Isolated instance setup and manifest](doc/isolated-instance.md)
 - [Crash and stale-lock recovery](doc/lease-recovery.md)
+- [Lease client scenarios and sequence diagrams](doc/lease-client-scenarios.md)
 - [Security model and limitations](doc/lease-security.md)
 
 ## Setting up Claude Desktop
@@ -312,6 +313,11 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 
 ### Sketching
 * `sketch_create`, `sketch_add_geometry`, `sketch_add_constraint`
+* `sketch_delete_constraint` — delete a validated batch by index and/or stable
+  name in one transaction; useful for removing multiple Block constraints
+  without index-shift errors.
+* `sketch_delete_geometry` — delete a validated batch of geometry indices and
+  report dependent constraints removed by FreeCAD.
 * `sketch_add_line`, `sketch_add_circle`, `sketch_add_arc`, `sketch_add_rectangle`
 * `sketch_add_polyline`, `sketch_add_bspline`, `sketch_add_bspline_through_points`, `sketch_add_bezier`, `sketch_add_ellipse`, `sketch_add_arc_of_ellipse`, `sketch_add_slot`, `sketch_add_regular_polygon`, `sketch_add_parametric_curve`, `sketch_import_points`, `sketch_toggle_construction`
 * `sketch_trim`, `sketch_extend`, `sketch_split`, `sketch_fillet`, `sketch_offset`, `sketch_symmetry`
@@ -343,7 +349,9 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 * `create_assembly`, `create_assembly_joint`, `create_assembly_grounded_joint`, `solve_assembly`
 * `build_path_wire`, `sweep_pipe`
 * `create_part_container`, `create_subshape_binder`, `create_datum_plane`, `move_object`
-* `get_document_tree`, `sketch_add_external_projection`
+* `get_document_tree`, `sketch_add_external_projection` — pass
+  `allow_gui_geometry_loop=true` to explicitly admit its bounded
+  assembly-aware preflight on the GUI thread.
 * `create_assembly_joint` warns when a referenced component's body has cross-body datums attached (M4 / P5 guardrail).
 
 ### FEM Analysis

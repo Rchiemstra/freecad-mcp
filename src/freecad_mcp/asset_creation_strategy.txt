@@ -21,7 +21,10 @@ Follow these steps in order:
 
 4. Attach the Sketch. Attach to an origin plane ("XY_Plane" / "XZ_Plane" / "YZ_Plane"), a
    datum plane, or an intentionally selected face ("Object:Face1"). Use sketch_attach if
-   you need to (re)attach after creation. Do not leave a sketch loose in the document.
+   you need to (re)attach after creation; pass attachment_offset (Placement dict with
+   Rotation.Angle in degrees) to position the sketch instead of rotating Placement
+   (P3 trap). edit_object can also set AttachmentOffset with the same dict form
+   get_object returns. Do not leave a sketch loose in the document.
 
 5. Add geometry. Build the 2D profile with sketch_add_line / sketch_add_circle /
    sketch_add_arc / sketch_add_rectangle / sketch_add_polyline / sketch_add_geometry, etc.

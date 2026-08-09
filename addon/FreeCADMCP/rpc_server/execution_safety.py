@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
-from enum import Enum
 
+from .execution_safety_ops.classify_helpers import (
+    is_unsafe_call,
+    is_unsafe_import,
+    is_unsafe_mutation_node,
+    parse_execute_code_ast,
+    tree_has_expensive_method_call,
+)
+from .execution_safety_types.gui_blocking_risk import GuiBlockingRisk
+from .execution_safety_types.gui_geometry_loop_risk import GuiGeometryLoopRisk
+from .execution_safety_types.request_class import RequestClass
 
 _BOOLEAN_METHODS = frozenset({"cut", "common", "fuse", "multiCut", "multiFuse"})
 _GEOMETRY_TRANSFORM_METHODS = frozenset({"mirror", "transformGeometry"})
@@ -15,74 +23,24 @@ _EXPENSIVE_METHODS = frozenset({
     "distToShape", "isInside", "isValid", "check", "checkGeometry",
     "removeSplitter",
 })
-_LIGHTWEIGHT_CALLS = frozenset({
-    "print", "len", "getattr", "hasattr", "sorted", "list", "tuple", "dict",
-    "set", "str", "float", "int", "bool", "round", "min", "max", "sum",
-    "abs", "enumerate", "range", "zip", "any", "all",
-})
-_LIGHTWEIGHT_METHODS = frozenset({
-    "getDocument", "listDocuments", "getObject", "getTypeIdOfProperty",
-    "isNull", "isClosed", "dumps", "keys", "values", "items", "get",
-})
-_LIGHTWEIGHT_IMPORTS = frozenset({"FreeCAD", "json", "math"})
-
-
-class RequestClass(Enum):
-    GUI_MUTATION = "gui_mutation"
-    GUI_LIGHTWEIGHT_READ = "gui_lightweight_read"
-    WORKER_ANALYSIS = "worker_analysis"
-    UNKNOWN = "unknown"
-
-
-@dataclass(frozen=True)
-class GuiBlockingRisk:
-    boolean_calls: int
-    transform_calls: int
-    reason: str
-
-
-@dataclass(frozen=True)
-class GuiGeometryLoopRisk:
-    expensive_calls: int
-    worker_only_calls: int
-    loops: int
-    reason: str
 
 
 def classify_execute_code(code: str, *, read_only: bool) -> RequestClass:
     """Conservatively classify arbitrary code; unknown reads fail safe to worker."""
     if not read_only:
         return RequestClass.GUI_MUTATION
-    try:
-        tree = ast.parse(code, mode="exec")
-    except SyntaxError:
+    tree = parse_execute_code_ast(code)
+    if tree is None:
         return RequestClass.UNKNOWN
-
+    if tree_has_expensive_method_call(tree):
+        return RequestClass.WORKER_ANALYSIS
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and node.attr in _EXPENSIVE_METHODS:
-            return RequestClass.WORKER_ANALYSIS
-
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Delete, ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
+        if is_unsafe_mutation_node(node):
             return RequestClass.UNKNOWN
-        if isinstance(node, ast.Assign):
-            if any(isinstance(target, (ast.Attribute, ast.Subscript)) for target in node.targets):
-                return RequestClass.UNKNOWN
-        if isinstance(node, ast.Import):
-            if any(item.name.split(".")[0] not in _LIGHTWEIGHT_IMPORTS for item in node.names):
-                return RequestClass.UNKNOWN
-        if isinstance(node, ast.ImportFrom):
-            if not node.module or node.module.split(".")[0] not in _LIGHTWEIGHT_IMPORTS:
-                return RequestClass.UNKNOWN
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                if node.func.id not in _LIGHTWEIGHT_CALLS:
-                    return RequestClass.UNKNOWN
-            elif isinstance(node.func, ast.Attribute):
-                if node.func.attr not in _LIGHTWEIGHT_METHODS:
-                    return RequestClass.UNKNOWN
-            else:
-                return RequestClass.UNKNOWN
+        if is_unsafe_import(node):
+            return RequestClass.UNKNOWN
+        if isinstance(node, ast.Call) and is_unsafe_call(node):
+            return RequestClass.UNKNOWN
     return RequestClass.GUI_LIGHTWEIGHT_READ
 
 
@@ -101,9 +59,8 @@ def find_gui_blocking_risk(code: str, *, read_only: bool) -> GuiBlockingRisk | N
     """
     if not read_only:
         return None
-    try:
-        tree = ast.parse(code, mode="exec")
-    except SyntaxError:
+    tree = parse_execute_code_ast(code)
+    if tree is None:
         # Let execute_code produce its normal structured syntax error.
         return None
 
@@ -138,9 +95,8 @@ def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
     loops must therefore be made explicitly read-only (so auto mode routes them
     to the isolated worker) or explicitly forced to GUI for a true mutation.
     """
-    try:
-        tree = ast.parse(code, mode="exec")
-    except SyntaxError:
+    tree = parse_execute_code_ast(code)
+    if tree is None:
         return None
 
     called_methods = [
@@ -159,7 +115,8 @@ def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
         for node in ast.walk(tree)
         if isinstance(
             node,
-            (ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp),
+            (ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp,
+             ast.GeneratorExp),
         )
     )
     if expensive_calls and loops:

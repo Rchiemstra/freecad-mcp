@@ -856,3 +856,20 @@ class TestCloseDocumentOperation:
         conn.invoke_rpc.return_value = {"success": False, "error": "not found"}
         result = close_document_operation(conn, "Part")
         assert "Failed" in _text(result)
+
+    def test_backend_denial_cannot_be_reported_as_closed(self):
+        conn = _ok_conn()
+        conn.invoke_rpc.return_value = {
+            "success": True,
+            "result": (
+                "A leased document cannot be closed by the generic RPC. "
+                "Finalize and verify the save first."
+            ),
+        }
+
+        result = close_document_operation(conn, "Part")
+
+        assert result.isError is True
+        assert "Failed to close document" in _text(result)
+        assert "Finalize and verify" in _text(result)
+        assert result.structuredContent["success"] is False

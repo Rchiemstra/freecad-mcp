@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 from freecad_mcp.freecad_client import FreeCADConnection
@@ -74,6 +75,8 @@ class ExecuteCodeCameraTest(unittest.TestCase):
         rpc_server = FakeRpcServer()
         connection = object.__new__(FreeCADConnection)
         connection.server = rpc_server
+        connection._identity_lock = threading.RLock()
+        connection._rpc_session = None
 
         screenshot = connection.get_active_screenshot(view_name=None)
 

@@ -7,6 +7,7 @@ import time
 from unittest.mock import MagicMock
 
 import FreeCADGui
+import pytest
 from PySide import QtCore
 
 
@@ -23,6 +24,25 @@ from addon.FreeCADMCP.rpc_server.gui_dispatcher import (
 
 def _app():
     return QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _flush_posted_dispatch_wakes(monkeypatch):
+    dispatchers = []
+    original_init = GuiDispatcher.__init__
+
+    def tracked_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        dispatchers.append(self)
+
+    monkeypatch.setattr(GuiDispatcher, "__init__", tracked_init)
+    yield
+    app = QtCore.QCoreApplication.instance()
+    if app is not None:
+        app.processEvents()
+        for dispatcher in dispatchers:
+            dispatcher.deleteLater()
+        app.processEvents()
 
 
 class _FakeQApp:
@@ -50,6 +70,14 @@ class _FakeQApp:
 
 def _fake_qapp(*, mouse=None, popup=None, modal=None):
     return _FakeQApp(mouse=mouse, popup=popup, modal=modal)
+
+
+class _FakeOverlay:
+    def __init__(self, *, visible):
+        self._visible = visible
+
+    def isVisible(self):
+        return self._visible
 
 
 def _queue_one(dispatcher, value="task"):
@@ -313,7 +341,14 @@ def test_running_timeout_rejects_new_work_until_original_request_finishes():
     while dispatcher.pending_count != 1 and time.monotonic() < deadline:
         time.sleep(0.001)
 
-    drain = threading.Thread(target=dispatcher._drain_one)
+    original_is_gui_thread = dispatcher._core._is_gui_thread
+
+    def drain_on_declared_owner():
+        owner = threading.get_ident()
+        dispatcher._core._is_gui_thread = lambda: threading.get_ident() == owner
+        dispatcher._drain_one()
+
+    drain = threading.Thread(target=drain_on_declared_owner)
     drain.start()
     assert started.wait(0.2)
     first.join(timeout=0.2)
@@ -338,6 +373,7 @@ def test_running_timeout_rejects_new_work_until_original_request_finishes():
 
     release.set()
     drain.join(timeout=0.2)
+    dispatcher._core._is_gui_thread = original_is_gui_thread
     assert dispatcher.submit(lambda: "recovered", 0.01) == "recovered"
 
 
@@ -411,6 +447,34 @@ def test_drain_defers_while_popup_or_modal_is_active(monkeypatch):
     dispatcher._drain_one()
     thread.join(timeout=0.5)
     assert result == ["popup-blocked"]
+
+
+def test_drain_ignores_stale_invisible_popup_or_modal(monkeypatch):
+    _app()
+    dispatcher = GuiDispatcher()
+    fake_app = _fake_qapp(
+        popup=_FakeOverlay(visible=False),
+        modal=_FakeOverlay(visible=False),
+    )
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtWidgets.QApplication,
+        "instance",
+        staticmethod(lambda: fake_app),
+    )
+    single_shot = MagicMock()
+    monkeypatch.setattr(
+        gui_dispatcher_module.QtCore.QTimer,
+        "singleShot",
+        single_shot,
+    )
+
+    thread, result = _queue_one(dispatcher, value="not-blocked")
+    dispatcher._drain_one()
+    thread.join(timeout=0.5)
+
+    assert result == ["not-blocked"]
+    assert dispatcher.pending_count == 0
+    single_shot.assert_not_called()
 
 
 def test_drain_runs_immediately_when_no_mouse_popup_or_modal(monkeypatch):

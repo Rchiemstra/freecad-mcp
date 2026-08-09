@@ -1,20 +1,32 @@
-"""Bounded XML-RPC request concurrency tests."""
+"""Bounded JSON-RPC request concurrency tests."""
 
 from __future__ import annotations
 
+import json
 import threading
-import xmlrpc.client
+import urllib.request
 
-import pytest
-
-import FreeCADGui
 import FreeCAD
-
+import FreeCADGui
 
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 from addon.FreeCADMCP.rpc_server.rpc_server import FilteredXMLRPCServer
+
+
+def _json_request(port, method, params=None, *, request_id=1):
+    document = {"jsonrpc": "2.0", "method": method, "id": request_id}
+    if params is not None:
+        document["params"] = params
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/jsonrpc",
+        data=json.dumps(document, separators=(",", ":")).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=2) as response:
+        return json.loads(response.read())
 
 
 class _ConcurrentMethods:
@@ -75,7 +87,10 @@ class _ConcurrentMethods:
 def test_ping_runs_while_another_handler_is_occupied():
     methods = _ConcurrentMethods()
     server = FilteredXMLRPCServer(
-        ("127.0.0.1", 0), allowed_ips_str="127.0.0.1", allow_none=True, logRequests=False
+        ("127.0.0.1", 0),
+        allowed_ips_str="127.0.0.1",
+        allow_none=True,
+        logRequests=False,
     )
     server.register_instance(methods)
     loop = threading.Thread(target=server.serve_forever, daemon=True)
@@ -84,15 +99,13 @@ def test_ping_runs_while_another_handler_is_occupied():
     slow_result = []
 
     def call_slow():
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            slow_result.append(client.slow())
+        slow_result.append(_json_request(port, "slow", request_id="slow"))
 
     slow_thread = threading.Thread(target=call_slow)
     slow_thread.start()
     try:
         assert methods.started.wait(timeout=2)
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            assert client.ping() is True
+        assert _json_request(port, "ping", request_id="ping")["result"] is True
     finally:
         methods.release.set()
         slow_thread.join(timeout=2)
@@ -100,13 +113,16 @@ def test_ping_runs_while_another_handler_is_occupied():
         server.shutdown()
         server.server_close()
         loop.join(timeout=2)
-    assert slow_result == [True]
+    assert slow_result == [{"jsonrpc": "2.0", "id": "slow", "result": True}]
 
 
 def test_control_plane_remains_available_when_general_lane_is_saturated():
     methods = _ConcurrentMethods()
     server = FilteredXMLRPCServer(
-        ("127.0.0.1", 0), allowed_ips_str="127.0.0.1", allow_none=True, logRequests=False
+        ("127.0.0.1", 0),
+        allowed_ips_str="127.0.0.1",
+        allow_none=True,
+        logRequests=False,
     )
     server.register_instance(methods)
     loop = threading.Thread(target=server.serve_forever, daemon=True)
@@ -114,24 +130,37 @@ def test_control_plane_remains_available_when_general_lane_is_saturated():
     port = server.server_address[1]
     calls = []
 
-    def call_slow():
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            calls.append(client.slow())
+    def call_slow(request_id):
+        calls.append(_json_request(port, "slow", request_id=request_id))
 
-    workers = [threading.Thread(target=call_slow) for _ in range(3)]
+    workers = [
+        threading.Thread(target=call_slow, args=(request_id,))
+        for request_id in range(3)
+    ]
     for worker in workers:
         worker.start()
     try:
         assert methods.three_started.wait(timeout=2)
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            assert client.ping() is True
-            assert client.get_worker_status()["active_job_id"] == "active"
-            assert client.cancel_worker_job("pending")["success"] is True
-            assert client.cancel_worker_job("active")["success"] is True
-            assert client.shutdown_rpc_server()["state"] == "stopping"
-            with pytest.raises(xmlrpc.client.Fault, match="server_busy: general") as exc:
-                client.slow()
-            assert exc.value.faultCode == 503
+        assert _json_request(port, "ping", request_id="ping")["result"] is True
+        assert (
+            _json_request(port, "get_worker_status", request_id="status")["result"][
+                "active_job_id"
+            ]
+            == "active"
+        )
+        assert _json_request(
+            port, "cancel_worker_job", ["pending"], request_id="cancel-pending"
+        )["result"]["success"] is True
+        assert _json_request(
+            port, "cancel_worker_job", ["active"], request_id="cancel-active"
+        )["result"]["success"] is True
+        assert (
+            _json_request(port, "shutdown_rpc_server", request_id="shutdown")[
+                "result"
+            ]["state"]
+            == "stopping"
+        )
+        busy = _json_request(port, "slow", request_id="busy")
     finally:
         methods.release.set()
         for worker in workers:
@@ -140,7 +169,13 @@ def test_control_plane_remains_available_when_general_lane_is_saturated():
         server.shutdown()
         server.server_close()
         loop.join(timeout=2)
-    assert calls == [True] * 3
+    assert busy["error"] == {
+        "code": -32000,
+        "message": "Server busy",
+        "data": {"reason": "server_busy", "lane": "general"},
+    }
+    assert sorted(response["id"] for response in calls) == [0, 1, 2]
+    assert all(response["result"] is True for response in calls)
 
 
 def test_v2_control_envelope_uses_reserved_lane_while_mutations_are_saturated():
@@ -157,12 +192,11 @@ def test_v2_control_envelope_uses_reserved_lane_while_mutations_are_saturated():
     port = server.server_address[1]
     workers = []
 
-    def call_slow():
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            client.slow()
+    def call_slow(request_id):
+        _json_request(port, "slow", request_id=request_id)
 
-    for _ in range(3):
-        worker = threading.Thread(target=call_slow)
+    for request_id in range(3):
+        worker = threading.Thread(target=call_slow, args=(request_id,))
         worker.start()
         workers.append(worker)
     try:
@@ -176,15 +210,19 @@ def test_v2_control_envelope_uses_reserved_lane_while_mutations_are_saturated():
             "params": {"target_request_id": request_id},
             "lease_credentials": [],
         }
-        with xmlrpc.client.ServerProxy(f"http://127.0.0.1:{port}") as client:
-            result = client.invoke_v2_control(envelope)
-            assert result == {
-                "success": True,
-                "target": "cancel_request",
-                "request_id": request_id,
-            }
-            with pytest.raises(xmlrpc.client.Fault, match="server_busy: general"):
-                client.slow()
+        result = _json_request(
+            port,
+            "invoke_v2_control",
+            [envelope],
+            request_id="control-envelope",
+        )["result"]
+        assert result == {
+            "success": True,
+            "target": "cancel_request",
+            "request_id": request_id,
+        }
+        busy = _json_request(port, "slow", request_id="busy")
+        assert busy["error"]["code"] == -32000
     finally:
         methods.release.set()
         for worker in workers:
@@ -212,7 +250,7 @@ def test_rejected_connection_uses_python_logging_not_freecad_console(monkeypatch
         server.server_close()
 
 
-def test_large_save_metadata_is_sanitized_at_xmlrpc_response_boundary():
+def test_large_save_metadata_round_trips_as_json_integers():
     methods = _ConcurrentMethods()
     server = FilteredXMLRPCServer(
         ("127.0.0.1", 0),
@@ -224,19 +262,20 @@ def test_large_save_metadata_is_sanitized_at_xmlrpc_response_boundary():
     loop = threading.Thread(target=server.serve_forever, daemon=True)
     loop.start()
     try:
-        with xmlrpc.client.ServerProxy(
-            f"http://127.0.0.1:{server.server_address[1]}", allow_none=True
-        ) as client:
-            result = client.get_save_result_with_nanoseconds()
+        result = _json_request(
+            server.server_address[1],
+            "get_save_result_with_nanoseconds",
+            request_id="wide-integers",
+        )["result"]
         assert result == {
             "success": True,
             "generation": 7,
             "baseline": {
-                "mtime_ns": "9223372036854775000",
-                "size": "5000000000",
+                "mtime_ns": 9_223_372_036_854_775_000,
+                "size": 5_000_000_000,
             },
             "save": {
-                "previous_mtime_ns": "-9223372036854775000",
+                "previous_mtime_ns": -9_223_372_036_854_775_000,
                 "verified": True,
             },
         }

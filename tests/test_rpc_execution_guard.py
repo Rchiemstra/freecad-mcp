@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import FreeCADGui
+import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 
 # The conda FreeCAD test package is headless and omits GUI command registration.
@@ -11,6 +13,9 @@ if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 from addon.FreeCADMCP.rpc_server import rpc_server
+from freecad_mcp.operations.p7_assembly import (
+    sketch_add_external_projection_operation,
+)
 
 
 HANGING_SYMMETRY_CODE = r'''
@@ -36,6 +41,56 @@ for radius in radii:
 class _DispatcherMustNotBeUsed:
     def submit(self, *_args, **_kwargs):
         raise AssertionError("risky payload was dispatched to FreeCAD's GUI thread")
+
+
+def _external_projection_payload(*, allow_gui_geometry_loop):
+    connection = MagicMock()
+    connection.get_active_screenshot.return_value = None
+    connection.execute_code.return_value = {
+        "success": False,
+        "error": "capture only",
+    }
+    sketch_add_external_projection_operation(
+        connection,
+        True,
+        "Doc",
+        "Sketch",
+        "Binder:Face1",
+        allow_gui_geometry_loop=allow_gui_geometry_loop,
+    )
+    code, options = connection.execute_code.call_args[0]
+    return code, options.to_dict()
+
+
+def test_external_projection_default_is_blocked_by_actual_loop_guard(monkeypatch):
+    code, options = _external_projection_payload(allow_gui_geometry_loop=False)
+    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+
+    result = rpc_server.FreeCADRPC().execute_code(code, options)
+
+    assert result["success"] is False
+    assert result["blocked"] == "gui_thread_geometry_loop"
+    assert result["code_analysis"]["call_families"]
+    assert "allow_gui_geometry_loop=true" in result["error"]
+
+
+def test_external_projection_explicit_override_reaches_gui_dispatch():
+    code, options = _external_projection_payload(allow_gui_geometry_loop=True)
+    rpc = rpc_server.FreeCADRPC()
+    dispatched = {}
+
+    def fake_dispatch_gui(task, timeout):
+        dispatched["called"] = True
+        dispatched["timeout"] = timeout
+        return {"ok": True, "session": {}, "stdout": ""}
+
+    rpc._dispatch_gui = fake_dispatch_gui
+    result = rpc.execute_code(code, options)
+
+    assert options["execution_mode"] == "gui"
+    assert options["allow_gui_geometry_loop"] is True
+    assert result["success"] is True
+    assert dispatched["called"] is True
 
 
 def test_transformed_symmetric_difference_forced_gui_routes_to_worker(monkeypatch):
@@ -215,3 +270,53 @@ def test_forced_gui_geometry_mutation_optin_reaches_gui(monkeypatch):
     )
     assert result["success"] is True
     assert dispatched.get("called") is True
+
+
+def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
+    model = tmp_path / "Model.FCStd"
+    model.write_bytes(b"before")
+    before_mtime = model.stat().st_mtime_ns
+
+    class _Document:
+        Name = "Model"
+        FileName = str(model)
+        Modified = True
+        Objects = []
+
+        def save(self):
+            model.write_bytes(b"saved content with a different size")
+            os.utime(model, ns=(before_mtime + 1_000_000, before_mtime + 1_000_000))
+            self.Modified = False
+
+        def commitCompatibilityMutation(self, callback, *, structural=False):
+            assert structural is True
+            callback()
+            return {
+                "status": "Committed",
+                "committed": True,
+                "revisions": {"UnknownModel": 1},
+            }
+
+    document = _Document()
+    monkeypatch.setattr(
+        rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
+    )
+    monkeypatch.setattr(
+        rpc_server.FreeCAD,
+        "getDocument",
+        lambda name: document if name == document.Name else None,
+    )
+    monkeypatch.setattr(rpc_server.FreeCAD, "ActiveDocument", document)
+    rpc = rpc_server.FreeCADRPC()
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", lambda: {})
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+
+    result = rpc.execute_code(
+        "FreeCAD.getDocument('Model').save()",
+        {"document": "Model", "execution_mode": "gui"},
+    )
+
+    assert result["success"] is True
+    assert model.stat().st_mtime_ns > before_mtime
+    assert result["session"]["saved"] is True
+    assert result["session"]["saved_documents"] == ["Model"]

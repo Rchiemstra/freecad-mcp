@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util
 import hashlib
+import importlib.util
 import json
 import os
-from pathlib import Path
-from types import SimpleNamespace
 import sys
 import uuid
+from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
-
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 MCP_ROOT = Path(__file__).resolve().parents[1]
@@ -93,6 +93,78 @@ def test_setup_profile_creates_persistent_identity_secret_and_manifest(
     assert second_manifest["profile_instance_id"] == first_manifest["profile_instance_id"]
     assert second_manifest["created_at"] == first_manifest["created_at"]
     assert secret_path.read_bytes() == first_secret
+
+
+def test_setup_profile_name_override_does_not_use_default_profile(
+    tmp_path, monkeypatch
+):
+    setup = _load_script("setup_isolated_profile.py")
+    monkeypatch.setattr(setup, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(setup, "_freecad_mcp_root", lambda: MCP_ROOT)
+    monkeypatch.setattr(
+        setup,
+        "_junction",
+        lambda _source, destination: destination.mkdir(parents=True, exist_ok=True),
+    )
+    monkeypatch.setattr(setup, "_restrict_owner_only", lambda _path: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "setup_isolated_profile.py",
+            "--port",
+            "19877",
+            "--profile-name",
+            ".freecad-mcp-e2e-session",
+        ],
+    )
+
+    assert setup.main() == 0
+    assert (tmp_path / ".freecad-mcp-e2e-session" / setup.MANIFEST_FILENAME).is_file()
+    assert not (tmp_path / setup.PROFILE_NAME).exists()
+    manifest = json.loads(
+        (tmp_path / ".freecad-mcp-e2e-session" / setup.MANIFEST_FILENAME).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["rpc_port"] == 19877
+
+
+def test_setup_profile_dir_env_override(tmp_path, monkeypatch):
+    setup = _load_script("setup_isolated_profile.py")
+    custom = tmp_path / "custom-profile-dir"
+    monkeypatch.setenv("FREECAD_MCP_PROFILE_DIR", str(custom))
+    monkeypatch.setattr(setup, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(setup, "_freecad_mcp_root", lambda: MCP_ROOT)
+    monkeypatch.setattr(
+        setup,
+        "_junction",
+        lambda _source, destination: destination.mkdir(parents=True, exist_ok=True),
+    )
+    monkeypatch.setattr(setup, "_restrict_owner_only", lambda _path: None)
+    monkeypatch.setattr(sys, "argv", ["setup_isolated_profile.py", "--port", "19878"])
+
+    assert setup.main() == 0
+    assert (custom / setup.MANIFEST_FILENAME).is_file()
+    assert not (tmp_path / setup.PROFILE_NAME).exists()
+
+
+def test_launcher_consume_profile_name_leaves_freecad_args() -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    name, rest = launcher._consume_launcher_args(
+        ["--profile-name", ".freecad-mcp-e2e-session", "--", "Macro.FCMacro"]
+    )
+    assert name == ".freecad-mcp-e2e-session"
+    assert rest == ["--", "Macro.FCMacro"]
+    resolved = launcher._resolve_profile(Path("/repo"), profile_name=name)
+    assert resolved == Path("/repo") / ".freecad-mcp-e2e-session"
+
+
+def test_launcher_profile_dir_env_override(tmp_path, monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    custom = tmp_path / "launcher-profile"
+    monkeypatch.setenv("FREECAD_MCP_PROFILE_DIR", str(custom))
+    assert launcher._resolve_profile(Path("/repo")) == custom
 
 
 def test_setup_refuses_to_replace_persistent_profile_identity(tmp_path):
@@ -240,7 +312,7 @@ def _authenticated_proxy(launcher, profile: Path, info: dict, secret: bytes):
     manager = SessionManager(manifest=runtime_manifest, secret=secret)
 
     class Proxy:
-        requests = []
+        requests: ClassVar[list] = []
 
         def handshake_v2(self, payload):
             self.requests.append(payload)
@@ -395,20 +467,24 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     monkeypatch.setattr(
         launcher,
         "_load_parent_start_freecad",
-        lambda: SimpleNamespace(
-            _launch_details=lambda executable, extra: (
-                [str(executable), *extra],
-                str(tmp_path),
-                {},
-            )
-        ),
+        lambda: SimpleNamespace(_launch_env=lambda _executable: {}),
     )
-    def spawn(*_args, **_kwargs):
+
+    def spawn(command, **_kwargs):
         assert reservation.closed is True
+        assert command == [str(freecad)]
         return Process()
 
     monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
-    monkeypatch.setattr(launcher.xmlrpc.client, "ServerProxy", lambda *args, **kwargs: Proxy())
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            self.server = Proxy()
+
+        @staticmethod
+        def disconnect():
+            return None
+
+    monkeypatch.setattr(launcher, "FreeCADConnection", Connection)
     monkeypatch.setattr(
         launcher, "_write_manifest", lambda profile_path, value: writes.append(value)
     )
@@ -509,7 +585,9 @@ def test_launcher_never_spawns_or_reuses_when_manifest_endpoint_is_occupied(
     assert spawned == []
 
 
-@pytest.mark.parametrize("script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"])
+@pytest.mark.parametrize(
+    "script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"]
+)
 def test_isolated_manifest_rejects_non_loopback_endpoint(
     tmp_path, script_name
 ):
@@ -532,7 +610,9 @@ def test_isolated_manifest_rejects_non_loopback_endpoint(
             script.load_instance_manifest(path)
 
 
-@pytest.mark.parametrize("script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"])
+@pytest.mark.parametrize(
+    "script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"]
+)
 def test_isolated_manifest_rejects_unknown_fields(tmp_path, script_name):
     script = _load_script(script_name)
     profile = tmp_path / "profile"
@@ -546,7 +626,7 @@ def test_isolated_manifest_rejects_unknown_fields(tmp_path, script_name):
     path = profile / "instance-manifest.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
 
-    with pytest.raises(SystemExit, match="extra=.*unexpected_downgrade_flag"):
+    with pytest.raises(SystemExit, match=r"extra=.*unexpected_downgrade_flag"):
         if script_name == "start_freecad_isolated.py":
             script._load_manifest(profile)
         else:

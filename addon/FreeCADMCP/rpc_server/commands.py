@@ -8,177 +8,40 @@ reflects saved settings on the checkable items.
 ``rpc_server.py`` at import time to preserve current side-effect behavior.
 """
 
-import FreeCAD
+import FreeCAD  # noqa: F401 - §3.3 shim for legacy monkeypatch surface
 import FreeCADGui
 from PySide import QtCore, QtWidgets
 
-from .ip_filter import validate_allowed_ips
-from .settings import (
-    LEASE_MODE_ENFORCE,
-    is_loopback_host,
-    load_settings,
-    save_settings,
+from .commands_types.configure_allowed_ips_command import ConfigureAllowedIPsCommand
+from .commands_types.dependencies import (
+    CommandDependencies,
+    bind_command_dependencies,
+    current_command_dependencies,
 )
+from .commands_types.start_rpc_server_command import StartRPCServerCommand
+from .commands_types.stop_rpc_server_command import StopRPCServerCommand
+from .commands_types.toggle_auto_start_command import ToggleAutoStartCommand
+from .commands_types.toggle_remote_connections_command import (
+    ToggleRemoteConnectionsCommand,
+)
+from .settings import load_settings, save_settings  # noqa: F401 - §3.3 shims
 
 
-class StartRPCServerCommand:
-    def GetResources(self):
-        return {"MenuText": "Start RPC Server", "ToolTip": "Start RPC Server"}
-
-    def Activated(self):
-        from . import rpc_server  # late import: avoids circular at module load
-        msg = rpc_server.start_rpc_server()
-        FreeCAD.Console.PrintMessage(msg + "\n")
-
-    def IsActive(self):
-        return True
-
-
-class StopRPCServerCommand:
-    def GetResources(self):
-        return {"MenuText": "Stop RPC Server", "ToolTip": "Stop RPC Server"}
-
-    def Activated(self):
-        from . import rpc_server
-        msg = rpc_server.stop_rpc_server()
-        FreeCAD.Console.PrintMessage(msg + "\n")
-
-    def IsActive(self):
-        return True
-
-
-class ToggleRemoteConnectionsCommand:
-    def GetResources(self):
-        return {
-            "MenuText": "Remote Connections",
-            "ToolTip": "Enable or disable remote connections for the RPC server.",
-            "Checkable": True,
-        }
-
-    def Activated(self, checked=0):
-        from . import rpc_server
-        settings = load_settings()
-        requested = bool(checked)
-        if (
-            requested
-            and settings.get("document_lease_mode") == LEASE_MODE_ENFORCE
-            and not settings.get(
-                "allow_authenticated_remote_without_transport_security", False
-            )
-        ):
-            FreeCAD.Console.PrintWarning(
-                "Remote Connections was not enabled: enforce mode keeps the addon "
-                "on loopback because HMAC does not encrypt XML-RPC. Use an SSH/TLS "
-                "tunnel, or deliberately configure the unsafe transport override.\n"
-            )
-            return
-
-        settings["remote_enabled"] = requested
-        if requested and is_loopback_host(settings.get("rpc_bind_host")):
-            # Preserve the pre-rpc_bind_host behavior for off/observe profiles:
-            # the explicit remote toggle means listen on all IPv4 interfaces.
-            settings["rpc_bind_host"] = "0.0.0.0"
-        save_settings(settings)
-
-        if settings["remote_enabled"]:
-            allowed_ips = settings.get("allowed_ips", "127.0.0.1")
-            FreeCAD.Console.PrintMessage(
-                f"Remote connections enabled. Allowed IPs: {allowed_ips}\n"
-            )
-        else:
-            FreeCAD.Console.PrintMessage("Remote connections disabled.\n")
-
-        if rpc_server.rpc_server_instance:
-            FreeCAD.Console.PrintMessage(
-                "Restart the RPC server for changes to take effect.\n"
-            )
-
-    def IsActive(self):
-        return True
-
-
-class ConfigureAllowedIPsCommand:
-    def GetResources(self):
-        return {
-            "MenuText": "Configure Allowed IPs",
-            "ToolTip": "Set which IP addresses or subnets are allowed to connect to the RPC server.",
-        }
-
-    def Activated(self):
-        from . import rpc_server
-        settings = load_settings()
-        current_ips = settings.get("allowed_ips", "127.0.0.1")
-        text, ok = QtWidgets.QInputDialog.getText(
-            None,
-            "Allowed IP Addresses",
-            "Enter allowed IP addresses or subnets (comma-separated):\n"
-            "Examples: 127.0.0.1, 192.168.1.0/24, 10.0.0.5",
-            QtWidgets.QLineEdit.Normal,
-            current_ips,
-        )
-        if ok and text.strip():
-            valid, errors = validate_allowed_ips(text.strip())
-            if errors:
-                QtWidgets.QMessageBox.warning(
-                    None,
-                    "Invalid IP Configuration",
-                    "The following errors were found:\n\n"
-                    + "\n".join(f"• {e}" for e in errors)
-                    + ("\n\nOnly valid entries will be saved."
-                       if valid else "\n\nNo valid entries found. Settings not changed."),
-                )
-            if not valid:
-                FreeCAD.Console.PrintWarning("Allowed IPs not changed — no valid entries.\n")
-                return
-            normalised = ", ".join(valid)
-            settings["allowed_ips"] = normalised
-            save_settings(settings)
-            FreeCAD.Console.PrintMessage(
-                f"Allowed IPs updated to: {normalised}\n"
-            )
-            if rpc_server.rpc_server_instance:
-                FreeCAD.Console.PrintMessage(
-                    "Restart the RPC server for changes to take effect.\n"
-                )
-        else:
-            FreeCAD.Console.PrintMessage("Allowed IPs not changed.\n")
-
-    def IsActive(self):
-        return True
-
-
-class ToggleAutoStartCommand:
-    def GetResources(self):
-        return {
-            "MenuText": "Auto-Start Server",
-            "ToolTip": "Automatically start the RPC server when FreeCAD launches.",
-            "Checkable": True,
-        }
-
-    def Activated(self, checked=0):
-        settings = load_settings()
-        settings["auto_start_rpc"] = bool(checked)
-        save_settings(settings)
-
-        if settings["auto_start_rpc"]:
-            FreeCAD.Console.PrintMessage(
-                "MCP RPC server will start automatically on next FreeCAD launch.\n"
-            )
-        else:
-            FreeCAD.Console.PrintMessage(
-                "MCP RPC server auto-start disabled.\n"
-            )
-
-    def IsActive(self):
-        return True
-
-
-def register_commands() -> None:
-    FreeCADGui.addCommand("Start_RPC_Server", StartRPCServerCommand())
-    FreeCADGui.addCommand("Stop_RPC_Server", StopRPCServerCommand())
-    FreeCADGui.addCommand("Toggle_Auto_Start", ToggleAutoStartCommand())
-    FreeCADGui.addCommand("Toggle_Remote_Connections", ToggleRemoteConnectionsCommand())
-    FreeCADGui.addCommand("Configure_Allowed_IPs", ConfigureAllowedIPsCommand())
+def register_commands(dependencies: CommandDependencies | None = None) -> None:
+    if dependencies is not None:
+        bind_command_dependencies(dependencies)
+    dependencies = current_command_dependencies()
+    FreeCADGui.addCommand("Start_RPC_Server", StartRPCServerCommand(dependencies))
+    FreeCADGui.addCommand("Stop_RPC_Server", StopRPCServerCommand(dependencies))
+    FreeCADGui.addCommand("Toggle_Auto_Start", ToggleAutoStartCommand(dependencies))
+    FreeCADGui.addCommand(
+        "Toggle_Remote_Connections",
+        ToggleRemoteConnectionsCommand(dependencies),
+    )
+    FreeCADGui.addCommand(
+        "Configure_Allowed_IPs",
+        ConfigureAllowedIPsCommand(dependencies),
+    )
 
 
 # Map command objectName -> settings key. Matching on objectName rather than
