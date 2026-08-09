@@ -1,5 +1,12 @@
-import sys as _sys
 import os as _os
+import sys as _sys
+from functools import partial as _partial
+
+from PySide import QtCore
+
+# FreeCAD injects FreeCAD, Gui, and Workbench into InitGui's namespace at load
+# time. Do not import them here — that breaks FreeCAD's InitGui exec model and
+# the split-exec test harness (F821 names are intentional; noqa where used).
 
 try:
     _addon_dir = _os.path.dirname(_os.path.abspath(__file__))
@@ -13,12 +20,13 @@ if _addon_dir not in _sys.path:
     _sys.path.insert(0, _addon_dir)
 
 
-class FreeCADMCPAddonWorkbench(Workbench):
+class FreeCADMCPAddonWorkbench(Workbench):  # noqa: F821
     MenuText = "MCP Addon"
     ToolTip = "Addon for MCP Communication"
 
     def Initialize(self):
-        from rpc_server import rpc_server
+        # Import registers workbench commands before toolbar/menu append.
+        from rpc_server import rpc_server  # noqa: F401
 
         commands = [
             "Start_RPC_Server",
@@ -43,7 +51,7 @@ class FreeCADMCPAddonWorkbench(Workbench):
         return "Gui::PythonWorkbench"
 
 
-Gui.addWorkbench(FreeCADMCPAddonWorkbench())
+Gui.addWorkbench(FreeCADMCPAddonWorkbench())  # noqa: F821
 
 
 def _auto_start_mcp():
@@ -55,43 +63,62 @@ def _auto_start_mcp():
             return
 
         msg = rpc_server.start_rpc_server()
-        FreeCAD.Console.PrintMessage(f"[MCP] Auto-start: {msg}\n")
+        FreeCAD.Console.PrintMessage(f"[MCP] Auto-start: {msg}\n")  # noqa: F821
     except Exception as e:
-        FreeCAD.Console.PrintWarning(f"[MCP] Auto-start failed: {e}\n")
+        FreeCAD.Console.PrintWarning(f"[MCP] Auto-start failed: {e}\n")  # noqa: F821
 
-
-from PySide import QtCore
 
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
 
 
-_document_lease_runtime_shutdown_connected = False
+_rpc_runtime_shutdown_state = {"connected": False, "callback": None}
 
 
-def _connect_document_lease_runtime_shutdown(rpc_server):
-    global _document_lease_runtime_shutdown_connected
-    app = QtCore.QCoreApplication.instance()
-    if app is None or _document_lease_runtime_shutdown_connected:
+def _shutdown_mcp_runtime(rpc_server):
+    """Stop the adapter graph without changing native document state."""
+
+    rpc_server.stop_rpc_server(wait_for_completion=True)
+
+
+def _connect_rpc_runtime_shutdown(
+    rpc_server,
+    _qt_core=QtCore,
+    _state=_rpc_runtime_shutdown_state,
+    _partial_callback=_partial,
+    _shutdown_callback=_shutdown_mcp_runtime,
+):
+    """Connect shutdown without relying on InitGui's execution globals.
+
+    FreeCAD can execute InitGui.py with separate global and local mappings.
+    Delayed Qt callbacks therefore need their helpers and mutable state bound
+    directly instead of resolving names through the script globals.
+    """
+
+    app = _qt_core.QCoreApplication.instance()
+    if app is None or _state["connected"]:
         return
-    app.aboutToQuit.connect(rpc_server.shutdown_document_lease_runtime)
-    _document_lease_runtime_shutdown_connected = True
+    callback = _partial_callback(_shutdown_callback, rpc_server)
+    app.aboutToQuit.connect(callback)
+    _state["callback"] = callback
+    _state["connected"] = True
 
 
-def _initialize_document_lease_runtime():
-    """Start process-lifetime identity/status even when RPC auto-start is off."""
+def _initialize_rpc_runtime_shutdown(
+    _connect_shutdown=_connect_rpc_runtime_shutdown,
+):
+    """Install deterministic shutdown even when RPC auto-start is off."""
 
     try:
         from rpc_server import rpc_server
 
-        rpc_server.initialize_document_lease_runtime()
-        _connect_document_lease_runtime_shutdown(rpc_server)
+        _connect_shutdown(rpc_server)
     except Exception as e:
-        FreeCAD.Console.PrintWarning(
-            f"[MCP] Document lease runtime not initialized: {e}\n"
+        FreeCAD.Console.PrintWarning(  # noqa: F821
+            f"[MCP] RPC shutdown hook not initialized: {e}\n"
         )
 
 
-QtCore.QTimer.singleShot(0, _initialize_document_lease_runtime)
+QtCore.QTimer.singleShot(0, _initialize_rpc_runtime_shutdown)
 
 
 def _register_git_sidecar_observer():
@@ -100,62 +127,10 @@ def _register_git_sidecar_observer():
 
         register_observer()
     except Exception as e:
-        FreeCAD.Console.PrintWarning(
+        FreeCAD.Console.PrintWarning(  # noqa: F821
             f"[MCP] Git sidecar observer not registered: {e}\n"
         )
 
 
 QtCore.QTimer.singleShot(0, _register_git_sidecar_observer)
 
-
-_document_lease_shutdown_connected = False
-
-
-def _register_document_lease_observer():
-    """Install the v2 observer independently of RPC auto-start ordering."""
-    global _document_lease_shutdown_connected
-    try:
-        from document_lease.observer import register_observer, unregister_observer
-
-        def _refresh_indicator(_event):
-            try:
-                from lock_indicator import refresh_lock_indicator
-
-                refresh_lock_indicator()
-            except Exception:
-                pass
-
-        observer = register_observer(notification_callback=_refresh_indicator)
-        if observer is None:
-            return
-        from rpc_server import rpc_server
-
-        _connect_document_lease_runtime_shutdown(rpc_server)
-        app = QtCore.QCoreApplication.instance()
-        if app is not None and not _document_lease_shutdown_connected:
-            app.aboutToQuit.connect(unregister_observer)
-            _document_lease_shutdown_connected = True
-    except Exception as e:
-        FreeCAD.Console.PrintWarning(
-            f"[MCP] Document lease observer not registered: {e}\n"
-        )
-
-
-# Register the v2 observer before the compatibility observer.  On an
-# unexpected close this ensures the active credential is fenced and its v2
-# sidecar retained before legacy cleanup callbacks are considered.
-QtCore.QTimer.singleShot(0, _register_document_lease_observer)
-
-
-def _register_document_lock():
-    try:
-        from document_lock import register_lock_feature
-
-        register_lock_feature()
-    except Exception as e:
-        FreeCAD.Console.PrintWarning(
-            f"[MCP] Document lock feature not registered: {e}\n"
-        )
-
-
-QtCore.QTimer.singleShot(0, _register_document_lock)

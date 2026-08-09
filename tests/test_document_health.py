@@ -6,6 +6,9 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.rpc_server import rpc_server as addon_rpc
+from addon.FreeCADMCP.rpc_server.rpc_helpers_ops.generated_execute import (
+    _generated_operation_method_spec,
+)
 from addon.FreeCADMCP.rpc_server.mutation_guard import (
     DocumentHealthVerdict,
     GuiMutationTransaction,
@@ -16,8 +19,37 @@ from addon.FreeCADMCP.rpc_server.mutation_guard import (
     make_method_spec,
 )
 
-
 pytestmark = pytest.mark.unit
+
+
+def test_typed_mutations_can_recover_locked_error_but_arbitrary_code_cannot():
+    assert make_method_spec("pad_feature", "MUTATING").allowed_during_recovery
+    assert make_method_spec("edit_object", "MUTATING").allowed_during_recovery
+    assert make_method_spec("restore", "MUTATING").allowed_during_recovery
+    assert not make_method_spec(
+        "execute_code", "MUTATING"
+    ).allowed_during_recovery
+    assert not make_method_spec(
+        "run_transaction", "MUTATING"
+    ).allowed_during_recovery
+
+
+def test_signed_generated_operation_inherits_typed_recovery_permission():
+    execute_spec = make_method_spec("execute_code", "MUTATING")
+
+    typed_spec = _generated_operation_method_spec(
+        execute_spec,
+        "partdesign.create-pad",
+    )
+    arbitrary_spec = _generated_operation_method_spec(
+        execute_spec,
+        "execute_code",
+    )
+
+    assert typed_spec.name == "partdesign.create-pad"
+    assert typed_spec.allowed_during_recovery is True
+    assert typed_spec.rollback_coverage == RollbackCoverage.DOCUMENT_ONLY
+    assert arbitrary_spec.allowed_during_recovery is False
 
 
 class Shape:
@@ -50,7 +82,16 @@ class CountingShape(Shape):
 
 
 class Obj:
-    def __init__(self, name, *, state=(), shape=None, type_id="Part::Feature"):
+    def __init__(
+        self,
+        name,
+        *,
+        state=(),
+        shape=None,
+        type_id="Part::Feature",
+        status_string=None,
+        valid=None,
+    ):
         self.Name = name
         self.Label = name
         self.State = list(state)
@@ -60,9 +101,22 @@ class Obj:
         self.Placement = None
         self.Group = []
         self.Tip = None
+        self._status_string = status_string
+        self._valid = valid
 
     def isDerivedFrom(self, type_name):
         return self.TypeId == type_name
+
+    def isValid(self):
+        if self._valid is not None:
+            return self._valid
+        state = {str(item).lower() for item in self.State}
+        return not ({"invalid", "error"} & state)
+
+    def getStatusString(self):
+        if self._status_string is not None:
+            return self._status_string
+        return "Valid" if self.isValid() else "Error"
 
 
 class Doc:
@@ -120,6 +174,35 @@ def test_health_delta_separates_preexisting_and_new_errors():
     assert delta.preexisting_recompute_errors == ("Stable",)
     assert delta.new_recompute_errors == ()
     assert delta.created_objects == ("Created",)
+
+
+def test_invalid_object_status_uses_get_status_string():
+    assembly = Obj(
+        "Assembly",
+        state=("Invalid",),
+        status_string=(
+            "object and dynamic-property structure changes are unavailable "
+            "across a collaboration stable boundary (kind=Restricted) "
+            "(mutation=propertySchema on QRinsertionslider002)"
+        ),
+        valid=False,
+    )
+    joint = Obj("Joint", state=(), status_string="Valid", valid=True)
+    doc = Doc(objects=(assembly, joint))
+    snapshot = capture_document_health(doc, profile=ValidationProfile.DEFAULT)
+
+    assert snapshot.invalid_state_objects == ("Assembly",)
+    assert snapshot.invalid_object_status == {
+        "Assembly": (
+            "object and dynamic-property structure changes are unavailable "
+            "across a collaboration stable boundary (kind=Restricted) "
+            "(mutation=propertySchema on QRinsertionslider002)"
+        )
+    }
+    delta = calculate_document_health_delta(snapshot, snapshot)
+    assert delta.invalid_object_status == snapshot.invalid_object_status
+    assert "invalid_object_status" in snapshot.to_dict()
+    assert "invalid_object_status" in delta.to_dict()
 
 
 def test_new_invalid_shape_and_broken_body_tip_degrade_health():
@@ -230,10 +313,12 @@ def test_mutation_validator_failure_aborts_before_commit(monkeypatch):
         "FreeCAD",
         SimpleNamespace(
             listDocuments=lambda: {"Model": document},
+            getDocument=lambda name: document if name == "Model" else None,
+            getUserAppDataDir=lambda: "",
         ),
     )
     spec = replace(
-        make_method_spec("create_object", "MUTATING"),
+        make_method_spec("health_test_mutation", "MUTATING"),
         validator=lambda _doc: (_ for _ in ()).throw(RuntimeError("invalid")),
     )
     result, failed = addon_rpc.FreeCADRPC()._execute_mutation_with_health(
@@ -259,6 +344,7 @@ def _install_documents(monkeypatch, *documents):
         SimpleNamespace(
             listDocuments=lambda: dict(by_name),
             getDocument=by_name.get,
+            getUserAppDataDir=lambda: "",
         ),
     )
 
@@ -267,7 +353,7 @@ def test_healthy_typed_mutation_commits_with_expected_object_delta(monkeypatch):
     feature = Obj("Feature", shape=Shape(1))
     document = Doc(objects=(feature,))
     _install_documents(monkeypatch, document)
-    spec = make_method_spec("edit_object", "MUTATING")
+    spec = make_method_spec("health_test_mutation", "MUTATING")
 
     def mutate():
         feature.Label = "Expected label"
@@ -289,7 +375,7 @@ def test_backend_failure_and_new_invalid_shape_abort_before_commit(monkeypatch):
     feature = Obj("Feature", shape=Shape(1))
     document = Doc(objects=(feature,))
     _install_documents(monkeypatch, document)
-    spec = make_method_spec("edit_object", "MUTATING")
+    spec = make_method_spec("health_test_mutation", "MUTATING")
     rpc = addon_rpc.FreeCADRPC()
 
     failed_result, failed = rpc._execute_mutation_with_health(
@@ -328,7 +414,7 @@ def test_unrelated_document_mutation_is_degraded_and_rolled_back(monkeypatch):
     unrelated_obj = Obj("Unrelated", shape=Shape(2))
     unrelated = Doc("UnrelatedDoc", objects=(unrelated_obj,))
     _install_documents(monkeypatch, target, unrelated)
-    spec = make_method_spec("edit_object", "MUTATING")
+    spec = make_method_spec("health_test_mutation", "MUTATING")
 
     def mutate_wrong_document():
         unrelated_obj.Label = "unexpected"

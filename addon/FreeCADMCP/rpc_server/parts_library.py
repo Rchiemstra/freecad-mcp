@@ -3,7 +3,6 @@ import os
 import FreeCAD
 import FreeCADGui
 
-
 _parts_lib_path: str | None = None
 
 
@@ -47,7 +46,7 @@ def get_parts_list() -> list[str]:
 
     if not os.path.exists(parts_lib_path):
         # Library addon not installed — return empty so the caller can show a
-        # friendly "no parts found" message instead of raising over XML-RPC.
+        # friendly "no parts found" message instead of raising over RPC.
         return []
 
     parts = []

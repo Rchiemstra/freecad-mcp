@@ -42,7 +42,7 @@ else:
             print(json.dumps({'ok': False, 'error': 'datum normal not parallel to face; use edge projection', 'candidate_edges': _candidate_edges}))
         else:
             _before = len(getattr(_sk, 'ExternalGeometry', []))
-            _idx = _sk.addExternal(_src, _sub, bool(_defining))
+            _idx = _sk.addExternal(_src.Name, _sub, bool(_defining))
             if _idx is None:
                 _after_count = len(getattr(_sk, 'ExternalGeometry', []))
                 if _after_count > _before:

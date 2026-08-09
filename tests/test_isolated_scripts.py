@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util
 import hashlib
+import importlib.util
 import json
 import os
-from pathlib import Path
-from types import SimpleNamespace
 import sys
 import uuid
+from pathlib import Path
+from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
-
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 MCP_ROOT = Path(__file__).resolve().parents[1]
@@ -240,7 +240,7 @@ def _authenticated_proxy(launcher, profile: Path, info: dict, secret: bytes):
     manager = SessionManager(manifest=runtime_manifest, secret=secret)
 
     class Proxy:
-        requests = []
+        requests: ClassVar[list] = []
 
         def handshake_v2(self, payload):
             self.requests.append(payload)
@@ -395,20 +395,24 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     monkeypatch.setattr(
         launcher,
         "_load_parent_start_freecad",
-        lambda: SimpleNamespace(
-            _launch_details=lambda executable, extra: (
-                [str(executable), *extra],
-                str(tmp_path),
-                {},
-            )
-        ),
+        lambda: SimpleNamespace(_launch_env=lambda _executable: {}),
     )
-    def spawn(*_args, **_kwargs):
+
+    def spawn(command, **_kwargs):
         assert reservation.closed is True
+        assert command == [str(freecad)]
         return Process()
 
     monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
-    monkeypatch.setattr(launcher.xmlrpc.client, "ServerProxy", lambda *args, **kwargs: Proxy())
+    class Connection:
+        def __init__(self, *args, **kwargs):
+            self.server = Proxy()
+
+        @staticmethod
+        def disconnect():
+            return None
+
+    monkeypatch.setattr(launcher, "FreeCADConnection", Connection)
     monkeypatch.setattr(
         launcher, "_write_manifest", lambda profile_path, value: writes.append(value)
     )
@@ -509,7 +513,9 @@ def test_launcher_never_spawns_or_reuses_when_manifest_endpoint_is_occupied(
     assert spawned == []
 
 
-@pytest.mark.parametrize("script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"])
+@pytest.mark.parametrize(
+    "script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"]
+)
 def test_isolated_manifest_rejects_non_loopback_endpoint(
     tmp_path, script_name
 ):
@@ -532,7 +538,9 @@ def test_isolated_manifest_rejects_non_loopback_endpoint(
             script.load_instance_manifest(path)
 
 
-@pytest.mark.parametrize("script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"])
+@pytest.mark.parametrize(
+    "script_name", ["start_freecad_isolated.py", "setup_cursor_mcp_isolated.py"]
+)
 def test_isolated_manifest_rejects_unknown_fields(tmp_path, script_name):
     script = _load_script(script_name)
     profile = tmp_path / "profile"
@@ -546,7 +554,7 @@ def test_isolated_manifest_rejects_unknown_fields(tmp_path, script_name):
     path = profile / "instance-manifest.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
 
-    with pytest.raises(SystemExit, match="extra=.*unexpected_downgrade_flag"):
+    with pytest.raises(SystemExit, match=r"extra=.*unexpected_downgrade_flag"):
         if script_name == "start_freecad_isolated.py":
             script._load_manifest(profile)
         else:

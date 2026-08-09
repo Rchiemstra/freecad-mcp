@@ -90,7 +90,7 @@ because the module is a project entry point, not a `python -m` executable.
 ## Remote use
 
 The isolated manifest is deliberately loopback-only. HMAC authenticates an MCP
-runtime but does not encrypt XML-RPC traffic. For remote use, keep the manifest
-endpoint local and connect an SSH tunnel or TLS proxy to that loopback endpoint;
-do not replace `rpc_host` with a LAN address. See
-[lease security](lease-security.md).
+runtime but does not encrypt the JSON-RPC 2.0 transport. For remote use, keep the
+manifest endpoint local and connect an SSH tunnel or TLS proxy to that loopback
+endpoint; do not replace `rpc_host` with a LAN address. See [lease
+security](lease-security.md).

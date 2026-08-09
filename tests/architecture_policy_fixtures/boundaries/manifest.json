@@ -1,0 +1,677 @@
+{
+  "schema_version": 1,
+  "description": "Synthetic Phase 2 boundary-policy cases. Scan each source_root without production allowances.",
+  "rules": {
+    "ARCH101": "One capability subject per implementation module.",
+    "ARCH102": "Only downward add-on layer imports; runtime is import-forbidden outside bootstrap.",
+    "ARCH103": "No application runtime module locator.",
+    "ARCH104": "No internal import through a package __init__ barrel."
+  },
+  "cases": [
+    {
+      "id": "capability_single_subject_pass",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/pass",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "ordinary_dependency_names_do_not_own_capabilities",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/pass_dependency_names",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "list_comprehension_target_is_not_module_binding",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/pass_list_comprehension",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "generator_target_is_not_module_binding",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/pass_generator_expression",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "dispatch_composition_pass",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/pass_dispatch_router",
+      "outcome": "pass",
+      "files": ["dispatch/router.py"]
+    },
+    {
+      "id": "capability_cross_subject_import_fails",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_cross_subject",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "import": "capabilities.fem.meshes",
+          "message_fragment": "sketch imports capability subject fem"
+        }
+      ]
+    },
+    {
+      "id": "capability_mixed_definitions_fail",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_mixed_definitions",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/mixed.py",
+          "line": 1,
+          "import": "capabilities.mesh.topology",
+          "message_fragment": "sketch imports capability subject mesh"
+        }
+      ]
+    },
+    {
+      "id": "capability_nested_runtime_is_not_composition",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_nested_runtime",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/runtime.py",
+          "line": 1,
+          "import": "capabilities.mesh.topology",
+          "message_fragment": "sketch imports capability subject mesh"
+        }
+      ]
+    },
+    {
+      "id": "capability_nested_dispatch_is_not_composition",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_nested_dispatch",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/dispatch/helper.py",
+          "line": 1,
+          "import": "capabilities.mesh.topology",
+          "message_fragment": "sketch imports capability subject mesh"
+        }
+      ]
+    },
+    {
+      "id": "capability_object_diagnostics_vocabulary_fails",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_object_diagnostics",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/grab_bag.py",
+          "line": 1,
+          "subjects": ["object", "diagnostics"],
+          "message_fragment": "multiple capability subjects"
+        }
+      ]
+    },
+    {
+      "id": "capability_ui_export_vocabulary_fails",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_ui_export",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/grab_bag.py",
+          "line": 1,
+          "subjects": ["ui", "export"],
+          "message_fragment": "multiple capability subjects"
+        }
+      ]
+    },
+    {
+      "id": "capability_grab_bag_fails",
+      "rule": "ARCH101",
+      "source_root": "capability_ownership/fail_grab_bag",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/grab_bag.py",
+          "line": 1,
+          "subjects": ["sketch", "fem"],
+          "message_fragment": "multiple capability subjects"
+        }
+      ]
+    },
+    {
+      "id": "layer_downward_imports_pass",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/pass",
+      "outcome": "pass",
+      "files": [
+        "transport/listener.py",
+        "dispatch/invoke.py",
+        "capabilities/sketch/constraints.py",
+        "runtime.py"
+      ]
+    },
+    {
+      "id": "layer_upward_import_fails",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/fail_upward",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "dispatch/invoke.py",
+          "line": 1,
+          "import": "addon.FreeCADMCP.transport",
+          "message_fragment": "dispatch may not import transport"
+        }
+      ]
+    },
+    {
+      "id": "layer_runtime_import_fails",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/fail_runtime_import",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "import": "runtime",
+          "message_fragment": "layer may not import runtime"
+        }
+      ]
+    },
+    {
+      "id": "non_addon_transport_names_pass",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/pass_non_addon_names",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/handler.py"]
+    },
+    {
+      "id": "capability_freecad_import_pass",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/pass_capability_freecad",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "dispatch_freecad_qt_imports_fail",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/fail_freecad_qt",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "dispatch/invoke.py",
+          "line": 1,
+          "import": "DraftVecUtils",
+          "message_fragment": "may not import non-stdlib runtime DraftVecUtils"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 2,
+          "import": "Import",
+          "message_fragment": "may not import non-stdlib runtime Import"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 3,
+          "import": "Part",
+          "message_fragment": "may not import non-stdlib runtime Part"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 4,
+          "import": "pivy",
+          "message_fragment": "may not import non-stdlib runtime pivy"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 5,
+          "import": "PySide6",
+          "message_fragment": "may not import non-stdlib runtime PySide6"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 6,
+          "import": "Sketcher",
+          "message_fragment": "may not import non-stdlib runtime Sketcher"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 7,
+          "import": "Spreadsheet",
+          "message_fragment": "may not import non-stdlib runtime Spreadsheet"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 8,
+          "import": "WebGui",
+          "message_fragment": "may not import non-stdlib runtime WebGui"
+        }
+      ]
+    },
+    {
+      "id": "dispatch_dynamic_freecad_qt_imports_fail",
+      "rule": "ARCH102",
+      "source_root": "layer_direction/fail_dynamic_freecad_qt",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "dispatch/invoke.py",
+          "line": 8,
+          "target": "'FreeCAD'",
+          "message_fragment": "may not dynamically import non-stdlib runtime"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 9,
+          "target": "'FreeCADGui'",
+          "message_fragment": "may not dynamically import non-stdlib runtime"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 10,
+          "target": "'PySide6'",
+          "message_fragment": "may not dynamically import non-stdlib runtime"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 11,
+          "target": "'Part'",
+          "message_fragment": "may not dynamically import non-stdlib runtime"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 12,
+          "target": "addon.FreeCADMCP.transport.listener",
+          "message_fragment": "dispatch may not dynamically import transport"
+        },
+        {
+          "path": "dispatch/invoke.py",
+          "line": 13,
+          "target": "addon.FreeCADMCP.runtime",
+          "message_fragment": "layer may not dynamically import runtime"
+        },
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "target": "addon.FreeCADMCP.transport.listener",
+          "message_fragment": "capabilities may not dynamically import transport"
+        }
+      ]
+    },
+    {
+      "id": "runtime_injected_collaborator_pass",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/pass",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "generic_builtin_import_passes",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/pass_generic_builtin",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "rpc_mod_call_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_rpc_mod",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "kind": "_rpc_mod_call",
+          "message_fragment": "runtime locator _rpc_mod"
+        }
+      ]
+    },
+    {
+      "id": "sys_modules_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_sys_modules",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "kind": "sys_modules_get",
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "importlib_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_importlib",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "kind": "importlib_import_module",
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "importfrom_alias_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_importfrom_alias",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "kind": "importlib_import_module",
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "sys_modules_alias_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_sys_alias",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "kind": "sys_modules_get",
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "builtin_import_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_builtin_import",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator __import__"
+        }
+      ]
+    },
+    {
+      "id": "qualified_builtin_import_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_qualified_builtin_import",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator __import__"
+        }
+      ]
+    },
+    {
+      "id": "imported_builtin_alias_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_imported_builtin_alias",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator __import__"
+        }
+      ]
+    },
+    {
+      "id": "absolute_from_runtime_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_absolute_from_import",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "addon.FreeCADMCP.rpc_server.server",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "absolute_document_lease_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_absolute_document_lease",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "addon.FreeCADMCP.document_lease",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "absolute_core_authority_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_absolute_core_authority",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "addon.FreeCADMCP.document_lease.core_authority",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "external_server_module_import_passes",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/pass_external_server",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "unrelated_absolute_locator_is_not_hidden_by_bare_import",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_unrelated_absolute_with_bare",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "target": "document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        },
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 3,
+          "target": "addon.FreeCADMCP.document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "same_arm_fallback_spelling_is_not_hidden",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_same_arm_fallback",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        },
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 3,
+          "target": "addon.FreeCADMCP.document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "same_arm_from_imports_are_not_hidden",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_same_arm_from_imports",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "addon.FreeCADMCP.document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        },
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 3,
+          "target": "FreeCADMCP.document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "nested_scope_import_is_not_a_fallback_arm",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_nested_scope_fallback",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 2,
+          "target": "document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        },
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 5,
+          "target": "addon.FreeCADMCP.document_lock",
+          "message_fragment": "local import is an application runtime module locator"
+        }
+      ]
+    },
+    {
+      "id": "distinct_fallback_arms_share_one_locator_occurrence",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/pass_distinct_fallback_arms",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py"]
+    },
+    {
+      "id": "importlib_assignment_alias_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_importlib_assignment_alias",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 7,
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator importlib.import_module"
+        }
+      ]
+    },
+    {
+      "id": "sys_modules_assignment_alias_locator_fails",
+      "rule": "ARCH103",
+      "source_root": "runtime_locator/fail_sys_assignment_alias",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 7,
+          "target": "addon.FreeCADMCP.rpc_server.rpc_server",
+          "message_fragment": "runtime module locator sys.modules.get"
+        }
+      ]
+    },
+    {
+      "id": "composition_root_star_import_passes",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/pass_composition_root_star",
+      "outcome": "pass",
+      "files": ["server.py"]
+    },
+    {
+      "id": "leaf_import_passes",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/pass",
+      "outcome": "pass",
+      "files": ["capabilities/sketch/constraints.py", "capabilities/sketch/types/record.py"]
+    },
+    {
+      "id": "alternate_addon_package_barrel_import_fails",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/fail_alt_package_barrel",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "import": "FreeCADMCP.capabilities.sketch.types",
+          "symbol": "Record",
+          "resolved_barrel": "capabilities/sketch/types/__init__.py",
+          "message_fragment": "internal barrel import"
+        }
+      ]
+    },
+    {
+      "id": "package_init_importing_another_barrel_fails",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/fail_init_to_barrel",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/__init__.py",
+          "line": 1,
+          "import": ".types",
+          "symbol": "Record",
+          "resolved_barrel": "capabilities/sketch/types/__init__.py",
+          "message_fragment": "internal barrel import"
+        }
+      ]
+    },
+    {
+      "id": "child_package_import_from_barrel_fails",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/fail_child_package",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "import": "addon.FreeCADMCP.capabilities.sketch",
+          "symbol": "types",
+          "resolved_barrel": "capabilities/sketch/__init__.py",
+          "message_fragment": "internal barrel import"
+        }
+      ]
+    },
+    {
+      "id": "internal_package_barrel_import_fails",
+      "rule": "ARCH104",
+      "source_root": "barrel_import/fail_package_barrel",
+      "outcome": "fail",
+      "violations": [
+        {
+          "path": "capabilities/sketch/constraints.py",
+          "line": 1,
+          "import": "addon.FreeCADMCP.capabilities.sketch.types",
+          "symbol": "Record",
+          "resolved_barrel": "capabilities/sketch/types/__init__.py",
+          "message_fragment": "internal barrel import"
+        }
+      ]
+    }
+  ]
+}

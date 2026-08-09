@@ -1,4 +1,4 @@
-"""Lease-lifetime request-id guarantees at the authenticated RPC boundary."""
+"""Request-id guarantees at the authenticated native RPC boundary."""
 
 from __future__ import annotations
 
@@ -8,14 +8,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from addon.FreeCADMCP import document_lock
+from addon.FreeCADMCP.rpc_server import request_identity
+from addon.FreeCADMCP.rpc_server import rpc_server as addon_rpc
 from addon.FreeCADMCP.rpc_server.inflight_requests import InflightRequestRegistry
 from addon.FreeCADMCP.rpc_server.lease_protocol import (
     RequestEnvelope,
     RequestReplayCache,
 )
-from addon.FreeCADMCP.rpc_server.mutation_guard import make_method_spec
-from addon.FreeCADMCP.rpc_server import rpc_server as addon_rpc
 
 
 def _uuid() -> str:
@@ -66,18 +65,17 @@ class _CountingRPC(addon_rpc.FreeCADRPC):
 def _rpc_runtime(monkeypatch):
     runtime_id = _uuid()
     manager = _SessionManager(runtime_id)
-    replay = RequestReplayCache(owner_has_unresolved_lease=lambda _owner: True)
+    replay = RequestReplayCache()
     registry = InflightRequestRegistry()
     monkeypatch.setattr(addon_rpc, "rpc_session_manager", manager)
     monkeypatch.setattr(addon_rpc, "rpc_request_replay_cache", replay)
     monkeypatch.setattr(addon_rpc, "rpc_inflight_request_registry", registry)
     monkeypatch.setattr(addon_rpc, "rpc_server_runtime_id", _uuid())
-    monkeypatch.setattr(addon_rpc, "document_lease_service", None)
-    document_lock.set_request_identity(instance_id=runtime_id)
+    request_identity.set_request_identity(instance_id=runtime_id)
     try:
         yield runtime_id, manager, replay
     finally:
-        document_lock.clear_request_identity()
+        request_identity.clear_request_identity()
 
 
 def _credential(token: str, *, generation: int = 1) -> dict[str, object]:
@@ -109,29 +107,29 @@ def _envelope(
             "doc_name": "Model",
             "obj_data": {"Type": "Part::Feature", "Name": "Once"},
         },
-        "lease_credentials": credentials
-        if credentials is not None
-        else [_credential("L" * 43)],
+        "lease_credentials": credentials if credentials is not None else [],
         "operation": {"name": "Idempotency test", "task_id": _uuid()},
     }
 
 
 @pytest.mark.unit
-def test_method_descriptor_pin_policy_excludes_reads_and_automatic_heartbeat():
-    assert make_method_spec("create_object", "MUTATING").pin_replay_for_lease_lifetime
-    assert make_method_spec(
-        "acquire_document_lock", "LIFECYCLE"
-    ).pin_replay_for_lease_lifetime
-    assert make_method_spec(
-        "lease_reconcile", "LIFECYCLE"
-    ).pin_replay_for_lease_lifetime
-    assert make_method_spec(
-        "update_document_lock", "LIFECYCLE"
-    ).pin_replay_for_lease_lifetime
-    assert not make_method_spec(
-        "lease_heartbeat_batch", "LIFECYCLE"
-    ).pin_replay_for_lease_lifetime
-    assert not make_method_spec("get_objects", "READ_ONLY").pin_replay_for_lease_lifetime
+def test_legacy_document_credentials_are_rejected_before_dispatch(_rpc_runtime):
+    runtime_id, _manager, replay = _rpc_runtime
+    request_id = _uuid()
+    rpc = _CountingRPC()
+
+    result = rpc.invoke_v2(
+        _envelope(
+            runtime_id,
+            request_id=request_id,
+            session_token="A" * 43,
+            credentials=[_credential("L" * 43)],
+        )
+    )
+
+    assert result["error"]["code"] == "LEGACY_LEASE_AUTHORITY_REMOVED"
+    assert rpc.dispatch_count == 0
+    assert replay.status(runtime_id, request_id).status == "unknown"
 
 
 @pytest.mark.unit
@@ -139,12 +137,10 @@ def test_completed_mutation_replays_across_authenticated_session_refresh(_rpc_ru
     runtime_id, _manager, replay = _rpc_runtime
     request_id = _uuid()
     operation_id = _uuid()
-    credential = _credential("L" * 43)
     first = _envelope(
         runtime_id,
         request_id=request_id,
         session_token="A" * 43,
-        credentials=[credential],
     )
     first["operation"]["task_id"] = operation_id
     refreshed = copy.deepcopy(first)
@@ -157,6 +153,8 @@ def test_completed_mutation_replays_across_authenticated_session_refresh(_rpc_ru
     assert initial == repeated
     assert rpc.dispatch_count == 1
     assert replay.status(runtime_id, request_id).status == "completed"
+    entry = replay._entries[(runtime_id, request_id)]
+    assert entry.process_pinned is False
 
 
 @pytest.mark.unit
@@ -165,7 +163,6 @@ def test_generated_operation_is_verified_then_replayed_with_refreshed_signature(
 ):
     runtime_id, _manager, _replay = _rpc_runtime
     request_id = _uuid()
-    credential = _credential("G" * 43)
     params = {
         "code": "doc.addObject('Part::Feature', 'Once')",
         "options": {
@@ -181,7 +178,6 @@ def test_generated_operation_is_verified_then_replayed_with_refreshed_signature(
         session_token="A" * 43,
         method="execute_code",
         params=copy.deepcopy(params),
-        credentials=[credential],
     )
     first["params"]["options"]["operation_signature"] = (
         addon_rpc._generated_execute_signature(
@@ -217,51 +213,13 @@ def test_generated_operation_is_verified_then_replayed_with_refreshed_signature(
 
 
 @pytest.mark.unit
-def test_acquisition_token_is_returned_once_and_never_retained(_rpc_runtime):
-    runtime_id, _manager, replay = _rpc_runtime
-    request_id = _uuid()
-    raw_token = "one-time-acquisition-token-that-must-not-be-cached"
-    payload = _envelope(
-        runtime_id,
-        request_id=request_id,
-        session_token="A" * 43,
-        method="acquire_document_lock",
-        params={
-            "selector": {"document_name": "Model"},
-            "task_description": "one time",
-        },
-        credentials=[],
-    )
-    rpc = _CountingRPC(
-        {
-            "success": True,
-            "credential": {
-                "lease_id": _uuid(),
-                "document_session_uuid": _uuid(),
-                "generation": 1,
-                "token": raw_token,
-            },
-        }
-    )
-
-    initial = rpc.invoke_v2(payload)
-    repeated = rpc.invoke_v2(payload)
-
-    assert initial["result"]["credential"]["token"] == raw_token
-    assert repeated["error"]["code"] == "ACQUISITION_RESULT_NOT_REPLAYABLE"
-    assert rpc.dispatch_count == 1
-    assert raw_token not in repr(replay._entries)
-
-
-@pytest.mark.unit
-def test_post_dispatch_exception_is_process_pinned_and_never_reapplied(monkeypatch):
+def test_post_dispatch_exception_is_process_pinned_and_not_reapplied(monkeypatch):
     runtime_id = _uuid()
     request_id = _uuid()
     now = [1.0]
     replay = RequestReplayCache(
         ttl_seconds=1,
         monotonic=lambda: now[0],
-        owner_has_unresolved_lease=lambda _owner: False,
     )
     monkeypatch.setattr(addon_rpc, "rpc_session_manager", _SessionManager(runtime_id))
     monkeypatch.setattr(addon_rpc, "rpc_request_replay_cache", replay)
@@ -269,8 +227,7 @@ def test_post_dispatch_exception_is_process_pinned_and_never_reapplied(monkeypat
         addon_rpc, "rpc_inflight_request_registry", InflightRequestRegistry()
     )
     monkeypatch.setattr(addon_rpc, "rpc_server_runtime_id", _uuid())
-    monkeypatch.setattr(addon_rpc, "document_lease_service", None)
-    document_lock.set_request_identity(instance_id=runtime_id)
+    request_identity.set_request_identity(instance_id=runtime_id)
     rpc = _CountingRPC(error=RuntimeError("escaped after dispatch"))
     payload = _envelope(
         runtime_id,
@@ -283,7 +240,7 @@ def test_post_dispatch_exception_is_process_pinned_and_never_reapplied(monkeypat
         assert replay.prune() == 0
         second = rpc.invoke_v2(payload)
     finally:
-        document_lock.clear_request_identity()
+        request_identity.clear_request_identity()
 
     assert first["error"]["code"] == "REQUEST_OUTCOME_UNCERTAIN"
     assert second["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
@@ -307,7 +264,7 @@ def test_post_dispatch_exception_is_process_pinned_and_never_reapplied(monkeypat
         },
     ],
 )
-def test_normal_uncertain_result_is_process_pinned_without_owner(
+def test_native_uncertain_result_is_process_pinned_and_not_reapplied(
     monkeypatch, uncertain_result
 ):
     runtime_id = _uuid()
@@ -316,7 +273,6 @@ def test_normal_uncertain_result_is_process_pinned_without_owner(
     replay = RequestReplayCache(
         ttl_seconds=1,
         monotonic=lambda: now[0],
-        owner_has_unresolved_lease=lambda _owner: False,
     )
     monkeypatch.setattr(addon_rpc, "rpc_session_manager", _SessionManager(runtime_id))
     monkeypatch.setattr(addon_rpc, "rpc_request_replay_cache", replay)
@@ -324,8 +280,7 @@ def test_normal_uncertain_result_is_process_pinned_without_owner(
         addon_rpc, "rpc_inflight_request_registry", InflightRequestRegistry()
     )
     monkeypatch.setattr(addon_rpc, "rpc_server_runtime_id", _uuid())
-    monkeypatch.setattr(addon_rpc, "document_lease_service", None)
-    document_lock.set_request_identity(instance_id=runtime_id)
+    request_identity.set_request_identity(instance_id=runtime_id)
     rpc = _CountingRPC(uncertain_result)
     payload = _envelope(
         runtime_id,
@@ -338,7 +293,7 @@ def test_normal_uncertain_result_is_process_pinned_without_owner(
         assert replay.prune() == 0
         repeated = rpc.invoke_v2(payload)
     finally:
-        document_lock.clear_request_identity()
+        request_identity.clear_request_identity()
 
     assert first["ok"] is False
     assert repeated["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
