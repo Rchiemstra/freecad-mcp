@@ -3,7 +3,6 @@
 # captured states to produce a text-only diff when a viewable image can't be
 # returned. Read-only; returns JSON.
 import json as _i10_json
-import math as _i10_math
 
 _names = $object_names
 
@@ -16,10 +15,8 @@ def _v(_x):
 
 def _rot(_r):
     try:
-        # FreeCAD Rotation.Angle is radians; public angle_deg is degrees.
-        return {'x': round(float(_r.Axis.x), 6), 'y': round(float(_r.Axis.y), 6),
-                'z': round(float(_r.Axis.z), 6),
-                'angle_deg': round(float(_r.Angle) * (180.0 / _i10_math.pi), 6)}
+        return {'x': round(float(_r.x), 6), 'y': round(float(_r.y), 6),
+                'z': round(float(_r.z), 6), 'angle_deg': round(float(_r.Angle), 6)}
     except Exception:
         return None
 

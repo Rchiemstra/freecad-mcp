@@ -46,7 +46,9 @@ def _is_eligible_target(filename: str) -> bool:
         if pattern in name_lower:
             return False
     parts = {p.lower() for p in path.parts}
-    return not parts & {"fc_recovery_files", "recovery", "autosave", "snapshots", "snapshot"}
+    if parts & {"fc_recovery_files", "recovery", "autosave", "snapshots", "snapshot"}:
+        return False
+    return True
 
 
 def _find_freecad_git() -> list[str]:
@@ -85,7 +87,7 @@ def export_sidecar_after_save(filename: str) -> dict[str, Any]:
 
     sidecar = f"{filename}.git.json"
     try:
-        cmd = [*_find_freecad_git(), filename]
+        cmd = _find_freecad_git() + [filename]
         proc = subprocess.run(
             cmd,
             capture_output=True,

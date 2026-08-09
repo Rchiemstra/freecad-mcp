@@ -1,1 +1,0 @@
-"""FreeCADRPC façade binding helpers."""

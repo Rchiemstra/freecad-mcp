@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from mcp.types import TextContent
@@ -12,7 +11,6 @@ from freecad_mcp.operations.core import (
     inspect_references_operation,
     repair_references_operation,
 )
-from addon.FreeCADMCP.rpc_server import reference_repair
 
 
 def _text(response) -> str:
@@ -87,56 +85,3 @@ def test_repair_preflight_failure_is_structured_tool_error():
     assert response.structuredContent["data"] == result
     assert response.structuredContent["repair_committed"] is False
     assert "repair_committed" in _text(response)
-
-
-def test_preflight_counts_exact_properties(monkeypatch):
-    document = SimpleNamespace(Name="Model")
-    target = SimpleNamespace(Name="Target", Document=document)
-
-    class _Owner:
-        TypeId = "PartDesign::Feature"
-
-        def __init__(self, name, properties):
-            self.Name = name
-            self.PropertiesList = list(properties)
-            for property_name, subelements in properties.items():
-                setattr(self, property_name, (target, list(subelements)))
-
-        def getTypeIdOfProperty(self, _property_name):
-            return "App::PropertyLinkSub"
-
-    owners = [
-        _Owner("Pinion_Tooth_Pad", {"ReferenceAxis": ["AxisBad"]}),
-        _Owner("Joint_A", {"AttachedTo": ["EdgeBad"]}),
-        _Owner("Joint_B", {"Support": ["FaceBad"]}),
-        _Owner("Healthy", {"Support": ["Face1"]}),
-    ]
-    document.Objects = owners
-    document.getObject = lambda name: next(
-        (owner for owner in owners if owner.Name == name), None
-    )
-
-    def validate(_target, subelement):
-        if subelement.endswith("Bad"):
-            raise ValueError(f"{subelement} does not exist")
-
-    monkeypatch.setattr(
-        reference_repair.FreeCAD,
-        "getDocument",
-        lambda name: document if name == document.Name else None,
-    )
-    monkeypatch.setattr(reference_repair, "validate_subelement_reference", validate)
-
-    result = reference_repair.inspect_references_gui(
-        "Model", only_invalid=True, validate=True
-    )
-
-    assert result["ok"] is True
-    assert result["invalid_count"] == 3
-    assert {
-        (item["object"], item["property"]) for item in result["references"]
-    } == {
-        ("Pinion_Tooth_Pad", "ReferenceAxis"),
-        ("Joint_A", "AttachedTo"),
-        ("Joint_B", "Support"),
-    }

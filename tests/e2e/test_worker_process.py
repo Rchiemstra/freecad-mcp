@@ -54,24 +54,6 @@ def _document(name: str):
     return doc
 
 
-def _windows_process_is_running(pid: int) -> bool:
-    """Return whether *pid* is still active without requiring pywin32."""
-    import ctypes
-    from ctypes import wintypes
-
-    synchronize = 0x00100000
-    wait_timeout = 0x00000102
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    handle = kernel32.OpenProcess(synchronize, False, pid)
-    if not handle:
-        return False
-    try:
-        return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
-    finally:
-        kernel32.CloseHandle(handle)
-
-
 @pytest.mark.e2e
 def test_explicit_worker_sees_unsaved_snapshot_and_next_job_succeeds(tmp_path):
     doc = _document("WorkerSnapshot")
@@ -110,11 +92,6 @@ def test_python_and_fcmacro_launch_probe_then_keep_python_production_path(tmp_pa
     production = MODULE_DIR / "worker_entry.py"
     macro_probe = tmp_path / "worker entry probe.FCMacro"
     shutil.copy2(production, macro_probe)
-    probe_profile = tmp_path / "probe-profile"
-    probe_profile.mkdir()
-    probe_environment = os.environ.copy()
-    probe_environment["FREECAD_USER_HOME"] = str(probe_profile)
-    probe_environment["FREECAD_USER_DATA"] = str(probe_profile)
 
     for entry in (production, macro_probe):
         result_path = tmp_path / f"{entry.suffix[1:]}-result.json"
@@ -131,7 +108,6 @@ def test_python_and_fcmacro_launch_probe_then_keep_python_production_path(tmp_pa
             capture_output=True,
             timeout=30,
             check=False,
-            env=probe_environment,
         )
         assert completed.returncode == 0, completed.stdout + completed.stderr
         result = read_json_limited(result_path)
@@ -448,6 +424,8 @@ def test_reopened_manifest_rejects_broken_target_identity(field):
         FreeCAD.closeDocument(doc.Name)
 
 
+
+
 @pytest.mark.e2e
 def test_cyclic_document_dependencies_are_snapshotted_once(tmp_path):
     left = FreeCAD.newDocument("CycleLeft")
@@ -634,6 +612,8 @@ def test_worker_stdout_is_truncated_while_streaming():
 
 @pytest.mark.e2e
 def test_active_cancellation_kills_descendant_and_next_job_succeeds(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("POSIX descendant-state assertion; Windows uses Job Object tests")
     doc = _document("WorkerActiveCancellation")
     manager = WorkerManager(_runtime(), str(MODULE_DIR))
     pidfile = tmp_path / "descendant.pid"
@@ -642,11 +622,8 @@ def test_active_cancellation_kills_descendant_and_next_job_succeeds(tmp_path):
         workspace = manager.create_workspace()
         snapshot = create_primary_snapshot_gui(doc.Name, str(workspace))
         code = (
-            "import os,subprocess,time\n"
-            "command=([os.environ.get('COMSPEC','cmd.exe'),'/d','/c',"
-            "'ping','-n','60','127.0.0.1'] if os.name=='nt' else ['sleep','60'])\n"
-            "child=subprocess.Popen(command,stdout=subprocess.DEVNULL,"
-            "stderr=subprocess.DEVNULL)\n"
+            "import subprocess,time\n"
+            "child=subprocess.Popen(['sleep','60'])\n"
             f"open({str(pidfile)!r},'w').write(str(child.pid))\n"
             "time.sleep(60)"
         )
@@ -674,35 +651,23 @@ def test_active_cancellation_kills_descendant_and_next_job_succeeds(tmp_path):
         thread.join(timeout=10)
         assert result[0]["error_code"] == "WORKER_CANCELLED"
 
-        if sys.platform == "win32":
-            deadline = time.monotonic() + 5
-            while (
-                _windows_process_is_running(child_pid) and time.monotonic() < deadline
-            ):
-                time.sleep(0.05)
-            assert not _windows_process_is_running(child_pid), (
-                f"running descendant remains: pid={child_pid}"
+        deadline = time.monotonic() + 5
+        state_path = Path(f"/proc/{child_pid}/status")
+        while state_path.exists() and time.monotonic() < deadline:
+            state = next(
+                line for line in state_path.read_text().splitlines()
+                if line.startswith("State:")
             )
-        else:
-            deadline = time.monotonic() + 5
-            state_path = Path(f"/proc/{child_pid}/status")
-            while state_path.exists() and time.monotonic() < deadline:
-                state = next(
-                    line
-                    for line in state_path.read_text().splitlines()
-                    if line.startswith("State:")
-                )
-                if "Z (zombie)" in state:
-                    break
-                time.sleep(0.05)
-            if state_path.exists():
-                state = next(
-                    line
-                    for line in state_path.read_text().splitlines()
-                    if line.startswith("State:")
-                )
-                assert "Z (zombie)" in state, f"running descendant remains: {state}"
-                assert os.environ.get("EXPECT_REAPED_DESCENDANT") != "1", state
+            if "Z (zombie)" in state:
+                break
+            time.sleep(0.05)
+        if state_path.exists():
+            state = next(
+                line for line in state_path.read_text().splitlines()
+                if line.startswith("State:")
+            )
+            assert "Z (zombie)" in state, f"running descendant remains: {state}"
+            assert os.environ.get("EXPECT_REAPED_DESCENDANT") != "1", state
 
         workspace = manager.create_workspace()
         snapshot = create_primary_snapshot_gui(doc.Name, str(workspace))

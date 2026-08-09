@@ -18,9 +18,6 @@ and do not make arbitrary code inside FreeCAD trustworthy.
   while the request fingerprint remains authoritative.
 - Raw lease tokens remain in MCP/addon memory. Only SHA-256 fingerprints enter
   sidecars; public status and logs omit both token and fingerprint.
-  Unacknowledged acquisition claims remain pinned until acknowledgement or
-  exact credential use. The vault's configured capacity is soft; it neither
-  evicts nor rejects an unresolved raw credential.
 - Task descriptions remain process-local by default. Sidecars contain an empty
   task summary unless `persist_task_summary_in_sidecar=true` explicitly opts
   into a sanitized, single-line, 256-character diagnostic summary.
@@ -30,8 +27,7 @@ and do not make arbitrary code inside FreeCAD trustworthy.
   Registry/sidecar disagreement blocks instead of selecting the more
   permissive state.
 - Dirty, uncertain, stale, malformed, and save-failed states remain visible and
-  fenced until credentialed reconciliation, guarded evidence-based authority
-  rotation, or explicit local recovery.
+  locked until explicitly resolved.
 
 ## Non-goals and residual risk
 
@@ -45,17 +41,8 @@ and do not make arbitrary code inside FreeCAD trustworthy.
 - Sidecars cannot discover every hardlink alias on every host. Canonical paths
   and filesystem identities reduce this risk.
 - FreeCAD mutation and filesystem metadata cannot form one atomic transaction.
-  Guarded orphan handoff CAS-publishes the sidecar, verifies exact core-fence
-  read-back before releasing a credential, and logically restores prior
-  authority on mismatch. A post-publication sidecar error uses an exact guarded
-  read when available; if the read itself fails after a known successful
-  `os.replace` or atomic no-replace `os.link`, core handoff and token escrow
-  complete with an explicit uncertainty warning instead of stranding
-  credentialless authority. Exact rollback deletion likewise records whether
-  absence was observed under the guard. A readable mismatch or
-  incomplete/uncertain rollback preserves the recovery snapshot. Crash
-  handling therefore prefers a recoverable leftover lock over an unsafe
-  unlocked interval.
+  Crash handling therefore prefers leftover locks over an unsafe unlocked
+  interval.
 
 ## Secret and transport handling
 
@@ -64,16 +51,10 @@ and do not make arbitrary code inside FreeCAD trustworthy.
 on Windows. The manifest and Cursor configuration contain only its path. Never
 paste, log, commit, or copy the secret into an MCP argument value.
 
-HMAC authenticates but does not encrypt the RPC transport. The live endpoint is
-JSON-RPC 2.0 at `/jsonrpc`, and every request and response negotiates
-`X-FreeCAD-MCP-Protocol: jsonrpc-2.0`. The retired `/RPC2` and `/` routes return a
-bounded HTTP 410 deprecation response directing callers to `/jsonrpc`; they do
-not authenticate or dispatch an RPC method. Loopback is the default and
-recommended deployment. A nonempty, unsupported protocol header is rejected
-before dispatch with HTTP 409 and JSON-RPC error `-32005`. A remote connection
-must use an SSH tunnel or TLS
-proxy, a narrow IP/CIDR allowlist, and a separately protected secret.
-Plain non-loopback RPC exposes session and lease credentials to network observers.
+HMAC authenticates but does not encrypt XML-RPC. Loopback is the default and
+recommended deployment. A remote connection must use an SSH tunnel or TLS
+proxy, a narrow IP/CIDR allowlist, and a separately protected secret. Plain
+non-loopback XML-RPC exposes session and lease credentials to network observers.
 Accordingly, `document_lease_mode=enforce` rejects a non-loopback addon bind
 unless `allow_authenticated_remote_without_transport_security=true` is set by
 an administrator as an explicit unsafe override. The ordinary GUI remote toggle

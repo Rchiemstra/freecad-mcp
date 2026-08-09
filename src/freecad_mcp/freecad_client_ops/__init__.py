@@ -1,1 +1,0 @@
-"""FreeCAD client ops package."""

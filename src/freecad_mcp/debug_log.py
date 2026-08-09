@@ -167,20 +167,14 @@ def _legacy_redact_payload(payload: Any, *, secrets: Iterable[str] = ()) -> Any:
     if _REDACT_CODE:
         def _code_sub(m: re.Match[str]) -> str:
             body = m.group(2)
-            return (
-                f'{m.group(1)}<redacted code sha256={_sha256(body)} '
-                f'len={len(body)}>{m.group(3)}'
-            )
+            return f'{m.group(1)}<redacted code sha256={_sha256(body)} len={len(body)}>{m.group(3)}'
 
         redacted = _CODE_FIELD_RE.sub(_code_sub, redacted)
 
     if _REDACT_IMAGES:
         def _img_sub(m: re.Match[str]) -> str:
             body = m.group(2)
-            return (
-                f'{m.group(1)}<redacted image sha256={_sha256(body)} '
-                f'len={len(body)}>{m.group(3)}'
-            )
+            return f'{m.group(1)}<redacted image sha256={_sha256(body)} len={len(body)}>{m.group(3)}'
 
         redacted = _IMAGE_MIME_RE.sub(_img_sub, redacted)
         redacted = _BASE64_RE.sub(

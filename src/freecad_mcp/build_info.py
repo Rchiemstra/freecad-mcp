@@ -9,9 +9,10 @@ explicit ``unknown`` fallback.
 
 from __future__ import annotations
 
-import os
 from importlib import metadata
+import os
 from typing import Any
+
 
 PACKAGE_NAME = "freecad-mcp"
 PROTOCOL_VERSION = 2
@@ -27,19 +28,14 @@ def _installed_version() -> str:
 
 def _generated_metadata() -> dict[str, Any]:
     try:
-        from ._build_metadata import (
-            BUILD_ID,
-            BUILD_TIMESTAMP,
-            GIT_COMMIT,
-            GIT_DIRTY,
-        )
+        from . import _build_metadata
     except ImportError:
         return {}
     return {
-        "git_commit": GIT_COMMIT,
-        "git_dirty": GIT_DIRTY,
-        "build_timestamp": BUILD_TIMESTAMP,
-        "build_id": BUILD_ID,
+        "git_commit": getattr(_build_metadata, "GIT_COMMIT", None),
+        "git_dirty": getattr(_build_metadata, "GIT_DIRTY", None),
+        "build_timestamp": getattr(_build_metadata, "BUILD_TIMESTAMP", None),
+        "build_id": getattr(_build_metadata, "BUILD_ID", None),
     }
 
 

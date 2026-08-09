@@ -52,7 +52,6 @@ The strict schema is produced by `LeaseRecord.to_sidecar_dict()`:
     "mcp_pid": 5678,
     "mcp_process_started_at": "RFC3339Z",
     "hostname": "host",
-    "mcp_hostname": "host",
     "client": "freecad-mcp",
     "agent_id": "agent"
   },
@@ -86,11 +85,6 @@ invalid UUIDs or roles, partial path pairs, equal source/destination comparison
 keys, and a role whose path does not match that sidecar's `document` identity.
 For first save only, the source path pair may be null because no source
 sidecar exists. Older schema-v2 records that omit `migration` remain readable.
-Older schema-v2 records that omit `mcp_hostname` also remain readable, but
-cannot use process-death-based same-runtime recovery because process
-co-location is not proven. The narrowly recognized pre-fix worker-snapshot
-`USER_INTERVENED` case remains recoverable because takeover already revoked its
-credential independently of process liveness.
 
 The raw lease token is never serialized. Public status also omits its
 fingerprint. PIDs and wall-clock values are useful only together with runtime,
@@ -133,10 +127,6 @@ credentials, customer data, or proprietary details in task metadata.
 - Updates read and compare lease ID, generation, fingerprint, and revision
   while holding the guard, write a complete temporary file, flush it, and
   atomically replace the sidecar. Clean release is compare-and-remove.
-- Creation publishes with atomic no-replace linking under the same guard.
-  Creation, replacement, and deletion distinguish pre-publication failure from
-  a post-publication hardening/directory-sync failure and report the latter as
-  typed commit uncertainty with the guarded observed result.
 - Sidecar, guard, and temporary files are owner-only. Symlinks and non-regular
   sidecars are rejected.
 - UNC/network paths are rejected by default because lock and rename semantics

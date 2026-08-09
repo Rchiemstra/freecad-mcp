@@ -134,12 +134,6 @@ Docker may use lowercase `freecadcmd`. The result path is stored inside `job.jso
 
 Jobs and results use schema version 1 and a UUID `job_id`. Jobs contain code, options, snapshot manifest, artifact staging directory, and result path. Results contain status, bounded stdout, session data, structured error/traceback, artifacts, and separate snapshot/worker metrics.
 
-Each worker receives a disposable FreeCAD user profile inside its managed job
-workspace. It inherits the parent runtime environment needed to load the exact
-matching FreeCAD build, but it cannot load addons, debugger hooks, or auto-start
-services from the GUI process's normal profile. The profile is quota-counted and
-removed with the workspace.
-
 ## 10. Snapshot and external-document behavior
 
 Snapshot creation executes on Qt with no pre-snapshot recompute. It records active document; selection as document name, object name, and selected subelement names; filenames; labels; object counts; dependency set; dirty/change indicators; and duration before/after `saveCopy()`. A detected state/dependency change retries once, then returns `snapshot_state_changed`. These indicators are best effort and do not establish global atomicity.

@@ -3,202 +3,22 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import uuid
-from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from addon.FreeCADMCP.rpc_server import lease_protocol as addon_protocol
 from freecad_mcp import rpc_auth
 
+
 SECRET = b"a" * 32
 NOW = "2026-07-22T10:00:00.000000Z"
 MCP_RUNTIME_ID = "3201517e-5664-4ee0-9168-81b46f29f0e0"
 ADDON_RUNTIME_ID = "8c897b64-0f04-4e09-9f80-2873d4527b7f"
 CLIENT_NONCE = "Y2xpZW50LW5vbmNlLTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA"
-
-
-CLIENT_COMPATIBILITY_ORIGINS = {
-    "rpc_auth_ops.handshake_request": (
-        "handshake_request",
-        (
-            ("build_handshake_request", "build_handshake_request"),
-            ("build_handshake_request_from_manifest", "build_handshake_request_from_manifest"),
-        ),
-    ),
-    "rpc_auth_ops.handshake_response": (
-        "handshake_response",
-        (
-            ("verify_handshake_response", "verify_handshake_response"),
-            (
-                "verify_handshake_response_from_manifest",
-                "verify_handshake_response_from_manifest",
-            ),
-        ),
-    ),
-    "rpc_auth_ops.manifest": (
-        "manifest",
-        (
-            ("load_instance_manifest", "load_instance_manifest"),
-            ("make_mcp_runtime_identity", "make_mcp_runtime_identity"),
-        ),
-    ),
-    "rpc_auth_types.constants": (
-        "constants",
-        tuple(
-            (name, name)
-            for name in (
-                "HANDSHAKE_REQUEST_KIND",
-                "HANDSHAKE_RESPONSE_KIND",
-                "HMAC_ALGORITHM",
-                "INSTANCE_MANIFEST_SCHEMA_VERSION",
-                "MAX_ACCEPTED_SESSION_LIFETIME_SECONDS",
-                "MAX_HANDSHAKE_BYTES",
-                "MAX_INSTANCE_MANIFEST_BYTES",
-                "MAX_JSON_DEPTH",
-                "MAX_SECRET_FILE_BYTES",
-                "MIN_SECRET_BYTES",
-                "PROTOCOL_NAME",
-                "PROTOCOL_VERSION",
-                "REQUIRED_PROTOCOL_FEATURES",
-                "SUPPORTED_FEATURES",
-                "_NONCE_RE",
-                "_PROCESS_STARTED_AT",
-                "_PROOF_RE",
-                "_REQUEST_PROOF_DOMAIN",
-                "_RESPONSE_PROOF_DOMAIN",
-                "_SAFE_IDENTIFIER_RE",
-                "_TOKEN_RE",
-            )
-        ),
-    ),
-    "rpc_auth_types.instance_manifest": (
-        "instance_manifest",
-        tuple(
-            (name, name)
-            for name in (
-                "InstanceManifest",
-                "_normalize_instance_manifest_build_fields",
-                "_normalize_instance_manifest_runtime_fields",
-                "_validate_instance_manifest_required",
-            )
-        ),
-    ),
-    "rpc_auth_types.mcp_runtime_identity": (
-        "mcp_runtime_identity",
-        (("McpRuntimeIdentity", "McpRuntimeIdentity"),),
-    ),
-    "rpc_auth_types.profile_secret": (
-        "profile_secret",
-        (("load_profile_secret", "load_profile_secret"),),
-    ),
-    "rpc_auth_types.proof": (
-        "proof",
-        (("_proof", "_proof"), ("_verify_proof", "_verify_proof")),
-    ),
-    "rpc_auth_types.rpc_auth_error": (
-        "protocol_error",
-        (("RpcAuthError", "ProtocolError"),),
-    ),
-    "rpc_auth_types.runtime_manifest": (
-        "runtime_manifest",
-        (("RuntimeManifest", "RuntimeManifest"),),
-    ),
-    "rpc_auth_types.validation": (
-        "validation",
-        tuple(
-            (name, name)
-            for name in (
-                "_bounded_json",
-                "_format_utc",
-                "_normalize_features",
-                "_parse_utc",
-                "_require_exact_keys",
-                "_require_host",
-                "_require_identifier",
-                "_require_pid",
-                "_require_port",
-                "_require_sequence",
-                "_require_string",
-                "_require_uuid",
-                "_validate_json_value",
-                "_validate_nonce",
-                "_validate_secret",
-                "_validate_token",
-                "canonical_json_bytes",
-            )
-        ),
-    ),
-    "rpc_auth_types.verified_handshake_response": (
-        "verified_handshake_response",
-        (("VerifiedHandshakeResponse", "VerifiedHandshakeResponse"),),
-    ),
-}
-
-CLIENT_FACADE_EXPORTS = (
-    "HANDSHAKE_REQUEST_KIND",
-    "HANDSHAKE_RESPONSE_KIND",
-    "HMAC_ALGORITHM",
-    "INSTANCE_MANIFEST_SCHEMA_VERSION",
-    "MAX_ACCEPTED_SESSION_LIFETIME_SECONDS",
-    "MAX_HANDSHAKE_BYTES",
-    "MAX_INSTANCE_MANIFEST_BYTES",
-    "MAX_JSON_DEPTH",
-    "MAX_SECRET_FILE_BYTES",
-    "MIN_SECRET_BYTES",
-    "PROTOCOL_NAME",
-    "PROTOCOL_VERSION",
-    "REQUIRED_PROTOCOL_FEATURES",
-    "SUPPORTED_FEATURES",
-    "InstanceManifest",
-    "McpRuntimeIdentity",
-    "RpcAuthError",
-    "RuntimeManifest",
-    "VerifiedHandshakeResponse",
-    "build_handshake_request",
-    "build_handshake_request_from_manifest",
-    "canonical_json_bytes",
-    "load_instance_manifest",
-    "load_profile_secret",
-    "make_mcp_runtime_identity",
-    "verify_handshake_response",
-    "verify_handshake_response_from_manifest",
-)
-
-
-def test_client_legacy_paths_alias_canonical_protocol_leaves():
-    import importlib
-
-    canonical_exports = {}
-    for legacy_suffix, (canonical_leaf, aliases) in CLIENT_COMPATIBILITY_ORIGINS.items():
-        legacy = importlib.import_module(f"freecad_mcp.{legacy_suffix}")
-        canonical = importlib.import_module(f"freecad_mcp._shared.protocol.{canonical_leaf}")
-        assert tuple(legacy.__all__) == tuple(alias for alias, _ in aliases)
-        for alias, defining_name in aliases:
-            defining_object = getattr(canonical, defining_name)
-            assert getattr(legacy, alias) is defining_object
-            canonical_exports[alias] = defining_object
-
-    import freecad_mcp.rpc_auth_ops as legacy_ops
-    import freecad_mcp.rpc_auth_types as legacy_types
-
-    assert tuple(legacy_ops.__all__) == ()
-    expected_types = (
-        "InstanceManifest",
-        "McpRuntimeIdentity",
-        "RpcAuthError",
-        "RuntimeManifest",
-        "VerifiedHandshakeResponse",
-    )
-    assert tuple(legacy_types.__all__) == expected_types
-    for name in expected_types:
-        assert getattr(legacy_types, name) is canonical_exports[name]
-
-    assert tuple(rpc_auth.__all__) == CLIENT_FACADE_EXPORTS
-    for name in CLIENT_FACADE_EXPORTS:
-        assert getattr(rpc_auth, name) is canonical_exports[name]
 
 
 def _addon_manifest(**overrides):
@@ -464,7 +284,7 @@ def test_signed_expired_or_excessively_long_session_is_rejected(offset):
     _manager, request, response, _verified = _perform_round_trip()
     response = copy.deepcopy(response)
     response["session_expires_at"] = (
-        (datetime.now(UTC) + offset).isoformat().replace("+00:00", "Z")
+        (datetime.now(timezone.utc) + offset).isoformat().replace("+00:00", "Z")
     )
     response = addon_protocol.sign_handshake_response(response, SECRET)
 

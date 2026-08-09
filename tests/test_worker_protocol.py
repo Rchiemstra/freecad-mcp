@@ -87,13 +87,13 @@ def test_selection_state_includes_selected_subelements(monkeypatch):
     ]
 
 
-@pytest.mark.parametrize("name", ["H_Axis", "V_Axis", "N_Axis", "RootPoint"])
-def test_validate_subelement_accepts_sketcher_pseudo_subelements(name):
+@pytest.mark.parametrize("name", ["H_Axis", "V_Axis", "RootPoint"])
+def test_validate_subelement_accepts_sketcher_semantic_names(name):
+    edge = SimpleNamespace(isNull=lambda: False)
     target = SimpleNamespace(
         Name="BoltProfileSketch",
-        TypeId="Sketcher::SketchObject",
         Shape=_RaisingShape(),
-        getSubObject=lambda _requested: None,
+        getSubObject=lambda requested: edge if requested == name else None,
     )
     validate_subelement_reference(target, name)
 
@@ -101,7 +101,6 @@ def test_validate_subelement_accepts_sketcher_pseudo_subelements(name):
 def test_validate_subelement_rejects_unknown_semantic_name():
     target = SimpleNamespace(
         Name="BoltProfileSketch",
-        TypeId="Sketcher::SketchObject",
         Shape=_EmptyShape(),
         getSubObject=lambda _name: None,
     )

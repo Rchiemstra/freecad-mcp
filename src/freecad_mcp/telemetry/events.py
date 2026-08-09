@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import time
-from collections.abc import Mapping
-from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Mapping
 
 from ..build_info import event_schema_version
 from .context import get_context
+
 
 EVENT_NAMES = frozenset(
     {
@@ -55,7 +55,7 @@ EVENT_NAMES = frozenset(
 
 def utc_timestamp() -> str:
     return (
-        datetime.now(UTC)
+        datetime.now(timezone.utc)
         .isoformat(timespec="microseconds")
         .replace("+00:00", "Z")
     )

@@ -1,1 +1,0 @@
-"""Sketch capability fixture."""

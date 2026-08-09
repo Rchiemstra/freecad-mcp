@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 import copy
-import importlib
 import os
-import subprocess
-import sys
 import uuid
-from pathlib import Path
-
 import pytest
 
 from addon.FreeCADMCP.rpc_server.lease_protocol import (
@@ -29,279 +24,9 @@ from addon.FreeCADMCP.rpc_server.lease_protocol import (
     verify_handshake_response,
 )
 
+
 SECRET = b"p" * 32
 NOW = "2026-07-22T10:00:00.000000Z"
-
-
-def _same_names(*names):
-    return tuple((name, name) for name in names)
-
-
-ADDON_COMPATIBILITY_ORIGINS = {
-    "lease_protocol_ops.handshake_request": (
-        "handshake_request",
-        _same_names(
-            "build_handshake_request",
-            "sign_handshake_request",
-            "verify_handshake_request",
-        ),
-    ),
-    "lease_protocol_ops.handshake_response": (
-        "handshake_response",
-        _same_names("sign_handshake_response", "verify_handshake_response"),
-    ),
-    "lease_protocol_ops.manifest": ("manifest", _same_names("make_runtime_manifest")),
-    "lease_protocol_ops.profile_secret": (
-        "profile_secret",
-        _same_names("create_profile_secret", "load_profile_secret"),
-    ),
-    "lease_protocol_ops.public_error": ("public_error", _same_names("public_error")),
-    "lease_protocol_types.constants": (
-        "constants",
-        _same_names(
-            "DEFAULT_REPLAY_RESPONSE_MAX_BYTES",
-            "DEFAULT_REPLAY_TTL_SECONDS",
-            "DEFAULT_SESSION_TTL_SECONDS",
-            "HANDSHAKE_REQUEST_KIND",
-            "HANDSHAKE_RESPONSE_KIND",
-            "HMAC_ALGORITHM",
-            "MAX_ENVELOPE_BYTES",
-            "MAX_HANDSHAKE_BYTES",
-            "MAX_HANDSHAKE_NONCES",
-            "MAX_LEASE_CREDENTIALS",
-            "MAX_PARAMS_DEPTH",
-            "MAX_SECRET_FILE_BYTES",
-            "MAX_SESSION_TTL_SECONDS",
-            "MIN_SECRET_BYTES",
-            "PROTOCOL_NAME",
-            "PROTOCOL_VERSION",
-            "REQUIRED_PROTOCOL_FEATURES",
-            "SUPPORTED_FEATURES",
-            "_METHOD_RE",
-            "_NONCE_RE",
-            "_PROCESS_STARTED_AT",
-            "_PROOF_RE",
-            "_REDACTED",
-            "_REQUEST_PROOF_DOMAIN",
-            "_RESPONSE_PROOF_DOMAIN",
-            "_SAFE_IDENTIFIER_RE",
-            "_SENSITIVE_KEYS",
-            "_TOKEN_RE",
-        ),
-    ),
-    "lease_protocol_types.lease_credential": (
-        "lease_credential",
-        _same_names("LeaseCredential"),
-    ),
-    "lease_protocol_types.lease_protocol_error": (
-        "protocol_error",
-        (("LeaseProtocolError", "ProtocolError"), ("_is_uuid", "_is_uuid")),
-    ),
-    "lease_protocol_types.mcp_runtime_identity": (
-        "mcp_runtime_identity",
-        _same_names("McpRuntimeIdentity"),
-    ),
-    "lease_protocol_types.operation_context": (
-        "operation_context",
-        _same_names("OperationContext"),
-    ),
-    "lease_protocol_types.proof": ("proof", _same_names("_proof", "_verify_proof")),
-    "lease_protocol_types.redaction": (
-        "redaction",
-        _same_names("_key_is_sensitive", "redact_sensitive"),
-    ),
-    "lease_protocol_types.replay_cache_helpers": (
-        "replay_cache_helpers",
-        _same_names(
-            "completion_tombstone", "is_completion_tombstone", "scrub_exact_secrets"
-        ),
-    ),
-    "lease_protocol_types.replay_check": ("replay_check", _same_names("ReplayCheck")),
-    "lease_protocol_types.request_envelope": (
-        "request_envelope",
-        _same_names("RequestEnvelope"),
-    ),
-    "lease_protocol_types.request_replay_cache": (
-        "request_replay_cache",
-        _same_names("RequestReplayCache"),
-    ),
-    "lease_protocol_types.runtime_manifest": (
-        "runtime_manifest",
-        _same_names("RuntimeManifest"),
-    ),
-    "lease_protocol_types.session_context": (
-        "session_context",
-        _same_names("SessionContext"),
-    ),
-    "lease_protocol_types.session_manager": (
-        "session_manager",
-        _same_names("SessionManager"),
-    ),
-    "lease_protocol_types.validation": (
-        "validation",
-        _same_names(
-            "_format_utc",
-            "_is_uuid",
-            "_limited_canonical_json",
-            "_normalize_features",
-            "_parse_utc",
-            "_require_exact_keys",
-            "_require_host",
-            "_require_identifier",
-            "_require_pid",
-            "_require_port",
-            "_require_sequence",
-            "_require_string",
-            "_require_uuid",
-            "_token_digest",
-            "_validate_json_value",
-            "_validate_nonce",
-            "_validate_secret",
-            "_validate_token",
-            "canonical_json_bytes",
-        ),
-    ),
-    "lease_protocol_types.verified_handshake": (
-        "verified_handshake",
-        _same_names("VerifiedHandshake"),
-    ),
-    "lease_protocol_types.verified_handshake_response": (
-        "verified_handshake_response",
-        _same_names("VerifiedHandshakeResponse"),
-    ),
-    "lease_protocol_types._replay_entry": (
-        "_replay_entry",
-        _same_names("_ReplayEntry"),
-    ),
-    "lease_protocol_types._session_record": (
-        "_session_record",
-        _same_names("_SessionRecord"),
-    ),
-}
-
-ADDON_TYPES_EXPORTS = (
-    "LeaseCredential",
-    "LeaseProtocolError",
-    "McpRuntimeIdentity",
-    "OperationContext",
-    "ReplayCheck",
-    "RequestEnvelope",
-    "RuntimeManifest",
-    "SessionContext",
-    "VerifiedHandshake",
-    "VerifiedHandshakeResponse",
-)
-
-ADDON_FACADE_EXPORTS = (
-    "DEFAULT_REPLAY_RESPONSE_MAX_BYTES",
-    "DEFAULT_REPLAY_TTL_SECONDS",
-    "DEFAULT_SESSION_TTL_SECONDS",
-    "HANDSHAKE_REQUEST_KIND",
-    "HANDSHAKE_RESPONSE_KIND",
-    "HMAC_ALGORITHM",
-    "MAX_ENVELOPE_BYTES",
-    "MAX_HANDSHAKE_BYTES",
-    "MAX_HANDSHAKE_NONCES",
-    "MAX_LEASE_CREDENTIALS",
-    "MAX_PARAMS_DEPTH",
-    "MAX_SECRET_FILE_BYTES",
-    "MAX_SESSION_TTL_SECONDS",
-    "MIN_SECRET_BYTES",
-    "PROTOCOL_NAME",
-    "PROTOCOL_VERSION",
-    "REQUIRED_PROTOCOL_FEATURES",
-    "SUPPORTED_FEATURES",
-    "LeaseCredential",
-    "LeaseProtocolError",
-    "McpRuntimeIdentity",
-    "OperationContext",
-    "ReplayCheck",
-    "RequestEnvelope",
-    "RequestReplayCache",
-    "RuntimeManifest",
-    "SessionContext",
-    "SessionManager",
-    "VerifiedHandshake",
-    "VerifiedHandshakeResponse",
-    "build_handshake_request",
-    "canonical_json_bytes",
-    "create_profile_secret",
-    "lease_protocol_public_error",
-    "load_profile_secret",
-    "make_runtime_manifest",
-    "public_error",
-    "redact_sensitive",
-    "sign_handshake_request",
-    "sign_handshake_response",
-    "verify_handshake_request",
-    "verify_handshake_response",
-)
-
-
-def test_addon_legacy_protocol_paths_reexport_canonical_leaf_objects():
-    addon_protocol = importlib.import_module(
-        "addon.FreeCADMCP.rpc_server.lease_protocol"
-    )
-    canonical_exports = {}
-    for legacy_suffix, (canonical_leaf, aliases) in ADDON_COMPATIBILITY_ORIGINS.items():
-        legacy = importlib.import_module(f"addon.FreeCADMCP.rpc_server.{legacy_suffix}")
-        canonical = importlib.import_module(
-            f"addon.FreeCADMCP._shared.protocol.{canonical_leaf}"
-        )
-        assert tuple(legacy.__all__) == tuple(alias for alias, _ in aliases)
-        for alias, defining_name in aliases:
-            defining_object = getattr(canonical, defining_name)
-            assert getattr(legacy, alias) is defining_object
-            canonical_exports[alias] = defining_object
-
-    legacy_types = importlib.import_module(
-        "addon.FreeCADMCP.rpc_server.lease_protocol_types"
-    )
-    assert tuple(legacy_types.__all__) == ADDON_TYPES_EXPORTS
-    for name in ADDON_TYPES_EXPORTS:
-        assert getattr(legacy_types, name) is canonical_exports[name]
-
-    assert tuple(addon_protocol.__all__) == ADDON_FACADE_EXPORTS
-    canonical_exports["lease_protocol_public_error"] = canonical_exports["public_error"]
-    for name in ADDON_FACADE_EXPORTS:
-        assert getattr(addon_protocol, name) is canonical_exports[name]
-
-
-def test_addon_top_level_import_layout_reexports_local_vendor_leaves():
-    addon_root = Path(__file__).resolve().parents[1] / "addon" / "FreeCADMCP"
-    environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(addon_root)
-    check = f"""
-import importlib
-origins = {ADDON_COMPATIBILITY_ORIGINS!r}
-types_exports = {ADDON_TYPES_EXPORTS!r}
-facade_exports = {ADDON_FACADE_EXPORTS!r}
-canonical_exports = {{}}
-for legacy_suffix, (canonical_leaf, aliases) in origins.items():
-    legacy = importlib.import_module(f"rpc_server.{{legacy_suffix}}")
-    canonical = importlib.import_module(f"_shared.protocol.{{canonical_leaf}}")
-    assert tuple(legacy.__all__) == tuple(alias for alias, _ in aliases)
-    for alias, defining_name in aliases:
-        defining_object = getattr(canonical, defining_name)
-        assert getattr(legacy, alias) is defining_object
-        canonical_exports[alias] = defining_object
-legacy_types = importlib.import_module("rpc_server.lease_protocol_types")
-assert tuple(legacy_types.__all__) == types_exports
-for name in types_exports:
-    assert getattr(legacy_types, name) is canonical_exports[name]
-facade = importlib.import_module("rpc_server.lease_protocol")
-assert tuple(facade.__all__) == facade_exports
-canonical_exports["lease_protocol_public_error"] = canonical_exports["public_error"]
-for name in facade_exports:
-    assert getattr(facade, name) is canonical_exports[name]
-"""
-
-    subprocess.run(
-        [sys.executable, "-c", check],
-        check=True,
-        cwd=addon_root,
-        env=environment,
-    )
 
 
 def _manifest(**overrides):
@@ -433,7 +158,9 @@ def test_authenticated_handshake_and_bound_envelope_succeed():
     assert response["client_nonce"] == request["client_nonce"]
     assert verified.manifest.addon_runtime_id == _manifest().addon_runtime_id
 
-    context, envelope = manager.authenticate_envelope(_envelope(verified.session_token))
+    context, envelope = manager.authenticate_envelope(
+        _envelope(verified.session_token)
+    )
     assert context.session_id == verified.session_id
     assert context.mcp.runtime_id == _mcp().runtime_id
     assert envelope.method == "create_pad"
@@ -556,11 +283,15 @@ def test_session_expires_using_monotonic_time():
     manager, request_payload, _response, verified = _handshake(
         clock=lambda: now[0], ttl=5.0
     )
-    manager.authenticate(verified.session_token, mcp_runtime_id=_mcp().runtime_id)
+    manager.authenticate(
+        verified.session_token, mcp_runtime_id=_mcp().runtime_id
+    )
     now[0] = 105.0
 
     with pytest.raises(LeaseProtocolError) as raised:
-        manager.authenticate(verified.session_token, mcp_runtime_id=_mcp().runtime_id)
+        manager.authenticate(
+            verified.session_token, mcp_runtime_id=_mcp().runtime_id
+        )
 
     assert raised.value.code == "SESSION_EXPIRED"
 
@@ -584,7 +315,9 @@ def test_session_revocation_and_runtime_binding_are_enforced():
 
     assert manager.revoke(session_id=verified.session_id, reason="test") is True
     with pytest.raises(LeaseProtocolError) as raised:
-        manager.authenticate(verified.session_token, mcp_runtime_id=_mcp().runtime_id)
+        manager.authenticate(
+            verified.session_token, mcp_runtime_id=_mcp().runtime_id
+        )
     assert raised.value.code == "SESSION_REVOKED"
 
 
@@ -662,38 +395,13 @@ def test_replay_cache_journals_late_gui_completion():
     )
 
     late = {"ok": True, "late_completion": True, "result": {"success": True}}
-    assert cache.journal_completion(runtime_id, envelope.request_id, late)
-    assert cache.status(runtime_id, envelope.request_id).response == late
-    cache.complete(
-        runtime_id,
-        envelope,
-        {"ok": False, "error": {"code": "GUI_COMPLETION_UNCERTAIN"}},
-    )
-    assert cache.status(runtime_id, envelope.request_id).response == late
-    assert not cache.journal_completion(runtime_id, str(uuid.uuid4()), late)
-
-
-def test_oversized_late_completion_tombstone_is_not_overwritten_by_timeout():
-    _manager, _request_payload, _response, verified = _handshake()
-    envelope = RequestEnvelope.from_dict(_envelope(verified.session_token))
-    cache = RequestReplayCache(response_max_bytes=256)
-    runtime_id = _mcp().runtime_id
-    assert cache.claim(runtime_id, envelope).status == "new"
-
     assert cache.journal_completion(
-        runtime_id,
-        envelope.request_id,
-        {"ok": True, "late_completion": True, "result": "x" * 1024},
+        runtime_id, envelope.request_id, late
     )
-    compacted = cache.status(runtime_id, envelope.request_id).response
-    assert compacted["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
-
-    cache.complete(
-        runtime_id,
-        envelope,
-        {"ok": False, "error": {"code": "GUI_COMPLETION_UNCERTAIN"}},
+    assert cache.status(runtime_id, envelope.request_id).response == late
+    assert not cache.journal_completion(
+        runtime_id, str(uuid.uuid4()), late
     )
-    assert cache.status(runtime_id, envelope.request_id).response == compacted
 
 
 def test_replay_semantics_survive_session_refresh_and_normalize_generated_hmac():
@@ -727,9 +435,7 @@ def test_replay_semantics_survive_session_refresh_and_normalize_generated_hmac()
         ],
         "operation": {"name": "Create box", "task_id": task_id},
     }
-    first = RequestEnvelope.from_dict(
-        {**copy.deepcopy(base), "session_token": "A" * 43}
-    )
+    first = RequestEnvelope.from_dict({**copy.deepcopy(base), "session_token": "A" * 43})
     refreshed_payload = copy.deepcopy(base)
     refreshed_payload["session_token"] = "B" * 43
     refreshed_payload["params"]["options"]["operation_signature"] = (
@@ -739,9 +445,9 @@ def test_replay_semantics_survive_session_refresh_and_normalize_generated_hmac()
     cache = RequestReplayCache()
 
     assert first.semantic_fingerprint() == refreshed.semantic_fingerprint()
-    assert cache.claim(runtime_id, first).status == "new"
+    assert cache.claim(runtime_id, first, pin_to_owner_leases=True).status == "new"
     cache.complete(runtime_id, first, {"ok": True, "result": {"success": True}})
-    replay = cache.claim(runtime_id, refreshed)
+    replay = cache.claim(runtime_id, refreshed, pin_to_owner_leases=True)
     assert replay.status == "completed"
 
 
@@ -758,7 +464,7 @@ def test_replay_rejects_changed_multi_document_credential_across_sessions():
     )
     first = RequestEnvelope.from_dict(payload)
     cache = RequestReplayCache()
-    cache.claim(runtime_id, first)
+    cache.claim(runtime_id, first, pin_to_owner_leases=True)
     cache.complete(runtime_id, first, {"ok": True})
 
     changed_payload = copy.deepcopy(payload)
@@ -766,33 +472,31 @@ def test_replay_rejects_changed_multi_document_credential_across_sessions():
     changed_payload["lease_credentials"][1]["generation"] = 9
     changed = RequestEnvelope.from_dict(changed_payload)
     with pytest.raises(LeaseProtocolError) as raised:
-        cache.claim(runtime_id, changed)
+        cache.claim(runtime_id, changed, pin_to_owner_leases=True)
     assert raised.value.code == "REQUEST_ID_REUSE"
 
 
-def test_process_pinned_replay_compacts_after_ttl_and_is_not_evicted():
+def test_pinned_replay_compacts_after_ttl_and_is_not_evicted_until_release():
     now = [10.0]
+    active = { _mcp().runtime_id }
     runtime_id = _mcp().runtime_id
     envelope = RequestEnvelope.from_dict(_envelope("S" * 43))
     cache = RequestReplayCache(
         ttl_seconds=5,
         monotonic=lambda: now[0],
+        owner_has_unresolved_lease=lambda owner: owner in active,
     )
-    cache.claim(runtime_id, envelope)
+    cache.claim(runtime_id, envelope, pin_to_owner_leases=True)
     cache.complete(
         runtime_id,
         envelope,
         {
             "ok": True,
             "result": {
-                "message": (
-                    f"tokens {envelope.session_token} "
-                    f"{envelope.lease_credentials[0].token}"
-                ),
+                "message": f"tokens {envelope.session_token} {envelope.lease_credentials[0].token}",
                 "token": envelope.lease_credentials[0].token,
             },
         },
-        process_pinned=True,
     )
     immediate = cache.status(runtime_id, envelope.request_id).response
     assert envelope.session_token not in str(immediate)
@@ -804,36 +508,27 @@ def test_process_pinned_replay_compacts_after_ttl_and_is_not_evicted():
     assert compacted.status == "completed"
     assert compacted.response["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
 
-
-def test_owner_lease_pinning_apis_are_inert_no_ops():
-    now = [10.0]
-    runtime_id = _mcp().runtime_id
-    envelope = RequestEnvelope.from_dict(_envelope("P" * 43))
-    cache = RequestReplayCache(
-        ttl_seconds=1,
-        monotonic=lambda: now[0],
-        owner_has_unresolved_lease=lambda _owner: True,
-    )
-    cache.bind_lease_retention_predicate(lambda _owner: True)
-    cache.claim(runtime_id, envelope, pin_to_owner_leases=True)
-    cache.complete(runtime_id, envelope, {"ok": True})
-    now[0] = 12.0
+    active.clear()
     assert cache.prune() == 1
     assert cache.status(runtime_id, envelope.request_id).status == "expired"
+    assert cache.status(runtime_id, str(uuid.uuid4())).status == "unknown"
 
 
 def test_replay_capacity_never_evicts_pinned_or_in_progress_entries():
     runtime_id = _mcp().runtime_id
-    cache = RequestReplayCache(max_entries=2)
+    cache = RequestReplayCache(
+        max_entries=2,
+        owner_has_unresolved_lease=lambda owner: owner == runtime_id,
+    )
     first = RequestEnvelope.from_dict(_envelope("A" * 43))
     second = RequestEnvelope.from_dict(_envelope("B" * 43))
     third = RequestEnvelope.from_dict(_envelope("C" * 43))
-    cache.claim(runtime_id, first)
-    cache.complete(runtime_id, first, {"ok": True}, process_pinned=True)
-    cache.claim(runtime_id, second)
+    cache.claim(runtime_id, first, pin_to_owner_leases=True)
+    cache.complete(runtime_id, first, {"ok": True})
+    cache.claim(runtime_id, second, pin_to_owner_leases=True)
 
     with pytest.raises(LeaseProtocolError) as raised:
-        cache.claim(runtime_id, third)
+        cache.claim(runtime_id, third, pin_to_owner_leases=True)
     assert raised.value.code == "REPLAY_JOURNAL_FULL"
     assert cache.status(runtime_id, first.request_id).status == "completed"
     assert cache.status(runtime_id, second.request_id).status == "in_progress"

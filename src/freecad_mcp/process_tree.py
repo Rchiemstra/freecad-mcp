@@ -1,13 +1,12 @@
 """Child-process tree management for the instrumented MCP launcher (R2)."""
 from __future__ import annotations
 
-import contextlib
 import os
 import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterable
+from typing import Iterable
 
 
 def _iter_descendant_pids(root_pid: int) -> list[int]:
@@ -84,8 +83,10 @@ def kill_process_tree(root_pid: int, *, grace_seconds: float = 2.0) -> None:
                 return
             time.sleep(0.1)
         for pid in pids:
-            with contextlib.suppress(OSError):
+            try:
                 os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
 
 
 def _pid_alive(pid: int) -> bool:
@@ -153,11 +154,7 @@ class WindowsJobObject:
             win32job.JobObjectExtendedLimitInformation,
             info,
         )
-        proc = win32api.OpenProcess(
-            win32con.PROCESS_SET_QUOTA | win32con.PROCESS_TERMINATE,
-            False,
-            pid,
-        )
+        proc = win32api.OpenProcess(win32con.PROCESS_SET_QUOTA | win32con.PROCESS_TERMINATE, False, pid)
         win32job.AssignProcessToJobObject(self._handle, proc)
         win32api.CloseHandle(proc)
 

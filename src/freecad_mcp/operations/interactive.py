@@ -7,11 +7,11 @@ import logging
 from typing import Any
 
 from ..freecad_client import FreeCADConnection
-from ..responses.constants import ToolResponse
-from ..responses.tool_results import json_response, tool_fail
+from ..responses import ToolResponse, json_response, tool_fail, tool_ok
 from ..template_resources import render_template_text
 from .diagnostics import _diff_states, _response_text
 from .p7_assembly import _doc_preamble, _run_json_code
+
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -82,17 +82,6 @@ def get_gui_state_operation(freecad: FreeCADConnection) -> ToolResponse:
     return tool_fail(json.dumps(result), structured=result)
 
 
-def get_report_view_operation(
-    freecad: FreeCADConnection,
-    max_lines: int | None = 200,
-    clear: bool = False,
-) -> ToolResponse:
-    result = freecad.get_report_view(max_lines=max_lines, clear=clear)
-    if result.get("ok"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
-
-
 def recompute_and_wait_operation(
     freecad: FreeCADConnection, doc_name: str
 ) -> ToolResponse:
@@ -124,7 +113,7 @@ def diagnose_pocket_operation(
     doc_name: str,
     pocket_name: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name),
+    code = _doc_preamble(doc_name) + [
         render_template_text(
             "diagnostics/diagnose_pocket.py.txt",
             pocket_name=repr(pocket_name),
@@ -147,7 +136,7 @@ def diagnose_helix_operation(
     doc_name: str,
     helix_name: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name),
+    code = _doc_preamble(doc_name) + [
         render_template_text(
             "diagnostics/diagnose_helix.py.txt",
             helix_name=repr(helix_name),
@@ -174,7 +163,7 @@ def compare_documents_operation(
     """Compare two open documents (e.g. V7 vs V8) via paired capture_state."""
 
     def _capture(doc_name: str, names: list[str] | None) -> dict:
-        code = [*_doc_preamble(doc_name),
+        code = _doc_preamble(doc_name) + [
             render_template_text(
                 "diagnostics/capture_state.py.txt",
                 object_names=repr(names),
@@ -237,19 +226,3 @@ def compare_documents_operation(
         "diff": diff,
     }
     return json_response(payload)
-
-
-__all__ = [
-    "activate_document_operation",
-    "compare_documents_operation",
-    "diagnose_helix_operation",
-    "diagnose_pocket_operation",
-    "get_gui_state_operation",
-    "get_report_view_operation",
-    "get_selection_operation",
-    "open_document_operation",
-    "recompute_and_wait_operation",
-    "select_subshapes_operation",
-    "set_section_view_operation",
-    "set_tree_expanded_operation",
-]

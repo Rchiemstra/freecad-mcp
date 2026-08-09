@@ -1,11 +1,5 @@
-import contextlib
-
 import FreeCAD as App
-
-try:
-    from .placement_codec import placement_to_dict, rotation_to_dict, vector_to_dict
-except ImportError:  # pragma: no cover - flat addon import path
-    from placement_codec import placement_to_dict, rotation_to_dict, vector_to_dict
+import json
 
 
 def _get_optional_app_type(name: str) -> type | tuple[type, ...] | None:
@@ -24,12 +18,17 @@ def serialize_value(value):
     if isinstance(value, (int, float, str, bool)):
         return value
     elif isinstance(value, App.Vector):
-        return vector_to_dict(value)
+        return {"x": value.x, "y": value.y, "z": value.z}
     elif isinstance(value, App.Rotation):
-        # Public contract: Angle is degrees (FreeCAD's .Angle is radians).
-        return rotation_to_dict(value)
+        return {
+            "Axis": {"x": value.Axis.x, "y": value.Axis.y, "z": value.Axis.z},
+            "Angle": value.Angle,
+        }
     elif isinstance(value, App.Placement):
-        return placement_to_dict(value)
+        return {
+            "Base": serialize_value(value.Base),
+            "Rotation": serialize_value(value.Rotation),
+        }
     elif isinstance(value, (list, tuple)):
         return [serialize_value(v) for v in value]
     elif _COLOR_TYPE is not None and isinstance(value, _COLOR_TYPE):
@@ -58,8 +57,10 @@ def serialize_view_object(view):
         return None
     result = {}
     for attr in ("ShapeColor", "Transparency", "Visibility"):
-        with contextlib.suppress(Exception):
+        try:
             result[attr] = serialize_value(getattr(view, attr))
+        except Exception:
+            pass
     return result
 
 
@@ -88,7 +89,7 @@ def serialize_object(obj):
             try:
                 result["Properties"][prop] = serialize_value(getattr(obj, prop))
             except Exception as e:
-                result["Properties"][prop] = f"<error: {e!s}>"
+                result["Properties"][prop] = f"<error: {str(e)}>"
 
         try:
             if hasattr(obj, "ViewObject") and obj.ViewObject is not None:
