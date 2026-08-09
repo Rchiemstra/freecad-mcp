@@ -21,6 +21,7 @@ class DocumentHealthSnapshot:
     body_tip_issues: tuple[str, ...]
     validation_profile: str
     validation_available: bool = True
+    invalid_object_status: Mapping[str, str] = field(default_factory=dict)
     object_signatures: Mapping[str, tuple[Any, ...]] = field(
         default_factory=dict, repr=False, compare=False
     )
@@ -37,6 +38,7 @@ class DocumentHealthSnapshot:
             "null_shape_objects": list(self.null_shape_objects),
             "invalid_shape_objects": list(self.invalid_shape_objects),
             "body_tip_issues": list(self.body_tip_issues),
+            "invalid_object_status": dict(self.invalid_object_status),
             "validation_profile": self.validation_profile,
             "validation_available": self.validation_available,
         }

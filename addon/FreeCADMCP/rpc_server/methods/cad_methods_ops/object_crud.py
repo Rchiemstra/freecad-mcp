@@ -82,12 +82,16 @@ def edit_object(
     collaborators = self._cad_collaborators
 
     def edit_task():
+        # Property edits can trigger Assembly solve / dynamic-property work
+        # during the in-callback recompute; declare structural so the grant
+        # covers that window (same as create/delete).
         result = run_cad_mutation(
             collaborators, doc_name,
             lambda: edit_object_gui(
                 doc_name, obj, freecad=collaborators.freecad,
                 set_object_property=collaborators.set_object_property,
             ),
+            structural=True,
         )
         if result is True and presentation_properties:
             document = collaborators.freecad.getDocument(doc_name)

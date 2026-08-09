@@ -52,11 +52,15 @@ class _CompatibilityAPI:
             "revisions": {"UnknownModel": 9},
         }
         self.calls = []
+        self.structural_scopes = []
         self.callback_results = []
         self.callback_failures = 0
 
-    def commit_compatibility_mutation(self, document_name, callback):
+    def commit_compatibility_mutation(
+        self, document_name, callback, *, structural=False
+    ):
         self.calls.append((document_name, callback))
+        self.structural_scopes.append(structural)
         if not self.invoke_callback:
             return {"status": "Rejected", "committed": False}
         try:
@@ -73,18 +77,27 @@ def _rpc_with_execution(**overrides):
     compatibility_api = overrides.pop(
         "compatibility_api", initial._collaboration_collaborators.compatibility_api
     )
+    freecad = overrides.pop("freecad", None)
+    collab_kwargs = {"compatibility_api": compatibility_api}
+    exec_kwargs = {"compatibility_api": compatibility_api, **overrides}
+    cad_kwargs = {"compatibility_api": compatibility_api}
+    if freecad is not None:
+        collab_kwargs["freecad"] = freecad
+        exec_kwargs["freecad"] = freecad
+        cad_kwargs["freecad"] = freecad
     collaboration = replace(
         initial._collaboration_collaborators,
-        compatibility_api=compatibility_api,
+        **collab_kwargs,
     )
     execution = replace(
         initial._execution_collaborators,
-        compatibility_api=compatibility_api,
-        **overrides,
+        **exec_kwargs,
     )
+    cad = replace(initial._cad_collaborators, **cad_kwargs)
     return rpc_server.FreeCADRPC(
         collaboration_collaborators=collaboration,
         execution_collaborators=execution,
+        cad_collaborators=cad,
     )
 
 
@@ -157,6 +170,7 @@ def test_mutating_gui_execute_uses_native_boundary_exactly_once_and_keeps_result
     )
 
     assert [item[0] for item in api.calls] == ["Model"]
+    assert api.structural_scopes == [True]
     assert api.callback_results == [
         {"ok": True, "session": {"saved": False}, "stdout": "kept"}
     ]
@@ -390,3 +404,66 @@ def test_worker_control_and_shutdown_use_captured_dependencies(monkeypatch):
         "success": True,
         "state": "already_stopping",
     }
+
+
+def test_gui_execute_resolves_active_document_when_option_omitted(monkeypatch):
+    """Omitting document must not skip the native boundary when ActiveDocument exists."""
+
+    api = _CompatibilityAPI()
+    recomputes = []
+
+    class Document:
+        Name = "ActiveModel"
+
+        def recompute(self):
+            recomputes.append(self.Name)
+
+    document = Document()
+    freecad = SimpleNamespace(
+        ActiveDocument=document,
+        getDocument=lambda name: document if name == "ActiveModel" else None,
+    )
+    rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "session": {"saved": False},
+            "stdout": "ok",
+        },
+    )
+
+    result = rpc.execute_code("print('ok')", {"execution_mode": "gui"})
+
+    assert [item[0] for item in api.calls] == ["ActiveModel"]
+    assert api.structural_scopes == [True]
+    assert recomputes == ["ActiveModel"]
+    assert result["success"] is True
+
+
+def test_gui_execute_without_document_or_active_still_runs_without_boundary(
+    monkeypatch,
+):
+    api = _CompatibilityAPI()
+    freecad = SimpleNamespace(ActiveDocument=None, getDocument=lambda _name: None)
+    rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "session": {},
+            "stdout": "pure",
+        },
+    )
+
+    result = rpc.execute_code("print('pure')", {"execution_mode": "gui"})
+
+    assert api.calls == []
+    assert result["success"] is True
+    assert "pure" in result["message"]

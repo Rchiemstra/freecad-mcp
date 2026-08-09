@@ -204,6 +204,14 @@ def get_gui_state(conn) -> dict[str, Any]:
         return conn.server.get_gui_state()
 
 
+def get_report_view(
+        conn,
+        max_lines: int | None = 200,
+        clear: bool = False,
+    ) -> dict[str, Any]:
+        return conn.server.get_report_view(max_lines, clear)
+
+
 def recompute_and_wait(conn, doc_name: str) -> dict[str, Any]:
         routed = conn._invoke_mutation_v2(
             "recompute_and_wait",

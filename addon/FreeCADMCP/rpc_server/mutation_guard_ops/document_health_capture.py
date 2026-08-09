@@ -10,9 +10,11 @@ from .document_health_snapshot import DocumentHealthSnapshot
 from .document_health_verdict import DocumentHealthVerdict
 from .object_helpers import (
     body_tip_issue,
+    object_is_valid,
     object_name,
     object_signature,
     object_state,
+    object_status_string,
     shape_is_null,
     shape_is_valid,
 )
@@ -40,6 +42,7 @@ def capture_document_health(
             null_shape_objects=(),
             invalid_shape_objects=(),
             body_tip_issues=(),
+            invalid_object_status={},
             validation_profile=selected.value,
             validation_available=False,
         )
@@ -52,6 +55,7 @@ def capture_document_health(
     null_shapes: list[str] = []
     invalid_shapes: list[str] = []
     body_issues: list[str] = []
+    invalid_status: dict[str, str] = {}
     names: list[str] = []
     for item in objects:
         item_name = object_name(item) or "<unnamed>"
@@ -61,6 +65,13 @@ def capture_document_health(
             recompute_errors.append(item_name)
         if any("invalid" in value for value in state):
             invalid_states.append(item_name)
+        is_valid = object_is_valid(item)
+        if is_valid is False or any(
+            token in ("invalid", "error") for token in state
+        ):
+            status = object_status_string(item)
+            if status is not None:
+                invalid_status[item_name] = status
         signatures[item_name] = object_signature(
             item,
             include_shape_hash=selected
@@ -97,6 +108,7 @@ def capture_document_health(
         null_shape_objects=tuple(sorted(set(null_shapes))),
         invalid_shape_objects=tuple(sorted(set(invalid_shapes))),
         body_tip_issues=tuple(sorted(set(body_issues))),
+        invalid_object_status=dict(sorted(invalid_status.items())),
         validation_profile=selected.value,
         validation_available=True,
         object_signatures=signatures,
@@ -176,6 +188,7 @@ def calculate_document_health_delta(
         preexisting_invalid_state_objects=before.invalid_state_objects,
         preexisting_invalid_shapes=before.invalid_shape_objects,
         body_tip_issues=after.body_tip_issues,
+        invalid_object_status=dict(after.invalid_object_status),
         validation_profile=after.validation_profile,
         validation_available=available,
         validation_error=validation_error,

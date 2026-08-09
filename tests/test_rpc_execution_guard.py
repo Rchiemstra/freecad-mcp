@@ -289,7 +289,7 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
             self.Modified = False
 
         def commitCompatibilityMutation(self, callback, *, structural=False):
-            assert structural is False
+            assert structural is True
             callback()
             return {
                 "status": "Committed",

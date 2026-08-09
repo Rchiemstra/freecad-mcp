@@ -18,6 +18,42 @@ class _GuiExecuteRollback(RuntimeError):
     """Abort the native transaction while retaining its public error envelope."""
 
 
+def _resolve_primary_document(collaborators, options: dict[str, Any]) -> str | None:
+    """Prefer explicit options['document']; else ActiveDocument (fail closed)."""
+
+    declared = options.get("document")
+    if isinstance(declared, str) and declared:
+        return declared
+    active = getattr(collaborators.freecad, "ActiveDocument", None)
+    name = getattr(active, "Name", None)
+    if isinstance(name, str) and name:
+        return name
+    return None
+
+
+def _recompute_primary_document(collaborators, primary_document: str) -> None:
+    """Recompute under the active structural grant before apply returns.
+
+    DocumentCommitCoordinator opens the structural grant only around
+    operation.apply(); its own post-apply recompute runs after the grant
+    ends. Matching typed CAD mutations, force one recompute inside the
+    callback so Assembly/joint side effects see the grant.
+    """
+
+    get_document = getattr(collaborators.freecad, "getDocument", None)
+    if not callable(get_document):
+        return
+    try:
+        document = get_document(primary_document)
+    except Exception:
+        return
+    if document is None:
+        return
+    recompute = getattr(document, "recompute", None)
+    if callable(recompute):
+        recompute()
+
+
 def _run_gui_execute_with_native_attribution(
     collaborators,
     run_gui_task,
@@ -34,11 +70,14 @@ def _run_gui_execute_with_native_attribution(
             and captured["result"].get("ok") is False
         ):
             raise _GuiExecuteRollback
+        _recompute_primary_document(collaborators, primary_document)
         return captured["result"]
 
     try:
+        # GUI execute_code can create/remove objects or trigger Assembly
+        # structural side effects; always request the structural grant.
         native_result = collaborators.commit_compatibility_mutation(
-            primary_document, native_callback
+            primary_document, native_callback, structural=True
         )
     except _GuiExecuteRollback:
         return captured["result"]
@@ -143,7 +182,11 @@ def execute_code(
             collect_invalid_objects_fn=self._collect_invalid_objects,
         )
 
-    primary_document = options.get("document")
+    primary_document = _resolve_primary_document(collaborators, options)
+    if primary_document and options.get("document") != primary_document:
+        # Stamp so session / optional target recompute see the same document
+        # the native boundary attributes — omit no longer means "no document".
+        options = {**options, "document": primary_document}
 
     def execute_code_gui_task():
         return _run_gui_execute_with_native_attribution(

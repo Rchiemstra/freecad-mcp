@@ -241,7 +241,7 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
             self, document_name, callback, *, structural=False
         ):
             assert document_name == "Doc"
-            assert structural is False
+            assert structural is True
             stage["value"] = "native_callback"
             callback()
             assert presentation_calls == []

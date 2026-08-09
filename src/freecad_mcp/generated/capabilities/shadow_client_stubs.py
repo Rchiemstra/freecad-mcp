@@ -259,6 +259,10 @@ def get_gui_state(conn, *args, **kwargs):
     """INERT shadow stub for get_gui_state (read)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
+def get_report_view(conn, *args, **kwargs):
+    """INERT shadow stub for get_report_view (read)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
 def get_selection(conn, *args, **kwargs):
     """INERT shadow stub for get_selection (read)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)

@@ -42,6 +42,17 @@ def get_gui_state(conn):
     return _generated.get_gui_state(conn)
 
 
+def get_report_view(conn, max_lines: int | None = 200, clear: bool = False):
+    routed = conn._invoke_mutation_v2(
+        "get_report_view",
+        {"max_lines": max_lines, "clear": clear},
+        operation_name="Get Report view",
+    )
+    if routed is not None:
+        return routed
+    return _generated.get_report_view(conn, max_lines=max_lines, clear=clear)
+
+
 recompute_and_wait = _generated.recompute_and_wait
 set_section_view = _generated.set_section_view
 
@@ -62,6 +73,7 @@ __all__ = [  # noqa: RUF022
     'select_subshapes',
     'get_selection',
     'get_gui_state',
+    'get_report_view',
     'recompute_and_wait',
     'set_section_view',
 ]

@@ -82,7 +82,16 @@ class CountingShape(Shape):
 
 
 class Obj:
-    def __init__(self, name, *, state=(), shape=None, type_id="Part::Feature"):
+    def __init__(
+        self,
+        name,
+        *,
+        state=(),
+        shape=None,
+        type_id="Part::Feature",
+        status_string=None,
+        valid=None,
+    ):
         self.Name = name
         self.Label = name
         self.State = list(state)
@@ -92,9 +101,22 @@ class Obj:
         self.Placement = None
         self.Group = []
         self.Tip = None
+        self._status_string = status_string
+        self._valid = valid
 
     def isDerivedFrom(self, type_name):
         return self.TypeId == type_name
+
+    def isValid(self):
+        if self._valid is not None:
+            return self._valid
+        state = {str(item).lower() for item in self.State}
+        return not ({"invalid", "error"} & state)
+
+    def getStatusString(self):
+        if self._status_string is not None:
+            return self._status_string
+        return "Valid" if self.isValid() else "Error"
 
 
 class Doc:
@@ -152,6 +174,35 @@ def test_health_delta_separates_preexisting_and_new_errors():
     assert delta.preexisting_recompute_errors == ("Stable",)
     assert delta.new_recompute_errors == ()
     assert delta.created_objects == ("Created",)
+
+
+def test_invalid_object_status_uses_get_status_string():
+    assembly = Obj(
+        "Assembly",
+        state=("Invalid",),
+        status_string=(
+            "object and dynamic-property structure changes are unavailable "
+            "across a collaboration stable boundary (kind=Restricted) "
+            "(mutation=propertySchema on QRinsertionslider002)"
+        ),
+        valid=False,
+    )
+    joint = Obj("Joint", state=(), status_string="Valid", valid=True)
+    doc = Doc(objects=(assembly, joint))
+    snapshot = capture_document_health(doc, profile=ValidationProfile.DEFAULT)
+
+    assert snapshot.invalid_state_objects == ("Assembly",)
+    assert snapshot.invalid_object_status == {
+        "Assembly": (
+            "object and dynamic-property structure changes are unavailable "
+            "across a collaboration stable boundary (kind=Restricted) "
+            "(mutation=propertySchema on QRinsertionslider002)"
+        )
+    }
+    delta = calculate_document_health_delta(snapshot, snapshot)
+    assert delta.invalid_object_status == snapshot.invalid_object_status
+    assert "invalid_object_status" in snapshot.to_dict()
+    assert "invalid_object_status" in delta.to_dict()
 
 
 def test_new_invalid_shape_and_broken_body_tip_degrade_health():

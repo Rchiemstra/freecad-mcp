@@ -28,6 +28,7 @@ AUTHENTICATED_METHODS = frozenset(
         "capture_view_sequence_to_disk",
         "get_active_screenshot",
         "get_gui_state",
+        "get_report_view",
         "get_selection",
         "open_document",
         "refresh_view",

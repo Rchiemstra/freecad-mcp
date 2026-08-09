@@ -5358,6 +5358,164 @@
         "type": "array"
       }
     },
+    "get_report_view": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "max_lines",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "default": 200
+        },
+        {
+          "name": "clear",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        }
+      ],
+      "result_examples": [
+        {
+          "ok": true,
+          "text": "line",
+          "line_count": 1,
+          "total_lines": 1,
+          "truncated": false,
+          "cleared": false
+        },
+        {
+          "ok": false,
+          "error_code": "REPORT_VIEW_UNAVAILABLE",
+          "error": "Report view widget not found"
+        }
+      ],
+      "result_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          },
+          "line_count": {
+            "type": "integer"
+          },
+          "total_lines": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "cleared": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      }
+    },
     "get_request_status": {
       "normalized_error_examples": [
         {

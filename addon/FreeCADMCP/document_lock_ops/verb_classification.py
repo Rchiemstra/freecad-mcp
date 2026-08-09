@@ -87,6 +87,7 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "refresh_view": (VerbKind.READ_ONLY, _none_doc),
     "get_selection": (VerbKind.READ_ONLY, _none_doc),
     "get_gui_state": (VerbKind.READ_ONLY, _none_doc),
+    "get_report_view": (VerbKind.READ_ONLY, _none_doc),
     "set_tree_expanded": (VerbKind.READ_ONLY, _params0_doc),
     "select_subshapes": (VerbKind.READ_ONLY, _params0_doc),
     "set_section_view": (VerbKind.READ_ONLY, _none_doc),

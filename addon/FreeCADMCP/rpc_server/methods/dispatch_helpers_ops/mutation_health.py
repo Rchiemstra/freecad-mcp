@@ -102,6 +102,13 @@ def aggregate_document_health(deltas, *, unexpected_documents=()):
                 for name in getattr(item, field_name)
             }
         )
+    invalid_object_status: dict[str, str] = {}
+    for item in deltas:
+        for object_name, status in (item.invalid_object_status or {}).items():
+            key = f"{item.document_name}.{object_name}"
+            invalid_object_status[key] = str(status)
+    if invalid_object_status:
+        aggregate["invalid_object_status"] = dict(sorted(invalid_object_status.items()))
     return aggregate
 
 

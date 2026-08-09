@@ -82,6 +82,17 @@ def get_gui_state_operation(freecad: FreeCADConnection) -> ToolResponse:
     return tool_fail(json.dumps(result), structured=result)
 
 
+def get_report_view_operation(
+    freecad: FreeCADConnection,
+    max_lines: int | None = 200,
+    clear: bool = False,
+) -> ToolResponse:
+    result = freecad.get_report_view(max_lines=max_lines, clear=clear)
+    if result.get("ok"):
+        return json_response(result)
+    return tool_fail(json.dumps(result), structured=result)
+
+
 def recompute_and_wait_operation(
     freecad: FreeCADConnection, doc_name: str
 ) -> ToolResponse:
@@ -234,6 +245,7 @@ __all__ = [
     "diagnose_helix_operation",
     "diagnose_pocket_operation",
     "get_gui_state_operation",
+    "get_report_view_operation",
     "get_selection_operation",
     "open_document_operation",
     "recompute_and_wait_operation",

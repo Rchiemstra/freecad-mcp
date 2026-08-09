@@ -6,6 +6,7 @@ from .gui_methods_ops.document_ops import list_documents, open_document, reload_
 from .gui_methods_ops.gui_interaction import (
     activate_document,
     get_gui_state,
+    get_report_view,
     get_selection,
     select_subshapes,
     set_section_view,
@@ -29,6 +30,7 @@ __all__ = [
     "capture_view_sequence_to_disk",
     "get_active_screenshot",
     "get_gui_state",
+    "get_report_view",
     "get_selection",
     "list_documents",
     "open_document",
