@@ -79,6 +79,17 @@ def _resolve_via_shape_element(shape: Any, name: str) -> Any | None:
     return resolved
 
 
+def subelement_resolvable_by_freecad_fallback(target: Any, subelement: str) -> bool:
+    """Return whether FreeCAD can still resolve a stale element-map subelement."""
+    name = str(subelement)
+    if _resolve_via_get_subobject(target, name) is not None:
+        return True
+    shape = getattr(target, "Shape", None)
+    if shape is not None and _resolve_via_shape_element(shape, name) is not None:
+        return True
+    return False
+
+
 def validate_subelement_reference(target: Any, subelement: str) -> None:
     """Resolve a shape or semantic subelement and reject nonexistent references.
 

@@ -6,6 +6,7 @@ import io
 from typing import Any
 
 from ._common import require_document_modified
+from ...gui_dispatch import _flush_gui_events
 from .execute_code_gui_exec import run_python_on_gui_thread
 from .execute_code_gui_hooks import (
     install_read_only_save_hooks,
@@ -67,6 +68,15 @@ def run_execute_code_gui_task(
         restore_save_hooks(saved_hooks)
         recompute_documents(recompute_mode, recompute_docs, freecad=freecad)
         restore_active_document(active_before, restore_active, freecad=freecad)
+
+    if ok and not read_only:
+        try:
+            import FreeCADGui
+
+            FreeCADGui.updateGui()
+        except Exception:
+            pass
+        _flush_gui_events()
 
     session = build_execute_session(
         target_doc=target_doc,

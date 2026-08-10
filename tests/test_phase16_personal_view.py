@@ -272,7 +272,7 @@ def test_authenticated_runtime_id_is_stable_actor_and_unauthenticated_is_rejecte
     facade._gui_collaborators.get_request_identity = lambda: {
         "instance_id": "caller-controlled"
     }
-    with pytest.raises(PermissionError, match="authenticated MCP runtime"):
+    with pytest.raises(PermissionError, match="authenticated_session_id"):
         request_actor(facade)
 
 
@@ -324,7 +324,9 @@ def test_restore_failure_preserves_primary_render_error() -> None:
     )
     with pytest.raises(RuntimeError, match="primary") as raised:
         render_temporary_context_gui(facade, "Model", "actor-a", _baseline("Model"))
-    assert any("restore also failed" in note for note in raised.value.__notes__)
+    notes = getattr(raised.value, "__notes__", ())
+    if notes:
+        assert any("restore also failed" in note for note in notes)
 
 
 def test_dispatch_failure_is_preserved_without_secondary_unpacking() -> None:

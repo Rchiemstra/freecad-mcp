@@ -15,6 +15,8 @@ from .collaboration_context_core import (
 )
 from .collaboration_context_dispatch import dispatch_gui
 from .collaboration_context_view import build_view_context
+from ...view_manager_ops.screenshot import capture_active_view_png_bytes
+from ...view_manager_ops.screenshot_blank import is_near_blank_png
 
 
 def render_temporary_context_gui(
@@ -47,7 +49,9 @@ def render_temporary_context_gui(
                 document_name, actor, snapshot
             )
         except Exception as restore_error:
-            primary.add_note(f"personal view restore also failed: {restore_error}")
+            note = getattr(primary, "add_note", None)
+            if note is not None:
+                note(f"personal view restore also failed: {restore_error}")
         raise
     else:
         _member(collabs, "restore_personal_view_context")(
@@ -134,6 +138,22 @@ def render_personal_context_gui(
         background,
         int(samples),
     )
+    if is_near_blank_png(image):
+        fallback, fallback_error = capture_active_view_png_bytes(
+            view_name=view_name or "Isometric",
+            width=width,
+            height=height,
+            focus_object=focus_object,
+            focus_objects=focus_objects,
+            yaw_deg=yaw_deg,
+        )
+        if fallback and not is_near_blank_png(fallback):
+            context["screenshot_fallback"] = "active_view_save_image"
+            return fallback, context
+        if fallback is not None:
+            image = fallback
+        elif fallback_error:
+            context["screenshot_fallback_error"] = fallback_error
     return image, context
 
 

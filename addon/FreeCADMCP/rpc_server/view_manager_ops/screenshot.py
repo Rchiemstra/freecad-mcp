@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Sequence
 from typing import Any
 
@@ -14,6 +16,7 @@ from .focus_helpers import (
     normalize_focus_names,
     resolve_focus_targets,
 )
+from .screenshot_blank import is_near_blank_png
 from .view_constants import apply_view_orientation
 
 
@@ -87,3 +90,36 @@ def save_active_screenshot(
         return True
     except Exception as e:
         return str(e)
+
+
+def capture_active_view_png_bytes(
+    view_name: str = "Isometric",
+    width: int | None = None,
+    height: int | None = None,
+    focus_object: str | None = None,
+    focus_objects: Sequence[str] | None = None,
+    yaw_deg: float | None = None,
+) -> tuple[bytes | None, str | None]:
+    """Capture the active Inventor view via ``saveImage`` and return PNG bytes."""
+    path = tempfile.mktemp(suffix=".png")
+    try:
+        status = save_active_screenshot(
+            path,
+            view_name=view_name,
+            width=width,
+            height=height,
+            focus_object=focus_object,
+            focus_objects=focus_objects,
+            yaw_deg=yaw_deg,
+        )
+        if status is not True:
+            return None, str(status)
+        with open(path, "rb") as output:
+            return output.read(), None
+    except Exception as exc:
+        return None, str(exc)
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass

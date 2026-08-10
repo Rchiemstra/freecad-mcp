@@ -31,9 +31,19 @@ def request_actor(facade: Any) -> str:
         if isinstance(identity, Mapping)
         else getattr(identity, "instance_id", None)
     )
-    if not session_id or not runtime_id:
+    if not session_id and not runtime_id:
         raise PermissionError(
             "an authenticated MCP runtime identity is required for GUI views"
+        )
+    if not session_id:
+        raise PermissionError(
+            "authenticated_session_id is required for GUI views; establish a "
+            "handshake_v2 session before calling actor-scoped GUI methods"
+        )
+    if not runtime_id:
+        raise PermissionError(
+            "instance_id is required for GUI views; use the immutable MCP "
+            "runtime identity from handshake_v2"
         )
     return str(runtime_id)
 

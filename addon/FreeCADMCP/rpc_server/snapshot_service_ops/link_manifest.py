@@ -7,6 +7,9 @@ from typing import Any
 import FreeCAD
 
 from ..worker_protocol import ProtocolError, validate_subelement_reference
+from ..worker_protocol_ops.subelement_validation import (
+    subelement_resolvable_by_freecad_fallback,
+)
 from .link_helpers import is_link_property, reference_entries
 
 
@@ -49,6 +52,10 @@ def _append_reference_rows(
             try:
                 validate_subelement_reference(target, subelement)
             except ProtocolError:
+                # FreeCAD may still resolve stale element-map names via
+                # getSubObject / Shape.getElement even when indexed names fail.
+                if subelement_resolvable_by_freecad_fallback(target, subelement):
+                    continue
                 invalid_subelements.append(
                     f"{target_doc}.{target_name}.{subelement}"
                 )

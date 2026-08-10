@@ -83,10 +83,9 @@ def _complete_open(facade, result, actor, existing_names):
         raise _DocumentOpenRejectedError(str(exc)) from exc
 
 
-def _open_checked(facade, path):
+def _open_checked(facade, path, actor):
     collaborators = facade._gui_collaborators
     existing_names = set(collaborators.freecad.listDocuments())
-    actor = request_actor(facade)
     result = collaborators.open_document(path)
     if not isinstance(result, dict) or not result.get("ok"):
         return result
@@ -151,7 +150,8 @@ def reload_document(self, doc_name: str) -> dict[str, Any]:
 
 def open_document(self, path: str) -> dict[str, Any]:
     try:
-        res = dispatch_gui(self, lambda: _open_checked(self, path))
+        actor = request_actor(self)
+        res = dispatch_gui(self, lambda: _open_checked(self, path, actor))
     except Exception as exc:
         defaults = {}
         if isinstance(

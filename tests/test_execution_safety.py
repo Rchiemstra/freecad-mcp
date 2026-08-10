@@ -70,6 +70,23 @@ def test_detects_isinside_sampling_loop_as_worker_only():
     assert risk.loops == 2
 
 
+def test_does_not_flag_boundbox_loop_with_top_level_expensive_call():
+    code = (
+        "for obj in doc.Objects:\n"
+        "    print(obj.Shape.BoundBox)\n"
+        "print(shape.distToShape(other)[0])\n"
+    )
+    assert find_gui_geometry_loop_risk(code) is None
+
+
+def test_flags_expensive_geometry_inside_for_loop():
+    code = "for item in items:\n    print(item.cut(other).Volume)"
+    risk = find_gui_geometry_loop_risk(code)
+    assert risk is not None
+    assert risk.expensive_calls == 1
+    assert risk.loops == 1
+
+
 def test_does_not_flag_single_expensive_geometry_call_without_iteration():
     assert find_gui_geometry_loop_risk("print(a.distToShape(b)[0])") is None
 

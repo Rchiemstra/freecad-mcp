@@ -171,6 +171,8 @@ def refresh_view(
         }
         if capture:
             result["image_base64"] = encode_png_bytes(image)
+            if context.get("screenshot_fallback"):
+                result["screenshot_fallback"] = context["screenshot_fallback"]
         return result
     except Exception as exc:
         return public_error(self, exc)

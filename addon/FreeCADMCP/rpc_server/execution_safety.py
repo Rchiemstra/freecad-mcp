@@ -87,6 +87,44 @@ def find_gui_blocking_risk(code: str, *, read_only: bool) -> GuiBlockingRisk | N
     return None
 
 
+_LOOP_NODE_TYPES = (
+    ast.For,
+    ast.AsyncFor,
+    ast.While,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
+
+
+def _is_expensive_method_call(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _EXPENSIVE_METHODS
+    )
+
+
+def _nodes_inside_loop_body(loop_node: ast.AST) -> list[ast.AST]:
+    """AST nodes inside a loop/comprehension body, excluding outer iter clauses."""
+    nodes: list[ast.AST] = []
+    if isinstance(loop_node, (ast.For, ast.AsyncFor, ast.While)):
+        for part in loop_node.body:
+            nodes.extend(ast.walk(part))
+        for part in getattr(loop_node, "orelse", ()):
+            nodes.extend(ast.walk(part))
+        return nodes
+    if isinstance(loop_node, ast.DictComp):
+        nodes.extend(ast.walk(loop_node.key))
+        nodes.extend(ast.walk(loop_node.value))
+    elif isinstance(loop_node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+        nodes.extend(ast.walk(loop_node.elt))
+    for generator in getattr(loop_node, "generators", ()):
+        nodes.extend(ast.walk(generator))
+    return nodes
+
+
 def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
     """Detect expensive OCCT operations repeated by Python control flow.
 
@@ -99,27 +137,28 @@ def find_gui_geometry_loop_risk(code: str) -> GuiGeometryLoopRisk | None:
     if tree is None:
         return None
 
-    called_methods = [
-        node.func.attr
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in _EXPENSIVE_METHODS
-    ]
-    expensive_calls = len(called_methods)
-    worker_only_calls = sum(
-        method in _WORKER_ONLY_LOOP_METHODS for method in called_methods
-    )
-    loops = sum(
-        1
-        for node in ast.walk(tree)
-        if isinstance(
-            node,
-            (ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp, ast.DictComp,
-             ast.GeneratorExp),
+    expensive_nodes: list[ast.Call] = []
+    seen_calls: set[int] = set()
+    loops = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, _LOOP_NODE_TYPES):
+            continue
+        loops += 1
+        for child in _nodes_inside_loop_body(node):
+            if not _is_expensive_method_call(child):
+                continue
+            call_id = id(child)
+            if call_id in seen_calls:
+                continue
+            seen_calls.add(call_id)
+            expensive_nodes.append(child)
+    if expensive_nodes:
+        expensive_calls = len(expensive_nodes)
+        worker_only_calls = sum(
+            1
+            for call in expensive_nodes
+            if call.func.attr in _WORKER_ONLY_LOOP_METHODS
         )
-    )
-    if expensive_calls and loops:
         return GuiGeometryLoopRisk(
             expensive_calls=expensive_calls,
             worker_only_calls=worker_only_calls,
