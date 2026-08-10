@@ -190,9 +190,26 @@ class TestSketchGeometry:
 
 
 class TestExternalProjection:
+    def test_default_requires_gui_loop_opt_in(self):
+        conn = _ok_conn()
+        resp = sketch_add_external_projection_operation(
+            conn, True, "Doc", "Sketch", "Binder:Face1"
+        )
+        conn.execute_code.assert_not_called()
+        envelope = resp.structuredContent
+        assert envelope["error_code"] == "gui_geometry_loop_opt_in_required"
+        assert "allow_gui_geometry_loop=true" in envelope["error"]
+
     def test_compiles_and_preflights(self):
         conn = _ok_conn()
-        sketch_add_external_projection_operation(conn, True, "Doc", "Sketch", "Binder:Face1")
+        sketch_add_external_projection_operation(
+            conn,
+            True,
+            "Doc",
+            "Sketch",
+            "Binder:Face1",
+            allow_gui_geometry_loop=True,
+        )
         code = _code(conn)
         options = conn.execute_code.call_args[0][1]
         assert_code_compiles(code)
@@ -204,8 +221,8 @@ class TestExternalProjection:
             "datum normal not parallel to face",
             "candidate_edges",
         )
-        assert options.execution_mode == "auto"
-        assert options.allow_gui_geometry_loop is False
+        assert options.execution_mode == "gui"
+        assert options.allow_gui_geometry_loop is True
 
     def test_explicit_gui_loop_override_forces_gui_execution(self):
         conn = _ok_conn()

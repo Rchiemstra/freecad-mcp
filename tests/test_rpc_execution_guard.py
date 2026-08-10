@@ -62,16 +62,23 @@ def _external_projection_payload(*, allow_gui_geometry_loop):
     return code, options.to_dict()
 
 
-def test_external_projection_default_is_blocked_by_actual_loop_guard(monkeypatch):
-    code, options = _external_projection_payload(allow_gui_geometry_loop=False)
-    monkeypatch.setattr(rpc_server, "gui_dispatcher", _DispatcherMustNotBeUsed())
+def test_external_projection_default_is_blocked_by_actual_loop_guard():
+    connection = MagicMock()
+    connection.get_active_screenshot.return_value = None
+    result = sketch_add_external_projection_operation(
+        connection,
+        True,
+        "Doc",
+        "Sketch",
+        "Binder:Face1",
+        allow_gui_geometry_loop=False,
+    )
 
-    result = rpc_server.FreeCADRPC().execute_code(code, options)
-
-    assert result["success"] is False
-    assert result["blocked"] == "gui_thread_geometry_loop"
-    assert result["code_analysis"]["call_families"]
-    assert "allow_gui_geometry_loop=true" in result["error"]
+    connection.execute_code.assert_not_called()
+    envelope = result.structuredContent
+    assert envelope["status"] == "failed"
+    assert envelope["error_code"] == "gui_geometry_loop_opt_in_required"
+    assert "allow_gui_geometry_loop=true" in envelope["error"]
 
 
 def test_external_projection_explicit_override_reaches_gui_dispatch():

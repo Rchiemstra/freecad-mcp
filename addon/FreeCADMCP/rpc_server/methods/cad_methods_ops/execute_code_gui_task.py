@@ -71,12 +71,9 @@ def run_execute_code_gui_task(
 
     if ok and not read_only:
         try:
-            import FreeCADGui
-
-            FreeCADGui.updateGui()
+            _flush_gui_events()
         except Exception:
             pass
-        _flush_gui_events()
 
     session = build_execute_session(
         target_doc=target_doc,

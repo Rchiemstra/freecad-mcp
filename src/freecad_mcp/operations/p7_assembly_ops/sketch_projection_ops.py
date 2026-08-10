@@ -46,6 +46,16 @@ def sketch_add_external_projection_operation(
             "projection_mode must be one of: auto, edge, face, point",
             error_code="INVALID_ARGUMENT",
         )
+    if not allow_gui_geometry_loop:
+        return tool_fail(
+            (
+                "sketch_add_external_projection requires allow_gui_geometry_loop=true "
+                "because the generated preflight cannot be proven bounded by the "
+                "static geometry-loop guard; pass allow_gui_geometry_loop=True to "
+                "run the bounded preflight and projection on the GUI thread."
+            ),
+            error_code="gui_geometry_loop_opt_in_required",
+        )
     lines = _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
         "p7_assembly/sketch_add_external_projection.py.txt",
         sketch_name=repr(sketch_name),
@@ -60,6 +70,6 @@ def sketch_add_external_projection_operation(
         "Failed to add external projection",
         screenshot=True,
         document=doc_name,
-        execution_mode="gui" if allow_gui_geometry_loop else "auto",
-        allow_gui_geometry_loop=allow_gui_geometry_loop,
+        execution_mode="gui",
+        allow_gui_geometry_loop=True,
     )
