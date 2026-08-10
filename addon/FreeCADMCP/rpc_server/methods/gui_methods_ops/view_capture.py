@@ -25,12 +25,17 @@ def get_active_screenshot(
     focus_object: str | None = None,
     focus_objects: list[str] | None = None,
     yaw_deg: float | None = None,
+    document: str | None = None,
+    doc_name: str | None = None,
+    document_name: str | None = None,
 ) -> str:
     """Get a base64 PNG rendered from this requester's personal view context."""
 
+    hint = document or doc_name or document_name
     try:
         image, _ = render_personal_view(
             self,
+            hint=hint,
             view_name=view_name or "Isometric",
             width=width,
             height=height,
@@ -41,6 +46,8 @@ def get_active_screenshot(
         )
         return encode_png_bytes(image)
     except GuiDispatchFailure:
+        raise
+    except (PermissionError, ValueError):
         raise
     except Exception as exc:
         redacted_error(self, exc)

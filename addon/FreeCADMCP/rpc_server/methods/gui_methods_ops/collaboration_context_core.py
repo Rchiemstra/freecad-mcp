@@ -179,6 +179,21 @@ def _remembered_documents(facade: Any, actor: str, documents: list[Any]) -> list
     ]
 
 
+def _freecad_active_document(facade: Any, documents: list[Any]) -> Any:
+    active = getattr(_member(collaborators(facade), "freecad"), "ActiveDocument", None)
+    if active is None:
+        return None
+    active_name = _document_name(active)
+    matches = [
+        document
+        for document in documents
+        if _document_name(document) == active_name
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
 def resolve_document(facade: Any, actor: str, hint: Any = None) -> Any:
     documents = _documents(facade)
     if not documents:
@@ -198,6 +213,9 @@ def resolve_document(facade: Any, actor: str, hint: Any = None) -> Any:
         raise ValueError("actor has view state in multiple open documents")
     if len(documents) == 1:
         return documents[0]
+    freecad_active = _freecad_active_document(facade, documents)
+    if freecad_active is not None:
+        return freecad_active
     raise ValueError("document hint is required when multiple documents are open")
 
 

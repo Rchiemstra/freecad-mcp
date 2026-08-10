@@ -4307,6 +4307,42 @@
               "number"
             ]
           }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "document",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "doc_name",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "document_name",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
         }
       ],
       "result_examples": [

@@ -100,6 +100,7 @@ def _facade(
     dispatch=None,
     restore_error=None,
     prepare_animation=None,
+    active_document=None,
 ):
     documents = documents or [_Document()]
     saved = saved if saved is not None else {}
@@ -125,7 +126,8 @@ def _facade(
 
     collaborators = SimpleNamespace(
         freecad=SimpleNamespace(
-            listDocuments=lambda: {doc.Name: doc for doc in documents}
+            listDocuments=lambda: {doc.Name: doc for doc in documents},
+            ActiveDocument=active_document,
         ),
         dispatch_gui=dispatch
         or (
@@ -272,6 +274,46 @@ def test_authenticated_runtime_id_is_stable_actor_and_unauthenticated_is_rejecte
     }
     with pytest.raises(PermissionError, match="authenticated MCP runtime"):
         request_actor(facade)
+
+
+def test_get_active_screenshot_uses_freecad_active_document_in_multi_doc_sessions():
+    model = _Document("Model")
+    other = _Document("Other")
+    # Empty saved: exercise ActiveDocument fallback, not remembered personal context.
+    facade, _, calls = _facade(
+        documents=[model, other],
+        saved={},
+        active_document=model,
+    )
+
+    payload = get_active_screenshot(facade)
+
+    assert base64.b64decode(payload) == PNG
+    assert any(call[:2] == ("render", "Model") for call in calls)
+
+
+def test_get_active_screenshot_rejects_ambiguous_multi_doc_without_target():
+    model = _Document("Model")
+    other = _Document("Other")
+    facade, _, _ = _facade(documents=[model, other], active_document=None)
+
+    with pytest.raises(ValueError, match="document hint is required"):
+        get_active_screenshot(facade)
+
+
+def test_get_active_screenshot_document_hint_overrides_active_document():
+    model = _Document("Model")
+    other = _Document("Other")
+    facade, _, calls = _facade(
+        documents=[model, other],
+        saved={("Other", "actor-a"): _baseline("Other")},
+        active_document=model,
+    )
+
+    payload = get_active_screenshot(facade, document="Other")
+
+    assert base64.b64decode(payload) == PNG
+    assert any(call[:2] == ("render", "Other") for call in calls)
 
 
 def test_restore_failure_preserves_primary_render_error() -> None:

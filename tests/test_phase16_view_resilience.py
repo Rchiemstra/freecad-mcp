@@ -67,7 +67,7 @@ def _baseline(name, camera=None):
     }
 
 
-def _facade(documents, saved=None, viewport_size=(400, 100)):
+def _facade(documents, saved=None, viewport_size=(400, 100), active_document=None):
     saved = {} if saved is None else saved
 
     def snapshot(name, actor):
@@ -79,7 +79,8 @@ def _facade(documents, saved=None, viewport_size=(400, 100)):
 
     collaborators = SimpleNamespace(
         freecad=SimpleNamespace(
-            listDocuments=lambda: {doc.Name: doc for doc in documents}
+            listDocuments=lambda: {doc.Name: doc for doc in documents},
+            ActiveDocument=active_document,
         ),
         dispatch_gui=lambda _facade, callback, **_kwargs: callback(),
         get_request_identity=lambda: SimpleNamespace(
@@ -174,6 +175,31 @@ def test_fit_recurses_container_children_and_accepts_mesh_and_direct_bounds():
 
     assert _float_field(context["camera"], "height") >= 72
     assert _float_field(context["camera"], "nearDistance") > 0
+
+
+def test_resolve_document_uses_freecad_active_document_when_unambiguous():
+    model = _Document("Model")
+    other = _Document("Other")
+    facade, _ = _facade([model, other], active_document=model)
+
+    assert resolve_document(facade, "actor-a").Name == "Model"
+
+
+def test_resolve_document_requires_hint_when_active_document_is_unset():
+    model = _Document("Model")
+    other = _Document("Other")
+    facade, _ = _facade([model, other], active_document=None)
+
+    with pytest.raises(ValueError, match="document hint is required"):
+        resolve_document(facade, "actor-a")
+
+
+def test_explicit_document_hint_wins_over_freecad_active_document():
+    model = _Document("Model")
+    other = _Document("Other")
+    facade, _ = _facade([model, other], active_document=model)
+
+    assert resolve_document(facade, "actor-a", hint="Other").Name == "Other"
 
 
 def test_native_active_marker_recovers_actor_target_in_a_fresh_registry():
