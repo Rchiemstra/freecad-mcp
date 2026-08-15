@@ -7,7 +7,8 @@ then accepts readiness only after a profile-secret-authenticated v2 handshake
 proves the launched PID, persistent profile identity, endpoint, runtime UUID,
 process start, version and build metadata.  It never stops or reuses a process
 already listening on the configured endpoint, including the default :9875
-instance.
+instance.  ``FREECAD_MCP_ISOLATED_FREECAD`` may select an absolute branch-built
+FreeCAD executable without changing the isolated profile or endpoint.
 """
 from __future__ import annotations
 
@@ -16,10 +17,12 @@ import importlib.util
 import ipaddress
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from contextlib import suppress
@@ -52,8 +55,11 @@ from freecad_mcp.rpc_auth import (  # noqa: E402
 
 PROFILE_NAME = ".freecad-mcp-isolated"
 MANIFEST_FILENAME = "instance-manifest.json"
+LAUNCH_STATE_FILENAME = "launch-state.json"
 MANIFEST_SCHEMA_VERSION = 1
 LAUNCHER_BUILD_ID = f"{MCP_BUILD_ID}-isolated-launcher"
+FREECAD_EXECUTABLE_ENV = "FREECAD_MCP_ISOLATED_FREECAD"
+SUPERVISE_FLAG = "--supervise"
 _MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -112,6 +118,19 @@ def _consume_launcher_args(argv: list[str]) -> tuple[str | None, list[str]]:
     return profile_name, remainder
 
 
+def _consume_supervision_flag(argv: list[str]) -> tuple[bool, list[str]]:
+    supervise = False
+    remainder: list[str] = []
+    for arg in argv:
+        if arg == SUPERVISE_FLAG:
+            if supervise:
+                raise SystemExit(f"{SUPERVISE_FLAG} may be specified only once")
+            supervise = True
+        else:
+            remainder.append(arg)
+    return supervise, remainder
+
+
 class InstanceValidationError(RuntimeError):
     """The endpoint answered, but it is not the launched isolated runtime."""
 
@@ -120,8 +139,49 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
+def _resolve_freecad_executable(repo: Path) -> Path:
+    """Select one explicit FreeCAD executable without changing profile policy."""
+
+    configured = os.environ.get(FREECAD_EXECUTABLE_ENV, "").strip()
+    if configured:
+        expanded = os.path.expandvars(os.path.expanduser(configured))
+        candidate = Path(expanded)
+        if not candidate.is_absolute():
+            raise SystemExit(
+                f"{FREECAD_EXECUTABLE_ENV} must be an absolute path: {configured!r}"
+            )
+        try:
+            resolved = candidate.resolve(strict=True)
+        except OSError as exc:
+            raise SystemExit(
+                f"{FREECAD_EXECUTABLE_ENV} does not identify an existing file: "
+                f"{candidate}"
+            ) from exc
+        if not resolved.is_file():
+            raise SystemExit(
+                f"{FREECAD_EXECUTABLE_ENV} must identify a regular file: {resolved}"
+            )
+        if os.name != "nt" and not os.access(resolved, os.X_OK):
+            raise SystemExit(
+                f"{FREECAD_EXECUTABLE_ENV} is not executable: {resolved}"
+            )
+        return resolved
+
+    executable_name = "FreeCAD.exe" if sys.platform == "win32" else "FreeCAD"
+    candidate = repo / "build" / "release" / "bin" / executable_name
+    if not candidate.is_file():
+        raise SystemExit(f"build/release FreeCAD not found: {candidate}")
+    if os.name != "nt" and not os.access(candidate, os.X_OK):
+        raise SystemExit(f"build/release FreeCAD is not executable: {candidate}")
+    return candidate
+
+
 def _manifest_path(profile: Path) -> Path:
     return profile / MANIFEST_FILENAME
+
+
+def _launch_state_path(profile: Path) -> Path:
+    return profile / LAUNCH_STATE_FILENAME
 
 
 def _load_manifest(profile: Path) -> dict[str, Any]:  # noqa: C901
@@ -195,8 +255,7 @@ def _load_manifest(profile: Path) -> dict[str, Any]:  # noqa: C901
     return value
 
 
-def _write_manifest(profile: Path, value: dict[str, Any]) -> None:
-    path = _manifest_path(profile)
+def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=path.name + ".", suffix=".tmp", dir=str(path.parent)
     )
@@ -214,6 +273,689 @@ def _write_manifest(profile: Path, value: dict[str, Any]) -> None:
         with suppress(OSError):
             temporary.unlink()
         raise
+
+
+def _write_manifest(profile: Path, value: dict[str, Any]) -> None:
+    _write_json_atomic(_manifest_path(profile), value)
+
+
+def _write_launch_state(profile: Path, *, process, executable: Path) -> None:
+    """Persist the exact spawned PID before any readiness wait can fail."""
+
+    _write_json_atomic(
+        _launch_state_path(profile),
+        {
+            "schema_version": 1,
+            "freecad_pid": int(process.pid),
+            "profile_path": str(profile.resolve()),
+            "freecad_executable": str(executable.resolve()),
+            "created_at_unix": time.time(),
+        },
+    )
+
+
+def _clear_launch_state(profile: Path) -> None:
+    with suppress(FileNotFoundError):
+        _launch_state_path(profile).unlink()
+
+
+def _terminate_spawned_process(process, *, timeout_seconds: float = 10.0) -> bool:
+    """Stop only the process object created by this launcher."""
+
+    if process.poll() is not None:
+        return True
+    with suppress(OSError):
+        process.terminate()
+    try:
+        process.wait(timeout=timeout_seconds)
+        return True
+    except subprocess.TimeoutExpired:
+        pass
+    except OSError:
+        return process.poll() is not None
+    with suppress(OSError):
+        process.kill()
+    try:
+        process.wait(timeout=timeout_seconds)
+    except (OSError, subprocess.TimeoutExpired):
+        return process.poll() is not None
+    return process.poll() is not None
+
+
+class _WindowsLifetimeJob:
+    """Kill-on-close Job Object assigned before a suspended child first runs."""
+
+    _KILL_ON_JOB_CLOSE = 0x00002000
+    _EXTENDED_LIMIT_INFORMATION = 9
+
+    def __init__(self) -> None:  # noqa: C901 - bounded ctypes declarations
+        import ctypes
+        from ctypes import wintypes
+
+        self._ctypes = ctypes
+        self._wintypes = wintypes
+        self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+        class BASIC_LIMITS(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                ("PerJobUserTimeLimit", ctypes.c_longlong),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_ulonglong),
+                ("WriteOperationCount", ctypes.c_ulonglong),
+                ("OtherOperationCount", ctypes.c_ulonglong),
+                ("ReadTransferCount", ctypes.c_ulonglong),
+                ("WriteTransferCount", ctypes.c_ulonglong),
+                ("OtherTransferCount", ctypes.c_ulonglong),
+            ]
+
+        class EXTENDED_LIMITS(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BASIC_LIMITS),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        self._limits_type = EXTENDED_LIMITS
+        self._kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+        self._kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        self._kernel32.SetInformationJobObject.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        ]
+        self._kernel32.SetInformationJobObject.restype = wintypes.BOOL
+        self._kernel32.AssignProcessToJobObject.argtypes = [
+            wintypes.HANDLE,
+            wintypes.HANDLE,
+        ]
+        self._kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+        self._kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        self._kernel32.TerminateJobObject.restype = wintypes.BOOL
+        self._kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+        self._kernel32.ResumeThread.restype = wintypes.DWORD
+        self._kernel32.GetExitCodeProcess.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        self._kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        self._kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self._kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        self._kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        self._kernel32.TerminateProcess.restype = wintypes.BOOL
+        self._kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        self._handle = self._kernel32.CreateJobObjectW(None, None)
+        if not self._handle:
+            raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
+        limits = EXTENDED_LIMITS()
+        limits.BasicLimitInformation.LimitFlags = self._KILL_ON_JOB_CLOSE
+        if not self._kernel32.SetInformationJobObject(
+            self._handle,
+            self._EXTENDED_LIMIT_INFORMATION,
+            ctypes.byref(limits),
+            ctypes.sizeof(limits),
+        ):
+            error = ctypes.get_last_error()
+            self.close()
+            raise OSError(error, "SetInformationJobObject failed")
+
+    def bind_suspended_process(self, process_handle, thread_handle) -> None:
+        if not self._kernel32.AssignProcessToJobObject(self._handle, process_handle):
+            raise OSError(
+                self._ctypes.get_last_error(),
+                "AssignProcessToJobObject failed",
+            )
+        previous_suspend_count = self._kernel32.ResumeThread(thread_handle)
+        if previous_suspend_count == 0xFFFFFFFF:
+            raise OSError(self._ctypes.get_last_error(), "ResumeThread failed")
+
+    def terminate(self) -> None:
+        if self._handle and not self._kernel32.TerminateJobObject(self._handle, 1):
+            raise OSError(self._ctypes.get_last_error(), "TerminateJobObject failed")
+
+    def close(self) -> None:
+        if self._handle:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+
+class _WindowsCreatedProcess:
+    """Minimal Popen-compatible owner backed by retained Win32 handles."""
+
+    STILL_ACTIVE = 259
+
+    def __init__(self, *, api, process_handle, pid: int) -> None:
+        self._api = api
+        self._handle = process_handle
+        self.pid = int(pid)
+        self.returncode = None
+
+    def poll(self):
+        if self.returncode is not None:
+            return self.returncode
+        code = self._api._wintypes.DWORD()
+        if not self._api._kernel32.GetExitCodeProcess(
+            self._handle, self._api._ctypes.byref(code)
+        ):
+            raise OSError(
+                self._api._ctypes.get_last_error(), "GetExitCodeProcess failed"
+            )
+        if code.value == self.STILL_ACTIVE:
+            return None
+        self.returncode = int(code.value)
+        return self.returncode
+
+    def wait(self, timeout=None):
+        milliseconds = 0xFFFFFFFF if timeout is None else max(0, int(timeout * 1000))
+        result = self._api._kernel32.WaitForSingleObject(self._handle, milliseconds)
+        if result == 258:
+            raise subprocess.TimeoutExpired("FreeCAD", timeout)
+        if result != 0:
+            raise OSError(
+                self._api._ctypes.get_last_error(), "WaitForSingleObject failed"
+            )
+        return self.poll()
+
+    def kill(self):
+        if not self._api._kernel32.TerminateProcess(self._handle, 1):
+            raise OSError(
+                self._api._ctypes.get_last_error(), "TerminateProcess failed"
+            )
+
+    def terminate(self):
+        self.kill()
+
+    def close(self) -> None:
+        if self._handle:
+            self._api._kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+
+def _windows_quote_command(argv: list[str]) -> str:
+    return subprocess.list2cmdline(argv)
+
+
+def _windows_environment_block(env: dict[str, str]):
+    # CreateProcessW requires case-insensitive ordering and a double-NUL tail.
+    entries = [f"{key}={value}" for key, value in sorted(env.items(), key=lambda x: x[0].upper())]
+    return "\0".join(entries) + "\0\0"
+
+
+def _create_windows_suspended_process(cmd, *, env, cwd, job: _WindowsLifetimeJob):
+    """Create suspended, bind to the preconfigured Job, then resume."""
+
+    ctypes = job._ctypes
+    wintypes = job._wintypes
+    kernel32 = job._kernel32
+
+    class STARTUPINFOW(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("lpReserved", wintypes.LPWSTR),
+            ("lpDesktop", wintypes.LPWSTR),
+            ("lpTitle", wintypes.LPWSTR),
+            ("dwX", wintypes.DWORD),
+            ("dwY", wintypes.DWORD),
+            ("dwXSize", wintypes.DWORD),
+            ("dwYSize", wintypes.DWORD),
+            ("dwXCountChars", wintypes.DWORD),
+            ("dwYCountChars", wintypes.DWORD),
+            ("dwFillAttribute", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("wShowWindow", wintypes.WORD),
+            ("cbReserved2", wintypes.WORD),
+            ("lpReserved2", ctypes.POINTER(ctypes.c_ubyte)),
+            ("hStdInput", wintypes.HANDLE),
+            ("hStdOutput", wintypes.HANDLE),
+            ("hStdError", wintypes.HANDLE),
+        ]
+
+    class STARTUPINFOEXW(ctypes.Structure):
+        _fields_ = [
+            ("StartupInfo", STARTUPINFOW),
+            ("lpAttributeList", ctypes.c_void_p),
+        ]
+
+    class PROCESS_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("hProcess", wintypes.HANDLE),
+            ("hThread", wintypes.HANDLE),
+            ("dwProcessId", wintypes.DWORD),
+            ("dwThreadId", wintypes.DWORD),
+        ]
+
+    kernel32.CreateProcessW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.BOOL,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.LPCWSTR,
+        ctypes.POINTER(STARTUPINFOEXW),
+        ctypes.POINTER(PROCESS_INFORMATION),
+    ]
+    kernel32.CreateProcessW.restype = wintypes.BOOL
+    kernel32.InitializeProcThreadAttributeList.argtypes = [
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
+    kernel32.InitializeProcThreadAttributeList.restype = wintypes.BOOL
+    kernel32.UpdateProcThreadAttribute.argtypes = [
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.c_size_t,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    ]
+    kernel32.UpdateProcThreadAttribute.restype = wintypes.BOOL
+    kernel32.DeleteProcThreadAttributeList.argtypes = [ctypes.c_void_p]
+    class SECURITY_ATTRIBUTES(ctypes.Structure):
+        _fields_ = [
+            ("nLength", wintypes.DWORD),
+            ("lpSecurityDescriptor", ctypes.c_void_p),
+            ("bInheritHandle", wintypes.BOOL),
+        ]
+
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(SECURITY_ATTRIBUTES),
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    security = SECURITY_ATTRIBUTES(
+        ctypes.sizeof(SECURITY_ATTRIBUTES),
+        None,
+        True,
+    )
+    # The supervised FreeCAD child must never inherit the launcher's private
+    # STOP pipe. Give it explicit NUL standard handles instead.
+    null_input = kernel32.CreateFileW(
+        "NUL",
+        0x80000000,  # GENERIC_READ
+        0x00000001 | 0x00000002,  # FILE_SHARE_READ | FILE_SHARE_WRITE
+        ctypes.byref(security),
+        3,  # OPEN_EXISTING
+        0,
+        None,
+    )
+    null_output = kernel32.CreateFileW(
+        "NUL",
+        0x40000000,  # GENERIC_WRITE
+        0x00000001 | 0x00000002,
+        ctypes.byref(security),
+        3,
+        0,
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if null_input in (None, invalid_handle) or null_output in (None, invalid_handle):
+        error = ctypes.get_last_error()
+        for handle in (null_input, null_output):
+            if handle not in (None, invalid_handle):
+                kernel32.CloseHandle(handle)
+        raise OSError(error, "CreateFileW(NUL) failed")
+
+    attribute_size = ctypes.c_size_t()
+    kernel32.InitializeProcThreadAttributeList(
+        None,
+        1,
+        0,
+        ctypes.byref(attribute_size),
+    )
+    if not attribute_size.value:
+        error = ctypes.get_last_error()
+        kernel32.CloseHandle(null_input)
+        kernel32.CloseHandle(null_output)
+        raise OSError(error, "InitializeProcThreadAttributeList sizing failed")
+    attribute_storage = ctypes.create_string_buffer(attribute_size.value)
+    attribute_list = ctypes.cast(attribute_storage, ctypes.c_void_p)
+    if not kernel32.InitializeProcThreadAttributeList(
+        attribute_list,
+        1,
+        0,
+        ctypes.byref(attribute_size),
+    ):
+        error = ctypes.get_last_error()
+        kernel32.CloseHandle(null_input)
+        kernel32.CloseHandle(null_output)
+        raise OSError(error, "InitializeProcThreadAttributeList failed")
+    inherited_handles = (wintypes.HANDLE * 2)(null_input, null_output)
+    if not kernel32.UpdateProcThreadAttribute(
+        attribute_list,
+        0,
+        0x00020002,  # PROC_THREAD_ATTRIBUTE_HANDLE_LIST
+        ctypes.cast(inherited_handles, ctypes.c_void_p),
+        ctypes.sizeof(inherited_handles),
+        None,
+        None,
+    ):
+        error = ctypes.get_last_error()
+        kernel32.DeleteProcThreadAttributeList(attribute_list)
+        kernel32.CloseHandle(null_input)
+        kernel32.CloseHandle(null_output)
+        raise OSError(error, "UpdateProcThreadAttribute(HANDLE_LIST) failed")
+
+    startup = STARTUPINFOEXW()
+    startup.StartupInfo.cb = ctypes.sizeof(startup)
+    startup.StartupInfo.dwFlags = 0x00000100  # STARTF_USESTDHANDLES
+    startup.StartupInfo.hStdInput = null_input
+    startup.StartupInfo.hStdOutput = null_output
+    startup.StartupInfo.hStdError = null_output
+    startup.lpAttributeList = attribute_list
+    info = PROCESS_INFORMATION()
+    command_line = ctypes.create_unicode_buffer(_windows_quote_command(list(cmd)))
+    environment = ctypes.create_unicode_buffer(_windows_environment_block(dict(env)))
+    flags = (
+        0x00000004  # CREATE_SUSPENDED
+        | 0x00000200  # CREATE_NEW_PROCESS_GROUP
+        | 0x00000400  # CREATE_UNICODE_ENVIRONMENT
+        | 0x00080000  # EXTENDED_STARTUPINFO_PRESENT
+    )
+    create_error = 0
+    try:
+        created = kernel32.CreateProcessW(
+            str(cmd[0]),
+            command_line,
+            None,
+            None,
+            True,
+            flags,
+            environment,
+            str(cwd),
+            ctypes.byref(startup),
+            ctypes.byref(info),
+        )
+        if not created:
+            create_error = ctypes.get_last_error()
+    finally:
+        kernel32.DeleteProcThreadAttributeList(attribute_list)
+        kernel32.CloseHandle(null_input)
+        kernel32.CloseHandle(null_output)
+    if not created:
+        raise OSError(create_error, "CreateProcessW failed")
+    process = _WindowsCreatedProcess(
+        api=job,
+        process_handle=info.hProcess,
+        pid=int(info.dwProcessId),
+    )
+    try:
+        job.bind_suspended_process(info.hProcess, info.hThread)
+    except BaseException:
+        with suppress(Exception):
+            process.kill()
+        with suppress(Exception):
+            process.wait(timeout=10.0)
+        process.close()
+        raise
+    finally:
+        kernel32.CloseHandle(info.hThread)
+    return process
+
+
+class _SupervisedChild:
+    """Lifetime owner retained by test-only supervision mode."""
+
+    def __init__(self, process, *, windows_job=None) -> None:
+        self.process = process
+        self._windows_job = windows_job
+        self._closed = False
+        self._terminated = False
+
+    def terminate_exact_tree(self, *, grace_seconds: float = 5.0) -> None:
+        if self._closed:
+            raise RuntimeError("supervised child ownership has been closed")
+        if self._windows_job is not None:
+            self._windows_job.terminate()
+            self.process.wait(timeout=grace_seconds)
+            self._terminated = True
+            return
+
+        # The direct child has never been waited/reaped, so its numeric PID
+        # cannot be reused while this supervisor owns it. As session leader it
+        # also pins the private process-group identity for all descendants.
+        # TERM is followed by an unconditional group KILL: a TERM handler may
+        # fork, but its descendants remain in this creation-owned group.
+        group = int(self.process.pid)
+        with suppress(ProcessLookupError):
+            os.killpg(group, signal.SIGTERM)
+        time.sleep(max(0.0, grace_seconds))
+        with suppress(ProcessLookupError):
+            os.killpg(group, signal.SIGKILL)
+        self.process.wait(timeout=max(1.0, grace_seconds))
+        self._terminated = True
+
+    def exit_code_if_exited(self):
+        """Observe early exit without reaping the POSIX session leader."""
+
+        if self._windows_job is not None:
+            return self.process.poll()
+        waitid = getattr(os, "waitid", None)
+        wait_nowait = getattr(os, "WNOWAIT", None)
+        if waitid is None or wait_nowait is None:
+            return None
+        try:
+            result = waitid(
+                os.P_PID,
+                int(self.process.pid),
+                os.WEXITED | os.WNOHANG | wait_nowait,
+            )
+        except ChildProcessError:
+            return 1
+        if result is None:
+            return None
+        return int(getattr(result, "si_status", 1) or 1)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        if not self._terminated:
+            with suppress(Exception):
+                self.terminate_exact_tree(grace_seconds=1.0)
+        self._closed = True
+        if self._windows_job is not None:
+            self._windows_job.close()
+        close_process = getattr(self.process, "close", None)
+        if callable(close_process):
+            close_process()
+
+    @property
+    def terminated(self) -> bool:
+        return self._terminated
+
+
+class _SupervisorControl:
+    """Consume the private parent pipe from spawn until exact-tree shutdown."""
+
+    def __init__(self, stream=None) -> None:
+        self._stream = sys.stdin if stream is None else stream
+        self._stop = threading.Event()
+        self._command: str | None = None
+        self._read_error: BaseException | None = None
+        self._signal_requested = False
+        self._handlers: dict[object, object] = {}
+        self._thread = threading.Thread(
+            target=self._read_control,
+            name="freecad-mcp-supervisor-control",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        self._install_signal_handlers()
+        try:
+            self._thread.start()
+        except BaseException:
+            self.close()
+            raise
+
+    def _read_control(self) -> None:
+        try:
+            self._command = self._stream.readline()
+        except BaseException as exc:
+            self._read_error = exc
+        finally:
+            self._stop.set()
+
+    def _install_signal_handlers(self) -> None:
+        def request_stop(_signum, _frame) -> None:
+            # Python invokes this on the main thread. Mutate only the shared
+            # stop state; owned process cleanup remains in normal control flow.
+            self._signal_requested = True
+            self._stop.set()
+
+        for candidate in (
+            getattr(signal, "SIGTERM", None),
+            getattr(signal, "SIGINT", None),
+        ):
+            if candidate is None:
+                continue
+            try:
+                self._handlers[candidate] = signal.signal(candidate, request_stop)
+            except (OSError, ValueError):
+                continue
+
+    def wait(self, timeout: float | None = None) -> bool:
+        return self._stop.wait(timeout)
+
+    def requested(self) -> bool:
+        return self._stop.is_set()
+
+    def exit_code(self) -> int:
+        if self._signal_requested:
+            return 0
+        if self._read_error is not None:
+            return 1
+        return 0 if self._command in {"STOP\n", "STOP\r\n", ""} else 2
+
+    def close(self) -> None:
+        for candidate, previous in self._handlers.items():
+            with suppress(OSError, ValueError):
+                signal.signal(candidate, previous)
+        self._handlers.clear()
+
+
+def _spawn_freecad_process(
+    cmd,
+    *,
+    env,
+    cwd,
+    supervise: bool,
+):
+    """Spawn FreeCAD, binding supervised Windows children before first run."""
+
+    if sys.platform == "win32" and supervise:
+        windows_job = _WindowsLifetimeJob()
+        try:
+            process = _create_windows_suspended_process(
+                cmd, env=env, cwd=cwd, job=windows_job
+            )
+        except BaseException:
+            windows_job.close()
+            raise
+        return process, _SupervisedChild(process, windows_job=windows_job)
+
+    creationflags = 0
+    start_new_session = os.name != "nt"
+    windows_job = None
+    if sys.platform == "win32":
+        creationflags = (
+            subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+            | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+        )
+    try:
+        process = subprocess.Popen(
+            cmd,
+            env=env,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL if supervise else None,
+            creationflags=creationflags,
+            close_fds=True,
+            start_new_session=start_new_session,
+        )
+    except BaseException:
+        if windows_job is not None:
+            windows_job.close()
+        raise
+    return process, (_SupervisedChild(process, windows_job=windows_job) if supervise else None)
+
+
+def _spawn_supervised_process_with_control(cmd, *, env, cwd):
+    """Atomically hand a new supervised child to its control monitor."""
+
+    control = _SupervisorControl()
+    control.start()
+    process = None
+    owner = None
+    try:
+        if control.requested():
+            raise InterruptedError("supervisor stop requested before child spawn")
+        process, owner = _spawn_freecad_process(
+            cmd,
+            env=env,
+            cwd=cwd,
+            supervise=True,
+        )
+        if control.requested():
+            owner.terminate_exact_tree()
+            raise InterruptedError("supervisor stop requested during child spawn")
+    except BaseException:
+        if owner is not None:
+            owner.close()
+        control.close()
+        raise
+    return process, owner, control
+
+
+def _supervise_until_stop(
+    owner: _SupervisedChild,
+    control: _SupervisorControl,
+) -> int:
+    """Hold lifetime ownership until the private parent pipe requests stop."""
+
+    print("SUPERVISOR_READY", flush=True)
+    control.wait()
+    requested_exit = control.exit_code()
+    if requested_exit != 0:
+        print("ERROR: invalid supervisor command; stopping exact child", file=sys.stderr)
+    try:
+        owner.terminate_exact_tree()
+    except Exception as exc:
+        print(f"ERROR: identity-bound supervisor shutdown failed: {exc}", file=sys.stderr)
+        return 1
+    print("SUPERVISOR_STOPPED", flush=True)
+    return requested_exit
+
+
+def _close_supervised_lifecycle(owner, control) -> None:
+    """Tear down exact ownership before restoring external signal handlers."""
+
+    if owner is not None:
+        owner.close()
+    if control is not None:
+        control.close()
 
 
 def _reserve_endpoint(host: str, port: int) -> socket.socket:
@@ -505,12 +1247,11 @@ def _load_parent_start_freecad():
 
 def main() -> int:  # noqa: C901
     repo = _repo_root()
-    profile_name, freecad_argv = _consume_launcher_args(sys.argv[1:])
+    supervise, launcher_argv = _consume_supervision_flag(sys.argv[1:])
+    profile_name, freecad_argv = _consume_launcher_args(launcher_argv)
     profile = _resolve_profile(repo, profile_name=profile_name)
-    freecad = repo / "build" / "release" / "bin" / "FreeCAD.exe"
+    freecad = _resolve_freecad_executable(repo)
 
-    if not freecad.is_file():
-        raise SystemExit(f"build/release FreeCAD not found: {freecad}")
     if not profile.is_dir():
         raise SystemExit(
             f"Isolated profile missing: {profile}\n"
@@ -555,73 +1296,96 @@ def main() -> int:  # noqa: C901
         print(f"  RPC:      {host}:{port}")
         print("  existing default MCP instance is not contacted or stopped")
 
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = (
-                subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
-                | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-            )
     except BaseException:
         endpoint_reservation.close()
         raise
     # This is the narrowest possible release-to-bind window without changing
     # FreeCAD's addon listener to inherit a pre-bound socket.
     endpoint_reservation.close()
-    process = subprocess.Popen(
-        cmd,
-        env=env,
-        cwd=cwd,
-        creationflags=creationflags,
-        close_fds=True,
-    )
-    print(f"  pid:      {process.pid}")
-
-    # Keep launch expectations in memory.  The persistent readiness manifest
-    # is not updated with candidate runtime facts until their HMAC-authenticated
-    # handshake has been verified.
-    launch_manifest = dict(manifest)
-    launch_manifest.update(
-        {
-            "expected_freecad_pid": process.pid,
-            "expected_freecad_process_started_at": None,
-            "expected_addon_runtime_id": None,
-            "expected_boot_id": None,
-            "expected_protocol_version": None,
-            "expected_protocol_features": None,
-            "expected_addon_version": None,
-            "expected_addon_build_id": None,
-            "expected_freecad_version": None,
-            "expected_freecad_revision": None,
-            "expected_profile_path_fingerprint": None,
-        }
-    )
-
-    deadline = time.monotonic() + 60.0
-    launcher_identity = make_mcp_runtime_identity(client_build_id=LAUNCHER_BUILD_ID)
-    connection = FreeCADConnection(
-        host=host,
-        port=port,
-        timeout=2.0,
-        mcp_instance_id=launcher_identity.runtime_id,
-        mcp_client=launcher_identity.client_build_id,
-        mcp_pid=launcher_identity.pid,
-        mcp_host=launcher_identity.hostname,
-    )
+    process = None
+    supervised_owner = None
+    supervisor_control = None
+    connection = None
+    readiness_published = False
+    launch_state_written = False
     try:
+        if supervise:
+            process, supervised_owner, supervisor_control = (
+                _spawn_supervised_process_with_control(cmd, env=env, cwd=cwd)
+            )
+        else:
+            process, supervised_owner = _spawn_freecad_process(
+                cmd,
+                env=env,
+                cwd=cwd,
+                supervise=False,
+            )
+        print(f"  pid:      {process.pid}")
+        # This record closes the crash window between Popen and authenticated
+        # manifest publication. A caller can refuse or clean up this exact PID
+        # even if the launcher itself is interrupted during readiness proof.
+        _write_launch_state(profile, process=process, executable=freecad)
+        launch_state_written = True
+
+        # Keep launch expectations in memory.  The persistent readiness
+        # manifest is not updated with candidate runtime facts until their
+        # HMAC-authenticated handshake has been verified.
+        launch_manifest = dict(manifest)
+        launch_manifest.update(
+            {
+                "expected_freecad_pid": process.pid,
+                "expected_freecad_process_started_at": None,
+                "expected_addon_runtime_id": None,
+                "expected_boot_id": None,
+                "expected_protocol_version": None,
+                "expected_protocol_features": None,
+                "expected_addon_version": None,
+                "expected_addon_build_id": None,
+                "expected_freecad_version": None,
+                "expected_freecad_revision": None,
+                "expected_profile_path_fingerprint": None,
+            }
+        )
+
+        deadline = time.monotonic() + 60.0
+        launcher_identity = make_mcp_runtime_identity(client_build_id=LAUNCHER_BUILD_ID)
+        connection = FreeCADConnection(
+            host=host,
+            port=port,
+            timeout=2.0,
+            mcp_instance_id=launcher_identity.runtime_id,
+            mcp_client=launcher_identity.client_build_id,
+            mcp_pid=launcher_identity.pid,
+            mcp_host=launcher_identity.hostname,
+        )
         proxy = connection.server
         while time.monotonic() < deadline:
-            if process.poll() is not None:
+            if supervisor_control is not None and supervisor_control.requested():
+                return _supervise_until_stop(
+                    supervised_owner,
+                    supervisor_control,
+                )
+            exit_code = (
+                supervised_owner.exit_code_if_exited()
+                if supervised_owner is not None
+                else process.poll()
+            )
+            if exit_code is not None:
                 print(
                     f"ERROR: FreeCAD exited before RPC identity was proven "
-                    f"(code {process.returncode})",
+                    f"(code {exit_code})",
                     file=sys.stderr,
                 )
-                return process.returncode or 1
+                return exit_code or 1
             try:
                 info = proxy.get_instance_info()
             except (JsonRpcProtocolMismatchError, JsonRpcRemoteError, OSError):
-                time.sleep(0.5)
-                continue
+                if supervisor_control is None or not supervisor_control.wait(0.5):
+                    continue
+                return _supervise_until_stop(
+                    supervised_owner,
+                    supervisor_control,
+                )
             try:
                 expectations = _prove_authenticated_instance(
                     proxy,
@@ -634,25 +1398,50 @@ def main() -> int:  # noqa: C901
             except InstanceValidationError as exc:
                 print(
                     "ERROR: authenticated RPC endpoint identity validation failed: "
-                    f"{exc}. The process was not reused or stopped.",
+                    f"{exc}. The exact spawned process will be stopped.",
                     file=sys.stderr,
                 )
                 return 1
             validated_manifest = dict(launch_manifest)
             validated_manifest.update(expectations)
             _write_manifest(profile, validated_manifest)
+            readiness_published = True
+            # The authenticated readiness manifest supersedes the unresolved
+            # launch record. Failure to remove the redundant record must not
+            # turn a proven-ready child into an unowned detached process.
+            with suppress(OSError):
+                _clear_launch_state(profile)
             print(
                 f"Isolated MCP RPC identity authenticated on {host}:{port} "
                 f"(pid={process.pid}, "
                 f"runtime={expectations['expected_addon_runtime_id']})"
             )
+            if supervised_owner is not None:
+                return _supervise_until_stop(
+                    supervised_owner,
+                    supervisor_control,
+                )
             return 0
     finally:
-        connection.disconnect()
+        if supervised_owner is None and process is not None and not readiness_published:
+            stopped = _terminate_spawned_process(process)
+            if stopped:
+                if launch_state_written:
+                    _clear_launch_state(profile)
+            elif not launch_state_written:
+                # A launch-state write failure must not erase the only durable
+                # record of a child that also resisted exact-process cleanup.
+                with suppress(Exception):
+                    _write_launch_state(profile, process=process, executable=freecad)
+        if connection is not None:
+            with suppress(Exception):
+                connection.disconnect()
+        _close_supervised_lifecycle(supervised_owner, supervisor_control)
 
     print(
         f"ERROR: FreeCAD started, but no authenticated isolated RPC appeared on "
-        f"{host}:{port} within 60 seconds. The process was not stopped.",
+        f"{host}:{port} within 60 seconds. The exact spawned process was stopped "
+        "when possible; unresolved launch state was preserved otherwise.",
         file=sys.stderr,
     )
     return 1

@@ -9,9 +9,13 @@ def spreadsheet_create(self, doc_name: str, sheet_name: str) -> dict:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: spreadsheet_create_gui(
-                doc_name, sheet_name, freecad=collaborators.freecad
+                doc_name,
+                sheet_name,
+                freecad=collaborators.freecad,
+                recompute=False,
             ),
             structural=True,
         )
@@ -19,15 +23,18 @@ def spreadsheet_create(self, doc_name: str, sheet_name: str) -> dict:
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
-def spreadsheet_set_cells(
-    self, doc_name: str, sheet_name: str, cells: list
-) -> dict:
+def spreadsheet_set_cells(self, doc_name: str, sheet_name: str, cells: list) -> dict:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: spreadsheet_set_cells_gui(
-                doc_name, sheet_name, cells, freecad=collaborators.freecad
+                doc_name,
+                sheet_name,
+                cells,
+                freecad=collaborators.freecad,
+                recompute=False,
             ),
         )
     )
@@ -52,9 +59,15 @@ def spreadsheet_set_alias(
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: spreadsheet_set_alias_gui(
-                doc_name, sheet_name, address, alias, freecad=collaborators.freecad
+                doc_name,
+                sheet_name,
+                address,
+                alias,
+                freecad=collaborators.freecad,
+                recompute=False,
             ),
         )
     )
@@ -71,7 +84,7 @@ def spreadsheet_list_aliases(self, doc_name: str, sheet_name: str) -> dict:
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
-def spreadsheet_create_gui(doc_name, sheet_name, *, freecad):
+def spreadsheet_create_gui(doc_name, sheet_name, *, freecad, recompute: bool = True):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -79,13 +92,21 @@ def spreadsheet_create_gui(doc_name, sheet_name, *, freecad):
         if doc.getObject(sheet_name):
             return f"Object already exists: {sheet_name}"
         sheet = doc.addObject("Spreadsheet::Sheet", sheet_name)
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return {"success": True, "sheet": sheet.Name}
     except Exception as e:
         return str(e)
 
 
-def spreadsheet_set_cells_gui(doc_name, sheet_name, cells, *, freecad):
+def spreadsheet_set_cells_gui(
+    doc_name,
+    sheet_name,
+    cells,
+    *,
+    freecad,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -99,7 +120,8 @@ def spreadsheet_set_cells_gui(doc_name, sheet_name, cells, *, freecad):
             if error:
                 return error
             updated.append(row)
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return {"success": True, "sheet": sheet.Name, "updated": updated}
     except Exception as e:
         return str(e)
@@ -119,7 +141,15 @@ def spreadsheet_get_cells_gui(doc_name, sheet_name, addresses, *, freecad):
         return str(e)
 
 
-def spreadsheet_set_alias_gui(doc_name, sheet_name, address, alias, *, freecad):
+def spreadsheet_set_alias_gui(
+    doc_name,
+    sheet_name,
+    address,
+    alias,
+    *,
+    freecad,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -128,7 +158,8 @@ def spreadsheet_set_alias_gui(doc_name, sheet_name, address, alias, *, freecad):
         if not sheet:
             return f"Spreadsheet '{sheet_name}' not found."
         sheet.setAlias(str(address), str(alias))
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return {
             "success": True,
             "sheet": sheet.Name,

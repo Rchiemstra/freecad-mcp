@@ -70,9 +70,33 @@ class CadCollaborators:
         callback: Callable[[], Any],
         *,
         structural: bool = False,
+        recompute: bool = True,
+        postcondition: Callable[[], Any] | None = None,
     ) -> Any:
         """Delegate exactly once through the injected native boundary."""
 
+        if postcondition is not None:
+            if recompute:
+                return self.compatibility_api.commit_compatibility_mutation(
+                    document_name,
+                    callback,
+                    structural=structural,
+                    postcondition=postcondition,
+                )
+            return self.compatibility_api.commit_compatibility_mutation(
+                document_name,
+                callback,
+                structural=structural,
+                recompute=recompute,
+                postcondition=postcondition,
+            )
+        if not recompute:
+            return self.compatibility_api.commit_compatibility_mutation(
+                document_name,
+                callback,
+                structural=structural,
+                recompute=False,
+            )
         return self.compatibility_api.commit_compatibility_mutation(
             document_name, callback, structural=structural
         )

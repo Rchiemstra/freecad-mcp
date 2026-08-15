@@ -155,6 +155,7 @@ def test_historic_sidecar_round_trip_returns_immutable_projection(tmp_path: _Pat
         (b"\xff", _SidecarMalformedError),
         (b"{" + b"x" * _MAX_SIDECAR_BYTES, _SidecarTooLargeError),
     ],
+    ids=("malformed-json", "invalid-utf8", "oversized-payload"),
 )
 def test_historic_sidecar_rejects_bad_bytes(
     data: bytes, error: type[Exception]

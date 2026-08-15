@@ -4,29 +4,54 @@ import logging
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
-from ...template_resources import render_template_text
-from .run_code import _run_code
+from ...responses.tool_results import tool_fail, tool_ok
 
 logger = logging.getLogger("FreeCADMCPserver")
 
+
 def undo_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
-    code = render_template_text(
-        "core/doc_action.py.txt",
-        doc_name=repr(doc_name),
-        action_line="_d.undo()",
-        message=repr("undo done"),
-    )
-    return _run_code(freecad, True, code,
-                     f"Undo performed on '{doc_name}'", "Failed to undo",
-                     document=doc_name)
+    return _typed_history_response(freecad, "undo", doc_name)
+
 
 def redo_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
-    code = render_template_text(
-        "core/doc_action.py.txt",
-        doc_name=repr(doc_name),
-        action_line="_d.redo()",
-        message=repr("redo done"),
+    return _typed_history_response(freecad, "redo", doc_name)
+
+
+def _typed_history_response(freecad: FreeCADConnection, action: str, doc_name: str) -> ToolResponse:
+    try:
+        result = getattr(freecad, action)(doc_name)
+    except Exception as exc:
+        logger.error("Typed %s failed: %s", action, exc)
+        return tool_fail(f"Failed to {action}: {exc}")
+    if (
+        isinstance(result, dict)
+        and result.get("success") is not False
+        and result.get("ok") is not False
+    ):
+        return tool_ok(
+            f"{action.title()} performed on '{doc_name}'",
+            structured=result,
+            only_text_feedback=True,
+        )
+    failure = result.get("error", result) if isinstance(result, dict) else result
+    return tool_fail(
+        f"Failed to {action}: {failure}",
+        structured=result if isinstance(result, dict) else None,
+        error_code=result.get("error_code") if isinstance(result, dict) else None,
     )
-    return _run_code(freecad, True, code,
-                     f"Redo performed on '{doc_name}'", "Failed to redo",
-                     document=doc_name)
+
+
+def get_mutation_readiness_operation(
+    freecad: FreeCADConnection, doc_name: str | None = None
+) -> ToolResponse:
+    try:
+        result = freecad.get_mutation_readiness(doc_name)
+    except Exception as exc:
+        return tool_fail(f"Failed to inspect mutation readiness: {exc}")
+    if isinstance(result, dict) and result.get("success") is not False:
+        return tool_ok("Mutation readiness checked", structured=result, only_text_feedback=True)
+    return tool_fail(
+        f"Failed to inspect mutation readiness: {result}",
+        structured=result if isinstance(result, dict) else None,
+        error_code=result.get("error_code") if isinstance(result, dict) else None,
+    )

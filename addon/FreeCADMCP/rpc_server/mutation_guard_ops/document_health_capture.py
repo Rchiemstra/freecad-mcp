@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+try:
+    from document_state import document_modified_or_dirty
+except ImportError:  # pragma: no cover - package test layout
+    from addon.FreeCADMCP.document_state import document_modified_or_dirty
+
 from .document_health_delta import DocumentHealthDelta
 from .document_health_snapshot import DocumentHealthSnapshot
 from .document_health_verdict import DocumentHealthVerdict
@@ -21,7 +26,7 @@ from .object_helpers import (
 from .validation_profile import ValidationProfile
 
 
-def capture_document_health(
+def capture_document_health(  # noqa: C901
     document: Any,
     *,
     document_session_uuid: str = "",
@@ -34,7 +39,7 @@ def capture_document_health(
         return DocumentHealthSnapshot(
             document_name=name,
             document_session_uuid=str(document_session_uuid or ""),
-            document_dirty=bool(getattr(document, "Modified", False)),
+            document_dirty=document_modified_or_dirty(document),
             object_count=len(tuple(getattr(document, "Objects", ()) or ())),
             object_names=(),
             recompute_error_objects=(),
@@ -90,13 +95,7 @@ def capture_document_health(
             issue = body_tip_issue(item)
             if issue:
                 body_issues.append(issue)
-    dirty = bool(
-        getattr(
-            document,
-            "Modified",
-            getattr(document, "modified", False),
-        )
-    )
+    dirty = document_modified_or_dirty(document)
     return DocumentHealthSnapshot(
         document_name=name,
         document_session_uuid=str(document_session_uuid or ""),

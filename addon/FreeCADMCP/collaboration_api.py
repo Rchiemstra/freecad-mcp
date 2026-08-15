@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -25,11 +24,15 @@ class CollaborationAPI:
         callback: Callable[[], Any],
         *,
         structural: bool = False,
+        recompute: bool = True,
+        postcondition: Callable[[], Any] | None = None,
     ) -> Any:
         """Return the native result after invoking ``callback`` at the commit boundary."""
 
         if not callable(callback):
             raise TypeError("callback must be callable")
+        if postcondition is not None and not callable(postcondition):
+            raise TypeError("postcondition must be callable")
 
         document = self._document_lookup(document_name)
         if document is None:
@@ -37,8 +40,20 @@ class CollaborationAPI:
 
         commit = getattr(document, "commitCompatibilityMutation", None)
         if not callable(commit):
-            if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") == "1":
-                raise TypeError("document must provide commitCompatibilityMutation()")
-            callback()
-            return {"status": "Committed", "committed": True}
-        return commit(callback, structural=structural)
+            raise TypeError("document must provide commitCompatibilityMutation()")
+        native_options: dict[str, Any] = {"structural": structural}
+        if structural:
+            # The public MCP surface never accepts native authority.  Only an
+            # internal typed/generated operation that selected structural
+            # scope can request the matching native trust grant.  An older
+            # runtime rejects this keyword before invoking the callback.
+            native_options["trusted_structural"] = True
+        if not recompute:
+            native_options["recompute"] = False
+        if postcondition is not None:
+            # A postcondition is an ordering contract, not an optional
+            # convenience.  Passing the keyword deliberately fails before the
+            # callback on an older native runtime instead of silently moving
+            # validation back in front of the native recompute.
+            native_options["postcondition"] = postcondition
+        return commit(callback, **native_options)

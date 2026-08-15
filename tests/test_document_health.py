@@ -18,6 +18,7 @@ from addon.FreeCADMCP.rpc_server.mutation_guard import (
     capture_document_health,
     make_method_spec,
 )
+from tests.helpers.native_readiness import attach_native_readiness
 
 pytestmark = pytest.mark.unit
 
@@ -128,6 +129,7 @@ class Doc:
         self.commits = 0
         self.aborts = 0
         self.fail_abort = False
+        attach_native_readiness(self)
 
     def openTransaction(self, _name):
         self.opened += 1
@@ -174,6 +176,22 @@ def test_health_delta_separates_preexisting_and_new_errors():
     assert delta.preexisting_recompute_errors == ("Stable",)
     assert delta.new_recompute_errors == ()
     assert delta.created_objects == ("Created",)
+
+
+def test_health_capture_uses_authoritative_app_file_change_state():
+    document = Doc()
+    document.Modified = False
+    document.getFileChangeState = lambda: {
+        "state": "modified",
+        "has_pending_file_changes": True,
+        "last_canonical_save_failed": False,
+    }
+
+    default = capture_document_health(document, profile=ValidationProfile.DEFAULT)
+    skipped = capture_document_health(document, profile=ValidationProfile.NONE)
+
+    assert default.document_dirty is True
+    assert skipped.document_dirty is True
 
 
 def test_invalid_object_status_uses_get_status_string():

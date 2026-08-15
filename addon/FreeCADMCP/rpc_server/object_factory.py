@@ -25,10 +25,12 @@ def _create_fem_mesh(doc: FreeCAD.Document, obj: Object):
     """
     from femmesh.gmshtools import GmshTools
 
-    res = getattr(doc, obj.analysis).addObject(
-        ObjectsFem.makeMeshGmsh(doc, obj.name)
-    )[0]
-    geom_attr = "Shape" if hasattr(res, "Shape") else ("Part" if hasattr(res, "Part") else None)
+    res = getattr(doc, obj.analysis).addObject(ObjectsFem.makeMeshGmsh(doc, obj.name))[
+        0
+    ]
+    geom_attr = (
+        "Shape" if hasattr(res, "Shape") else ("Part" if hasattr(res, "Part") else None)
+    )
     legacy_to_new = {
         "Part": geom_attr,
         "ElementSizeMax": "CharacteristicLengthMax",
@@ -70,7 +72,9 @@ def _create_fem_object(doc: FreeCAD.Document, obj: Object):
     }
     obj_type_short = obj.type.split("::")[1]
     method_name = "make" + obj_type_short
-    make_method = fem_make_methods.get(obj_type_short, getattr(ObjectsFem, method_name, None))
+    make_method = fem_make_methods.get(
+        obj_type_short, getattr(ObjectsFem, method_name, None)
+    )
 
     if not callable(make_method):
         raise ValueError(f"No creation method '{method_name}' found in ObjectsFem.")
@@ -93,7 +97,7 @@ def _create_generic_object(doc: FreeCAD.Document, obj: Object) -> None:
     )
 
 
-def create_object_gui(doc_name: str, obj: Object):
+def create_object_gui(doc_name: str, obj: Object, *, recompute: bool = True):
     """Create an object in ``doc_name`` according to ``obj.type``.
 
     Returns ``True`` on success, or an error string on failure (matching the
@@ -122,7 +126,8 @@ def create_object_gui(doc_name: str, obj: Object):
         else:
             _create_generic_object(doc, obj)
 
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return True
     except Exception as e:
         return str(e)

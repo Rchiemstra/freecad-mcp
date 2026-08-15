@@ -35,6 +35,7 @@ from .core_ops.feature_ops import (
 )
 from .core_ops.fem_ops import run_fem_analysis_operation
 from .core_ops.history_ops import (
+    get_mutation_readiness_operation,
     redo_operation,
     undo_operation,
 )
@@ -105,6 +106,7 @@ __all__ = [
     "edit_object_operation",
     "execute_code_async_operation",
     "execute_code_operation",
+    "get_mutation_readiness_operation",
     "get_object_operation",
     "get_objects_operation",
     "get_parts_list_operation",

@@ -9,7 +9,7 @@ _mirror = _body.newObject('PartDesign::Mirrored', $mirror_name)
 _set_originals(_mirror, _src)
 _set_linksub(_mirror, ('MirrorPlane', 'Plane'), _resolve_linksub(_doc, _body, $plane))
 _set_tip(_body, _mirror)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('mirror_name=' + _mirror.Name)
 print('source_name=' + _src.Name)
 print('body_name=' + _body.Name)

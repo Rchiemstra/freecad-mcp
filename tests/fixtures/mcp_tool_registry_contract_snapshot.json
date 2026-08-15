@@ -48,7 +48,7 @@
     "tools_advanced_b",
     "tools_advanced_b2"
   ],
-  "tool_count": 171,
+  "tool_count": 172,
   "tool_order": [
     "get_runtime_info",
     "check_rpc_sync",
@@ -121,6 +121,7 @@
     "linear_pattern_feature",
     "polar_pattern_feature",
     "mirror_feature",
+    "get_mutation_readiness",
     "recompute_document",
     "undo",
     "redo",
@@ -432,7 +433,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str', base_feature: 'str', fillet_name: 'str', radius: 'float', edge_refs: 'list[str] | None' = None, body_name: 'str | None' = None) -> 'CallToolResult'"
     },
     "finalize_document_edit": {
-      "docstring": "Validate, Save/Save As, reopen-verify, then CAS-release the lease.\n\nAny validation, save, or sidecar-removal failure retains a visible locked\nerror/recovery record instead of presenting a clean release.",
+      "docstring": "Run native change-aware Save/Save As, verify a stable live FCStd hash,\nmetadata, required archive members, and CRC, then report finalization.\n\nNo legacy MCP lease is held or released. A save, clean-state, or verification\nfailure returns ``finalized: false`` and keeps automation fail-closed.",
       "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', save_mode: \"Literal['save', 'save_as', 'first_save']\" = 'save', destination: 'str' = '', overwrite: 'bool' = False, expected_destination_sha256: 'str' = '', validation_profile: 'str' = 'default') -> 'CallToolResult'"
     },
     "find_edges": {
@@ -466,6 +467,10 @@
     "get_gui_state": {
       "docstring": "Report the active GUI context (read-only).\n\nReturns JSON with the active document, active PartDesign Body, active\nworkbench, the object currently in edit-mode, and the current selection.\nUse it to orient before editing -- e.g. confirm the right Body is active\nbefore adding a sketch/feature, or check whether a Sketch is open for edit.",
       "signature": "(ctx: 'Context') -> 'CallToolResult'"
+    },
+    "get_mutation_readiness": {
+      "docstring": "Inspect whether one document, or all open documents, is safe for the next typed mutation. Reports pending native transactions, recompute work, collaboration barriers, and document-local rollback quarantine.",
+      "signature": "(ctx: 'Context', doc_name: 'str | None' = None) -> 'CallToolResult'"
     },
     "get_object": {
       "docstring": "Get an object from a document.\nYou can use this tool to get the properties of an object to see what you can check or edit.\n\nArgs:\n    doc_name: The name of the document to get the object from.\n    obj_name: The name of the object to get.\n\nReturns:\n    The object and a screenshot of the object.",
@@ -664,15 +669,15 @@
       "signature": "(ctx: 'Context', doc_name: 'str', analysis_name: 'str', timeout: 'int' = 600) -> 'CallToolResult'"
     },
     "run_transaction": {
-      "docstring": "Run code inside ``openTransaction`` with automatic rollback on failure (M5).\n\nAuthenticated lease mode rejects this legacy nested-code helper because\nits inner ``exec`` cannot be independently scoped by the addon's mutation\nguard. Use typed modelling tools, or the explicitly enabled unsafe\n``execute_code`` route with ``affected_documents``.",
+      "docstring": "Retired transaction-code helper.\n\nGenerated callbacks cannot own transaction or history control inside FreeCAD's\nnative mutation coordinator. This tool always returns\n``RUN_TRANSACTION_RETIRED``; use typed modelling tools instead.",
       "signature": "(ctx: 'Context', doc_name: 'str', label: 'str', code: 'str', dry_run: 'bool' = False, commit_on_success: 'bool' = True) -> 'CallToolResult'"
     },
     "save_document": {
-      "docstring": "Compare, save, hash, reopen-verify, and retain the renewable lease.\n\nSelect the open document with ``document_name``,\n``document_session_uuid``, or ``canonical_path``. If more than one field is\nsupplied, every field must identify the same live document.",
+      "docstring": "Run native change-aware Save and verify a stable live FCStd hash, metadata,\nrequired archive members, and CRC. An Unchanged result is also compared with\nthe invocation baseline and does not rewrite the file.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document.",
       "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', validation_profile: 'str' = 'default') -> 'CallToolResult'"
     },
     "save_document_as": {
-      "docstring": "Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases.\n\nSelect the open document with ``document_name``,\n``document_session_uuid``, or ``canonical_path``. If more than one field is\nsupplied, every field must identify the same live document.",
+      "docstring": "Run native policy-controlled Save As (no-clobber by default) and verify a\nstable live FCStd hash, metadata, required archive members, and CRC. No legacy\nlease aliases are created.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document. Non-empty legacy\nexpected-hash options are rejected rather than silently ignored.",
       "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', destination: 'str', overwrite: 'bool' = False, expected_destination_sha256: 'str' = '', validation_profile: 'str' = 'default') -> 'CallToolResult'"
     },
     "save_view_sequence": {

@@ -9,9 +9,22 @@ def set_expression(
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: set_expression_gui(
-                doc_name, object_name, prop_path, expression,
+                doc_name,
+                object_name,
+                prop_path,
+                expression,
+                freecad=collaborators.freecad,
+                recompute=False,
+                validate_result=False,
+            ),
+            postcondition=lambda: _set_expression_result_gui(
+                doc_name,
+                object_name,
+                prop_path,
+                expression,
                 freecad=collaborators.freecad,
             ),
         )
@@ -23,9 +36,14 @@ def clear_expression(self, doc_name: str, object_name: str, prop_path: str) -> d
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: clear_expression_gui(
-                doc_name, object_name, prop_path, freecad=collaborators.freecad
+                doc_name,
+                object_name,
+                prop_path,
+                freecad=collaborators.freecad,
+                recompute=False,
             ),
         )
     )
@@ -42,7 +60,16 @@ def list_expressions(self, doc_name: str, object_name: str) -> dict:
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
-def set_expression_gui(doc_name, object_name, prop_path, expression, *, freecad):
+def set_expression_gui(
+    doc_name,
+    object_name,
+    prop_path,
+    expression,
+    *,
+    freecad,
+    recompute: bool = True,
+    validate_result: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -61,22 +88,61 @@ def set_expression_gui(doc_name, object_name, prop_path, expression, *, freecad)
                 "expression": expression,
                 "message": str(e),
             }
-        doc.recompute()
-        state = list(getattr(obj, "State", []))
-        invalid = any(s in ("Invalid", "Error") for s in state)
-        return {
-            "success": not invalid,
-            "object": obj.Name,
-            "prop_path": prop_path,
-            "expression": expression,
-            "state": state,
-            "valid": not invalid,
-        }
+        if recompute:
+            doc.recompute()
+        if not validate_result:
+            return {
+                "success": True,
+                "object": obj.Name,
+                "prop_path": prop_path,
+                "expression": expression,
+            }
+        return _set_expression_result(obj, prop_path, expression)
     except Exception as e:
         return str(e)
 
 
-def clear_expression_gui(doc_name, object_name, prop_path, *, freecad):
+def _set_expression_result(obj, prop_path, expression):
+    state = list(getattr(obj, "State", []))
+    invalid = any(s in ("Invalid", "Error") for s in state)
+    return {
+        "success": not invalid,
+        "object": obj.Name,
+        "prop_path": prop_path,
+        "expression": expression,
+        "state": state,
+        "valid": not invalid,
+    }
+
+
+def _set_expression_result_gui(
+    doc_name,
+    object_name,
+    prop_path,
+    expression,
+    *,
+    freecad,
+):
+    try:
+        doc = freecad.getDocument(doc_name)
+        if not doc:
+            return f"Document '{doc_name}' not found."
+        obj = doc.getObject(object_name)
+        if not obj:
+            return f"Object '{object_name}' not found."
+        return _set_expression_result(obj, prop_path, expression)
+    except Exception as e:
+        return str(e)
+
+
+def clear_expression_gui(
+    doc_name,
+    object_name,
+    prop_path,
+    *,
+    freecad,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -88,7 +154,8 @@ def clear_expression_gui(doc_name, object_name, prop_path, *, freecad):
             obj.clearExpression(prop_path)
         else:
             obj.setExpression(prop_path, None)
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return {"success": True, "object": obj.Name, "prop_path": prop_path}
     except Exception as e:
         return str(e)

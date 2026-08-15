@@ -77,7 +77,10 @@ def create_assembly_joint(conn, *args, **kwargs):
 
 def solve_assembly(conn, *args, **kwargs):
     """Generated client stub for solve_assembly (mutation)."""
-    raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)
+    from freecad_mcp.generated.capabilities.connection_methods.connection_assembly_ops import (
+        solve_assembly as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
 
 # subject: core
 def create_document(conn, *args, **kwargs):
@@ -150,6 +153,13 @@ def diagnose_pocket(conn, *args, **kwargs):
     raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)
 
 # subject: document_history
+def get_mutation_readiness(conn, *args, **kwargs):
+    """Generated client stub for get_mutation_readiness (read)."""
+    from freecad_mcp.generated.capabilities.connection_methods.connection_model_ops import (
+        get_mutation_readiness as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
+
 def close_document(conn, *args, **kwargs):
     """Generated client stub for close_document (mutation)."""
     raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)

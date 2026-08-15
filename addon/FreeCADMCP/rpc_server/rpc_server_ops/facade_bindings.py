@@ -11,6 +11,7 @@ from ..methods import (
     native_lifecycle_methods,
     v2_methods,
 )
+from ..methods.cad_methods_ops.mutation_readiness import get_mutation_readiness
 from ..methods.cad_methods_ops.recompute_helpers import collect_invalid_objects
 from ..methods.cad_methods_ops.sketch_gui_constraints import (
     sketch_delete_constraint_gui,
@@ -120,6 +121,7 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.undo = cad_methods.undo
     FreeCADRPC.redo = cad_methods.redo
     FreeCADRPC.get_recompute_log = cad_methods.get_recompute_log
+    FreeCADRPC.get_mutation_readiness = get_mutation_readiness
     FreeCADRPC.spreadsheet_create = cad_methods.spreadsheet_create
     FreeCADRPC.spreadsheet_set_cells = cad_methods.spreadsheet_set_cells
     FreeCADRPC.spreadsheet_get_cells = cad_methods.spreadsheet_get_cells

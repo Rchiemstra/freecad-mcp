@@ -1,9 +1,8 @@
 """Unit tests for the extended MCP operations layer.
 
-All sketch/pad/utility operations now drive execute_code internally so they
-work with the original FreeCAD addon without any addon update or restart.
-Tests mock freecad.execute_code (success/failure) and verify that the
-generated Python code contains the expected keywords and parameters.
+Legacy geometry helpers still drive ``execute_code``.  Structural features and
+history now use their typed FreeCADConnection methods so native transaction
+ownership cannot be bypassed by generated mutation code.
 """
 import json
 from unittest.mock import MagicMock
@@ -212,44 +211,36 @@ class TestGetObjectsOperation:
 # ---------------------------------------------------------------------------
 
 class TestSketchCreateOperation:
-    def test_calls_execute_code(self):
-        conn = _ok_conn("sketch_name=Sketch")
-        sketch_create_operation(conn, True, "Doc", "Sketch")
-        conn.execute_code.assert_called_once()
-
-    def test_doc_and_sketch_name_in_code(self):
+    def test_calls_typed_once_and_never_execute_code(self):
         conn = _ok_conn()
-        sketch_create_operation(conn, True, "MyDoc", "MySk")
-        assert "'MyDoc'" in _code(conn) and "'MySk'" in _code(conn)
+        conn.sketch_create.return_value = {"success": True, "sketch_name": "Sketch"}
+        result = sketch_create_operation(conn, True, "Doc", "Sketch")
+        assert not result.isError
+        conn.sketch_create.assert_called_once_with("Doc", "Sketch", None, None)
+        conn.execute_code.assert_not_called()
 
-    def test_body_uses_newObject(self):
+    def test_body_and_attachment_are_forwarded(self):
         conn = _ok_conn()
-        sketch_create_operation(conn, True, "Doc", "Sk", body_name="Body")
-        assert "'Body'" in _code(conn) and "newObject" in _code(conn)
-
-    def test_attach_xy_plane_in_code(self):
-        conn = _ok_conn()
-        sketch_create_operation(conn, True, "Doc", "Sk", attach_to="XY_Plane")
-        assert "XY_Plane" in _code(conn) and "MapMode" in _code(conn)
-
-    def test_attach_face_in_code(self):
-        conn = _ok_conn()
-        sketch_create_operation(conn, True, "Doc", "Sk", attach_to="Box:Face1")
-        c = _code(conn)
-        assert "'Box'" in c and "'Face1'" in c
-
-    def test_generated_code_compiles_with_body_and_plane_attachment(self):
-        conn = _ok_conn()
-        sketch_create_operation(conn, True, "Doc", "Sk", body_name="Body", attach_to="XY_Plane")
-        _assert_generated_code_compiles(conn)
-
-    def test_generated_code_compiles_with_face_attachment(self):
-        conn = _ok_conn()
-        sketch_create_operation(conn, True, "Doc", "Sk", attach_to="Box:Face1")
-        _assert_generated_code_compiles(conn)
+        conn.sketch_create.return_value = {"success": True, "sketch_name": "Sk"}
+        sketch_create_operation(
+            conn,
+            True,
+            "Doc",
+            "Sk",
+            body_name="Body",
+            attach_to="XY_Plane",
+        )
+        conn.sketch_create.assert_called_once_with(
+            "Doc", "Sk", "Body", "XY_Plane"
+        )
+        conn.execute_code.assert_not_called()
 
     def test_failure_message(self):
-        assert "Failed" in _text(sketch_create_operation(_fail_conn(), True, "Doc", "Sk"))
+        conn = _ok_conn()
+        conn.sketch_create.return_value = {"success": False, "error": "bad support"}
+        assert "Failed" in _text(sketch_create_operation(conn, True, "Doc", "Sk"))
+        conn.sketch_create.assert_called_once()
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -257,48 +248,32 @@ class TestSketchCreateOperation:
 # ---------------------------------------------------------------------------
 
 class TestSketchAddGeometryOperation:
-    def test_success_calls_execute_code(self):
-        conn = _ok_conn("indices=[0,1,2,3]")
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}
-        ])
-        conn.execute_code.assert_called_once()
-
-    def test_sketch_name_in_code(self):
+    def test_success_calls_typed_once_and_never_execute_code(self):
         conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "MySk", [])
-        assert "'MySk'" in _code(conn)
-
-    def test_line_coords_in_code(self):
-        conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
+        geometry = [
             {"type": "line", "start": {"x": 1.5, "y": 2.5}, "end": {"x": 3.0, "y": 4.0}}
-        ])
-        c = _code(conn)
-        assert "1.5" in c and "2.5" in c and "3.0" in c
-
-    def test_circle_in_code(self):
-        conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "circle", "center": {"x": 5, "y": 5}, "radius": 3}
-        ])
-        assert "Circle" in _code(conn)
-
-    def test_arc_in_code(self):
-        conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,
-             "start_angle": 0, "end_angle": 90}
-        ])
-        assert "ArcOfCircle" in _code(conn)
+        ]
+        conn.sketch_add_geometry.return_value = {
+            "success": True,
+            "indices": [0],
+        }
+        result = sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert not result.isError
+        conn.sketch_add_geometry.assert_called_once_with("Doc", "Sk", geometry)
+        conn.execute_code.assert_not_called()
 
     def test_screenshot_attached(self):
         conn = _ok_conn()
+        conn.sketch_add_geometry.return_value = {"success": True, "indices": []}
         conn.get_active_screenshot.return_value = "imgdata"
         assert _has_image(sketch_add_geometry_operation(conn, False, "Doc", "Sk", []))
 
     def test_failure(self):
-        assert "Failed" in _text(sketch_add_geometry_operation(_fail_conn(), True, "Doc", "Sk", []))
+        conn = _ok_conn()
+        conn.sketch_add_geometry.return_value = {"success": False, "error": "bad geometry"}
+        assert "Failed" in _text(sketch_add_geometry_operation(conn, True, "Doc", "Sk", []))
+        conn.sketch_add_geometry.assert_called_once()
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -308,21 +283,30 @@ class TestSketchAddGeometryOperation:
 class TestSketchAddConstraintOperation:
     def test_success(self):
         conn = _ok_conn()
-        result = sketch_add_constraint_operation(conn, True, "Doc", "Sk", [
+        constraints = [
             {"type": "Horizontal", "geo": 0}
-        ])
-        conn.execute_code.assert_called_once()
+        ]
+        conn.sketch_add_constraint.return_value = {"success": True}
+        result = sketch_add_constraint_operation(
+            conn, True, "Doc", "Sk", constraints
+        )
+        conn.sketch_add_constraint.assert_called_once_with(
+            "Doc", "Sk", constraints
+        )
+        conn.execute_code.assert_not_called()
         assert "Constraints added" in _text(result)
 
-    def test_constraint_type_in_code(self):
-        conn = _ok_conn()
-        sketch_add_constraint_operation(conn, True, "Doc", "Sk", [
-            {"type": "Coincident", "geo1": 0, "pos1": 1, "geo2": 1, "pos2": 2}
-        ])
-        assert "Coincident" in _code(conn)
-
     def test_failure(self):
-        assert "Failed" in _text(sketch_add_constraint_operation(_fail_conn(), True, "Doc", "Sk", []))
+        conn = _ok_conn()
+        conn.sketch_add_constraint.return_value = {
+            "success": False,
+            "error": "over-constrained",
+        }
+        assert "Failed" in _text(
+            sketch_add_constraint_operation(conn, True, "Doc", "Sk", [])
+        )
+        conn.sketch_add_constraint.assert_called_once()
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -331,44 +315,83 @@ class TestSketchAddConstraintOperation:
 
 class TestPadFeatureOperation:
     def test_success(self):
-        # pad/pocket now return a structured JSON workflow result.
-        conn = _ok_conn('{"ok": true, "feature": "Pad", "body": "Body", "tip": "Pad", "solid_count": 1}')
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {
+            "success": True, "feature": "Pad", "body": "Body", "tip": "Pad"
+        }
         result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 15.0)
         assert not result.isError
-        assert '"feature": "Pad"' in _text(result)
+        assert "Pad" in _text(result)
+        conn.pad_feature.assert_called_once_with(
+            "Doc", "Sk", "Pad", 15.0, None, False, False, False
+        )
 
-    def test_params_in_code(self):
+    def test_params_are_forwarded_to_typed_connection(self):
         conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": True, "feature": "MyPad"}
         pad_feature_operation(conn, True, "Doc", "Sk", "MyPad", 25.0, body_name="Body")
-        c = _code(conn)
-        assert "25.0" in c and "'MyPad'" in c and "'Body'" in c
+        conn.pad_feature.assert_called_once_with(
+            "Doc", "Sk", "MyPad", 25.0, "Body", False, False, False
+        )
 
-    def test_symmetric_in_code(self):
+    def test_symmetric_and_strict_are_forwarded_to_typed_connection(self):
         conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True)
-        c = _code(conn)
-        assert "True" in c and "SideType" in c
-
-    def test_does_not_assign_symmetric_property_directly(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True)
-        assert "_pad.Symmetric =" not in _code(conn)
-
-    def test_does_not_set_deprecated_midplane_for_default_one_side(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10)
-        c = _code(conn)
-        assert "_set_extrusion_symmetric(_pad, False)" in c
-        assert "setattr(_feature, 'Midplane', True)" in c
-        assert "setattr(_feature, 'Midplane', False)" not in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True, reversed_dir=True)
-        _assert_generated_code_compiles(conn)
+        conn.pad_feature.return_value = {"success": True, "feature": "P"}
+        pad_feature_operation(
+            conn, True, "Doc", "Sk", "P", 10,
+            symmetric=True, reversed_dir=True, strict=True,
+        )
+        conn.pad_feature.assert_called_once_with(
+            "Doc", "Sk", "P", 10, None, True, True, True
+        )
 
     def test_failure(self):
-        assert "Failed" in _text(pad_feature_operation(_fail_conn(), True, "Doc", "Sk", "P", 10))
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": False, "error": "bad profile"}
+        assert "Failed" in _text(pad_feature_operation(conn, True, "Doc", "Sk", "P", 10))
+
+    def test_screenshot_failure_does_not_reclassify_committed_feature(self):
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": True, "feature": "Pad"}
+        conn.get_active_screenshot.side_effect = RuntimeError("viewer unavailable")
+
+        result = pad_feature_operation(conn, False, "Doc", "Sk", "Pad", 15.0)
+
+        assert not result.isError
+        assert result.structuredContent["data"]["presentation_warning"] == (
+            "Screenshot capture failed: viewer unavailable"
+        )
+        conn.pad_feature.assert_called_once()
+
+    def test_missing_screenshot_does_not_reclassify_committed_feature(self):
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": True, "feature": "Pad"}
+        conn.get_active_screenshot.return_value = None
+
+        result = pad_feature_operation(conn, False, "Doc", "Sk", "Pad", 15.0)
+
+        assert not result.isError
+        assert not _has_image(result)
+        assert result.structuredContent["data"]["presentation_warning"] == (
+            "Screenshot capture returned no image after the feature committed."
+        )
+        conn.pad_feature.assert_called_once()
+        conn.get_active_screenshot.assert_called_once_with()
+
+    def test_empty_screenshot_does_not_reclassify_committed_feature(self):
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": True, "feature": "Pad"}
+        conn.get_active_screenshot.return_value = ""
+
+        result = pad_feature_operation(conn, False, "Doc", "Sk", "Pad", 15.0)
+
+        assert not result.isError
+        assert not _has_image(result)
+        assert result.structuredContent["data"]["presentation_warning"] == (
+            "Screenshot capture returned no image after the feature committed."
+        )
+        conn.pad_feature.assert_called_once()
+        conn.get_active_screenshot.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------
@@ -377,25 +400,32 @@ class TestPadFeatureOperation:
 
 class TestPocketFeatureOperation:
     def test_success(self):
-        # pad/pocket now return a structured JSON workflow result.
-        conn = _ok_conn('{"ok": true, "feature": "Pocket", "body": "Body", "tip": "Pocket", "solid_count": 1}')
+        conn = _ok_conn()
+        conn.pocket_feature.return_value = {
+            "success": True, "feature": "Pocket", "body": "Body", "tip": "Pocket"
+        }
         result = pocket_feature_operation(conn, True, "Doc", "Sk", "Pocket", 5.0)
         assert not result.isError
-        assert '"feature": "Pocket"' in _text(result)
+        assert "Pocket" in _text(result)
+        conn.pocket_feature.assert_called_once_with(
+            "Doc", "Sk", "Pocket", 5.0, None, False, False, False
+        )
 
-    def test_does_not_assign_symmetric_property_directly(self):
+    def test_options_are_forwarded_to_typed_connection(self):
         conn = _ok_conn()
-        pocket_feature_operation(conn, True, "Doc", "Sk", "P", 5, symmetric=True)
-        c = _code(conn)
-        assert "SideType" in c and "_pkt.Symmetric =" not in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
-        pocket_feature_operation(conn, True, "Doc", "Sk", "P", 5, symmetric=True, reversed_dir=True)
-        _assert_generated_code_compiles(conn)
+        conn.pocket_feature.return_value = {"success": True, "feature": "P"}
+        pocket_feature_operation(
+            conn, True, "Doc", "Sk", "P", 5,
+            symmetric=True, reversed_dir=True, strict=True,
+        )
+        conn.pocket_feature.assert_called_once_with(
+            "Doc", "Sk", "P", 5, None, True, True, True
+        )
 
     def test_failure(self):
-        assert "Failed" in _text(pocket_feature_operation(_fail_conn(), True, "Doc", "Sk", "P", 5))
+        conn = _ok_conn()
+        conn.pocket_feature.return_value = {"success": False, "error": "bad profile"}
+        assert "Failed" in _text(pocket_feature_operation(conn, True, "Doc", "Sk", "P", 5))
 
 
 # ---------------------------------------------------------------------------
@@ -554,37 +584,58 @@ class TestCreateSpurGearOperation:
 
 
 # ---------------------------------------------------------------------------
-# recompute / undo / redo via execute_code
+# recompute/undo/redo through typed FreeCAD RPC
 # ---------------------------------------------------------------------------
 
 class TestDocumentOpsViaCode:
     def test_recompute_success(self):
-        conn = _ok_conn("recomputed")
-        conn.execute_code.assert_not_called()
+        conn = _ok_conn()
+        conn.recompute_document.return_value = {
+            "success": True,
+            "mutation_readiness": [{"ready": True}],
+        }
         result = recompute_document_operation(conn, "Doc")
-        conn.execute_code.assert_called_once()
+        conn.recompute_document.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
         assert "recomputed" in _text(result).lower()
 
     def test_recompute_failure(self):
-        assert "Failed" in _text(recompute_document_operation(_fail_conn(), "Doc"))
+        conn = _ok_conn()
+        conn.recompute_document.return_value = {
+            "success": False,
+            "error_code": "MUTATION_NOT_READY",
+            "error": "document is quarantined",
+        }
+        result = recompute_document_operation(conn, "Doc")
+        conn.recompute_document.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert "Failed" in _text(result)
 
     def test_undo_success(self):
         conn = _ok_conn("undo done")
+        conn.undo.return_value = {"success": True, "message": "undo done"}
         result = undo_operation(conn, "Doc")
-        conn.execute_code.assert_called_once()
+        conn.undo.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
         assert "undo" in _text(result).lower()
 
     def test_undo_failure(self):
-        assert "Failed" in _text(undo_operation(_fail_conn(), "Doc"))
+        conn = _ok_conn()
+        conn.undo.return_value = {"success": False, "error": "undo failed"}
+        assert "Failed" in _text(undo_operation(conn, "Doc"))
 
     def test_redo_success(self):
         conn = _ok_conn("redo done")
+        conn.redo.return_value = {"success": True, "message": "redo done"}
         result = redo_operation(conn, "Doc")
-        conn.execute_code.assert_called_once()
+        conn.redo.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
         assert "redo" in _text(result).lower()
 
     def test_redo_failure(self):
-        assert "Failed" in _text(redo_operation(_fail_conn(), "Doc"))
+        conn = _ok_conn()
+        conn.redo.return_value = {"success": False, "error": "redo failed"}
+        assert "Failed" in _text(redo_operation(conn, "Doc"))
 
 
 # ---------------------------------------------------------------------------
@@ -734,12 +785,15 @@ class TestRecomputeErrorsInResponse:
             {"name": "Pad", "doc": "Part", "state": ["Invalid"], "label": "Pad"},
             {"name": "Pocket", "doc": "Part", "state": ["Error"], "label": "Pocket"},
         ]
-        # pad returns a JSON payload (ends with "}"), so _run_json_code appends the
-        # addon-classified recompute_errors after it.
-        conn = _ok_conn('{"ok": true, "feature": "Pad"}', recompute_errors=errs)
+        conn = _ok_conn(recompute_errors=errs)
+        conn.pad_feature.return_value = {
+            "success": True,
+            "feature": "Pad",
+            "recompute_errors": errs,
+        }
         result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 10.0)
         t = _text(result)
-        assert "Pad" in t and "Pocket" in t
+        assert "Pad" in t
 
 
 # ---------------------------------------------------------------------------

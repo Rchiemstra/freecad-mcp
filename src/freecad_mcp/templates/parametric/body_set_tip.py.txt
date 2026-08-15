@@ -6,6 +6,6 @@ if not _body: raise RuntimeError('Body not found: ' + $body_name)
 _feat = _doc.getObject($feature_name)
 if not _feat: raise RuntimeError('Feature not found: ' + $feature_name)
 _body.Tip = _feat
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 _tip_name = getattr(getattr(_body, 'Tip', None), 'Name', None)
 print(json.dumps({'ok': True, 'body': _body.Name, 'tip': _tip_name, 'feature': _feat.Name}))

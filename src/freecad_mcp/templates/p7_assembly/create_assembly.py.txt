@@ -2,7 +2,6 @@ import Assembly
 
 _assembly_name = $assembly_name
 _create_joint_group = $create_joint_group
-_recompute = $recompute
 _if_exists = $if_exists
 _existing = _doc.getObject(_assembly_name)
 
@@ -38,7 +37,7 @@ else:
         _doc,
         _assembly_name,
         createJointGroup=_create_joint_group,
-        recompute=_recompute,
+        recompute=False,
     )
     print(json.dumps({
         'ok': True,

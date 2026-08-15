@@ -8,7 +8,15 @@ from .sketch_geometry_ops import add_sketch_geometry_item
 from .sketch_gui_constraints import sketch_delete_error
 
 
-def sketch_add_geometry_gui(doc_name, sketch_name, geometry, *, freecad, part):
+def sketch_add_geometry_gui(
+    doc_name,
+    sketch_name,
+    geometry,
+    *,
+    freecad,
+    part,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -26,7 +34,8 @@ def sketch_add_geometry_gui(doc_name, sketch_name, geometry, *, freecad, part):
                 return error
             indices.extend(added)
 
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return indices
     except Exception as e:
         return str(e)
@@ -38,6 +47,7 @@ def sketch_delete_geometry_gui(
     geometry_indices,
     *,
     freecad,
+    recompute: bool = True,
 ):
     try:
         doc = freecad.getDocument(doc_name)
@@ -105,7 +115,8 @@ def sketch_delete_geometry_gui(
 
         constraint_count_before = len(list(getattr(sketch, "Constraints", []) or []))
         sketch.delGeometries(target_indices)
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         remaining_geometry_count = len(list(getattr(sketch, "Geometry", []) or []))
         remaining_constraint_count = len(list(getattr(sketch, "Constraints", []) or []))
         return {

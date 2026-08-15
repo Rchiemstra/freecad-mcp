@@ -30,7 +30,7 @@ def is_near_blank_png(image: bytes | bytearray | memoryview) -> bool:
     return True
 
 
-def _decode_png_sample_bytes(data: bytes) -> tuple[bytes, int]:
+def _decode_png_sample_bytes(data: bytes) -> tuple[bytes, int]:  # noqa: C901
     pos = 8
     width = 0
     height = 0

@@ -8,6 +8,7 @@ from mcp.types import CallToolResult
 
 from freecad_mcp.operations import (
     close_document_operation,
+    get_mutation_readiness_operation,
     get_recompute_log_operation,
     recompute_document_operation,
     redo_operation,
@@ -18,6 +19,20 @@ from freecad_mcp.tools_server_surfaces import server_connection
 
 if TYPE_CHECKING:
     from freecad_mcp.instrumented_server import InstrumentedFastMCP
+def _register_get_mutation_readiness(
+    mcp: InstrumentedFastMCP,
+    *,
+    dependencies: ToolDependencies,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def get_mutation_readiness(
+        ctx: Context, doc_name: str | None = None
+    ) -> CallToolResult:
+        """Inspect whether one document, or all open documents, is safe for the next typed mutation. Reports pending native transactions, recompute work, collaboration barriers, and document-local rollback quarantine."""
+        return get_mutation_readiness_operation(server_connection(), doc_name)
+
+    exports['get_mutation_readiness'] = get_mutation_readiness
 def _register_recompute_document(
     mcp: InstrumentedFastMCP,
     *,
@@ -144,6 +159,11 @@ def register(
 ) -> dict[str, object]:
     """Register document_history MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
+    _register_get_mutation_readiness(
+        mcp,
+        dependencies=dependencies,
+        exports=exports,
+    )
     _register_recompute_document(
         mcp,
         dependencies=dependencies,

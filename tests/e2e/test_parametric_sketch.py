@@ -1,6 +1,7 @@
-"""E2E: parametric Spreadsheet → expression → Pad / named constraints.
+"""E2E: parametric Spreadsheet → expression → native Pad / Pocket.
 
-These tests run only inside the freecad-mcp Docker image (FreeCADCmd).
+These tests run under FreeCADCmd. The mutation-lane regression requires the
+branch-built native collaboration API rather than stock FreeCAD.
 """
 from __future__ import annotations
 
@@ -27,9 +28,12 @@ from freecad_mcp.operations.parametric import (  # noqa: E402
 from freecad_mcp.operations.core import (  # noqa: E402
     pad_feature_operation,
     pocket_feature_operation,
+    redo_operation,
     sketch_add_circle_operation,
     sketch_add_constraint_operation,
+    sketch_add_geometry_operation,
     sketch_create_operation,
+    undo_operation,
 )
 from tests.e2e._helpers import tool_response_text  # noqa: E402
 
@@ -59,6 +63,231 @@ def _json_from_response(resp) -> dict:
         idx = end
     assert objs, f"no JSON object in response: {text!r}"
     return objs[-1]
+
+
+def _assert_mutation_ready(conn, doc_name: str) -> dict:
+    readiness = conn.get_mutation_readiness(doc_name)
+    assert readiness.get("success") is True, readiness
+    assert readiness.get("ready") is True, readiness
+    assert readiness.get("reasons") == [], readiness
+    documents = readiness.get("documents") or []
+    assert len(documents) == 1, readiness
+    item = documents[0]
+    assert item.get("document") == doc_name, item
+    assert item.get("ready") is True, item
+    assert item.get("pending_transaction") is False, item
+    assert item.get("booked_transaction_id") == 0, item
+    assert item.get("transaction_locked") is False, item
+    assert item.get("must_execute") is False, item
+    assert item.get("pending_removal") is False, item
+    assert item.get("recomputing") is False, item
+    assert item.get("collaboration_blocked") is False, item
+    assert item.get("collaboration_poisoned") is False, item
+    assert item.get("quarantined") is False, item
+    return item
+
+
+def _assert_native_mutation_ready(document) -> None:
+    readiness = document.getMutationReadiness()
+    assert readiness.get("ready") is True, readiness
+    assert readiness.get("stable_event_supported") is True, readiness
+    assert readiness.get("pending_transaction") is False, readiness
+    assert readiness.get("booked_transaction") == 0, readiness
+    assert readiness.get("transaction_locked") is False, readiness
+    assert readiness.get("recomputing") is False, readiness
+    assert readiness.get("must_execute") is False, readiness
+    assert readiness.get("pending_removal") is False, readiness
+    assert readiness.get("commit_barrier") is False, readiness
+    assert readiness.get("notification_replay") is False, readiness
+    assert readiness.get("poisoned") is False, readiness
+    assert readiness.get("quarantined") is False, readiness
+
+
+def _successful(result: dict) -> bool:
+    return (
+        isinstance(result, dict)
+        and result.get("success") is True
+        and result.get("ok") is not False
+    )
+
+
+def test_native_mutation_lane_recovers_after_open_profile_failure(freecad_session):
+    """A failed Pad must not poison later features, history, or another doc."""
+
+    conn = freecad_session
+    doc = conn.doc
+    doc_name = doc.Name
+    # ``freecad_session`` capability-gates the whole production mutation facade:
+    # branch CI fails closed when native collaboration is required, while the
+    # stock conda compatibility image reports an explicit skip.
+    assert callable(getattr(doc, "commitCompatibilityMutation", None))
+    assert callable(getattr(doc, "getMutationReadiness", None))
+    doc.UndoMode = 1
+
+    assert not body_create_operation(conn, True, doc_name, "Body").isError
+    assert not sketch_create_operation(
+        conn,
+        True,
+        doc_name,
+        "Outer",
+        body_name="Body",
+        attach_to="XY_Plane",
+    ).isError
+    assert not sketch_add_geometry_operation(
+        conn,
+        True,
+        doc_name,
+        "Outer",
+        [
+            {
+                "type": "line",
+                "start": {"x": -6.0, "y": -4.0},
+                "end": {"x": 6.0, "y": -4.0},
+            }
+        ],
+    ).isError
+
+    history_before_bad_pad = int(doc.UndoCount)
+    rejected = conn.pad_feature(
+        doc_name,
+        "Outer",
+        "RejectedPad",
+        4.0,
+        "Body",
+        False,
+        False,
+        True,
+    )
+    assert rejected.get("success") is False, rejected
+    assert rejected.get("ok") is False, rejected
+    assert rejected.get("error") == "Sketch profile is not pad-ready", rejected
+    assert rejected.get("diagnostics", {}).get("is_closed") is not True, rejected
+    assert doc.getObject("RejectedPad") is None
+    assert int(doc.UndoCount) == history_before_bad_pad
+    _assert_mutation_ready(conn, doc_name)
+    _assert_native_mutation_ready(doc)
+
+    # Repair the same sketch into a constrained closed wire. The first edge is
+    # retained so this exercises recovery from the exact semantic preflight
+    # failure above, not a fresh-sketch retry.
+    assert not sketch_add_geometry_operation(
+        conn,
+        True,
+        doc_name,
+        "Outer",
+        [
+            {
+                "type": "line",
+                "start": {"x": 6.0, "y": -4.0},
+                "end": {"x": 6.0, "y": 4.0},
+            },
+            {
+                "type": "line",
+                "start": {"x": 6.0, "y": 4.0},
+                "end": {"x": -6.0, "y": 4.0},
+            },
+            {
+                "type": "line",
+                "start": {"x": -6.0, "y": 4.0},
+                "end": {"x": -6.0, "y": -4.0},
+            },
+        ],
+    ).isError
+    assert not sketch_add_constraint_operation(
+        conn,
+        True,
+        doc_name,
+        "Outer",
+        [
+            {"type": "Coincident", "geo1": 0, "pos1": 2, "geo2": 1, "pos2": 1},
+            {"type": "Coincident", "geo1": 1, "pos1": 2, "geo2": 2, "pos2": 1},
+            {"type": "Coincident", "geo1": 2, "pos1": 2, "geo2": 3, "pos2": 1},
+            {"type": "Coincident", "geo1": 3, "pos1": 2, "geo2": 0, "pos2": 1},
+            {"type": "Horizontal", "geo": 0},
+            {"type": "Vertical", "geo": 1},
+            {"type": "Horizontal", "geo": 2},
+            {"type": "Vertical", "geo": 3},
+        ],
+    ).isError
+    assert doc.getObject("Outer").Shape.isClosed()
+
+    pad_history_before = int(doc.UndoCount)
+    pad = conn.pad_feature(
+        doc_name, "Outer", "Pad", 4.0, "Body", False, False, True
+    )
+    assert _successful(pad), pad
+    assert pad.get("feature") == "Pad", pad
+    assert int(doc.UndoCount) == pad_history_before + 1
+    assert str(doc.UndoNames[0]).startswith("Collaborative operation ")
+    _assert_mutation_ready(conn, doc_name)
+
+    assert not sketch_create_operation(
+        conn,
+        True,
+        doc_name,
+        "Inner",
+        body_name="Body",
+        attach_to="XY_Plane",
+    ).isError
+    assert not sketch_add_circle_operation(
+        conn, True, doc_name, "Inner", 0.0, 0.0, 2.0
+    ).isError
+    pocket_history_before = int(doc.UndoCount)
+    pocket = conn.pocket_feature(
+        doc_name, "Inner", "Pocket", 4.0, "Body", False, True, True
+    )
+    assert _successful(pocket), pocket
+    assert pocket.get("feature") == "Pocket", pocket
+    assert int(doc.UndoCount) == pocket_history_before + 1
+    pocket_volume = float(doc.getObject("Pocket").Shape.Volume)
+    assert pocket_volume < float(doc.getObject("Pad").Shape.Volume)
+    _assert_mutation_ready(conn, doc_name)
+
+    undone = undo_operation(conn, doc_name)
+    assert not undone.isError, tool_response_text(undone)
+    assert doc.getObject("Pocket") is None
+    restored_pad = doc.getObject("Pad")
+    assert restored_pad is not None
+    assert doc.getObject("Body").Tip is restored_pad
+    assert int(doc.RedoCount) == 1
+    _assert_mutation_ready(conn, doc_name)
+
+    redone = redo_operation(conn, doc_name)
+    assert not redone.isError, tool_response_text(redone)
+    restored_pocket = doc.getObject("Pocket")
+    assert restored_pocket is not None
+    assert doc.getObject("Body").Tip is restored_pocket
+    assert float(restored_pocket.Shape.Volume) == pytest.approx(pocket_volume)
+    assert int(doc.RedoCount) == 0
+    _assert_mutation_ready(conn, doc_name)
+    _assert_native_mutation_ready(doc)
+
+    second_name = f"{doc_name}_Second"
+    second = FreeCAD.newDocument(second_name)
+    second.UndoMode = 1
+    try:
+        _assert_mutation_ready(conn, second_name)
+        assert not body_create_operation(conn, True, second_name, "Body").isError
+        assert not sketch_create_operation(
+            conn,
+            True,
+            second_name,
+            "Outer",
+            body_name="Body",
+            attach_to="XY_Plane",
+        ).isError
+        assert not sketch_add_circle_operation(
+            conn, True, second_name, "Outer", 0.0, 0.0, 3.0
+        ).isError
+        second_pad = conn.pad_feature(
+            second_name, "Outer", "Pad", 2.0, "Body", False, False, True
+        )
+        assert _successful(second_pad), second_pad
+        _assert_mutation_ready(conn, second_name)
+        _assert_native_mutation_ready(second)
+        _assert_mutation_ready(conn, doc_name)
+    finally:
+        FreeCAD.closeDocument(second_name)
 
 
 def test_alias_radius_pad_volume_updates(freecad_session):

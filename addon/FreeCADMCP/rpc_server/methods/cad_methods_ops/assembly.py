@@ -2,13 +2,12 @@
 
 import contextlib
 
-from .cad_mutation import run_cad_mutation
+from .cad_mutation import run_cad_mutation, unsupported_native_phase_boundary
 from .solve_assembly_helpers import run_assembly_solve
 
 
 def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
-    """I9 — re-solve an Assembly via the real internal solver. Tries
-    assembly.solve() (C++), then JointObject.solveIfAllowed, then recompute."""
+    """Re-solve through an apply-only solver, then native authoritative recompute."""
     collaborators = self._cad_collaborators
 
     def solve_task():
@@ -16,8 +15,12 @@ def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
             collaborators,
             doc_name,
             lambda: solve_assembly_gui(
-                doc_name, assembly_name, freecad=collaborators.freecad
+                doc_name,
+                assembly_name,
+                freecad=collaborators.freecad,
+                recompute=False,
             ),
+            structural=True,
         )
 
     res = self._dispatch_gui(solve_task)
@@ -26,7 +29,13 @@ def solve_assembly(self, doc_name: str, assembly_name: str) -> dict:
     return {"ok": False, "error": res}
 
 
-def solve_assembly_gui(doc_name: str, assembly_name: str, *, freecad):
+def solve_assembly_gui(
+    doc_name: str,
+    assembly_name: str,
+    *,
+    freecad,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -43,11 +52,20 @@ def solve_assembly_gui(doc_name: str, assembly_name: str, *, freecad):
                 "ok": False,
                 "error": f"Object '{assembly_name}' is not an Assembly::AssemblyObject.",
             }
-        method, status, error = run_assembly_solve(asm)
+        method, status, error = run_assembly_solve(
+            asm,
+            allow_recompute_fallback=recompute,
+        )
         if method is None:
+            if not recompute:
+                return unsupported_native_phase_boundary(
+                    "solve_assembly",
+                    error or "no apply-only Assembly solver entry point is available",
+                )
             return {"ok": False, "error": f"solve_assembly failed: {error}"}
-        with contextlib.suppress(Exception):
-            doc.recompute()
+        if recompute:
+            with contextlib.suppress(Exception):
+                doc.recompute()
         return {
             "ok": True,
             "assembly": asm.Name,

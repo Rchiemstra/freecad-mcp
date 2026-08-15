@@ -25,6 +25,7 @@ class InstallDockContext:
     save_clear_btn: Any
     restore_btn: Any
     keep_dirty_btn: Any
+    pause_btn: Any
     bridge: Any
     qt_widgets: Any
     qt_core: Any

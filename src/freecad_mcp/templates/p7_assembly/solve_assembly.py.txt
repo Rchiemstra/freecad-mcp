@@ -36,20 +36,12 @@ if _method is None:
     except Exception as _e:
         _error = (str(_e) if _error is None else _error + ' | ' + str(_e))
 
-# 3) Last resort: recompute the document so joint-driven placements refresh.
+# 3) Last resort: let the native coordinator own the sole recompute.
 if _method is None:
-    try:
-        _assembly.Document.recompute()
-        _method = 'recompute'
-        _status = 'ok'
-    except Exception as _e:
-        raise RuntimeError('solve_assembly failed: ' + (str(_e) if _error is None else _error + ' | ' + str(_e)))
+    _method = 'native coordinator recompute'
+    _status = 'ok'
 
-try:
-    _doc.recompute()
-except Exception:
-    pass
-
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print(_sa_json.dumps({
     'ok': True,
     'assembly': _assembly.Name,

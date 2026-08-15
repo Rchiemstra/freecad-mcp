@@ -5,5 +5,5 @@ _pts = [FreeCAD.Vector(_cx + _r*math.cos(_offset + 2*math.pi*_i/_n),
 _idxs = []
 for _i in range(_n):
     _idxs.append(_sk.addGeometry(Part.LineSegment(_pts[_i], _pts[(_i+1)%_n]),$construction))
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('indices=' + str(_idxs))

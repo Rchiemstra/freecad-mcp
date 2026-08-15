@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from ..cad_methods_ops.cad_mutation import cad_mutation_inflight
+from ..cad_methods_ops.mutation_readiness_wait import (
+    asynchronous_transient_document_keys,
+    await_transient_mutation_readiness,
+)
+
 # ruff: noqa: F403, F405
 from ._support import *
 from .dispatch_gui_callbacks import build_gui_on_complete, build_replay_on_complete
@@ -7,6 +13,44 @@ from .dispatch_gui_errors import handle_gui_dispatch_error
 from .dispatch_gui_lease_task import run_lease_aware_gui_task
 
 """GUI-thread dispatch with lease revalidation."""
+
+
+def _build_mutation_readiness_probe(collaborators, captured, inflight):
+    """Build a GUI-owner probe that never waits or enters a nested event loop."""
+
+    document_names = tuple(str(name) for name in captured["doc_names"] if name)
+    if not document_names:
+        return None
+
+    def probe():
+        if inflight is not None:
+            inflight.token.checkpoint("gui_mutation_readiness_probe")
+        documents = tuple(
+            collaborators.freecad.getDocument(name) for name in document_names
+        )
+        # A closed document is a permanent preflight error handled by the
+        # normal task.  It must not be stranded waiting for a native signal.
+        if any(document is None for document in documents):
+            return None
+        readiness, _settled = await_transient_mutation_readiness(
+            documents,
+            inflight=inflight,
+            # The dispatcher continuation owns only asynchronous native
+            # states. Operation-specific code retains mustExecute policy.
+            allow_pending_recompute=True,
+        )
+        waiting = asynchronous_transient_document_keys(
+            readiness,
+            allow_pending_recompute=True,
+        )
+        if not waiting:
+            return None
+        return GuiDeferDecision(
+            document_keys=document_names,
+            reason="native_mutation_readiness:" + ",".join(waiting),
+        )
+
+    return probe
 
 
 def dispatch_gui(
@@ -93,13 +137,28 @@ def dispatch_gui(
         collaborators=collaborators,
     )
 
+    readiness_probe = (
+        _build_mutation_readiness_probe(collaborators, captured, inflight)
+        if context
+        and bool(
+            getattr(dispatcher, "supports_readiness_continuations", False)
+        )
+        else None
+    )
+
     try:
-        return dispatcher.submit(
-            task,
-            t,
-            request_id=request_id,
-            session_id=session_id,
-            on_complete=(
+        def gui_task():
+            # ``run_cad_mutation`` is invoked inside this callback.  A
+            # ContextVar preserves the same request id/cancellation token for
+            # its bounded readiness settle turn without widening CAD's
+            # dependency container with dispatcher policy.
+            with cad_mutation_inflight(inflight):
+                return task()
+
+        submit_options = {
+            "request_id": request_id,
+            "session_id": session_id,
+            "on_complete": (
                 on_complete
                 if (
                     gui_phase_registered
@@ -109,7 +168,13 @@ def dispatch_gui(
                 )
                 else None
             ),
-        )
+        }
+        if readiness_probe is not None:
+            submit_options.update(
+                defer_probe=readiness_probe,
+                document_keys=tuple(captured["doc_names"]),
+            )
+        return dispatcher.submit(gui_task, t, **submit_options)
     except GuiDispatchError as exc:
         return handle_gui_dispatch_error(
             self,

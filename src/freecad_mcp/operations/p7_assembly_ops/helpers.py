@@ -56,6 +56,7 @@ def _run_json_code(
     screenshot: bool = False,
     document: str | None = None,
     read_only: bool = False,
+    recompute: bool = True,
     execution_mode: str = "auto",
     allow_gui_geometry_loop: bool = False,
 ) -> ToolResponse:
@@ -63,8 +64,10 @@ def _run_json_code(
         opts = ExecuteOptions(
             document=document,
             affected_documents=[document] if document and not read_only else None,
-            recompute="none" if read_only else "target",
-            recompute_documents=[document] if document and not read_only else None,
+            recompute="none" if read_only or not recompute else "target",
+            recompute_documents=(
+                [document] if document and not read_only and recompute else None
+            ),
             read_only=read_only,
             execution_mode="worker" if read_only else execution_mode,
             restore_active_document=True,

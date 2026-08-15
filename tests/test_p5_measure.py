@@ -342,10 +342,10 @@ class TestTranslate:
         code = _code(conn)
         assert_code_contains(code, "7.5", "-3.0", "2.5")
 
-    def test_recompute_called(self):
+    def test_recompute_is_deferred_to_native_postcondition(self):
         conn = _ok_conn()
         translate_operation(conn, True, "Doc", "Obj1", 0, 0, 0)
-        assert_code_contains(_code(conn), "_doc.recompute()")
+        assert_code_contains(_code(conn), "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
 
 
 # ---------------------------------------------------------------------------

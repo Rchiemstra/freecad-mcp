@@ -9,5 +9,5 @@ if _body_name:
 else:
     _sk = _doc.addObject('Sketcher::SketchObject', $sketch_name)
 $attachment_code
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('sketch_name=' + _sk.Name)

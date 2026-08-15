@@ -16,6 +16,7 @@ from addon.FreeCADMCP.rpc_server import rpc_server
 from freecad_mcp.operations.p7_assembly import (
     sketch_add_external_projection_operation,
 )
+from tests.helpers.native_readiness import attach_native_readiness
 
 
 HANGING_SYMMETRY_CODE = r'''
@@ -295,8 +296,19 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
             os.utime(model, ns=(before_mtime + 1_000_000, before_mtime + 1_000_000))
             self.Modified = False
 
-        def commitCompatibilityMutation(self, callback, *, structural=False):
+        def commitCompatibilityMutation(
+            self,
+            callback,
+            *,
+            structural=False,
+            recompute=True,
+            postcondition=None,
+            trusted_structural=False,
+        ):
             assert structural is True
+            assert recompute is False
+            assert postcondition is None
+            assert trusted_structural is True
             callback()
             return {
                 "status": "Committed",
@@ -304,7 +316,7 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
                 "revisions": {"UnknownModel": 1},
             }
 
-    document = _Document()
+    document = attach_native_readiness(_Document())
     monkeypatch.setattr(
         rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
     )

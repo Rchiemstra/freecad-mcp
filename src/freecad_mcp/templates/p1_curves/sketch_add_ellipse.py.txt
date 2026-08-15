@@ -3,5 +3,5 @@ _major_pt = FreeCAD.Vector($cx + $major_radius*math.cos(_angle), $cy + $major_ra
 _center = FreeCAD.Vector($cx, $cy, 0)
 _ell = Part.Ellipse(_major_pt, $minor_radius, _center)
 _idx = _sk.addGeometry(_ell, $construction)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('geometry_index=' + str(_idx))

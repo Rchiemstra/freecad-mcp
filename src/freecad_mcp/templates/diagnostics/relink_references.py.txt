@@ -96,11 +96,6 @@ for _o in _doc.Objects:
             if _set_link(_o, _name, _kind):
                 _relinked.append({'object': _o.Name, 'property': _name, 'kind': _kind})
 
-try:
-    _doc.recompute()
-except Exception:
-    pass
-
 print(_m5_json.dumps({
     'ok': True,
     'from': _from.Name,

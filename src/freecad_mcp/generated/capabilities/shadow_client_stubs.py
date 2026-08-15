@@ -124,6 +124,10 @@ def diagnose_pocket(conn, *args, **kwargs):
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
 # subject: document_history
+def get_mutation_readiness(conn, *args, **kwargs):
+    """INERT shadow stub for get_mutation_readiness (read)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
 def close_document(conn, *args, **kwargs):
     """INERT shadow stub for close_document (mutation)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)

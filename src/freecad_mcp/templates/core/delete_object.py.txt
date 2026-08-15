@@ -78,7 +78,6 @@ else:
         _result.setdefault('errors', []).append(
             {'object': _root_name, 'error': str(_e)}
         )
-    _doc.recompute()
     _result['refused'] = False
     _result['deleted'] = _deleted
     if _force and _dep_names:

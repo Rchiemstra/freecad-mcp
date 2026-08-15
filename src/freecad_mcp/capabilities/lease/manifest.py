@@ -77,7 +77,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="finalize_document_edit",
-            docstring='Validate, Save/Save As, reopen-verify, then CAS-release the lease.\n\nAny validation, save, or sidecar-removal failure retains a visible locked\nerror/recovery record instead of presenting a clean release.',
+            docstring='Run native change-aware Save/Save As, verify a stable live FCStd hash,\nmetadata, required archive members, and CRC, then report finalization.\n\nNo legacy MCP lease is held or released. A save, clean-state, or verification\nfailure returns ``finalized: false`` and keeps automation fail-closed.',
             signature='(ctx: \'Context\', selector: \'DocumentSelectorInput\', save_mode: "Literal[\'save\', \'save_as\', \'first_save\']" = \'save\', destination: \'str\' = \'\', overwrite: \'bool\' = False, expected_destination_sha256: \'str\' = \'\', validation_profile: \'str\' = \'default\') -> \'CallToolResult\'',
             operation_path="freecad_mcp.capabilities.gateway_refs.connection:finalize_document_edit",
             rpc_method="finalize_document_edit",
@@ -88,7 +88,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="save_document",
-            docstring='Compare, save, hash, reopen-verify, and retain the renewable lease.\n\nSelect the open document with ``document_name``,\n``document_session_uuid``, or ``canonical_path``. If more than one field is\nsupplied, every field must identify the same live document.',
+            docstring='Run native change-aware Save and verify a stable live FCStd hash, metadata,\nrequired archive members, and CRC. An Unchanged result is also compared with\nthe invocation baseline and does not rewrite the file.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document.',
             signature="(ctx: 'Context', selector: 'DocumentSelectorInput', validation_profile: 'str' = 'default') -> 'CallToolResult'",
             operation_path="freecad_mcp.capabilities.gateway_refs.connection:save_document",
             rpc_method="save_document",
@@ -99,7 +99,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="save_document_as",
-            docstring='Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases.\n\nSelect the open document with ``document_name``,\n``document_session_uuid``, or ``canonical_path``. If more than one field is\nsupplied, every field must identify the same live document.',
+            docstring='Run native policy-controlled Save As (no-clobber by default) and verify a\nstable live FCStd hash, metadata, required archive members, and CRC. No legacy\nlease aliases are created.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document. With ``overwrite=True``,\na non-empty ``expected_destination_sha256`` enables native conflict-safe compare-\nand-swap: the destination is replaced only when its verified SHA-256 matches.',
             signature="(ctx: 'Context', selector: 'DocumentSelectorInput', destination: 'str', overwrite: 'bool' = False, expected_destination_sha256: 'str' = '', validation_profile: 'str' = 'default') -> 'CallToolResult'",
             operation_path="freecad_mcp.capabilities.gateway_refs.connection:save_document_as",
             rpc_method="save_document_as",

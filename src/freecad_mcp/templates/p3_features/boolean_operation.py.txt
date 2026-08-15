@@ -7,5 +7,5 @@ _bool.Base = _s1
 _bool.Tool = _s2
 _s1.Visibility = False
 _s2.Visibility = False
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('result_name=' + _bool.Name)

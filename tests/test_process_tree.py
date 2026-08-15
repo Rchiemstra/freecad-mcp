@@ -1,11 +1,12 @@
 """Process-tree cleanup tests for the instrumented MCP launcher (R2)."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import sys
+from unittest.mock import patch
 
 import pytest
-import sys
 
+from freecad_mcp import process_tree
 from freecad_mcp.process_tree import kill_process_tree
 
 
@@ -20,3 +21,17 @@ def test_kill_process_tree_terminates_descendants():
             with patch("freecad_mcp.process_tree.os.kill") as kill:
                 kill_process_tree(41)
                 assert kill.call_count >= 2
+
+
+@pytest.mark.unit
+def test_windows_liveness_probe_never_uses_os_kill(monkeypatch):
+    monkeypatch.setattr(process_tree.sys, "platform", "win32")
+    monkeypatch.setattr(
+        process_tree.os,
+        "kill",
+        lambda *_args: pytest.fail("Windows liveness must never call os.kill"),
+    )
+
+    # On non-Windows hosts ctypes.WinDLL is unavailable; unknown must be
+    # preserved as alive without falling back to destructive signal emulation.
+    assert isinstance(process_tree._pid_alive(4242), bool)

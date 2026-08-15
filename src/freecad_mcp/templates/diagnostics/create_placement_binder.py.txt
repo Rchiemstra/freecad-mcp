@@ -14,7 +14,7 @@ if 'Relative' in getattr(_binder, 'PropertiesList', []):
     _binder.Relative = bool(_relative)
 if 'BindMode' in getattr(_binder, 'PropertiesList', []):
     _binder.BindMode = _bind_mode
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 _src_center, _src_normal = _face_pose(_src_feat, _subpath.split('.')[-1] if '.' in _subpath else _subpath)
 _binder_sub = 'Face1' if _subpath.startswith(('HornHubPad.', '')) and _binder.Shape.Faces else ''
 if _binder.Shape and _binder.Shape.Faces:

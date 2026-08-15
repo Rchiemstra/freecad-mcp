@@ -3,6 +3,7 @@ later I4/I10/M5/M6 helpers added in the same module)."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -25,7 +26,6 @@ from freecad_mcp.operations.core import (
     delete_object_operation,
     get_view_operation,
     pad_feature_operation,
-    pocket_feature_operation,
 )
 from freecad_mcp.operations.p3_features import (
     helical_sweep_feature_operation,
@@ -42,6 +42,16 @@ from freecad_mcp.operations.p7_assembly import (
     solve_assembly_operation,
 )
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
+
+_FEATURES_GUI_SOURCE = (
+    Path(__file__).parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "features_gui.py"
+).read_text(encoding="utf-8")
 
 
 def _ok_conn(output: str = '{"ok": true}'):
@@ -107,26 +117,22 @@ class TestI2SilentBuildAssertion:
     surfaced failure instead of propagating."""
 
     def test_pad_asserts_direction_parallel_to_sketch_normal(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
-        code = _code(conn)
-        assert_code_compiles(code)
+        # Typed builders own the verification in the addon; generated public
+        # snippets may not bypass native transaction ownership.
         assert_code_contains(
-            code,
-            "SILENT BUILD MISMATCH",
-            "Direction",
-            "getGlobalPlacement",
-            "MyPad",
+            _FEATURES_GUI_SOURCE,
+            "pad_feature_gui",
+            "_build_feature_result",
+            "set_feature_bool",
         )
-        # Direction check is enabled for pad (the P2 catch).
-        assert "check_direction=True" in code or "True" in code
 
     def test_pocket_asserts_direction_parallel_to_sketch_normal(self):
-        conn = _ok_conn()
-        pocket_feature_operation(conn, True, "Doc", "Profile", "MyPocket", 3.0)
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "SILENT BUILD MISMATCH", "Direction", "MyPocket")
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE,
+            "pocket_feature_gui",
+            "_build_feature_result",
+            "set_feature_bool",
+        )
 
     def test_loft_asserts_bbox_only_no_direction_check(self):
         conn = _ok_conn()
@@ -155,9 +161,9 @@ class TestI2SilentBuildAssertion:
         assert_code_contains(code, "SILENT BUILD MISMATCH", "MyHelix")
 
     def test_pad_mismatch_failure_is_surfaced(self):
-        # When the assertion raises inside execute_code, the op reports a failure
-        # with the SILENT BUILD MISMATCH prefix instead of "Pad created".
-        resp = pad_feature_operation(_fail_conn(), True, "Doc", "Profile", "MyPad", 5.0)
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": False, "error": "build failed"}
+        resp = pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
         assert "Failed to create pad" in _text(resp)
 
     def test_bbox_assertion_accepts_profile_position_inside_feature(self):
@@ -316,62 +322,45 @@ class TestPadPocketHardening:
     Body-membership/Tip verification, returned as a structured JSON result."""
 
     def test_pad_has_no_document_level_fallback(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert "_doc.addObject('PartDesign::Pad'" not in code
-        assert '_doc.addObject("PartDesign::Pad"' not in code
-        assert "No PartDesign::Body found" in code
+        assert "doc.addObject(\"PartDesign::Pad\"" not in _FEATURES_GUI_SOURCE
+        assert "No PartDesign::Body found" in _FEATURES_GUI_SOURCE
 
     def test_pocket_has_no_document_level_fallback(self):
-        conn = _ok_conn()
-        pocket_feature_operation(conn, True, "Doc", "Sketch", "MyPocket", 3.0)
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert "_doc.addObject('PartDesign::Pocket'" not in code
-        assert "No PartDesign::Body found" in code
+        assert "doc.addObject(\"PartDesign::Pocket\"" not in _FEATURES_GUI_SOURCE
+        assert "No PartDesign::Body found" in _FEATURES_GUI_SOURCE
 
-    def test_build_wrapped_in_transaction(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
-        assert_code_contains(
-            _code(conn), "openTransaction", "commitTransaction", "abortTransaction"
-        )
+    def test_build_has_no_inner_transaction_control(self):
+        assert "openTransaction" not in _FEATURES_GUI_SOURCE
+        assert "commitTransaction" not in _FEATURES_GUI_SOURCE
+        assert "abortTransaction" not in _FEATURES_GUI_SOURCE
 
     def test_runs_sketch_diagnostics_gate(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
         assert_code_contains(
-            _code(conn), "ConflictingConstraints", "MalformedConstraints", "isClosed"
+            _FEATURES_GUI_SOURCE,
+            "ConflictingConstraints",
+            "MalformedConstraints",
+            "isClosed",
         )
 
     def test_verifies_body_membership_and_tip(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
         assert_code_contains(
-            _code(conn), "_body.Group", "_body.Tip", "is not a member of Body"
+            _FEATURES_GUI_SOURCE, "body.Group", "body.Tip", "is not a Body member"
         )
 
     def test_strict_requires_explicit_body_name(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0, strict=True)
-        code = _code(conn)
-        assert "_strict = True" in code
-        assert "strict PartDesign mode requires an explicit body_name" in code
+        assert "strict PartDesign mode requires an explicit body_name" in _FEATURES_GUI_SOURCE
 
     def test_non_strict_autodetects_owning_body(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
-        code = _code(conn)
-        assert "_strict = False" in code
-        assert "'PartDesign::Body'" in code and "_o.Group" in code
+        assert "obj.TypeId == \"PartDesign::Body\" and sketch in obj.Group" in _FEATURES_GUI_SOURCE
 
     def test_returns_structured_payload(self):
-        conn = _ok_conn('{"ok": true, "feature": "MyPad", "body": "Body", "tip": "MyPad"}')
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {
+            "success": True, "feature": "MyPad", "body": "Body", "tip": "MyPad"
+        }
         resp = pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
         assert not resp.isError
-        assert '"feature": "MyPad"' in _text(resp)
+        assert "MyPad" in _text(resp)
 
 
 class TestI4FindSubshapes:
@@ -474,42 +463,73 @@ class TestI5DeleteObject:
     recurse or force-delete on demand."""
 
     def test_refuses_when_dependents_and_lists_them(self):
-        out = ('{"ok": true, "object": "Body", "refused": true, "deleted": [], '
-               '"dependents": [{"name": "Pad", "type": "PartDesign::Pad", "state": "Clean"}], '
-               '"message": "Refused to delete Body: it has 1 dependent object(s)."}'
-               '\n__RECOMPUTE_LOG__[]')
-        conn = _ok_conn(out)
+        conn = _ok_conn()
+        conn.delete_object.return_value = {
+            "success": True,
+            "ok": True,
+            "object": "Body",
+            "refused": True,
+            "deleted": [],
+            "dependents": [
+                {"name": "Pad", "type": "PartDesign::Pad", "state": "Clean"}
+            ],
+            "message": "Refused to delete Body: it has 1 dependent object(s).",
+        }
         resp = delete_object_operation(conn, True, "Doc", "Body")
         text = _text(resp)
         assert "refused" in text
         assert "Pad" in text
         assert "PartDesign::Pad" in text
+        conn.delete_object.assert_called_once_with("Doc", "Body", False, False)
+        conn.execute_code.assert_not_called()
 
     def test_recursive_deletes_dependents(self):
-        out = ('{"ok": true, "object": "Body", "refused": false, '
-               '"deleted": ["Pad", "Body"], "message": "Deleted Body and 1 dependent."}'
-               '\n__RECOMPUTE_LOG__[]')
-        conn = _ok_conn(out)
+        conn = _ok_conn()
+        conn.delete_object.return_value = {
+            "success": True,
+            "ok": True,
+            "object": "Body",
+            "refused": False,
+            "deleted": ["Pad", "Body"],
+            "message": "Deleted Body and 1 dependent.",
+        }
         resp = delete_object_operation(conn, True, "Doc", "Body", recursive=True)
         text = _text(resp)
         assert '"deleted": ["Pad", "Body"]' in text
+        conn.delete_object.assert_called_once_with("Doc", "Body", True, False)
+        conn.execute_code.assert_not_called()
 
     def test_force_reports_orphans_left(self):
-        out = ('{"ok": true, "object": "Body", "refused": false, "deleted": ["Body"], '
-               '"orphans_left": ["Pad"], "message": "left 1 dependent orphaned"}'
-               '\n__RECOMPUTE_LOG__[]')
-        conn = _ok_conn(out)
+        conn = _ok_conn()
+        conn.delete_object.return_value = {
+            "success": True,
+            "ok": True,
+            "object": "Body",
+            "refused": False,
+            "deleted": ["Body"],
+            "orphans_left": ["Pad"],
+            "message": "left 1 dependent orphaned",
+        }
         resp = delete_object_operation(conn, True, "Doc", "Body", force=True)
         text = _text(resp)
         assert "orphans_left" in text
         assert "Pad" in text
+        conn.delete_object.assert_called_once_with("Doc", "Body", False, True)
+        conn.execute_code.assert_not_called()
 
-    def test_generated_code_walks_outlist_and_compiles(self):
+    def test_typed_failure_is_surfaced_without_execute_code(self):
         conn = _ok_conn()
-        delete_object_operation(conn, True, "Doc", "Body", recursive=True)
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "OutList", "removeObject", "recompute", "_i5_json.dumps", "Body")
+        conn.delete_object.return_value = {
+            "success": False,
+            "ok": False,
+            "error_code": "DELETE_OBJECT_FAILED",
+            "error": "rollback rejected deletion",
+        }
+        response = delete_object_operation(conn, True, "Doc", "Body")
+        assert response.isError
+        assert "rollback rejected deletion" in _text(response)
+        conn.delete_object.assert_called_once_with("Doc", "Body", False, False)
+        conn.execute_code.assert_not_called()
 
 
 class TestI7SnapshotRestore:
@@ -571,27 +591,37 @@ class TestI7SnapshotRestore:
 class TestI9SolveAssembly:
     """I9 — solve_assembly re-solves an Assembly via the real internal solver."""
 
-    def test_generated_code_tries_solve_entry_points(self):
+    def test_calls_typed_rpc_once_and_never_execute_code(self):
         conn = _ok_conn()
-        solve_assembly_operation(conn, True, "Doc", "Asm")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "getObject('Asm')",
-            "Assembly::AssemblyObject",
-            "solveIfAllowed",
-            "recompute",
-        )
+        conn.solve_assembly.return_value = {
+            "ok": True,
+            "assembly": "Asm",
+            "method": "assembly.solve()",
+            "status": "0",
+        }
+        response = solve_assembly_operation(conn, True, "Doc", "Asm")
+        assert not response.isError
+        conn.solve_assembly.assert_called_once_with("Doc", "Asm")
+        conn.execute_code.assert_not_called()
 
     def test_returns_json_with_method(self):
-        out = '{"ok": true, "assembly": "Asm", "method": "assembly.solve()", "status": "0"}'
-        resp = solve_assembly_operation(_ok_conn(out), True, "Doc", "Asm")
+        conn = _ok_conn()
+        conn.solve_assembly.return_value = {
+            "ok": True,
+            "assembly": "Asm",
+            "method": "assembly.solve()",
+            "status": "0",
+        }
+        resp = solve_assembly_operation(conn, True, "Doc", "Asm")
         assert _text(resp).startswith('{"ok": true, "assembly": "Asm"')
 
     def test_failure_is_surfaced(self):
-        resp = solve_assembly_operation(_fail_conn(), True, "Doc", "Asm")
+        conn = _ok_conn()
+        conn.solve_assembly.return_value = {"ok": False, "error": "solver failed"}
+        resp = solve_assembly_operation(conn, True, "Doc", "Asm")
         assert "Failed to solve assembly" in _text(resp)
+        conn.solve_assembly.assert_called_once_with("Doc", "Asm")
+        conn.execute_code.assert_not_called()
 
 
 class TestM6FaceNormalEdgeAxis:

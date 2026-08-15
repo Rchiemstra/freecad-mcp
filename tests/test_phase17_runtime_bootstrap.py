@@ -491,6 +491,38 @@ def test_shutdown_failure_retains_exact_runtime_claim_and_blocks_restart(monkeyp
     assert rpc_server.start_rpc_server() == "RPC Server shutdown is still in progress."
 
 
+def test_second_shutdown_retries_a_retained_retryable_runtime(monkeypatch):
+    calls: list[str] = []
+    holder = {}
+
+    def dispose_attempt():
+        calls.append("runtime:dispose")
+        runtime = holder["runtime"]
+        if calls.count("runtime:dispose") == 1:
+            runtime.disposal_retryable = True
+            raise RuntimeError("dispatcher cleanup timed out")
+        runtime.disposal_retryable = False
+
+    runtime = _published_runtime(
+        monkeypatch,
+        calls=calls,
+        dispose=dispose_attempt,
+    )
+    runtime.disposal_retryable = False
+    holder["runtime"] = runtime
+
+    first = rpc_server.stop_rpc_server(wait_for_completion=True)
+    retained_claim = rpc_server._runtime_shutdown_claim
+    second = rpc_server.stop_rpc_server(wait_for_completion=True)
+
+    assert first.startswith("RPC Server shutdown failed:")
+    assert retained_claim is not None
+    assert retained_claim.runtime is runtime
+    assert second == "RPC Server stopped."
+    assert calls.count("runtime:dispose") == 2
+    assert rpc_server._runtime_shutdown_claim is None
+
+
 def test_listener_thread_timeout_retains_claim_and_blocks_restart(monkeypatch):
     calls = []
 
@@ -556,6 +588,73 @@ def test_final_shutdown_waits_for_runtime_disposal_before_returning(monkeypatch)
     caller.join(timeout=1.0)
 
     assert results == ["RPC Server stopped."]
+    assert rpc_server._runtime_shutdown_claim is None
+
+
+def test_owner_dispatcher_cleanup_runs_before_shutdown_worker_and_wait(monkeypatch):
+    calls: list[object] = []
+
+    runtime = _published_runtime(
+        monkeypatch,
+        calls=calls,
+        dispose=lambda: calls.append("runtime:dispose"),
+    )
+
+    def dispose_on_owner_thread(*, timeout):
+        assert timeout == 2.0
+        calls.append("dispatcher:owner_dispose")
+        return True
+
+    runtime.dispatcher.dispose_on_owner_thread = dispose_on_owner_thread
+
+    result = rpc_server.stop_rpc_server(wait_for_completion=True)
+
+    assert result == "RPC Server stopped."
+    assert calls.index("dispatcher:owner_dispose") < calls.index("listener:begin")
+    assert calls.index("dispatcher:owner_dispose") < calls.index("runtime:dispose")
+
+
+def test_owner_join_prepares_remote_owned_incomplete_shutdown(monkeypatch):
+    calls: list[object] = []
+    owner_ident = threading.get_ident()
+    dispose_entered = threading.Event()
+    owner_prepared = threading.Event()
+
+    def dispose_runtime():
+        calls.append("runtime:dispose")
+        dispose_entered.set()
+        assert owner_prepared.wait(timeout=1.0)
+
+    runtime = _published_runtime(
+        monkeypatch,
+        calls=calls,
+        dispose=dispose_runtime,
+    )
+
+    def dispose_on_owner_thread(*, timeout):
+        assert timeout == 2.0
+        if threading.get_ident() != owner_ident:
+            return False
+        calls.append("dispatcher:owner_dispose")
+        owner_prepared.set()
+        return True
+
+    runtime.dispatcher.dispose_on_owner_thread = dispose_on_owner_thread
+    remote_results: list[str] = []
+    remote = threading.Thread(
+        target=lambda: remote_results.append(
+            rpc_server.stop_rpc_server(wait_for_completion=True)
+        )
+    )
+    remote.start()
+    assert dispose_entered.wait(timeout=1.0)
+
+    owner_result = rpc_server.stop_rpc_server(wait_for_completion=True)
+    remote.join(timeout=1.0)
+
+    assert owner_result == "RPC Server stopped."
+    assert remote_results == ["RPC Server stopped."]
+    assert calls.count("dispatcher:owner_dispose") == 1
     assert rpc_server._runtime_shutdown_claim is None
 
 

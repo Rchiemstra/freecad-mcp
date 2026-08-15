@@ -3,5 +3,5 @@ _doc = FreeCAD.getDocument($doc_name)
 _sk = _doc.getObject($sketch_name)
 if not _sk: raise RuntimeError('Sketch not found')
 $constraint_lines
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print($message)

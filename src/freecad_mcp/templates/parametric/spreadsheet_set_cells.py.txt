@@ -22,5 +22,5 @@ for _cell in _cells:
     elif _cell.get('set_alias'):
         _sheet.setAlias(str(_addr), str(_cell['set_alias']))
     _updated.append({'address': str(_addr), 'alias': _alias or (_sheet.getAlias(str(_addr)) if hasattr(_sheet, 'getAlias') else None)})
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print(json.dumps({'ok': True, 'sheet': _sheet.Name, 'updated': _updated}))

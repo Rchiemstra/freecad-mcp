@@ -11,6 +11,7 @@ recompute_document = _generated.recompute_document
 undo = _generated.undo
 redo = _generated.redo
 run_fem_analysis = _generated.run_fem_analysis
+get_mutation_readiness = _generated.get_mutation_readiness
 
 __all__ = [  # noqa: RUF022
     'sketch_attach',
@@ -20,4 +21,5 @@ __all__ = [  # noqa: RUF022
     'undo',
     'redo',
     'run_fem_analysis',
+    'get_mutation_readiness',
 ]

@@ -3,8 +3,11 @@
 # Strategy: install FreeCAD from conda-forge, which ships the `FreeCADCmd`
 # headless console and exposes the FreeCAD/Part/Sketcher Python modules on the
 # interpreter path. The container's Python *is* FreeCAD's Python, so `pytest`
-# can `import FreeCAD` directly and `exec` generated MCP code in-process (the
-# same pattern used by tests/integration/test_assembly_path_live.py).
+# can import the native modules directly. This stock compatibility image skips
+# branch-native mutation-lane tests that require ``commitCompatibilityMutation``;
+# CI runs those through the workspace's branch-built FreeCADCmd. Read-only
+# generated-code probes remain in-process because this image does not emulate
+# the production worker subprocess.
 #
 # Build:  docker build -t freecad-mcp-tests .
 # Run:    docker run --rm freecad-mcp-tests pytest -m e2e

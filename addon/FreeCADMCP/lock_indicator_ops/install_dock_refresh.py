@@ -10,6 +10,28 @@ from .lease_view import _is_eligible_exact_owner_stale_timeout, _lease_view
 from .local_recovery import _live_document_for_view, _local_recovery_capabilities, _v2_lease_service
 from .secret_redaction import _redact_secrets
 
+try:
+    from automation_pause import status as automation_pause_status
+except ImportError:  # pragma: no cover - package test layout
+    from addon.FreeCADMCP.automation_pause import status as automation_pause_status
+
+
+def _apply_pause_button(ctx: InstallDockContext) -> str:
+    pause = automation_pause_status()
+    if pause["paused"]:
+        ctx.pause_btn.setText("Resume agent writes")
+        ctx.pause_btn.setToolTip(
+            "New MCP writes are blocked locally. Click to resume admission."
+        )
+        if pause["active_write_count"]:
+            return "Agent writes are pausing after the current operation."
+        return "Agent writes are paused locally."
+    ctx.pause_btn.setText("Pause agent writes")
+    ctx.pause_btn.setToolTip(
+        "Block new MCP writes after any current operation finishes."
+    )
+    return "Agent writes are currently admitted."
+
 
 def _apply_capability_buttons(
     ctx: InstallDockContext,
@@ -69,6 +91,7 @@ def build_refresh_from_leases(
     local_recovery_busy: Callable[[], bool],
 ) -> Callable[[list[dict[str, Any]]], None]:
     def refresh_from_leases(leases: list[dict[str, Any]]) -> None:
+        pause_message = _apply_pause_button(ctx)
         leases = [_redact_secrets(item) for item in leases]
         previous_id = str(ctx.selector.currentData() or "")
         preferred = _select_preferred_lease(leases)
@@ -100,7 +123,7 @@ def build_refresh_from_leases(
             ctx.save_clear_btn.setEnabled(False)
             ctx.restore_btn.setEnabled(False)
             ctx.keep_dirty_btn.setEnabled(False)
-            ctx.info.setPlainText("No active MCP document leases.")
+            ctx.info.setPlainText(f"No active MCP document leases.\n\n{pause_message}")
             return
 
         selected = selected_lease() or preferred or leases[0]
@@ -119,7 +142,7 @@ def build_refresh_from_leases(
             local_recovery_busy=local_recovery_busy(),
         )
         _text, tip = _lease_lines(selected)
-        ctx.info.setPlainText(tip)
+        ctx.info.setPlainText(f"{tip}\n\n{pause_message}")
 
     return refresh_from_leases
 
@@ -131,11 +154,12 @@ def build_refresh_selected_detail(
     local_recovery_busy: Callable[[], bool],
 ) -> Callable[[int], None]:
     def refresh_selected_detail(_index: int) -> None:
+        pause_message = _apply_pause_button(ctx)
         selected = selected_lease()
         if selected is None:
             return
         _text, tip = _lease_lines(selected)
-        ctx.info.setPlainText(tip)
+        ctx.info.setPlainText(f"{tip}\n\n{pause_message}")
         view = _lease_view(selected)
         service = _v2_lease_service()
         document = (

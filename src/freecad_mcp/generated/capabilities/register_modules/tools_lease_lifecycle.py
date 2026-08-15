@@ -43,11 +43,12 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         selector: DocumentSelectorInput,  # noqa: F821
         validation_profile: str = "default",
     ) -> CallToolResult:
-        """Compare, save, hash, reopen-verify, and retain the renewable lease.
+        """Run native change-aware Save and verify a stable live FCStd hash, metadata,
+        required archive members, and CRC. An Unchanged result is also compared with
+        the invocation baseline and does not rewrite the file.
 
-        Select the open document with ``document_name``,
-        ``document_session_uuid``, or ``canonical_path``. If more than one field is
-        supplied, every field must identify the same live document.
+        Select the open document with ``document_name`` or ``canonical_path``; if both
+        are supplied, they must identify the same live document.
         """
 
         del ctx
@@ -66,11 +67,13 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         expected_destination_sha256: str = "",
         validation_profile: str = "default",
     ) -> CallToolResult:
-        """Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases.
+        """Run native policy-controlled Save As (no-clobber by default) and verify a
+        stable live FCStd hash, metadata, required archive members, and CRC. No legacy
+        lease aliases are created.
 
-        Select the open document with ``document_name``,
-        ``document_session_uuid``, or ``canonical_path``. If more than one field is
-        supplied, every field must identify the same live document.
+        Select the open document with ``document_name`` or ``canonical_path``; if both
+        are supplied, they must identify the same live document. Non-empty legacy
+        expected-hash options are rejected rather than silently ignored.
         """
 
         del ctx
@@ -94,10 +97,11 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         expected_destination_sha256: str = "",
         validation_profile: str = "default",
     ) -> CallToolResult:
-        """Validate, Save/Save As, reopen-verify, then CAS-release the lease.
+        """Run native change-aware Save/Save As, verify a stable live FCStd hash,
+        metadata, required archive members, and CRC, then report finalization.
 
-        Any validation, save, or sidecar-removal failure retains a visible locked
-        error/recovery record instead of presenting a clean release.
+        No legacy MCP lease is held or released. A save, clean-state, or verification
+        failure returns ``finalized: false`` and keeps automation fail-closed.
         """
 
         del ctx

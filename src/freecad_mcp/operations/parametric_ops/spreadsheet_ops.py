@@ -7,7 +7,7 @@ from ...responses.constants import ToolResponse
 from ...responses.tool_results import tool_fail
 from ...template_resources import render_template_lines
 from ..p7_assembly import _run_json_code
-from .helpers import _doc_missing
+from .helpers import _doc_missing, _typed_parametric_mutation
 
 
 def spreadsheet_create_operation(
@@ -16,19 +16,12 @@ def spreadsheet_create_operation(
     doc_name: str,
     sheet_name: str,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "parametric/spreadsheet_create.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        sheet_name=repr(sheet_name),
-    )
-    return _run_json_code(
+    return _typed_parametric_mutation(
         freecad,
         only_text_feedback,
-        "\n".join(lines),
+        "spreadsheet_create",
+        (doc_name, sheet_name),
         "Failed to create spreadsheet",
-        screenshot=False,
-        document=doc_name,
     )
 
 def spreadsheet_set_cells_operation(
@@ -40,20 +33,12 @@ def spreadsheet_set_cells_operation(
 ) -> ToolResponse:
     if not isinstance(cells, list) or not cells:
         return tool_fail("cells must be a non-empty list of {address|alias, value, ...}")
-    lines = render_template_lines(
-        "parametric/spreadsheet_set_cells.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        sheet_name=repr(sheet_name),
-        cells=repr(cells),
-    )
-    return _run_json_code(
+    return _typed_parametric_mutation(
         freecad,
         only_text_feedback,
-        "\n".join(lines),
+        "spreadsheet_set_cells",
+        (doc_name, sheet_name, cells),
         "Failed to set spreadsheet cells",
-        screenshot=False,
-        document=doc_name,
     )
 
 def spreadsheet_get_cells_operation(
@@ -90,21 +75,12 @@ def spreadsheet_set_alias_operation(
     address: str,
     alias: str,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "parametric/spreadsheet_set_alias.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        sheet_name=repr(sheet_name),
-        address=repr(address),
-        alias=repr(alias),
-    )
-    return _run_json_code(
+    return _typed_parametric_mutation(
         freecad,
         only_text_feedback,
-        "\n".join(lines),
+        "spreadsheet_set_alias",
+        (doc_name, sheet_name, address, alias),
         "Failed to set spreadsheet alias",
-        screenshot=False,
-        document=doc_name,
     )
 
 def spreadsheet_list_aliases_operation(

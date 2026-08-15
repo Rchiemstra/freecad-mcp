@@ -136,3 +136,6 @@ def run_fem_analysis(
             if proxy is not conn.server:
                 proxy.close()
 
+def get_mutation_readiness(conn, doc_name: str | None = None) -> dict[str, Any]:
+        return conn.server.get_mutation_readiness(doc_name)
+

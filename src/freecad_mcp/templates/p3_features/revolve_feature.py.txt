@@ -14,5 +14,5 @@ _set_linksub(_rev, ('ReferenceAxis', 'Axis'), _resolve_linksub(_doc, _body, $axi
 _rev.Symmetric = $symmetric
 _rev.Reversed = $reversed_dir
 _sk.Visibility = False
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('revolve_name=' + _rev.Name)

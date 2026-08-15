@@ -27,7 +27,9 @@ _test_pl = FreeCAD.Placement(
     ),
 )
 _src.Placement = _test_pl
-_doc.recompute()
+raise RuntimeError(
+    'validate_movement_follow requires a typed multi-phase native operation'
+)
 _errors = []
 for _d in _deps:
     _pe = (_src.Placement.Base - _d.Placement.Base).Length
@@ -39,12 +41,7 @@ for _d in _deps:
     except Exception:
         _center_err = None
     _errors.append({'name': _d.Name, 'placement_translation_error_mm': round(_pe, 9), 'center_of_mass_error_mm': _center_err})
-if _restore:
-    _src.Placement = _orig_pl
-    _doc.recompute()
-    _restore_err = (_src.Placement.Base - _orig_pl.Base).Length
-else:
-    _restore_err = None
+_restore_err = None
 print(json.dumps({
     'ok': all((e.get('placement_translation_error_mm') or 0) <= _tolerance for e in _errors),
     'source': _source,

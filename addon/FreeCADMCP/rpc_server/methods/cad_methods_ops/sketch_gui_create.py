@@ -6,7 +6,15 @@ from .sketch_attach_helpers import resolve_sketch_support
 from .sketch_create_helpers import apply_create_attach_to, create_sketch_object
 
 
-def sketch_create_gui(doc_name, sketch_name, body_name, attach_to, *, freecad):
+def sketch_create_gui(
+    doc_name,
+    sketch_name,
+    body_name,
+    attach_to,
+    *,
+    freecad,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -23,7 +31,8 @@ def sketch_create_gui(doc_name, sketch_name, body_name, attach_to, *, freecad):
             if attach_error:
                 return attach_error
 
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         freecad.Console.PrintMessage(
             f"Sketch '{sketch_name}' created in '{doc_name}'.\n"
         )
@@ -41,6 +50,7 @@ def sketch_attach_gui(
     freecad,
     dict_to_placement,
     placement_to_dict,
+    recompute: bool = True,
 ):
     try:
         doc = freecad.getDocument(doc_name)
@@ -63,7 +73,8 @@ def sketch_attach_gui(
         if offset_error:
             return offset_error
 
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return _sketch_attach_result(
             sketch,
             attached,

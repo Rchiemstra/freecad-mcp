@@ -1,5 +1,5 @@
 _path = $file_path
 import Import
 Import.insert(_path, _doc.Name)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print(json.dumps({'imported': True, 'path': _path}))

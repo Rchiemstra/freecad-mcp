@@ -2,6 +2,12 @@
 
 from typing import Any
 
+from .cad_mutation import (
+    admit_cad_mutation,
+    current_cad_mutation_inflight,
+    postflight_cad_mutation,
+)
+
 
 def collect_invalid_objects(freecad) -> dict[str, list[dict[str, Any]]]:
     flagged: dict[str, list[dict[str, Any]]] = {}
@@ -82,9 +88,7 @@ def get_recompute_log_gui(doc_name: str, *, freecad) -> list:
             for item in getattr(obj, "ExpressionEngine", None) or []:
                 try:
                     if isinstance(item, (list, tuple)) and len(item) >= 2:
-                        exprs.append(
-                            {"prop": str(item[0]), "expression": str(item[1])}
-                        )
+                        exprs.append({"prop": str(item[0]), "expression": str(item[1])})
                     else:
                         exprs.append({"raw": str(item)})
                 except Exception as ee:
@@ -122,17 +126,20 @@ def recompute_document_gui(doc_name, *, freecad):
         doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
+        admission_failure = admit_cad_mutation(
+            doc, inflight=current_cad_mutation_inflight()
+        )
+        if admission_failure is not None:
+            return admission_failure
         doc.recompute()
-        return True
+        return postflight_cad_mutation(doc, True)
     except Exception as e:
         return str(e)
 
 
 def undo(self, doc_name: str) -> dict:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: undo_gui(doc_name, freecad=collaborators.freecad)
-    )
+    res = self._dispatch_gui(lambda: undo_gui(doc_name, freecad=collaborators.freecad))
     return self._adapt_gui_mutation_result(res)
 
 
@@ -141,17 +148,20 @@ def undo_gui(doc_name, *, freecad):
         doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
+        admission_failure = admit_cad_mutation(
+            doc, inflight=current_cad_mutation_inflight()
+        )
+        if admission_failure is not None:
+            return admission_failure
         doc.undo()
-        return True
+        return postflight_cad_mutation(doc, True)
     except Exception as e:
         return str(e)
 
 
 def redo(self, doc_name: str) -> dict:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: redo_gui(doc_name, freecad=collaborators.freecad)
-    )
+    res = self._dispatch_gui(lambda: redo_gui(doc_name, freecad=collaborators.freecad))
     return self._adapt_gui_mutation_result(res)
 
 
@@ -160,15 +170,38 @@ def redo_gui(doc_name, *, freecad):
         doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
+        admission_failure = admit_cad_mutation(
+            doc, inflight=current_cad_mutation_inflight()
+        )
+        if admission_failure is not None:
+            return admission_failure
         doc.redo()
-        return True
+        return postflight_cad_mutation(doc, True)
     except Exception as e:
         return str(e)
 
 
 def recompute_and_wait(self, doc_name: str) -> dict[str, Any]:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(lambda: collaborators.recompute_and_wait(doc_name))
+    res = self._dispatch_gui(
+        lambda: recompute_and_wait_gui(doc_name, collaborators=collaborators)
+    )
     if isinstance(res, dict):
         return res
     return {"ok": False, "error": str(res)}
+
+
+def recompute_and_wait_gui(doc_name: str, *, collaborators) -> Any:
+    """Apply the standard mutation readiness gate before recompute/GUI drain."""
+
+    document = collaborators.freecad.getDocument(doc_name)
+    if document is None:
+        return collaborators.recompute_and_wait(doc_name)
+    admission_failure = admit_cad_mutation(
+        document,
+        inflight=current_cad_mutation_inflight(),
+    )
+    if admission_failure is not None:
+        return admission_failure
+    result = collaborators.recompute_and_wait(doc_name)
+    return postflight_cad_mutation(document, result)

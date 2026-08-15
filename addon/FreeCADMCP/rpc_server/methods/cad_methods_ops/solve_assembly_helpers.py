@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 
-def run_assembly_solve(asm) -> tuple[str | None, object | None, str | None]:
+def run_assembly_solve(
+    asm,
+    *,
+    allow_recompute_fallback: bool = True,
+) -> tuple[str | None, object | None, str | None]:
     error = None
     try:
         if hasattr(asm, "solve"):
@@ -17,9 +21,10 @@ def run_assembly_solve(asm) -> tuple[str | None, object | None, str | None]:
         return "JointObject.solveIfAllowed", "ok", error
     except Exception as exc:
         error = str(exc) if error is None else f"{error} | {exc}"
-    try:
-        asm.Document.recompute()
-        return "recompute", "ok", error
-    except Exception as exc:
-        combined = f"{error} | {exc}" if error else str(exc)
-        return None, None, combined
+    if allow_recompute_fallback:
+        try:
+            asm.Document.recompute()
+            return "recompute", "ok", error
+        except Exception as exc:
+            error = f"{error} | {exc}" if error else str(exc)
+    return None, None, error or "no Assembly solver entry point is available"

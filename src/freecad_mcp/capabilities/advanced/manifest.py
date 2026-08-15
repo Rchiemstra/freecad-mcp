@@ -55,7 +55,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="run_transaction",
-            docstring="Run code inside ``openTransaction`` with automatic rollback on failure (M5).\n\nAuthenticated lease mode rejects this legacy nested-code helper because\nits inner ``exec`` cannot be independently scoped by the addon's mutation\nguard. Use typed modelling tools, or the explicitly enabled unsafe\n``execute_code`` route with ``affected_documents``.",
+            docstring="Retired transaction-code helper.\n\nGenerated callbacks cannot own transaction or history control inside FreeCAD's\nnative mutation coordinator. This tool always returns\n``RUN_TRANSACTION_RETIRED``; use typed modelling tools instead.",
             signature="(ctx: 'Context', doc_name: 'str', label: 'str', code: 'str', dry_run: 'bool' = False, commit_on_success: 'bool' = True) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.run_transaction_operation",
             rpc_method="run_transaction",

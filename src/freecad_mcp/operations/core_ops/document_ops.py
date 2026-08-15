@@ -5,8 +5,6 @@ import logging
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.tool_results import json_response, tool_fail, tool_ok
-from ...template_resources import render_template_text
-from .run_code import _run_code
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -110,12 +108,29 @@ def reload_document_operation(
         )
 
 def recompute_document_operation(freecad: FreeCADConnection, doc_name: str) -> ToolResponse:
-    code = render_template_text(
-        "core/doc_action.py.txt",
-        doc_name=repr(doc_name),
-        action_line="_d.recompute()",
-        message=repr("recomputed"),
+    """Use the typed readiness-gated recompute RPC exactly once."""
+
+    try:
+        result = freecad.recompute_document(doc_name)
+    except Exception as exc:
+        logger.error("Failed to recompute document: %s", exc)
+        return tool_fail(
+            f"Failed to recompute document: {exc}",
+            error_code=type(exc).__name__.upper(),
+        )
+    if not isinstance(result, dict):
+        return tool_fail(
+            "Failed to recompute document: invalid RPC response",
+            error_code="INVALID_RPC_RESPONSE",
+        )
+    if result.get("success") is False or result.get("ok") is False:
+        error = result.get("error", result.get("message", "unknown error"))
+        return tool_fail(
+            f"Failed to recompute document: {error}",
+            structured=result,
+            error_code=result.get("error_code"),
+        )
+    return tool_ok(
+        f"Document '{doc_name}' recomputed",
+        structured=result,
     )
-    return _run_code(freecad, True, code,
-                     f"Document '{doc_name}' recomputed", "Failed to recompute",
-                     document=doc_name)

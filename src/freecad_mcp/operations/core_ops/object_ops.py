@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
-from ...execute_options import ExecuteOptions
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.tool_results import add_screenshot_if_available, json_response, tool_fail, tool_ok
-from ...template_resources import render_template_lines
-from .recompute_log import _RECOMPUTE_LOG_SENTINEL, _format_recompute_log
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -89,56 +87,45 @@ def delete_object_operation(
       * otherwise           -> refuse and list the dependents so the agent decides.
 
     Returns JSON ``{ok, object, deleted, refused, dependents|orphans_left, ...}``
-    plus the I3 recompute log so any newly-Invalid objects surface immediately.
+    with the typed mutation's authoritative health and transaction evidence.
     """
     try:
-        code = "\n".join(
-            render_template_lines(
-                "core/delete_object.py.txt",
-                doc_name=repr(doc_name),
-                obj_name=repr(obj_name),
-                recursive=repr(recursive),
-                force=repr(force),
-            )
-            + render_template_lines("diagnostics/recompute_log.py.txt")
+        result = freecad.delete_object(
+            doc_name,
+            obj_name,
+            recursive,
+            force,
         )
-        res = freecad.execute_code(
-            code,
-            ExecuteOptions(
-                document=doc_name,
-                affected_documents=[doc_name],
-                recompute="target",
-                recompute_documents=[doc_name],
-                generated_operation=True,
-                operation_id="delete_object",
-            ),
-        )
-        screenshot = freecad.get_active_screenshot()
-        if res["success"]:
-            output = res.get("message", "")
-            marker = "Output:"
-            if marker in output:
-                output = output.split(marker, 1)[1].strip()
-            # Split the delete JSON from the I3 recompute-log sentinel.
-            log_summary = _format_recompute_log(output)
-            json_part = output
-            idx = output.rfind(_RECOMPUTE_LOG_SENTINEL)
-            if idx >= 0:
-                json_part = output[:idx].rstrip()
-            msg = json_part
-            if log_summary:
-                msg += "\n" + log_summary
-            response = tool_ok(msg, structured=res)
-        else:
-            response = tool_fail(
-                f"Failed to delete object: {res.get('error', res.get('message', 'unknown error'))}",
-                structured=res,
-                error_code=res.get("error_code"),
-            )
-        return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to delete object: {e!s}")
         return tool_fail(f"Failed to delete object: {e!s}")
+    if not isinstance(result, dict):
+        return tool_fail(
+            "Failed to delete object: invalid RPC response",
+            error_code="INVALID_RPC_RESPONSE",
+        )
+    if result.get("success") is False or result.get("ok") is False:
+        return tool_fail(
+            f"Failed to delete object: {result.get('error', result.get('message', 'unknown error'))}",
+            structured=result,
+            error_code=result.get("error_code"),
+        )
+
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            # Deletion has already committed. Screenshot capture is
+            # presentation-only and must not make the mutation look retryable.
+            result = dict(result)
+            result["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    response = tool_ok(
+        json.dumps(result, ensure_ascii=False, default=str),
+        structured=result,
+        only_text_feedback=only_text_feedback,
+    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 def get_objects_operation(
     freecad: FreeCADConnection,

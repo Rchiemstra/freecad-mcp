@@ -27,14 +27,27 @@ def finalize_gui_execute_response(
             }
         )
     tb = res.get("traceback")
-    return annotate(
-        {
-            "success": False,
-            "error": res.get("error", "Unknown error"),
-            "traceback": tb,
-            "structured": tb,
-            "session": res.get("session", {}),
-            "message": res.get("stdout", ""),
-            "is_error": True,
-        }
-    )
+    failure = {
+        "success": False,
+        "error": res.get("error", "Unknown error"),
+        "traceback": tb,
+        "structured": tb,
+        "session": res.get("session", {}),
+        "message": res.get("stdout", ""),
+        "is_error": True,
+    }
+    for key in (
+        "error_code",
+        "mutation_readiness",
+        "waited_for_readiness",
+        "retryable",
+        "committed_result",
+        "native_status",
+        "native_message",
+        "rollback_succeeded",
+        "rollback_failed",
+        "diagnostic",
+    ):
+        if key in res:
+            failure[key] = res[key]
+    return annotate(failure)

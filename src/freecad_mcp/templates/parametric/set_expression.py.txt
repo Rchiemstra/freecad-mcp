@@ -18,7 +18,7 @@ except Exception as _e:
         'type': type(_e).__name__,
     }))
     raise RuntimeError('Failed to set expression on ' + _obj.Name + '.' + _prop + ': ' + str(_e))
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 _bound = None
 try:
     _bound = str(_obj.getExpression(_prop)) if hasattr(_obj, 'getExpression') else None

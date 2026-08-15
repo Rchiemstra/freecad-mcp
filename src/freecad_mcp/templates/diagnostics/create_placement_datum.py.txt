@@ -15,7 +15,7 @@ _plane.AttachmentOffset = FreeCAD.Placement(
     FreeCAD.Vector(float(_offset[0]), float(_offset[1]), float(_offset[2])),
     FreeCAD.Rotation(),
 )
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 _src_center, _src_normal = _face_pose(_src_feat, _sub_only)
 _datum_center = _vec(_plane.Placement.Base)
 try:

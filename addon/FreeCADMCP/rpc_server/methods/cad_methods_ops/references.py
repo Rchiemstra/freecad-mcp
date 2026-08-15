@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from .cad_mutation import run_cad_mutation
+
 
 def inspect_references(
     self,
@@ -34,14 +36,38 @@ def repair_references(
 ) -> dict[str, Any]:
     """Atomically rewrite link properties, deferring recompute by default."""
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: collaborators.repair_references_gui(
+
+    def apply_repairs():
+        return collaborators.repair_references_gui(
             doc_name,
             repairs,
-            recompute=bool(recompute),
+            recompute=False,
             validate=bool(validate),
+            phase="apply" if recompute else "complete",
+        )
+
+    def validate_repairs():
+        return collaborators.repair_references_gui(
+            doc_name,
+            repairs,
+            recompute=False,
+            validate=bool(validate),
+            phase="postcondition",
+        )
+
+    res = self._dispatch_gui(
+        lambda: run_cad_mutation(
+            collaborators,
+            doc_name,
+            apply_repairs,
+            validate_after_callback=bool(recompute),
+            native_recompute=bool(recompute),
+            postcondition=validate_repairs if recompute else None,
         )
     )
     if isinstance(res, dict):
+        if res.get("success") is False or res.get("ok") is False:
+            res = dict(res)
+            res["repair_committed"] = False
         return res
     return {"ok": False, "repair_committed": False, "error": str(res)}

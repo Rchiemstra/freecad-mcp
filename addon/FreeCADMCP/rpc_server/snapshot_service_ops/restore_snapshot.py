@@ -57,7 +57,7 @@ def force_document_dirty(document: Any) -> None:
         ) from exc
     if document_modified_state(document) is not True:
         raise SnapshotRestoreError(
-            "restored document did not report Gui::Document.Modified=true"
+            "restored document did not report pending authoritative file changes"
         )
 
 

@@ -27,10 +27,24 @@ class _NativeDocument:
         self.result = result
         self.callbacks: list[object] = []
         self.structural_scopes: list[bool] = []
+        self.trusted_structural_scopes: list[bool] = []
+        self.recompute_policies: list[bool] = []
+        self.postconditions: list[object | None] = []
 
-    def commitCompatibilityMutation(self, callback, *, structural=False):
+    def commitCompatibilityMutation(
+        self,
+        callback,
+        *,
+        structural=False,
+        recompute=True,
+        postcondition=None,
+        trusted_structural=False,
+    ):
         self.callbacks.append(callback)
         self.structural_scopes.append(structural)
+        self.trusted_structural_scopes.append(trusted_structural)
+        self.recompute_policies.append(recompute)
+        self.postconditions.append(postcondition)
         return self.result
 
 
@@ -72,6 +86,9 @@ def test_bridge_resolves_once_and_returns_the_exact_native_result() -> None:
     assert document.callbacks == [callback]
     assert document.callbacks[0] is callback
     assert document.structural_scopes == [False]
+    assert document.trusted_structural_scopes == [False]
+    assert document.recompute_policies == [True]
+    assert document.postconditions == [None]
 
 
 def test_bridge_forwards_only_the_explicit_structural_scope() -> None:
@@ -83,6 +100,81 @@ def test_bridge_forwards_only_the_explicit_structural_scope() -> None:
     )
 
     assert document.structural_scopes == [True]
+    assert document.trusted_structural_scopes == [True]
+
+
+def test_bridge_forwards_explicit_deferred_recompute_policy() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    document = _NativeDocument({"status": "Committed"})
+
+    api_type(document_lookup=lambda _name: document).commit_compatibility_mutation(
+        "Model", lambda: None, recompute=False
+    )
+
+    assert document.recompute_policies == [False]
+
+
+def test_bridge_forwards_postcondition_only_when_explicitly_requested() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    document = _NativeDocument({"status": "Committed"})
+
+    def postcondition():
+        return True
+
+    api_type(document_lookup=lambda _name: document).commit_compatibility_mutation(
+        "Model",
+        lambda: None,
+        structural=True,
+        recompute=False,
+        postcondition=postcondition,
+    )
+
+    assert document.structural_scopes == [True]
+    assert document.trusted_structural_scopes == [True]
+    assert document.recompute_policies == [False]
+    assert document.postconditions == [postcondition]
+
+
+def test_postcondition_fails_closed_before_callback_on_an_older_native_runtime() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    callback_calls = []
+
+    class OlderNativeDocument:
+        @staticmethod
+        def commitCompatibilityMutation(callback, *, structural=False, recompute=True):
+            callback_calls.append((callback, structural, recompute))
+
+    with pytest.raises(TypeError, match="postcondition"):
+        api_type(
+            document_lookup=lambda _name: OlderNativeDocument()
+        ).commit_compatibility_mutation(
+            "Model",
+            lambda: callback_calls.append("callback"),
+            postcondition=lambda: True,
+        )
+
+    assert callback_calls == []
+
+
+def test_trusted_structural_scope_fails_closed_before_callback_on_older_runtime() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    callback_calls = []
+
+    class OlderNativeDocument:
+        @staticmethod
+        def commitCompatibilityMutation(callback, *, structural=False, recompute=True):
+            callback_calls.append((callback, structural, recompute))
+
+    with pytest.raises(TypeError, match="trusted_structural"):
+        api_type(
+            document_lookup=lambda _name: OlderNativeDocument()
+        ).commit_compatibility_mutation(
+            "Model",
+            lambda: callback_calls.append("callback"),
+            structural=True,
+        )
+
+    assert callback_calls == []
 
 
 def test_bridge_propagates_lookup_and_native_failures_without_translation() -> None:
@@ -137,6 +229,20 @@ def test_non_callable_callback_fails_before_document_resolution() -> None:
     assert lookup_calls == []
 
 
+def test_non_callable_postcondition_fails_before_document_resolution() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    lookup_calls: list[object] = []
+
+    with pytest.raises(TypeError, match="postcondition must be callable"):
+        api_type(document_lookup=lambda name: lookup_calls.append(name)).commit_compatibility_mutation(
+            "Model",
+            lambda: None,
+            postcondition=object(),
+        )
+
+    assert lookup_calls == []
+
+
 def test_missing_document_fails_closed() -> None:
     api_type = _load_package_module().CollaborationAPI
 
@@ -147,22 +253,22 @@ def test_missing_document_fails_closed() -> None:
         )
 
 
-def test_compose_lane_uses_adapter_fallback_without_native_commit() -> None:
+def test_missing_native_commit_fails_closed_without_running_callback() -> None:
     api_type = _load_package_module().CollaborationAPI
     for document in (object(), type("Document", (), {"commitCompatibilityMutation": 7})()):
         callback_ran = []
-        result = api_type(
-            document_lookup=lambda _name, document=document: document
-        ).commit_compatibility_mutation("Model", lambda: callback_ran.append(None))
-        assert result == {"status": "Committed", "committed": True}
-        assert callback_ran == [None]
+        with pytest.raises(
+            TypeError,
+            match=r"document must provide commitCompatibilityMutation\(\)",
+        ):
+            api_type(
+                document_lookup=lambda _name, document=document: document
+            ).commit_compatibility_mutation("Model", lambda: callback_ran.append(None))
+        assert callback_ran == []
 
 
-def test_native_lane_requires_commit_compatibility_mutation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_native_lane_requires_commit_compatibility_mutation() -> None:
     api_type = _load_package_module().CollaborationAPI
-    monkeypatch.setenv("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION", "1")
 
     for document in (object(), type("Document", (), {"commitCompatibilityMutation": 7})()):
         with pytest.raises(
@@ -183,7 +289,14 @@ def test_public_signatures_expose_no_caller_supplied_authority_inputs() -> None:
     )
     assert list(
         inspect.signature(api_type.commit_compatibility_mutation).parameters
-    ) == ["self", "document_name", "callback", "structural"]
+    ) == [
+        "self",
+        "document_name",
+        "callback",
+        "structural",
+        "recompute",
+        "postcondition",
+    ]
     assert inspect.signature(api_type.commit_compatibility_mutation).parameters[
         "structural"
     ].kind is inspect.Parameter.KEYWORD_ONLY

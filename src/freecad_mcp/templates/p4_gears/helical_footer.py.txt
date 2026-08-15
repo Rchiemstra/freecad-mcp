@@ -13,7 +13,7 @@ _hel.Pitch = _helix_pitch
 _hel.Height = _width
 _hel.Angle = 0
 _sk.Visibility = False
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('body_name='     + _body.Name)
 print('sketch_name='   + _sk.Name)
 print('helix_name='    + _hel.Name)

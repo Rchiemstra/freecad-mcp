@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..cad_methods_ops.mutation_readiness import document_readiness, mark_quarantined
+
 # ruff: noqa: F403, F405
 from ._support import *
 
@@ -40,7 +42,7 @@ def build_health_deltas(before, after, affected):
     ]
 
 
-def finalize_mutation_health(
+def finalize_mutation_health(  # noqa: C901
     self,
     *,
     transaction,
@@ -118,12 +120,28 @@ def finalize_mutation_health(
         ),
     }
     if transaction.abort_succeeded is False:
+        for document in documents:
+            mark_quarantined(document, "transaction rollback failed")
+    post_readiness = [document_readiness(document) for document in documents]
+    result["mutation_readiness"] = post_readiness
+    if transaction.abort_succeeded is False:
         result.update(
             success=False,
             outcome_status="degraded",
             error_code="TRANSACTION_ROLLBACK_FAILED",
             error="Document transaction rollback failed",
         )
+    elif any(
+        any(reason != "automation_paused" for reason in item["reasons"])
+        for item in post_readiness
+    ) and not failed:
+        result.update(
+            success=False,
+            outcome_status="degraded",
+            error_code="MUTATION_NOT_READY_AFTER_COMMIT",
+            error="Mutation committed but the document is not ready for another mutation",
+        )
+        failed = True
     elif (
         health.get("attempted_verdict")
         in {

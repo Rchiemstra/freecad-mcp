@@ -35,22 +35,16 @@ def _register_run_transaction(
         dry_run: bool = False,
         commit_on_success: bool = True,
     ) -> CallToolResult:
-        """Run code inside ``openTransaction`` with automatic rollback on failure (M5).
+        """Retired transaction-code helper.
 
-        Authenticated lease mode rejects this legacy nested-code helper because
-        its inner ``exec`` cannot be independently scoped by the addon's mutation
-        guard. Use typed modelling tools, or the explicitly enabled unsafe
-        ``execute_code`` route with ``affected_documents``.
+        Generated callbacks cannot own transaction or history control inside FreeCAD's
+        native mutation coordinator. This tool always returns
+        ``RUN_TRANSACTION_RETIRED``; use typed modelling tools instead.
         """
-        if dependencies.state.rpc_session.connected:
-            return tool_fail(
-                "run_transaction is disabled in authenticated lease mode because "
-                "nested arbitrary code cannot be proven to stay within its declared "
-                "document scope"
-            )
+        del ctx
         return run_transaction_operation(
-            server_connection(),
-            server_state().only_text_feedback,
+            None,
+            True,
             doc_name,
             label,
             code,

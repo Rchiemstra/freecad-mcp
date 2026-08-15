@@ -8136,6 +8136,15 @@
           "schema": {
             "type": "boolean"
           }
+        },
+        {
+          "default": false,
+          "kind": "positional_or_keyword",
+          "name": "strict",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          }
         }
       ],
       "result_examples": [
@@ -8429,6 +8438,15 @@
           "default": false,
           "kind": "positional_or_keyword",
           "name": "reversed_dir",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
+          "default": false,
+          "kind": "positional_or_keyword",
+          "name": "strict",
           "required": false,
           "schema": {
             "type": "boolean"
@@ -13872,6 +13890,154 @@
               "null",
               "object"
             ]
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "get_mutation_readiness": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_name",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
+        }
+      ],
+      "result_examples": [
+        {
+          "success": true
+        },
+        {
+          "error": "example-error",
+          "success": false
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success",
+              "error"
+            ]
+          }
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
           },
           "success": {
             "type": "boolean"

@@ -14,6 +14,6 @@ if len(_unique_pts) < 2:
 _bsp = Part.BSplineCurve()
 _bsp.interpolate(_unique_pts)
 _idx = _sk.addGeometry(_bsp, $construction)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('geometry_index=' + str(_idx))
 print('sample_count=' + str(len(_unique_pts)))

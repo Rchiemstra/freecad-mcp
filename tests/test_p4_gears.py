@@ -205,9 +205,9 @@ class TestCreateInvoluteGearLayerB:
         code = self._gear_code()
         assert_code_contains(code, "PartDesign::Body")
 
-    def test_recompute_called(self):
+    def test_recompute_is_deferred_to_native_postcondition(self):
         code = self._gear_code()
-        assert_code_contains(code, "_doc.recompute()")
+        assert_code_contains(code, "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
 
     def test_doc_lookup_present(self):
         code = self._gear_code()

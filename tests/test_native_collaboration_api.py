@@ -34,6 +34,13 @@ def test_branch_built_freecad_exposes_the_frozen_collaboration_api():
             "cancelEdit",
             "editSessionStatus",
             "commitCompatibilityMutation",
+            "getMutationReadiness",
+            "getFileChangeState",
+            "hasPendingFileChanges",
+            "saveWithOutcome",
+            "forceSave",
+            "saveAsWithOutcome",
+            "saveCopyWithOutcome",
         ):
             assert callable(getattr(document, method, None)), method
         for method in (

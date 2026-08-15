@@ -44,34 +44,25 @@ if _diag['is_closed'] is False:
     raise RuntimeError('Sketch ' + $sketch_name + ' profile is not a closed wire; a Pocket needs a closed profile. Run get_sketch_diagnostics and close the profile.')
 $extrusion_helpers
 $bool_helpers
-# --- Atomic feature build: a failed check aborts and leaves no partial feature ---
-_doc.openTransaction('Pocket ' + $pocket_name)
-try:
-    _pkt = _body.newObject('PartDesign::Pocket', $pocket_name)
-    _pkt.Profile = (_sk, [''])
-    _pkt.Length = $length
-    _set_extrusion_symmetric(_pkt, $symmetric)
-    _set_feature_bool(_pkt, ('Reversed',), $reversed_dir)
-    _body.Tip = _pkt
-    _sk.Visibility = False
-    _doc.recompute()
+# Native typed gateway owns the transaction boundary. This payload contains no
+# transaction/undo/redo controls and is safe only beneath that gateway.
+_pkt = _body.newObject('PartDesign::Pocket', $pocket_name)
+_pkt.Profile = (_sk, [''])
+_pkt.Length = $length
+_set_extrusion_symmetric(_pkt, $symmetric)
+_set_feature_bool(_pkt, ('Reversed',), $reversed_dir)
+_body.Tip = _pkt
+_sk.Visibility = False
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 $verification
-    # --- Post-build verification: Body membership + Tip + state ---
-    if _pkt not in _body.Group:
-        raise RuntimeError('Pocket ' + _pkt.Name + ' is not a member of Body ' + _body.Name + ' after creation.')
-    if getattr(_body, 'Tip', None) is not _pkt:
-        raise RuntimeError('Body ' + _body.Name + ' Tip did not advance to ' + _pkt.Name + '.')
-    _st = list(getattr(_pkt, 'State', []))
-    if any(_s in ('Invalid', 'Error', 'Erroneous') for _s in _st):
-        raise RuntimeError('Pocket ' + _pkt.Name + ' is in state ' + str(_st) + ' after recompute.')
-    _doc.commitTransaction()
-except Exception:
-    _doc.abortTransaction()
-    try:
-        _doc.recompute()
-    except Exception:
-        pass
-    raise
+# --- Post-build verification: Body membership + Tip + state ---
+if _pkt not in _body.Group:
+    raise RuntimeError('Pocket ' + _pkt.Name + ' is not a member of Body ' + _body.Name + ' after creation.')
+if getattr(_body, 'Tip', None) is not _pkt:
+    raise RuntimeError('Body ' + _body.Name + ' Tip did not advance to ' + _pkt.Name + '.')
+_st = list(getattr(_pkt, 'State', []))
+if any(_s in ('Invalid', 'Error', 'Erroneous') for _s in _st):
+    raise RuntimeError('Pocket ' + _pkt.Name + ' is in state ' + str(_st) + ' after recompute.')
 # Feature committed and validated; assemble the report defensively so a
 # reporting glitch never rolls back a good feature.
 _shp = getattr(_pkt, 'Shape', None)

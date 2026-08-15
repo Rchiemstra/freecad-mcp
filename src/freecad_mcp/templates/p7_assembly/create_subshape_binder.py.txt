@@ -9,6 +9,7 @@ _if_exists = $if_exists
 _src = _doc.getObject(_source_name)
 if not _src: raise RuntimeError('Source object not found: ' + _source_name)
 _existing = _doc.getObject(_binder_name)
+_post_binder = None
 if _existing and _if_exists == 'skip':
     print(json.dumps({'ok': True, 'skipped': True, 'binder_name': _existing.Name, 'source_object': _source_name}))
 else:
@@ -25,7 +26,10 @@ else:
         try: _binder.Placement = _global_placement(_src)
         except Exception: pass
     _add_to_container(_container, _binder)
-    _doc.recompute()
+    _post_binder = _binder
+
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
+if _post_binder is not None:
     _src_compare_shape = getattr(_src, 'Shape', None)
     if _subs:
         _selected_shapes = [_subshape(_src, _sub) for _sub in _subs]
@@ -33,8 +37,8 @@ else:
         if len(_selected_shapes) == 1: _src_compare_shape = _selected_shapes[0]
         elif _selected_shapes: _src_compare_shape = Part.makeCompound(_selected_shapes)
     _src_bb = _global_boundbox(_src, _src_compare_shape)
-    _binder_bb = _global_boundbox(_binder)
+    _binder_bb = _global_boundbox(_post_binder)
     _delta = _bbox_delta(_src_bb, _binder_bb)
     _warning = None
     if _delta is not None and _delta > 0.01: _warning = 'Binder bbox differs from source by more than 0.01 mm'
-    print(json.dumps({'ok': True, 'binder_name': _binder.Name, 'source_object': _src.Name, 'sub_elements': _subs, 'relative': _relative, 'sync_placement': _sync_placement, 'bbox_delta_mm': None if _delta is None else round(_delta, 6), 'warning': _warning, 'source_bbox': None if _src_bb is None else _bb(_src_bb), 'binder_bbox': None if _binder_bb is None else _bb(_binder_bb)}))
+    print(json.dumps({'ok': True, 'binder_name': _post_binder.Name, 'source_object': _src.Name, 'sub_elements': _subs, 'relative': _relative, 'sync_placement': _sync_placement, 'bbox_delta_mm': None if _delta is None else round(_delta, 6), 'warning': _warning, 'source_bbox': None if _src_bb is None else _bb(_src_bb), 'binder_bbox': None if _binder_bb is None else _bb(_binder_bb)}))

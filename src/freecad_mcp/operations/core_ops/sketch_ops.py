@@ -5,11 +5,50 @@ import logging
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.tool_results import add_screenshot_if_available, tool_fail, tool_ok
-from ...template_resources import render_template_lines, render_template_text
-from .code_gen import _constraint_line, _geom_line
-from .run_code import _run_code
 
 logger = logging.getLogger("FreeCADMCPserver")
+
+
+def _typed_sketch_mutation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    method_name: str,
+    args: tuple[object, ...],
+    success_message: str,
+    failure_prefix: str,
+) -> ToolResponse:
+    try:
+        result = getattr(freecad, method_name)(*args)
+    except Exception as exc:
+        logger.error("%s: %s", failure_prefix, exc)
+        return tool_fail(f"{failure_prefix}: {exc}")
+    if not isinstance(result, dict):
+        return tool_fail(
+            f"{failure_prefix}: invalid RPC response",
+            error_code="INVALID_RPC_RESPONSE",
+        )
+    if result.get("success") is False or result.get("ok") is False:
+        return tool_fail(
+            f"{failure_prefix}: {result.get('error', result.get('message', 'unknown error'))}",
+            structured=result,
+            error_code=result.get("error_code"),
+        )
+
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            # The typed mutation has already committed; presentation capture
+            # cannot safely reclassify it as a retryable model failure.
+            result = dict(result)
+            result["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    response = tool_ok(
+        success_message,
+        structured=result,
+        only_text_feedback=only_text_feedback,
+    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 def sketch_create_operation(
     freecad: FreeCADConnection,
@@ -19,32 +58,14 @@ def sketch_create_operation(
     body_name: str | None = None,
     attach_to: str | None = None,
 ) -> ToolResponse:
-    attachment_code = ""
-    if attach_to:
-        if attach_to in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
-            attachment_code = render_template_text(
-                "core/attach_origin_plane.py.txt",
-                attach_to=repr(attach_to),
-            ).strip()
-        elif ":" in attach_to:
-            obj_n, face = attach_to.split(":", 1)
-            attachment_code = render_template_text(
-                "core/attach_face.py.txt",
-                obj_name=repr(obj_n),
-                face_name=repr(face),
-            ).strip()
-    lines = render_template_lines(
-        "core/sketch_create.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=repr(f"Document {doc_name!r} not found"),
-        body_name=repr(body_name),
-        body_missing=repr(f"Body {body_name!r} not found"),
-        sketch_name=repr(sketch_name),
-        attachment_code=attachment_code,
+    return _typed_sketch_mutation(
+        freecad,
+        only_text_feedback,
+        "sketch_create",
+        (doc_name, sketch_name, body_name, attach_to),
+        f"Sketch '{sketch_name}' created",
+        "Failed to create sketch",
     )
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Sketch '{sketch_name}' created", "Failed to create sketch",
-                     document=doc_name)
 
 def sketch_add_geometry_operation(
     freecad: FreeCADConnection,
@@ -53,15 +74,14 @@ def sketch_add_geometry_operation(
     sketch_name: str,
     geometry: list,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "core/sketch_add_geometry.py.txt",
-        doc_name=repr(doc_name),
-        sketch_name=repr(sketch_name),
-        geometry_lines="\n".join(_geom_line("", geom) for geom in geometry),
+    return _typed_sketch_mutation(
+        freecad,
+        only_text_feedback,
+        "sketch_add_geometry",
+        (doc_name, sketch_name, geometry),
+        f"Geometry added to '{sketch_name}'",
+        "Failed to add geometry",
     )
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Geometry added to '{sketch_name}'", "Failed to add geometry",
-                     document=doc_name)
 
 def sketch_add_constraint_operation(
     freecad: FreeCADConnection,
@@ -70,16 +90,14 @@ def sketch_add_constraint_operation(
     sketch_name: str,
     constraints: list,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "core/sketch_add_constraint.py.txt",
-        doc_name=repr(doc_name),
-        sketch_name=repr(sketch_name),
-        constraint_lines="\n".join(_constraint_line(c) for c in constraints),
-        message=repr(f"{len(constraints)} constraint(s) added"),
+    return _typed_sketch_mutation(
+        freecad,
+        only_text_feedback,
+        "sketch_add_constraint",
+        (doc_name, sketch_name, constraints),
+        f"Constraints added to '{sketch_name}'",
+        "Failed to add constraints",
     )
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Constraints added to '{sketch_name}'", "Failed to add constraints",
-                     document=doc_name)
 
 def sketch_delete_constraint_operation(
     freecad: FreeCADConnection,

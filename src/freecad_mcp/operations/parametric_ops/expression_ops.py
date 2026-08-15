@@ -4,7 +4,7 @@ from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...template_resources import render_template_lines
 from ..p7_assembly import _run_json_code
-from .helpers import _doc_missing
+from .helpers import _doc_missing, _typed_parametric_mutation
 
 
 def set_expression_operation(
@@ -15,21 +15,12 @@ def set_expression_operation(
     prop_path: str,
     expression: str,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "parametric/set_expression.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        object_name=repr(object_name),
-        prop_path=repr(prop_path),
-        expression=repr(expression),
-    )
-    return _run_json_code(
+    return _typed_parametric_mutation(
         freecad,
         only_text_feedback,
-        "\n".join(lines),
+        "set_expression",
+        (doc_name, object_name, prop_path, expression),
         "Failed to set expression",
-        screenshot=False,
-        document=doc_name,
     )
 
 def clear_expression_operation(
@@ -39,20 +30,12 @@ def clear_expression_operation(
     object_name: str,
     prop_path: str,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "parametric/clear_expression.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        object_name=repr(object_name),
-        prop_path=repr(prop_path),
-    )
-    return _run_json_code(
+    return _typed_parametric_mutation(
         freecad,
         only_text_feedback,
-        "\n".join(lines),
+        "clear_expression",
+        (doc_name, object_name, prop_path),
         "Failed to clear expression",
-        screenshot=False,
-        document=doc_name,
     )
 
 def list_expressions_operation(

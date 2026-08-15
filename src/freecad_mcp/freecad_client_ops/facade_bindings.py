@@ -7,6 +7,7 @@ from .connection_methods.connection_acquisition_ops import (
     _recover_acquisition_after_transport_loss,
     _resolve_locked_error_handoff_pending,
 )
+from .connection_methods.connection_assembly_ops import solve_assembly
 from .connection_methods.connection_control_ops import (
     acknowledge_acquisition_claim,
     cancel_request, notify_cancel_request as _notify_cancel_request,
@@ -42,6 +43,7 @@ from .connection_methods.connection_lease_ops import (
 )
 from .connection_methods.connection_model_ops import (
     diagnose_parametric,
+    get_mutation_readiness,
     recompute_document,
     redo,
     run_fem_analysis,
@@ -229,9 +231,11 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.list_expressions = list_expressions
     FreeCADConnection.body_create = body_create
     FreeCADConnection.body_set_tip = body_set_tip
+    FreeCADConnection.solve_assembly = solve_assembly
     FreeCADConnection.sketch_attach = sketch_attach
     FreeCADConnection.sketch_edit_constraint = sketch_edit_constraint
     FreeCADConnection.diagnose_parametric = diagnose_parametric
+    FreeCADConnection.get_mutation_readiness = get_mutation_readiness
     FreeCADConnection.recompute_document = recompute_document
     FreeCADConnection.undo = undo
     FreeCADConnection.redo = redo

@@ -3,5 +3,5 @@ if not _obj: raise RuntimeError('Object not found')
 _pl = _obj.Placement
 _pl.Base = _pl.Base + FreeCAD.Vector($dx,$dy,$dz)
 _obj.Placement = _pl
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print($message)

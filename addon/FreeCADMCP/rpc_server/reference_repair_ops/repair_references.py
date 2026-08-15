@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import Any
 
 import FreeCAD
@@ -65,7 +64,9 @@ def resolve_references(
     return resolved
 
 
-def assignment_value(prop_type: str, references: list[tuple[Any, tuple[str, ...]]]) -> Any:
+def assignment_value(
+    prop_type: str, references: list[tuple[Any, tuple[str, ...]]]
+) -> Any:
     """Build the native value expected by each FreeCAD link property family."""
     if "LinkSubList" in prop_type:
         return [(target, subelements) for target, subelements in references]
@@ -98,6 +99,12 @@ def recompute_result(doc: Any, requested: bool) -> dict[str, Any]:
         return {"requested": True, "ok": result is not False, "result": result}
     except Exception as exc:
         return {"requested": True, "ok": False, "error": str(exc)}
+
+
+def native_recompute_result(requested: bool) -> dict[str, Any]:
+    if not requested:
+        return {"requested": False, "ok": None, "deferred": True}
+    return {"requested": True, "ok": True, "native": True}
 
 
 def _preflight_repairs(
@@ -141,53 +148,30 @@ def _preflight_repairs(
     return prepared, None
 
 
-def _commit_repairs(
+def _apply_repairs(
     doc: Any,
     prepared: list[tuple[Any, str, str, Any]],
 ) -> dict[str, Any] | None:
-    opened_transaction = False
     try:
-        if hasattr(doc, "openTransaction"):
-            doc.openTransaction("MCP repair broken references")
-            opened_transaction = True
         for owner, property_name, _prop_type, value in prepared:
             setattr(owner, property_name, value)
-        if opened_transaction:
-            doc.commitTransaction()
     except Exception as exc:
-        if opened_transaction:
-            with contextlib.suppress(Exception):
-                doc.abortTransaction()
         return {
             "ok": False,
             "repair_committed": False,
-            "error": f"Repair assignment failed and was rolled back: {exc}",
+            "error": f"Repair assignment failed: {exc}",
         }
     return None
 
 
-def repair_references_gui(
+def _repair_result(
+    doc: Any,
     document_name: str,
-    repairs: list[dict[str, Any]],
+    prepared: list[tuple[Any, str, str, Any]],
     *,
-    recompute: bool = False,
-    validate: bool = False,
+    validate: bool,
+    recompute_status: dict[str, Any],
 ) -> dict[str, Any]:
-    """Atomically replace complete link properties, with recompute deferred by default."""
-    doc = FreeCAD.getDocument(document_name)
-    if doc is None:
-        return {"ok": False, "error": f"Document '{document_name}' not found"}
-    if not isinstance(repairs, list) or not repairs:
-        return {"ok": False, "error": "At least one repair is required"}
-
-    prepared, preflight_error = _preflight_repairs(doc, repairs, validate=validate)
-    if preflight_error is not None:
-        return preflight_error
-
-    commit_error = _commit_repairs(doc, prepared)
-    if commit_error is not None:
-        return commit_error
-
     applied = [
         {
             "object": owner.Name,
@@ -200,10 +184,7 @@ def repair_references_gui(
         serialize_property(owner, property_name, validate)
         for owner, property_name, _prop_type, _value in prepared
     ]
-    remaining_invalid = [
-        item for item in verified_properties if item["valid"] is False
-    ]
-    recompute_status = recompute_result(doc, recompute)
+    remaining_invalid = [item for item in verified_properties if item["valid"] is False]
     return {
         "ok": not remaining_invalid,
         "document": document_name,
@@ -214,3 +195,61 @@ def repair_references_gui(
         "validation_performed": validate,
         "modified": document_modified_state(doc),
     }
+
+
+def repair_references_gui(
+    document_name: str,
+    repairs: list[dict[str, Any]],
+    *,
+    recompute: bool = False,
+    validate: bool = False,
+    phase: str = "complete",
+) -> dict[str, Any]:
+    """Apply or inspect preflighted replacements at an explicit commit phase."""
+    doc = FreeCAD.getDocument(document_name)
+    if doc is None:
+        return {"ok": False, "error": f"Document '{document_name}' not found"}
+    if not isinstance(repairs, list) or not repairs:
+        return {"ok": False, "error": "At least one repair is required"}
+    if phase not in {"apply", "postcondition", "complete"}:
+        return {
+            "ok": False,
+            "repair_committed": False,
+            "error": f"Unsupported repair phase: {phase}",
+        }
+
+    prepared, preflight_error = _preflight_repairs(doc, repairs, validate=validate)
+    if preflight_error is not None:
+        return preflight_error
+
+    if phase != "postcondition":
+        commit_error = _apply_repairs(doc, prepared)
+        if commit_error is not None:
+            return commit_error
+    if phase == "apply":
+        return {
+            "ok": True,
+            "document": document_name,
+            "repair_committed": True,
+            "applied": [
+                {
+                    "object": owner.Name,
+                    "property": property_name,
+                    "property_type": prop_type,
+                }
+                for owner, property_name, prop_type, _value in prepared
+            ],
+        }
+
+    recompute_status = (
+        native_recompute_result(True)
+        if phase == "postcondition"
+        else recompute_result(doc, recompute)
+    )
+    return _repair_result(
+        doc,
+        document_name,
+        prepared,
+        validate=validate,
+        recompute_status=recompute_status,
+    )

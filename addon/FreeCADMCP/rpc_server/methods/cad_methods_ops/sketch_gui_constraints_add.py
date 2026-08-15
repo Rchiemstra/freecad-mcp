@@ -7,7 +7,15 @@ import contextlib
 from .sketch_constraint_dispatch import apply_sketch_constraint
 
 
-def sketch_add_constraint_gui(doc_name, sketch_name, constraints, *, freecad, sketcher):
+def sketch_add_constraint_gui(
+    doc_name,
+    sketch_name,
+    constraints,
+    *,
+    freecad,
+    sketcher,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -25,7 +33,8 @@ def sketch_add_constraint_gui(doc_name, sketch_name, constraints, *, freecad, sk
                 with contextlib.suppress(Exception):
                     sketch.renameConstraint(idx, str(name))
 
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return True
     except Exception as e:
         return str(e)
