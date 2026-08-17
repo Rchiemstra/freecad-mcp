@@ -87,6 +87,7 @@ _READ_ONLY_REMOTE_METHODS = frozenset(
         "list_expressions",
         "diagnose_parametric",
         "get_sketch_diagnostics",
+        "get_semantic_revisions",
     }
 )
 

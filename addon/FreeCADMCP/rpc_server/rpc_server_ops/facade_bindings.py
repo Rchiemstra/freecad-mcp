@@ -9,6 +9,7 @@ from ..methods import (
     lease_methods,
     lifecycle_methods,
     native_lifecycle_methods,
+    part3_collaboration_methods,
     v2_methods,
 )
 from ..methods.cad_methods_ops.mutation_readiness import get_mutation_readiness
@@ -96,6 +97,12 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.finalize_document_edit = native_lifecycle_methods.finalize_document_edit
     FreeCADRPC.release_document_lock = lease_methods.release_document_lock
     FreeCADRPC.force_release_stale_lock = lease_methods.force_release_stale_lock
+
+    # Part 3 identity-bound checked-edit surface
+    FreeCADRPC.get_semantic_revisions = part3_collaboration_methods.get_semantic_revisions
+    FreeCADRPC.begin_checked_edit = part3_collaboration_methods.begin_checked_edit
+    FreeCADRPC.commit_checked_property = part3_collaboration_methods.commit_checked_property
+    FreeCADRPC.cancel_checked_edit = part3_collaboration_methods.cancel_checked_edit
 
     # Phase 4 slice 4F — CAD methods
     FreeCADRPC.create_object = cad_methods.create_object
