@@ -106,6 +106,13 @@ def test_cancel_checked_property_discards_fence() -> None:
 
     document = MagicMock()
     document.editSessionStatus.return_value = {"status": "Active"}
+    document.collaborationIdentity.return_value = {
+        "instance_id": 1,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    document.Uid = SimpleNamespace(Value="uid-1")
+    document.Name = "Model"
     document.cancelEdit.return_value = True
 
     rpc = MagicMock()
@@ -114,6 +121,6 @@ def test_cancel_checked_property_discards_fence() -> None:
         "authenticated_session_id": "actor-1",
     }
 
-    result = methods.cancel_checked_edit(rpc, "session-cancel", "cleanup")
+    result = methods.cancel_checked_edit(rpc, "session-cancel", "cleanup", "cancel-op-1")
     assert result.get("success") is True, result
     assert pop_begin_fence("session-cancel") is None

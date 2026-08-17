@@ -17,6 +17,8 @@ PART3_METHODS = (
     "begin_checked_edit",
     "commit_checked_property",
     "cancel_checked_edit",
+    "undo",
+    "redo",
 )
 
 
@@ -102,6 +104,7 @@ def _result_examples(method: str) -> list[dict[str, Any]]:
             {
                 "success": True,
                 "session_id": "session-example",
+                "operation_id": "op-example",
                 "document_uid": "uid-example",
                 "document_instance_id": 1,
                 "lifecycle_epoch": 1,
@@ -130,8 +133,17 @@ def _result_examples(method: str) -> list[dict[str, Any]]:
                 "current_revisions": {"ObjectModel:Target": 3},
             },
         ]
+    if method in {"undo", "redo"}:
+        return [
+            {"success": True, "operation_id": "op-example"},
+            {
+                "success": False,
+                "error_code": "HISTORY_HEAD_REJECTED",
+                "error": "document undo history head does not match the client expectation",
+            },
+        ]
     return [
-        {"success": True, "cancelled": True, "session_id": "session-example"},
+        {"success": True, "cancelled": True, "session_id": "session-example", "operation_id": "op-example"},
         {"success": False, "error_code": "DOCUMENT_LIFECYCLE_REJECTED", "error": "stale"},
     ]
 

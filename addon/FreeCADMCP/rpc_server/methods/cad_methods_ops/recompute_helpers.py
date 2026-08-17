@@ -2,11 +2,110 @@
 
 from typing import Any
 
+try:
+    from ...part3_collaboration.admission import (
+        actor_from_session,
+        early_operation_replay,
+        replay_or_protocol_error,
+    )
+    from ...part3_collaboration.history_head import (
+        capture_redo_head,
+        capture_undo_head,
+        redo_head_matches,
+        undo_head_matches,
+    )
+    from ...part3_collaboration.identity import (
+        bootstrap_identity_selector,
+        resolve_identity_bound_document,
+    )
+    from ...part3_collaboration.operation_terminal_store import store_operation_terminal
+except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.part3_collaboration.admission import (
+        actor_from_session,
+        early_operation_replay,
+        replay_or_protocol_error,
+    )
+    from addon.FreeCADMCP.part3_collaboration.history_head import (
+        capture_redo_head,
+        capture_undo_head,
+        redo_head_matches,
+        undo_head_matches,
+    )
+    from addon.FreeCADMCP.part3_collaboration.identity import (
+        bootstrap_identity_selector,
+        resolve_identity_bound_document,
+    )
+    from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+        store_operation_terminal,
+    )
+
 from .cad_mutation import (
     admit_cad_mutation,
     current_cad_mutation_inflight,
     postflight_cad_mutation,
 )
+
+
+def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "success": False,
+        "ok": False,
+        "error_code": code,
+        "error": message,
+    }
+    payload.update(extra)
+    return payload
+
+
+def _selector_dict(selector: Any) -> dict[str, Any] | None:
+    if isinstance(selector, dict):
+        return selector
+    return None
+
+
+def _store_history_terminal(
+    actor_id: str,
+    operation_id: str,
+    canonical_payload: dict[str, Any],
+    document: Any,
+    terminal_result: dict[str, Any],
+) -> None:
+    selector = bootstrap_identity_selector(document)
+    store_operation_terminal(
+        actor_id,
+        str(operation_id),
+        canonical_payload,
+        document_instance_id=int(selector.document_instance_id),
+        lifecycle_epoch=int(selector.lifecycle_epoch),
+        terminal_result=terminal_result,
+    )
+
+
+def _finish_history_mutation(
+    document: Any,
+    *,
+    actor_id: str,
+    operation_id: str,
+    canonical_payload: dict[str, Any],
+) -> Any:
+    """Target recompute after undo/redo, then postflight (ADR §11.1 target policy)."""
+
+    document.recompute()
+    result = postflight_cad_mutation(document, True)
+    if isinstance(result, dict) and (
+        result.get("success") is False or result.get("ok") is False
+    ):
+        # History action already applied; do not store a failure terminal (ADR §2.2).
+        failure = dict(result)
+        failure["operation_id"] = operation_id
+        return failure
+
+    terminal: dict[str, Any] = {"success": True, "operation_id": operation_id}
+    if isinstance(result, dict):
+        terminal.update(result)
+        terminal.setdefault("success", True)
+    _store_history_terminal(actor_id, operation_id, canonical_payload, document, terminal)
+    return terminal
 
 
 def collect_invalid_objects(freecad) -> dict[str, list[dict[str, Any]]]:
@@ -137,46 +236,204 @@ def recompute_document_gui(doc_name, *, freecad):
         return str(e)
 
 
-def undo(self, doc_name: str) -> dict:
+def undo(
+    self,
+    doc_selector,
+    operation_id,
+    expected_undo_count=None,
+    expected_undo_head=None,
+) -> dict:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(lambda: undo_gui(doc_name, freecad=collaborators.freecad))
+    res = self._dispatch_gui(
+        lambda: undo_gui(
+            doc_selector,
+            operation_id=str(operation_id),
+            expected_undo_count=expected_undo_count,
+            expected_undo_head=expected_undo_head,
+            freecad=collaborators.freecad,
+            rpc=self,
+        )
+    )
     return self._adapt_gui_mutation_result(res)
 
 
-def undo_gui(doc_name, *, freecad):
+def undo_gui(
+    doc_selector,
+    *,
+    operation_id: str,
+    expected_undo_count,
+    expected_undo_head,
+    freecad,
+    rpc,
+) -> Any:
     try:
-        doc = freecad.getDocument(doc_name)
-        if not doc:
-            return f"Document '{doc_name}' not found."
+        document, failure = resolve_identity_bound_document(
+            freecad,
+            _selector_dict(doc_selector),
+        )
+        if failure is not None:
+            return failure
+
+        canonical_payload = {
+            "method": "undo",
+            "doc_selector": dict(_selector_dict(doc_selector) or {}),
+            "expected_undo_count": expected_undo_count,
+            "expected_undo_head": expected_undo_head,
+        }
+        replay, auth_failure = early_operation_replay(
+            rpc,
+            operation_id,
+            canonical_payload,
+            document,
+        )
+        if auth_failure is not None:
+            return auth_failure
+        replay_result = replay_or_protocol_error(replay)
+        if replay_result is not None:
+            return replay_result
+
+        actor_id, auth_failure = actor_from_session(rpc)
+        if auth_failure is not None:
+            return auth_failure
+
+        if expected_undo_count is None or expected_undo_head is None:
+            failure = _error(
+                "HISTORY_HEAD_REQUIRED",
+                "expected_undo_count and expected_undo_head are required",
+            )
+            _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
+            return failure
+
+        if not undo_head_matches(document, expected_undo_count, expected_undo_head):
+            live = capture_undo_head(document)
+            failure = _error(
+                "HISTORY_HEAD_REJECTED",
+                "document undo history head does not match the client expectation",
+                expected_undo_count=int(expected_undo_count),
+                expected_undo_head=str(expected_undo_head),
+                current_undo_count=live["undo_count"],
+                current_undo_head=live["undo_head"],
+            )
+            _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
+            return failure
+
         admission_failure = admit_cad_mutation(
-            doc, inflight=current_cad_mutation_inflight()
+            document, inflight=current_cad_mutation_inflight()
         )
         if admission_failure is not None:
+            _store_history_terminal(
+                actor_id, operation_id, canonical_payload, document, admission_failure
+            )
             return admission_failure
-        doc.undo()
-        return postflight_cad_mutation(doc, True)
+
+        document.undo()
+        return _finish_history_mutation(
+            document,
+            actor_id=actor_id,
+            operation_id=operation_id,
+            canonical_payload=canonical_payload,
+        )
     except Exception as e:
         return str(e)
 
 
-def redo(self, doc_name: str) -> dict:
+def redo(
+    self,
+    doc_selector,
+    operation_id,
+    expected_redo_count=None,
+    expected_redo_head=None,
+) -> dict:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(lambda: redo_gui(doc_name, freecad=collaborators.freecad))
+    res = self._dispatch_gui(
+        lambda: redo_gui(
+            doc_selector,
+            operation_id=str(operation_id),
+            expected_redo_count=expected_redo_count,
+            expected_redo_head=expected_redo_head,
+            freecad=collaborators.freecad,
+            rpc=self,
+        )
+    )
     return self._adapt_gui_mutation_result(res)
 
 
-def redo_gui(doc_name, *, freecad):
+def redo_gui(
+    doc_selector,
+    *,
+    operation_id: str,
+    expected_redo_count,
+    expected_redo_head,
+    freecad,
+    rpc,
+) -> Any:
     try:
-        doc = freecad.getDocument(doc_name)
-        if not doc:
-            return f"Document '{doc_name}' not found."
+        document, failure = resolve_identity_bound_document(
+            freecad,
+            _selector_dict(doc_selector),
+        )
+        if failure is not None:
+            return failure
+
+        canonical_payload = {
+            "method": "redo",
+            "doc_selector": dict(_selector_dict(doc_selector) or {}),
+            "expected_redo_count": expected_redo_count,
+            "expected_redo_head": expected_redo_head,
+        }
+        replay, auth_failure = early_operation_replay(
+            rpc,
+            operation_id,
+            canonical_payload,
+            document,
+        )
+        if auth_failure is not None:
+            return auth_failure
+        replay_result = replay_or_protocol_error(replay)
+        if replay_result is not None:
+            return replay_result
+
+        actor_id, auth_failure = actor_from_session(rpc)
+        if auth_failure is not None:
+            return auth_failure
+
+        if expected_redo_count is None or expected_redo_head is None:
+            failure = _error(
+                "HISTORY_HEAD_REQUIRED",
+                "expected_redo_count and expected_redo_head are required",
+            )
+            _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
+            return failure
+
+        if not redo_head_matches(document, expected_redo_count, expected_redo_head):
+            live = capture_redo_head(document)
+            failure = _error(
+                "HISTORY_HEAD_REJECTED",
+                "document redo history head does not match the client expectation",
+                expected_redo_count=int(expected_redo_count),
+                expected_redo_head=str(expected_redo_head),
+                current_redo_count=live["redo_count"],
+                current_redo_head=live["redo_head"],
+            )
+            _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
+            return failure
+
         admission_failure = admit_cad_mutation(
-            doc, inflight=current_cad_mutation_inflight()
+            document, inflight=current_cad_mutation_inflight()
         )
         if admission_failure is not None:
+            _store_history_terminal(
+                actor_id, operation_id, canonical_payload, document, admission_failure
+            )
             return admission_failure
-        doc.redo()
-        return postflight_cad_mutation(doc, True)
+
+        document.redo()
+        return _finish_history_mutation(
+            document,
+            actor_id=actor_id,
+            operation_id=operation_id,
+            canonical_payload=canonical_payload,
+        )
     except Exception as e:
         return str(e)
 

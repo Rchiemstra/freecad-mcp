@@ -80,6 +80,8 @@ AUTHENTICATED_METHODS = frozenset(
         "begin_checked_edit",
         "commit_checked_property",
         "cancel_checked_edit",
+        "undo",
+        "redo",
         "get_request_status",
         "cancel_request",
         "shutdown_rpc_server",

@@ -6,6 +6,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 try:
+    from ...part3_collaboration.admission import (
+        actor_from_session,
+        early_operation_replay,
+        early_operation_replay_across_documents,
+        replay_or_protocol_error,
+    )
     from ...part3_collaboration.checked_edit_fence import (
         discard_begin_fence,
         pop_begin_fence,
@@ -15,11 +21,18 @@ try:
         bootstrap_identity_selector,
         resolve_identity_bound_document,
     )
+    from ...part3_collaboration.operation_terminal_store import store_operation_terminal
     from ...part3_collaboration.revisions import (
         conflict_payload_from_commit_result,
         encode_semantic_revision_key,
     )
 except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.part3_collaboration.admission import (
+        actor_from_session,
+        early_operation_replay,
+        early_operation_replay_across_documents,
+        replay_or_protocol_error,
+    )
     from addon.FreeCADMCP.part3_collaboration.checked_edit_fence import (
         discard_begin_fence,
         pop_begin_fence,
@@ -28,6 +41,9 @@ except ImportError:  # pragma: no cover - flat addon import path
     from addon.FreeCADMCP.part3_collaboration.identity import (
         bootstrap_identity_selector,
         resolve_identity_bound_document,
+    )
+    from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+        store_operation_terminal,
     )
     from addon.FreeCADMCP.part3_collaboration.revisions import (
         conflict_payload_from_commit_result,
@@ -46,17 +62,6 @@ def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
     }
     payload.update(extra)
     return payload
-
-
-def _actor_from_session(self) -> tuple[str | None, dict[str, Any] | None]:
-    identity = self._execution_collaborators.request_identity_provider().get_request_identity()
-    actor_id = identity.get("authenticated_session_id")
-    if not actor_id:
-        return None, _error(
-            "LEASE_PROTOCOL_REQUIRED",
-            "This operation requires a handshake_v2 session and an immutable authenticated request envelope",
-        )
-    return str(actor_id), None
 
 
 def _normalize_revision_keys(revision_keys: Sequence[Mapping[str, Any]] | None) -> list[dict[str, str]]:
@@ -98,6 +103,24 @@ def _session_still_active(document: Any, session_id: str) -> bool:
     return False
 
 
+def _store_terminal(
+    actor_id: str,
+    operation_id: str,
+    canonical_payload: Mapping[str, Any],
+    document: Any,
+    terminal_result: Mapping[str, Any],
+) -> None:
+    selector = bootstrap_identity_selector(document)
+    store_operation_terminal(
+        actor_id,
+        str(operation_id),
+        canonical_payload,
+        document_instance_id=int(selector.document_instance_id),
+        lifecycle_epoch=int(selector.lifecycle_epoch),
+        terminal_result=terminal_result,
+    )
+
+
 def get_semantic_revisions(self, doc_selector, revision_keys):
     freecad = self._execution_collaborators.freecad
     document, failure = resolve_identity_bound_document(
@@ -137,10 +160,9 @@ def get_semantic_revisions(self, doc_selector, revision_keys):
     }
 
 
-def begin_checked_edit(self, doc_selector, revision_keys):
-    actor_id, auth_failure = _actor_from_session(self)
-    if auth_failure is not None:
-        return auth_failure
+def begin_checked_edit(self, doc_selector, revision_keys, operation_id):
+    if not operation_id:
+        return _error("OPERATION_ID_REQUIRED", "operation_id is required")
 
     freecad = self._execution_collaborators.freecad
     document, failure = resolve_identity_bound_document(
@@ -150,6 +172,28 @@ def begin_checked_edit(self, doc_selector, revision_keys):
     if failure is not None:
         return failure
 
+    keys = _normalize_revision_keys(revision_keys)
+    canonical_payload = {
+        "method": "begin_checked_edit",
+        "doc_selector": dict(_selector_dict(doc_selector) or {}),
+        "revision_keys": keys,
+    }
+    replay, auth_failure = early_operation_replay(
+        self,
+        str(operation_id),
+        canonical_payload,
+        document,
+    )
+    if auth_failure is not None:
+        return auth_failure
+    replay_result = replay_or_protocol_error(replay)
+    if replay_result is not None:
+        return replay_result
+
+    actor_id, auth_failure = actor_from_session(self)
+    if auth_failure is not None:
+        return auth_failure
+
     begin = getattr(document, "beginEditSession", None)
     snapshot_for_edit = getattr(document, "snapshotForEdit", None)
     if not callable(begin) or not callable(snapshot_for_edit):
@@ -158,7 +202,6 @@ def begin_checked_edit(self, doc_selector, revision_keys):
             "document does not expose beginEditSession/snapshotForEdit",
         )
 
-    keys = _normalize_revision_keys(revision_keys)
     try:
         session = begin(actor_id)
         if not isinstance(session, Mapping):
@@ -182,15 +225,18 @@ def begin_checked_edit(self, doc_selector, revision_keys):
         lifecycle_epoch=int(snapshot.get("lifecycle_epoch") or selector.lifecycle_epoch),
         revisions=list(snapshot.get("revisions") or []),
     )
-    return {
+    result = {
         "success": True,
         "session_id": session_id,
+        "operation_id": str(operation_id),
         "document_uid": selector.document_uid,
         "document_instance_id": int(snapshot.get("document_instance_id") or selector.document_instance_id),
         "lifecycle_epoch": int(snapshot.get("lifecycle_epoch") or selector.lifecycle_epoch),
         "document_name": selector.document_name,
         "revisions": list(snapshot.get("revisions") or []),
     }
+    _store_terminal(actor_id, str(operation_id), canonical_payload, document, result)
+    return result
 
 
 def commit_checked_property(
@@ -203,13 +249,6 @@ def commit_checked_property(
     value,
     operation_id,
 ):
-    actor_id, auth_failure = _actor_from_session(self)
-    if auth_failure is not None:
-        return auth_failure
-
-    if not operation_id:
-        return _error("OPERATION_ID_REQUIRED", "operation_id is required")
-
     freecad = self._execution_collaborators.freecad
     document, failure = resolve_identity_bound_document(
         freecad,
@@ -217,6 +256,31 @@ def commit_checked_property(
     )
     if failure is not None:
         return failure
+
+    canonical_payload = {
+        "method": "commit_checked_property",
+        "session_id": str(session_id),
+        "doc_selector": dict(_selector_dict(doc_selector) or {}),
+        "object_name": str(object_name),
+        "property_name": str(property_name),
+        "value_type": str(value_type),
+        "value": str(value),
+    }
+    replay, auth_failure = early_operation_replay(
+        self,
+        str(operation_id),
+        canonical_payload,
+        document,
+    )
+    if auth_failure is not None:
+        return auth_failure
+    replay_result = replay_or_protocol_error(replay)
+    if replay_result is not None:
+        return replay_result
+
+    actor_id, auth_failure = actor_from_session(self)
+    if auth_failure is not None:
+        return auth_failure
 
     if not _session_still_active(document, str(session_id)):
         discard_begin_fence(str(session_id))
@@ -281,28 +345,36 @@ def commit_checked_property(
         )
         result = commit(str(session_id), prepared)
     except Exception as exc:
-        return _error("CHECKED_PROPERTY_COMMIT_FAILED", str(exc))
+        failure = _error("CHECKED_PROPERTY_COMMIT_FAILED", str(exc))
+        _store_terminal(actor_id, str(operation_id), canonical_payload, document, failure)
+        return failure
 
     if not isinstance(result, Mapping):
-        return _error(
+        failure = _error(
             "CHECKED_PROPERTY_COMMIT_FAILED",
             "commitEdit returned an invalid payload",
         )
+        _store_terminal(actor_id, str(operation_id), canonical_payload, document, failure)
+        return failure
 
     status = str(result.get("status") or "")
     if status == "Conflict":
-        return conflict_payload_from_commit_result(result, operation_id=str(operation_id))
+        terminal = conflict_payload_from_commit_result(result, operation_id=str(operation_id))
+        _store_terminal(actor_id, str(operation_id), canonical_payload, document, terminal)
+        return terminal
 
     if not bool(result.get("committed")):
-        return _error(
+        failure = _error(
             "CHECKED_PROPERTY_COMMIT_REJECTED",
             str(result.get("message") or "commitEdit was not committed"),
             operation_id=str(operation_id),
             status=status,
         )
+        _store_terminal(actor_id, str(operation_id), canonical_payload, document, failure)
+        return failure
 
     published = list(result.get("published_revisions") or [])
-    return {
+    terminal = {
         "success": True,
         "ok": True,
         "committed": True,
@@ -315,15 +387,38 @@ def commit_checked_property(
             if isinstance(item, Mapping)
         ],
     }
+    _store_terminal(actor_id, str(operation_id), canonical_payload, document, terminal)
+    return terminal
 
 
-def cancel_checked_edit(self, session_id, reason="cancelled by caller"):
-    actor_id, auth_failure = _actor_from_session(self)
+def cancel_checked_edit(self, session_id, reason="cancelled by caller", operation_id=None):
+    actor_id, auth_failure = actor_from_session(self)
     if auth_failure is not None:
         return auth_failure
+    if not operation_id:
+        return _error("OPERATION_ID_REQUIRED", "operation_id is required")
+
+    canonical_payload = {
+        "method": "cancel_checked_edit",
+        "session_id": str(session_id),
+        "reason": str(reason),
+    }
 
     freecad = self._execution_collaborators.freecad
     documents = list(freecad.listDocuments().values())
+
+    replay, auth_failure = early_operation_replay_across_documents(
+        self,
+        str(operation_id),
+        canonical_payload,
+        documents,
+    )
+    if auth_failure is not None:
+        return auth_failure
+    replay_result = replay_or_protocol_error(replay)
+    if replay_result is not None:
+        return replay_result
+
     cancel = None
     target_document = None
     for document in documents:
@@ -336,23 +431,31 @@ def cancel_checked_edit(self, session_id, reason="cancelled by caller"):
             break
 
     if cancel is None or target_document is None:
-        return _error(
+        failure = _error(
             "DOCUMENT_LIFECYCLE_REJECTED",
             "checked edit session is absent or no longer active",
             session_id=str(session_id),
         )
+        if target_document is not None:
+            _store_terminal(actor_id, str(operation_id), canonical_payload, target_document, failure)
+        return failure
 
     try:
         cancelled = bool(cancel(str(session_id), str(reason)))
     except Exception as exc:
-        return _error("CHECKED_EDIT_CANCEL_FAILED", str(exc))
+        failure = _error("CHECKED_EDIT_CANCEL_FAILED", str(exc))
+        _store_terminal(actor_id, str(operation_id), canonical_payload, target_document, failure)
+        return failure
 
     discard_begin_fence(str(session_id))
-    return {
+    terminal = {
         "success": cancelled,
         "cancelled": cancelled,
         "session_id": str(session_id),
+        "operation_id": str(operation_id),
     }
+    _store_terminal(actor_id, str(operation_id), canonical_payload, target_document, terminal)
+    return terminal
 
 
 __all__ = [

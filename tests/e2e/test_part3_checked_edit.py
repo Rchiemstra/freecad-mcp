@@ -138,7 +138,7 @@ def test_same_property_conflict_via_checked_edit(part3_doc):
 
     begin = rpc._dispatch(
         "begin_checked_edit",
-        [selector, revision_keys],
+        [selector, revision_keys, "part3-conflict-begin"],
     )
     assert begin.get("success") is True, begin
     session_id = begin["session_id"]
@@ -172,7 +172,7 @@ def test_same_property_conflict_via_checked_edit(part3_doc):
 
     status = conn.doc.editSessionStatus(session_id)
     assert status is not None
-    rpc._dispatch("cancel_checked_edit", [session_id, "test cleanup"])
+    rpc._dispatch("cancel_checked_edit", [session_id, "test cleanup", "part3-conflict-cancel"])
 
 
 def test_independent_property_success(part3_doc):
@@ -180,7 +180,7 @@ def test_independent_property_success(part3_doc):
     selector = _selector(conn.doc)
     revision_keys = [_property_key("SecondBox", "BetaValue")]
 
-    begin = rpc._dispatch("begin_checked_edit", [selector, revision_keys])
+    begin = rpc._dispatch("begin_checked_edit", [selector, revision_keys, "part3-independent-begin"])
     assert begin.get("success") is True, begin
     session_id = begin["session_id"]
 
@@ -212,7 +212,7 @@ def test_close_reopen_refuses_stale_selector_and_session(part3_doc):
     selector = _selector(conn.doc)
     revision_keys = [_model_key("StressBox")]
 
-    begin = rpc._dispatch("begin_checked_edit", [selector, revision_keys])
+    begin = rpc._dispatch("begin_checked_edit", [selector, revision_keys, "part3-stale-begin"])
     assert begin.get("success") is True, begin
     session_id = begin["session_id"]
 
@@ -237,7 +237,7 @@ def test_close_reopen_refuses_stale_selector_and_session(part3_doc):
     assert stale_commit.get("success") is False, stale_commit
     assert stale_commit.get("error_code") == "DOCUMENT_LIFECYCLE_REJECTED"
 
-    stale_cancel = rpc._dispatch("cancel_checked_edit", [session_id])
+    stale_cancel = rpc._dispatch("cancel_checked_edit", [session_id, "cleanup", "part3-stale-cancel"])
     assert stale_cancel.get("success") is False, stale_cancel
     assert stale_cancel.get("error_code") == "DOCUMENT_LIFECYCLE_REJECTED"
 

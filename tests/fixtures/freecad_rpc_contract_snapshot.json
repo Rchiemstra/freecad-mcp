@@ -8815,15 +8815,16 @@
           "code": "DOCUMENT_CONFLICT",
           "data": {
             "changed_semantic_keys": [
-              "model"
+              "ObjectModel:Target"
             ],
             "current_revisions": {
-              "model": 4
+              "ObjectModel:Target": 4
             },
             "expected_revisions": {
-              "model": 3
+              "ObjectModel:Target": 3
             },
-            "request_id": "phase1-example"
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
           },
           "message": "document revision conflict"
         },
@@ -8831,7 +8832,8 @@
           "code": "DOCUMENT_LIFECYCLE_REJECTED",
           "data": {
             "current_lifecycle_epoch": 3,
-            "expected_lifecycle_epoch": 2
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
           },
           "message": "document lifecycle changed"
         }
@@ -8897,21 +8899,38 @@
       },
       "parameters": [
         {
-          "name": "doc_name",
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "operation_id",
           "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
-        }
-      ],
-      "result_examples": [
-        {
-          "success": true
         },
         {
-          "error": "example-error",
-          "success": false
+          "name": "expected_redo_count",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_redo_head",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
@@ -8934,24 +8953,82 @@
               }
             },
             "required": [
-              "success",
-              "error"
+              "success"
             ]
           }
         ],
         "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
           },
           "error_code": {
             "type": "string"
           },
-          "success": {
+          "committed": {
             "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
-      }
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "HISTORY_HEAD_REJECTED",
+          "error": "document undo history head does not match the client expectation"
+        }
+      ]
     },
     "refresh_view": {
       "normalized_error_examples": [
@@ -13605,15 +13682,16 @@
           "code": "DOCUMENT_CONFLICT",
           "data": {
             "changed_semantic_keys": [
-              "model"
+              "ObjectModel:Target"
             ],
             "current_revisions": {
-              "model": 4
+              "ObjectModel:Target": 4
             },
             "expected_revisions": {
-              "model": 3
+              "ObjectModel:Target": 3
             },
-            "request_id": "phase1-example"
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
           },
           "message": "document revision conflict"
         },
@@ -13621,7 +13699,8 @@
           "code": "DOCUMENT_LIFECYCLE_REJECTED",
           "data": {
             "current_lifecycle_epoch": 3,
-            "expected_lifecycle_epoch": 2
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
           },
           "message": "document lifecycle changed"
         }
@@ -13687,21 +13766,38 @@
       },
       "parameters": [
         {
-          "name": "doc_name",
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "operation_id",
           "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
-        }
-      ],
-      "result_examples": [
-        {
-          "success": true
         },
         {
-          "error": "example-error",
-          "success": false
+          "name": "expected_undo_count",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_undo_head",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
@@ -13724,24 +13820,82 @@
               }
             },
             "required": [
-              "success",
-              "error"
+              "success"
             ]
           }
         ],
         "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
           },
           "error_code": {
             "type": "string"
           },
-          "success": {
+          "committed": {
             "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
-      }
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "HISTORY_HEAD_REJECTED",
+          "error": "document undo history head does not match the client expectation"
+        }
+      ]
     },
     "update_document_lock": {
       "normalized_error_examples": [
@@ -14381,6 +14535,14 @@
           "schema": {
             "type": "array"
           }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
         }
       ],
       "result_schema": {
@@ -14472,6 +14634,7 @@
         {
           "success": true,
           "session_id": "session-example",
+          "operation_id": "op-example",
           "document_uid": "uid-example",
           "document_instance_id": 1,
           "lifecycle_epoch": 1,
@@ -14854,6 +15017,15 @@
             "type": "string"
           },
           "default": "cancelled by caller"
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
@@ -14945,7 +15117,8 @@
         {
           "success": true,
           "cancelled": true,
-          "session_id": "session-example"
+          "session_id": "session-example",
+          "operation_id": "op-example"
         },
         {
           "success": false,
