@@ -715,6 +715,14 @@
     {
       "execution_mode": "typed_gateway",
       "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:save_document_copy",
+      "rpc_method": "save_document_copy",
+      "tool": "save_document_copy"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
       "mutation_class": "mutation",
       "operation_path": "freecad_mcp.operations.bounding_box_operation",
       "rpc_method": "bounding_box",
@@ -1377,5 +1385,5 @@
       "tool": "get_worker_status"
     }
   ],
-  "tool_count": 172
+  "tool_count": 173
 }

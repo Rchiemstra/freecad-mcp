@@ -88,6 +88,33 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         )
 
     @mcp.tool()
+    def save_document_copy(
+        ctx: Context,
+        selector: DocumentSelectorInput,  # noqa: F821
+        destination: str,
+        overwrite: bool = False,
+        validation_profile: str = "default",
+    ) -> CallToolResult:
+        """Run native Save Copy via ``saveCopyWithOutcome`` and verify a stable live
+        FCStd hash, metadata, required archive members, and CRC. The canonical
+        savepoint must not move and pending-file state must remain intact.
+
+        Select the open document with ``document_name`` or ``canonical_path``; if both
+        are supplied, they must identify the same live document. ``overwrite=False``
+        refuses an existing destination.
+        """
+
+        del ctx
+        return _result(
+            server_connection().save_document_copy(
+                selector,
+                destination,
+                overwrite=overwrite,
+                validation_profile=validation_profile,
+            )
+        )
+
+    @mcp.tool()
     def finalize_document_edit(
         ctx: Context,
         selector: DocumentSelectorInput,  # noqa: F821
@@ -132,6 +159,7 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
     return {
         "save_document": save_document,
         "save_document_as": save_document_as,
+        "save_document_copy": save_document_copy,
         "finalize_document_edit": finalize_document_edit,
         "force_release_stale_lock": force_release_stale_lock,
     }

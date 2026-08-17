@@ -35,6 +35,17 @@ def repair_references(
     validate: bool = False,
 ) -> dict[str, Any]:
     """Atomically rewrite link properties, deferring recompute by default."""
+    if recompute:
+        return {
+            "success": False,
+            "ok": False,
+            "repair_committed": False,
+            "error_code": "RECOMPUTE_DEFERRED",
+            "error": (
+                "repair_references defers coordinator-owned recompute; "
+                "call recompute_document after repair"
+            ),
+        }
     collaborators = self._cad_collaborators
 
     def apply_repairs():
@@ -43,16 +54,7 @@ def repair_references(
             repairs,
             recompute=False,
             validate=bool(validate),
-            phase="apply" if recompute else "complete",
-        )
-
-    def validate_repairs():
-        return collaborators.repair_references_gui(
-            doc_name,
-            repairs,
-            recompute=False,
-            validate=bool(validate),
-            phase="postcondition",
+            phase="complete",
         )
 
     res = self._dispatch_gui(
@@ -60,9 +62,8 @@ def repair_references(
             collaborators,
             doc_name,
             apply_repairs,
-            validate_after_callback=bool(recompute),
-            native_recompute=bool(recompute),
-            postcondition=validate_repairs if recompute else None,
+            native_recompute=False,
+            method="repair_references",
         )
     )
     if isinstance(res, dict):

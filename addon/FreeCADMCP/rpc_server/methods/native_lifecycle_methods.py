@@ -421,6 +421,107 @@ def _save_gui(document: Any) -> dict[str, Any]:
     )
 
 
+def _pending_file_state(document: Any) -> dict[str, Any]:
+    state_getter = getattr(document, "getFileChangeState", None)
+    if callable(state_getter):
+        state = state_getter()
+        if isinstance(state, Mapping):
+            return dict(state)
+    pending = getattr(document, "hasPendingFileChanges", None)
+    modified = getattr(document, "Modified", None)
+    return {
+        "has_pending_file_changes": bool(pending()) if callable(pending) else None,
+        "modified": bool(modified) if modified is not None else None,
+    }
+
+
+def _save_copy_gui(  # noqa: C901
+    document: Any,
+    destination: str,
+    overwrite: bool,
+) -> dict[str, Any]:
+    quarantine = _quarantine_failure(document)
+    if quarantine is not None:
+        return quarantine
+    if not destination:
+        return _error("DESTINATION_REQUIRED", "destination is required")
+    canonical_before = _document_path(document)
+    destination_real = os.path.realpath(str(destination))
+    if not overwrite and os.path.isfile(destination_real):
+        return _error(
+            "DESTINATION_EXISTS",
+            "Save Copy refuses to clobber an existing destination when overwrite=False",
+        )
+    if canonical_before:
+        canonical_real = os.path.normcase(os.path.realpath(canonical_before))
+        if os.path.normcase(destination_real) == canonical_real:
+            return _error(
+                "COPY_TARGET_IS_CANONICAL",
+                "Save Copy cannot overwrite the canonical document",
+            )
+    save_copy_with_outcome = getattr(document, "saveCopyWithOutcome", None)
+    if not callable(save_copy_with_outcome):
+        return _error(
+            "NATIVE_SAVE_OUTCOME_UNAVAILABLE",
+            "This FreeCAD runtime cannot prove change-aware Save Copy outcomes; update the "
+            "native runtime before saving a copy through MCP.",
+        )
+    pending_before = _pending_file_state(document)
+    baseline, baseline_error = _capture_invocation_baseline(canonical_before)
+    try:
+        outcome = save_copy_with_outcome(str(destination))
+    except Exception as exc:
+        return _error("NATIVE_SAVE_COPY_FAILED", f"FreeCAD Save Copy failed: {exc}")
+    if not isinstance(outcome, Mapping):
+        return _error(
+            "NATIVE_SAVE_COPY_REJECTED",
+            "FreeCAD returned an invalid Save Copy outcome",
+        )
+    result = _outcome_result(
+        document,
+        outcome,
+        fallback_path=str(destination),
+        invocation_baseline=baseline,
+        invocation_baseline_error=baseline_error,
+    )
+    canonical_after = _document_path(document)
+    if canonical_before != canonical_after:
+        result.update(
+            success=False,
+            saved=False,
+            error_code="CANONICAL_SAVEPOINT_MOVED",
+            error=(
+                "Save Copy must not move the canonical savepoint; "
+                f"FileName changed from {canonical_before!r} to {canonical_after!r}"
+            ),
+        )
+        return result
+    if canonical_before:
+        before_real = os.path.normcase(os.path.realpath(canonical_before))
+        after_real = os.path.normcase(os.path.realpath(canonical_after))
+        if before_real != after_real:
+            result.update(
+                success=False,
+                saved=False,
+                error_code="CANONICAL_SAVEPOINT_MOVED",
+                error="Save Copy must not move the canonical savepoint path",
+            )
+            return result
+    pending_after = _pending_file_state(document)
+    if pending_before != pending_after:
+        result.update(
+            success=False,
+            saved=False,
+            error_code="CANONICAL_PENDING_STATE_CLEARED",
+            error=(
+                "Save Copy must not clear canonical pending-file state; "
+                "callers may recompute afterward if needed"
+            ),
+        )
+        return result
+    return result
+
+
 def _save_as_gui(
     document: Any,
     destination: str,
@@ -498,6 +599,18 @@ def _resolve_and_save_as_gui(
     )
 
 
+def _resolve_and_save_copy_gui(
+    facade: Any,
+    selector: Mapping[str, Any],
+    destination: str,
+    overwrite: bool,
+) -> dict[str, Any]:
+    document = _resolve_document_gui(facade, selector)
+    if document is None:
+        return _error("DOCUMENT_NOT_FOUND", "selector did not resolve a live document")
+    return _save_copy_gui(document, destination, overwrite)
+
+
 def save_document(self, selector, validation_profile="default"):
     if validation_profile != "default":
         return _error(
@@ -534,6 +647,32 @@ def save_document_as(
             destination,
             overwrite,
             expected_destination_sha256,
+        )
+    )
+    return result if isinstance(result, dict) else _error("NATIVE_SAVE_FAILED", str(result))
+
+
+def save_document_copy(
+    self,
+    selector,
+    destination,
+    overwrite=False,
+    validation_profile="default",
+):
+    if validation_profile != "default":
+        return _error(
+            "VALIDATION_PROFILE_UNSUPPORTED",
+            "Native FreeCAD persistence does not accept MCP validation profiles",
+        )
+    selector_failure = _selector_error(selector)
+    if selector_failure is not None:
+        return selector_failure
+    result = self._dispatch_gui(
+        lambda: _resolve_and_save_copy_gui(
+            self,
+            selector,
+            destination,
+            overwrite,
         )
     )
     return result if isinstance(result, dict) else _error("NATIVE_SAVE_FAILED", str(result))

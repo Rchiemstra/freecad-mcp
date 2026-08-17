@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
 from addon.FreeCADMCP import automation_pause
+from addon.FreeCADMCP.part3_collaboration.history_head import capture_undo_head
+from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+    clear_operation_terminal_store,
+)
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import mutation_readiness
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_mutation import (
     run_cad_mutation,
@@ -501,20 +506,52 @@ def test_ordinary_native_callback_exception_is_not_reclassified_as_rollback_fail
 
 
 def test_undo_uses_the_same_pause_admission_gate():
+    clear_operation_terminal_store()
+
     class HistoryDocument(_Document):
         def __init__(self):
             super().__init__()
             self.undo_calls = 0
+            self.UndoNames = ["EditA"]
+            self.UndoCount = 1
+
+        def collaborationIdentity(self):
+            return {
+                "instance_id": 5,
+                "lifecycle_epoch": 1,
+                "state": "Live",
+            }
 
         def undo(self):
             self.undo_calls += 1
 
     document = HistoryDocument()
+    rpc = MagicMock()
+    rpc._execution_collaborators.freecad.listDocuments.return_value = {
+        "Model": document
+    }
+    rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = {
+        "authenticated_session_id": "actor-1",
+    }
+
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+    head = capture_undo_head(document)
+    undo_kwargs = dict(
+        operation_id="undo-pause-blocked",
+        expected_undo_count=head["undo_count"],
+        expected_undo_head=head["undo_head"],
+        freecad=rpc._execution_collaborators.freecad,
+        rpc=rpc,
+    )
+
     automation_pause.request_local_pause_after_current()
 
-    blocked = undo_gui(
-        "Model", freecad=SimpleNamespace(getDocument=lambda _name: document)
-    )
+    blocked = undo_gui(selector, **undo_kwargs)
 
     assert blocked["error_code"] == "MUTATION_NOT_READY"
     assert document.undo_calls == 0
@@ -522,10 +559,15 @@ def test_undo_uses_the_same_pause_admission_gate():
     automation_pause._paused = False
     admitted = automation_pause.admit_remote_write("undo", ("Model",))
     automation_pause.request_local_pause_after_current()
-    assert (
-        undo_gui("Model", freecad=SimpleNamespace(getDocument=lambda _name: document))
-        is True
+    result = undo_gui(
+        selector,
+        operation_id="undo-pause-admitted",
+        expected_undo_count=head["undo_count"],
+        expected_undo_head=head["undo_head"],
+        freecad=rpc._execution_collaborators.freecad,
+        rpc=rpc,
     )
+    assert result.get("success") is True
     assert document.undo_calls == 1
     automation_pause.finish_remote_write(admitted["token"])
 

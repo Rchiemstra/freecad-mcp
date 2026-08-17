@@ -14,4 +14,4 @@ def register_tools(mcp, *, dependencies):
     )
 
 # manifest subjects: advanced, assembly, core, diagnostics, document_history, features, gear, gui, io, lease, measure, parametric, partdesign, runtime, sketch, transform, worker
-# tool count: 172
+# tool count: 173

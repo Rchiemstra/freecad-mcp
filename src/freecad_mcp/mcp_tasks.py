@@ -21,6 +21,7 @@ HEAVY_TASK_TOOLS = frozenset(
         "run_fem_analysis",
         "save_document",
         "save_document_as",
+        "save_document_copy",
         "save_view_sequence",
         "validate_geometry",
     }

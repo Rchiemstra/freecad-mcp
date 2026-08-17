@@ -31,7 +31,7 @@ _LEGACY_LEASE_STUB_METHODS = frozenset(
 )
 
 _PAUSE_GATED_LIFECYCLE_METHODS = frozenset(
-    {"save_document", "save_document_as", "finalize_document_edit"}
+    {"save_document", "save_document_as", "save_document_copy", "finalize_document_edit"}
 )
 
 # Pause admission needs only the read/write distinction.  Keep it local to the
@@ -169,7 +169,10 @@ def dispatch(self, method, params):
         admission = admit_remote_write(method, _pause_document_names(method, params))
         if not admission.get("success"):
             return admission
+    from ..cad_methods_ops.cad_mutation import cad_mutation_rpc_method
+
     try:
-        return func(*params)
+        with cad_mutation_rpc_method(method):
+            return func(*params)
     finally:
         finish_remote_write(admission.get("token") if admission else None)

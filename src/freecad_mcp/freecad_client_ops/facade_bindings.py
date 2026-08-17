@@ -76,6 +76,7 @@ from .connection_methods.connection_save_ops import (
     release_document_lock,
     save_document,
     save_document_as,
+    save_document_copy,
 )
 from .connection_methods.connection_sketch_ops import (
     pad_feature,
@@ -249,6 +250,7 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.update_document_lock = update_document_lock
     FreeCADConnection.save_document = save_document
     FreeCADConnection.save_document_as = save_document_as
+    FreeCADConnection.save_document_copy = save_document_copy
     FreeCADConnection.finalize_document_edit = finalize_document_edit
     FreeCADConnection.release_document_lock = release_document_lock
     FreeCADConnection.force_release_stale_lock = force_release_stale_lock

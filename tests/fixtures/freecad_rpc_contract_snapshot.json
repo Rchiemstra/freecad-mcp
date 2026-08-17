@@ -15126,6 +15126,236 @@
           "error": "stale"
         }
       ]
+    },
+    "save_document_copy": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "overwrite",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        },
+        {
+          "name": "validation_profile",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": "default"
+        }
+      ],
+      "result_examples": [
+        {
+          "success": true,
+          "saved": true,
+          "save_disposition": "copy_written",
+          "file_written": true,
+          "unchanged": false,
+          "canonical_path": "/tmp/Model.FCStd",
+          "target_path": "/tmp/Model-copy.FCStd",
+          "resulting_clean": false,
+          "document_name": "Model",
+          "authority": "native_freecad"
+        },
+        {
+          "success": false,
+          "error_code": "CANONICAL_SAVEPOINT_MOVED",
+          "error": "Save Copy must not move the canonical savepoint"
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
     }
   },
   "production_listener_examples": {

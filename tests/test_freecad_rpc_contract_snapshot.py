@@ -350,7 +350,7 @@ def test_phase4_json_listener_round_trips_every_semantic_outcome():
             assert decoded["error"] == mapped
         assert contract["result_examples"], method_name
 
-    assert converted_failures == 81
+    assert converted_failures == 82
 
 
 def test_phase5_json_client_converts_every_documented_failure_to_native_error():
@@ -394,7 +394,7 @@ def test_phase5_json_client_converts_every_documented_failure_to_native_error():
             assert error.data == mapped["data"], method_name
             assert error.semantic_code == mapped["data"]["error_code"], method_name
 
-    assert converted_failures == 81
+    assert converted_failures == 82
 
 
 def test_freecad_rpc_instance_exposes_same_public_names(freecad_rpc_class):

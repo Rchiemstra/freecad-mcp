@@ -377,6 +377,10 @@ def save_document_as(conn, *args, **kwargs):
     """INERT shadow stub for save_document_as (lease)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
+def save_document_copy(conn, *args, **kwargs):
+    """INERT shadow stub for save_document_copy (lease)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
 # subject: measure
 def bounding_box(conn, *args, **kwargs):
     """INERT shadow stub for bounding_box (mutation)."""

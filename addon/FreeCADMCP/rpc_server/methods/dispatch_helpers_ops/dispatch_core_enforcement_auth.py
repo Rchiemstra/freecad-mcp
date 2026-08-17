@@ -76,6 +76,7 @@ AUTHENTICATED_METHODS = frozenset(
         "release_document_lock",
         "save_document",
         "save_document_as",
+        "save_document_copy",
         "finalize_document_edit",
         "begin_checked_edit",
         "commit_checked_property",

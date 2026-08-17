@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
+from ...recompute_policy import assert_recompute_policy
 from .mutation_readiness import document_readiness, mark_quarantined
 from .mutation_readiness_wait import (
     blocking_readiness_reasons,
@@ -15,6 +16,9 @@ from .mutation_readiness_wait import (
 
 _ACTIVE_INFLIGHT: ContextVar[Any | None] = ContextVar(
     "freecad_mcp_cad_mutation_inflight", default=None
+)
+_ACTIVE_RPC_METHOD: ContextVar[str | None] = ContextVar(
+    "freecad_mcp_cad_mutation_method", default=None
 )
 
 
@@ -43,6 +47,21 @@ def cad_mutation_inflight(inflight: Any):
 
 def current_cad_mutation_inflight() -> Any:
     return _ACTIVE_INFLIGHT.get()
+
+
+@contextmanager
+def cad_mutation_rpc_method(method: str | None):
+    """Carry the active typed RPC method name into ``run_cad_mutation``."""
+
+    token = _ACTIVE_RPC_METHOD.set(method)
+    try:
+        yield
+    finally:
+        _ACTIVE_RPC_METHOD.reset(token)
+
+
+def current_cad_mutation_rpc_method() -> str | None:
+    return _ACTIVE_RPC_METHOD.get()
 
 
 def _pause_is_already_admitted(
@@ -259,6 +278,7 @@ def run_cad_mutation(  # noqa: C901
     validate_after_callback: bool = True,
     native_recompute: bool = True,
     postcondition: Callable[[], Any] | None = None,
+    method: str | None = None,
 ):
     """Run one typed CAD callback through one native compatibility commit.
 
@@ -270,6 +290,9 @@ def run_cad_mutation(  # noqa: C901
 
     if postcondition is not None and not callable(postcondition):
         raise TypeError("postcondition must be callable")
+
+    rpc_method = method if method is not None else current_cad_mutation_rpc_method()
+    assert_recompute_policy(rpc_method, native_recompute)
 
     document, lookup_error, lookup_available = _lookup_document(
         collaborators, document_name
@@ -409,7 +432,9 @@ def run_cad_mutation(  # noqa: C901
 __all__ = [
     "admit_cad_mutation",
     "cad_mutation_inflight",
+    "cad_mutation_rpc_method",
     "current_cad_mutation_inflight",
+    "current_cad_mutation_rpc_method",
     "native_mutation_rejection",
     "native_rollback_exception_result",
     "postflight_cad_mutation",

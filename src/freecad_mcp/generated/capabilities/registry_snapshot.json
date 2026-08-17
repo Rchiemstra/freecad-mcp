@@ -48,7 +48,7 @@
     "tools_advanced_b",
     "tools_advanced_b2"
   ],
-  "tool_count": 172,
+  "tool_count": 173,
   "tool_order": [
     "get_runtime_info",
     "check_rpc_sync",
@@ -63,6 +63,7 @@
     "release_document_lock",
     "save_document",
     "save_document_as",
+    "save_document_copy",
     "finalize_document_edit",
     "create_document",
     "create_object",
@@ -679,6 +680,10 @@
     "save_document_as": {
       "docstring": "Run native policy-controlled Save As (no-clobber by default) and verify a\nstable live FCStd hash, metadata, required archive members, and CRC. No legacy\nlease aliases are created.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document. Non-empty legacy\nexpected-hash options are rejected rather than silently ignored.",
       "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', destination: 'str', overwrite: 'bool' = False, expected_destination_sha256: 'str' = '', validation_profile: 'str' = 'default') -> 'CallToolResult'"
+    },
+    "save_document_copy": {
+      "docstring": "Run native Save Copy via ``saveCopyWithOutcome`` and verify a stable live\nFCStd hash, metadata, required archive members, and CRC. The canonical\nsavepoint must not move and pending-file state must remain intact.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document. ``overwrite=False``\nrefuses an existing destination.",
+      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', destination: 'str', overwrite: 'bool' = False, validation_profile: 'str' = 'default') -> 'CallToolResult'"
     },
     "save_view_sequence": {
       "docstring": "Capture multiple framed screenshots for motion/station review.\n\nProvide ``frames`` and/or ``orbit``.\n\nFrame dict fields:\n- ``view_name`` (default ``Isometric``)\n- ``focus_object`` / ``focus_objects``\n- ``yaw_deg``\n- ``label``\n\nOrbit dict fields:\n- ``focus_object`` / ``focus_objects``\n- ``steps`` (default 8)\n- ``view_name`` (default ``Isometric``)\n- ``yaw_start_deg`` (default 0)\n\nReturns text metadata plus one PNG image per successful frame.",

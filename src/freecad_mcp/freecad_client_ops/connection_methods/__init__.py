@@ -110,6 +110,7 @@ from .connection_save_ops import (
     release_document_lock,
     save_document,
     save_document_as,
+    save_document_copy,
 )
 from .connection_sketch_ops import (
     pad_feature,
@@ -259,6 +260,7 @@ __all__ = [
     'run_fem_analysis',
     'save_document',
     'save_document_as',
+    'save_document_copy',
     'select_subshapes',
     'selector_argument',
     'session_ids_from_selector',

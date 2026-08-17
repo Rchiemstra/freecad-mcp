@@ -1077,15 +1077,56 @@ def test_failed_fem_analysis_does_not_replay_deferred_presentation(monkeypatch):
 
 
 def test_transaction_control_uses_injected_dependencies_outside_native_commit():
+    from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+        clear_operation_terminal_store,
+    )
+
+    clear_operation_terminal_store()
+
     class Document:
+        Name = "Doc"
+        Uid = SimpleNamespace(Value="uid-doc")
+
         def __init__(self):
             self.calls = []
+            self.UndoNames = ["EditA"]
+            self.UndoCount = 1
+            self.RedoNames = []
+            self.RedoCount = 0
+
+        def collaborationIdentity(self):
+            return {
+                "instance_id": 1,
+                "lifecycle_epoch": 1,
+                "state": "Live",
+            }
+
+        def getMutationReadiness(self):
+            return {
+                "ready": True,
+                "stable_event_supported": True,
+                "pending_transaction": False,
+                "booked_transaction": 0,
+                "transaction_locked": False,
+                "recomputing": False,
+                "must_execute": False,
+                "pending_removal": False,
+                "commit_barrier": False,
+                "notification_replay": False,
+                "poisoned": False,
+                "quarantined": False,
+                "diagnostic": "Ready for mutation",
+            }
 
         def recompute(self):
             self.calls.append("recompute")
 
         def undo(self):
             self.calls.append("undo")
+            self.UndoNames = []
+            self.UndoCount = 0
+            self.RedoNames = ["EditA"]
+            self.RedoCount = 1
 
         def redo(self):
             self.calls.append("redo")
@@ -1093,17 +1134,51 @@ def test_transaction_control_uses_injected_dependencies_outside_native_commit():
     document = Document()
     waited = []
     collaborators, native = _collaborators(
-        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: document,
+            listDocuments=lambda: {"Doc": document},
+        ),
         recompute_and_wait=lambda name: waited.append(name) or {"ok": True},
     )
-    rpc = _rpc(collaborators)
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _execution_collaborators=SimpleNamespace(
+            request_identity_provider=lambda: SimpleNamespace(
+                get_request_identity=lambda: {"authenticated_session_id": "actor-1"}
+            )
+        ),
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, success_fields=None: (
+            result
+            if isinstance(result, dict)
+            else {"success": result is True, **(success_fields or {})}
+        ),
+    )
+    selector = {
+        "document_uid": "uid-doc",
+        "document_instance_id": 1,
+        "lifecycle_epoch": 1,
+        "document_name": "Doc",
+    }
 
     recompute_helpers.recompute_document(rpc, "Doc")
-    recompute_helpers.undo(rpc, "Doc")
-    recompute_helpers.redo(rpc, "Doc")
+    recompute_helpers.undo(
+        rpc,
+        selector,
+        "op-undo",
+        expected_undo_count=1,
+        expected_undo_head="EditA",
+    )
+    recompute_helpers.redo(
+        rpc,
+        selector,
+        "op-redo",
+        expected_redo_count=1,
+        expected_redo_head="EditA",
+    )
     assert recompute_helpers.recompute_and_wait(rpc, "Doc") == {"ok": True}
 
-    assert document.calls == ["recompute", "undo", "redo"]
+    assert document.calls == ["recompute", "undo", "recompute", "redo", "recompute"]
     assert waited == ["Doc"]
     assert native.documents == []
 
@@ -1141,57 +1216,17 @@ def test_deferred_reference_repair_stays_atomic_without_native_recompute():
     assert native.recompute_policies == [False]
 
 
-def test_eager_reference_repair_builds_result_after_one_native_recompute():
-    calls: list[tuple[bool, bool, str]] = []
+def test_eager_reference_repair_refuses_recompute_true():
+    """WP03 pins repair_references to none; recompute=True is RECOMPUTE_DEFERRED."""
 
-    class Document:
-        Name = "Doc"
-        Objects = ()
+    def repair(*_args, **_kwargs):
+        pytest.fail("repair must not run when recompute=True is refused")
 
-        def __init__(self):
-            self.recompute_calls = 0
-
-        def recompute(self):
-            self.recompute_calls += 1
-
-    document = Document()
-
-    def repair(_document_name, _repairs, *, recompute, validate, phase):
-        calls.append((recompute, validate, phase))
-        if phase == "apply":
-            return {"ok": True, "repair_committed": True}
-        assert document.recompute_calls == 1
-        return {
-            "ok": True,
-            "repair_committed": True,
-            "recompute": {"requested": True, "ok": True, "native": True},
-            "remaining_invalid_repaired_properties": [],
-            "modified": True,
-        }
-
-    class NativeAPI:
-        @staticmethod
-        def commit_compatibility_mutation(
-            _document_name,
-            callback,
-            *,
-            structural=False,
-            postcondition=None,
-        ):
-            assert structural is False
-            callback()
-            document.recompute()
-            assert postcondition is not None
-            if postcondition() is False:
-                return {"status": "PostconditionFailed", "committed": False}
-            return {"status": "Committed", "committed": True}
-
-    collaborators, _native = _collaborators(
+    document = SimpleNamespace(Name="Doc", Objects=())
+    collaborators, native = _collaborators(
         freecad=SimpleNamespace(getDocument=lambda _name: document),
         repair_references_gui=repair,
     )
-    collaborators = replace(collaborators, compatibility_api=NativeAPI())
-
     result = references.repair_references(
         _rpc(collaborators),
         "Doc",
@@ -1200,14 +1235,10 @@ def test_eager_reference_repair_builds_result_after_one_native_recompute():
         validate=True,
     )
 
-    assert result["recompute"] == {
-        "requested": True,
-        "ok": True,
-        "native": True,
-    }
-    assert result["modified"] is True
-    assert document.recompute_calls == 1
-    assert calls == [(False, True, "apply"), (False, True, "postcondition")]
+    assert result["success"] is False
+    assert result["error_code"] == "RECOMPUTE_DEFERRED"
+    assert result["repair_committed"] is False
+    assert native.documents == []
 
 
 def test_remaining_invalid_reference_repair_rolls_back_response_truthfully():

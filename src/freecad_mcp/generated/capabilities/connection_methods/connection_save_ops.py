@@ -71,6 +71,38 @@ def save_document_as(
         )
 
 
+def save_document_copy(
+        conn,
+        selector: Mapping[str, Any],
+        destination: str,
+        overwrite: bool = False,
+        validation_profile: str = "default",
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        selected = dict(selector)
+        routed = conn._invoke_mutation_v2(
+            "save_document_copy",
+            {
+                "selector": selected,
+                "destination": destination,
+                "overwrite": overwrite,
+                "validation_profile": validation_profile,
+            },
+            selectors=(selected,),
+            operation_name="Save Copy and verify document",
+            request_id=request_id,
+        )
+        if routed is not None:
+            return routed
+        return conn.server.save_document_copy(
+            selected,
+            destination,
+            overwrite,
+            validation_profile,
+        )
+
+
 def finalize_document_edit(
         conn,
         selector: Mapping[str, Any],

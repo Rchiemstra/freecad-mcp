@@ -94,6 +94,7 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.update_document_lock = lease_methods.update_document_lock
     FreeCADRPC.save_document = native_lifecycle_methods.save_document
     FreeCADRPC.save_document_as = native_lifecycle_methods.save_document_as
+    FreeCADRPC.save_document_copy = native_lifecycle_methods.save_document_copy
     FreeCADRPC.finalize_document_edit = native_lifecycle_methods.finalize_document_edit
     FreeCADRPC.release_document_lock = lease_methods.release_document_lock
     FreeCADRPC.force_release_stale_lock = lease_methods.force_release_stale_lock

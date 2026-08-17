@@ -21,6 +21,8 @@ PART3_METHODS = (
     "redo",
 )
 
+SAVE_LIFECYCLE_METHODS = ("save_document_copy",)
+
 
 def _template_error_block() -> dict[str, Any]:
     return {
@@ -142,6 +144,26 @@ def _result_examples(method: str) -> list[dict[str, Any]]:
                 "error": "document undo history head does not match the client expectation",
             },
         ]
+    if method == "save_document_copy":
+        return [
+            {
+                "success": True,
+                "saved": True,
+                "save_disposition": "copy_written",
+                "file_written": True,
+                "unchanged": False,
+                "canonical_path": "/tmp/Model.FCStd",
+                "target_path": "/tmp/Model-copy.FCStd",
+                "resulting_clean": False,
+                "document_name": "Model",
+                "authority": "native_freecad",
+            },
+            {
+                "success": False,
+                "error_code": "CANONICAL_SAVEPOINT_MOVED",
+                "error": "Save Copy must not move the canonical savepoint",
+            },
+        ]
     return [
         {"success": True, "cancelled": True, "session_id": "session-example", "operation_id": "op-example"},
         {"success": False, "error_code": "DOCUMENT_LIFECYCLE_REJECTED", "error": "stale"},
@@ -202,6 +224,17 @@ def main() -> None:
     for method_name in PART3_METHODS:
         method = getattr(FreeCADRPC, method_name)
         entry = dict(template)
+        entry["parameters"] = captured[method_name]
+        entry["result_schema"] = _result_schema(method_name)
+        entry["result_examples"] = _result_examples(method_name)
+        methods[method_name] = entry
+
+    if "save_document_as" in methods:
+        save_as_template = methods["save_document_as"]
+    else:
+        save_as_template = dict(template)
+    for method_name in SAVE_LIFECYCLE_METHODS:
+        entry = dict(save_as_template)
         entry["parameters"] = captured[method_name]
         entry["result_schema"] = _result_schema(method_name)
         entry["result_examples"] = _result_examples(method_name)

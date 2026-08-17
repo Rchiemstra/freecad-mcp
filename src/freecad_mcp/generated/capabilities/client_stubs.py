@@ -505,6 +505,13 @@ def save_document_as(conn, *args, **kwargs):
     )
     return _impl(conn, *args, **kwargs)
 
+def save_document_copy(conn, *args, **kwargs):
+    """Generated client stub for save_document_copy (lease)."""
+    from freecad_mcp.generated.capabilities.connection_methods.connection_save_ops import (
+        save_document_copy as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
+
 # subject: measure
 def bounding_box(conn, *args, **kwargs):
     """Generated client stub for bounding_box (mutation)."""
