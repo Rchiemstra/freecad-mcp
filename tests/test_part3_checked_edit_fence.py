@@ -9,9 +9,11 @@ import pytest
 
 from addon.FreeCADMCP.part3_collaboration.checked_edit_fence import (
     clear_begin_fences,
-    discard_begin_fence,
     pop_begin_fence,
     store_begin_fence,
+)
+from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+    clear_operation_terminal_store,
 )
 from addon.FreeCADMCP.rpc_server.methods import part3_collaboration_methods as methods
 
@@ -21,8 +23,10 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _clear_fence_store():
     clear_begin_fences()
+    clear_operation_terminal_store()
     yield
     clear_begin_fences()
+    clear_operation_terminal_store()
 
 
 def test_store_and_pop_begin_fence() -> None:
@@ -49,7 +53,10 @@ def test_commit_checked_property_uses_begin_fence_for_prepare() -> None:
     )
 
     document = MagicMock()
-    document.editSessionStatus.return_value = {"status": "Active"}
+    document.editSessionStatus.return_value = {
+        "status": "Active",
+        "actor_id": "runtime-owner",
+    }
     document.collaborationIdentity.return_value = {
         "instance_id": 5,
         "lifecycle_epoch": 1,
@@ -67,7 +74,8 @@ def test_commit_checked_property_uses_begin_fence_for_prepare() -> None:
     rpc = MagicMock()
     rpc._execution_collaborators.freecad.listDocuments.return_value = {"Model": document}
     rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = {
-        "authenticated_session_id": "actor-1",
+        "authenticated_session_id": "auth-a",
+        "instance_id": "runtime-owner",
     }
 
     result = methods.commit_checked_property(
@@ -105,7 +113,10 @@ def test_cancel_checked_property_discards_fence() -> None:
     )
 
     document = MagicMock()
-    document.editSessionStatus.return_value = {"status": "Active"}
+    document.editSessionStatus.return_value = {
+        "status": "Active",
+        "actor_id": "runtime-owner",
+    }
     document.collaborationIdentity.return_value = {
         "instance_id": 1,
         "lifecycle_epoch": 1,
@@ -118,9 +129,139 @@ def test_cancel_checked_property_discards_fence() -> None:
     rpc = MagicMock()
     rpc._execution_collaborators.freecad.listDocuments.return_value = {"Model": document}
     rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = {
-        "authenticated_session_id": "actor-1",
+        "authenticated_session_id": "auth-a",
+        "instance_id": "runtime-owner",
     }
 
     result = methods.cancel_checked_edit(rpc, "session-cancel", "cleanup", "cancel-op-1")
     assert result.get("success") is True, result
     assert pop_begin_fence("session-cancel") is None
+
+
+def _owned_document(*, session_id: str):
+    document = MagicMock()
+    document.editSessionStatus.return_value = {
+        "status": "Active",
+        "actor_id": "runtime-owner",
+    }
+    document.collaborationIdentity.return_value = {
+        "instance_id": 5,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    document.Uid = SimpleNamespace(Value="uid-1")
+    document.Name = "Model"
+    document.prepareEditWithExpectedRevisions.return_value = object()
+    document.commitEdit.return_value = {
+        "status": "Committed",
+        "committed": True,
+        "published_revisions": [],
+    }
+    document.cancelEdit.return_value = True
+    store_begin_fence(
+        session_id,
+        document_instance_id=5,
+        lifecycle_epoch=1,
+        revisions=[{"kind": "ObjectModel", "subject": "StressBox", "revision": 4}],
+    )
+    return document
+
+
+def _rpc_for_runtime(document, runtime: str):
+    rpc = MagicMock()
+    rpc._execution_collaborators.freecad.listDocuments.return_value = {"Model": document}
+    rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = {
+        "authenticated_session_id": f"auth-{runtime}",
+        "instance_id": runtime,
+    }
+    return rpc
+
+
+def test_foreign_runtime_cannot_consume_fence_or_commit_owner_edit() -> None:
+    document = _owned_document(session_id="native-edit-foreign-commit")
+    intruder = _rpc_for_runtime(document, "runtime-intruder")
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+
+    refused = methods.commit_checked_property(
+        intruder,
+        "native-edit-foreign-commit",
+        selector,
+        "StressBox",
+        "Float",
+        "float",
+        "3.0",
+        "foreign-commit",
+    )
+
+    assert refused.get("success") is False, refused
+    assert refused.get("error_code") == "CHECKED_EDIT_ACTOR_MISMATCH"
+    assert "published_revisions" not in refused
+    document.prepareEditWithExpectedRevisions.assert_not_called()
+    document.commitEdit.assert_not_called()
+
+    owner = _rpc_for_runtime(document, "runtime-owner")
+    completed = methods.commit_checked_property(
+        owner,
+        "native-edit-foreign-commit",
+        selector,
+        "StressBox",
+        "Float",
+        "float",
+        "3.0",
+        "owner-commit",
+    )
+    assert completed.get("success") is True, completed
+    document.prepareEditWithExpectedRevisions.assert_called_once()
+    document.commitEdit.assert_called_once()
+
+    document.prepareEditWithExpectedRevisions.reset_mock()
+    document.commitEdit.reset_mock()
+    isolated = methods.commit_checked_property(
+        intruder,
+        "native-edit-foreign-commit",
+        selector,
+        "StressBox",
+        "Float",
+        "float",
+        "3.0",
+        "owner-commit",
+    )
+    assert isolated.get("success") is False, isolated
+    assert isolated.get("error_code") == "CHECKED_EDIT_ACTOR_MISMATCH"
+    assert "committed" not in isolated
+    assert "published_revisions" not in isolated
+    document.prepareEditWithExpectedRevisions.assert_not_called()
+    document.commitEdit.assert_not_called()
+
+
+def test_foreign_runtime_cannot_cancel_or_consume_owner_fence() -> None:
+    document = _owned_document(session_id="native-edit-foreign-cancel")
+    intruder = _rpc_for_runtime(document, "runtime-intruder")
+
+    refused = methods.cancel_checked_edit(
+        intruder,
+        "native-edit-foreign-cancel",
+        "intruder cleanup",
+        "foreign-cancel",
+    )
+
+    assert refused.get("success") is False, refused
+    assert refused.get("error_code") == "CHECKED_EDIT_ACTOR_MISMATCH"
+    assert "cancelled" not in refused
+    document.cancelEdit.assert_not_called()
+
+    owner = _rpc_for_runtime(document, "runtime-owner")
+    completed = methods.cancel_checked_edit(
+        owner,
+        "native-edit-foreign-cancel",
+        "owner cleanup",
+        "owner-cancel",
+    )
+    assert completed.get("success") is True, completed
+    document.cancelEdit.assert_called_once()
+    assert pop_begin_fence("native-edit-foreign-cancel") is None

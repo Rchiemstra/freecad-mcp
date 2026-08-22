@@ -50,7 +50,10 @@ def _cad_mutation_gates():
 
 def _mock_document(**overrides):
     document = MagicMock()
-    document.editSessionStatus.return_value = {"status": "Active"}
+    document.editSessionStatus.return_value = {
+        "status": "Active",
+        "actor_id": "runtime-owner",
+    }
     document.collaborationIdentity.return_value = {
         "instance_id": 5,
         "lifecycle_epoch": 1,
@@ -67,9 +70,17 @@ def _mock_rpc(document):
     rpc = MagicMock()
     rpc._execution_collaborators.freecad.listDocuments.return_value = {"Model": document}
     rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = {
-        "authenticated_session_id": "actor-1",
+        "authenticated_session_id": "auth-a",
+        "instance_id": "runtime-owner",
     }
     return rpc
+
+
+def _set_request_identity(rpc, *, auth_session: str, runtime: str | None) -> None:
+    identity = {"authenticated_session_id": auth_session}
+    if runtime is not None:
+        identity["instance_id"] = runtime
+    rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = identity
 
 
 @pytest.mark.parametrize("action", ["undo", "redo"])
@@ -111,7 +122,10 @@ def test_history_action_carries_authenticated_actor_across_gui_thread(action) ->
     }
 
     thread_ids["handler"] = threading.get_ident()
-    request_identity.set_request_identity(authenticated_session_id="actor-1")
+    request_identity.set_request_identity(
+        authenticated_session_id="auth-a",
+        instance_id="runtime-owner",
+    )
     try:
         result = getattr(recompute_helpers, action)(
             rpc,
@@ -286,6 +300,7 @@ def test_undo_replay_returns_stored_terminal_without_second_undo() -> None:
     document.undo.assert_called_once()
 
     document.undo.reset_mock()
+    _set_request_identity(rpc, auth_session="auth-b", runtime="runtime-owner")
     second = undo_gui(
         selector,
         operation_id="undo-replay",
@@ -315,6 +330,7 @@ def test_cancel_checked_edit_replay_after_success_without_active_session() -> No
 
     document.editSessionStatus.return_value = {"status": "Inactive"}
     document.cancelEdit.reset_mock()
+    _set_request_identity(rpc, auth_session="auth-b", runtime="runtime-owner")
 
     second = methods.cancel_checked_edit(
         rpc,
@@ -325,3 +341,159 @@ def test_cancel_checked_edit_replay_after_success_without_active_session() -> No
     assert second.get("success") is True, second
     assert second == first
     document.cancelEdit.assert_not_called()
+
+
+def test_begin_replay_survives_bearer_rotation_for_same_runtime() -> None:
+    document = _mock_document()
+    document.beginEditSession.return_value = {"session_id": "native-edit-1"}
+    document.snapshotForEdit.return_value = {
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "revisions": [
+            {"kind": "ObjectModel", "subject": "StressBox", "revision": 4}
+        ],
+    }
+    rpc = _mock_rpc(document)
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+
+    first = methods.begin_checked_edit(
+        rpc,
+        selector,
+        [{"kind": "ObjectModel", "subject": "StressBox"}],
+        "begin-renewal",
+    )
+    _set_request_identity(rpc, auth_session="auth-b", runtime="runtime-owner")
+    second = methods.begin_checked_edit(
+        rpc,
+        selector,
+        [{"kind": "ObjectModel", "subject": "StressBox"}],
+        "begin-renewal",
+    )
+
+    assert first.get("success") is True, first
+    assert second == first
+    document.beginEditSession.assert_called_once_with("runtime-owner")
+    document.snapshotForEdit.assert_called_once()
+
+
+def test_commit_terminal_replay_survives_bearer_rotation_for_same_runtime() -> None:
+    store_begin_fence(
+        "native-edit-1",
+        document_instance_id=5,
+        lifecycle_epoch=1,
+        revisions=[{"kind": "ObjectModel", "subject": "StressBox", "revision": 4}],
+    )
+    document = _mock_document()
+    document.prepareEditWithExpectedRevisions.return_value = object()
+    document.commitEdit.return_value = {
+        "status": "Committed",
+        "committed": True,
+        "published_revisions": [],
+    }
+    rpc = _mock_rpc(document)
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+    args = [
+        "native-edit-1",
+        selector,
+        "StressBox",
+        "Float",
+        "float",
+        "3.0",
+        "commit-renewal",
+    ]
+
+    first = methods.commit_checked_property(rpc, *args)
+    _set_request_identity(rpc, auth_session="auth-b", runtime="runtime-owner")
+    second = methods.commit_checked_property(rpc, *args)
+
+    assert first.get("success") is True, first
+    assert second == first
+    document.prepareEditWithExpectedRevisions.assert_called_once()
+    document.commitEdit.assert_called_once()
+
+
+def test_checked_edit_continues_after_same_runtime_bearer_rotation() -> None:
+    document = _mock_document()
+    document.beginEditSession.return_value = {"session_id": "native-edit-1"}
+    document.snapshotForEdit.return_value = {
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "revisions": [
+            {"kind": "ObjectModel", "subject": "StressBox", "revision": 4}
+        ],
+    }
+    document.prepareEditWithExpectedRevisions.return_value = object()
+    document.commitEdit.return_value = {
+        "status": "Committed",
+        "committed": True,
+        "published_revisions": [],
+    }
+    rpc = _mock_rpc(document)
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+
+    begun = methods.begin_checked_edit(
+        rpc,
+        selector,
+        [{"kind": "ObjectModel", "subject": "StressBox"}],
+        "begin-continuation",
+    )
+    _set_request_identity(rpc, auth_session="auth-b", runtime="runtime-owner")
+    committed = methods.commit_checked_property(
+        rpc,
+        begun["session_id"],
+        selector,
+        "StressBox",
+        "Float",
+        "float",
+        "3.0",
+        "commit-continuation",
+    )
+
+    assert begun.get("success") is True, begun
+    assert committed.get("success") is True, committed
+    document.beginEditSession.assert_called_once_with("runtime-owner")
+    document.prepareEditWithExpectedRevisions.assert_called_once()
+    document.commitEdit.assert_called_once()
+
+
+def test_missing_stable_runtime_identity_fails_closed() -> None:
+    document = _mock_document()
+    document.beginEditSession.return_value = {"session_id": "native-edit-1"}
+    document.snapshotForEdit.return_value = {
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "revisions": [],
+    }
+    rpc = _mock_rpc(document)
+    _set_request_identity(rpc, auth_session="auth-a", runtime=None)
+
+    result = methods.begin_checked_edit(
+        rpc,
+        {
+            "document_uid": "uid-1",
+            "document_instance_id": 5,
+            "lifecycle_epoch": 1,
+            "document_name": "Model",
+        },
+        [{"kind": "ObjectModel", "subject": "StressBox"}],
+        "begin-without-runtime",
+    )
+
+    assert result.get("success") is False, result
+    assert result.get("error_code") == "LEASE_PROTOCOL_REQUIRED"
+    document.beginEditSession.assert_not_called()

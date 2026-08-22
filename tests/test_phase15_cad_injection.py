@@ -1144,7 +1144,10 @@ def test_transaction_control_uses_injected_dependencies_outside_native_commit():
         _cad_collaborators=collaborators,
         _execution_collaborators=SimpleNamespace(
             request_identity_provider=lambda: SimpleNamespace(
-                get_request_identity=lambda: {"authenticated_session_id": "actor-1"}
+                get_request_identity=lambda: {
+                    "authenticated_session_id": "auth-a",
+                    "instance_id": "runtime-owner",
+                }
             )
         ),
         _dispatch_gui=lambda callback, **_kwargs: callback(),

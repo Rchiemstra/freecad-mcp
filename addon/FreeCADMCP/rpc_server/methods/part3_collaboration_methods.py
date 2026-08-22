@@ -91,16 +91,27 @@ def _selector_dict(selector: Any) -> Mapping[str, Any] | None:
     return None
 
 
-def _session_still_active(document: Any, session_id: str) -> bool:
+def _active_session_owner(document: Any, session_id: str) -> tuple[bool, str | None]:
     status = getattr(document, "editSessionStatus", None)
     if not callable(status):
-        return False
+        return False, None
     observed = status(session_id)
     if observed is None:
-        return False
+        return False, None
     if isinstance(observed, Mapping):
-        return str(observed.get("status") or "") == "Active"
-    return False
+        if str(observed.get("status") or "") != "Active":
+            return False, None
+        actor_id = observed.get("actor_id")
+        return True, str(actor_id) if actor_id else None
+    return False, None
+
+
+def _actor_mismatch(session_id: str) -> dict[str, Any]:
+    return _error(
+        "CHECKED_EDIT_ACTOR_MISMATCH",
+        "checked edit session does not belong to this authenticated MCP runtime",
+        session_id=str(session_id),
+    )
 
 
 def _store_terminal(
@@ -282,13 +293,16 @@ def commit_checked_property(
     if auth_failure is not None:
         return auth_failure
 
-    if not _session_still_active(document, str(session_id)):
+    session_active, session_owner = _active_session_owner(document, str(session_id))
+    if not session_active:
         discard_begin_fence(str(session_id))
         return _error(
             "DOCUMENT_LIFECYCLE_REJECTED",
             "checked edit session is absent or no longer active",
             session_id=str(session_id),
         )
+    if session_owner != actor_id:
+        return _actor_mismatch(str(session_id))
 
     fence = pop_begin_fence(str(session_id))
     if fence is None:
@@ -422,13 +436,17 @@ def cancel_checked_edit(self, session_id, reason="cancelled by caller", operatio
     cancel = None
     target_document = None
     for document in documents:
+        session_active, session_owner = _active_session_owner(document, str(session_id))
+        if not session_active:
+            continue
+        if session_owner != actor_id:
+            return _actor_mismatch(str(session_id))
         candidate = getattr(document, "cancelEdit", None)
         if not callable(candidate):
             continue
-        if _session_still_active(document, str(session_id)):
-            cancel = candidate
-            target_document = document
-            break
+        cancel = candidate
+        target_document = document
+        break
 
     if cancel is None or target_document is None:
         failure = _error(

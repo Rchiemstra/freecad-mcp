@@ -531,7 +531,8 @@ def test_undo_uses_the_same_pause_admission_gate():
         "Model": document
     }
     rpc._execution_collaborators.request_identity_provider.return_value.get_request_identity.return_value = {
-        "authenticated_session_id": "actor-1",
+        "authenticated_session_id": "auth-a",
+        "instance_id": "runtime-owner",
     }
 
     selector = {

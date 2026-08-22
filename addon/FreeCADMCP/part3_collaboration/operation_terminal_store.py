@@ -1,4 +1,4 @@
-"""Server-enforced (session, operation_id) terminal-result store for ADR §2.2."""
+"""Server-enforced (MCP runtime, operation_id) terminal store for ADR §2.2."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def payload_fingerprint(payload: Mapping[str, Any]) -> bytes:
 
 
 def check_operation_terminal(
-    session_id: str,
+    runtime_owner_id: str,
     operation_id: str,
     canonical_payload: Mapping[str, Any],
     *,
@@ -47,7 +47,7 @@ def check_operation_terminal(
 ) -> OperationReplayCheck:
     """Look up a stored terminal result before mutating document state."""
 
-    key = (str(session_id), str(operation_id))
+    key = (str(runtime_owner_id), str(operation_id))
     fingerprint = payload_fingerprint(canonical_payload)
     with _lock:
         existing = _store.get(key)
@@ -67,7 +67,7 @@ def check_operation_terminal(
 
 
 def store_operation_terminal(
-    session_id: str,
+    runtime_owner_id: str,
     operation_id: str,
     canonical_payload: Mapping[str, Any],
     *,
@@ -75,7 +75,7 @@ def store_operation_terminal(
     lifecycle_epoch: int,
     terminal_result: Mapping[str, Any],
 ) -> None:
-    key = (str(session_id), str(operation_id))
+    key = (str(runtime_owner_id), str(operation_id))
     with _lock:
         _store[key] = _StoredTerminal(
             fingerprint=payload_fingerprint(canonical_payload),

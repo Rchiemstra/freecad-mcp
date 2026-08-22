@@ -29,13 +29,14 @@ def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
 
 def actor_from_session(self) -> tuple[str | None, dict[str, Any] | None]:
     identity = self._execution_collaborators.request_identity_provider().get_request_identity()
-    actor_id = identity.get("authenticated_session_id")
-    if not actor_id:
+    authenticated_session_id = identity.get("authenticated_session_id")
+    runtime_owner_id = identity.get("instance_id")
+    if not authenticated_session_id or not runtime_owner_id:
         return None, _error(
             "LEASE_PROTOCOL_REQUIRED",
-            "This operation requires a handshake_v2 session and an immutable authenticated request envelope",
+            "This operation requires a handshake_v2 session with an immutable authenticated MCP runtime identity",
         )
-    return str(actor_id), None
+    return str(runtime_owner_id), None
 
 
 def early_operation_replay(
