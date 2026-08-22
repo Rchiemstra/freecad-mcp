@@ -5,7 +5,6 @@ from typing import Any
 try:
     from ...part3_collaboration.admission import (
         actor_from_session,
-        early_operation_replay,
         replay_or_protocol_error,
     )
     from ...part3_collaboration.history_head import (
@@ -18,11 +17,13 @@ try:
         bootstrap_identity_selector,
         resolve_identity_bound_document,
     )
-    from ...part3_collaboration.operation_terminal_store import store_operation_terminal
+    from ...part3_collaboration.operation_terminal_store import (
+        check_operation_terminal,
+        store_operation_terminal,
+    )
 except ImportError:  # pragma: no cover - flat addon import path
     from addon.FreeCADMCP.part3_collaboration.admission import (
         actor_from_session,
-        early_operation_replay,
         replay_or_protocol_error,
     )
     from addon.FreeCADMCP.part3_collaboration.history_head import (
@@ -36,6 +37,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         resolve_identity_bound_document,
     )
     from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+        check_operation_terminal,
         store_operation_terminal,
     )
 
@@ -79,6 +81,25 @@ def _store_history_terminal(
         lifecycle_epoch=int(selector.lifecycle_epoch),
         terminal_result=terminal_result,
     )
+
+
+def _history_replay_result(
+    actor_id: str,
+    operation_id: str,
+    canonical_payload: dict[str, Any],
+    document: Any,
+) -> dict[str, Any] | None:
+    if not operation_id:
+        return _error("OPERATION_ID_REQUIRED", "operation_id is required")
+    selector = bootstrap_identity_selector(document)
+    replay = check_operation_terminal(
+        actor_id,
+        operation_id,
+        canonical_payload,
+        live_document_instance_id=int(selector.document_instance_id),
+        live_lifecycle_epoch=int(selector.lifecycle_epoch),
+    )
+    return replay_or_protocol_error(replay)
 
 
 def _finish_history_mutation(
@@ -243,6 +264,9 @@ def undo(
     expected_undo_count=None,
     expected_undo_head=None,
 ) -> dict:
+    actor_id, auth_failure = actor_from_session(self)
+    if auth_failure is not None:
+        return self._adapt_gui_mutation_result(auth_failure)
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: undo_gui(
@@ -250,6 +274,7 @@ def undo(
             operation_id=str(operation_id),
             expected_undo_count=expected_undo_count,
             expected_undo_head=expected_undo_head,
+            actor_id=actor_id,
             freecad=collaborators.freecad,
             rpc=self,
         )
@@ -263,6 +288,7 @@ def undo_gui(
     operation_id: str,
     expected_undo_count,
     expected_undo_head,
+    actor_id: str | None = None,
     freecad,
     rpc,
 ) -> Any:
@@ -280,21 +306,15 @@ def undo_gui(
             "expected_undo_count": expected_undo_count,
             "expected_undo_head": expected_undo_head,
         }
-        replay, auth_failure = early_operation_replay(
-            rpc,
-            operation_id,
-            canonical_payload,
-            document,
+        if actor_id is None:
+            actor_id, auth_failure = actor_from_session(rpc)
+            if auth_failure is not None:
+                return auth_failure
+        replay_result = _history_replay_result(
+            actor_id, operation_id, canonical_payload, document
         )
-        if auth_failure is not None:
-            return auth_failure
-        replay_result = replay_or_protocol_error(replay)
         if replay_result is not None:
             return replay_result
-
-        actor_id, auth_failure = actor_from_session(rpc)
-        if auth_failure is not None:
-            return auth_failure
 
         if expected_undo_count is None or expected_undo_head is None:
             failure = _error(
@@ -344,6 +364,9 @@ def redo(
     expected_redo_count=None,
     expected_redo_head=None,
 ) -> dict:
+    actor_id, auth_failure = actor_from_session(self)
+    if auth_failure is not None:
+        return self._adapt_gui_mutation_result(auth_failure)
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: redo_gui(
@@ -351,6 +374,7 @@ def redo(
             operation_id=str(operation_id),
             expected_redo_count=expected_redo_count,
             expected_redo_head=expected_redo_head,
+            actor_id=actor_id,
             freecad=collaborators.freecad,
             rpc=self,
         )
@@ -364,6 +388,7 @@ def redo_gui(
     operation_id: str,
     expected_redo_count,
     expected_redo_head,
+    actor_id: str | None = None,
     freecad,
     rpc,
 ) -> Any:
@@ -381,21 +406,15 @@ def redo_gui(
             "expected_redo_count": expected_redo_count,
             "expected_redo_head": expected_redo_head,
         }
-        replay, auth_failure = early_operation_replay(
-            rpc,
-            operation_id,
-            canonical_payload,
-            document,
+        if actor_id is None:
+            actor_id, auth_failure = actor_from_session(rpc)
+            if auth_failure is not None:
+                return auth_failure
+        replay_result = _history_replay_result(
+            actor_id, operation_id, canonical_payload, document
         )
-        if auth_failure is not None:
-            return auth_failure
-        replay_result = replay_or_protocol_error(replay)
         if replay_result is not None:
             return replay_result
-
-        actor_id, auth_failure = actor_from_session(rpc)
-        if auth_failure is not None:
-            return auth_failure
 
         if expected_redo_count is None or expected_redo_head is None:
             failure = _error(

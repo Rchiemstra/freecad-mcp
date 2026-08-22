@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -9,14 +10,15 @@ import pytest
 
 from addon.FreeCADMCP.part3_collaboration.checked_edit_fence import (
     clear_begin_fences,
-    pop_begin_fence,
     store_begin_fence,
 )
 from addon.FreeCADMCP.part3_collaboration.history_head import capture_undo_head
 from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
     clear_operation_terminal_store,
 )
+from addon.FreeCADMCP.rpc_server import request_identity
 from addon.FreeCADMCP.rpc_server.methods import part3_collaboration_methods as methods
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import recompute_helpers
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.recompute_helpers import undo_gui
 
 pytestmark = pytest.mark.unit
@@ -68,6 +70,61 @@ def _mock_rpc(document):
         "authenticated_session_id": "actor-1",
     }
     return rpc
+
+
+@pytest.mark.parametrize("action", ["undo", "redo"])
+def test_history_action_carries_authenticated_actor_across_gui_thread(action) -> None:
+    document = _mock_document()
+    history_name = "EditA"
+    setattr(document, f"{action.title()}Names", [history_name])
+    setattr(document, f"{action.title()}Count", 1)
+    setattr(document, action, MagicMock())
+    rpc = _mock_rpc(document)
+    rpc._cad_collaborators.freecad = rpc._execution_collaborators.freecad
+    rpc._execution_collaborators.request_identity_provider.return_value = request_identity
+    rpc._adapt_gui_mutation_result.side_effect = lambda result: result
+    thread_ids = {}
+
+    def dispatch_on_gui_thread(callback):
+        captured = {}
+
+        def run_callback():
+            thread_ids["gui"] = threading.get_ident()
+            captured["result"] = callback()
+
+        thread = threading.Thread(target=run_callback)
+        thread.start()
+        thread.join()
+        assert not thread.is_alive()
+        return captured["result"]
+
+    rpc._dispatch_gui.side_effect = dispatch_on_gui_thread
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+    expected = {
+        f"expected_{action}_count": 1,
+        f"expected_{action}_head": history_name,
+    }
+
+    thread_ids["handler"] = threading.get_ident()
+    request_identity.set_request_identity(authenticated_session_id="actor-1")
+    try:
+        result = getattr(recompute_helpers, action)(
+            rpc,
+            selector,
+            f"{action}-thread-hop",
+            **expected,
+        )
+    finally:
+        request_identity.clear_request_identity()
+
+    assert thread_ids["handler"] != thread_ids["gui"]
+    assert result.get("success") is True, result
+    getattr(document, action).assert_called_once()
 
 
 def test_commit_checked_property_replay_skips_prepare() -> None:

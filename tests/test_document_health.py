@@ -331,7 +331,9 @@ def test_mutation_validator_failure_aborts_before_commit(monkeypatch):
         "FreeCAD",
         SimpleNamespace(
             listDocuments=lambda: {"Model": document},
-            getDocument=lambda name: document if name == "Model" else None,
+            getDocument=lambda name: document
+            if name == "Model"
+            else (_ for _ in ()).throw(NameError(f"Unknown document '{name}'")),
             getUserAppDataDir=lambda: "",
         ),
     )

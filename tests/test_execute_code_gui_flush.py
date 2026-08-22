@@ -45,7 +45,7 @@ def test_mutating_execute_flushes_gui_events_after_success(monkeypatch):
         ActiveDocument=None,
         listDocuments=lambda: {},
         setActiveDocument=MagicMock(),
-        getDocument=MagicMock(return_value=None),
+        getDocument=MagicMock(side_effect=NameError("Unknown document")),
     )
 
     result = run_execute_code_gui_task(
@@ -138,7 +138,7 @@ def test_native_boundary_defers_recompute_session_and_flush_to_owned_phases(
         ActiveDocument=None,
         listDocuments=lambda: {},
         setActiveDocument=MagicMock(),
-        getDocument=MagicMock(return_value=None),
+        getDocument=MagicMock(side_effect=NameError("Unknown document")),
     )
     postcondition_sink = {}
 
