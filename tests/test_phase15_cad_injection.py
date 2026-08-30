@@ -387,7 +387,7 @@ def test_typed_delete_forwards_recursive_and_force_with_compatibility_defaults(
         (assembly, "solve_assembly", "solve_assembly_gui", ("Doc", "Assembly")),
     ],
 )
-def test_structural_wrappers_reach_native_with_trusted_scope(
+def test_structural_wrappers_reach_native_with_explicit_structural_scope(
     monkeypatch,
     module,
     method_name,
@@ -432,7 +432,7 @@ def test_structural_wrappers_reach_native_with_trusted_scope(
     assert result["success"] is True
     assert len(native_options) == 1
     assert native_options[0]["structural"] is True
-    assert native_options[0]["trusted_structural"] is True
+    assert "trusted_structural" not in native_options[0]
     assert leaf_calls[0]["recompute"] is False
 
 

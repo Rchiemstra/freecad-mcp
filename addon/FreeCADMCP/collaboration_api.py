@@ -42,12 +42,6 @@ class CollaborationAPI:
         if not callable(commit):
             raise TypeError("document must provide commitCompatibilityMutation()")
         native_options: dict[str, Any] = {"structural": structural}
-        if structural:
-            # The public MCP surface never accepts native authority.  Only an
-            # internal typed/generated operation that selected structural
-            # scope can request the matching native trust grant.  An older
-            # runtime rejects this keyword before invoking the callback.
-            native_options["trusted_structural"] = True
         if not recompute:
             native_options["recompute"] = False
         if postcondition is not None:

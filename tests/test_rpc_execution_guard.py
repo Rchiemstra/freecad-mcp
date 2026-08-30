@@ -303,12 +303,10 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
             structural=False,
             recompute=True,
             postcondition=None,
-            trusted_structural=False,
         ):
             assert structural is True
             assert recompute is False
             assert postcondition is None
-            assert trusted_structural is True
             callback()
             return {
                 "status": "Committed",

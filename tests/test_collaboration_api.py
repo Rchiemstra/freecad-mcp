@@ -27,7 +27,6 @@ class _NativeDocument:
         self.result = result
         self.callbacks: list[object] = []
         self.structural_scopes: list[bool] = []
-        self.trusted_structural_scopes: list[bool] = []
         self.recompute_policies: list[bool] = []
         self.postconditions: list[object | None] = []
 
@@ -38,11 +37,9 @@ class _NativeDocument:
         structural=False,
         recompute=True,
         postcondition=None,
-        trusted_structural=False,
     ):
         self.callbacks.append(callback)
         self.structural_scopes.append(structural)
-        self.trusted_structural_scopes.append(trusted_structural)
         self.recompute_policies.append(recompute)
         self.postconditions.append(postcondition)
         return self.result
@@ -86,12 +83,11 @@ def test_bridge_resolves_once_and_returns_the_exact_native_result() -> None:
     assert document.callbacks == [callback]
     assert document.callbacks[0] is callback
     assert document.structural_scopes == [False]
-    assert document.trusted_structural_scopes == [False]
     assert document.recompute_policies == [True]
     assert document.postconditions == [None]
 
 
-def test_bridge_forwards_only_the_explicit_structural_scope() -> None:
+def test_explicit_structural_scope_reaches_native() -> None:
     api_type = _load_package_module().CollaborationAPI
     document = _NativeDocument({"status": "Committed"})
 
@@ -100,7 +96,6 @@ def test_bridge_forwards_only_the_explicit_structural_scope() -> None:
     )
 
     assert document.structural_scopes == [True]
-    assert document.trusted_structural_scopes == [True]
 
 
 def test_bridge_forwards_explicit_deferred_recompute_policy() -> None:
@@ -130,7 +125,6 @@ def test_bridge_forwards_postcondition_only_when_explicitly_requested() -> None:
     )
 
     assert document.structural_scopes == [True]
-    assert document.trusted_structural_scopes == [True]
     assert document.recompute_policies == [False]
     assert document.postconditions == [postcondition]
 
@@ -151,27 +145,6 @@ def test_postcondition_fails_closed_before_callback_on_an_older_native_runtime()
             "Model",
             lambda: callback_calls.append("callback"),
             postcondition=lambda: True,
-        )
-
-    assert callback_calls == []
-
-
-def test_trusted_structural_scope_fails_closed_before_callback_on_older_runtime() -> None:
-    api_type = _load_package_module().CollaborationAPI
-    callback_calls = []
-
-    class OlderNativeDocument:
-        @staticmethod
-        def commitCompatibilityMutation(callback, *, structural=False, recompute=True):
-            callback_calls.append((callback, structural, recompute))
-
-    with pytest.raises(TypeError, match="trusted_structural"):
-        api_type(
-            document_lookup=lambda _name: OlderNativeDocument()
-        ).commit_compatibility_mutation(
-            "Model",
-            lambda: callback_calls.append("callback"),
-            structural=True,
         )
 
     assert callback_calls == []
