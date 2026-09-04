@@ -213,6 +213,25 @@ def test_auto_start_and_about_to_quit_share_one_root_without_duplicate_callback(
     assert context["calls"][-1:] == ["stop"]
 
 
+def test_auto_start_import_failure_logs_traceback(monkeypatch) -> None:
+    def fail_import() -> None:
+        raise ModuleNotFoundError("No module named 'startup_dependency'")
+
+    context = _exec_init_gui(
+        monkeypatch,
+        auto_start=True,
+        on_rpc_server_import=fail_import,
+    )
+
+    warning = next(
+        message
+        for message in context["warnings"]
+        if message.startswith("[MCP] Auto-start failed:")
+    )
+    assert "Traceback (most recent call last):" in warning
+    assert "ModuleNotFoundError: No module named 'startup_dependency'" in warning
+
+
 def test_init_gui_does_not_start_lease_runtime_or_register_authority_observers(
     monkeypatch,
 ) -> None:

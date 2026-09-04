@@ -6,27 +6,27 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 try:
-    from ...part3_collaboration.admission import (
+    from part3_collaboration.admission import (
         actor_from_session,
         early_operation_replay,
         early_operation_replay_across_documents,
         replay_or_protocol_error,
     )
-    from ...part3_collaboration.checked_edit_fence import (
+    from part3_collaboration.checked_edit_fence import (
         discard_begin_fence,
         pop_begin_fence,
         store_begin_fence,
     )
-    from ...part3_collaboration.identity import (
+    from part3_collaboration.identity import (
         bootstrap_identity_selector,
         resolve_identity_bound_document,
     )
-    from ...part3_collaboration.operation_terminal_store import store_operation_terminal
-    from ...part3_collaboration.revisions import (
+    from part3_collaboration.operation_terminal_store import store_operation_terminal
+    from part3_collaboration.revisions import (
         conflict_payload_from_commit_result,
         encode_semantic_revision_key,
     )
-except ImportError:  # pragma: no cover - flat addon import path
+except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP.part3_collaboration.admission import (
         actor_from_session,
         early_operation_replay,

@@ -10,8 +10,8 @@ from threading import Lock
 from typing import Any
 
 try:
-    from .._shared.protocol.validation import canonical_json_bytes
-except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.validation import canonical_json_bytes
+except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP._shared.protocol.validation import canonical_json_bytes
 
 

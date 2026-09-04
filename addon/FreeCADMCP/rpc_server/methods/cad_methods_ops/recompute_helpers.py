@@ -3,25 +3,25 @@
 from typing import Any
 
 try:
-    from ...part3_collaboration.admission import (
+    from part3_collaboration.admission import (
         actor_from_session,
         replay_or_protocol_error,
     )
-    from ...part3_collaboration.history_head import (
+    from part3_collaboration.history_head import (
         capture_redo_head,
         capture_undo_head,
         redo_head_matches,
         undo_head_matches,
     )
-    from ...part3_collaboration.identity import (
+    from part3_collaboration.identity import (
         bootstrap_identity_selector,
         resolve_identity_bound_document,
     )
-    from ...part3_collaboration.operation_terminal_store import (
+    from part3_collaboration.operation_terminal_store import (
         check_operation_terminal,
         store_operation_terminal,
     )
-except ImportError:  # pragma: no cover - flat addon import path
+except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP.part3_collaboration.admission import (
         actor_from_session,
         replay_or_protocol_error,
