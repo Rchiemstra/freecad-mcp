@@ -29,29 +29,31 @@ def _register_sketch_create(
         sketch_name: str,
         body_name: str | None = None,
         attach_to: str | None = None,
+        attachment_offset: dict[str, Any] | None = None,
     ) -> CallToolResult:
         """Create a new Sketcher sketch in FreeCAD.
 
         Args:
             doc_name: The document to create the sketch in.
             sketch_name: Name for the new sketch object.
-            body_name: Optional PartDesign Body to attach the sketch to. If omitted the
+            body_name: Optional PartDesign Body to contain the sketch. If omitted the
                 sketch is added directly to the document.
             attach_to: Optional attachment target. Accepted values:
                 - "XY_Plane", "XZ_Plane", "YZ_Plane" — attach to a coordinate plane.
                 - "ObjectName:FaceN" — attach to a specific face of an existing object
                   (e.g. "Box:Face1").
+            attachment_offset: Optional Placement dict applied atomically while the new
+                sketch is attached. ``Rotation.Angle`` is in degrees.
 
         Returns:
             A message indicating success or failure and a screenshot.
 
         Recipe (avoid the silent P3 trap):
-          Prefer ``attach_to`` an origin plane ("XY_Plane"/"XZ_Plane"/"YZ_Plane")
-          and use ``AttachmentOffset`` to position the sketch, rather than creating
-          a sketch on a default axis and then rotating its Placement. A rotated
-          "Deactivated" attachment can drop the rotation (P3). For cross-body
-          supports, keep the source body at an identity placement (P1) and verify
-          with ``preview_attachment``.
+          Pass ``attach_to`` and ``attachment_offset`` when creating the sketch. This
+          keeps support, map mode, and offset in the same structural commit. Do not
+          rotate the Placement of a "Deactivated" sketch; a later feature recompute can
+          silently drop that rotation (P3). For cross-body supports, keep the source
+          body at an identity placement (P1) and verify with ``preview_attachment``.
 
         Examples:
             Create a sketch on the XY plane inside a Body:
@@ -71,6 +73,7 @@ def _register_sketch_create(
             sketch_name,
             body_name,
             attach_to,
+            attachment_offset,
         )
 
     exports['sketch_create'] = sketch_create

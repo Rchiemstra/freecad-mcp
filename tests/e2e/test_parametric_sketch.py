@@ -151,6 +151,50 @@ def test_native_create_sequences_leave_mutation_lane_ready(freecad_session):
     _assert_native_mutation_ready(conn.doc)
 
 
+def test_sketch_create_attaches_xz_plane_and_offset_atomically(freecad_session):
+    """Origin support and offset are applied while the sketch is still new."""
+
+    conn = freecad_session
+    doc_name = conn.doc.Name
+    assert not body_create_operation(conn, True, doc_name, "Body").isError
+    offset = {
+        "Base": {"x": 0.0, "y": 0.0, "z": 25.0},
+        "Rotation": {
+            "Axis": {"x": 0.0, "y": 0.0, "z": 1.0},
+            "Angle": 15.0,
+        },
+    }
+
+    result = sketch_create_operation(
+        conn,
+        True,
+        doc_name,
+        "SketchXZ",
+        body_name="Body",
+        attach_to="XZ_Plane",
+        attachment_offset=offset,
+    )
+
+    assert not result.isError, tool_response_text(result)
+    sketch = conn.doc.getObject("SketchXZ")
+    assert sketch is not None
+    assert sketch.MapMode == "FlatFace"
+    support = list(sketch.AttachmentSupport)
+    assert len(support) == 1
+    assert support[0][0].Name == "XZ_Plane"
+    assert math.isclose(sketch.AttachmentOffset.Base.z, 25.0, abs_tol=1e-8)
+    assert math.isclose(
+        math.degrees(sketch.AttachmentOffset.Rotation.Angle),
+        15.0,
+        abs_tol=1e-8,
+    )
+    conn.doc.recompute()
+    assert sketch.MapMode == "FlatFace"
+    assert support[0][0].Name == "XZ_Plane"
+    _assert_mutation_ready(conn, doc_name)
+    _assert_native_mutation_ready(conn.doc)
+
+
 def test_native_mutation_lane_recovers_after_open_profile_failure(freecad_session):
     """A failed Pad must not poison later features, history, or another doc."""
 

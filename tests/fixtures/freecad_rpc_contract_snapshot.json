@@ -12032,6 +12032,18 @@
             ]
           },
           "default": null
+        },
+        {
+          "name": "attachment_offset",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -15425,6 +15437,11 @@
         2
       ],
       "rpc_method_capabilities": {
+        "sketch_create": {
+          "parameters": [
+            "attachment_offset"
+          ]
+        },
         "sketch_attach": {
           "parameters": [
             "attachment_offset"

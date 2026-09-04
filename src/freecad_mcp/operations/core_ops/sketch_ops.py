@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
@@ -57,12 +58,16 @@ def sketch_create_operation(
     sketch_name: str,
     body_name: str | None = None,
     attach_to: str | None = None,
+    attachment_offset: dict[str, Any] | None = None,
 ) -> ToolResponse:
+    args = (doc_name, sketch_name, body_name, attach_to)
+    if attachment_offset is not None:
+        args += (attachment_offset,)
     return _typed_sketch_mutation(
         freecad,
         only_text_feedback,
         "sketch_create",
-        (doc_name, sketch_name, body_name, attach_to),
+        args,
         f"Sketch '{sketch_name}' created",
         "Failed to create sketch",
     )

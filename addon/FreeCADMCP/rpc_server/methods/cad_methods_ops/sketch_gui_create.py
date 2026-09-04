@@ -11,25 +11,36 @@ def sketch_create_gui(
     sketch_name,
     body_name,
     attach_to,
+    attachment_offset,
     *,
     freecad,
+    dict_to_placement,
     recompute: bool = True,
 ):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
             return f"Document '{doc_name}' not found."
+        if attachment_offset is not None and not attach_to:
+            return "attachment_offset requires attach_to during sketch creation."
 
         sketch, error = create_sketch_object(doc, sketch_name, body_name)
         if error:
             return error
 
         if attach_to:
-            attach_error = apply_create_attach_to(
-                sketch, doc, attach_to, freecad=freecad
-            )
+            attach_error = apply_create_attach_to(sketch, doc, attach_to)
             if attach_error:
                 return attach_error
+
+        offset_error = _apply_attachment_offset(
+            sketch,
+            sketch_name,
+            attachment_offset,
+            dict_to_placement=dict_to_placement,
+        )
+        if offset_error:
+            return offset_error
 
         if recompute:
             doc.recompute()

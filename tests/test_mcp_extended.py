@@ -235,6 +235,26 @@ class TestSketchCreateOperation:
         )
         conn.execute_code.assert_not_called()
 
+    def test_attachment_offset_is_forwarded_atomically(self):
+        conn = _ok_conn()
+        conn.sketch_create.return_value = {"success": True, "sketch_name": "Sk"}
+        offset = {"Base": {"x": 0, "y": 0, "z": 25}}
+
+        sketch_create_operation(
+            conn,
+            True,
+            "Doc",
+            "Sk",
+            body_name="Body",
+            attach_to="XZ_Plane",
+            attachment_offset=offset,
+        )
+
+        conn.sketch_create.assert_called_once_with(
+            "Doc", "Sk", "Body", "XZ_Plane", offset
+        )
+        conn.execute_code.assert_not_called()
+
     def test_failure_message(self):
         conn = _ok_conn()
         conn.sketch_create.return_value = {"success": False, "error": "bad support"}

@@ -22,6 +22,7 @@ def sketch_create(
     sketch_name: str,
     body_name: str | None = None,
     attach_to: str | None = None,
+    attachment_offset=None,
 ) -> dict:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -33,7 +34,9 @@ def sketch_create(
                 sketch_name,
                 body_name,
                 attach_to,
+                attachment_offset,
                 freecad=collaborators.freecad,
+                dict_to_placement=collaborators.dict_to_placement,
                 recompute=False,
             ),
             structural=True,

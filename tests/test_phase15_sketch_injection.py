@@ -62,7 +62,12 @@ def _collaborators(api):
 @pytest.mark.parametrize(
     ("method", "args", "leaf", "expected_dependencies"),
     [
-        ("sketch_create", ("Doc", "Sketch"), "sketch_create_gui", ("freecad",)),
+        (
+            "sketch_create",
+            ("Doc", "Sketch"),
+            "sketch_create_gui",
+            ("freecad", "dict_to_placement"),
+        ),
         (
             "sketch_add_geometry",
             ("Doc", "Sketch", []),
