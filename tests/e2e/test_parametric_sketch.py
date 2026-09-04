@@ -111,6 +111,46 @@ def _successful(result: dict) -> bool:
     )
 
 
+def test_native_create_sequences_leave_mutation_lane_ready(freecad_session):
+    """Body→Sketch and Sheet→cells commit without stranded recompute work."""
+
+    conn = freecad_session
+    doc_name = conn.doc.Name
+
+    body = body_create_operation(conn, True, doc_name, "Body")
+    assert not body.isError, tool_response_text(body)
+    _assert_mutation_ready(conn, doc_name)
+
+    sketch = sketch_create_operation(
+        conn,
+        True,
+        doc_name,
+        "Sketch",
+        body_name="Body",
+        attach_to="XY_Plane",
+    )
+    assert not sketch.isError, tool_response_text(sketch)
+    _assert_mutation_ready(conn, doc_name)
+
+    sheet = spreadsheet_create_operation(conn, True, doc_name, "Dims")
+    assert not sheet.isError, tool_response_text(sheet)
+    _assert_mutation_ready(conn, doc_name)
+
+    cells = spreadsheet_set_cells_operation(
+        conn,
+        True,
+        doc_name,
+        "Dims",
+        [
+            {"address": "A1", "value": 3.0},
+            {"address": "B1", "value": "120 mm"},
+        ],
+    )
+    assert not cells.isError, tool_response_text(cells)
+    _assert_mutation_ready(conn, doc_name)
+    _assert_native_mutation_ready(conn.doc)
+
+
 def test_native_mutation_lane_recovers_after_open_profile_failure(freecad_session):
     """A failed Pad must not poison later features, history, or another doc."""
 

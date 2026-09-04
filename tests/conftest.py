@@ -65,6 +65,22 @@ _BRANCH_NATIVE_DOCUMENT_APIS = (
     "saveCopyWithOutcome",
 )
 
+_LIVE_TYPED_RPC_METHODS = frozenset(
+    {
+        "body_create",
+        "body_set_tip",
+        "diagnose_parametric",
+        "set_expression",
+        "sketch_add_constraint",
+        "sketch_add_geometry",
+        "sketch_attach",
+        "sketch_create",
+        "sketch_edit_constraint",
+        "spreadsheet_create",
+        "spreadsheet_set_cells",
+    }
+)
+
 
 def _missing_branch_native_document_apis(document) -> tuple[str, ...]:
     return tuple(
@@ -342,6 +358,18 @@ class LiveFreeCADConnection:
         """Use the production local dispatcher without inventing RPC auth."""
 
         return self._rpc._dispatch(method, list(params))
+
+    def __getattr__(self, name: str):
+        """Expose the typed methods used by live operation-level tests.
+
+        Production ``FreeCADConnection`` receives these methods from generated
+        facade bindings.  This intentionally small test facade dispatches the
+        same RPC method names while continuing to bypass transport only.
+        """
+
+        if name not in _LIVE_TYPED_RPC_METHODS:
+            raise AttributeError(name)
+        return lambda *params: self._dispatch(name, *params)
 
     def pad_feature(
         self,

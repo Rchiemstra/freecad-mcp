@@ -167,6 +167,30 @@ def test_typed_feature_history_and_readiness_methods_delegate_exactly():
     ]
 
 
+def test_generated_typed_mutation_methods_delegate_to_production_dispatch():
+    connection = _connection_with_rpc()
+    connection._typed_rpc._dispatch.return_value = {"success": True}
+
+    assert connection.body_create("Doc", "Body") == {"success": True}
+    assert connection.sketch_create("Doc", "Sketch", "Body", "XY_Plane") == {
+        "success": True
+    }
+    assert connection.spreadsheet_create("Doc", "Dims") == {"success": True}
+    assert connection.spreadsheet_set_cells(
+        "Doc", "Dims", [{"address": "A1", "value": 3.0}]
+    ) == {"success": True}
+
+    assert connection._typed_rpc._dispatch.call_args_list == [
+        call("body_create", ["Doc", "Body"]),
+        call("sketch_create", ["Doc", "Sketch", "Body", "XY_Plane"]),
+        call("spreadsheet_create", ["Doc", "Dims"]),
+        call(
+            "spreadsheet_set_cells",
+            ["Doc", "Dims", [{"address": "A1", "value": 3.0}]],
+        ),
+    ]
+
+
 def test_production_dispatch_refuses_live_fixture_mutations_while_paused():
     leaves = SimpleNamespace(
         execute_code=MagicMock(return_value={"success": True}),
