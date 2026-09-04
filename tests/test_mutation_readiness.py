@@ -22,6 +22,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.mutation_readiness_wait
 )
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.recompute_helpers import (
     recompute_and_wait_gui,
+    recompute_document_gui,
     undo_gui,
 )
 
@@ -573,14 +574,24 @@ def test_undo_uses_the_same_pause_admission_gate():
     automation_pause.finish_remote_write(admitted["token"])
 
 
+@pytest.mark.parametrize("entrypoint", ["recompute_document", "recompute_and_wait"])
 @pytest.mark.parametrize(
     "blocker",
-    ["quarantined", "poisoned", "paused", "recomputing", "native_not_ready"],
+    [
+        "quarantined",
+        "poisoned",
+        "paused",
+        "transaction",
+        "recomputing",
+        "native_not_ready",
+    ],
 )
-def test_recompute_and_wait_rejection_never_recomputes_or_flushes(blocker):
+def test_explicit_recompute_rejection_never_recomputes_or_flushes(entrypoint, blocker):
     readiness = {}
     if blocker == "poisoned":
         readiness = {"ready": False, "poisoned": True}
+    elif blocker == "transaction":
+        readiness = {"ready": False, "pending_transaction": True}
     elif blocker == "recomputing":
         readiness = {"ready": False, "recomputing": True}
     elif blocker == "native_not_ready":
@@ -599,11 +610,40 @@ def test_recompute_and_wait_rejection_never_recomputes_or_flushes(blocker):
         ),
     )
 
-    result = recompute_and_wait_gui("Model", collaborators=collaborators)
+    if entrypoint == "recompute_document":
+        result = recompute_document_gui("Model", freecad=collaborators.freecad)
+    else:
+        result = recompute_and_wait_gui("Model", collaborators=collaborators)
 
     assert result["error_code"] == "MUTATION_NOT_READY"
     assert leaf_calls == []
     assert document.recompute_calls == 0
+
+
+@pytest.mark.parametrize("entrypoint", ["recompute_document", "recompute_and_wait"])
+def test_explicit_recompute_admits_pending_recompute_native_not_ready(entrypoint):
+    document = _Document(readiness={"ready": False, "must_execute": True})
+    leaf_calls: list[str] = []
+
+    def recompute_and_flush(_name):
+        document.recompute()
+        leaf_calls.extend(("recompute", "flush"))
+        return {"ok": True, "idle": True}
+
+    collaborators = SimpleNamespace(
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        recompute_and_wait=recompute_and_flush,
+    )
+
+    if entrypoint == "recompute_document":
+        result = recompute_document_gui("Model", freecad=collaborators.freecad)
+        assert result is True
+        assert leaf_calls == []
+    else:
+        result = recompute_and_wait_gui("Model", collaborators=collaborators)
+        assert result == {"ok": True, "idle": True}
+        assert leaf_calls == ["recompute", "flush"]
+    assert document.recompute_calls == 1
 
 
 def test_recompute_and_wait_healthy_path_recomputes_and_flushes_once():

@@ -247,7 +247,9 @@ def recompute_document_gui(doc_name, *, freecad):
         if not doc:
             return f"Document '{doc_name}' not found."
         admission_failure = admit_cad_mutation(
-            doc, inflight=current_cad_mutation_inflight()
+            doc,
+            inflight=current_cad_mutation_inflight(),
+            allow_pending_recompute=True,
         )
         if admission_failure is not None:
             return admission_failure
@@ -476,6 +478,7 @@ def recompute_and_wait_gui(doc_name: str, *, collaborators) -> Any:
     admission_failure = admit_cad_mutation(
         document,
         inflight=current_cad_mutation_inflight(),
+        allow_pending_recompute=True,
     )
     if admission_failure is not None:
         return admission_failure
