@@ -63,6 +63,14 @@ _BRANCH_NATIVE_DOCUMENT_APIS = (
     "forceSave",
     "saveAsWithOutcome",
     "saveCopyWithOutcome",
+    "collaborationIdentity",
+    "captureSemanticRevisions",
+    "beginEditSession",
+    "snapshotForEdit",
+    "prepareEditWithExpectedRevisions",
+    "commitEdit",
+    "cancelEdit",
+    "editSessionStatus",
 )
 
 _LIVE_TYPED_RPC_METHODS = frozenset(
@@ -88,6 +96,21 @@ def _missing_branch_native_document_apis(document) -> tuple[str, ...]:
         for name in _BRANCH_NATIVE_DOCUMENT_APIS
         if not callable(getattr(document, name, None))
     )
+
+
+def _reject_missing_branch_native_document_apis(
+    missing_apis: tuple[str, ...],
+) -> None:
+    message = (
+        "This E2E fixture requires the branch-native App::Document mutation, "
+        "collaboration, file-state, and save-outcome APIs; missing: "
+        + ", ".join(missing_apis)
+        + ". Stock FreeCAD compatibility images intentionally skip this "
+        "production coverage."
+    )
+    if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") == "1":
+        pytest.fail(message)
+    pytest.skip(message)
 
 
 @pytest.fixture(autouse=True)
@@ -497,16 +520,7 @@ def freecad_session(request):
     missing_apis = _missing_branch_native_document_apis(session.doc)
     if missing_apis:
         session.close()
-        message = (
-            "This E2E fixture requires the branch-native App::Document mutation, "
-            "file-state, and save-outcome APIs; missing: "
-            + ", ".join(missing_apis)
-            + ". Stock FreeCAD compatibility images intentionally skip this "
-            "production coverage."
-        )
-        if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") == "1":
-            pytest.fail(message)
-        pytest.skip(message)
+        _reject_missing_branch_native_document_apis(missing_apis)
     yield session
     session.close()
 

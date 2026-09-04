@@ -13,7 +13,11 @@ FreeCAD = pytest.importorskip("FreeCAD")
 
 from addon.FreeCADMCP.rpc_server import request_identity
 from addon.FreeCADMCP.rpc_server.lease_protocol import RequestEnvelope
-from tests.conftest import LiveFreeCADConnection
+from tests.conftest import (
+    LiveFreeCADConnection,
+    _missing_branch_native_document_apis,
+    _reject_missing_branch_native_document_apis,
+)
 
 pytestmark = [pytest.mark.e2e]
 
@@ -108,6 +112,10 @@ def _property_key(object_name: str, property_name: str) -> dict[str, str]:
 def part3_doc():
     doc_name = f"Part3Checked_{uuid.uuid4().hex[:8]}"
     conn = LiveFreeCADConnection(doc_name)
+    missing_apis = _missing_branch_native_document_apis(conn.doc)
+    if missing_apis:
+        conn.close()
+        _reject_missing_branch_native_document_apis(missing_apis)
 
     stress = conn.doc.addObject("App::FeatureTest", "StressBox")
     stress.Integer = 1

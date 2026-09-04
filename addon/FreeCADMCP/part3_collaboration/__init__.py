@@ -7,7 +7,7 @@ from .revisions import (
     encode_semantic_revision_key,
     revision_keys_from_observations,
 )
-from .types import Part3IdentitySelector
+from .types.part3_identity_selector import Part3IdentitySelector
 
 __all__ = [
     "Part3IdentitySelector",

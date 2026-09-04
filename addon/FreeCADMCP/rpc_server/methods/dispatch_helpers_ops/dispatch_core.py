@@ -145,25 +145,6 @@ def dispatch(self, method, params):
     func = getattr(self, method, None)
     if func is None or method.startswith("_"):
         raise Exception(f'method "{method}" is not supported')
-    if (
-        method in AUTHENTICATED_METHODS
-        and method not in _LEGACY_LEASE_STUB_METHODS
-    ):
-        collaborators = self._execution_collaborators
-        identity_provider = collaborators.request_identity_provider()
-        auth_error = elevate_rpc_session_identity_or_error(
-            collaborators,
-            identity_provider,
-            identity_provider.get_request_identity(),
-        )
-        if auth_error is not None:
-            emit_auth_gate_refusal(
-                method=method,
-                error_code=str(auth_error.get("error_code") or "AUTH_GATE_REFUSED"),
-                lane=auth_refusal_lane(method),
-                request_id=auth_error.get("request_id"),
-            )
-            return auth_error
     admission = None
     if _remote_write_method(method, params):
         admission = admit_remote_write(method, _pause_document_names(method, params))
@@ -172,6 +153,27 @@ def dispatch(self, method, params):
     from ..cad_methods_ops.cad_mutation import cad_mutation_rpc_method
 
     try:
+        if (
+            method in AUTHENTICATED_METHODS
+            and method not in _LEGACY_LEASE_STUB_METHODS
+        ):
+            collaborators = self._execution_collaborators
+            identity_provider = collaborators.request_identity_provider()
+            auth_error = elevate_rpc_session_identity_or_error(
+                collaborators,
+                identity_provider,
+                identity_provider.get_request_identity(),
+            )
+            if auth_error is not None:
+                emit_auth_gate_refusal(
+                    method=method,
+                    error_code=str(
+                        auth_error.get("error_code") or "AUTH_GATE_REFUSED"
+                    ),
+                    lane=auth_refusal_lane(method),
+                    request_id=auth_error.get("request_id"),
+                )
+                return auth_error
         with cad_mutation_rpc_method(method):
             return func(*params)
     finally:

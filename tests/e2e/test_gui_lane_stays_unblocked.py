@@ -34,7 +34,16 @@ MCP_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = MCP_ROOT / "scripts"
 PROFILE_NAME = ".freecad-mcp-e2e-session"
 E2E_PORT = 9877
-REPO_ROOT = MCP_ROOT.parents[2]
+
+
+def _find_repo_root(mcp_root: Path) -> Path:
+    for candidate in mcp_root.parents:
+        if (candidate / "src" / "Main").is_dir():
+            return candidate
+    return mcp_root
+
+
+REPO_ROOT = _find_repo_root(MCP_ROOT)
 DEFAULT_PROFILE = ".freecad-mcp-isolated"
 SHORT_TTL_SECONDS = 2.0
 # Far-future client expiry so ensure_session_fresh does not hide the reactive

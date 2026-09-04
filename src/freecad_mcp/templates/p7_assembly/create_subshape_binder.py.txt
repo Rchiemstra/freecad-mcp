@@ -22,9 +22,6 @@ else:
     _binder = _body.newObject('PartDesign::SubShapeBinder', _binder_name) if _body else _doc.addObject('PartDesign::SubShapeBinder', _binder_name)
     _binder.Support = [(_src, tuple(_subs) if _subs else ('',))]
     if 'Relative' in getattr(_binder, 'PropertiesList', []): _binder.Relative = bool(_relative)
-    if (not _relative) and _sync_placement:
-        try: _binder.Placement = _global_placement(_src)
-        except Exception: pass
     _add_to_container(_container, _binder)
     _post_binder = _binder
 

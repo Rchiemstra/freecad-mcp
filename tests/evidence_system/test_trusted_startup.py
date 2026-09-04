@@ -57,9 +57,10 @@ def test_hostile_pythonpath(tmp_path):
  assert mismatch_result["issue"]=={"stage":"authorization","code":"AUTHORIZATION_BINDING","artifact":"review-authorization.json","field":"/commands"} and not (mismatch_out/"final-verdict.json").exists()
  explicit_result,explicit_out=run_packet(tmp_path/"explicit-current-interpreter",{"kind":"docker","case":"missing"},host_interpreter=Path(sys.executable).resolve())
  assert explicit_result["issue"]=={"stage":"mount","code":"MOUNT_SET_CONTRACT","artifact":"inspect","field":"/Mounts"} and not (explicit_out/"final-verdict.json").exists()
- repository=Path(__file__).resolve().parents[5]; tokens=("R"+"chie","C:/"+"Users","C:\\"+"Users","FreeCAD"+"Modeling","App"+"Data"+"/Local")
- assert not any(token in path.read_text(encoding="utf-8") for path in [*repository.joinpath("tools/mcp/freecad-mcp/src/freecad_mcp/evidence_system").glob("*.py"),*repository.joinpath("tools/mcp/freecad-mcp/tests/evidence_system").glob("*.py"),repository/"tests/gui/part3/test_evidence_system_integration.py"] for token in tokens)
- launch_source=(repository/"tools/mcp/freecad-mcp/src/freecad_mcp/evidence_system/launch_source.py").read_text(encoding="utf-8")
+ mcp_root=Path(__file__).resolve().parents[2]; repository=next((candidate for candidate in (mcp_root,*mcp_root.parents) if (candidate/"tools/mcp/freecad-mcp").is_dir()),mcp_root); mcp_checkout=repository/"tools/mcp/freecad-mcp" if repository!=mcp_root else mcp_root; tokens=("R"+"chie","C:/"+"Users","C:\\"+"Users","FreeCAD"+"Modeling","App"+"Data"+"/Local")
+ sensitive_sources=[*mcp_checkout.joinpath("src/freecad_mcp/evidence_system").glob("*.py"),*mcp_checkout.joinpath("tests/evidence_system").glob("*.py")]; integration=repository/"tests/gui/part3/test_evidence_system_integration.py"; sensitive_sources.extend([integration] if integration.is_file() else [])
+ assert not any(token in path.read_text(encoding="utf-8") for path in sensitive_sources for token in tokens)
+ launch_source=(mcp_checkout/"src/freecad_mcp/evidence_system/launch_source.py").read_text(encoding="utf-8")
  assert 'kwargs["executable"] = interpreter.launch_path' in launch_source and 'argv[script_index] = self.launch_path' in launch_source
 def test_cwd_shadow(tmp_path,monkeypatch):
  p=make(tmp_path);(tmp_path/"json.py").write_text("raise RuntimeError()");monkeypatch.chdir(tmp_path);rc,x=go(p);assert rc==0 and x["passed"]

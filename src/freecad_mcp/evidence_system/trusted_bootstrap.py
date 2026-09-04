@@ -142,7 +142,7 @@ def run(root,argv,reviewer_anchor,interpreter_anchor,identity):
  if any(auth[name]!=value for name,value in identity.items()):return _issue("AUTHORIZATION_SCOPE","review-authorization.json","/"+next(name for name,value in identity.items() if auth[name]!=value),"authorization")
  if not _hex(interpreter_anchor):return _issue("INTERPRETER_APPROVAL","bootstrap","/interpreter-sha256","interpreter")
  invoked=_invoked_interpreter()
- actual_outer=[invoked,"-I","-S","-B",sys.argv[0],str(root),"--reviewer-sha256",reviewer_anchor,"--interpreter-sha256",interpreter_anchor,"--run-id",identity["run_id"],"--attempt-id",identity["attempt_id"],"--sequence",str(identity["sequence"]),"--scope",identity["scope"],"--",*argv]
+ actual_outer=[invoked,"-I","-S","-B",str(Path(__file__).resolve()),str(root),"--reviewer-sha256",reviewer_anchor,"--interpreter-sha256",interpreter_anchor,"--run-id",identity["run_id"],"--attempt-id",identity["attempt_id"],"--sequence",str(identity["sequence"]),"--scope",identity["scope"],"--",*argv]
  if contract["outer"]!=actual_outer:return _issue("AUTHORIZATION_BINDING","review-authorization.json","/commands","authorization")
  runtime=config.get("runtime")
  if isinstance(runtime,dict) and isinstance(runtime.get("policy"),dict):

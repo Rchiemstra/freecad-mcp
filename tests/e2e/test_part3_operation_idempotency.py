@@ -10,7 +10,11 @@ FreeCAD = pytest.importorskip("FreeCAD")
 
 from addon.FreeCADMCP.part3_collaboration.history_head import capture_undo_head
 from addon.FreeCADMCP.rpc_server import request_identity
-from tests.conftest import LiveFreeCADConnection
+from tests.conftest import (
+    LiveFreeCADConnection,
+    _missing_branch_native_document_apis,
+    _reject_missing_branch_native_document_apis,
+)
 from tests.e2e.test_part3_checked_edit import _build_authenticated_rpc, _selector
 
 pytestmark = [pytest.mark.e2e]
@@ -22,6 +26,10 @@ _PROP_NO_RECOMPUTE = 16
 def part3_history_doc():
     doc_name = f"Part3History_{uuid.uuid4().hex[:8]}"
     conn = LiveFreeCADConnection(doc_name)
+    missing_apis = _missing_branch_native_document_apis(conn.doc)
+    if missing_apis:
+        conn.close()
+        _reject_missing_branch_native_document_apis(missing_apis)
 
     stress = conn.doc.addObject("App::FeatureTest", "StressBox")
     stress.Integer = 1

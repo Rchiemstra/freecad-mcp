@@ -25,7 +25,7 @@ MOUNTS = lambda package, out: [
 
 def run_packet(tmp_path: Path, mutation: dict[str, object] | None = None, *, host_interpreter: Path | None = None, approved_interpreter_sha256: str | None = None, pre_spawn_hook: object | None = None) -> tuple[dict[str, object], Path]:
     package = tmp_path / "diagnostic"; package.mkdir(parents=True); out = tmp_path / "out"; active_mutation = mutation or {}
-    worker_root=tmp_path/"worker-root"; worker_root.mkdir(); worker=worker_root/"offline_worker.py"; mutation_path=worker.with_suffix(".mutation.json"); mutation_path.write_text(json.dumps(active_mutation)); worker.write_text(_WORKER,encoding="utf-8")
+    worker_root=tmp_path/"worker-root"; worker_root.mkdir(); worker=worker_root/"offline_worker.py"; worker.write_text(_WORKER.replace("__MUTATION_JSON__", repr(json.dumps(active_mutation))),encoding="utf-8")
     race_target = tmp_path / "worker-race-target"
     if active_mutation.get("kind") == "worker_race":
         race_target.mkdir(); (race_target / "offline_worker.mutation.json").write_text(json.dumps(active_mutation)); (race_target / "offline_worker.py").write_text("from pathlib import Path\nPath(r'%s').write_text('unapproved')\n" % (tmp_path / "unapproved-worker-side-effect"))
@@ -93,7 +93,7 @@ def main(request):
 _WORKER = '''from datetime import datetime,timezone
 from pathlib import Path
 import hashlib,json,sys
-mutation=json.loads(Path(__file__).with_suffix(".mutation.json").read_text()); request=json.loads(Path(sys.argv[3]).read_text()); binding=request["binding"]; policy=request["policy"]; kind=mutation.get("kind")
+mutation=json.loads(__MUTATION_JSON__); request=json.loads(Path(sys.argv[3]).read_text()); binding=request["binding"]; policy=request["policy"]; kind=mutation.get("kind")
 if kind=="worker_swap":Path(__file__).parents[1].joinpath("approved-worker-ran").write_text("ran")
 if sys.argv[1]=="--cleanup-request":print(json.dumps({"passed":True,"errors":[]}));raise SystemExit()
 checks=("package","authorization","configured_candidate","raw_candidate","repository","sources","binaries","image","output_freshness","conflicting_processes","port","cache","resolved_outer_command","resolved_executor_command","resolved_docker_command","environment","mounts","timestamp_freshness")

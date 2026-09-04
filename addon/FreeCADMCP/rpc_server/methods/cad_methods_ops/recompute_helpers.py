@@ -47,6 +47,14 @@ from .cad_mutation import (
     postflight_cad_mutation,
 )
 
+__all__ = [
+    "get_recompute_log",
+    "recompute_and_wait",
+    "recompute_document",
+    "redo",
+    "undo",
+]
+
 
 def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {

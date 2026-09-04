@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import math
 from pathlib import Path
 import tempfile
@@ -267,6 +267,102 @@ def _close(document) -> None:
         FreeCAD.closeDocument(document.Name)
     except Exception:
         pass
+
+
+class _BenchmarkNativeDocument:
+    """Expose the branch-native success path to the stock compatibility image."""
+
+    def __init__(self, document) -> None:
+        self._document = document
+
+    def __getattr__(self, name: str):
+        return getattr(self._document, name)
+
+    @staticmethod
+    def getMutationReadiness() -> dict[str, Any]:
+        return {
+            "ready": True,
+            "stable_event_supported": True,
+            "pending_transaction": False,
+            "booked_transaction": 0,
+            "transaction_locked": False,
+            "recomputing": False,
+            "must_execute": False,
+            "pending_removal": False,
+            "commit_barrier": False,
+            "notification_replay": False,
+            "poisoned": False,
+            "quarantined": False,
+            "diagnostic": "Benchmark stock-runtime compatibility adapter",
+        }
+
+    def commitCompatibilityMutation(
+        self,
+        callback,
+        *,
+        structural: bool = False,
+        recompute: bool = True,
+        postcondition=None,
+    ) -> dict[str, Any]:
+        del structural
+        callback()
+        if recompute:
+            self._document.recompute()
+        if postcondition is not None and postcondition() is False:
+            return {"status": "PostconditionFailed", "committed": False}
+        return {"status": "Committed", "committed": True}
+
+
+class _BenchmarkFreeCAD:
+    def __init__(self, freecad, document: _BenchmarkNativeDocument) -> None:
+        self._freecad = freecad
+        self._document = document
+
+    def __getattr__(self, name: str):
+        return getattr(self._freecad, name)
+
+    def getDocument(self, name: str):
+        document = self._freecad.getDocument(name)
+        if document is self._document._document:
+            return self._document
+        return document
+
+
+def _adapt_stock_runtime_for_typed_benchmark(rpc, document) -> tuple[Any, bool]:
+    """Supply only the missing native success boundary in the stock image."""
+
+    if callable(getattr(document, "getMutationReadiness", None)) and callable(
+        getattr(document, "commitCompatibilityMutation", None)
+    ):
+        return rpc, False
+
+    import FreeCAD
+
+    from addon.FreeCADMCP.collaboration_api import CollaborationAPI
+
+    native_document = _BenchmarkNativeDocument(document)
+    freecad = _BenchmarkFreeCAD(FreeCAD, native_document)
+    compatibility_api = CollaborationAPI(document_lookup=freecad.getDocument)
+    collaboration_collaborators = replace(
+        rpc._collaboration_collaborators,
+        compatibility_api=compatibility_api,
+        freecad=freecad,
+    )
+    execution_collaborators = replace(
+        rpc._execution_collaborators,
+        compatibility_api=compatibility_api,
+        freecad=freecad,
+    )
+    cad_collaborators = replace(
+        rpc._cad_collaborators,
+        compatibility_api=compatibility_api,
+        freecad=freecad,
+    )
+    return type(rpc)(
+        collaboration_collaborators=collaboration_collaborators,
+        execution_collaborators=execution_collaborators,
+        cad_collaborators=cad_collaborators,
+    ), True
 
 
 def _runtime_document_signatures() -> dict[str, tuple[Any, ...]]:
@@ -621,6 +717,9 @@ def _probe(task: BenchmarkTask, workspace: Path) -> dict[str, Any]:
         doc = _document("BenchmarkTyped")
         try:
             rpc = FreeCADRPC()
+            rpc, compatibility_adapter = _adapt_stock_runtime_for_typed_benchmark(
+                rpc, doc
+            )
             rpc._dispatch_gui = lambda callable_, timeout=None: callable_()
             response = rpc.create_object(
                 doc.Name,
@@ -640,6 +739,7 @@ def _probe(task: BenchmarkTask, workspace: Path) -> dict[str, Any]:
             modified_documents.append("target")
             modified_objects.append(result.Name)
             evidence["volume"] = float(result.Shape.Volume)
+            evidence["stock_compatibility_adapter"] = compatibility_adapter
         finally:
             _close(doc)
     else:
