@@ -99,6 +99,12 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         FCStd hash, metadata, required archive members, and CRC. The canonical
         savepoint must not move and pending-file state must remain intact.
 
+        Save Copy remains available as an extraction path for quarantined or poisoned
+        documents. Such a result is marked ``recovery_only=true`` and
+        ``model_state_verified=false``: archive structure and storage durability are
+        verified, but the model must be inspected after reopening and the operation
+        does not clear quarantine.
+
         Select the open document with ``document_name`` or ``canonical_path``; if both
         are supplied, they must identify the same live document. ``overwrite=False``
         refuses an existing destination.

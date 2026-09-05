@@ -481,12 +481,15 @@ def test_delete_leaf_refuses_or_recursively_deletes_without_orphans():
             self.TypeId = type_id
             self.State = []
             self.OutList = []
+            self.InList = []
+            self.Group = []
 
     root = Node("Body", "PartDesign::Body")
     child = Node("Pad", "PartDesign::Pad")
     grandchild = Node("Fillet", "PartDesign::Fillet")
-    root.OutList = [child]
-    child.OutList = [grandchild]
+    root.Group = [child, grandchild]
+    child.InList = [root, grandchild]
+    grandchild.InList = [root]
 
     class Document:
         def __init__(self):
@@ -513,7 +516,7 @@ def test_delete_leaf_refuses_or_recursively_deletes_without_orphans():
     refused = object_crud.delete_object_gui("Doc", "Body", freecad=freecad)
 
     assert refused["refused"] is True
-    assert [item["name"] for item in refused["dependents"]] == ["Pad", "Fillet"]
+    assert [item["name"] for item in refused["dependents"]] == ["Fillet", "Pad"]
     assert refused["deleted"] == []
     assert document.removed == []
     assert document.recompute_calls == 0
@@ -538,12 +541,16 @@ def test_delete_leaf_force_reports_preserved_dependents():
         TypeId="PartDesign::Pad",
         State=["Touched"],
         OutList=[],
+        InList=[],
+        Group=[],
     )
     root = SimpleNamespace(
         Name="Body",
         TypeId="PartDesign::Body",
         State=[],
-        OutList=[dependent],
+        OutList=[],
+        InList=[],
+        Group=[dependent],
     )
     objects = {"Body": root, "Pad": dependent}
     document = SimpleNamespace(
@@ -565,6 +572,67 @@ def test_delete_leaf_force_reports_preserved_dependents():
     assert result["deleted"] == ["Body"]
     assert result["orphans_left"] == ["Pad"]
     assert set(objects) == {"Pad"}
+
+
+def test_recursive_feature_delete_removes_deepest_consumers_but_keeps_body_owner():
+    class Node:
+        def __init__(self, name, type_id):
+            self.Name = name
+            self.TypeId = type_id
+            self.State = []
+            self.OutList = []
+            self.InList = []
+            self.Group = []
+
+        def isDerivedFrom(self, type_id):
+            return self.TypeId == type_id
+
+    body = Node("Body", "PartDesign::Body")
+    sketch = Node("Sketch", "Sketcher::SketchObject")
+    pad = Node("Pad", "PartDesign::Pad")
+    fillet = Node("Fillet", "PartDesign::Fillet")
+    body.Group = [sketch, pad, fillet]
+    body.Tip = fillet
+    sketch.InList = [body, pad]
+    pad.InList = [body, fillet]
+    fillet.InList = [body]
+
+    class Document:
+        def __init__(self):
+            self.objects = {
+                item.Name: item for item in (body, sketch, pad, fillet)
+            }
+            self.removed = []
+
+        def getObject(self, name):
+            return self.objects.get(name)
+
+        def removeObject(self, name):
+            self.removed.append(name)
+            self.objects.pop(name, None)
+            if body.Tip is fillet and name == "Fillet":
+                body.Tip = pad
+            if body.Tip is pad and name == "Pad":
+                body.Tip = sketch
+
+        def recompute(self):
+            return None
+
+    document = Document()
+    result = object_crud.delete_object_gui(
+        "Doc",
+        "Pad",
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: document,
+            Console=SimpleNamespace(PrintMessage=lambda _message: None),
+        ),
+        recursive=True,
+    )
+
+    assert result["deleted"] == ["Fillet", "Pad"]
+    assert document.removed == ["Fillet", "Pad"]
+    assert set(document.objects) == {"Body", "Sketch"}
+    assert body.Tip is sketch
 
 
 def test_expression_mutation_receives_the_exact_injected_freecad():

@@ -26,6 +26,7 @@ import json
 import math
 import os
 import sys
+import uuid
 from unittest.mock import MagicMock
 
 import pytest
@@ -79,6 +80,7 @@ _LIVE_TYPED_RPC_METHODS = frozenset(
     {
         "body_create",
         "body_set_tip",
+        "delete_object",
         "diagnose_parametric",
         "set_expression",
         "sketch_add_constraint",
@@ -369,6 +371,7 @@ class LiveFreeCADConnection:
         install(module_registry=sys.modules)
         self.doc = FreeCAD.newDocument(doc_name)
         self._typed_rpc = None
+        self._use_native_history_leaf = True
         self._globals = {
             "FreeCAD": FreeCAD,
             "Part": _Part,
@@ -479,10 +482,69 @@ class LiveFreeCADConnection:
         )
 
     def undo(self, doc_name):
-        return self._dispatch("undo", doc_name)
+        if not getattr(self, "_use_native_history_leaf", False):
+            return self._dispatch("undo", doc_name)
+        return self._history_mutation("undo", doc_name)
 
     def redo(self, doc_name):
-        return self._dispatch("redo", doc_name)
+        if not getattr(self, "_use_native_history_leaf", False):
+            return self._dispatch("redo", doc_name)
+        return self._history_mutation("redo", doc_name)
+
+    def _history_mutation(self, action: str, doc_name: str):
+        """Exercise the production history leaf while bypassing test transport auth."""
+
+        from addon.FreeCADMCP.part3_collaboration.history_head import (
+            capture_redo_head,
+            capture_undo_head,
+        )
+        from addon.FreeCADMCP.part3_collaboration.identity import (
+            bootstrap_identity_selector,
+        )
+        from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.recompute_helpers import (
+            redo_gui,
+            undo_gui,
+        )
+
+        document = FreeCAD.getDocument(doc_name)
+        if document is None:
+            return {
+                "success": False,
+                "ok": False,
+                "error_code": "DOCUMENT_NOT_FOUND",
+                "error": f"Document {doc_name!r} not found",
+            }
+        identity = bootstrap_identity_selector(document)
+        selector = {
+            "document_uid": identity.document_uid,
+            "document_instance_id": identity.document_instance_id,
+            "lifecycle_epoch": identity.lifecycle_epoch,
+            "document_name": identity.document_name,
+        }
+        operation_id = f"live-fixture-{action}-{uuid.uuid4()}"
+        if action == "undo":
+            head = capture_undo_head(document)
+            result = undo_gui(
+                selector,
+                operation_id=operation_id,
+                expected_undo_count=head["undo_count"],
+                expected_undo_head=head["undo_head"],
+                actor_id="live-freecad-e2e",
+                freecad=FreeCAD,
+                rpc=self._rpc,
+            )
+        else:
+            head = capture_redo_head(document)
+            result = redo_gui(
+                selector,
+                operation_id=operation_id,
+                expected_redo_count=head["redo_count"],
+                expected_redo_head=head["redo_head"],
+                actor_id="live-freecad-e2e",
+                freecad=FreeCAD,
+                rpc=self._rpc,
+            )
+        return self._rpc._adapt_gui_mutation_result(result)
 
     def get_mutation_readiness(self, doc_name=None):
         return self._dispatch("get_mutation_readiness", doc_name)

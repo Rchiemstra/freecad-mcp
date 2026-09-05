@@ -110,7 +110,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="save_document_copy",
-            docstring='Run native Save Copy via ``saveCopyWithOutcome`` and verify a stable live\nFCStd hash, metadata, required archive members, and CRC. The canonical\nsavepoint must not move and pending-file state must remain intact.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document. ``overwrite=False``\nrefuses an existing destination.',
+            docstring='Run native Save Copy via ``saveCopyWithOutcome`` and verify a stable live\nFCStd hash, metadata, required archive members, and CRC. The canonical\nsavepoint must not move and pending-file state must remain intact.\n\nSave Copy remains available as an extraction path for quarantined or poisoned\ndocuments. Such a result is marked ``recovery_only=true`` and\n``model_state_verified=false``: archive structure and storage durability are\nverified, but the model must be inspected after reopening and the operation\ndoes not clear quarantine.\n\nSelect the open document with ``document_name`` or ``canonical_path``; if both\nare supplied, they must identify the same live document. ``overwrite=False``\nrefuses an existing destination.',
             signature="(ctx: 'Context', selector: 'DocumentSelectorInput', destination: 'str', overwrite: 'bool' = False, validation_profile: 'str' = 'default') -> 'CallToolResult'",
             operation_path="freecad_mcp.capabilities.gateway_refs.connection:save_document_copy",
             rpc_method="save_document_copy",

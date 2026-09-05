@@ -256,19 +256,96 @@ def edit_object_gui(
 
 
 def _object_dependents(root) -> list[Any]:
-    seen = {id(root)}
+    def links(item, attribute: str) -> tuple[Any, ...]:
+        return tuple(getattr(item, attribute, ()) or ())
+
+    def is_derived(item, type_id: str) -> bool:
+        try:
+            return bool(item.isDerivedFrom(type_id))
+        except Exception:
+            return str(getattr(item, "TypeId", "")) == type_id
+
+    def owns(container, item) -> bool:
+        return any(member is item for member in links(container, "Group"))
+
+    def owning_container(item):
+        getter = getattr(item, "getParentGeoFeatureGroup", None)
+        if callable(getter):
+            try:
+                owner = getter()
+            except Exception:
+                owner = None
+            if owner is not None and owns(owner, item):
+                return owner
+        for candidate in links(item, "InList"):
+            if owns(candidate, item):
+                return candidate
+        return None
+
+    def ownership_exclusions(container) -> set[int]:
+        # A PartDesign Body's Origin and its axes/planes are implementation-
+        # owned. The Body removes that closure itself; deleting any member as
+        # an ordinary dependent tears attachment state down prematurely.
+        excluded: set[int] = set()
+
+        def mark(item) -> None:
+            identity = id(item)
+            if identity in excluded:
+                return
+            excluded.add(identity)
+            for child in links(item, "OutList"):
+                mark(child)
+
+        origin = getattr(container, "Origin", None) if container is not None else None
+        if origin is not None:
+            mark(origin)
+        return excluded
+
+    owner = owning_container(root)
+    root_is_container = (
+        is_derived(root, "PartDesign::Body")
+        or is_derived(root, "App::DocumentObjectGroup")
+        or is_derived(root, "App::Part")
+    )
+    excluded = ownership_exclusions(root if root_is_container else owner)
+    if owner is not None:
+        excluded.add(id(owner))
+
+    seen = {id(root), *excluded}
     ordered: list[Any] = []
 
-    def visit(item) -> None:
-        for dependent in getattr(item, "OutList", ()) or ():
+    def visit_downstream(item, allowed: set[int] | None = None) -> None:
+        identity = id(item)
+        if identity in seen:
+            return
+        seen.add(identity)
+        for dependent in links(item, "InList"):
             identity = id(dependent)
-            if identity in seen:
+            if identity in seen or (allowed is not None and identity not in allowed):
                 continue
-            seen.add(identity)
-            ordered.append(dependent)
-            visit(dependent)
+            # Containers own their members and are not downstream feature
+            # consumers. In particular, deleting a Body member must never
+            # recursively delete the Body merely because Group/Tip links point
+            # back to it.
+            if owns(dependent, item):
+                seen.add(identity)
+                continue
+            visit_downstream(dependent, allowed)
+        if item is not root:
+            ordered.append(item)
 
-    visit(root)
+    if root_is_container:
+        payload = links(root, "Group") or links(root, "OutList")
+        payload = tuple(item for item in payload if id(item) not in excluded)
+        allowed = {id(item) for item in payload}
+        for item in payload:
+            visit_downstream(item, allowed)
+    else:
+        # InList is the downstream graph: later PartDesign features and other
+        # consumers point back to the feature they require. Postorder gives a
+        # safe deletion sequence with deepest consumers first.
+        seen.remove(id(root))
+        visit_downstream(root)
     return ordered
 
 
@@ -392,8 +469,10 @@ def delete_object_gui(
         if dependent_names and not recursive and not force:
             return _delete_refusal_result(result, root_name, dependents)
 
-        delete_order = list(reversed(dependent_names)) if recursive else []
-        delete_order.append(root_name)
+        # Dependents are returned in downstream postorder. Remove the deepest
+        # consumers first, then the requested target; owning containers and
+        # Body Origin implementation objects are deliberately not included.
+        delete_order = [*dependent_names, root_name] if recursive else [root_name]
         deleted, errors = _remove_object_names(doc, delete_order)
         if errors:
             return _delete_failure_result(result, deleted, errors)

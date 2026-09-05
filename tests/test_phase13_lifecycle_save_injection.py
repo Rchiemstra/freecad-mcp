@@ -64,6 +64,12 @@ class _Document:
         self.last_save_failed = False
         self.durability_verified = True
         self.native_warnings: list[str] = []
+        self.dependencies: list[_Document] = []
+        self.dependency_sort_arguments: list[bool] = []
+
+    def getDependentDocuments(self, sort=True):
+        self.dependency_sort_arguments.append(bool(sort))
+        return [self, *self.dependencies]
 
     def hasPendingFileChanges(self):
         return self.pending_file_changes
@@ -147,10 +153,14 @@ class _OutcomeDocument(_Document):
         }
 
 
-def _facade(document: _Document | None):
+def _facade(document: _Document | None, *additional_documents: _Document):
+    documents = {
+        item.Name: item
+        for item in ((document,) if document else ()) + additional_documents
+    }
     freecad = SimpleNamespace(
-        getDocument=lambda name: document if document and name == document.Name else None,
-        listDocuments=lambda: ({document.Name: document} if document else {}),
+        getDocument=lambda name: documents.get(name),
+        listDocuments=lambda: dict(documents),
     )
     return SimpleNamespace(
         _execution_collaborators=SimpleNamespace(freecad=freecad),
@@ -681,3 +691,44 @@ def test_save_and_finalize_cannot_clear_a_rollback_quarantine() -> None:
         assert mutation_readiness.document_readiness(document)["quarantined"] is True
     finally:
         mutation_readiness.clear_quarantine(document)
+
+
+def test_canonical_save_is_blocked_by_quarantined_external_dependency() -> None:
+    document = _Document()
+    dependency = _Document()
+    dependency.Name = "LinkedParts"
+    dependency.FileName = "/work/LinkedParts.FCStd"
+    document.dependencies = [dependency]
+    mutation_readiness.mark_quarantined(dependency, "dependency rollback failed")
+    try:
+        result = native_lifecycle_methods.save_document(
+            _facade(document), {"document_name": "Model"}
+        )
+    finally:
+        mutation_readiness.clear_quarantine(dependency)
+
+    assert result["error_code"] == "DOCUMENT_QUARANTINED"
+    assert result["document_name"] == "Model"
+    assert result["blocking_document"] == "LinkedParts"
+    assert "LinkedParts" in result["error"]
+    assert document.dependency_sort_arguments == [False]
+    assert document.calls == []
+
+
+def test_canonical_save_ignores_quarantined_unrelated_open_document() -> None:
+    document = _Document()
+    unrelated = _Document()
+    unrelated.Name = "Unrelated"
+    unrelated.FileName = "/work/Unrelated.FCStd"
+    mutation_readiness.mark_quarantined(unrelated, "unrelated rollback failed")
+    try:
+        result = native_lifecycle_methods.save_document(
+            _facade(document, unrelated), {"document_name": "Model"}
+        )
+    finally:
+        mutation_readiness.clear_quarantine(unrelated)
+
+    assert result["success"] is True
+    assert result.get("blocking_document") is None
+    assert document.dependency_sort_arguments == [False]
+    assert document.calls == [("save_outcome", "/work/Model.FCStd")]

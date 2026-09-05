@@ -326,24 +326,60 @@ def _outcome_result(  # noqa: C901
 
 
 def _quarantine_failure(document: Any) -> dict[str, Any] | None:
-    """Never persist/release a document whose rollback integrity is unproven."""
+    """Never persist/release a canonical dependency closure with unproven state."""
 
-    readiness = document_readiness(document)
-    if not readiness.get("quarantined") and not readiness.get(
-        "collaboration_poisoned"
-    ):
-        return None
-    return {
-        **_error(
-            "DOCUMENT_QUARANTINED",
-            "The document is quarantined after an unverified rollback; close and reopen a "
-            "verified archive before saving or finalizing it.",
-        ),
-        "document_name": str(getattr(document, "Name", "") or ""),
-        "mutation_readiness": [readiness],
-        "finalized": False,
-        "released": False,
-    }
+    documents = [document]
+    dependent_documents = getattr(document, "getDependentDocuments", None)
+    if callable(dependent_documents):
+        try:
+            # The unsorted native API returns the real persistent PropertyXLink
+            # closure and includes the selected document itself. Avoid scanning
+            # every open document: an unrelated quarantine must not block save.
+            dependencies = tuple(dependent_documents(False))
+        except Exception as exc:
+            return {
+                **_error(
+                    "DEPENDENCY_CLOSURE_UNAVAILABLE",
+                    "Canonical save could not verify the document dependency closure: "
+                    f"{exc}",
+                ),
+                "document_name": str(getattr(document, "Name", "") or ""),
+                "blocking_document": str(getattr(document, "Name", "") or ""),
+                "finalized": False,
+                "released": False,
+            }
+        seen = {id(document)}
+        for dependency in sorted(
+            dependencies,
+            key=lambda item: str(getattr(item, "Name", "") or ""),
+        ):
+            if dependency is None or id(dependency) in seen:
+                continue
+            seen.add(id(dependency))
+            documents.append(dependency)
+
+    for candidate in documents:
+        readiness = document_readiness(candidate)
+        if not readiness.get("quarantined") and not readiness.get(
+            "collaboration_poisoned"
+        ):
+            continue
+        blocking_name = str(getattr(candidate, "Name", "") or "<unnamed>")
+        target_name = str(getattr(document, "Name", "") or "")
+        return {
+            **_error(
+                "DOCUMENT_QUARANTINED",
+                f"Canonical save is blocked by document {blocking_name!r}, whose rollback "
+                "integrity is unproven; close and reopen a verified archive before saving "
+                "or finalizing the dependency closure.",
+            ),
+            "document_name": target_name,
+            "blocking_document": blocking_name,
+            "mutation_readiness": [readiness],
+            "finalized": False,
+            "released": False,
+        }
+    return None
 
 
 def _selector_error(selector: Any) -> dict[str, Any] | None:
@@ -440,9 +476,15 @@ def _save_copy_gui(  # noqa: C901
     destination: str,
     overwrite: bool,
 ) -> dict[str, Any]:
-    quarantine = _quarantine_failure(document)
-    if quarantine is not None:
-        return quarantine
+    # Save Copy is the recovery escape hatch: unlike canonical Save/Save As it
+    # neither advances the savepoint nor releases a quarantined document.  A
+    # poisoned model may therefore be archived for manual recovery, provided
+    # the result is explicitly marked as semantically unverified.
+    recovery_readiness = document_readiness(document)
+    recovery_only = bool(
+        recovery_readiness.get("quarantined")
+        or recovery_readiness.get("collaboration_poisoned")
+    )
     if not destination:
         return _error("DESTINATION_REQUIRED", "destination is required")
     canonical_before = _document_path(document)
@@ -519,6 +561,20 @@ def _save_copy_gui(  # noqa: C901
             ),
         )
         return result
+    if recovery_only and result.get("success"):
+        warning = (
+            "The FCStd copy is structurally and durably verified, but its model state "
+            "is not trusted because the live document remains quarantined or poisoned. "
+            "Use this copy only for manual recovery; it did not release the quarantine "
+            "or advance the canonical savepoint."
+        )
+        result.update(
+            recovery_only=True,
+            model_state_verified=False,
+            warning_code="UNVERIFIED_QUARANTINE_RECOVERY_COPY",
+            warning=warning,
+            mutation_readiness=[recovery_readiness],
+        )
     return result
 
 

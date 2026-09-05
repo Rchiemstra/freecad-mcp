@@ -64,6 +64,9 @@ def test_typed_cad_adapter_publishes_one_exact_structural_revision_event():
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.object_crud import (
         create_object,
     )
+    from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.mutation_health import (
+        adapt_gui_mutation_result,
+    )
     from addon.FreeCADMCP.rpc_server.mutation_guard_ops.validate_invariants import (
         validate_document_invariants,
     )
@@ -87,17 +90,25 @@ def test_typed_cad_adapter_publishes_one_exact_structural_revision_event():
 
     class RecordingAPI:
         def commit_compatibility_mutation(
-            self, document_name, callback, *, structural=False
+            self,
+            document_name,
+            callback,
+            *,
+            structural=False,
+            postcondition=None,
         ):
             native_result = bridge.commit_compatibility_mutation(
-                document_name, callback, structural=structural
+                document_name,
+                callback,
+                structural=structural,
+                postcondition=postcondition,
             )
             native_results.append(native_result)
             return native_result
 
     collaborators = SimpleNamespace(
         freecad=FreeCAD,
-        create_object_gui=lambda document_name, obj: (
+        create_object_gui=lambda document_name, obj, *, recompute=True: (
             FreeCAD.getDocument(document_name).addObject(obj.type, obj.name)
             is not None
         ),
@@ -109,19 +120,17 @@ def test_typed_cad_adapter_publishes_one_exact_structural_revision_event():
     facade = SimpleNamespace(
         _cad_collaborators=collaborators,
         _dispatch_gui=lambda callback: callback(),
-        _adapt_gui_mutation_result=lambda result, success_fields=None: {
-            "success": result is True,
-            **(success_fields or {}),
-        },
+        _adapt_gui_mutation_result=adapt_gui_mutation_result,
     )
 
     try:
         result = create_object(
             facade,
             document.Name,
-            {"Type": "App::FeaturePython", "Name": "RemoteFeature"},
+            {"Type": "App::DocumentObjectGroup", "Name": "RemoteFeature"},
         )
-        assert result == {"success": True, "object_name": "RemoteFeature"}
+        assert result["success"] is True, result
+        assert result["object_name"] == "RemoteFeature"
         assert len(native_results) == 1
         assert native_results[0]["status"] == "Committed"
         assert native_results[0]["committed"] is True

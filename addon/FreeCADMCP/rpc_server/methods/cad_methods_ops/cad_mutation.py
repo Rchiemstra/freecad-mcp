@@ -64,6 +64,23 @@ def current_cad_mutation_rpc_method() -> str | None:
     return _ACTIVE_RPC_METHOD.get()
 
 
+def _document_name(document: Any) -> str:
+    return str(getattr(document, "Name", "") or "<unnamed>")
+
+
+def _readiness_failure_message(blocked: list[dict[str, Any]]) -> str:
+    details = []
+    for item in blocked:
+        name = str(item.get("document") or "<unnamed>")
+        reasons = ", ".join(str(reason) for reason in item.get("reasons") or ())
+        diagnostic = str(item.get("diagnostic") or "")
+        description = reasons or "native readiness rejected the mutation"
+        if diagnostic:
+            description += f" ({diagnostic})"
+        details.append(f"document {name!r}: {description}")
+    return "Mutation refused because " + "; ".join(details)
+
+
 def _pause_is_already_admitted(
     item: dict[str, Any], reasons: list[str] | None = None
 ) -> bool:
@@ -103,7 +120,7 @@ def admit_cad_mutation(
         "success": False,
         "ok": False,
         "error_code": "MUTATION_NOT_READY",
-        "error": "document is not ready for mutation",
+        "error": _readiness_failure_message(blocked),
         "mutation_readiness": blocked,
         "waited_for_readiness": waited_for_readiness,
         "retryable": any(
@@ -188,14 +205,24 @@ def native_mutation_rejection(
     status = native_result.get("status") if isinstance(native_result, dict) else None
     if _rollback_failed(native_result):
         mark_quarantined(document, "native compatibility mutation rollback failed")
+    document_name = _document_name(document) if document is not None else ""
+    native_message = (
+        str(native_result.get("message") or "")
+        if isinstance(native_result, dict)
+        else ""
+    )
+    error = f"Native compatibility mutation rejected {operation_label}"
+    if document_name:
+        error += f" in document {document_name!r}"
+    if status:
+        error += f" ({status})"
+    if native_message:
+        error += f": {native_message}"
     result = {
         "success": False,
         "ok": False,
         "error_code": "NATIVE_COMPATIBILITY_MUTATION_REJECTED",
-        "error": (
-            f"Native compatibility mutation rejected {operation_label}"
-            + (f" ({status})" if status else "")
-        ),
+        "error": error,
         "native_status": status,
     }
     if isinstance(native_result, dict):
@@ -205,6 +232,7 @@ def native_mutation_rejection(
             if key in native_result:
                 result[key] = native_result[key]
     if document is not None:
+        result["document_name"] = document_name
         readiness = document_readiness(document)
         result["mutation_readiness"] = [readiness]
         result["retryable"] = readiness["ready"]

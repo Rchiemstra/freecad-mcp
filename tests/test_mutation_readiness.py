@@ -150,6 +150,8 @@ def test_malformed_native_readiness_blocks_admission_before_native_commit():
     result = run_cad_mutation(collaborators, "Model", lambda: True)
 
     assert result["error_code"] == "MUTATION_NOT_READY"
+    assert "document 'Model'" in result["error"]
+    assert "native_readiness_unavailable" in result["error"]
     assert result["mutation_readiness"][0]["reasons"] == [
         "native_readiness_unavailable"
     ]
@@ -463,6 +465,7 @@ def test_native_rejection_reports_readiness_and_quarantines_detected_rollback_fa
             "status": "RollbackFailed",
             "committed": False,
             "rollback_succeeded": False,
+            "message": "rollback could not restore Pad_Holes.Shape",
         },
         validate_document_invariants=lambda _document: None,
     )
@@ -470,6 +473,9 @@ def test_native_rejection_reports_readiness_and_quarantines_detected_rollback_fa
     result = run_cad_mutation(collaborators, "Model", lambda: True)
 
     assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+    assert result["document_name"] == "Model"
+    assert "document 'Model'" in result["error"]
+    assert "rollback could not restore Pad_Holes.Shape" in result["error"]
     assert result["mutation_readiness"][0]["reasons"] == ["document_quarantined"]
     assert result["retryable"] is False
 

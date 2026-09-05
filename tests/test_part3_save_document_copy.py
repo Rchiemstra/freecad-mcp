@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.rpc_server.methods import native_lifecycle_methods
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import mutation_readiness
 from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops import (
     dispatch_core_enforcement_auth,
 )
@@ -87,6 +88,32 @@ def test_save_document_copy_writes_copy_without_moving_canonical_savepoint():
         assert result["success"] is True
         assert result["saved"] is True
         assert result["save_disposition"] == "copy_written"
+        assert document.FileName == canonical
+        assert os.path.isfile(copy_path)
+
+
+def test_save_document_copy_extracts_quarantined_document_as_unverified_recovery():
+    with tempfile.TemporaryDirectory() as tmp:
+        canonical = os.path.join(tmp, "Model.FCStd")
+        copy_path = os.path.join(tmp, "Model-recovery.FCStd")
+        _write_minimal_fcstd(canonical)
+        document = _mock_document(canonical_path=canonical)
+        mutation_readiness.mark_quarantined(document, "rollback failed")
+        try:
+            result = native_lifecycle_methods._save_copy_gui(
+                document,
+                copy_path,
+                overwrite=False,
+            )
+        finally:
+            mutation_readiness.clear_quarantine(document)
+
+        assert result["success"] is True
+        assert result["saved"] is True
+        assert result["recovery_only"] is True
+        assert result["model_state_verified"] is False
+        assert result["warning_code"] == "UNVERIFIED_QUARANTINE_RECOVERY_COPY"
+        assert result["mutation_readiness"][0]["quarantined"] is True
         assert document.FileName == canonical
         assert os.path.isfile(copy_path)
 

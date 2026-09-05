@@ -290,7 +290,9 @@ def test_native_rejection_without_callback_fails_closed_in_execute_envelope(
     assert gui_calls == []
     assert result["success"] is False
     assert result["is_error"] is True
-    assert result["error"] == "Native compatibility mutation rejected execution (Rejected)"
+    assert result["error"] == (
+        "Native compatibility mutation rejected execution in document 'Model' (Rejected)"
+    )
     assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
     assert result["native_status"] == "Rejected"
     assert result["mutation_readiness"][0]["ready"] is True
@@ -327,7 +329,8 @@ def test_native_rejection_after_callback_fails_closed_in_execute_envelope(
     assert result["success"] is False
     assert result["is_error"] is True
     assert result["error"] == (
-        "Native compatibility mutation rejected execution (PostconditionFailed)"
+        "Native compatibility mutation rejected execution in document 'Model' "
+        "(PostconditionFailed)"
     )
     assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
     assert result["native_status"] == "PostconditionFailed"
@@ -399,7 +402,10 @@ def test_gui_error_requests_native_rollback_and_preserves_error_envelope(monkeyp
     assert api.callback_failures == 1
     assert api.callback_results == []
     assert result["success"] is False
-    assert result["error"] == "historical execute failure"
+    assert result["error"] == (
+        "execute_code failed in document 'Model': historical execute failure"
+    )
+    assert result["document_name"] == "Model"
     assert result["traceback"] == "traceback-contract"
     assert result["session"] == {"saved": False}
     assert result["message"] == "partial output"
@@ -837,7 +843,9 @@ def test_generated_post_recompute_failure_preserves_precise_error_after_rollback
 
     assert events == ["apply", "native-recompute"]
     assert result["success"] is False
-    assert result["error"] == "postcondition rejected"
+    assert result["error"] == (
+        "execute_code failed in document 'Model': postcondition rejected"
+    )
     assert result["mutation_readiness"][0]["ready"] is True
     assert result["retryable"] is True
 

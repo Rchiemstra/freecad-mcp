@@ -27,9 +27,13 @@ def finalize_gui_execute_response(
             }
         )
     tb = res.get("traceback")
+    document_name = str(options.get("document") or "")
+    error = str(res.get("error", "Unknown error"))
+    if document_name and f"document {document_name!r}" not in error:
+        error = f"execute_code failed in document {document_name!r}: {error}"
     failure = {
         "success": False,
-        "error": res.get("error", "Unknown error"),
+        "error": error,
         "traceback": tb,
         "structured": tb,
         "session": res.get("session", {}),
@@ -47,7 +51,10 @@ def finalize_gui_execute_response(
         "rollback_succeeded",
         "rollback_failed",
         "diagnostic",
+        "document_name",
     ):
         if key in res:
             failure[key] = res[key]
+    if document_name:
+        failure.setdefault("document_name", document_name)
     return annotate(failure)

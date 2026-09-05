@@ -68,12 +68,23 @@ def execute_mutation_with_health(
         )
     ]
     if blocked:
+        blocked_details = []
+        for item in blocked:
+            name = str(item.get("document") or "<unnamed>")
+            reasons = ", ".join(
+                str(reason) for reason in item.get("reasons") or ()
+            )
+            diagnostic = str(item.get("diagnostic") or "")
+            detail = reasons or "native readiness rejected the mutation"
+            if diagnostic:
+                detail += f" ({diagnostic})"
+            blocked_details.append(f"document {name!r}: {detail}")
         return (
             {
                 "success": False,
                 "ok": False,
                 "error_code": "MUTATION_NOT_READY",
-                "error": "document is not ready for mutation",
+                "error": "Mutation refused because " + "; ".join(blocked_details),
                 "readiness": blocked,
                 "waited_for_readiness": waited_for_readiness,
             },

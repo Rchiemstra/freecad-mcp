@@ -84,6 +84,44 @@ def test_delete_recursive_removes_dependents(freecad_session):
     assert not (remaining & gone), f"orphans left: {remaining & gone}"
 
 
+def test_delete_recursive_mid_chain_feature_keeps_body_and_clears_later_tip(
+    freecad_session,
+):
+    doc = freecad_session.doc
+    body = doc.addObject("PartDesign::Body", "FeatureBody")
+    box = body.newObject("PartDesign::Feature", "BaseFeature")
+    box.Shape = Part.makeBox(10.0, 10.0, 10.0)
+    later = body.newObject("PartDesign::Feature", "LaterFeature")
+    later.addProperty("App::PropertyLink", "InputFeature")
+    later.InputFeature = box
+    later.Shape = Part.makeBox(12.0, 10.0, 10.0)
+    body.Tip = later
+    doc.recompute()
+    assert box.isValid()
+    assert later.isValid()
+    assert body.Tip is later
+    box_name = box.Name
+    later_name = later.Name
+    origin_name = body.Origin.Name
+
+    response = delete_object_operation(
+        freecad_session,
+        True,
+        doc.Name,
+        box_name,
+        recursive=True,
+    )
+    payload = _payload(response)
+
+    assert payload["ok"] is True
+    assert payload["deleted"] == [later_name, box_name]
+    assert doc.getObject(body.Name) is body
+    assert doc.getObject(origin_name) is body.Origin
+    assert doc.getObject(later_name) is None
+    assert doc.getObject(box_name) is None
+    assert body.Tip is None
+
+
 def test_partially_completed_recursive_delete_restores_status_and_readiness(
     freecad_session,
 ):

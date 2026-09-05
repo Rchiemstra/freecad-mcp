@@ -105,6 +105,17 @@ def _register_execute_code(
         ``read_only=true`` may temporarily rotate/recompute geometry in the worker
         snapshot; it only forbids modifying the live GUI documents.
 
+        LIVE MUTATION RECOMPUTE — with ``recompute="target"``, the Python body runs
+        under a deferred-recompute fence. Calling ``doc.recompute()`` in that body does
+        not execute newly created features, so their ``Shape`` values are unavailable
+        until the authoritative recompute after the body returns. Create or mutate in
+        one call and inspect geometry in a second call. Signed typed feature tools may
+        use their post-recompute continuation to verify geometry in one operation.
+        Create documents with ``create_document`` before entering this scoped mutation;
+        ``App.newDocument()`` is deliberately unavailable inside a prepared commit.
+        GUI mutations are non-preemptible, so ``timeout_seconds`` applies only to worker
+        execution and is deliberately rejected for GUI mode.
+
         Args:
             code: The Python code to execute.
             document: Target document name for scoped recompute/error reporting.
