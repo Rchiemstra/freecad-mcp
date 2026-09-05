@@ -65,19 +65,6 @@ class _Document:
         self._readiness = _native_payload()
 
 
-@pytest.fixture(autouse=True)
-def _reset_readiness_state():
-    mutation_readiness._QUARANTINED.clear()
-    automation_pause._paused = False
-    automation_pause._active.clear()
-    automation_pause._last_finished = None
-    yield
-    mutation_readiness._QUARANTINED.clear()
-    automation_pause._paused = False
-    automation_pause._active.clear()
-    automation_pause._last_finished = None
-
-
 def test_native_not_ready_and_recomputing_are_authoritative_stable_blockers():
     document = _Document(
         readiness={"ready": False, "recomputing": True, "must_execute": True}

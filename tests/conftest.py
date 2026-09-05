@@ -31,6 +31,8 @@ from unittest.mock import MagicMock
 import pytest
 from mcp.types import ImageContent, TextContent
 
+from addon.FreeCADMCP import automation_pause
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import mutation_readiness
 from tests.helpers import (
     runtime_bootstrap,  # noqa: F401  - install PySide/FreeCADGui stubs
 )
@@ -129,6 +131,35 @@ def _clear_legacy_rpc_runtime_test_overrides():
         for name in _RPC_RUNTIME_COMPATIBILITY_NAMES:
             if name in namespace:
                 delattr(module, name)
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_mutation_gate_state():
+    """Reset process-wide quarantine/pause state before and after every test.
+
+    ``mutation_readiness._QUARANTINED`` keys on ``(Name, id(document), Uid)``
+    (see its ``_lifecycle_key``); test doubles rarely set ``Uid``, so the key
+    collapses to ``(Name, id(document))``. CPython recycles a freed object's
+    id, and many test files reuse the document name "Model" -- so a test that
+    quarantines a document and does not clear it (directly, or indirectly via
+    a production rollback path it exercises) can leak a stale block into an
+    unrelated *later* test whose fresh document happens to land at the same
+    address, silently rejecting its mutation before any code runs. This
+    previously lived as a local fixture in test_mutation_readiness.py, which
+    only protected that one file; centralizing it here covers the whole
+    suite, including test_phase13_lifecycle_save_injection.py's quarantine
+    test that was leaking into test_phase14_execute_worker_injection.py.
+    """
+
+    mutation_readiness._QUARANTINED.clear()
+    automation_pause._paused = False
+    automation_pause._active.clear()
+    automation_pause._last_finished = None
+    yield
+    mutation_readiness._QUARANTINED.clear()
+    automation_pause._paused = False
+    automation_pause._active.clear()
+    automation_pause._last_finished = None
 
 
 # ---------------------------------------------------------------------------
