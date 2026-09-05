@@ -145,13 +145,24 @@ def postflight_cad_mutation(
         return result
     if not reasons or _pause_is_already_admitted(readiness, reasons):
         return result
+    warning = {
+        "code": "MUTATION_NOT_READY_AFTER_COMMIT",
+        "message": "Mutation committed but the document is not ready for another mutation",
+    }
+    if isinstance(result, dict):
+        committed = dict(result)
+        committed["ready_for_next_mutation"] = False
+        committed["readiness_warning"] = warning
+        committed["mutation_readiness"] = [readiness]
+        committed["retryable"] = False
+        return committed
     return {
-        "success": False,
-        "ok": False,
-        "error_code": "MUTATION_NOT_READY_AFTER_COMMIT",
-        "error": "Mutation committed but the document is not ready for another mutation",
+        "success": True,
+        "ok": True,
+        "result": result,
+        "ready_for_next_mutation": False,
+        "readiness_warning": warning,
         "mutation_readiness": [readiness],
-        "committed_result": result,
         "retryable": False,
     }
 

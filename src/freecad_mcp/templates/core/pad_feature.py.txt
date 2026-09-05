@@ -44,6 +44,18 @@ if _diag['is_closed'] is False:
     raise RuntimeError('Sketch ' + $sketch_name + ' profile is not a closed wire; a Pad needs a closed profile. Run get_sketch_diagnostics and close the profile.')
 $extrusion_helpers
 $bool_helpers
+# Capture the last solid before the feature exists so post-recompute
+# validation can prove that this additive feature actually added material.
+_source_feature = None
+_volume_before = 0.0
+for _candidate in reversed(list(getattr(_body, 'Group', []) or [])):
+    if _candidate is _sk:
+        continue
+    _candidate_shape = getattr(_candidate, 'Shape', None)
+    if _candidate_shape and not _candidate_shape.isNull() and getattr(_candidate_shape, 'Solids', []):
+        _source_feature = getattr(_candidate, 'Name', None)
+        _volume_before = float(_candidate_shape.Volume)
+        break
 # Native typed gateway owns the transaction boundary. This payload contains no
 # transaction/undo/redo controls and is safe only beneath that gateway.
 _pad = _body.newObject('PartDesign::Pad', $pad_name)
@@ -68,6 +80,15 @@ if any(_s in ('Invalid', 'Error', 'Erroneous') for _s in _st):
 _shp = getattr(_pad, 'Shape', None)
 _has_shape = bool(_shp) and not _shp.isNull()
 _solids = len(_shp.Solids) if _has_shape else 0
+if not _has_shape or not _solids:
+    raise RuntimeError('Pad ' + _pad.Name + ' did not produce a solid.')
+_volume_after = float(_shp.Volume)
+_material_delta = _volume_after - _volume_before
+_delta_tolerance = max(1.0e-9, max(abs(_volume_before), abs(_volume_after)) * 1.0e-12)
+if abs(_material_delta) <= _delta_tolerance:
+    raise RuntimeError('ZERO_MATERIAL_DELTA: Pad ' + _pad.Name + " did not change the body's material volume.")
+if _material_delta < 0.0:
+    raise RuntimeError('MATERIAL_DELTA_DIRECTION_MISMATCH: Pad ' + _pad.Name + ' removed material.')
 _bb = _shp.BoundBox if _has_shape else None
 try:
     _support = [getattr(_s[0], 'Name', str(_s[0])) for _s in (getattr(_sk, 'AttachmentSupport', None) or [])]
@@ -82,6 +103,11 @@ _result = {
     'attachment': {'support': _support, 'map_mode': getattr(_sk, 'MapMode', None)},
     'tip': getattr(getattr(_body, 'Tip', None), 'Name', None),
     'solid_count': _solids,
+    'source_feature': _source_feature,
+    'volume_before_mm3': _volume_before,
+    'volume_after_mm3': _volume_after,
+    'material_delta_mm3': _material_delta,
+    'material_delta_tolerance_mm3': _delta_tolerance,
     'state': _st,
     'bbox': ([_bb.XMin, _bb.YMin, _bb.ZMin, _bb.XMax, _bb.YMax, _bb.ZMax] if _bb else None),
     'diagnostics': _diag,

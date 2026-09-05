@@ -347,6 +347,16 @@ class TestPadPocketHardening:
             _FEATURES_GUI_SOURCE, "body.Group", "body.Tip", "is not a Body member"
         )
 
+    def test_verifies_signed_material_delta(self):
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE,
+            "volume_before_mm3",
+            "volume_after_mm3",
+            "material_delta_mm3",
+            "ZERO_MATERIAL_DELTA",
+            "MATERIAL_DELTA_DIRECTION_MISMATCH",
+        )
+
     def test_strict_requires_explicit_body_name(self):
         assert "strict PartDesign mode requires an explicit body_name" in _FEATURES_GUI_SOURCE
 

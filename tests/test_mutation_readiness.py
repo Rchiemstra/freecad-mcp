@@ -14,6 +14,7 @@ from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
 )
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import mutation_readiness
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_mutation import (
+    postflight_cad_mutation,
     run_cad_mutation,
 )
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.mutation_readiness_wait import (
@@ -411,6 +412,29 @@ def test_deferred_native_mutation_admits_and_preserves_pending_recompute():
     assert policies == [False]
     assert document.recompute_calls == 0
     assert document.getMutationReadiness()["must_execute"] is True
+
+
+def test_committed_mutation_with_postflight_barrier_remains_successful():
+    document = _Document(
+        readiness={
+            "ready": False,
+            "must_execute": True,
+            "diagnostic": "Recompute required before the next mutation",
+        }
+    )
+
+    result = postflight_cad_mutation(
+        document,
+        {"success": True, "ok": True, "feature": "Pattern"},
+    )
+
+    assert result["success"] is True
+    assert result["ok"] is True
+    assert result["feature"] == "Pattern"
+    assert result["ready_for_next_mutation"] is False
+    assert result["readiness_warning"]["code"] == "MUTATION_NOT_READY_AFTER_COMMIT"
+    assert result["retryable"] is False
+    assert "error_code" not in result
 
 
 def test_already_admitted_deferred_mutation_may_finish_after_local_pause():

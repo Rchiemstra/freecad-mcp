@@ -24,6 +24,67 @@ if TYPE_CHECKING:
     from freecad_mcp.instrumented_server import InstrumentedFastMCP
 
 
+_RPC_V2_ONLY_TOOLS = frozenset(
+    {
+        "activate_document",
+        "animate_placement",
+        "cancel_request",
+        "capture_view_sequence",
+        "capture_view_sequence_to_disk",
+        "finalize_document_edit",
+        "get_active_screenshot",
+        "get_gui_state",
+        "get_report_view",
+        "get_request_status",
+        "get_selection",
+        "open_document",
+        "redo",
+        "refresh_view",
+        "reload_document",
+        "repair_view_placements",
+        "save_document",
+        "select_subshapes",
+        "set_section_view",
+        "set_tree_expanded",
+        "undo",
+    }
+)
+
+
+def _tool_availability(*, authenticated_rpc_v2: bool) -> dict[str, Any]:
+    if authenticated_rpc_v2:
+        return {
+            "authenticated_rpc_v2": True,
+            "unavailable_tools": [],
+            "degraded_tools": [],
+        }
+    return {
+        "authenticated_rpc_v2": False,
+        "unavailable_tools": [
+            {
+                "tool": name,
+                "reason": "requires_authenticated_rpc_v2",
+            }
+            for name in sorted(_RPC_V2_ONLY_TOOLS)
+        ],
+        "degraded_tools": [
+            {
+                "tool": "save_document_as",
+                "effective_operation": "save_document_copy",
+                "verified": False,
+                "canonical_savepoint_changed": False,
+                "limitation": "expected_destination_sha256 is not supported",
+            },
+            {
+                "tool": "save_document_copy",
+                "effective_operation": "save_document_copy",
+                "verified": False,
+                "canonical_savepoint_changed": False,
+            },
+        ],
+    }
+
+
 def _compatibility_for_manifest(manifest: Any | None) -> dict[str, Any]:
     warnings: list[str] = []
     if manifest is None:
@@ -149,6 +210,7 @@ def _runtime_info_payload() -> dict[str, Any]:
         }
     )
     server_state().compatibility_warnings = list(compatibility["warnings"])
+    authenticated_rpc_v2 = manifest is not None and compatibility["compatible"]
     return {
         "mcp": {
             "version": package_version,
@@ -178,6 +240,9 @@ def _runtime_info_payload() -> dict[str, Any]:
             "path_fingerprint": profile_fingerprint or "unknown",
         },
         "compatibility": compatibility,
+        "tool_availability": _tool_availability(
+            authenticated_rpc_v2=authenticated_rpc_v2
+        ),
     }
 
 

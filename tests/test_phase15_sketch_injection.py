@@ -221,13 +221,21 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
             self._visibility = value
 
     sketch = Sketch()
+    base = SimpleNamespace(
+        Name="BaseFeature",
+        Shape=SimpleNamespace(
+            isNull=lambda: False,
+            Solids=[object()],
+            Volume=100.0,
+        ),
+    )
 
     class Body:
         TypeId = "PartDesign::Body"
         Name = "Body"
 
         def __init__(self):
-            self.Group = [sketch]
+            self.Group = [base, sketch]
             self.Tip = None
 
         def newObject(self, actual_type, actual_name):
@@ -246,6 +254,7 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
                     BoundBox=SimpleNamespace(
                         XMin=0, YMin=0, ZMin=0, XMax=1, YMax=1, ZMax=1
                     ),
+                    Volume=(125.0 if method_name == "pad_feature" else 75.0),
                 ),
             )
             self.Group.append(feature)

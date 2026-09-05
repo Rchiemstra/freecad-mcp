@@ -35,7 +35,11 @@ from freecad_mcp.operations.core import (  # noqa: E402
     sketch_create_operation,
     undo_operation,
 )
-from tests.e2e._helpers import tool_response_text  # noqa: E402
+from tests.e2e._helpers import (  # noqa: E402
+    add_xy_sketch,
+    make_padded_circle,
+    tool_response_text,
+)
 
 pytestmark = [pytest.mark.e2e]
 
@@ -477,6 +481,48 @@ def test_body_xy_pad_pocket(freecad_session):
     assert tip_vol < pad_vol * 0.95, f"tip_vol={tip_vol} pad_vol={pad_vol}"
     expected = math.pi * (6.0**2 - 2.0**2) * 4.0
     assert abs(tip_vol - expected) / expected < 0.12, f"tip_vol={tip_vol} expected~{expected}"
+
+
+def test_zero_material_pocket_is_rejected_and_rolled_back(freecad_session):
+    conn = freecad_session
+    doc = conn.doc
+    doc_name = conn.doc.Name
+    body = doc.addObject("PartDesign::Body", "Body")
+    _, pad = make_padded_circle(body, radius=6.0, length=4.0)
+    away = add_xy_sketch(body, "Away")
+    away.addGeometry(
+        Part.Circle(
+            FreeCAD.Vector(0, 0, 0),
+            FreeCAD.Vector(0, 0, 1),
+            2.0,
+        ),
+        False,
+    )
+    doc.recompute()
+    _assert_native_mutation_ready(doc)
+
+    rejected = conn.pocket_feature(
+        doc_name,
+        "Away",
+        "ZeroPocket",
+        4.0,
+        "Body",
+        False,
+        False,
+        True,
+    )
+
+    assert rejected["success"] is False, rejected
+    assert rejected["ok"] is False, rejected
+    assert rejected["error_code"] == "ZERO_MATERIAL_DELTA", rejected
+    assert rejected["material_delta_mm3"] == pytest.approx(0.0), rejected
+    assert doc.getObject("ZeroPocket") is None
+    assert body.Tip is pad
+    pending = conn.get_mutation_readiness(doc_name)
+    assert pending["reasons"] == ["pending_recompute", "native_not_ready"], pending
+    settled = conn._dispatch("recompute_document", doc_name)
+    assert settled["success"] is True, settled
+    _assert_mutation_ready(conn, doc_name)
 
 
 def test_bad_expression_structured_error(freecad_session):

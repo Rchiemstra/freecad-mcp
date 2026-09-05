@@ -90,6 +90,11 @@ def test_runtime_info_matching_identity_and_no_credentials(monkeypatch):
     assert payload["freecad"]["pid"] == 456
     assert payload["rpc"]["protocol_version"] == 2
     assert payload["compatibility"] == {"compatible": True, "warnings": []}
+    assert payload["tool_availability"] == {
+        "authenticated_rpc_v2": True,
+        "unavailable_tools": [],
+        "degraded_tools": [],
+    }
     assert "do-not-expose" not in json.dumps(response.structuredContent)
 
 
@@ -114,9 +119,16 @@ def test_runtime_info_marks_protocol_mismatch_incompatible(monkeypatch):
         "authenticated_manifest",
         _manifest(server, build_id=server.build_id, protocol_version=1),
     )
-    compatibility = server._runtime_info_payload()["compatibility"]
+    payload = server._runtime_info_payload()
+    compatibility = payload["compatibility"]
     assert compatibility["compatible"] is False
     assert any("protocol mismatch" in item for item in compatibility["warnings"])
+    unavailable = {
+        item["tool"] for item in payload["tool_availability"]["unavailable_tools"]
+    }
+    degraded = {item["tool"] for item in payload["tool_availability"]["degraded_tools"]}
+    assert {"save_document", "refresh_view", "get_report_view"} <= unavailable
+    assert {"save_document_as", "save_document_copy"} == degraded
 
 
 @pytest.fixture(autouse=True)

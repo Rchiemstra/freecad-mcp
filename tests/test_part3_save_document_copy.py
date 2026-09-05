@@ -150,6 +150,71 @@ def test_save_document_copy_is_authenticated_and_pause_gated():
 
 def test_save_document_copy_rpc_wraps_save_copy_with_outcome():
     source = inspect.getsource(native_lifecycle_methods.save_document_copy)
-    assert "saveCopyWithOutcome" in inspect.getsource(native_lifecycle_methods._save_copy_gui)
+    assert "saveCopyWithOutcome" in inspect.getsource(
+        native_lifecycle_methods._save_copy_gui
+    )
     assert "_dispatch_gui" in source
     assert "validation_profile" in source
+
+
+def test_legacy_save_as_degrades_to_verified_on_disk_save_copy():
+    calls = []
+    collaborators = SimpleNamespace(session_manager=None)
+
+    def save_copy(*params):
+        calls.append(params)
+        return {
+            "success": True,
+            "saved": True,
+            "file_evidence": {"archive": {"ok": True}},
+            "target_path": "Model.FCStd",
+        }
+
+    facade = SimpleNamespace(
+        _execution_collaborators=collaborators,
+        save_document_as=lambda *_args: pytest.fail("canonical Save As must not run"),
+        save_document_copy=save_copy,
+    )
+    selector = {"document_name": "Model"}
+
+    result = dispatch_core.dispatch(
+        facade,
+        "save_document_as",
+        (selector, "Model.FCStd", True, "", "default"),
+    )
+
+    assert calls == [(selector, "Model.FCStd", True, "default")]
+    assert result["success"] is True
+    assert result["saved"] is True
+    assert result["verified"] is False
+    assert result["storage_verified"] is True
+    assert result["protocol_verified"] is False
+    assert result["degraded"] is True
+    assert result["effective_operation"] == "save_document_copy"
+    assert result["canonical_savepoint_changed"] is False
+    assert result["warning_code"] == "UNAUTHENTICATED_DEGRADED_SAVE_COPY"
+
+
+def test_legacy_save_as_with_expected_hash_still_requires_authenticated_v2():
+    provider = SimpleNamespace(
+        get_request_identity=lambda: {},
+        set_request_identity=lambda **_values: None,
+    )
+    collaborators = SimpleNamespace(
+        session_manager=None,
+        request_identity_provider=lambda: provider,
+    )
+    facade = SimpleNamespace(
+        _execution_collaborators=collaborators,
+        save_document_as=lambda *_args: pytest.fail("Save As must not run"),
+        save_document_copy=lambda *_args: pytest.fail("Save Copy must not run"),
+    )
+
+    result = dispatch_core.dispatch(
+        facade,
+        "save_document_as",
+        ({"document_name": "Model"}, "Model.FCStd", True, "expected-hash"),
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "LEASE_PROTOCOL_REQUIRED"

@@ -131,17 +131,6 @@ def finalize_mutation_health(  # noqa: C901
             error_code="TRANSACTION_ROLLBACK_FAILED",
             error="Document transaction rollback failed",
         )
-    elif any(
-        any(reason != "automation_paused" for reason in item["reasons"])
-        for item in post_readiness
-    ) and not failed:
-        result.update(
-            success=False,
-            outcome_status="degraded",
-            error_code="MUTATION_NOT_READY_AFTER_COMMIT",
-            error="Mutation committed but the document is not ready for another mutation",
-        )
-        failed = True
     elif (
         health.get("attempted_verdict")
         in {
@@ -157,6 +146,21 @@ def finalize_mutation_health(  # noqa: C901
             error="Mutation was rolled back because document health degraded",
         )
         failed = True
+    elif (
+        any(
+            any(reason != "automation_paused" for reason in item["reasons"])
+            for item in post_readiness
+        )
+        and not failed
+    ):
+        result["ready_for_next_mutation"] = False
+        result["readiness_warning"] = {
+            "code": "MUTATION_NOT_READY_AFTER_COMMIT",
+            "message": (
+                "Mutation committed but the document is not ready for another mutation"
+            ),
+        }
+        result["retryable"] = False
     emit_telemetry(
         "document_health",
         "document_health_checked",
@@ -170,4 +174,6 @@ def finalize_mutation_health(  # noqa: C901
             "transaction": transaction_data,
         },
     )
-    return result, bool(failed or result.get("success") is False or result.get("ok") is False)
+    return result, bool(
+        failed or result.get("success") is False or result.get("ok") is False
+    )

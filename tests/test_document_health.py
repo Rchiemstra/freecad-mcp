@@ -391,6 +391,48 @@ def test_healthy_typed_mutation_commits_with_expected_object_delta(monkeypatch):
     assert result["document_health"]["modified_objects"] == ["Model.Feature"]
 
 
+def test_committed_health_mutation_reports_postcommit_barrier_as_warning(monkeypatch):
+    feature = Obj("Feature", shape=Shape(1))
+    document = Doc(objects=(feature,))
+    _install_documents(monkeypatch, document)
+    spec = make_method_spec("health_test_mutation", "MUTATING")
+
+    def mutate():
+        feature.Label = "Committed label"
+        document.getMutationReadiness = lambda: {
+            "ready": False,
+            "stable_event_supported": True,
+            "pending_transaction": False,
+            "booked_transaction": 0,
+            "transaction_locked": False,
+            "recomputing": False,
+            "must_execute": True,
+            "pending_removal": False,
+            "commit_barrier": False,
+            "notification_replay": False,
+            "poisoned": False,
+            "quarantined": False,
+            "diagnostic": "Recompute required before the next mutation",
+        }
+        return {"success": True, "ok": True, "object_name": feature.Name}
+
+    result, failed = addon_rpc.FreeCADRPC()._execute_mutation_with_health(
+        mutate,
+        (document,),
+        spec,
+        expected_objects=("Feature",),
+    )
+
+    assert failed is False
+    assert result["success"] is True
+    assert result["ok"] is True
+    assert result["transaction"]["status"] == "committed"
+    assert result["ready_for_next_mutation"] is False
+    assert result["readiness_warning"]["code"] == "MUTATION_NOT_READY_AFTER_COMMIT"
+    assert result["retryable"] is False
+    assert "error_code" not in result
+
+
 def test_backend_failure_and_new_invalid_shape_abort_before_commit(monkeypatch):
     feature = Obj("Feature", shape=Shape(1))
     document = Doc(objects=(feature,))
@@ -415,6 +457,11 @@ def test_backend_failure_and_new_invalid_shape_abort_before_commit(monkeypatch):
 
     def degrade():
         feature.Shape = Shape(2, null=True, valid=False)
+        document.getMutationReadiness = lambda: {
+            "ready": False,
+            "must_execute": True,
+            "diagnostic": "Rollback requires recompute",
+        }
         return {"success": True, "object_name": feature.Name}
 
     degraded, failed = rpc._execute_mutation_with_health(
@@ -427,6 +474,7 @@ def test_backend_failure_and_new_invalid_shape_abort_before_commit(monkeypatch):
     assert degraded["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
     assert degraded["transaction"]["status"] == "aborted"
     assert degraded["document_health"]["attempted_verdict"] == "degraded"
+    assert "readiness_warning" not in degraded
 
 
 def test_unrelated_document_mutation_is_degraded_and_rolled_back(monkeypatch):
