@@ -136,7 +136,7 @@ def _clear_legacy_rpc_runtime_test_overrides():
 # ---------------------------------------------------------------------------
 
 def pytest_configure(config: pytest.Config) -> None:
-    for marker in ("unit", "e2e", "core", "session_e2e", "benchmark"):
+    for marker in ("unit", "e2e", "core", "session_e2e", "benchmark", "integration"):
         config.addinivalue_line("markers", marker)
 
 
@@ -153,8 +153,15 @@ def pytest_collection_modifyitems(
     tests as ``unit`` makes the job actually run them, and keeps new test files
     covered without needing a marker on each. Tests already tagged with a layer
     marker are left untouched.
+
+    ``integration`` must stay in this set too: it marks real-subprocess tests
+    (e.g. against the sibling freecad_git CLI) that need a package the unit
+    job never installs. Leaving it out of ``layers`` would let this same
+    function silently ALSO tag those tests ``unit``, so ``pytest -m unit``
+    would pick them up and fail in an environment that was never meant to run
+    them.
     """
-    layers = {"unit", "e2e", "core", "session_e2e", "benchmark"}
+    layers = {"unit", "e2e", "core", "session_e2e", "benchmark", "integration"}
     for item in items:
         if not layers.intersection(m.name for m in item.iter_markers()):
             item.add_marker(pytest.mark.unit)

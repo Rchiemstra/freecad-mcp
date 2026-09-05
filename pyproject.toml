@@ -48,6 +48,7 @@ markers = [
     "core: tests reproducing FreeCAD core C++ behavior (placement/attacher/sketcher/pad)",
     "session_e2e: opt-in throwaway-profile session recovery / soak (not part of MARKER=e2e)",
     "benchmark: reproducible end-to-end task and KPI benchmark suite",
+    "integration: real-subprocess tests against sibling monorepo tools (e.g. freecad-git CLI), no mocks",
 ]
 asyncio_mode = "auto"
 
