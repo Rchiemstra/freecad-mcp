@@ -754,9 +754,30 @@ def finalize_document_edit(
             expected_destination_sha256,
             validation_profile,
         )
+    elif save_mode in {"save_copy", "copy"}:
+        # A copy is not a finalization: it writes a second file and leaves the
+        # open document modified, so it can never satisfy the resulting_clean
+        # contract below. Say so instead of reporting an unknown mode, which
+        # reads as "copies are not supported" when the tool does exist.
+        return {
+            **_error(
+                "INVALID_SAVE_MODE",
+                "save_mode='save_copy' is not a finalization: a copy leaves the "
+                "open document modified. Call the save_document_copy tool to "
+                "write the copy, then finalize separately with save_mode='save' "
+                "or 'save_as'.",
+            ),
+            "finalized": False,
+            "released": False,
+        }
     else:
         return {
-            **_error("INVALID_SAVE_MODE", f"Unsupported save_mode: {save_mode}"),
+            **_error(
+                "INVALID_SAVE_MODE",
+                f"Unsupported save_mode: {save_mode}. Valid modes are 'save', "
+                "'save_as' and 'first_save'; use the save_document_copy tool to "
+                "write a copy without finalizing.",
+            ),
             "finalized": False,
             "released": False,
         }

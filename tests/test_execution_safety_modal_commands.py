@@ -85,3 +85,43 @@ def test_block_response_passes_clean_code_through():
         )
         is None
     )
+
+
+def test_save_copy_refusal_names_the_copy_tool_not_the_overwriting_ones():
+    """Std_SaveCopy has no counterpart in the save/save-as pair.
+
+    A copy writes a second file and deliberately leaves the open document
+    modified. Pointing a blocked Std_SaveCopy at save_document/save_document_as
+    sends the caller to tools that overwrite the document being edited.
+    """
+    blocked = modal_command_block_response(
+        lambda payload: payload,
+        code="import FreeCADGui\nFreeCADGui.runCommand('Std_SaveCopy')\n",
+        find_modal_command_risk_fn=find_modal_command_risk,
+    )
+    assert blocked is not None
+    assert blocked["error_code"] == "MODAL_GUI_COMMAND_REFUSED"
+    assert "save_document_copy" in blocked["error"]
+    assert "save_document /" not in blocked["error"]
+
+
+def test_plain_save_refusal_still_offers_the_copy_tool_as_an_alternative():
+    blocked = modal_command_block_response(
+        lambda payload: payload,
+        code="import FreeCADGui\nFreeCADGui.runCommand('Std_Save')\n",
+        find_modal_command_risk_fn=find_modal_command_risk,
+    )
+    assert blocked is not None
+    assert "save_document / save_document_as" in blocked["error"]
+    assert "save_document_copy" in blocked["error"]
+
+
+def test_non_save_modal_refusal_keeps_the_generic_remedy():
+    blocked = modal_command_block_response(
+        lambda payload: payload,
+        code="import FreeCADGui\nFreeCADGui.runCommand('Std_Import')\n",
+        find_modal_command_risk_fn=find_modal_command_risk,
+    )
+    assert blocked is not None
+    assert "typed tool instead of a dialog" in blocked["error"]
+    assert "save_document" not in blocked["error"]
