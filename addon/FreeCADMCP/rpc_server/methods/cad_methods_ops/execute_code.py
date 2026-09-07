@@ -18,6 +18,7 @@ from .execute_code_policy import (
     geometry_loop_block_response,
     gui_timeout_not_supported_response,
     invalid_execution_mode_response,
+    modal_command_block_response,
     worker_requires_read_only_response,
 )
 from .execute_code_response import finalize_gui_execute_response
@@ -203,6 +204,13 @@ def _gui_execute_policy_block(
 ):
     if options.get("timeout_seconds") is not None:
         return gui_timeout_not_supported_response(annotate)
+    blocked = modal_command_block_response(
+        annotate,
+        code=code,
+        find_modal_command_risk_fn=collaborators.find_modal_command_risk,
+    )
+    if blocked is not None:
+        return blocked
     blocked = geometry_loop_block_response(
         annotate,
         code=code,

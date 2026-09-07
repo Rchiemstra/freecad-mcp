@@ -152,6 +152,37 @@ def boolean_audit_block_response(
     )
 
 
+def modal_command_block_response(
+    annotate: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    code: str,
+    find_modal_command_risk_fn: Callable[..., Any],
+) -> dict[str, Any] | None:
+    risk = find_modal_command_risk_fn(code)
+    if risk is None:
+        return None
+    remedy = (
+        "Use the save_document / save_document_as typed tools, which complete "
+        "without a dialog."
+        if risk.kind == "modal_gui_command" and "Save" in risk.trigger
+        else "Drive the operation through a typed tool instead of a dialog."
+    )
+    return annotate(
+        {
+            "success": False,
+            "is_error": True,
+            "blocked": risk.kind,
+            "error_code": "MODAL_GUI_COMMAND_REFUSED",
+            "retryable": False,
+            "error": (
+                f"Blocked before execution: {risk.reason}. execute_code is "
+                f"unattended, so {risk.trigger} would block the GUI thread past "
+                f"the RPC timeout and leave the dialog open. {remedy}"
+            ),
+        }
+    )
+
+
 def flatten_recompute_errors(session: dict, options: dict[str, Any]) -> list[dict]:
     flat_errors = []
     for key in (

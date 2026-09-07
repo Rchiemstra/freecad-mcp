@@ -13,7 +13,29 @@ from .execution_safety_ops.classify_helpers import (
 )
 from .execution_safety_types.gui_blocking_risk import GuiBlockingRisk
 from .execution_safety_types.gui_geometry_loop_risk import GuiGeometryLoopRisk
+from .execution_safety_types.modal_command_risk import ModalCommandRisk
 from .execution_safety_types.request_class import RequestClass
+
+# Std_ commands that can raise a modal dialog and then wait for a human.
+# execute_code is always unattended: nobody will ever dismiss the dialog, so the
+# GUI thread blocks until the RPC times out and the dialog outlives the call.
+# Std_Save is on the list because an unsaved or read-only document turns it into
+# a Save As dialog -- the exact case that hangs.
+_MODAL_GUI_COMMANDS = frozenset({
+    "Std_Save", "Std_SaveAs", "Std_SaveAll", "Std_SaveCopy",
+    "Std_Import", "Std_Export", "Std_MergeProjects", "Std_Revert",
+    "Std_New", "Std_Open", "Std_Quit",
+    "Std_CloseActiveWindow", "Std_CloseAllWindows",
+    "Std_Print", "Std_PrintPreview", "Std_PrintPdf",
+    "Std_ProjectInfo", "Std_DlgPreferences", "Std_DlgParameter",
+    "Std_DlgCustomize", "Std_DlgMacroRecord", "Std_DlgMacroExecute",
+    "Std_DlgMacroExecuteDirect", "Std_MacroRecord", "Std_MacroExecute",
+})
+# Both accept a command name as their first positional argument.
+_COMMAND_DISPATCHERS = frozenset({"runCommand", "SendMsgToActiveView"})
+# Qt's modal event loop. Matched only as an attribute call, so the Python
+# builtin exec() -- an ast.Name -- is never mistaken for a dialog.
+_MODAL_EVENT_LOOP_METHODS = frozenset({"exec", "exec_"})
 
 _BOOLEAN_METHODS = frozenset({"cut", "common", "fuse", "multiCut", "multiFuse"})
 _GEOMETRY_TRANSFORM_METHODS = frozenset({"mirror", "transformGeometry"})
@@ -84,6 +106,50 @@ def find_gui_blocking_risk(code: str, *, read_only: bool) -> GuiBlockingRisk | N
                 "booleans; this is non-interruptible and can freeze FreeCAD's UI"
             ),
         )
+    return None
+
+
+def find_modal_command_risk(code: str) -> ModalCommandRisk | None:
+    """Detect modal GUI entry points that would hang an unattended call.
+
+    execute_code runs on the GUI thread with no human attached. A modal
+    dialog therefore never gets dismissed: the thread blocks, the RPC times
+    out, and the dialog is left on screen owning the event loop. Refusing
+    before execution keeps the session usable and points the caller at the
+    typed tool that does the same job without a dialog.
+    """
+    tree = parse_execute_code_ast(code)
+    if tree is None:
+        # Let execute_code produce its normal structured syntax error.
+        return None
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method in _COMMAND_DISPATCHERS and node.args:
+                first = node.args[0]
+                if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                    command = first.value
+                    if command in _MODAL_GUI_COMMANDS:
+                        return ModalCommandRisk(
+                            kind="modal_gui_command",
+                            trigger=command,
+                            reason=(
+                                f"{method}({command!r}) can open a modal dialog "
+                                "that no one is present to dismiss"
+                            ),
+                        )
+            if method in _MODAL_EVENT_LOOP_METHODS:
+                return ModalCommandRisk(
+                    kind="modal_event_loop",
+                    trigger=f".{method}()",
+                    reason=(
+                        f"{method}() enters Qt's modal event loop and blocks the "
+                        "GUI thread until a human closes the dialog"
+                    ),
+                )
     return None
 
 

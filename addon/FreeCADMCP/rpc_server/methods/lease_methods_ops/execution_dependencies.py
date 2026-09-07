@@ -49,6 +49,7 @@ class ExecutionCollaborators:
     typed_tool_warning: Callable[..., Any]
     find_gui_geometry_loop_risk: Callable[..., Any]
     find_gui_blocking_risk: Callable[..., Any]
+    find_modal_command_risk: Callable[..., Any]
     process_started_at: str
     boot_id: str
     profile_fingerprint: str
@@ -84,6 +85,7 @@ class ExecutionCollaborators:
             "typed_tool_warning": self.typed_tool_warning,
             "find_gui_geometry_loop_risk": self.find_gui_geometry_loop_risk,
             "find_gui_blocking_risk": self.find_gui_blocking_risk,
+            "find_modal_command_risk": self.find_modal_command_risk,
         }
         invalid = [
             name for name, collaborator in callables.items() if not callable(collaborator)
