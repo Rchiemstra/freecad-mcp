@@ -8,6 +8,13 @@ def inflight_state(inflight, status):
         return "expired"
     if inflight is None:
         return _status_without_inflight(status)
+    if inflight.cancellation_requested and inflight.active_gui_phases:
+        return "cancel_requested"
+    # The RPC handler can have returned its timeout envelope while the GUI
+    # callback still owns an active phase.  That is not a terminal mutation
+    # result, even though the handler's local finalizer marked it failed.
+    if inflight.uncertain and inflight.active_gui_phases:
+        return "running_after_timeout"
     if inflight.terminal:
         return _terminal_inflight_state(inflight, status)
     if inflight.cancellation_requested:
@@ -36,6 +43,12 @@ def _terminal_inflight_state(inflight, status):
         ):
             return "completed_after_cancel_request"
         return "cancelled"
+    if (
+        status.response
+        and isinstance(status.response, dict)
+        and status.response.get("late_completion")
+    ):
+        return "completed" if status.response.get("ok") is not False else "failed"
     if inflight.terminal_status == "failed":
         return "failed"
     return "completed"

@@ -27,6 +27,12 @@ _RECOMPUTE_NONE_METHODS = frozenset(
     }
 )
 
+# A force delete is a narrowly scoped recovery operation. It may remove the
+# object that is keeping a document in a pre-existing mustExecute state, so it
+# must enter the native commit with recompute deferred. The caller then receives
+# explicit evidence that a normal recompute is still required.
+_RECOVERY_DEFERRED_METHODS = frozenset({"delete_object"})
+
 
 def _gateway_dispatch_path() -> Path:
     return (
@@ -55,7 +61,12 @@ def declared_policy(method: str) -> RecomputePolicy | None:
     return RecomputePolicy.TARGET
 
 
-def assert_recompute_policy(method: str | None, native_recompute: bool) -> None:
+def assert_recompute_policy(
+    method: str | None,
+    native_recompute: bool,
+    *,
+    recovery_deferred: bool = False,
+) -> None:
     """Fail closed when a typed mutation disagrees with its registry declaration."""
 
     if not method:
@@ -63,6 +74,12 @@ def assert_recompute_policy(method: str | None, native_recompute: bool) -> None:
     policy = declared_policy(method)
     if policy is None:
         return
+    if recovery_deferred:
+        if method in _RECOVERY_DEFERRED_METHODS and not native_recompute:
+            return
+        raise RuntimeError(
+            "run_cad_mutation deferred recovery is not declared for " f"{method!r}"
+        )
     expected = policy.native_recompute_bool
     if native_recompute != expected:
         raise RuntimeError(

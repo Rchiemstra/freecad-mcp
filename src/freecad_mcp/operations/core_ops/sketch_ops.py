@@ -150,22 +150,21 @@ def sketch_delete_constraint_operation(
                 structured=result,
                 error_code=result.get("error_code"),
             )
-        count = int(result.get("deleted_count", len(indices) + len(names)))
-        response = tool_ok(
-            f"Deleted {count} constraint(s) from '{sketch_name}'",
-            structured=result,
-        )
-        screenshot = (
-            None if only_text_feedback else freecad.get_active_screenshot()
-        )
-        return add_screenshot_if_available(
-            response,
-            screenshot,
-            only_text_feedback,
-        )
     except Exception as exc:
         logger.error("Failed to delete sketch constraints: %s", exc)
         return tool_fail(f"Failed to delete sketch constraints: {exc}")
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            result = dict(result)
+            result["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    count = int(result.get("deleted_count", len(indices) + len(names)))
+    response = tool_ok(
+        f"Deleted {count} constraint(s) from '{sketch_name}'", structured=result
+    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 def sketch_delete_geometry_operation(
     freecad: FreeCADConnection,
@@ -205,19 +204,18 @@ def sketch_delete_geometry_operation(
                 structured=result,
                 error_code=result.get("error_code"),
             )
-        count = int(result.get("deleted_count", len(set(indices))))
-        response = tool_ok(
-            f"Deleted {count} geometry item(s) from '{sketch_name}'",
-            structured=result,
-        )
-        screenshot = (
-            None if only_text_feedback else freecad.get_active_screenshot()
-        )
-        return add_screenshot_if_available(
-            response,
-            screenshot,
-            only_text_feedback,
-        )
     except Exception as exc:
         logger.error("Failed to delete sketch geometry: %s", exc)
         return tool_fail(f"Failed to delete sketch geometry: {exc}")
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            result = dict(result)
+            result["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    count = int(result.get("deleted_count", len(set(indices))))
+    response = tool_ok(
+        f"Deleted {count} geometry item(s) from '{sketch_name}'", structured=result
+    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)

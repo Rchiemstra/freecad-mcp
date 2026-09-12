@@ -46,7 +46,18 @@ def _run_code(
             operation_id=success_msg,
         )
         res = freecad.execute_code(full_code, opts)
-        screenshot = freecad.get_active_screenshot() if capture_view else None
+    except Exception as e:
+        logger.error(f"{fail_prefix}: {e}")
+        return tool_fail(f"{fail_prefix}: {e}")
+
+    screenshot = None
+    if capture_view:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            res = dict(res)
+            res["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    try:
         if res["success"]:
             output = res.get("message", "")
             msg = f"{success_msg}\n{output}".strip()

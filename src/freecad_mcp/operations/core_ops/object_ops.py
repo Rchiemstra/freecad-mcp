@@ -27,22 +27,33 @@ def create_object_operation(
             "Analysis": analysis_name,
         }
         res = freecad.create_object(doc_name, obj_data)
-        if res["success"]:
-            response = tool_ok(
-                f"Object '{res['object_name']}' created successfully",
-                structured=res,
-            )
-        else:
-            response = tool_fail(
-                f"Failed to create object: {res['error']}",
-                structured=res,
-                error_code=res.get("error_code"),
-            )
-        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
-        return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to create object: {e!s}")
         return tool_fail(f"Failed to create object: {e!s}")
+    if not isinstance(res, dict):
+        return tool_fail("Failed to create object: invalid RPC response")
+    if res.get("success") is False or res.get("ok") is False:
+        return tool_fail(
+            f"Failed to create object: {res.get('error', 'unknown error')}",
+            structured=res,
+            error_code=res.get("error_code"),
+        )
+
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            # The native mutation has committed. Capture is presentation-only,
+            # so it must not make the result look safe to retry.
+            res = dict(res)
+            res["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    response = tool_ok(
+        f"Object '{res.get('object_name', obj_name)}' created successfully",
+        structured=res,
+        only_text_feedback=only_text_feedback,
+    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 def edit_object_operation(
     freecad: FreeCADConnection,
@@ -53,22 +64,33 @@ def edit_object_operation(
 ) -> ToolResponse:
     try:
         res = freecad.edit_object(doc_name, obj_name, {"Properties": obj_properties})
-        if res["success"]:
-            response = tool_ok(
-                f"Object '{res['object_name']}' edited successfully",
-                structured=res,
-            )
-        else:
-            response = tool_fail(
-                f"Failed to edit object: {res['error']}",
-                structured=res,
-                error_code=res.get("error_code"),
-            )
-        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
-        return add_screenshot_if_available(response, screenshot, only_text_feedback)
     except Exception as e:
         logger.error(f"Failed to edit object: {e!s}")
         return tool_fail(f"Failed to edit object: {e!s}")
+    if not isinstance(res, dict):
+        return tool_fail("Failed to edit object: invalid RPC response")
+    if res.get("success") is False or res.get("ok") is False:
+        return tool_fail(
+            f"Failed to edit object: {res.get('error', 'unknown error')}",
+            structured=res,
+            error_code=res.get("error_code"),
+        )
+
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            # The native mutation has committed. Capture is presentation-only,
+            # so it must not make the result look safe to retry.
+            res = dict(res)
+            res["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    response = tool_ok(
+        f"Object '{res.get('object_name', obj_name)}' edited successfully",
+        structured=res,
+        only_text_feedback=only_text_feedback,
+    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 def delete_object_operation(
     freecad: FreeCADConnection,

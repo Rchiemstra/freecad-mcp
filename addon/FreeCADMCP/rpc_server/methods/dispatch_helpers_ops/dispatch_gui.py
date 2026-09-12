@@ -107,9 +107,21 @@ def dispatch_gui(
     replay_on_complete = None
     replay_cache = collaborators.request_replay_cache
     completion_runtime_id = collaborators.runtime_id
-    if context and replay_cache is not None and journal_late_completion:
+    replay_context = context
+    if replay_context is None and inflight is not None:
+        identity = collaborators.request_identity_provider().get_request_identity()
+        required_identity = {
+            key: identity.get(key)
+            for key in ("authenticated_session_id", "instance_id", "rpc_session_token")
+        }
+        if all(required_identity.values()):
+            replay_context = {
+                "request_id": inflight.request_id,
+                "identity": required_identity,
+            }
+    if replay_context is not None and replay_cache is not None and journal_late_completion:
         replay_on_complete = build_replay_on_complete(
-            context,
+            replay_context,
             replay_cache,
             completion_runtime_id,
             result_transform=late_result_transform,
