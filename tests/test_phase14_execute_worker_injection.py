@@ -217,7 +217,7 @@ def test_mutating_gui_execute_uses_native_boundary_exactly_once_and_keeps_result
     )
     dispatches = []
 
-    def dispatch(task, timeout):
+    def dispatch(task, timeout, **_kwargs):
         dispatches.append(timeout)
         return task()
 
@@ -273,7 +273,7 @@ def test_native_rejection_without_callback_fails_closed_in_execute_envelope(
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     gui_calls = []
     monkeypatch.setattr(
         execute_code_module,
@@ -311,7 +311,7 @@ def test_native_rejection_after_callback_fails_closed_in_execute_envelope(
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     gui_calls = []
     monkeypatch.setattr(
         execute_code_module,
@@ -352,7 +352,7 @@ def test_late_native_busy_reports_healthy_retryable_readiness(monkeypatch):
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -381,7 +381,7 @@ def test_gui_error_requests_native_rollback_and_preserves_error_envelope(monkeyp
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -428,7 +428,7 @@ def test_native_rollback_rejection_quarantines_execute_document(monkeypatch):
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -477,7 +477,7 @@ def test_native_rollback_exception_is_structured_and_quarantined(monkeypatch):
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -632,7 +632,7 @@ def test_gui_execute_resolves_active_document_when_option_omitted(monkeypatch):
     )
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -693,7 +693,7 @@ def test_gui_execute_settles_pending_recompute_before_native_boundary(monkeypatc
     )
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -702,6 +702,7 @@ def test_gui_execute_settles_pending_recompute_before_native_boundary(monkeypatc
             or {"ok": True, "session": {}, "stdout": "settled"}
         ),
     )
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
 
     result = rpc.execute_code(
         "print('settled')",
@@ -731,7 +732,6 @@ def test_gui_execute_target_recompute_is_owned_once_by_native_coordinator(
         freecad=_freecad_with_document(document),
     )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -741,6 +741,7 @@ def test_gui_execute_target_recompute_is_owned_once_by_native_coordinator(
         ),
     )
     monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
 
     result = rpc.execute_code(
         "print('native-owned')",
@@ -780,7 +781,7 @@ def test_signed_generated_continuation_runs_after_the_one_native_recompute(
     api = _CompatibilityAPI(native_recompute=document.recompute)
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
 
     result = rpc.execute_code(
@@ -826,7 +827,7 @@ def test_generated_post_recompute_failure_preserves_precise_error_after_rollback
     api = _CompatibilityAPI(native_recompute=document.recompute)
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
 
     result = rpc.execute_code(
         "FreeCAD.events.append('apply')\n"
@@ -930,7 +931,7 @@ def test_gui_execute_rejects_non_transient_readiness_without_native_callback(
     )
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -959,7 +960,7 @@ def test_gui_execute_without_document_or_active_still_runs_without_boundary(
     freecad = SimpleNamespace(ActiveDocument=None, getDocument=lambda _name: None)
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",

@@ -90,6 +90,16 @@ def test_run_cad_mutation_asserts_registry_match():
         )
 
 
+def test_force_delete_is_the_only_declared_deferred_recovery_policy():
+    recompute_policy.assert_recompute_policy(
+        "delete_object", False, recovery_deferred=True
+    )
+    with pytest.raises(RuntimeError, match="deferred recovery is not declared"):
+        recompute_policy.assert_recompute_policy(
+            "edit_object", False, recovery_deferred=True
+        )
+
+
 def test_repair_references_pins_none_and_refuses_recompute_true():
     rpc = MagicMock()
     rpc._cad_collaborators = MagicMock()

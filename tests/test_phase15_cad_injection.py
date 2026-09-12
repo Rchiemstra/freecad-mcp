@@ -26,6 +26,9 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import sketch_public
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies import (
     CadCollaborators,
 )
+from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.mutation_health import (
+    adapt_gui_mutation_result,
+)
 from addon.FreeCADMCP.rpc_server.property_mapper import Object
 from tests.helpers.native_readiness import freecad_with_native_readiness
 
@@ -134,7 +137,8 @@ def test_object_create_uses_the_exact_injected_factory_once():
     assert native.structural_scopes == [True]
 
 
-def test_object_create_defers_presentation_properties_until_after_native_commit():
+@pytest.mark.parametrize("failure", [None, "properties", "deferred"])
+def test_object_create_defers_presentation_properties_until_after_native_commit(failure):
     class Created:
         def __init__(self):
             self.ViewObject = None
@@ -171,11 +175,20 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
         assert recompute is False
         assert obj.properties == {"Length": 10}
         document.created = created
+        if failure == "deferred":
+
+            def apply_after_commit():
+                assert created.ViewObject is not None
+                raise RuntimeError("deferred provider unavailable")
+
+            return SimpleNamespace(apply_after_commit=apply_after_commit)
         return True
 
     def set_properties(actual_document, actual_object, properties):
         assert actual_object.ViewObject is not None
         presentation_calls.append((actual_document, actual_object, properties))
+        if failure == "properties":
+            raise RuntimeError("view property unavailable")
 
     collaborators, _native = _collaborators(
         freecad=SimpleNamespace(getDocument=lambda _name: document),
@@ -183,9 +196,11 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
         set_object_property=set_properties,
     )
     collaborators = replace(collaborators, compatibility_api=NativeAPI())
+    rpc = _rpc(collaborators)
+    rpc._adapt_gui_mutation_result = adapt_gui_mutation_result
 
     result = object_crud.create_object(
-        _rpc(collaborators),
+        rpc,
         "Doc",
         {
             "Type": "PartDesign::Feature",
@@ -198,8 +213,15 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
         },
     )
 
-    assert result == {"success": True, "object_name": "Pad"}
-    assert presentation_calls == [
+    assert result["success"] is True
+    assert result["object_name"] == "Pad"
+    if failure:
+        assert result["retryable"] is False
+        assert "unavailable" in result["presentation_warning"]
+    else:
+        assert "presentation_warning" not in result
+    assert document.created is created
+    expected_presentation_calls = [
         (
             document,
             created,
@@ -209,6 +231,7 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
             },
         )
     ]
+    assert presentation_calls == ([] if failure == "deferred" else expected_presentation_calls)
 
 
 @pytest.mark.parametrize(
@@ -219,6 +242,7 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
         "native_recompute_failure",
         "health_failure",
         "publication_failure",
+        "presentation_failure",
     ],
 )
 def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa: C901 - failure matrix
@@ -257,6 +281,8 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
             return
         presentation_calls.append((stage["value"], dict(actual_properties)))
         events.append(("presentation", stage["value"]))
+        if outcome == "presentation_failure":
+            raise RuntimeError("view property unavailable")
 
     class NativeAPI:
         def commit_compatibility_mutation(
@@ -299,9 +325,12 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
         validate_document_invariants=validate,
     )
     collaborators = replace(collaborators, compatibility_api=NativeAPI())
+    rpc = _rpc(collaborators)
+    if outcome == "presentation_failure":
+        rpc._adapt_gui_mutation_result = adapt_gui_mutation_result
 
     result = object_crud.edit_object(
-        _rpc(collaborators),
+        rpc,
         "Doc",
         "Pad",
         {
@@ -314,9 +343,15 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
     )
 
     assert model_calls == [("native_callback", {"Length": 10})]
-    assert result == {"success": outcome == "committed", "object_name": "Pad"}
+    if outcome == "presentation_failure":
+        assert result["success"] is True
+        assert result["object_name"] == "Pad"
+        assert result["retryable"] is False
+        assert "unavailable" in result["presentation_warning"]
+    else:
+        assert result == {"success": outcome == "committed", "object_name": "Pad"}
     assert document.recompute_count == (0 if outcome == "callback_failure" else 1)
-    if outcome == "committed":
+    if outcome in {"committed", "presentation_failure"}:
         assert presentation_calls == [
             (
                 "postcommit",
@@ -373,6 +408,61 @@ def test_typed_delete_forwards_recursive_and_force_with_compatibility_defaults(
         }
     ]
     assert native.structural_scopes == [True]
+
+
+def test_force_delete_uses_deferred_recovery_recompute_and_reports_it(monkeypatch):
+    monkeypatch.setattr(
+        object_crud,
+        "delete_object_gui",
+        lambda *_args, **_kwargs: {"ok": True, "deleted": ["BrokenJoint"]},
+    )
+    collaborators, native = _collaborators()
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, success_fields=None, **_kwargs: {
+            "success": True,
+            **(success_fields or {}),
+            **result,
+        },
+    )
+
+    result = object_crud.delete_object(rpc, "Doc", "BrokenJoint", force=True)
+
+    assert native.structural_scopes == [True]
+    assert native.recompute_policies == [False]
+    assert result["recompute"]["policy"] == "deferred_recovery"
+    assert result["recompute"]["required"] is True
+
+
+def test_force_delete_late_result_transform_retains_recovery_metadata(monkeypatch):
+    monkeypatch.setattr(
+        object_crud,
+        "delete_object_gui",
+        lambda *_args, **_kwargs: {"ok": True, "deleted": ["BrokenJoint"]},
+    )
+    collaborators, _native = _collaborators()
+    captured = {}
+
+    def dispatch(callback, *, late_result_transform=None, **_kwargs):
+        captured["transform"] = late_result_transform
+        return callback()
+
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=dispatch,
+        _adapt_gui_mutation_result=lambda result, success_fields=None, **_kwargs: {
+            "success": True,
+            **(success_fields or {}),
+            **result,
+        },
+    )
+    object_crud.delete_object(rpc, "Doc", "BrokenJoint", force=True)
+
+    late = captured["transform"]({"ok": True, "deleted": ["BrokenJoint"]})
+    assert late["success"] is True
+    assert late["object_name"] == "BrokenJoint"
+    assert late["recompute"]["policy"] == "deferred_recovery"
 
 
 @pytest.mark.parametrize(

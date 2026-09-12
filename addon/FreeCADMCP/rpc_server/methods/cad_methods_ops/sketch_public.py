@@ -40,7 +40,10 @@ def sketch_create(
                 recompute=False,
             ),
             structural=True,
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"sketch_name": sketch_name}
+        ),
     )
     return self._adapt_gui_mutation_result(
         res, success_fields={"sketch_name": sketch_name}
@@ -61,7 +64,10 @@ def sketch_add_geometry(self, doc_name: str, sketch_name: str, geometry: list) -
                 part=collaborators.part,
                 recompute=False,
             ),
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, result_field="indices", expected_result_type=list
+        ),
     )
     return self._adapt_gui_mutation_result(
         res,
@@ -86,7 +92,8 @@ def sketch_add_constraint(
                 sketcher=collaborators.sketcher,
                 recompute=False,
             ),
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(value),
     )
     return self._adapt_gui_mutation_result(res)
 
@@ -111,7 +118,8 @@ def sketch_delete_constraint(
                 freecad=collaborators.freecad,
                 recompute=False,
             ),
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(value),
     )
     return self._adapt_gui_mutation_result(res)
 
@@ -134,7 +142,8 @@ def sketch_delete_geometry(
                 freecad=collaborators.freecad,
                 recompute=False,
             ),
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(value),
     )
     return self._adapt_gui_mutation_result(res)
 
@@ -158,7 +167,7 @@ def sketch_attach(
                 recompute=False,
             ),
             structural=True,
-        )
+        ),
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
@@ -185,7 +194,7 @@ def sketch_edit_constraint(
                 freecad=collaborators.freecad,
                 recompute=False,
             ),
-        )
+        ),
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
@@ -267,7 +276,10 @@ def pad_feature(
                 set_extrusion_symmetric=collaborators.set_extrusion_symmetric,
                 set_feature_bool=collaborators.set_feature_bool,
             ),
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"pad_name": pad_name}
+        ),
     )
     return self._adapt_gui_mutation_result(res, success_fields={"pad_name": pad_name})
 
@@ -301,7 +313,10 @@ def pocket_feature(
                 set_extrusion_symmetric=collaborators.set_extrusion_symmetric,
                 set_feature_bool=collaborators.set_feature_bool,
             ),
-        )
+        ),
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"pocket_name": pocket_name}
+        ),
     )
     return self._adapt_gui_mutation_result(
         res, success_fields={"pocket_name": pocket_name}

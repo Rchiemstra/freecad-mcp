@@ -84,6 +84,59 @@ def test_delete_recursive_removes_dependents(freecad_session):
     assert not (remaining & gone), f"orphans left: {remaining & gone}"
 
 
+def test_force_delete_recovers_a_pending_document_then_allows_a_normal_edit(
+    freecad_session,
+):
+    """Recovery deletion enters a pre-existing mustExecute document deferred."""
+    doc = freecad_session.doc
+    # Match the reported deadlock: recompute leaves an invalid, unbound link
+    # pending rather than a merely touched object that eager admission settles.
+    broken = doc.addObject("App::Link", "BrokenJoint")
+    broken_name = broken.Name
+    doc.recompute()
+    assert broken.State
+    broken.touch()
+    assert doc.mustExecute()
+
+    deleted = freecad_session.delete_object(doc.Name, broken_name, False, True)
+
+    assert deleted["success"] is True
+    assert doc.getObject(broken_name) is None
+    assert deleted["recompute"]["policy"] == "deferred_recovery"
+    assert deleted["recompute"]["required"] is True
+
+    doc.recompute()
+    assert not doc.mustExecute()
+
+    created = freecad_session._dispatch(
+        "create_object",
+        doc.Name,
+        {"Name": "RecoveryProbe", "Type": "Part::Feature", "Properties": {}},
+    )
+    assert created["success"] is True
+    assert doc.getObject("RecoveryProbe") is not None
+
+
+def test_typed_create_object_binds_app_link_target(freecad_session):
+    """The typed object path resolves LinkedObject names before assignment."""
+    doc = freecad_session.doc
+    source = doc.addObject("Part::Feature", "Source")
+    doc.recompute()
+
+    created = freecad_session._dispatch(
+        "create_object",
+        doc.Name,
+        {
+            "Name": "LinkedSource",
+            "Type": "App::Link",
+            "Properties": {"LinkedObject": source.Name},
+        },
+    )
+
+    assert created["success"] is True
+    assert doc.getObject("LinkedSource").LinkedObject is source
+
+
 def test_delete_recursive_mid_chain_feature_keeps_body_and_clears_later_tip(
     freecad_session,
 ):

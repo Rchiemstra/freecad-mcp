@@ -16,6 +16,27 @@ def _split_presentation_properties(properties):
     return model_properties, presentation_properties
 
 
+def _committed_success(result):
+    return result is True or (
+        isinstance(result, dict)
+        and result.get("success") is not False
+        and result.get("ok") is not False
+    )
+
+
+def _presentation_warning(result, warning):
+    payload = dict(result) if isinstance(result, dict) else {}
+    payload.update(
+        {
+            "success": True,
+            "ok": True,
+            "retryable": False,
+            "presentation_warning": warning,
+        }
+    )
+    return payload
+
+
 def create_object(self, doc_name, obj_data: dict[str, Any]):
     properties, presentation_properties = _split_presentation_properties(
         obj_data.get("Properties", {})
@@ -55,25 +76,38 @@ def create_object(self, doc_name, obj_data: dict[str, Any]):
             create_model,
             structural=True,
         )
-        if result is True and deferred_presentation is not None:
+        if _committed_success(result) and deferred_presentation is not None:
             try:
                 deferred_presentation()
             except Exception as exc:
-                return str(exc)
-        if result is True and presentation_properties:
+                return _presentation_warning(
+                    result, f"Post-commit presentation failed: {exc}"
+                )
+        if _committed_success(result) and presentation_properties:
             document = collaborators.freecad.getDocument(doc_name)
             created = document.getObject(obj.name) if document else None
             if created is None:
-                return f"Object '{obj.name}' was not visible after native commit."
+                return _presentation_warning(
+                    result,
+                    "Post-commit presentation skipped: "
+                    f"object '{obj.name}' was not visible after native commit.",
+                )
             try:
                 collaborators.set_object_property(
                     document, created, presentation_properties
                 )
             except Exception as exc:
-                return str(exc)
+                return _presentation_warning(
+                    result, f"Post-commit presentation failed: {exc}"
+                )
         return result
 
-    res = self._dispatch_gui(create_task)
+    res = self._dispatch_gui(
+        create_task,
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"object_name": obj.name}
+        ),
+    )
     return self._adapt_gui_mutation_result(
         res, success_fields={"object_name": obj.name}
     )
@@ -106,20 +140,31 @@ def edit_object(
             ),
             structural=True,
         )
-        if result is True and presentation_properties:
+        if _committed_success(result) and presentation_properties:
             document = collaborators.freecad.getDocument(doc_name)
             edited = document.getObject(obj.name) if document else None
             if edited is None:
-                return f"Object '{obj.name}' was not visible after native commit."
+                return _presentation_warning(
+                    result,
+                    "Post-commit presentation skipped: "
+                    f"object '{obj.name}' was not visible after native commit.",
+                )
             try:
                 collaborators.set_object_property(
                     document, edited, presentation_properties
                 )
             except Exception as exc:
-                return str(exc)
+                return _presentation_warning(
+                    result, f"Post-commit presentation failed: {exc}"
+                )
         return result
 
-    res = self._dispatch_gui(edit_task)
+    res = self._dispatch_gui(
+        edit_task,
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"object_name": obj.name}
+        ),
+    )
     return self._adapt_gui_mutation_result(
         res, success_fields={"object_name": obj.name}
     )
@@ -133,6 +178,20 @@ def delete_object(
     force: bool = False,
 ):
     collaborators = self._cad_collaborators
+
+    def finalize_delete(value):
+        result = self._adapt_gui_mutation_result(
+            value, success_fields={"object_name": obj_name}
+        )
+        if force and isinstance(result, dict) and result.get("success") is not False:
+            result = dict(result)
+            result["recompute"] = {
+                "policy": "deferred_recovery",
+                "required": True,
+                "message": "Run recompute_document after force deletion to settle the document.",
+            }
+        return result
+
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
             collaborators,
@@ -148,11 +207,15 @@ def delete_object(
             structural=True,
             # ``force`` intentionally permits reported invalid dependents.
             validate_after_callback=not bool(force),
-        )
+            # A recovery delete may remove the object that leaves an existing
+            # document pending recompute. Enter with the explicitly declared
+            # deferred policy; callers must recompute after this cleanup.
+            native_recompute=not bool(force),
+            recovery_deferred=bool(force),
+        ),
+        late_result_transform=finalize_delete,
     )
-    return self._adapt_gui_mutation_result(
-        res, success_fields={"object_name": obj_name}
-    )
+    return finalize_delete(res)
 
 
 def get_objects(self, doc_name):

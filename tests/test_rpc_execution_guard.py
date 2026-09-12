@@ -87,7 +87,7 @@ def test_external_projection_explicit_override_reaches_gui_dispatch():
     rpc = rpc_server.FreeCADRPC()
     dispatched = {}
 
-    def fake_dispatch_gui(task, timeout):
+    def fake_dispatch_gui(task, timeout, **_kwargs):
         dispatched["called"] = True
         dispatched["timeout"] = timeout
         return {"ok": True, "session": {}, "stdout": ""}
@@ -266,7 +266,7 @@ def test_forced_gui_geometry_mutation_optin_reaches_gui(monkeypatch):
     rpc = rpc_server.FreeCADRPC()
     dispatched = {}
 
-    def fake_dispatch_gui(task, timeout):
+    def fake_dispatch_gui(task, timeout, **_kwargs):
         dispatched["called"] = True
         dispatched["timeout"] = timeout
         return {"ok": True, "session": {}, "stdout": ""}
@@ -326,7 +326,7 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
     monkeypatch.setattr(rpc_server.FreeCAD, "ActiveDocument", document)
     rpc = rpc_server.FreeCADRPC()
     monkeypatch.setattr(rpc, "_collect_invalid_objects", lambda: {})
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
 
     result = rpc.execute_code(
         "FreeCAD.getDocument('Model').save()",

@@ -316,6 +316,7 @@ def run_cad_mutation(  # noqa: C901
     inflight: Any = None,
     validate_after_callback: bool = True,
     native_recompute: bool = True,
+    recovery_deferred: bool = False,
     postcondition: Callable[[], Any] | None = None,
     method: str | None = None,
 ):
@@ -331,7 +332,9 @@ def run_cad_mutation(  # noqa: C901
         raise TypeError("postcondition must be callable")
 
     rpc_method = method if method is not None else current_cad_mutation_rpc_method()
-    assert_recompute_policy(rpc_method, native_recompute)
+    assert_recompute_policy(
+        rpc_method, native_recompute, recovery_deferred=recovery_deferred
+    )
 
     document, lookup_error, lookup_available = _lookup_document(
         collaborators, document_name

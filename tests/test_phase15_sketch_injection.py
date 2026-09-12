@@ -36,8 +36,9 @@ class _Facade:
         self._cad_collaborators = collaborators
 
     @staticmethod
-    def _dispatch_gui(callback):
-        return callback()
+    def _dispatch_gui(callback, *, late_result_transform=None):
+        result = callback()
+        return late_result_transform(result) if late_result_transform else result
 
     @staticmethod
     def _adapt_gui_mutation_result(result, **_kwargs):

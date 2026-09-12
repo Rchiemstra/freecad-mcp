@@ -335,7 +335,16 @@ def execute_code(
             postcondition_sink=postcondition_sink,
         )
 
-    res = self._dispatch_gui(execute_code_gui_task, collaborators.execute_timeout)
+    def finalize_late_result(value):
+        if isinstance(value, str):
+            return annotate({"success": False, "error": value, "is_error": True})
+        return finalize_gui_execute_response(annotate, value, options)
+
+    res = self._dispatch_gui(
+        execute_code_gui_task,
+        collaborators.execute_timeout,
+        late_result_transform=finalize_late_result,
+    )
     if isinstance(res, str):
         return annotate({"success": False, "error": res, "is_error": True})
     return finalize_gui_execute_response(annotate, res, options)

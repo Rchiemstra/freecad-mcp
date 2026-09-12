@@ -18,6 +18,7 @@ import ipaddress
 import json
 import os
 import signal
+import shlex
 import socket
 import subprocess
 import sys
@@ -1415,6 +1416,20 @@ def main() -> int:  # noqa: C901
                 f"Isolated MCP RPC identity authenticated on {host}:{port} "
                 f"(pid={process.pid}, "
                 f"runtime={expectations['expected_addon_runtime_id']})"
+            )
+            print(
+                "MCP command: "
+                + shlex.join(
+                    [
+                        "uv",
+                        "run",
+                        "--directory",
+                        str(_MCP_SOURCE.parent),
+                        "freecad-mcp",
+                        "--instance-manifest",
+                        str(_manifest_path(profile)),
+                    ]
+                )
             )
             if supervised_owner is not None:
                 return _supervise_until_stop(

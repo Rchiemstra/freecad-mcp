@@ -27,7 +27,10 @@ def set_expression(
                 expression,
                 freecad=collaborators.freecad,
             ),
-        )
+        ),
+        late_result_transform=lambda value: value
+        if isinstance(value, dict)
+        else {"success": False, "error": value},
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
@@ -45,7 +48,10 @@ def clear_expression(self, doc_name: str, object_name: str, prop_path: str) -> d
                 freecad=collaborators.freecad,
                 recompute=False,
             ),
-        )
+        ),
+        late_result_transform=lambda value: value
+        if isinstance(value, dict)
+        else {"success": False, "error": value},
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
