@@ -12,6 +12,7 @@ from .cad_mutation import (
     postflight_cad_mutation,
 )
 from .execute_code_context import build_execute_code_context
+from .execute_code_gui_hooks import restore_active_document
 from .execute_code_gui_task import run_execute_code_gui_task
 from .execute_code_policy import (
     boolean_audit_block_response,
@@ -265,6 +266,32 @@ def _prepare_native_gui_execution(options, collaborators):
     return options, primary_document, native_recompute, failure
 
 
+def _single_document_mutation_scope_failure(options, primary_document):
+    """Keep the public GUI path aligned with the one-document native commit."""
+
+    affected = options.get("affected_documents") or ()
+    if not isinstance(affected, (list, tuple, set)):
+        affected = ()
+    documents = {
+        str(name)
+        for name in (primary_document, *affected)
+        if isinstance(name, str) and name
+    }
+    if len(documents) <= 1:
+        return None
+    return {
+        "success": False,
+        "is_error": True,
+        "error_code": "UNSUPPORTED_MULTI_DOCUMENT_MUTATION_SCOPE",
+        "error": (
+            "Live mutating execute_code supports one document per mutation. "
+            "Run dependency-ordered single-document operations instead."
+        ),
+        "documents": sorted(documents),
+        "retryable": False,
+    }
+
+
 def execute_code(
     self, code: str, options: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -308,9 +335,18 @@ def execute_code(
     if blocked is not None:
         return blocked
 
+    options, primary_document, native_recompute, recompute_failure = (
+        _prepare_native_gui_execution(options, collaborators)
+    )
+    if recompute_failure is not None:
+        return annotate(recompute_failure)
+    scope_failure = _single_document_mutation_scope_failure(options, primary_document)
+    if scope_failure is not None:
+        return annotate(scope_failure)
+
     postcondition_sink: dict[str, Any] = {}
 
-    def run_gui_task():
+    def run_gui_task(active_before):
         return run_execute_code_gui_task(
             code,
             options,
@@ -318,22 +354,53 @@ def execute_code(
             collect_invalid_objects_fn=self._collect_invalid_objects,
             native_boundary=bool(primary_document),
             postcondition_sink=postcondition_sink if native_recompute else None,
+            active_document_before=active_before,
+            manage_active_document=False,
         )
-
-    options, primary_document, native_recompute, recompute_failure = (
-        _prepare_native_gui_execution(options, collaborators)
-    )
-    if recompute_failure is not None:
-        return annotate(recompute_failure)
 
     def execute_code_gui_task():
-        return _run_gui_execute_with_native_attribution(
-            collaborators,
-            run_gui_task,
-            primary_document,
-            native_recompute=native_recompute,
-            postcondition_sink=postcondition_sink,
-        )
+        active = getattr(collaborators.freecad, "ActiveDocument", None)
+        active_before = getattr(active, "Name", None) if active else None
+        result = None
+        try:
+            if primary_document and options.get("activate_document"):
+                target = collaborators.freecad.getDocument(primary_document)
+                if target is not None:
+                    try:
+                        collaborators.freecad.setActiveDocument(primary_document)
+                    except Exception as exc:
+                        result = {
+                            "ok": False,
+                            "error": (
+                                f"Failed to activate document {primary_document!r}: {exc}"
+                            ),
+                            "traceback": None,
+                            "session": {},
+                            "stdout": "",
+                        }
+            if result is None:
+                result = _run_gui_execute_with_native_attribution(
+                    collaborators,
+                    lambda: run_gui_task(active_before),
+                    primary_document,
+                    native_recompute=native_recompute,
+                    postcondition_sink=postcondition_sink,
+                )
+        finally:
+            # setActiveDocument changes document lifecycle.  It must happen
+            # before the prepared commit and restoration must wait until that
+            # commit has completed or rolled back.
+            restore_active_document(
+                active_before,
+                bool(options.get("restore_active_document", True)),
+                freecad=collaborators.freecad,
+            )
+        if isinstance(result, dict) and isinstance(result.get("session"), dict):
+            active_after = getattr(collaborators.freecad, "ActiveDocument", None)
+            result["session"]["active_document_after"] = (
+                getattr(active_after, "Name", None) if active_after else None
+            )
+        return result
 
     def finalize_late_result(value):
         if isinstance(value, str):

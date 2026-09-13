@@ -121,7 +121,9 @@ def _register_execute_code(
             document: Target document name for scoped recompute/error reporting.
             recompute: ``none`` (default for inspection), ``target``, or ``all``.
             recompute_documents: Explicit document list to recompute when recompute is ``target``.
-            affected_documents: Complete declared write scope for mutating code.
+            affected_documents: Optional duplicate declarations of ``document`` only.
+                Live mutations accept one distinct document; run dependency-ordered
+                separate calls for cross-document changes.
             read_only: Run only against an immutable FreeCADCmd snapshot. This never
                 executes arbitrary code against a live GUI document in any lease mode.
             restore_active_document: Restore the active document after execution.

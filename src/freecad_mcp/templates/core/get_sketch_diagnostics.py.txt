@@ -14,6 +14,16 @@ _info = {
     'solver_message': getattr(_sk, 'SolverMessage', None),
     'is_closed': None,
 }
+if hasattr(_sk, 'DoF'):
+    try:
+        _info['dof'] = int(_sk.DoF)
+    except (TypeError, ValueError):
+        pass
+if hasattr(_sk, 'FullyConstrained'):
+    try:
+        _info['fully_constrained'] = bool(_sk.FullyConstrained)
+    except (TypeError, ValueError):
+        pass
 try:
     _shape = _sk.Shape
     if _shape and not _shape.isNull(): _info['is_closed'] = _shape.isClosed()

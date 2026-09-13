@@ -34,7 +34,9 @@ def _decode_png_sample_bytes(data: bytes) -> tuple[bytes, int]:  # noqa: C901
     pos = 8
     width = 0
     height = 0
+    bit_depth = 0
     color_type = 0
+    compression = filter_method = interlace = 0
     idat = bytearray()
     while pos + 8 <= len(data):
         length = struct.unpack(">I", data[pos:pos + 4])[0]
@@ -43,17 +45,33 @@ def _decode_png_sample_bytes(data: bytes) -> tuple[bytes, int]:  # noqa: C901
         pos += 4
         chunk_data = data[pos:pos + length]
         pos += length + 4
-        if chunk_type == b"IHDR" and len(chunk_data) >= 10:
-            width, height, _bit_depth, color_type = struct.unpack(
-                ">IIBB", chunk_data[:10]
-            )
+        if chunk_type == b"IHDR" and len(chunk_data) == 13:
+            (
+                width,
+                height,
+                bit_depth,
+                color_type,
+                compression,
+                filter_method,
+                interlace,
+            ) = struct.unpack(">IIBBBBB", chunk_data)
         elif chunk_type == b"IDAT":
             idat.extend(chunk_data)
         elif chunk_type == b"IEND":
             break
-    if not idat or width == 0 or height == 0:
+    if (
+        not idat
+        or width == 0
+        or height == 0
+        or bit_depth != 8
+        or compression != 0
+        or filter_method != 0
+        or interlace != 0
+    ):
         return b"", 0
-    bpp = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type, 0)
+    # Palette PNGs require PLTE expansion.  Treat them as unsupported rather
+    # than accidentally classifying an otherwise valid capture as blank.
+    bpp = {0: 1, 2: 3, 4: 2, 6: 4}.get(color_type, 0)
     if bpp == 0:
         return b"", 0
     try:
@@ -64,12 +82,45 @@ def _decode_png_sample_bytes(data: bytes) -> tuple[bytes, int]:  # noqa: C901
     if row_bytes == 0:
         return b"", 0
     out = bytearray()
+    previous = bytearray(row_bytes)
     pos = 0
     for _ in range(height):
-        if pos >= len(filtered):
-            break
+        if pos + row_bytes + 1 > len(filtered):
+            return b"", 0
+        filter_type = filtered[pos]
         pos += 1
-        row = filtered[pos:pos + row_bytes]
+        row = bytearray(filtered[pos : pos + row_bytes])
         pos += row_bytes
+        if filter_type == 1:  # Sub
+            for index in range(row_bytes):
+                left = row[index - bpp] if index >= bpp else 0
+                row[index] = (row[index] + left) & 0xFF
+        elif filter_type == 2:  # Up
+            for index in range(row_bytes):
+                row[index] = (row[index] + previous[index]) & 0xFF
+        elif filter_type == 3:  # Average
+            for index in range(row_bytes):
+                left = row[index - bpp] if index >= bpp else 0
+                row[index] = (row[index] + ((left + previous[index]) // 2)) & 0xFF
+        elif filter_type == 4:  # Paeth
+            for index in range(row_bytes):
+                left = row[index - bpp] if index >= bpp else 0
+                up = previous[index]
+                up_left = previous[index - bpp] if index >= bpp else 0
+                predictor = left + up - up_left
+                distances = (
+                    abs(predictor - left),
+                    abs(predictor - up),
+                    abs(predictor - up_left),
+                )
+                paeth = (
+                    left
+                    if distances[0] <= distances[1] and distances[0] <= distances[2]
+                    else (up if distances[1] <= distances[2] else up_left)
+                )
+                row[index] = (row[index] + paeth) & 0xFF
+        elif filter_type != 0:
+            return b"", 0
         out.extend(row)
+        previous = row
     return bytes(out), bpp

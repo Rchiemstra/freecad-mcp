@@ -131,6 +131,28 @@ def _freecad_with_document(document):
     )
 
 
+def _real_gui_freecad(*documents, active_document=None):
+    by_name = {document.Name: document for document in documents}
+
+    class FreeCAD:
+        ActiveDocument = active_document
+        Console = SimpleNamespace(
+            PrintMessage=lambda _message: None,
+            PrintError=lambda _message: None,
+        )
+
+        def getDocument(self, name):
+            return by_name.get(name)
+
+        def listDocuments(self):
+            return dict(by_name)
+
+        def setActiveDocument(self, name):
+            self.ActiveDocument = by_name.get(name) if name else None
+
+    return FreeCAD()
+
+
 def _rpc_with_execution(**overrides):
     initial = rpc_server.FreeCADRPC()
     compatibility_api = overrides.pop(
@@ -233,12 +255,16 @@ def test_mutating_gui_execute_uses_native_boundary_exactly_once_and_keeps_result
     assert api.recompute_policies == [False]
     assert api.postcondition_scopes == [False]
     assert api.callback_results == [
-        {"ok": True, "session": {"saved": False}, "stdout": "kept"}
+        {
+            "ok": True,
+            "session": {"saved": False, "active_document_after": None},
+            "stdout": "kept",
+        }
     ]
     assert dispatches == [17.0]
     assert result["success"] is True
     assert result["message"] == "Python code execution completed.\nOutput: kept"
-    assert result["session"] == {"saved": False}
+    assert result["session"] == {"saved": False, "active_document_after": None}
     assert [item[0] for item in safety_calls] == [
         "analyze",
         "warning",
@@ -407,7 +433,7 @@ def test_gui_error_requests_native_rollback_and_preserves_error_envelope(monkeyp
     )
     assert result["document_name"] == "Model"
     assert result["traceback"] == "traceback-contract"
-    assert result["session"] == {"saved": False}
+    assert result["session"] == {"saved": False, "active_document_after": "Model"}
     assert result["message"] == "partial output"
     assert result["mutation_readiness"][0]["ready"] is True
     assert result["retryable"] is True
@@ -756,6 +782,225 @@ def test_gui_execute_target_recompute_is_owned_once_by_native_coordinator(
     assert api.recompute_policies == [True]
     assert api.postcondition_scopes == [True]
     assert result["success"] is True
+
+
+@pytest.mark.parametrize(
+    "restore_active, expected_active", [(True, "Original"), (False, "Target")]
+)
+def test_gui_execute_activates_before_native_commit_and_restores_afterward(
+    monkeypatch, restore_active, expected_active
+):
+    events = []
+
+    class Document(_ReadinessDocument):
+        def __init__(self, name):
+            super().__init__()
+            self.Name = name
+
+    original = Document("Original")
+    target = Document("Target")
+
+    class FreeCAD:
+        ActiveDocument = original
+
+        def getDocument(self, name):
+            return {"Original": original, "Target": target}.get(name)
+
+        def setActiveDocument(self, name):
+            events.append(f"activate:{name}")
+            self.ActiveDocument = self.getDocument(name)
+
+    class RecordingAPI(_CompatibilityAPI):
+        def commit_compatibility_mutation(self, *args, **kwargs):
+            events.append("commit")
+            return super().commit_compatibility_mutation(*args, **kwargs)
+
+    freecad = FreeCAD()
+    rpc = _rpc_with_execution(compatibility_api=RecordingAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **kwargs: (
+            events.append("callback")
+            or (
+                {
+                    "ok": False,
+                    "error": "wrong active document",
+                    "session": {},
+                    "stdout": "",
+                }
+                if freecad.ActiveDocument is not target
+                else {"ok": True, "session": {}, "stdout": "ok"}
+            )
+        ),
+    )
+
+    result = rpc.execute_code(
+        "print('capture')",
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": restore_active,
+        },
+    )
+
+    assert events == ["activate:Target", "commit", "callback"] + (
+        ["activate:Original"] if restore_active else []
+    )
+    assert freecad.ActiveDocument.Name == expected_active
+    assert result["success"] is True
+
+
+def test_gui_execute_rejects_multiple_distinct_documents_before_gui_dispatch(
+    monkeypatch,
+):
+    rpc = _rpc_with_execution(freecad=_freecad_with_document(_ReadinessDocument()))
+    monkeypatch.setattr(
+        rpc,
+        "_dispatch_gui",
+        lambda *_args, **_kwargs: pytest.fail("multi-document mutation dispatched"),
+    )
+
+    result = rpc.execute_code(
+        "print('must not run')",
+        {
+            "document": "Model",
+            "affected_documents": ["Model", "Other", "Other"],
+            "execution_mode": "gui",
+        },
+    )
+
+    assert result["error_code"] == "UNSUPPORTED_MULTI_DOCUMENT_MUTATION_SCOPE"
+    assert result["documents"] == ["Model", "Other"]
+
+
+def test_gui_execute_normalizes_duplicate_affected_document_declarations():
+    assert (
+        execute_code_module._single_document_mutation_scope_failure(
+            {"affected_documents": ["Model", "Model"]}, "Model"
+        )
+        is None
+    )
+
+
+def test_gui_execute_restores_original_document_when_activation_fails(monkeypatch):
+    events = []
+
+    class Document(_ReadinessDocument):
+        def __init__(self, name):
+            super().__init__()
+            self.Name = name
+
+    original = Document("Original")
+    target = Document("Target")
+
+    class FreeCAD:
+        ActiveDocument = original
+
+        def getDocument(self, name):
+            return {"Original": original, "Target": target}.get(name)
+
+        def setActiveDocument(self, name):
+            events.append(f"activate:{name}")
+            if name == "Target":
+                raise RuntimeError("GUI target activation failed")
+            self.ActiveDocument = self.getDocument(name)
+
+    class RecordingAPI(_CompatibilityAPI):
+        def commit_compatibility_mutation(self, *args, **kwargs):
+            events.append("commit")
+            return super().commit_compatibility_mutation(*args, **kwargs)
+
+    freecad = FreeCAD()
+    rpc = _rpc_with_execution(compatibility_api=RecordingAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+
+    result = rpc.execute_code(
+        "print('capture')",
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": True,
+        },
+    )
+
+    assert events == ["activate:Target", "activate:Original"]
+    assert freecad.ActiveDocument is original
+    assert result["success"] is False
+    assert "Failed to activate document 'Target'" in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("code", "succeeds"),
+    [("pass", True), ("raise RuntimeError('callback failure')", False)],
+)
+def test_real_gui_task_session_matches_restored_active_document(
+    monkeypatch, code, succeeds
+):
+    class Document(_ReadinessDocument):
+        Modified = False
+        FileName = ""
+
+        def __init__(self, name):
+            super().__init__()
+            self.Name = name
+
+    original = Document("Original")
+    target = Document("Target")
+    freecad = _real_gui_freecad(original, target, active_document=original)
+    rpc = _rpc_with_execution(compatibility_api=_CompatibilityAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+
+    result = rpc.execute_code(
+        code,
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": True,
+        },
+    )
+
+    assert result["success"] is succeeds
+    assert freecad.ActiveDocument is original
+    assert result["session"]["active_document_before"] == "Original"
+    assert result["session"]["active_document_after"] == "Original"
+
+
+def test_real_gui_task_preserves_null_active_document_snapshot(monkeypatch):
+    class Document(_ReadinessDocument):
+        Modified = False
+        FileName = ""
+        Name = "Target"
+
+    target = Document()
+    freecad = _real_gui_freecad(target, active_document=None)
+    rpc = _rpc_with_execution(compatibility_api=_CompatibilityAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+
+    result = rpc.execute_code(
+        "pass",
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": True,
+        },
+    )
+
+    assert result["success"] is True
+    assert freecad.ActiveDocument is None
+    assert result["session"]["active_document_before"] is None
+    assert result["session"]["active_document_after"] is None
 
 
 def test_signed_generated_continuation_runs_after_the_one_native_recompute(

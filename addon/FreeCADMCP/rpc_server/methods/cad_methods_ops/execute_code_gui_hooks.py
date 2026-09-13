@@ -61,10 +61,12 @@ def recompute_documents(
 def restore_active_document(
     active_before: str | None, restore_active: bool, *, freecad
 ) -> None:
-    if not restore_active or not active_before:
+    if not restore_active:
         return
     try:
-        if freecad.getDocument(active_before):
+        if active_before and freecad.getDocument(active_before):
             freecad.setActiveDocument(active_before)
+        elif active_before is None:
+            freecad.setActiveDocument("")
     except Exception:
         pass

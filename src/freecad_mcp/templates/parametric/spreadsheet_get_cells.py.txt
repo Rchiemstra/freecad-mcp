@@ -31,7 +31,11 @@ for _item in _addrs:
     except Exception as _e:
         _row['contents_error'] = str(_e)
     try:
-        _row['value'] = _sheet.get(_addr)
+        _value = _sheet.get(_addr)
+        _row['value'] = (
+            _value if _value is None or isinstance(_value, (bool, int, float, str))
+            else str(_value)
+        )
     except Exception as _e:
         _row['value_error'] = str(_e)
     _out.append(_row)

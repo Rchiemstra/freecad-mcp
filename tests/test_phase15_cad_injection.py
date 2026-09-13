@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
+import json
 import sys
 from dataclasses import fields, replace
 from pathlib import Path
@@ -22,6 +25,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
     references,
     spreadsheet,
 )
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import sketch_public
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies import (
     CadCollaborators,
@@ -843,6 +847,124 @@ def test_spreadsheet_read_is_not_native_but_create_is():
     ]
     assert native.documents == []
     assert document.recompute_calls == 1
+
+
+def test_spreadsheet_quantity_reads_are_json_safe_in_addon_and_worker_template(
+    monkeypatch,
+):
+    class Quantity:
+        def __str__(self):
+            return "440 mm"
+
+    class Sheet:
+        Name = "Parameters"
+
+        def getAlias(self, _address):
+            return "SeatWidth"
+
+        def getContents(self, _address):
+            return "440 mm"
+
+        def get(self, _address):
+            return Quantity()
+
+    sheet = Sheet()
+    document = SimpleNamespace(getObject=lambda _name: sheet)
+    freecad = SimpleNamespace(getDocument=lambda _name: document)
+
+    addon_result = spreadsheet.spreadsheet_get_cells_gui(
+        "Doc", "Parameters", ["A1"], freecad=freecad
+    )
+    assert addon_result["cells"][0]["value"] == "440 mm"
+    json.dumps(addon_result)
+
+    template = (
+        Path(__file__).parents[1]
+        / "src"
+        / "freecad_mcp"
+        / "templates"
+        / "parametric"
+        / "spreadsheet_get_cells.py.txt"
+    ).read_text(encoding="utf-8")
+    generated = (
+        template.replace("$doc_name", repr("Doc"))
+        .replace("$doc_missing", repr("Document missing"))
+        .replace("$sheet_name", repr("Parameters"))
+        .replace("$addresses", repr(["A1"]))
+    )
+    output = io.StringIO()
+    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
+    with contextlib.redirect_stdout(output):
+        exec(generated, {})
+    assert json.loads(output.getvalue())["cells"][0]["value"] == "440 mm"
+
+
+def test_sketch_diagnostics_report_available_solver_fields_in_addon_and_template(
+    monkeypatch,
+):
+    sketch = SimpleNamespace(
+        Name="Sketch",
+        Geometry=[],
+        Constraints=[],
+        State=[],
+        ConflictingConstraints=[],
+        RedundantConstraints=[],
+        MalformedConstraints=[],
+        SolverMessage=None,
+        DoF=3,
+        FullyConstrained=False,
+    )
+    document = SimpleNamespace(getObject=lambda _name: sketch)
+    freecad = SimpleNamespace(getDocument=lambda _name: document)
+
+    addon_result = diagnostics.get_sketch_diagnostics_gui(
+        "Doc", "Sketch", freecad=freecad
+    )
+    assert addon_result["dof"] == 3
+    assert addon_result["fully_constrained"] is False
+
+    template = (
+        Path(__file__).parents[1]
+        / "src"
+        / "freecad_mcp"
+        / "templates"
+        / "core"
+        / "get_sketch_diagnostics.py.txt"
+    ).read_text(encoding="utf-8")
+    generated = (
+        template.replace("$doc_name", repr("Doc"))
+        .replace("$doc_missing", repr("Document missing"))
+        .replace("$sketch_name", repr("Sketch"))
+    )
+    output = io.StringIO()
+    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
+    with contextlib.redirect_stdout(output):
+        exec(generated, {})
+    worker_result = json.loads(output.getvalue())
+    assert worker_result["dof"] == 3
+    assert worker_result["fully_constrained"] is False
+
+
+def test_sketch_diagnostics_do_not_invent_unavailable_solver_values():
+    sketch = SimpleNamespace(
+        Name="Sketch",
+        Geometry=[],
+        Constraints=[],
+        State=[],
+        ConflictingConstraints=[],
+        RedundantConstraints=[],
+        MalformedConstraints=[],
+        SolverMessage=None,
+    )
+    result = diagnostics.get_sketch_diagnostics_gui(
+        "Doc",
+        "Sketch",
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: SimpleNamespace(getObject=lambda _sketch: sketch)
+        ),
+    )
+    assert "dof" not in result
+    assert "fully_constrained" not in result
 
 
 def test_fem_analysis_fails_before_solver_or_native_callback():

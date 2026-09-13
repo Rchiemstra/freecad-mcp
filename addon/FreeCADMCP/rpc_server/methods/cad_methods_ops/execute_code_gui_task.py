@@ -19,6 +19,7 @@ from .execute_code_gui_session import build_execute_session, disk_signature
 from .recompute_helpers import collect_invalid_objects
 
 NATIVE_POST_RECOMPUTE_MARKER = "# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__"
+_ACTIVE_DOCUMENT_BEFORE_UNSET = object()
 
 
 def _split_native_post_recompute_code(
@@ -62,6 +63,8 @@ def run_execute_code_gui_task(  # noqa: C901
     collect_invalid_objects_fn=None,
     native_boundary: bool = False,
     postcondition_sink: dict[str, Any] | None = None,
+    active_document_before: str | None | object = _ACTIVE_DOCUMENT_BEFORE_UNSET,
+    manage_active_document: bool = True,
 ):
     output_buffer = io.StringIO()
     target_doc = options.get("document")
@@ -88,7 +91,11 @@ def run_execute_code_gui_task(  # noqa: C901
             "stdout": "",
         }
 
-    active_before = freecad.ActiveDocument.Name if freecad.ActiveDocument else None
+    active_before = (
+        (freecad.ActiveDocument.Name if freecad.ActiveDocument else None)
+        if active_document_before is _ACTIVE_DOCUMENT_BEFORE_UNSET
+        else active_document_before
+    )
     dirty_before = {
         name: require_document_modified(doc)
         for name, doc in freecad.listDocuments().items()
@@ -99,7 +106,7 @@ def run_execute_code_gui_task(  # noqa: C901
     collector = collect_invalid_objects_fn or collect_invalid_objects
     invalid_before = collector()
 
-    if target_doc and activate_doc:
+    if manage_active_document and target_doc and activate_doc:
         doc = freecad.getDocument(target_doc)
         if doc:
             freecad.setActiveDocument(target_doc)
@@ -121,7 +128,8 @@ def run_execute_code_gui_task(  # noqa: C901
         restore_save_hooks(saved_hooks)
         if not native_boundary:
             recompute_documents(recompute_mode, recompute_docs, freecad=freecad)
-        restore_active_document(active_before, restore_active, freecad=freecad)
+        if manage_active_document:
+            restore_active_document(active_before, restore_active, freecad=freecad)
 
     finalized_result: dict[str, Any] | None = None
 

@@ -492,3 +492,125 @@ assert RequestReplayCache is CanonicalReplay
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="SIGPIPE default-disposition regression is exercised on Linux",
+)
+@pytest.mark.parametrize("handler_kind", ["default", "identity"])
+def test_listener_response_write_preserves_sigpipe_default_without_terminating_process(
+    handler_kind: str,
+) -> None:
+    source_root = Path(__file__).resolve().parents[1]
+    script = f"""
+import http.client
+import json
+import signal
+import socket
+import sys
+import threading
+
+sys.path.insert(0, {str(source_root)!r})
+
+handler_kind = {handler_kind!r}
+if handler_kind == "identity":
+    from addon.FreeCADMCP.rpc_server.filtered_xmlrpc_server import FilteredXMLRPCServer
+    from addon.FreeCADMCP.rpc_server.xmlrpc_identity_handler import (
+        IdentityHandlerBindings,
+        McpIdentityRequestHandler,
+        bind_identity_handler,
+    )
+
+    bind_identity_handler(
+        IdentityHandlerBindings(
+            set_request_identity=lambda **kwargs: None,
+            clear_request_identity=lambda: None,
+        )
+    )
+    Listener = FilteredXMLRPCServer
+    RequestHandler = McpIdentityRequestHandler
+else:
+    from addon.FreeCADMCP.transport.listener import JsonRpcListener
+    from addon.FreeCADMCP.transport.request_handler import JsonRpcRequestHandler
+
+    Listener = JsonRpcListener
+    RequestHandler = JsonRpcRequestHandler
+
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+started = threading.Event()
+release = threading.Event()
+response_finished = threading.Event()
+
+class CompletionHandler(RequestHandler):
+    def finish(self):
+        try:
+            return super().finish()
+        finally:
+            response_finished.set()
+
+listener = Listener(
+    ("127.0.0.1", 0),
+    allowed_ips_str="127.0.0.1",
+    requestHandler=CompletionHandler,
+    allow_none=True,
+    logRequests=False,
+)
+
+def delayed_response():
+    started.set()
+    assert release.wait(5)
+    return "x" * (512 * 1024)
+
+listener.register_function(delayed_response, "delayed_response")
+listener.register_function(lambda: "alive", "ping")
+loop = threading.Thread(target=listener.serve_forever, daemon=True)
+loop.start()
+try:
+    client = socket.create_connection(listener.server_address, timeout=2)
+    payload = json.dumps(
+        {{"jsonrpc": "2.0", "method": "delayed_response", "id": 1}},
+        separators=(",", ":"),
+    ).encode()
+    client.sendall(
+        b"POST /jsonrpc HTTP/1.1\\r\\n"
+        b"Host: 127.0.0.1\\r\\n"
+        b"Content-Type: application/json\\r\\n"
+        + f"Content-Length: {{len(payload)}}\\r\\n\\r\\n".encode()
+        + payload
+    )
+    assert started.wait(2)
+    client.shutdown(socket.SHUT_RDWR)
+    client.close()
+    release.set()
+    assert response_finished.wait(3)
+
+    control = http.client.HTTPConnection("127.0.0.1", listener.server_address[1], timeout=3)
+    control.request(
+        "POST",
+        "/jsonrpc",
+        json.dumps({{"jsonrpc": "2.0", "method": "ping", "id": 2}}),
+        {{"Content-Type": "application/json"}},
+    )
+    response = control.getresponse()
+    assert response.status == 200
+    assert json.loads(response.read()) == {{"jsonrpc": "2.0", "result": "alive", "id": 2}}
+    assert signal.getsignal(signal.SIGPIPE) == signal.SIG_DFL
+    control.close()
+finally:
+    listener.begin_shutdown()
+    listener.shutdown()
+    listener.server_close()
+    loop.join(timeout=2)
+    assert not loop.is_alive()
+"""
+
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert completed.returncode == 0, completed.stderr
