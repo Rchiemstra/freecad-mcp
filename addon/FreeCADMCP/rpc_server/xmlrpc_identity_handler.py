@@ -3,7 +3,11 @@
 import contextlib
 from dataclasses import dataclass
 from typing import Any
-from xmlrpc.server import SimpleXMLRPCRequestHandler
+
+try:
+    from ..transport.request_handler import _NoSigPipeRequestHandler
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from transport.request_handler import _NoSigPipeRequestHandler
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +33,7 @@ def _identity_bindings():
     return _bindings
 
 
-class McpIdentityRequestHandler(SimpleXMLRPCRequestHandler):
+class McpIdentityRequestHandler(_NoSigPipeRequestHandler):
     """Capture JSON-RPC identity headers and reject retired XML-RPC routes."""
 
     def send_response(self, code, message=None):

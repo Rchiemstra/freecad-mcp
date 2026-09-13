@@ -52,7 +52,7 @@ def _snapshot_invariants_changed(
     return changed or active_before != active_after or selection_before != selection_after
 
 
-def create_snapshot_bundle_gui(
+def create_snapshot_bundle_gui(  # noqa: C901
     document_name: str | None,
     workspace: str,
     link_policy: str = "strict",
@@ -113,7 +113,21 @@ def create_snapshot_bundle_gui(
         for index, item in enumerate(documents, 1):
             canonical = snapshots / f"{index:04d}_{item.Name}.FCStd"
             load_path = load / f"{item.Name}.FCStd"
-            item.saveCopy(str(canonical))
+            save_copy_with_outcome = getattr(item, "saveCopyWithOutcome", None)
+            if callable(save_copy_with_outcome):
+                copy_outcome = save_copy_with_outcome(str(canonical))
+                if not isinstance(copy_outcome, Mapping) or not copy_outcome.get("success"):
+                    raise RuntimeError(
+                        str(
+                            copy_outcome.get("message")
+                            or copy_outcome.get("error_code")
+                            or "FreeCAD rejected the snapshot copy"
+                        )
+                        if isinstance(copy_outcome, Mapping)
+                        else "FreeCAD returned an invalid snapshot outcome"
+                    )
+            else:
+                item.saveCopy(str(canonical))
             entries.append({
                 **states_before[item.Name],
                 "snapshot_filename": canonical.name,
@@ -121,6 +135,7 @@ def create_snapshot_bundle_gui(
                 "load_filename": load_path.name,
                 "load_path": str(load_path),
                 "primary": item.Name == doc.Name,
+                "save_outcome": dict(copy_outcome) if callable(save_copy_with_outcome) else None,
             })
     except Exception as exc:
         return {

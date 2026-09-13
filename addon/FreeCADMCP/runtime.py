@@ -12,6 +12,15 @@ from functools import partial as _partial
 __all__ = ["AddonRuntime"]
 
 
+@_dataclass(slots=True)
+class _DisposalAttempt:
+    """Immutable identity with completion/result owned by one disposal turn."""
+
+    owner: int | None
+    complete: _threading.Event = _field(default_factory=_threading.Event)
+    failures: tuple[BaseException, ...] = ()
+
+
 @_dataclass(frozen=True, slots=True, init=False)
 class AddonRuntime:
     """Hold explicitly constructed gateway dependencies without starting them."""
@@ -34,13 +43,9 @@ class AddonRuntime:
         compare=False,
     )
     _dispose_lock: _threading.Lock = _field(repr=False, compare=False)
-    _dispose_complete: _threading.Event = _field(repr=False, compare=False)
-    _dispose_failures: tuple[BaseException, ...] = _field(
-        default=(),
-        repr=False,
-        compare=False,
+    _dispose_attempt: _DisposalAttempt | None = _field(
+        default=None, repr=False, compare=False
     )
-    _dispose_owner: int | None = _field(default=None, repr=False, compare=False)
     _disposed: bool = _field(default=False, repr=False, compare=False)
 
     def __init__(
@@ -103,9 +108,7 @@ class AddonRuntime:
         object.__setattr__(self, "server_started_at", "")
         object.__setattr__(self, "_owned_resources", owned)
         object.__setattr__(self, "_dispose_lock", _threading.Lock())
-        object.__setattr__(self, "_dispose_complete", _threading.Event())
-        object.__setattr__(self, "_dispose_failures", ())
-        object.__setattr__(self, "_dispose_owner", None)
+        object.__setattr__(self, "_dispose_attempt", None)
         object.__setattr__(self, "_disposed", False)
 
     def bind_publication(
@@ -137,27 +140,52 @@ class AddonRuntime:
         with self._dispose_lock:
             return self._disposed
 
-    def _claim_disposal(self) -> bool | None:
-        """Return True to dispose, False to wait, or None for recursive disposal."""
+    @property
+    def disposal_retryable(self) -> bool:
+        """Return whether a completed attempt retained failed resources."""
 
         with self._dispose_lock:
+            attempt = self._dispose_attempt
+            return bool(
+                attempt is not None
+                and attempt.complete.is_set()
+                and self._owned_resources
+            )
+
+    def _claim_disposal(
+        self,
+    ) -> tuple[bool | None, _DisposalAttempt | None]:
+        """Claim an initial or retained-resource disposal attempt."""
+
+        with self._dispose_lock:
+            attempt = self._dispose_attempt
             if not self._disposed:
+                attempt = _DisposalAttempt(owner=_threading.get_ident())
                 object.__setattr__(self, "_disposed", True)
-                object.__setattr__(self, "_dispose_owner", _threading.get_ident())
-                return True
+                object.__setattr__(self, "_dispose_attempt", attempt)
+                return True, attempt
             if (
-                self._dispose_owner == _threading.get_ident()
-                and not self._dispose_complete.is_set()
+                attempt is not None
+                and attempt.owner == _threading.get_ident()
+                and not attempt.complete.is_set()
             ):
-                return None
-            return False
+                return None, attempt
+            if attempt is not None and not attempt.complete.is_set():
+                return False, attempt
+            if self._owned_resources:
+                attempt = _DisposalAttempt(owner=_threading.get_ident())
+                object.__setattr__(self, "_dispose_attempt", attempt)
+                return True, attempt
+            return False, attempt
 
-    def _wait_for_disposal(self) -> None:
-        self._dispose_complete.wait()
-        with self._dispose_lock:
-            failures = self._dispose_failures
-        if failures:
-            raise BaseExceptionGroup("AddonRuntime disposal failed", failures)
+    @staticmethod
+    def _wait_for_disposal(attempt: _DisposalAttempt) -> None:
+        attempt.complete.wait()
+        if attempt.failures:
+            raise BaseExceptionGroup(
+                "AddonRuntime disposal failed",
+                attempt.failures,
+            )
 
     def _dispose_owned(self) -> tuple[
         list[BaseException],
@@ -179,12 +207,20 @@ class AddonRuntime:
 
     def _complete_disposal(
         self,
+        attempt: _DisposalAttempt,
         failures: list[BaseException],
         failed_resources: list[tuple[object, _Callable[[], None]]],
     ) -> None:
         failed_resource_ids = {id(resource) for resource, _ in failed_resources}
         with self._dispose_lock:
-            object.__setattr__(self, "_dispose_failures", tuple(failures))
+            retained_resources = tuple(
+                (resource, disposer)
+                for resource, disposer in self._owned_resources
+                if id(resource) in failed_resource_ids
+            )
+            if self._dispose_attempt is not attempt:
+                raise RuntimeError("disposal attempt identity changed")
+            attempt.failures = tuple(failures)
             for name in (
                 "listener",
                 "dispatcher",
@@ -204,26 +240,35 @@ class AddonRuntime:
                 object.__setattr__(self, name, None)
             object.__setattr__(self, "runtime_id", "")
             object.__setattr__(self, "server_started_at", "")
-            object.__setattr__(self, "_owned_resources", tuple(failed_resources))
-            object.__setattr__(self, "_dispose_owner", None)
-            self._dispose_complete.set()
+            object.__setattr__(self, "_owned_resources", retained_resources)
+            attempt.owner = None
+            attempt.complete.set()
 
     def dispose(self) -> None:
-        """Signal shutdown and release explicitly owned resources exactly once."""
+        """Release owned resources, retrying only resources retained on failure."""
 
-        owns_disposal = self._claim_disposal()
+        owns_disposal, attempt = self._claim_disposal()
         if owns_disposal is None:
             return
+        if attempt is None:
+            return
         if not owns_disposal:
-            self._wait_for_disposal()
+            self._wait_for_disposal(attempt)
             return
         failures, failed_resources = self._dispose_owned()
-        self._complete_disposal(failures, failed_resources)
+        self._complete_disposal(attempt, failures, failed_resources)
         if failures:
             raise BaseExceptionGroup("AddonRuntime disposal failed", failures)
 
 
 def _dispose_dispatcher(component: object) -> None:
+    dispose = getattr(component, "dispose", None)
+    if callable(dispose):
+        dispose(timeout=2.0)
+        return
+
+    # Compatibility for injected pre-continuation dispatchers. Production
+    # GuiDispatcher uses the atomic, waitable contract above.
     failures: list[BaseException] = []
     for method_name in ("stop_accepting", "deleteLater"):
         method = getattr(component, method_name, None)

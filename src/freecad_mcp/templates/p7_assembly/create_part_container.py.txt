@@ -11,5 +11,4 @@ else:
     _parent = _doc.getObject(_parent_name) if _parent_name else None
     if _parent_name and not _parent: raise RuntimeError('Parent container not found: ' + _parent_name)
     _add_to_container(_parent, _part)
-    _doc.recompute()
     print(json.dumps({'ok': True, 'part_name': _part.Name, 'label': _part.Label, 'parent_container': getattr(_parent, 'Name', None)}))

@@ -31,13 +31,17 @@ def _snapshot():
     return json.loads(_FIXTURE.read_text(encoding="utf-8"))
 
 
+def _missing_document(name):
+    raise NameError(f"Unknown document '{name}'")
+
+
 def test_production_methods_dispatch_the_frozen_listener_examples(
     freecad_rpc_class, monkeypatch
 ):
     expected = _snapshot()["production_listener_examples"]
     default_instance = freecad_rpc_class()
     freecad = SimpleNamespace(
-        getDocument=lambda _name: None,
+        getDocument=_missing_document,
         listDocuments=dict,
         getUserAppDataDir=lambda: "/profile/",
     )
@@ -92,15 +96,28 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
 
     create_module = inspect.getmodule(freecad_rpc_class.create_document)
     assert create_module is not None
-    monkeypatch.setattr(create_module.FreeCAD, "getDocument", lambda _name: None)
+    created_documents = {}
+
+    def get_created_document(name):
+        try:
+            return created_documents[name]
+        except KeyError:
+            return _missing_document(name)
+
+    def create_document(name):
+        created_documents[name] = SimpleNamespace(Name=name)
+        return True
+
+    monkeypatch.setattr(create_module.FreeCAD, "getDocument", get_created_document)
     instance._request_checkpoint = lambda *_args, **_kwargs: None
     instance._current_inflight = lambda: None
-    instance._create_document_gui = lambda _name: True
+    instance._create_document_gui = create_document
     instance._dispatch_gui = lambda callback: callback()
     instance._unknown_mutation_evidence = lambda *_args, **_kwargs: {
         "document_health": {},
         "mutation_scope": {"declared_documents": ["Phase1ContractDocument"]},
     }
+    instance._observed_document_evidence = instance._unknown_mutation_evidence
     actual["create_document"] = dispatcher._dispatch(
         "create_document", ("Phase1ContractDocument",)
     )

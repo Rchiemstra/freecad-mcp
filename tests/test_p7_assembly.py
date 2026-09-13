@@ -70,6 +70,21 @@ class TestAssemblyApiTools:
         assert_code_compiles(code)
         assert_code_contains(code, "Assembly.createAssembly", "UtilsAssembly.getJointGroup", "MainAssembly")
 
+    def test_create_assembly_defers_recompute_choice_to_native_coordinator(self):
+        conn = _ok_conn()
+        create_assembly_operation(
+            conn,
+            True,
+            "Doc",
+            "MainAssembly",
+            recompute=False,
+        )
+
+        code, options = conn.execute_code.call_args.args
+        assert "recompute=False" in code
+        assert options.recompute == "none"
+        assert options.recompute_documents is None
+
     def test_create_assembly_invalid_if_exists(self):
         resp = create_assembly_operation(_ok_conn(), True, "Doc", "Assembly", if_exists="bad")
         assert "if_exists" in _text(resp)
@@ -80,6 +95,22 @@ class TestAssemblyApiTools:
         code = _code(conn)
         assert_code_compiles(code)
         assert_code_contains(code, "Assembly.createGroundedJoint", "ObjectToGround", "BaseLink")
+
+    def test_grounded_joint_requests_one_native_recompute(self):
+        conn = _ok_conn()
+        create_assembly_grounded_joint_operation(
+            conn,
+            True,
+            "Doc",
+            "Assembly",
+            "BaseLink",
+            recompute=True,
+        )
+
+        code, options = conn.execute_code.call_args.args
+        assert "recompute=False" in code
+        assert options.recompute == "target"
+        assert options.recompute_documents == ["Doc"]
 
     def test_create_joint_compiles_and_uses_public_api(self):
         conn = _ok_conn()

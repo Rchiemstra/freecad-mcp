@@ -134,6 +134,7 @@ def get_instance_info(self):
             else []
         ),
         "rpc_method_capabilities": {
+            "sketch_create": {"parameters": ["attachment_offset"]},
             "sketch_attach": {"parameters": ["attachment_offset"]},
         },
         "addon_version": addon_version,

@@ -77,10 +77,10 @@ class TestSketchTrim:
         sketch_trim_operation(conn, True, "Doc", "Sk", 0, 3.5, 2.5)
         assert_code_contains(_code(conn), "3.5", "2.5")
 
-    def test_recompute_called(self):
+    def test_recompute_is_deferred_to_native_postcondition(self):
         conn = _ok_conn()
         sketch_trim_operation(conn, True, "Doc", "Sk", 0, 0.0, 0.0)
-        assert_code_contains(_code(conn), "_doc.recompute()")
+        assert_code_contains(_code(conn), "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
 
 
 # ---------------------------------------------------------------------------

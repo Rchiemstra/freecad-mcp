@@ -5,5 +5,5 @@ try:
 except AttributeError:
     for _gi in _indices:
         _sk.addConstraint(Sketcher.Constraint('Symmetric', _gi, 1, _gi, 2, _sym_geo))
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('symmetry applied')

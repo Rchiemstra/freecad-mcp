@@ -13,6 +13,9 @@ from .connection_acquisition_helpers import (
     process_handoff_status_poll,
     try_claim_handoff_result,
 )
+from .connection_assembly_ops import (
+    solve_assembly,
+)
 from .connection_control_ops import (
     acknowledge_acquisition_claim,
     cancel_request,
@@ -74,6 +77,7 @@ from .connection_lease_ops import (
 )
 from .connection_model_ops import (
     diagnose_parametric,
+    get_mutation_readiness,
     recompute_document,
     redo,
     run_fem_analysis,
@@ -106,6 +110,7 @@ from .connection_save_ops import (
     release_document_lock,
     save_document,
     save_document_as,
+    save_document_copy,
 )
 from .connection_sketch_ops import (
     pad_feature,
@@ -197,6 +202,7 @@ __all__ = [
     'get_document_lock',
     'get_gui_state',
     'get_instance_info',
+    'get_mutation_readiness',
     'get_object',
     'get_objects',
     'get_parts_list',
@@ -254,6 +260,7 @@ __all__ = [
     'run_fem_analysis',
     'save_document',
     'save_document_as',
+    'save_document_copy',
     'select_subshapes',
     'selector_argument',
     'session_ids_from_selector',
@@ -269,6 +276,7 @@ __all__ = [
     'sketch_delete_constraint',
     'sketch_delete_geometry',
     'sketch_edit_constraint',
+    'solve_assembly',
     'spreadsheet_create',
     'spreadsheet_get_cells',
     'spreadsheet_list_aliases',

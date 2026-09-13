@@ -18,32 +18,46 @@ from addon.FreeCADMCP.rpc_server.mutation_guard_ops.method_spec_constants import
     NATIVE_COMPATIBILITY_METHODS,
     NO_OUTER_TRANSACTION,
 )
+from tests.helpers.native_readiness import freecad_with_native_readiness
 
 pytestmark = pytest.mark.unit
 
 
 def _cad_collaborators(api) -> CadCollaborators:
     values = {
-        name: (object() if name in {"freecad", "part", "sketcher"} else lambda *a, **k: None)
+        name: (
+            object()
+            if name in {"freecad", "part", "sketcher"}
+            else lambda *a, **k: None
+        )
         for name in (field.name for field in fields(CadCollaborators))
         if name != "compatibility_api"
     }
+    values["freecad"] = freecad_with_native_readiness()
     return CadCollaborators(compatibility_api=api, **values)
 
 
 class _NativeAPI:
-    def __init__(self, *, result=None, invoke=True):
+    def __init__(self, *, result=None, invoke=True, native_recompute=None):
         self.result = result or {"status": "Committed", "committed": True}
         self.invoke = invoke
         self.calls = []
         self.completed_callbacks = 0
+        self.completed_postconditions = 0
+        self.native_recompute = native_recompute
 
     def commit_compatibility_mutation(
-        self, document_name, callback, *, structural=False
+        self, document_name, callback, *, structural=False, postcondition=None
     ):
         self.calls.append((document_name, callback, structural))
         if self.invoke:
             callback()
+            if self.native_recompute is not None:
+                self.native_recompute()
+            if postcondition is not None:
+                self.completed_postconditions += 1
+                if postcondition() is False:
+                    return {"status": "PostconditionFailed", "committed": False}
             self.completed_callbacks += 1
         return self.result
 
@@ -108,8 +122,13 @@ def test_default_cad_graph_is_eager_and_shares_native_api(monkeypatch) -> None:
 
     assert facade._cad_collaborators is captured
     assert captured.freecad is first
-    assert captured.compatibility_api is facade._collaboration_collaborators.compatibility_api
-    assert captured.compatibility_api is facade._execution_collaborators.compatibility_api
+    assert (
+        captured.compatibility_api
+        is facade._collaboration_collaborators.compatibility_api
+    )
+    assert (
+        captured.compatibility_api is facade._execution_collaborators.compatibility_api
+    )
     assert "_build_cad_collaborators" not in inspect.getsource(
         rpc_server.FreeCADRPC._cad_collaborators.fget
     )
@@ -160,23 +179,112 @@ def test_native_cad_commit_is_exact_once_and_returns_historical_result() -> None
     calls = []
     expected = {"ok": True, "object": "Pad"}
 
-    assert run_cad_mutation(
-        collaborators, "Doc", lambda: calls.append("callback") or expected
-    ) is expected
+    assert (
+        run_cad_mutation(
+            collaborators, "Doc", lambda: calls.append("callback") or expected
+        )
+        is expected
+    )
     assert calls == ["callback"]
     assert len(api.calls) == 1
     assert api.calls[0][0] == "Doc"
     assert api.completed_callbacks == 1
+    assert api.completed_postconditions == 1
+
+
+def test_default_eager_order_is_apply_native_recompute_then_validation() -> None:
+    events: list[str] = []
+    api = _NativeAPI(native_recompute=lambda: events.append("native_recompute"))
+    collaborators = replace(
+        _cad_collaborators(api),
+        validate_document_invariants=lambda _document: events.append("validate"),
+    )
+
+    assert (
+        run_cad_mutation(
+            collaborators,
+            "Doc",
+            lambda: events.append("apply") or True,
+        )
+        is True
+    )
+
+    assert events == ["apply", "native_recompute", "validate"]
+    assert api.completed_postconditions == 1
+
+
+def test_default_eager_path_fails_before_callback_on_old_native_runtime() -> None:
+    callbacks: list[str] = []
+
+    class OldNativeAPI:
+        @staticmethod
+        def commit_compatibility_mutation(
+            _document_name,
+            callback,
+            *,
+            structural=False,
+        ):
+            callbacks.append("native_entry")
+            callback()
+            return {"status": "Committed", "committed": True}
+
+    with pytest.raises(TypeError, match="postcondition"):
+        run_cad_mutation(
+            _cad_collaborators(OldNativeAPI()),
+            "Doc",
+            lambda: callbacks.append("callback") or True,
+        )
+
+    assert callbacks == []
 
 
 def test_legacy_geometry_index_list_is_a_committed_success() -> None:
     api = _NativeAPI()
     expected = [2, 3, 4]
-    assert run_cad_mutation(
-        _cad_collaborators(api), "Doc", lambda: expected
-    ) is expected
+    assert (
+        run_cad_mutation(_cad_collaborators(api), "Doc", lambda: expected) is expected
+    )
     assert len(api.calls) == 1
     assert api.completed_callbacks == 1
+
+
+def test_explicit_postcondition_runs_after_apply_and_replaces_provisional_result() -> (
+    None
+):
+    events = []
+    api = _NativeAPI(native_recompute=lambda: events.append("recompute"))
+    expected = {"success": True, "ok": True, "solid_count": 1}
+
+    result = run_cad_mutation(
+        _cad_collaborators(api),
+        "Doc",
+        lambda: events.append("apply") or {"success": True, "ok": True},
+        postcondition=lambda: events.append("postcondition") or expected,
+    )
+
+    assert result is expected
+    assert events == ["apply", "recompute", "postcondition"]
+    assert api.completed_postconditions == 1
+
+
+def test_failed_postcondition_rolls_back_and_restores_its_typed_envelope() -> None:
+    api = _NativeAPI()
+    failure = {
+        "success": False,
+        "ok": False,
+        "error": "Pad did not produce a solid",
+    }
+
+    result = run_cad_mutation(
+        _cad_collaborators(api),
+        "Doc",
+        lambda: {"success": True, "ok": True},
+        postcondition=lambda: failure,
+    )
+
+    assert result is failure
+    assert api.completed_postconditions == 1
+    assert api.completed_callbacks == 0
 
 
 @pytest.mark.parametrize("failure", ["legacy failure", False, None, {"ok": False}])
@@ -189,9 +297,7 @@ def test_callback_failure_rolls_back_and_restores_legacy_envelope(failure) -> No
 
 
 def test_native_rejection_before_or_after_callback_fails_closed() -> None:
-    before = _NativeAPI(
-        result={"status": "Busy", "committed": False}, invoke=False
-    )
+    before = _NativeAPI(result={"status": "Busy", "committed": False}, invoke=False)
     before_calls = []
     rejected = run_cad_mutation(
         _cad_collaborators(before),
@@ -201,9 +307,7 @@ def test_native_rejection_before_or_after_callback_fails_closed() -> None:
     assert before_calls == []
     assert rejected["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
 
-    after = _NativeAPI(
-        result={"status": "PostconditionFailed", "committed": False}
-    )
+    after = _NativeAPI(result={"status": "PostconditionFailed", "committed": False})
     after_calls = []
     rejected = run_cad_mutation(
         _cad_collaborators(after),
@@ -224,14 +328,16 @@ def test_native_callback_health_failure_rolls_back_and_fails_closed() -> None:
             self.recompute_calls += 1
 
     document = Document()
-    api = _NativeAPI()
+    api = _NativeAPI(native_recompute=document.recompute)
     collaborators = replace(
         _cad_collaborators(api),
-        freecad=type(
-            "FreeCAD",
-            (),
-            {"getDocument": staticmethod(lambda _name: document)},
-        )(),
+        freecad=freecad_with_native_readiness(
+            type(
+                "FreeCAD",
+                (),
+                {"getDocument": staticmethod(lambda _name: document)},
+            )()
+        ),
         validate_document_invariants=lambda _document: (_ for _ in ()).throw(
             RuntimeError("Pad")
         ),
@@ -253,12 +359,12 @@ def test_missing_document_preserves_leaf_envelope_without_native_entry() -> None
     api = _NativeAPI()
     collaborators = replace(
         _cad_collaborators(api),
-        freecad=type("FreeCAD", (), {"getDocument": staticmethod(lambda _name: None)})(),
+        freecad=type(
+            "FreeCAD", (), {"getDocument": staticmethod(lambda _name: None)}
+        )(),
     )
     expected = "Document 'Missing' not found."
-    assert run_cad_mutation(
-        collaborators, "Missing", lambda: expected
-    ) == expected
+    assert run_cad_mutation(collaborators, "Missing", lambda: expected) == expected
     assert api.calls == []
 
 
@@ -271,9 +377,7 @@ def test_document_lookup_failure_preserves_legacy_string_error() -> None:
         _cad_collaborators(api),
         freecad=type("FreeCAD", (), {"getDocument": staticmethod(failed_lookup)})(),
     )
-    assert run_cad_mutation(
-        collaborators, "Missing", lambda: True
-    ) == "lookup failed"
+    assert run_cad_mutation(collaborators, "Missing", lambda: True) == "lookup failed"
     assert api.calls == []
 
 
@@ -283,18 +387,19 @@ def test_native_cad_methods_never_open_the_legacy_outer_transaction() -> None:
         "create_object",
         "sketch_create",
         "pad_feature",
+        "repair_references",
         "spreadsheet_set_cells",
         "run_fem_analysis",
         "solve_assembly",
     } <= NATIVE_COMPATIBILITY_METHODS
 
 
-def test_transaction_control_and_deferred_repair_remain_outside_native_commit() -> None:
+def test_transaction_control_remains_outside_native_commit() -> None:
     assert {
-        "repair_references",
         "recompute_and_wait",
         "recompute_document",
         "redo",
         "undo",
     }.isdisjoint(NATIVE_COMPATIBILITY_METHODS)
+    assert "repair_references" in NATIVE_COMPATIBILITY_METHODS
     assert "repair_references" in NO_OUTER_TRANSACTION

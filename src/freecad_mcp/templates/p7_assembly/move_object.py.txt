@@ -15,5 +15,4 @@ if _remove_old:
         except Exception:
             pass
 _add_to_container(_target, _obj)
-_doc.recompute()
 print(json.dumps({'ok': True, 'object_name': _obj.Name, 'target_container': _target.Name, 'old_parents': _old}))

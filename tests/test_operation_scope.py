@@ -134,14 +134,9 @@ def test_generated_read_tools_request_snapshot_worker_compatible_execution() -> 
 
 
 MUTATIONS_THAT_MUST_NOT_BE_MARKED_READ_ONLY = {
-    ("core_ops/document_ops.py", "recompute_document_operation"),
-    ("core_ops/history_ops.py", "undo_operation"),
-    ("core_ops/history_ops.py", "redo_operation"),
     ("diagnostics_ops/placement_ops.py", "relink_references_operation"),
     ("diagnostics_ops/mutation_ops.py", "create_placement_binder_operation"),
     ("diagnostics_ops/mutation_ops.py", "create_placement_datum_operation"),
-    ("diagnostics_ops/mutation_ops.py", "run_transaction_operation"),
-    ("diagnostics_ops/mutation_ops.py", "validate_movement_follow_operation"),
     ("p5_measure_ops/measure_ops.py", "translate_operation"),
     ("p5_measure_ops/measure_ops.py", "rotate_operation"),
     ("p5_measure_ops/measure_ops.py", "scale_operation"),

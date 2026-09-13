@@ -14,20 +14,28 @@ def sketch_create(
         sketch_name: str,
         body_name: str | None = None,
         attach_to: str | None = None,
+        attachment_offset: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        params = {
+            "doc_name": doc_name,
+            "sketch_name": sketch_name,
+            "body_name": body_name,
+            "attach_to": attach_to,
+        }
+        if attachment_offset is not None:
+            params["attachment_offset"] = attachment_offset
         routed = conn._invoke_mutation_v2(
             "sketch_create",
-            {
-                "doc_name": doc_name,
-                "sketch_name": sketch_name,
-                "body_name": body_name,
-                "attach_to": attach_to,
-            },
+            params,
             document_names=(doc_name,),
             operation_name="Create sketch",
         )
         if routed is not None:
             return routed
+        if attachment_offset is not None:
+            return conn.server.sketch_create(
+                doc_name, sketch_name, body_name, attach_to, attachment_offset
+            )
         return conn.server.sketch_create(doc_name, sketch_name, body_name, attach_to)
 
 
@@ -128,6 +136,7 @@ def pad_feature(
         body_name: str | None = None,
         symmetric: bool = False,
         reversed_dir: bool = False,
+        strict: bool = False,
     ) -> dict[str, Any]:
         routed = conn._invoke_mutation_v2(
             "pad_feature",
@@ -139,12 +148,24 @@ def pad_feature(
                 "body_name": body_name,
                 "symmetric": symmetric,
                 "reversed_dir": reversed_dir,
+                "strict": strict,
             },
             document_names=(doc_name,),
             operation_name="Create Pad",
         )
         if routed is not None:
             return routed
+        if strict:
+            return conn.server.pad_feature(
+                doc_name,
+                sketch_name,
+                pad_name,
+                length,
+                body_name,
+                symmetric,
+                reversed_dir,
+                strict,
+            )
         return conn.server.pad_feature(
             doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir
         )
@@ -159,6 +180,7 @@ def pocket_feature(
         body_name: str | None = None,
         symmetric: bool = False,
         reversed_dir: bool = False,
+        strict: bool = False,
     ) -> dict[str, Any]:
         routed = conn._invoke_mutation_v2(
             "pocket_feature",
@@ -170,19 +192,25 @@ def pocket_feature(
                 "body_name": body_name,
                 "symmetric": symmetric,
                 "reversed_dir": reversed_dir,
+                "strict": strict,
             },
             document_names=(doc_name,),
             operation_name="Create Pocket",
         )
         if routed is not None:
             return routed
+        if strict:
+            return conn.server.pocket_feature(
+                doc_name,
+                sketch_name,
+                pocket_name,
+                length,
+                body_name,
+                symmetric,
+                reversed_dir,
+                strict,
+            )
         return conn.server.pocket_feature(
-            doc_name,
-            sketch_name,
-            pocket_name,
-            length,
-            body_name,
-            symmetric,
-            reversed_dir,
+            doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir
         )
 

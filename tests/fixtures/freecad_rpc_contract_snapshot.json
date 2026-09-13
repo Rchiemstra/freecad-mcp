@@ -150,8 +150,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "request_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -323,79 +323,79 @@
       },
       "parameters": [
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "file_path",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "session_id",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "task_description",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "client",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "agent_id",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "sha256",
-          "kind": "positional_or_keyword",
           "name": "hash_policy",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "sha256"
         }
       ],
       "result_examples": [
@@ -574,8 +574,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -715,52 +715,52 @@
       },
       "parameters": [
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "task_description",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "client",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "agent_id",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "sha256",
-          "kind": "positional_or_keyword",
           "name": "hash_policy",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "sha256"
         }
       ],
       "result_examples": [
@@ -899,128 +899,128 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "obj_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "keyframes",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "path_object",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": 12,
-          "kind": "positional_or_keyword",
           "name": "sample_count",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "integer"
-          }
+          },
+          "default": 12
         },
         {
-          "default": "Isometric",
-          "kind": "positional_or_keyword",
           "name": "view_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "Isometric"
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "focus_objects",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "width",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "height",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "encode_video",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": 8.0,
-          "kind": "positional_or_keyword",
           "name": "fps",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "number"
-          }
+          },
+          "default": 8.0
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "output_path",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -1156,16 +1156,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "body_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -1305,24 +1305,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "body_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "feature_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -1462,8 +1462,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "target_request_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -1621,8 +1621,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "job_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -1765,52 +1765,52 @@
       },
       "parameters": [
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "frames",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "width",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "height",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "orbit",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -1949,64 +1949,64 @@
       },
       "parameters": [
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "frames",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "width",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "height",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "orbit",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "frame_dir",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -2145,8 +2145,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "nonce",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": [
@@ -2321,8 +2321,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "request_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -2479,24 +2479,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "object_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "prop_path",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -2636,8 +2636,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -2790,16 +2790,16 @@
       },
       "parameters": [
         {
-          "default": "New_Document",
-          "kind": "positional_or_keyword",
           "name": "name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": "New_Document"
         }
       ],
       "result_examples": [
@@ -2940,16 +2940,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "obj_data",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "object"
@@ -3097,20 +3097,38 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "obj_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "recursive",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        },
+        {
+          "name": "force",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -3254,24 +3272,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "object_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -3407,24 +3425,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "obj_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "properties",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "object"
@@ -3572,24 +3590,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "code",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "options",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -3745,8 +3763,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "code",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -3906,8 +3924,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": [
@@ -3917,9 +3935,8 @@
           }
         },
         {
-          "default": "save",
-          "kind": "positional_or_keyword",
           "name": "save_mode",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "enum": [
@@ -3928,43 +3945,44 @@
               "save_as"
             ],
             "type": "string"
-          }
+          },
+          "default": "save"
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "destination",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "overwrite",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "expected_destination_sha256",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "default",
-          "kind": "positional_or_keyword",
           "name": "validation_profile",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "default"
         }
       ],
       "result_examples": [
@@ -4109,8 +4127,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_key",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -4237,112 +4255,112 @@
       },
       "parameters": [
         {
-          "default": "Isometric",
-          "kind": "positional_or_keyword",
           "name": "view_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": "Isometric"
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "width",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "height",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "focus_object",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "focus_objects",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "yaw_deg",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "number"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "document",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "document_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -4443,43 +4461,43 @@
       },
       "parameters": [
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "file_path",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "session_id",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -5014,16 +5032,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "obj_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -5182,8 +5200,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -5379,8 +5397,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -5640,8 +5658,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "request_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -6016,16 +6034,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -6266,8 +6284,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "payload",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "object"
@@ -6407,50 +6425,50 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_key",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "token",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "current_operation",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "state",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "document_dirty",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "boolean",
               "null"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -6589,16 +6607,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "relative_path",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -6746,42 +6764,42 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "object_names",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "only_invalid",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "validate",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -6917,8 +6935,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "payload",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "object"
@@ -7078,8 +7096,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "payload",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "object"
@@ -7239,21 +7257,21 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "leases",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
           }
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "client_monotonic_ns",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "integer"
-          }
+          },
+          "default": ""
         }
       ],
       "result_examples": [
@@ -7397,8 +7415,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "credential",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "object"
@@ -7780,16 +7798,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "object_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -7929,8 +7947,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "path",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -8076,66 +8094,75 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "pad_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "length",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "number"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "body_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "symmetric",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "reversed_dir",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
+        },
+        {
+          "name": "strict",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -8373,66 +8400,75 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "pocket_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "length",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "number"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "body_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "symmetric",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "reversed_dir",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
+        },
+        {
+          "name": "strict",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -8576,8 +8612,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -8717,8 +8753,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -8779,15 +8815,16 @@
           "code": "DOCUMENT_CONFLICT",
           "data": {
             "changed_semantic_keys": [
-              "model"
+              "ObjectModel:Target"
             ],
             "current_revisions": {
-              "model": 4
+              "ObjectModel:Target": 4
             },
             "expected_revisions": {
-              "model": 3
+              "ObjectModel:Target": 3
             },
-            "request_id": "phase1-example"
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
           },
           "message": "document revision conflict"
         },
@@ -8795,7 +8832,8 @@
           "code": "DOCUMENT_LIFECYCLE_REJECTED",
           "data": {
             "current_lifecycle_epoch": 3,
-            "expected_lifecycle_epoch": 2
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
           },
           "message": "document lifecycle changed"
         }
@@ -8861,21 +8899,38 @@
       },
       "parameters": [
         {
+          "name": "doc_selector",
           "kind": "positional_or_keyword",
-          "name": "doc_name",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
-        }
-      ],
-      "result_examples": [
-        {
-          "success": true
         },
         {
-          "error": "example-error",
-          "success": false
+          "name": "expected_redo_count",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_redo_head",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
@@ -8898,24 +8953,82 @@
               }
             },
             "required": [
-              "success",
-              "error"
+              "success"
             ]
           }
         ],
         "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
           },
           "error_code": {
             "type": "string"
           },
-          "success": {
+          "committed": {
             "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
-      }
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "HISTORY_HEAD_REJECTED",
+          "error": "document undo history head does not match the client expectation"
+        }
+      ]
     },
     "refresh_view": {
       "normalized_error_examples": [
@@ -9005,91 +9118,91 @@
       },
       "parameters": [
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "focus_objects",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "focus_object",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "touch_objects",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "fit",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "capture",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": "Isometric",
-          "kind": "positional_or_keyword",
           "name": "view_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "Isometric"
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "width",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "height",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -9228,43 +9341,43 @@
       },
       "parameters": [
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "doc_key",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "token",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": "saved",
-          "kind": "positional_or_keyword",
           "name": "disposition",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "saved"
         }
       ],
       "result_examples": [
@@ -9403,8 +9516,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -9552,38 +9665,38 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "repairs",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
           }
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "recompute",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "validate",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -9722,29 +9835,29 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "touch_objects",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
           }
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "fit",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -9883,24 +9996,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "snapshot_id",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -10036,29 +10149,29 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "analysis_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": 600,
-          "kind": "positional_or_keyword",
           "name": "timeout",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "integer"
-          }
+          },
+          "default": 600
         }
       ],
       "result_examples": [
@@ -10194,8 +10307,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": [
@@ -10205,13 +10318,13 @@
           }
         },
         {
-          "default": "default",
-          "kind": "positional_or_keyword",
           "name": "validation_profile",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "default"
         }
       ],
       "result_examples": [
@@ -10367,8 +10480,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": [
@@ -10378,39 +10491,39 @@
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "destination",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": false,
-          "kind": "positional_or_keyword",
           "name": "overwrite",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": false
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "expected_destination_sha256",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "default",
-          "kind": "positional_or_keyword",
           "name": "validation_profile",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "default"
         }
       ],
       "result_examples": [
@@ -10566,33 +10679,33 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "selections",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": true,
-          "kind": "positional_or_keyword",
           "name": "clear",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": true
         }
       ],
       "result_examples": [
@@ -10728,32 +10841,32 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "object_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "prop_path",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "expression",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -10893,61 +11006,61 @@
       },
       "parameters": [
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "enabled",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "boolean",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "placement",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "base",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "normal",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": true,
-          "kind": "positional_or_keyword",
           "name": "no_manip",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "boolean"
-          }
+          },
+          "default": true
         }
       ],
       "result_examples": [
@@ -11083,33 +11196,33 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "object_names",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": "expand",
-          "kind": "positional_or_keyword",
           "name": "mode",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": "expand"
         }
       ],
       "result_examples": [
@@ -11382,24 +11495,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "constraints",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
@@ -11542,24 +11655,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "geometry",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
@@ -11707,24 +11820,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "support",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": [
@@ -11736,16 +11849,16 @@
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "attachment_offset",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "object"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -11881,44 +11994,56 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "body_name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "attach_to",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
+        },
+        {
+          "name": "attachment_offset",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -12062,44 +12187,44 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "constraint_indices",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "constraint_names",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "array",
               "null"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -12238,24 +12363,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "geometry_indices",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
@@ -12398,25 +12523,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sketch_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "value",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
@@ -12424,31 +12548,32 @@
               "number",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "name",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "null",
               "string"
             ]
-          }
+          },
+          "default": null
         },
         {
-          "default": null,
-          "kind": "positional_or_keyword",
           "name": "index",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": [
               "integer",
               "null"
             ]
-          }
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -12584,8 +12709,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -12725,16 +12850,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "assembly_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -12874,16 +12999,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sheet_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -13023,24 +13148,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sheet_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "addresses",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
@@ -13180,16 +13305,16 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sheet_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -13329,32 +13454,32 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sheet_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "address",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "alias",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
@@ -13494,24 +13619,24 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "doc_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "sheet_name",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
         },
         {
-          "kind": "positional_or_keyword",
           "name": "cells",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "array"
@@ -13569,15 +13694,16 @@
           "code": "DOCUMENT_CONFLICT",
           "data": {
             "changed_semantic_keys": [
-              "model"
+              "ObjectModel:Target"
             ],
             "current_revisions": {
-              "model": 4
+              "ObjectModel:Target": 4
             },
             "expected_revisions": {
-              "model": 3
+              "ObjectModel:Target": 3
             },
-            "request_id": "phase1-example"
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
           },
           "message": "document revision conflict"
         },
@@ -13585,7 +13711,8 @@
           "code": "DOCUMENT_LIFECYCLE_REJECTED",
           "data": {
             "current_lifecycle_epoch": 3,
-            "expected_lifecycle_epoch": 2
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
           },
           "message": "document lifecycle changed"
         }
@@ -13651,21 +13778,38 @@
       },
       "parameters": [
         {
+          "name": "doc_selector",
           "kind": "positional_or_keyword",
-          "name": "doc_name",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": "string"
           }
-        }
-      ],
-      "result_examples": [
-        {
-          "success": true
         },
         {
-          "error": "example-error",
-          "success": false
+          "name": "expected_undo_count",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_undo_head",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
@@ -13688,24 +13832,82 @@
               }
             },
             "required": [
-              "success",
-              "error"
+              "success"
             ]
           }
         ],
         "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
           },
           "error_code": {
             "type": "string"
           },
-          "success": {
+          "committed": {
             "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
-      }
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "HISTORY_HEAD_REJECTED",
+          "error": "document undo history head does not match the client expectation"
+        }
+      ]
     },
     "update_document_lock": {
       "normalized_error_examples": [
@@ -13795,8 +13997,8 @@
       },
       "parameters": [
         {
-          "kind": "positional_or_keyword",
           "name": "selector",
+          "kind": "positional_or_keyword",
           "required": true,
           "schema": {
             "type": [
@@ -13806,22 +14008,22 @@
           }
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "task_description",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         },
         {
-          "default": "",
-          "kind": "positional_or_keyword",
           "name": "progress_detail",
+          "kind": "positional_or_keyword",
           "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": ""
         }
       ],
       "result_examples": [
@@ -13875,6 +14077,1293 @@
           },
           "success": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "get_mutation_readiness": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_name",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
+        }
+      ],
+      "result_examples": [
+        {
+          "success": true
+        },
+        {
+          "error": "example-error",
+          "success": false
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success",
+              "error"
+            ]
+          }
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "get_semantic_revisions": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "revision_keys",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "array"
+          }
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "document_uid": "uid-example",
+          "document_instance_id": 1,
+          "lifecycle_epoch": 1,
+          "document_name": "Model",
+          "revisions": [
+            {
+              "kind": "ObjectModel",
+              "subject": "Target",
+              "revision": 2
+            }
+          ]
+        },
+        {
+          "success": false,
+          "error": "example-error",
+          "error_code": "DOCUMENT_NOT_FOUND"
+        }
+      ]
+    },
+    "begin_checked_edit": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "revision_keys",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "array"
+          }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "session_id": "session-example",
+          "operation_id": "op-example",
+          "document_uid": "uid-example",
+          "document_instance_id": 1,
+          "lifecycle_epoch": 1,
+          "document_name": "Model",
+          "revisions": []
+        },
+        {
+          "success": false,
+          "error": "example-error",
+          "error_code": "LEASE_PROTOCOL_REQUIRED"
+        }
+      ]
+    },
+    "commit_checked_property": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "session_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "object_name",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        {
+          "name": "property_name",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "value_type",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "value",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "integer",
+              "number",
+              "string"
+            ]
+          }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "ok": true,
+          "committed": true,
+          "operation_id": "op-example",
+          "status": "Committed",
+          "published_revisions": [],
+          "published_semantic_keys": []
+        },
+        {
+          "success": false,
+          "error_code": "DOCUMENT_CONFLICT",
+          "error": "document revision conflict",
+          "changed_semantic_keys": [
+            "ObjectModel:Target"
+          ],
+          "expected_revisions": {
+            "ObjectModel:Target": 2
+          },
+          "current_revisions": {
+            "ObjectModel:Target": 3
+          }
+        }
+      ]
+    },
+    "cancel_checked_edit": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "session_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "reason",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": "cancelled by caller"
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "cancelled": true,
+          "session_id": "session-example",
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "error": "stale"
+        }
+      ]
+    },
+    "save_document_copy": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "overwrite",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        },
+        {
+          "name": "validation_profile",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": "default"
+        }
+      ],
+      "result_examples": [
+        {
+          "success": true,
+          "saved": true,
+          "save_disposition": "copy_written",
+          "file_written": true,
+          "unchanged": false,
+          "canonical_path": "/tmp/Model.FCStd",
+          "target_path": "/tmp/Model-copy.FCStd",
+          "resulting_clean": false,
+          "document_name": "Model",
+          "authority": "native_freecad"
+        },
+        {
+          "success": false,
+          "error_code": "CANONICAL_SAVEPOINT_MOVED",
+          "error": "Save Copy must not move the canonical savepoint"
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
@@ -13948,6 +15437,11 @@
         2
       ],
       "rpc_method_capabilities": {
+        "sketch_create": {
+          "parameters": [
+            "attachment_offset"
+          ]
+        },
         "sketch_attach": {
           "parameters": [
             "attachment_offset"

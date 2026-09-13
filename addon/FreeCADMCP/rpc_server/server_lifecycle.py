@@ -267,7 +267,7 @@ class _RpcStartRefusal(RuntimeError):
     """Expected configuration refusal with an already-public-safe message."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _FailedRuntimeResources:
     """Retain resources whose construction rollback did not complete."""
 
@@ -275,6 +275,30 @@ class _FailedRuntimeResources:
     resources: tuple[tuple[Any, Callable[[], None]], ...]
     request_replay_cache: Any
     disposed: bool = True
+
+    @property
+    def disposal_retryable(self) -> bool:
+        return bool(self.resources)
+
+    def dispose(self) -> None:
+        failures: list[BaseException] = []
+        retained: list[tuple[Any, Callable[[], None]]] = []
+        try:
+            self.shutdown_requested.set()
+        except BaseException as exc:
+            failures.append(exc)
+        for resource, disposer in self.resources:
+            try:
+                disposer()
+            except BaseException as exc:
+                failures.append(exc)
+                retained.append((resource, disposer))
+        self.resources = tuple(retained)
+        if failures:
+            raise BaseExceptionGroup(
+                "Failed runtime resource disposal failed",
+                failures,
+            )
 
 
 @dataclass(slots=True)

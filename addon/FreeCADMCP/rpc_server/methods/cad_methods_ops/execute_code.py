@@ -1,17 +1,29 @@
 """CAD RPC execute_code handler (Phase 4 slice 4F)."""
 
+from contextlib import suppress
 from typing import Any
 
+from ...gui_dispatch import _flush_gui_events
+from .cad_mutation import (
+    admit_cad_mutation,
+    current_cad_mutation_inflight,
+    native_mutation_rejection,
+    native_rollback_exception_result,
+    postflight_cad_mutation,
+)
 from .execute_code_context import build_execute_code_context
+from .execute_code_gui_hooks import restore_active_document
 from .execute_code_gui_task import run_execute_code_gui_task
 from .execute_code_policy import (
     boolean_audit_block_response,
     geometry_loop_block_response,
     gui_timeout_not_supported_response,
     invalid_execution_mode_response,
+    modal_command_block_response,
     worker_requires_read_only_response,
 )
 from .execute_code_response import finalize_gui_execute_response
+from .mutation_readiness import document_readiness, mark_quarantined
 
 
 class _GuiExecuteRollback(RuntimeError):
@@ -31,36 +43,37 @@ def _resolve_primary_document(collaborators, options: dict[str, Any]) -> str | N
     return None
 
 
-def _recompute_primary_document(collaborators, primary_document: str) -> None:
-    """Recompute under the active structural grant before apply returns.
-
-    DocumentCommitCoordinator opens the structural grant only around
-    operation.apply(); its own post-apply recompute runs after the grant
-    ends. Matching typed CAD mutations, force one recompute inside the
-    callback so Assembly/joint side effects see the grant.
-    """
-
-    get_document = getattr(collaborators.freecad, "getDocument", None)
-    if not callable(get_document):
-        return
-    try:
-        document = get_document(primary_document)
-    except Exception:
-        return
-    if document is None:
-        return
-    recompute = getattr(document, "recompute", None)
-    if callable(recompute):
-        recompute()
-
-
-def _run_gui_execute_with_native_attribution(
+def _run_gui_execute_with_native_attribution(  # noqa: C901
     collaborators,
     run_gui_task,
     primary_document,
+    *,
+    native_recompute: bool,
+    postcondition_sink: dict[str, Any],
 ):
     if not isinstance(primary_document, str) or not primary_document:
         return run_gui_task()
+    document = None
+    get_document = getattr(collaborators.freecad, "getDocument", None)
+    if callable(get_document):
+        try:
+            document = get_document(primary_document)
+        except Exception:
+            # Preserve the native boundary's historical stale/missing-document
+            # result instead of inventing a second lookup error contract here.
+            document = None
+    if document is not None:
+        admission_failure = admit_cad_mutation(
+            document,
+            inflight=current_cad_mutation_inflight(),
+        )
+        if admission_failure is not None:
+            return {
+                **admission_failure,
+                "traceback": None,
+                "session": {},
+                "stdout": "",
+            }
     captured = {}
 
     def native_callback():
@@ -70,17 +83,54 @@ def _run_gui_execute_with_native_attribution(
             and captured["result"].get("ok") is False
         ):
             raise _GuiExecuteRollback
-        _recompute_primary_document(collaborators, primary_document)
         return captured["result"]
+
+    def native_postcondition():
+        captured["postcondition_called"] = True
+        finalize = postcondition_sink.get("finalize")
+        if callable(finalize):
+            captured["result"] = finalize()
+        return not (
+            isinstance(captured.get("result"), dict)
+            and captured["result"].get("ok") is False
+        )
 
     try:
         # GUI execute_code can create/remove objects or trigger Assembly
         # structural side effects; always request the structural grant.
-        native_result = collaborators.commit_compatibility_mutation(
-            primary_document, native_callback, structural=True
-        )
+        if native_recompute:
+            native_result = collaborators.commit_compatibility_mutation(
+                primary_document,
+                native_callback,
+                structural=True,
+                postcondition=native_postcondition,
+            )
+        else:
+            native_result = collaborators.commit_compatibility_mutation(
+                primary_document,
+                native_callback,
+                structural=True,
+                recompute=False,
+            )
     except _GuiExecuteRollback:
-        return captured["result"]
+        if document is None:
+            return captured["result"]
+        return postflight_cad_mutation(
+            document,
+            captured["result"],
+            include_failure_readiness=True,
+        )
+    except Exception as exc:
+        if document is not None:
+            rollback_failure = native_rollback_exception_result(document, exc)
+            if rollback_failure is not None:
+                return {
+                    **rollback_failure,
+                    "traceback": None,
+                    "session": {},
+                    "stdout": "",
+                }
+        raise
     native_status = (
         native_result.get("status") if isinstance(native_result, dict) else None
     )
@@ -88,12 +138,56 @@ def _run_gui_execute_with_native_attribution(
         native_result.get("committed") if isinstance(native_result, dict) else False
     )
     if native_status == "Committed" and native_committed is True:
-        return captured["result"]
+        if native_recompute and not captured.get("postcondition_called"):
+            diagnostic = (
+                "native compatibility mutation committed execute_code without "
+                "its requested postcondition"
+            )
+            if document is not None:
+                mark_quarantined(document, diagnostic)
+            return {
+                "ok": False,
+                "success": False,
+                "is_error": True,
+                "error_code": "NATIVE_POSTCONDITION_NOT_RUN",
+                "error": diagnostic,
+                "mutation_readiness": (
+                    [document_readiness(document)] if document is not None else []
+                ),
+                "retryable": False,
+                "traceback": None,
+                "session": {},
+                "stdout": "",
+            }
+        result = captured["result"]
+        if document is not None:
+            result = postflight_cad_mutation(document, result)
+        if isinstance(result, dict) and result.get("ok") is True:
+            with suppress(Exception):
+                _flush_gui_events()
+        return result
+    if (
+        native_status == "PostconditionFailed"
+        and captured.get("postcondition_called")
+        and isinstance(captured.get("result"), dict)
+        and captured["result"].get("ok") is False
+    ):
+        # A signed generated continuation may perform read-only shape checks
+        # after the native recompute. Preserve its precise failure after the
+        # coordinator has rolled the apply transaction back.
+        result = captured["result"]
+        if document is not None:
+            result = postflight_cad_mutation(
+                document,
+                result,
+                include_failure_readiness=True,
+            )
+        return result
     return {
-        "ok": False,
-        "error": (
-            "Native compatibility mutation rejected execution"
-            + (f" ({native_status})" if native_status else "")
+        **native_mutation_rejection(
+            native_result,
+            document,
+            operation_label="execution",
         ),
         "traceback": None,
         "session": {},
@@ -111,6 +205,13 @@ def _gui_execute_policy_block(
 ):
     if options.get("timeout_seconds") is not None:
         return gui_timeout_not_supported_response(annotate)
+    blocked = modal_command_block_response(
+        annotate,
+        code=code,
+        find_modal_command_risk_fn=collaborators.find_modal_command_risk,
+    )
+    if blocked is not None:
+        return blocked
     blocked = geometry_loop_block_response(
         annotate,
         code=code,
@@ -129,6 +230,66 @@ def _gui_execute_policy_block(
         read_only=read_only,
         find_gui_blocking_risk_fn=collaborators.find_gui_blocking_risk,
     )
+
+
+def _native_recompute_policy(
+    options: dict[str, Any], primary_document: str | None
+) -> tuple[bool, dict[str, Any] | None]:
+    mode = options.get("recompute", "none")
+    if mode == "none":
+        return False, None
+    if mode == "target" and primary_document:
+        declared = options.get("recompute_documents")
+        documents = list(declared) if declared else [primary_document]
+        if documents and all(name == primary_document for name in documents):
+            return True, None
+    return False, {
+        "success": False,
+        "is_error": True,
+        "error_code": "UNSUPPORTED_NATIVE_RECOMPUTE_SCOPE",
+        "error": (
+            "Live mutating execute_code can recompute only its one attributed "
+            "document through the native coordinator; use a typed tool or split "
+            "the operation"
+        ),
+        "retryable": False,
+    }
+
+
+def _prepare_native_gui_execution(options, collaborators):
+    primary_document = _resolve_primary_document(collaborators, options)
+    if primary_document and options.get("document") != primary_document:
+        # Stamp so session and native recompute attribution resolve the same
+        # document; omission no longer means "no document".
+        options = {**options, "document": primary_document}
+    native_recompute, failure = _native_recompute_policy(options, primary_document)
+    return options, primary_document, native_recompute, failure
+
+
+def _single_document_mutation_scope_failure(options, primary_document):
+    """Keep the public GUI path aligned with the one-document native commit."""
+
+    affected = options.get("affected_documents") or ()
+    if not isinstance(affected, (list, tuple, set)):
+        affected = ()
+    documents = {
+        str(name)
+        for name in (primary_document, *affected)
+        if isinstance(name, str) and name
+    }
+    if len(documents) <= 1:
+        return None
+    return {
+        "success": False,
+        "is_error": True,
+        "error_code": "UNSUPPORTED_MULTI_DOCUMENT_MUTATION_SCOPE",
+        "error": (
+            "Live mutating execute_code supports one document per mutation. "
+            "Run dependency-ordered single-document operations instead."
+        ),
+        "documents": sorted(documents),
+        "retryable": False,
+    }
 
 
 def execute_code(
@@ -174,28 +335,83 @@ def execute_code(
     if blocked is not None:
         return blocked
 
-    def run_gui_task():
+    options, primary_document, native_recompute, recompute_failure = (
+        _prepare_native_gui_execution(options, collaborators)
+    )
+    if recompute_failure is not None:
+        return annotate(recompute_failure)
+    scope_failure = _single_document_mutation_scope_failure(options, primary_document)
+    if scope_failure is not None:
+        return annotate(scope_failure)
+
+    postcondition_sink: dict[str, Any] = {}
+
+    def run_gui_task(active_before):
         return run_execute_code_gui_task(
             code,
             options,
             freecad=collaborators.freecad,
             collect_invalid_objects_fn=self._collect_invalid_objects,
+            native_boundary=bool(primary_document),
+            postcondition_sink=postcondition_sink if native_recompute else None,
+            active_document_before=active_before,
+            manage_active_document=False,
         )
-
-    primary_document = _resolve_primary_document(collaborators, options)
-    if primary_document and options.get("document") != primary_document:
-        # Stamp so session / optional target recompute see the same document
-        # the native boundary attributes — omit no longer means "no document".
-        options = {**options, "document": primary_document}
 
     def execute_code_gui_task():
-        return _run_gui_execute_with_native_attribution(
-            collaborators,
-            run_gui_task,
-            primary_document,
-        )
+        active = getattr(collaborators.freecad, "ActiveDocument", None)
+        active_before = getattr(active, "Name", None) if active else None
+        result = None
+        try:
+            if primary_document and options.get("activate_document"):
+                target = collaborators.freecad.getDocument(primary_document)
+                if target is not None:
+                    try:
+                        collaborators.freecad.setActiveDocument(primary_document)
+                    except Exception as exc:
+                        result = {
+                            "ok": False,
+                            "error": (
+                                f"Failed to activate document {primary_document!r}: {exc}"
+                            ),
+                            "traceback": None,
+                            "session": {},
+                            "stdout": "",
+                        }
+            if result is None:
+                result = _run_gui_execute_with_native_attribution(
+                    collaborators,
+                    lambda: run_gui_task(active_before),
+                    primary_document,
+                    native_recompute=native_recompute,
+                    postcondition_sink=postcondition_sink,
+                )
+        finally:
+            # setActiveDocument changes document lifecycle.  It must happen
+            # before the prepared commit and restoration must wait until that
+            # commit has completed or rolled back.
+            restore_active_document(
+                active_before,
+                bool(options.get("restore_active_document", True)),
+                freecad=collaborators.freecad,
+            )
+        if isinstance(result, dict) and isinstance(result.get("session"), dict):
+            active_after = getattr(collaborators.freecad, "ActiveDocument", None)
+            result["session"]["active_document_after"] = (
+                getattr(active_after, "Name", None) if active_after else None
+            )
+        return result
 
-    res = self._dispatch_gui(execute_code_gui_task, collaborators.execute_timeout)
+    def finalize_late_result(value):
+        if isinstance(value, str):
+            return annotate({"success": False, "error": value, "is_error": True})
+        return finalize_gui_execute_response(annotate, value, options)
+
+    res = self._dispatch_gui(
+        execute_code_gui_task,
+        collaborators.execute_timeout,
+        late_result_transform=finalize_late_result,
+    )
     if isinstance(res, str):
         return annotate({"success": False, "error": res, "is_error": True})
     return finalize_gui_execute_response(annotate, res, options)

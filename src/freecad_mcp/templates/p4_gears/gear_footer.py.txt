@@ -14,7 +14,7 @@ _pad.Profile = (_sk, [''])
 _pad.Length = _width
 _set_extrusion_symmetric(_pad, False)
 _sk.Visibility = False
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('body_name='   + _body.Name)
 print('sketch_name=' + _sk.Name)
 print('pad_name='    + _pad.Name)

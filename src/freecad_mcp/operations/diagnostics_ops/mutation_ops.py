@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
+from ...responses.tool_results import tool_fail
 from ...template_resources import render_template_text
-from ..p7_assembly import _doc_preamble, _run_json_code
+from ..p7_assembly import _run_json_code
 from .helpers import _diag_preamble
 
 
@@ -68,20 +69,22 @@ def run_transaction_operation(
     dry_run: bool = False,
     commit_on_success: bool = True,
 ) -> ToolResponse:
-    preamble = _doc_preamble(doc_name)
-    body = render_template_text(
-        "diagnostics/run_transaction.py.txt",
-        label=repr(label),
-        code=repr(code),
-        dry_run=repr(dry_run),
-        commit_on_success=repr(commit_on_success),
-    )
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(preamble) + "\n" + body,
-        "Failed to run transaction",
-        screenshot=True,
-        document=doc_name,
-        read_only=False,
+    """Fail closed: generated callbacks may not own native transaction control."""
+
+    del freecad, only_text_feedback, doc_name, label, code, dry_run, commit_on_success
+    return tool_fail(
+        "run_transaction is retired because nested transaction control is incompatible "
+        "with FreeCAD's native mutation coordinator; use typed modelling tools instead.",
+        error_code="RUN_TRANSACTION_RETIRED",
+        structured={
+            "success": False,
+            "ok": False,
+            "error_code": "RUN_TRANSACTION_RETIRED",
+            "error": (
+                "Generated mutation callbacks cannot open, commit, abort, undo, or redo "
+                "inside the native coordinator. Use typed modelling tools."
+            ),
+        },
     )
 
 def validate_movement_follow_operation(
@@ -96,20 +99,29 @@ def validate_movement_follow_operation(
     restore: bool = True,
     tolerance: float = 1e-7,
 ) -> ToolResponse:
-    code = [*_diag_preamble(doc_name), render_template_text(
-        "diagnostics/validate_movement_follow.py.txt",
-        source=repr(source),
-        dependents=repr(dependents),
-        translation=repr(translation),
-        axis=repr(axis),
-        angle_deg=repr(angle_deg),
-        restore=repr(restore),
-        tolerance=repr(tolerance),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed movement-follow validation",
-        screenshot=False,
-        document=doc_name,
-        read_only=False,
+    """Reject a two-recompute probe before it can alter the live document."""
+
+    del (
+        freecad,
+        only_text_feedback,
+        doc_name,
+        source,
+        dependents,
+        translation,
+        axis,
+        angle_deg,
+        restore,
+        tolerance,
+    )
+    return tool_fail(
+        "Movement-follow validation requires mutation work on both sides of "
+        "recompute and cannot run atomically through the native coordinator.",
+        error_code="UNSUPPORTED_NATIVE_PHASE_BOUNDARY",
+        structured={
+            "success": False,
+            "ok": False,
+            "error_code": "UNSUPPORTED_NATIVE_PHASE_BOUNDARY",
+            "operation": "validate_movement_follow",
+            "retryable": False,
+        },
     )

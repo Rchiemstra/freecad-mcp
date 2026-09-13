@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
+from ...responses.tool_results import add_screenshot_if_available, tool_fail, tool_ok
 from ...template_resources import render_template_lines
-from ..p7_assembly import _run_json_code
 from .code_gen import (
-    _indented_build_assertion,
     _partdesign_bool_property_helper_code,
     _partdesign_extrusion_helper_code,
     _partdesign_pattern_helper_code,
@@ -25,28 +24,11 @@ def pad_feature_operation(
     reversed_dir: bool = False,
     strict: bool = False,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "core/pad_feature.py.txt",
-        doc_name=repr(doc_name),
-        sketch_name=repr(sketch_name),
-        body_name=repr(body_name),
-        strict=repr(bool(strict)),
-        pad_name=repr(pad_name),
-        length=repr(length),
-        extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
-        bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
-        symmetric=repr(symmetric),
-        reversed_dir=repr(reversed_dir),
-        verification=_indented_build_assertion(pad_name, sketch_name),
+    return _typed_feature_response(
+        freecad, only_text_feedback, "pad", doc_name, sketch_name, pad_name,
+        length, body_name, symmetric, reversed_dir, strict,
     )
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(lines),
-        "Failed to create pad",
-        screenshot=not only_text_feedback,
-        document=doc_name,
-    )
+
 
 def pocket_feature_operation(
     freecad: FreeCADConnection,
@@ -60,28 +42,60 @@ def pocket_feature_operation(
     reversed_dir: bool = False,
     strict: bool = False,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "core/pocket_feature.py.txt",
-        doc_name=repr(doc_name),
-        sketch_name=repr(sketch_name),
-        body_name=repr(body_name),
-        strict=repr(bool(strict)),
-        pocket_name=repr(pocket_name),
-        length=repr(length),
-        extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
-        bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
-        symmetric=repr(symmetric),
-        reversed_dir=repr(reversed_dir),
-        verification=_indented_build_assertion(pocket_name, sketch_name),
+    return _typed_feature_response(
+        freecad, only_text_feedback, "pocket", doc_name, sketch_name, pocket_name,
+        length, body_name, symmetric, reversed_dir, strict,
     )
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(lines),
-        "Failed to create pocket",
-        screenshot=not only_text_feedback,
-        document=doc_name,
+
+
+def _typed_feature_response(
+    freecad, only_text_feedback, kind, doc_name, sketch_name, feature_name,
+    length, body_name, symmetric, reversed_dir, strict,
+) -> ToolResponse:
+    """Use the typed atomic RPC; feature templates are no longer public writes."""
+    try:
+        method = getattr(freecad, f"{kind}_feature")
+        result = method(
+            doc_name, sketch_name, feature_name, length, body_name, symmetric,
+            reversed_dir, strict,
+        )
+    except Exception as exc:
+        return tool_fail(f"Failed to create {kind}: {exc}")
+    if not isinstance(result, dict) or result.get("success") is False or result.get("ok") is False:
+        failure = result.get("error", result) if isinstance(result, dict) else result
+        return tool_fail(
+            f"Failed to create {kind}: {failure}",
+            structured=result if isinstance(result, dict) else None,
+            error_code=result.get("error_code") if isinstance(result, dict) else None,
+        )
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            # The model mutation has already committed.  Presentation capture
+            # is best-effort and must never turn that success into a retryable
+            # failure that could duplicate the feature.
+            result = dict(result)
+            result["presentation_warning"] = f"Screenshot capture failed: {exc}"
+        if not screenshot:
+            screenshot = None
+            if "presentation_warning" not in result:
+                # The generated connection method normalizes capture failures
+                # to None, so absence must be handled just like a raised
+                # exception. The typed mutation is already committed either
+                # way.
+                result = dict(result)
+                result["presentation_warning"] = (
+                    "Screenshot capture returned no image after the feature committed."
+                )
+    response = tool_ok(
+        f"{kind.title()} '{result.get('feature', feature_name)}' created",
+        structured=result,
+        only_text_feedback=only_text_feedback,
     )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)
+
 
 def linear_pattern_feature_operation(
     freecad: FreeCADConnection,

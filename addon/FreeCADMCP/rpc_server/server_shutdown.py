@@ -29,6 +29,7 @@ class _RuntimeShutdownClaim:
     completed: threading.Event = field(default_factory=threading.Event)
     failure: BaseException | None = None
     preflight_failures: list[BaseException] = field(default_factory=list)
+    retryable_disposal: bool = False
 
 
 def _fence_inflight_cancellations(
@@ -36,8 +37,8 @@ def _fence_inflight_cancellations(
     timeout: float,
 ) -> list[BaseException]:
     failures: list[BaseException] = []
-    registry = runtime.inflight_requests
-    cancelling_rpc = runtime.collaboration_bridge
+    registry = getattr(runtime, "inflight_requests", None)
+    cancelling_rpc = getattr(runtime, "collaboration_bridge", None)
     if registry is None or cancelling_rpc is None:
         return failures
     cancellation_deadline = time.monotonic() + timeout
@@ -118,6 +119,23 @@ def _join_listener_thread(
         failures.append(exc)
 
 
+def _prepare_owner_dispatcher_shutdown(
+    runtime: Any,
+    claim: _RuntimeShutdownClaim,
+) -> None:
+    """Release Qt-owned observer state before an owner caller can block."""
+
+    dispatcher = getattr(runtime, "dispatcher", None)
+    dispose_on_owner = getattr(dispatcher, "dispose_on_owner_thread", None)
+    if not callable(dispose_on_owner):
+        return
+    try:
+        dispose_on_owner(timeout=2.0)
+    except BaseException as exc:
+        claim.preflight_failures.append(exc)
+        claim.retryable_disposal = True
+
+
 def _unpublish_disposed_runtime(
     rpc_mod: Any,
     runtime: Any,
@@ -141,8 +159,8 @@ def _dispose_claimed_runtime(
     claim: _RuntimeShutdownClaim,
 ) -> None:
     failures: list[BaseException] = list(claim.preflight_failures)
-    _stop_listener(runtime.listener, failures)
-    _begin_worker_shutdown(runtime.worker_manager, failures)
+    _stop_listener(getattr(runtime, "listener", None), failures)
+    _begin_worker_shutdown(getattr(runtime, "worker_manager", None), failures)
     _join_listener_thread(listener_thread, failures)
     try:
         runtime.dispose()
@@ -180,7 +198,7 @@ def _start_runtime_disposal(
         _dispose_claimed_runtime(rpc_mod, runtime, listener_thread, claim)
 
 
-def stop_rpc_server(
+def stop_rpc_server(  # noqa: C901
     *,
     dependencies: Any | None = None,
     wait_for_completion: bool = False,
@@ -208,6 +226,22 @@ def stop_rpc_server(
             )
             rpc_mod._runtime_shutdown_claim = claim
             owns_shutdown = True
+        elif (
+            claim.completed.is_set()
+            and claim.failure is not None
+            and (
+                bool(getattr(claim.runtime, "disposal_retryable", False))
+                or bool(getattr(claim, "retryable_disposal", False))
+            )
+        ):
+            runtime = claim.runtime
+            listener_thread = getattr(runtime, "listener_thread", None)
+            claim = _RuntimeShutdownClaim(
+                runtime,
+                listener_thread=listener_thread,
+            )
+            rpc_mod._runtime_shutdown_claim = claim
+            owns_shutdown = True
         else:
             runtime = claim.runtime
             listener_thread = None
@@ -223,6 +257,15 @@ def stop_rpc_server(
                 rpc_mod.RPC_SHUTDOWN_CANCELLATION_WAIT_SECONDS,
             )
         )
+
+    # A GUI owner may be joining a claim created by a remote caller whose
+    # teardown thread is already waiting for queued Qt cleanup. Prepare the
+    # dispatcher before *every* owner-side wait, not only for the caller that
+    # created the claim. The dispatcher operation is idempotent.
+    if not claim.completed.is_set():
+        _prepare_owner_dispatcher_shutdown(runtime, claim)
+
+    if owns_shutdown:
         _start_runtime_disposal(rpc_mod, runtime, listener_thread, claim)
 
     completed = claim.completed.wait(

@@ -5,5 +5,5 @@ try:
     _sk.addSymmetric(_indices, $construction)
 except Exception:
     pass
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('offset applied')

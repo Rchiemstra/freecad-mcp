@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -15,6 +16,36 @@ from ..p7_assembly import _run_json_code
 
 def _doc_missing(doc_name: str) -> str:
     return repr(f"Document {doc_name!r} not found")
+
+
+def _typed_parametric_mutation(
+    freecad: FreeCADConnection,
+    only_text_feedback: bool,
+    method_name: str,
+    args: tuple[Any, ...],
+    failure_prefix: str,
+) -> ToolResponse:
+    """Run one typed parametric write and preserve its structured envelope."""
+    try:
+        result = getattr(freecad, method_name)(*args)
+    except Exception as exc:
+        return tool_fail(f"{failure_prefix}: {exc}")
+    if not isinstance(result, dict):
+        return tool_fail(
+            f"{failure_prefix}: invalid RPC response",
+            error_code="INVALID_RPC_RESPONSE",
+        )
+    if result.get("success") is False or result.get("ok") is False:
+        return tool_fail(
+            f"{failure_prefix}: {result.get('error', result.get('message', 'unknown error'))}",
+            structured=result,
+            error_code=result.get("error_code"),
+        )
+    return tool_ok(
+        json.dumps(result, ensure_ascii=False, default=str),
+        structured=result,
+        only_text_feedback=only_text_feedback,
+    )
 
 def _typed_rpc_unavailable(exc: BaseException) -> bool:
     """True only when the addon/client lacks the typed method entirely."""

@@ -5,6 +5,7 @@ from typing import Any
 from . import state
 from .clickable_status_label import clickable_status_label_type
 from .constants import _mcp_dock_features
+from .document_changes_controls import refresh_document_changes_controls
 from .install_dock_handlers import (
     InstallDockContext,
     on_keep_dirty,
@@ -31,8 +32,30 @@ from .refresh import _refresh_lock_indicator_now, _refresh_set_status_style
 from .refresh_bridge import refresh_bridge_type
 from .runtime_bindings import current_runtime_bindings
 
+try:
+    from automation_pause_ui_bridge import set_local_pause_refresh
+except ImportError:  # pragma: no cover - package test layout
+    from addon.FreeCADMCP.automation_pause_ui_bridge import set_local_pause_refresh
 
-def install_lock_indicator() -> None:
+try:
+    from automation_pause import (
+        request_local_pause_after_current,
+        resume_local_agent_writes,
+    )
+    from automation_pause import (
+        status as automation_pause_status,
+    )
+except ImportError:  # pragma: no cover - package test layout
+    from addon.FreeCADMCP.automation_pause import (
+        request_local_pause_after_current,
+        resume_local_agent_writes,
+    )
+    from addon.FreeCADMCP.automation_pause import (
+        status as automation_pause_status,
+    )
+
+
+def install_lock_indicator() -> None:  # noqa: C901
     """Create the permanent status widget and closable detail dock."""
 
     if state._shared_state.installed:
@@ -66,6 +89,10 @@ def install_lock_indicator() -> None:
     bridge = refresh_bridge_type(QtCore)(main)
     bridge.refresh_requested.connect(bridge.refresh_now, QtCore.Qt.QueuedConnection)
     state._shared_state.refresh_bridge = bridge
+    # Runtime pause admission reaches only this neutral callback.  Emitting the
+    # Qt signal keeps UI work on the GUI queue and preserves the one-way local
+    # control boundary.
+    set_local_pause_refresh(bridge.refresh_requested.emit)
 
     dock = QtWidgets.QDockWidget("MCP Document Lock", main)
     dock.setObjectName("McpDocumentLockDock")
@@ -98,6 +125,14 @@ def install_lock_indicator() -> None:
     keep_dirty_btn = QtWidgets.QPushButton(
         "Keep dirty and acknowledge selected document…", container
     )
+    pause_btn = QtWidgets.QPushButton("Pause agent writes", container)
+
+    def toggle_agent_write_pause() -> None:
+        if automation_pause_status()["paused"]:
+            resume_local_agent_writes()
+        else:
+            request_local_pause_after_current()
+        _refresh_lock_indicator_now()
 
     def selected_lease() -> dict[str, Any] | None:
         record_id = selector.currentData()
@@ -118,6 +153,7 @@ def install_lock_indicator() -> None:
         save_clear_btn=save_clear_btn,
         restore_btn=restore_btn,
         keep_dirty_btn=keep_dirty_btn,
+        pause_btn=pause_btn,
         bridge=bridge,
         qt_widgets=QtWidgets,
         qt_core=QtCore,
@@ -132,6 +168,8 @@ def install_lock_indicator() -> None:
     save_clear_btn.clicked.connect(lambda: on_save_and_clear(ctx))
     restore_btn.clicked.connect(lambda: on_restore_baseline(ctx))
     keep_dirty_btn.clicked.connect(lambda: on_keep_dirty(ctx))
+    pause_btn.clicked.connect(toggle_agent_write_pause)
+    layout.addWidget(pause_btn)
     for button in (takeover_btn, save_clear_btn, restore_btn, keep_dirty_btn):
         layout.addWidget(button)
 
@@ -166,4 +204,8 @@ def install_lock_indicator() -> None:
     wire_gui_update_callback(bindings.set_compatibility_gui_update_callback)
 
     state._shared_state.installed = True
+    refresh_document_changes_controls()
     _refresh_lock_indicator_now()
+
+
+__all__ = ["install_lock_indicator"]

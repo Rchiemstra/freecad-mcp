@@ -218,6 +218,14 @@
     },
     {
       "execution_mode": "typed_gateway",
+      "gui_thread": true,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.get_mutation_readiness_operation",
+      "rpc_method": "get_mutation_readiness",
+      "tool": "get_mutation_readiness"
+    },
+    {
+      "execution_mode": "typed_gateway",
       "gui_thread": false,
       "mutation_class": "mutation",
       "operation_path": "freecad_mcp.operations.close_document_operation",
@@ -703,6 +711,14 @@
       "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:save_document_as",
       "rpc_method": "save_document_as",
       "tool": "save_document_as"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "lease",
+      "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:save_document_copy",
+      "rpc_method": "save_document_copy",
+      "tool": "save_document_copy"
     },
     {
       "execution_mode": "typed_gateway",
@@ -1369,5 +1385,5 @@
       "tool": "get_worker_status"
     }
   ],
-  "tool_count": 171
+  "tool_count": 173
 }

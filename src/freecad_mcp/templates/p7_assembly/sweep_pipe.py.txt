@@ -52,7 +52,6 @@ else:
     _container = _doc.getObject(_container_name) if _container_name else None
     if _container_name and not _container: raise RuntimeError('Container not found: ' + _container_name)
     _add_to_container(_container, _obj)
-    _doc.recompute()
     _radii = []
     for _edge in _wire.Edges:
         try:

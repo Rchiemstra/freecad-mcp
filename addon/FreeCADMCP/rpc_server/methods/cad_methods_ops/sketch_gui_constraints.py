@@ -22,6 +22,7 @@ def sketch_delete_constraint_gui(
     constraint_names,
     *,
     freecad,
+    recompute: bool = True,
 ):
     try:
         doc = freecad.getDocument(doc_name)
@@ -79,7 +80,8 @@ def sketch_delete_constraint_gui(
             for index in target_indices
         ]
         sketch.delConstraints(target_indices, True)
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         return {
             "success": True,
             "sketch": str(getattr(sketch, "Name", sketch_name)),
@@ -96,7 +98,16 @@ def sketch_delete_constraint_gui(
         )
 
 
-def sketch_edit_constraint_gui(doc_name, sketch_name, value, name, index, *, freecad):
+def sketch_edit_constraint_gui(
+    doc_name,
+    sketch_name,
+    value,
+    name,
+    index,
+    *,
+    freecad,
+    recompute: bool = True,
+):
     try:
         doc = freecad.getDocument(doc_name)
         if not doc:
@@ -109,7 +120,8 @@ def sketch_edit_constraint_gui(doc_name, sketch_name, value, name, index, *, fre
             return idx
         if value is not None:
             sketch.setDatum(idx, float(value))
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         after = None
         try:
             after = float(sketch.getDatum(idx))

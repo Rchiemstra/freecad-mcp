@@ -17,7 +17,7 @@ _set_property(_pattern, ('Occurrences',), _occurrences)
 _set_linksub(_pattern, ('Axis',), _resolve_linksub(_doc, _body, $axis))
 _set_feature_bool(_pattern, ('Reversed',), $reversed_dir)
 _set_tip(_body, _pattern)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('pattern_name=' + _pattern.Name)
 print('source_name=' + _src.Name)
 print('body_name=' + _body.Name)

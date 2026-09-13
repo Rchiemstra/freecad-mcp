@@ -22,7 +22,7 @@ def _tool_function(mcp, name: str):
     return getattr(tool, "fn", None) or getattr(tool, "function", None)
 
 
-def test_registered_run_transaction_uses_auth_session_not_retired_lease_state(
+def test_registered_run_transaction_is_retired_in_every_runtime_mode(
     monkeypatch,
 ) -> None:
     bootstrap_unit_test_runtime()
@@ -43,11 +43,13 @@ def test_registered_run_transaction_uses_auth_session_not_retired_lease_state(
     )
     exports = tools_advanced_a.register(mcp, dependencies=dependencies)
 
+    result = _tool_function(mcp, "run_transaction")(None, "Model", "edit", "pass")
+    assert "RUN_TRANSACTION_RETIRED" in str(result.structuredContent)
+    assert "retired" in response_text(result)
     state.rpc_session.mark_connected("auth-secret")
-    result = _tool_function(mcp, "run_transaction")(
+    authenticated = _tool_function(mcp, "run_transaction")(
         None, "Model", "edit", "pass"
     )
-
-    assert "disabled in authenticated lease mode" in response_text(result)
+    assert "RUN_TRANSACTION_RETIRED" in str(authenticated.structuredContent)
     assert exports["run_transaction"] is _tool_function(mcp, "run_transaction")
     connection.invoke_rpc.assert_not_called()

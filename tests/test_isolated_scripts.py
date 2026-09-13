@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import importlib.util
 import json
 import os
 import sys
+import threading
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -160,11 +162,522 @@ def test_launcher_consume_profile_name_leaves_freecad_args() -> None:
     assert resolved == Path("/repo") / ".freecad-mcp-e2e-session"
 
 
+def test_launcher_consumes_supervision_flag_without_forwarding_it() -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+
+    supervise, rest = launcher._consume_supervision_flag(
+        ["--", "Macro.FCMacro", "--supervise"]
+    )
+
+    assert supervise is True
+    assert rest == ["--", "Macro.FCMacro"]
+
+
+def test_supervised_posix_spawn_owns_new_session_and_disconnects_child_stdin(
+    monkeypatch,
+) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    process = SimpleNamespace(pid=4321)
+    calls = []
+    monkeypatch.setattr(launcher.sys, "platform", "linux")
+    monkeypatch.setattr(launcher.os, "name", "posix")
+    monkeypatch.setattr(
+        launcher.subprocess,
+        "Popen",
+        lambda command, **kwargs: calls.append((command, kwargs)) or process,
+    )
+
+    spawned, owner = launcher._spawn_freecad_process(
+        ["/branch/FreeCAD"],
+        env={"TEST": "1"},
+        cwd="/branch",
+        supervise=True,
+    )
+
+    assert spawned is process
+    assert owner.process is process
+    assert calls == [
+        (
+            ["/branch/FreeCAD"],
+            {
+                "env": {"TEST": "1"},
+                "cwd": "/branch",
+                "stdin": launcher.subprocess.DEVNULL,
+                "creationflags": 0,
+                "close_fds": True,
+                "start_new_session": True,
+            },
+        )
+    ]
+
+
+def test_posix_supervisor_never_polls_or_signals_reusable_pid_before_group_kill(
+    monkeypatch,
+) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+
+    class Process:
+        pid = 4321
+
+        @staticmethod
+        def poll():
+            pytest.fail("supervised POSIX child must not be polled/reaped")
+
+        @staticmethod
+        def send_signal(_signal):
+            pytest.fail("supervised POSIX child must be signalled by exact group")
+
+        @staticmethod
+        def wait(*, timeout):
+            events.append(("wait", timeout))
+            return -9
+
+    monkeypatch.setattr(
+        launcher.os,
+        "killpg",
+        lambda group, sig: events.append(("killpg", group, sig)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        launcher.time,
+        "sleep",
+        lambda seconds: events.append(("sleep", seconds)),
+    )
+    monkeypatch.setattr(launcher.signal, "SIGKILL", 9, raising=False)
+    owner = launcher._SupervisedChild(Process())
+
+    owner.terminate_exact_tree(grace_seconds=0.25)
+
+    assert events == [
+        ("killpg", 4321, launcher.signal.SIGTERM),
+        ("sleep", 0.25),
+        ("killpg", 4321, 9),
+        ("wait", 1.0),
+    ]
+
+
+def test_windows_job_assignment_precedes_resume() -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+
+    class Kernel:
+        @staticmethod
+        def AssignProcessToJobObject(job, process):
+            events.append(("assign", job, process))
+            return True
+
+        @staticmethod
+        def ResumeThread(thread):
+            events.append(("resume", thread))
+            return 1
+
+    job = launcher._WindowsLifetimeJob.__new__(launcher._WindowsLifetimeJob)
+    job._handle = "job-handle"
+    job._kernel32 = Kernel()
+    job._ctypes = SimpleNamespace(get_last_error=lambda: 0)
+
+    job.bind_suspended_process("process-handle", "thread-handle")
+
+    assert events == [
+        ("assign", "job-handle", "process-handle"),
+        ("resume", "thread-handle"),
+    ]
+
+
+def test_supervisor_sigterm_requests_owned_cleanup_outside_signal_handler(
+    monkeypatch,
+) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+    handlers = {}
+
+    def install(sig, handler):
+        previous = handlers.get(sig, "previous")
+        handlers[sig] = handler
+        return previous
+
+    read_started = threading.Event()
+    release_reader = threading.Event()
+
+    class BlockingControlPipe:
+        @staticmethod
+        def readline():
+            read_started.set()
+            release_reader.wait(1.0)
+            return ""
+
+    owner = SimpleNamespace(
+        terminate_exact_tree=lambda: events.append("terminate-owned-tree")
+    )
+    monkeypatch.setattr(launcher.signal, "signal", install)
+    control = launcher._SupervisorControl(BlockingControlPipe())
+    control.start()
+    assert read_started.wait(0.5)
+    handlers[launcher.signal.SIGTERM](launcher.signal.SIGTERM, None)
+
+    assert launcher._supervise_until_stop(owner, control) == 0
+    assert events == ["terminate-owned-tree"]
+    release_reader.set()
+    control.close()
+
+
+def test_supervisor_consumes_stop_before_readiness_wait_begins(monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    monkeypatch.setattr(launcher.signal, "signal", lambda _sig, _handler: None)
+    control = launcher._SupervisorControl(io.StringIO("STOP\n"))
+
+    control.start()
+
+    assert control.wait(0.5) is True
+    assert control.requested() is True
+    assert control.exit_code() == 0
+    control.close()
+
+
+def test_control_start_failure_closes_newly_spawned_owner(monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+    monkeypatch.setattr(
+        launcher,
+        "_spawn_freecad_process",
+        lambda *_args, **_kwargs: pytest.fail(
+            "control handlers must be installed before child spawn"
+        ),
+    )
+
+    class FailingControl:
+        @staticmethod
+        def start():
+            raise RuntimeError("control monitor failed")
+
+    monkeypatch.setattr(launcher, "_SupervisorControl", FailingControl)
+
+    with pytest.raises(RuntimeError, match="control monitor failed"):
+        launcher._spawn_supervised_process_with_control(
+            ["/branch/FreeCAD"], env={}, cwd="/branch"
+        )
+
+    assert events == []
+
+
+def test_preinstalled_control_stop_prevents_child_spawn(monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+
+    class RequestedControl:
+        def start(self):
+            events.append("start-control")
+
+        @staticmethod
+        def requested():
+            return True
+
+        def close(self):
+            events.append("close-control")
+
+    monkeypatch.setattr(launcher, "_SupervisorControl", RequestedControl)
+    monkeypatch.setattr(
+        launcher,
+        "_spawn_freecad_process",
+        lambda *_args, **_kwargs: pytest.fail(
+            "requested control must prevent child spawn"
+        ),
+    )
+
+    with pytest.raises(InterruptedError, match="before child spawn"):
+        launcher._spawn_supervised_process_with_control(
+            ["/branch/FreeCAD"], env={}, cwd="/branch"
+        )
+
+    assert events == ["start-control", "close-control"]
+
+
+def test_stop_arriving_during_spawn_terminates_owner_before_raising(monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+
+    class Control:
+        checks = 0
+
+        def start(self):
+            events.append("start-control")
+
+        def requested(self):
+            self.checks += 1
+            return self.checks > 1
+
+        def close(self):
+            events.append("close-control")
+
+    class Owner:
+        _terminated = False
+
+        def terminate_exact_tree(self):
+            events.append("terminate-owner")
+
+        def close(self):
+            events.append("close-owner")
+
+    monkeypatch.setattr(launcher, "_SupervisorControl", Control)
+    monkeypatch.setattr(
+        launcher,
+        "_spawn_freecad_process",
+        lambda *_args, **_kwargs: (SimpleNamespace(pid=4321), Owner()),
+    )
+
+    with pytest.raises(InterruptedError, match="during child spawn"):
+        launcher._spawn_supervised_process_with_control(
+            ["/branch/FreeCAD"], env={}, cwd="/branch"
+        )
+
+    assert events == [
+        "start-control",
+        "terminate-owner",
+        "close-owner",
+        "close-control",
+    ]
+
+
+def test_control_handlers_restore_only_after_owner_teardown(monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    events = []
+
+    class Owner:
+        def close(self):
+            events.append("close-owner")
+
+    class Control:
+        def close(self):
+            events.append("restore-handlers")
+
+    launcher._close_supervised_lifecycle(Owner(), Control())
+
+    assert events == ["close-owner", "restore-handlers"]
+
+
+def test_early_stop_reports_nonzero_when_exact_tree_shutdown_fails(monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    monkeypatch.setattr(launcher.signal, "signal", lambda _sig, _handler: None)
+    control = launcher._SupervisorControl(io.StringIO("STOP\n"))
+    control.start()
+    assert control.wait(0.5)
+
+    class FailingOwner:
+        @staticmethod
+        def terminate_exact_tree():
+            raise OSError("job/group termination failed")
+
+    assert launcher._supervise_until_stop(FailingOwner(), control) == 1
+    control.close()
+
+
+def test_windows_create_process_is_suspended_bound_then_thread_handle_closed() -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    import ctypes
+    from ctypes import wintypes
+
+    events = []
+
+    class Call:
+        def __init__(self, implementation):
+            self.implementation = implementation
+
+        def __call__(self, *args):
+            return self.implementation(*args)
+
+    null_handles = iter((101, 102))
+
+    def create_file(*_args):
+        handle = next(null_handles)
+        events.append(("create-null", handle))
+        return handle
+
+    def create_process(
+        application,
+        _command,
+        _process_security,
+        _thread_security,
+        inherit_handles,
+        flags,
+        _environment,
+        cwd,
+        startup_pointer,
+        info_pointer,
+    ):
+        startup = startup_pointer._obj.StartupInfo
+        info = info_pointer._obj
+        events.append(
+            (
+                "create-suspended",
+                application,
+                bool(inherit_handles),
+                int(flags),
+                cwd,
+                int(startup.hStdInput),
+                int(startup.hStdOutput),
+            )
+        )
+        info.hProcess = 201
+        info.hThread = 202
+        info.dwProcessId = 4321
+        info.dwThreadId = 1
+        return True
+
+    class Kernel:
+        CreateFileW = Call(create_file)
+        CreateProcessW = Call(create_process)
+
+        @staticmethod
+        def InitializeProcThreadAttributeList(
+            attribute_list, _count, _flags, size_pointer
+        ):
+            if attribute_list is None:
+                size_pointer._obj.value = 128
+                events.append("size-attribute-list")
+                return False
+            events.append("initialize-attribute-list")
+            return True
+
+        @staticmethod
+        def UpdateProcThreadAttribute(
+            _attribute_list,
+            _flags,
+            attribute,
+            _value,
+            value_size,
+            _previous,
+            _return_size,
+        ):
+            events.append(("restrict-handles", int(attribute), int(value_size)))
+            return True
+
+        @staticmethod
+        def DeleteProcThreadAttributeList(_attribute_list):
+            events.append("delete-attribute-list")
+
+        @staticmethod
+        def CloseHandle(handle):
+            events.append(("close", int(handle)))
+            return True
+
+    class Job:
+        _ctypes = ctypes
+        _wintypes = wintypes
+        _kernel32 = Kernel()
+
+        @staticmethod
+        def bind_suspended_process(process_handle, thread_handle):
+            events.append(("bind-and-resume", int(process_handle), int(thread_handle)))
+
+    process = launcher._create_windows_suspended_process(
+        ["C:/branch/FreeCAD.exe", "--console"],
+        env={"A": "1"},
+        cwd="C:/branch",
+        job=Job(),
+    )
+
+    assert process.pid == 4321
+    assert events[:4] == [
+        ("create-null", 101),
+        ("create-null", 102),
+        "size-attribute-list",
+        "initialize-attribute-list",
+    ]
+    restrict_event = events[4]
+    assert restrict_event[0:2] == ("restrict-handles", 0x00020002)
+    assert restrict_event[2] == 2 * ctypes.sizeof(wintypes.HANDLE)
+    create_event = events[5]
+    assert create_event[:3] == (
+        "create-suspended",
+        "C:/branch/FreeCAD.exe",
+        True,
+    )
+    flags = create_event[3]
+    assert flags & 0x00000004  # CREATE_SUSPENDED
+    assert flags & 0x00080000  # EXTENDED_STARTUPINFO_PRESENT
+    assert events[6:] == [
+        "delete-attribute-list",
+        ("close", 101),
+        ("close", 102),
+        ("bind-and-resume", 201, 202),
+        ("close", 202),
+    ]
+    process.close()
+    assert events[-1] == ("close", 201)
+
+
 def test_launcher_profile_dir_env_override(tmp_path, monkeypatch) -> None:
     launcher = _load_script("start_freecad_isolated.py")
     custom = tmp_path / "launcher-profile"
     monkeypatch.setenv("FREECAD_MCP_PROFILE_DIR", str(custom))
     assert launcher._resolve_profile(Path("/repo")) == custom
+
+
+def test_launcher_freecad_executable_override_wins(tmp_path, monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    branch_freecad = tmp_path / "build" / "debug" / "bin" / "BranchFreeCAD"
+    branch_freecad.parent.mkdir(parents=True)
+    branch_freecad.touch()
+    branch_freecad.chmod(0o755)
+    monkeypatch.setenv(launcher.FREECAD_EXECUTABLE_ENV, str(branch_freecad.resolve()))
+
+    assert launcher._resolve_freecad_executable(tmp_path) == branch_freecad.resolve()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable bits only")
+def test_launcher_rejects_non_executable_override(tmp_path, monkeypatch) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    branch_freecad = tmp_path / "build" / "debug" / "bin" / "BranchFreeCAD"
+    branch_freecad.parent.mkdir(parents=True)
+    branch_freecad.touch(mode=0o600)
+    monkeypatch.setenv(launcher.FREECAD_EXECUTABLE_ENV, str(branch_freecad.resolve()))
+
+    with pytest.raises(SystemExit, match="is not executable"):
+        launcher._resolve_freecad_executable(tmp_path)
+
+
+@pytest.mark.parametrize("configured", ["relative/FreeCAD", "missing/FreeCAD.exe"])
+def test_launcher_rejects_invalid_freecad_override_before_endpoint_or_spawn(
+    tmp_path, monkeypatch, configured
+) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    if configured.startswith("missing/"):
+        configured = str((tmp_path / configured).resolve())
+    monkeypatch.setenv(launcher.FREECAD_EXECUTABLE_ENV, configured)
+    monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        launcher,
+        "_reserve_endpoint",
+        lambda *_args: pytest.fail("invalid executable must fail before reservation"),
+    )
+    monkeypatch.setattr(
+        launcher.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("invalid executable must not spawn"),
+    )
+    monkeypatch.setattr(sys, "argv", ["start_freecad_isolated.py"])
+
+    with pytest.raises(SystemExit, match="FREECAD_MCP_ISOLATED_FREECAD"):
+        launcher.main()
+
+
+@pytest.mark.parametrize(
+    ("platform", "executable_name"),
+    [("win32", "FreeCAD.exe"), ("linux", "FreeCAD")],
+)
+def test_launcher_default_executable_is_platform_specific(
+    tmp_path, monkeypatch, platform, executable_name
+) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    expected = tmp_path / "build" / "release" / "bin" / executable_name
+    expected.parent.mkdir(parents=True)
+    expected.touch()
+    expected.chmod(0o755)
+    monkeypatch.delenv(launcher.FREECAD_EXECUTABLE_ENV, raising=False)
+    monkeypatch.setattr(launcher.sys, "platform", platform)
+
+    assert launcher._resolve_freecad_executable(tmp_path) == expected
 
 
 def test_setup_refuses_to_replace_persistent_profile_identity(tmp_path):
@@ -426,9 +939,10 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     launcher = _load_script("start_freecad_isolated.py")
     profile = tmp_path / launcher.PROFILE_NAME
     profile.mkdir()
-    freecad = tmp_path / "build" / "release" / "bin" / "FreeCAD.exe"
+    freecad = tmp_path / "build" / "debug" / "bin" / "BranchFreeCAD.exe"
     freecad.parent.mkdir(parents=True)
     freecad.touch()
+    freecad.chmod(0o755)
     secret = profile / "auth.secret"
     secret.write_bytes(b"s" * 32)
     secret.chmod(0o600)
@@ -441,10 +955,24 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     class Process:
         pid = 4321
         returncode = None
+        terminated = False
 
-        @staticmethod
-        def poll():
-            return None
+        def poll(self):
+            return 0 if self.terminated else None
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = 0
+
+        def wait(self, *, timeout):
+            del timeout
+            if not self.terminated:
+                raise launcher.subprocess.TimeoutExpired("FreeCAD", 1)
+            return self.returncode
+
+        def kill(self):
+            self.terminated = True
+            self.returncode = -9
 
     class Proxy:
         @staticmethod
@@ -457,6 +985,7 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
 
     writes = []
     monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path)
+    monkeypatch.setenv(launcher.FREECAD_EXECUTABLE_ENV, str(freecad.resolve()))
     reservation = SimpleNamespace(closed=False)
 
     def close_reservation():
@@ -470,10 +999,16 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
         lambda: SimpleNamespace(_launch_env=lambda _executable: {}),
     )
 
-    def spawn(command, **_kwargs):
+    spawned = []
+
+    def spawn(command, **kwargs):
         assert reservation.closed is True
-        assert command == [str(freecad)]
-        return Process()
+        assert command == [str(freecad.resolve())]
+        assert kwargs["start_new_session"] is (os.name != "nt")
+        assert kwargs["stdin"] is None
+        process = Process()
+        spawned.append(process)
+        return process
 
     monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
     class Connection:
@@ -492,6 +1027,67 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
 
     assert launcher.main() == 1
     assert writes == []
+    assert spawned[0].terminated is True
+    assert not (profile / launcher.LAUNCH_STATE_FILENAME).exists()
+
+
+def test_launcher_preserves_launch_state_when_exact_child_resists_cleanup(
+    tmp_path, monkeypatch
+) -> None:
+    launcher = _load_script("start_freecad_isolated.py")
+    profile = tmp_path / launcher.PROFILE_NAME
+    profile.mkdir()
+    freecad = tmp_path / "BranchFreeCAD"
+    freecad.touch()
+    freecad.chmod(0o755)
+    secret = profile / "auth.secret"
+    secret.write_bytes(b"s" * 32)
+    secret.chmod(0o600)
+    manifest = _launch_manifest(profile)
+    manifest["auth_secret_file"] = str(secret)
+    (profile / launcher.MANIFEST_FILENAME).write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+
+    class Process:
+        pid = 8765
+        returncode = None
+
+        @staticmethod
+        def poll():
+            return None
+
+    monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path)
+    monkeypatch.setenv(launcher.FREECAD_EXECUTABLE_ENV, str(freecad.resolve()))
+    reservation = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(launcher, "_reserve_endpoint", lambda *_args: reservation)
+    monkeypatch.setattr(
+        launcher,
+        "_load_parent_start_freecad",
+        lambda: SimpleNamespace(_launch_env=lambda _executable: {}),
+    )
+    monkeypatch.setattr(launcher.subprocess, "Popen", lambda *_args, **_kwargs: Process())
+    monkeypatch.setattr(
+        launcher,
+        "_terminate_spawned_process",
+        lambda _process: False,
+    )
+
+    class Connection:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("post-spawn setup failed")
+
+    monkeypatch.setattr(launcher, "FreeCADConnection", Connection)
+    monkeypatch.setattr(sys, "argv", ["start_freecad_isolated.py"])
+
+    with pytest.raises(RuntimeError, match="post-spawn setup failed"):
+        launcher.main()
+
+    state = json.loads(
+        (profile / launcher.LAUNCH_STATE_FILENAME).read_text(encoding="utf-8")
+    )
+    assert state["freecad_pid"] == 8765
+    assert Path(state["profile_path"]) == profile.resolve()
 
 
 @pytest.mark.parametrize(
@@ -556,9 +1152,11 @@ def test_launcher_never_spawns_or_reuses_when_manifest_endpoint_is_occupied(
     launcher = _load_script("start_freecad_isolated.py")
     profile = tmp_path / launcher.PROFILE_NAME
     profile.mkdir()
-    freecad = tmp_path / "build" / "release" / "bin" / "FreeCAD.exe"
+    executable_name = "FreeCAD.exe" if launcher.sys.platform == "win32" else "FreeCAD"
+    freecad = tmp_path / "build" / "release" / "bin" / executable_name
     freecad.parent.mkdir(parents=True)
     freecad.touch()
+    freecad.chmod(0o755)
     secret = profile / "auth.secret"
     secret.write_bytes(b"s" * 32)
     secret.chmod(0o600)

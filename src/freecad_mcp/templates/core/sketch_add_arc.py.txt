@@ -4,5 +4,5 @@ _sk = _doc.getObject($sketch_name)
 if not _sk: raise RuntimeError('Sketch not found')
 _circ = Part.Circle(FreeCAD.Vector($cx,$cy,0),FreeCAD.Vector(0,0,1),$radius)
 _idx = _sk.addGeometry(Part.ArcOfCircle(_circ,math.radians($start_angle),math.radians($end_angle)),$construction)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('geometry_index=' + str(_idx))

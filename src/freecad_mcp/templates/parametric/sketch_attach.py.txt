@@ -65,7 +65,7 @@ if _offset is not None:
         raise RuntimeError('Sketch has no AttachmentOffset: ' + $sketch_name)
     _sk.AttachmentOffset = _mcp_dict_to_placement(_offset)
     _offset_out = _mcp_placement_to_dict(_sk.AttachmentOffset)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 _payload = {'ok': True, 'sketch': _sk.Name, 'attached': _attached}
 if _offset_out is not None:
     _payload['attachment_offset'] = _offset_out

@@ -3,7 +3,6 @@ import Assembly
 _assembly_name = $assembly_name
 _component_name = $component_name
 _label = $label
-_recompute = $recompute
 
 _assembly = _doc.getObject(_assembly_name)
 if not _assembly:
@@ -23,7 +22,7 @@ _joint = Assembly.createGroundedJoint(
     _assembly,
     _component,
     label=_label,
-    recompute=_recompute,
+    recompute=False,
 )
 _grounded = getattr(_joint, 'ObjectToGround', None)
 print(json.dumps({

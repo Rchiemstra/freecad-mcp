@@ -431,6 +431,7 @@ def _start_adversarial_server(mode, *, timeout=0.15):
             if mode == "duplicate_protocol":
                 self.send_header(JSON_RPC_PROTOCOL_HEADER, "incompatible")
             self.send_header(JSON_RPC_PROTOCOL_HEADER, JSON_RPC_PROTOCOL_VALUE)
+            chunked = mode in {"chunked_stall", "chunked_short"}
             declared = len(payload) + 10 if mode == "short_body" else len(payload)
             declared_text = str(declared)
             if mode == "plus_length":
@@ -438,9 +439,12 @@ def _start_adversarial_server(mode, *, timeout=0.15):
             elif mode == "underscore_length":
                 digits = str(declared)
                 declared_text = f"{digits[:-1]}_{digits[-1]}"
-            self.send_header("Content-Length", declared_text)
-            if mode == "duplicate_length":
+            if chunked:
+                self.send_header("Transfer-Encoding", "chunked")
+            else:
                 self.send_header("Content-Length", declared_text)
+                if mode == "duplicate_length":
+                    self.send_header("Content-Length", declared_text)
             self.end_headers()
             started.set()
             try:
@@ -449,6 +453,13 @@ def _start_adversarial_server(mode, *, timeout=0.15):
                         self.wfile.write(bytes((item,)))
                         self.wfile.flush()
                         time.sleep(0.04)
+                elif mode == "chunked_stall":
+                    self.wfile.write(b"5\r\nabcde\r\n")
+                    self.wfile.flush()
+                    time.sleep(timeout * 4)
+                elif mode == "chunked_short":
+                    self.wfile.write(b"5\r\nabc")
+                    self.wfile.flush()
                 else:
                     self.wfile.write(payload)
             except OSError:
@@ -506,6 +517,30 @@ def test_response_deadline_rejects_a_peer_that_drips_within_socket_timeout():
         with pytest.raises(TimeoutError, match="deadline"):
             lane.call("ping")
         assert time.monotonic() - started_at < 0.75
+    finally:
+        _stop_adversarial_server(server, loop, lane)
+
+
+def test_response_deadline_maps_stalled_chunked_body_to_timeout():
+    server, loop, lane, _started = _start_adversarial_server(
+        "chunked_stall", timeout=0.15
+    )
+    started_at = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match="deadline"):
+            lane.call("ping")
+        assert time.monotonic() - started_at < 0.75
+    finally:
+        _stop_adversarial_server(server, loop, lane)
+
+
+def test_immediate_incomplete_chunked_body_remains_protocol_mismatch():
+    server, loop, lane, _started = _start_adversarial_server(
+        "chunked_short", timeout=2
+    )
+    try:
+        with pytest.raises(JsonRpcProtocolMismatchError, match="bounded HTTP"):
+            lane.call("ping")
     finally:
         _stop_adversarial_server(server, loop, lane)
 

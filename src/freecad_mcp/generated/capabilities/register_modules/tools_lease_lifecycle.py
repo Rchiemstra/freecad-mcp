@@ -43,11 +43,12 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         selector: DocumentSelectorInput,  # noqa: F821
         validation_profile: str = "default",
     ) -> CallToolResult:
-        """Compare, save, hash, reopen-verify, and retain the renewable lease.
+        """Run native change-aware Save and verify a stable live FCStd hash, metadata,
+        required archive members, and CRC. An Unchanged result is also compared with
+        the invocation baseline and does not rewrite the file.
 
-        Select the open document with ``document_name``,
-        ``document_session_uuid``, or ``canonical_path``. If more than one field is
-        supplied, every field must identify the same live document.
+        Select the open document with ``document_name`` or ``canonical_path``; if both
+        are supplied, they must identify the same live document.
         """
 
         del ctx
@@ -66,11 +67,13 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         expected_destination_sha256: str = "",
         validation_profile: str = "default",
     ) -> CallToolResult:
-        """Pre-lock, Save As, hash, reopen-verify, and migrate lease aliases.
+        """Run native policy-controlled Save As (no-clobber by default) and verify a
+        stable live FCStd hash, metadata, required archive members, and CRC. No legacy
+        lease aliases are created.
 
-        Select the open document with ``document_name``,
-        ``document_session_uuid``, or ``canonical_path``. If more than one field is
-        supplied, every field must identify the same live document.
+        Select the open document with ``document_name`` or ``canonical_path``; if both
+        are supplied, they must identify the same live document. Non-empty legacy
+        expected-hash options are rejected rather than silently ignored.
         """
 
         del ctx
@@ -85,6 +88,39 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         )
 
     @mcp.tool()
+    def save_document_copy(
+        ctx: Context,
+        selector: DocumentSelectorInput,  # noqa: F821
+        destination: str,
+        overwrite: bool = False,
+        validation_profile: str = "default",
+    ) -> CallToolResult:
+        """Run native Save Copy via ``saveCopyWithOutcome`` and verify a stable live
+        FCStd hash, metadata, required archive members, and CRC. The canonical
+        savepoint must not move and pending-file state must remain intact.
+
+        Save Copy remains available as an extraction path for quarantined or poisoned
+        documents. Such a result is marked ``recovery_only=true`` and
+        ``model_state_verified=false``: archive structure and storage durability are
+        verified, but the model must be inspected after reopening and the operation
+        does not clear quarantine.
+
+        Select the open document with ``document_name`` or ``canonical_path``; if both
+        are supplied, they must identify the same live document. ``overwrite=False``
+        refuses an existing destination.
+        """
+
+        del ctx
+        return _result(
+            server_connection().save_document_copy(
+                selector,
+                destination,
+                overwrite=overwrite,
+                validation_profile=validation_profile,
+            )
+        )
+
+    @mcp.tool()
     def finalize_document_edit(
         ctx: Context,
         selector: DocumentSelectorInput,  # noqa: F821
@@ -94,10 +130,11 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
         expected_destination_sha256: str = "",
         validation_profile: str = "default",
     ) -> CallToolResult:
-        """Validate, Save/Save As, reopen-verify, then CAS-release the lease.
+        """Run native change-aware Save/Save As, verify a stable live FCStd hash,
+        metadata, required archive members, and CRC, then report finalization.
 
-        Any validation, save, or sidecar-removal failure retains a visible locked
-        error/recovery record instead of presenting a clean release.
+        No legacy MCP lease is held or released. A save, clean-state, or verification
+        failure returns ``finalized: false`` and keeps automation fail-closed.
         """
 
         del ctx
@@ -128,6 +165,7 @@ def _register_tools(mcp: InstrumentedFastMCP) -> dict[str, object]:
     return {
         "save_document": save_document,
         "save_document_as": save_document_as,
+        "save_document_copy": save_document_copy,
         "finalize_document_edit": finalize_document_edit,
         "force_release_stale_lock": force_release_stale_lock,
     }

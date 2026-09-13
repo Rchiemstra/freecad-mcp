@@ -42,7 +42,7 @@ if _value is not None:
             'message': str(_e),
         }))
         raise RuntimeError('Failed to edit constraint: ' + str(_e))
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 _after = None
 try:
     _after = float(_sk.getDatum(_idx))

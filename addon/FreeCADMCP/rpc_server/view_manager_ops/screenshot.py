@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from collections.abc import Sequence
+from contextlib import suppress
 from typing import Any
 
 import FreeCADGui
@@ -16,7 +17,6 @@ from .focus_helpers import (
     normalize_focus_names,
     resolve_focus_targets,
 )
-from .screenshot_blank import is_near_blank_png
 from .view_constants import apply_view_orientation
 
 
@@ -119,7 +119,5 @@ def capture_active_view_png_bytes(
     except Exception as exc:
         return None, str(exc)
     finally:
-        try:
+        with suppress(OSError):
             os.remove(path)
-        except OSError:
-            pass

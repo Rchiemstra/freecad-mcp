@@ -85,10 +85,10 @@ class TestRevolveFeature:
         revolve_feature_operation(conn, True, "Doc", "MySketch", "Rev1")
         assert_code_contains(_code(conn), "MySketch")
 
-    def test_recompute_called(self):
+    def test_recompute_is_deferred_to_native_postcondition(self):
         conn = _ok_conn()
         revolve_feature_operation(conn, True, "Doc", "Sketch", "Rev1")
-        assert_code_contains(_code(conn), "_doc.recompute()")
+        assert_code_contains(_code(conn), "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
 
 
 # ---------------------------------------------------------------------------

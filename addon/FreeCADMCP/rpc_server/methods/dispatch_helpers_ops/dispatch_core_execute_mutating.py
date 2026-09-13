@@ -31,10 +31,17 @@ def validate_mutating_execute_scope(
     code, options, generated_operation, validate_unsafe_execute_scope
 ):
     primary = options["document"]
-    additional = [
-        name for name in (options.get("affected_documents") or []) if name != primary
-    ]
-    declared = {primary, *additional}
+    declared = {primary, *(options.get("affected_documents") or [])}
+    if len(declared) > 1:
+        return declared, {
+            "success": False,
+            "error_code": "UNSUPPORTED_MULTI_DOCUMENT_MUTATION_SCOPE",
+            "error": (
+                "Live mutating execute_code supports one document per mutation. "
+                "Run dependency-ordered single-document operations instead."
+            ),
+            "documents": sorted(declared),
+        }
     if generated_operation:
         return declared, None
     scope_validation = validate_unsafe_execute_scope(code, declared)

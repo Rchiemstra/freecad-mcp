@@ -5,5 +5,5 @@ _periodic = $periodic
 _bsp = Part.BSplineCurve()
 $build_line
 _idx = _sk.addGeometry(_bsp, $construction)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('geometry_index=' + str(_idx))

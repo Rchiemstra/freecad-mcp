@@ -44,6 +44,12 @@ def assign_document_property(
     if isinstance(current, FreeCAD.Vector) and isinstance(val, dict):
         setattr(obj, prop, _as_vector(val))
         return True
+    if (
+        isinstance(val, str)
+        and obj.getTypeIdOfProperty(prop) in {"App::PropertyLink", "App::PropertyXLink"}
+    ):
+        assign_link_property(doc, obj, prop, val)
+        return True
     if prop in ["Base", "Tool", "Source", "Profile"] and isinstance(val, str):
         assign_link_property(doc, obj, prop, val)
         return True

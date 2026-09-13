@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
+from ...responses.tool_results import add_screenshot_if_available, tool_fail, tool_ok
 from ...template_resources import render_template_lines
 from .helpers import (
     _doc_preamble,
@@ -39,6 +41,7 @@ def create_assembly_operation(
         screenshot=True,
         document=doc_name,
         read_only=False,
+        recompute=recompute,
     )
 
 def create_assembly_grounded_joint_operation(
@@ -64,6 +67,7 @@ def create_assembly_grounded_joint_operation(
         "Failed to create grounded assembly joint",
         screenshot=True,
         document=doc_name,
+        recompute=recompute,
     )
 
 def create_assembly_joint_operation(
@@ -111,6 +115,7 @@ def create_assembly_joint_operation(
         "Failed to create assembly joint",
         screenshot=True,
         document=doc_name,
+        recompute=recompute,
     )
 
 def solve_assembly_operation(
@@ -125,11 +130,32 @@ def solve_assembly_operation(
     plain recompute, and reports which method succeeded. Returns JSON
     ``{ok, assembly, method, status}``. Fixes P9 (no documented solve API).
     """
-    lines = _doc_preamble(doc_name) + render_template_lines(
-        "p7_assembly/solve_assembly.py.txt",
-        assembly_name=repr(assembly_name),
+    try:
+        result = freecad.solve_assembly(doc_name, assembly_name)
+    except Exception as exc:
+        return tool_fail(f"Failed to solve assembly: {exc}")
+    if not isinstance(result, dict):
+        return tool_fail(
+            "Failed to solve assembly: invalid RPC response",
+            error_code="INVALID_RPC_RESPONSE",
+        )
+    if result.get("success") is False or result.get("ok") is False:
+        return tool_fail(
+            f"Failed to solve assembly: {result.get('error', result.get('message', 'unknown error'))}",
+            structured=result,
+            error_code=result.get("error_code"),
+        )
+
+    screenshot = None
+    if not only_text_feedback:
+        try:
+            screenshot = freecad.get_active_screenshot()
+        except Exception as exc:
+            result = dict(result)
+            result["presentation_warning"] = f"Screenshot capture failed: {exc}"
+    response = tool_ok(
+        json.dumps(result, ensure_ascii=False, default=str),
+        structured=result,
+        only_text_feedback=only_text_feedback,
     )
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(lines),
-        "Failed to solve assembly", screenshot=True, document=doc_name,
-    )
+    return add_screenshot_if_available(response, screenshot, only_text_feedback)

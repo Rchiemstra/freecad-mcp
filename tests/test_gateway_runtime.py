@@ -393,7 +393,176 @@ def test_disposal_aggregates_ordered_failures_after_all_callbacks() -> None:
         runtime.dispose()
     assert repeated.value.message == "AddonRuntime disposal failed"
     assert repeated.value.exceptions == (worker_failure, listener_failure)
-    assert calls == ["worker_manager", "dispatcher", "listener"]
+    assert calls == [
+        "worker_manager",
+        "dispatcher",
+        "listener",
+        "worker_manager",
+        "listener",
+    ]
+
+
+def test_failed_owned_resource_is_retained_and_retried_to_completion() -> None:
+    dependencies = _dependencies()
+    attempts: list[str] = []
+
+    def dispose_dispatcher() -> None:
+        attempts.append("dispatcher")
+        if len(attempts) == 1:
+            raise RuntimeError("owner thread did not drain cleanup")
+
+    runtime = _runtime(
+        dependencies=dependencies,
+        owned_resources=(
+            (dependencies["dispatcher"], dispose_dispatcher),
+        ),
+    )
+
+    with pytest.raises(ExceptionGroup, match="disposal failed"):
+        runtime.dispose()
+
+    assert runtime.dispatcher is dependencies["dispatcher"]
+    assert runtime.disposal_retryable is True
+
+    runtime.dispose()
+
+    assert attempts == ["dispatcher", "dispatcher"]
+    assert runtime.dispatcher is None
+    assert runtime.disposal_retryable is False
+
+
+def test_waiter_keeps_first_attempt_failure_across_concurrent_retry() -> None:
+    dependencies = _dependencies()
+    first_failure = RuntimeError("first disposal failed")
+    disposer_entered = threading.Event()
+    release_disposer = threading.Event()
+    waiter_started = threading.Event()
+    waiter_observed_completion = threading.Event()
+    release_waiter = threading.Event()
+    attempts: list[int] = []
+
+    def dispose_dispatcher() -> None:
+        attempts.append(len(attempts) + 1)
+        if len(attempts) == 1:
+            disposer_entered.set()
+            assert release_disposer.wait(timeout=1.0)
+            raise first_failure
+
+    runtime = _runtime(
+        dependencies=dependencies,
+        owned_resources=(
+            (dependencies["dispatcher"], dispose_dispatcher),
+        ),
+    )
+    first_errors: list[BaseException] = []
+    waiter_errors: list[BaseException] = []
+    retry_errors: list[BaseException] = []
+
+    def invoke(errors: list[BaseException]) -> None:
+        try:
+            runtime.dispose()
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=invoke, args=(first_errors,))
+    first.start()
+    assert disposer_entered.wait(timeout=1.0)
+    first_attempt = runtime._dispose_attempt
+    assert first_attempt is not None
+    inner_completion = first_attempt.complete
+
+    class GateCompletion:
+        def set(self) -> None:
+            inner_completion.set()
+
+        def is_set(self) -> bool:
+            return inner_completion.is_set()
+
+        def wait(self, timeout=None) -> bool:
+            waiter_started.set()
+            completed = inner_completion.wait(timeout)
+            if completed:
+                waiter_observed_completion.set()
+                assert release_waiter.wait(timeout=1.0)
+            return completed
+
+    first_attempt.complete = GateCompletion()
+    waiter = threading.Thread(target=invoke, args=(waiter_errors,))
+    waiter.start()
+    assert waiter_started.wait(timeout=1.0)
+    release_disposer.set()
+    first.join(timeout=1.0)
+    assert waiter_observed_completion.wait(timeout=1.0)
+
+    retry = threading.Thread(target=invoke, args=(retry_errors,))
+    retry.start()
+    retry.join(timeout=1.0)
+    release_waiter.set()
+    waiter.join(timeout=1.0)
+
+    assert len(first_errors) == 1
+    assert len(waiter_errors) == 1
+    assert isinstance(waiter_errors[0], BaseExceptionGroup)
+    assert waiter_errors[0].exceptions == (first_failure,)
+    assert retry_errors == []
+    assert attempts == [1, 2]
+    assert runtime.dispatcher is None
+
+
+def test_dispatcher_disposer_uses_atomic_bounded_contract() -> None:
+    calls: list[tuple[str, float | None]] = []
+
+    class Dispatcher:
+        def dispose(self, *, timeout: float) -> None:
+            calls.append(("dispose", timeout))
+
+        def stop_accepting(self) -> None:  # pragma: no cover - assertion seam
+            pytest.fail("atomic dispatcher disposal must own stopping")
+
+        def deleteLater(self) -> None:  # pragma: no cover - assertion seam
+            pytest.fail("atomic dispatcher disposal must own QObject deletion")
+
+    _runtime_module()._dispose_dispatcher(Dispatcher())
+
+    assert calls == [("dispose", 2.0)]
+
+
+def test_atomic_dispatcher_failure_stays_runtime_owned_until_retry() -> None:
+    runtime_module = _runtime_module()
+
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        def dispose(self, *, timeout: float) -> None:
+            assert timeout == 2.0
+            self.attempts += 1
+            if self.attempts == 1:
+                raise TimeoutError("owner cleanup still queued")
+
+    dispatcher = Dispatcher()
+    dependencies = _dependencies()
+    dependencies["dispatcher"] = dispatcher
+    runtime = _runtime(
+        dependencies=dependencies,
+        owned_resources=(
+            (
+                dispatcher,
+                lambda: runtime_module._dispose_dispatcher(dispatcher),
+            ),
+        ),
+    )
+
+    with pytest.raises(ExceptionGroup, match="disposal failed"):
+        runtime.dispose()
+
+    assert runtime.dispatcher is dispatcher
+    assert runtime.disposal_retryable is True
+
+    runtime.dispose()
+
+    assert dispatcher.attempts == 2
+    assert runtime.dispatcher is None
 
 
 def test_disposal_aggregates_fatal_cancellation_and_finishes_cleanup() -> None:

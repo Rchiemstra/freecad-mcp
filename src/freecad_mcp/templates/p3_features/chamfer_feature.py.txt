@@ -12,5 +12,5 @@ _chm.Size = $size
 _edge_refs = $edge_refs
 if _edge_refs:
     _chm.Base = (_base, _edge_refs)
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('chamfer_name=' + _chm.Name)

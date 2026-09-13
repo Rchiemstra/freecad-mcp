@@ -131,6 +131,18 @@ def get_sketch_diagnostics_gui(doc_name: str, sketch_name: str, *, freecad) -> d
         "solver_message": getattr(sk, "SolverMessage", None),
         "is_closed": None,
     }
+    # SketchObject exposes these after a solver run.  Do not infer a zero DoF
+    # for older or sketch-like objects which do not expose the solver fields.
+    if hasattr(sk, "DoF"):
+        try:
+            info["dof"] = int(sk.DoF)
+        except (TypeError, ValueError):
+            pass
+    if hasattr(sk, "FullyConstrained"):
+        try:
+            info["fully_constrained"] = bool(sk.FullyConstrained)
+        except (TypeError, ValueError):
+            pass
     try:
         shape = sk.Shape
         if shape and not shape.isNull():

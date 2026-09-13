@@ -8,5 +8,5 @@ _loft = _body.newObject('PartDesign::AdditiveLoft', $loft_name) if _body else _d
 _loft.Sections = _profiles
 _loft.Ruled = $ruled
 _loft.Closed = $closed
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('loft_name=' + _loft.Name)

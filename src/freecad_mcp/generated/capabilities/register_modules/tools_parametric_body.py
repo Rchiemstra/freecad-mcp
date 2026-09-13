@@ -181,6 +181,8 @@ def _register_get_sketch_diagnostics(
             - malformed_constraints: list of malformed constraint indices
             - solver_message: solver status string (if available)
             - is_closed: whether the sketch wire forms a closed profile
+            - dof: solver degrees of freedom (when available)
+            - fully_constrained: solver constrained-state flag (when available)
 
         Examples:
             ```json

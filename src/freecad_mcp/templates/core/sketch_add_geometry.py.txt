@@ -4,5 +4,5 @@ _sk = _doc.getObject($sketch_name)
 if not _sk: raise RuntimeError('Sketch not found')
 _idxs = []
 $geometry_lines
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('indices=' + str(_idxs))

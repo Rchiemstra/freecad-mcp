@@ -12,5 +12,5 @@ _sw = _body.newObject('PartDesign::AdditivePipe', $sweep_name) if _body else _do
 _sw.Profile = (_profile, [''])
 _sw.Spine = (_path, [''])
 _sw.Frenet = $frenet
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('sweep_name=' + _sw.Name)

@@ -13,5 +13,5 @@ _hel.Height = $height
 _hel.Radius = $radius
 _hel.LeftHanded = $left_handed
 _hel.Reversed = $reversed_dir
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('helix_name=' + _hel.Name)

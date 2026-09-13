@@ -170,8 +170,8 @@ def test_inline_runtime_info_operation_path_is_importable():
     assert callable(symbol)
 
 
-def test_connection_method_module_count_is_twenty_one():
-    assert len(connection_method_module_names()) == 21
+def test_connection_method_module_count_is_twenty_two():
+    assert len(connection_method_module_names()) == 22
 
 
 @pytest.mark.parametrize("module_name", connection_method_module_names())

@@ -43,7 +43,22 @@ def snapshot_gui(doc_name: str):
         fd, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
         os.close(fd)
         try:
-            doc.saveCopy(path)
+            save_outcome = None
+            save_copy_with_outcome = getattr(doc, "saveCopyWithOutcome", None)
+            if callable(save_copy_with_outcome):
+                save_outcome = save_copy_with_outcome(path)
+                if not isinstance(save_outcome, dict) or not save_outcome.get("success"):
+                    raise RuntimeError(
+                        str(
+                            save_outcome.get("message")
+                            or save_outcome.get("error_code")
+                            or "FreeCAD rejected the snapshot copy"
+                        )
+                        if isinstance(save_outcome, dict)
+                        else "FreeCAD returned an invalid snapshot outcome"
+                    )
+            else:
+                doc.saveCopy(path)
         except Exception as e:
             with contextlib.suppress(Exception):
                 os.remove(path)
@@ -61,6 +76,7 @@ def snapshot_gui(doc_name: str):
             "snapshot_id": sid,
             "doc": doc.Name,
             "count": len(FreeCAD._mcp_snapshots),
+            "save_outcome": save_outcome,
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}

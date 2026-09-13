@@ -6,6 +6,7 @@ import os
 import tempfile
 from typing import Any
 
+from ...view_manager_ops.screenshot_blank import is_near_blank_png
 from .collaboration_context import (
     GuiDispatchFailure,
     encode_png_bytes,
@@ -13,7 +14,6 @@ from .collaboration_context import (
     redacted_error,
     render_personal_view,
 )
-from ...view_manager_ops.screenshot_blank import is_near_blank_png
 
 _MAX_SEQUENCE_FRAMES = 120
 

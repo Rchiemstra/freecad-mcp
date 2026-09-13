@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .sketch_attach_helpers import find_origin_plane
+
 
 def create_sketch_object(doc, sketch_name: str, body_name: str | None):
     if body_name:
@@ -12,9 +14,9 @@ def create_sketch_object(doc, sketch_name: str, body_name: str | None):
     return doc.addObject("Sketcher::SketchObject", sketch_name), None
 
 
-def apply_create_attach_to(sketch, doc, attach_to: str, *, freecad) -> str | None:
+def apply_create_attach_to(sketch, doc, attach_to: str) -> str | None:
     if attach_to in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
-        return _attach_origin_plane_on_create(sketch, doc, attach_to, freecad=freecad)
+        return _attach_origin_plane_on_create(sketch, doc, attach_to)
     if ":" in attach_to:
         obj_name, face = attach_to.split(":", 1)
         ref_obj = doc.getObject(obj_name)
@@ -22,33 +24,16 @@ def apply_create_attach_to(sketch, doc, attach_to: str, *, freecad) -> str | Non
             return f"Object '{obj_name}' not found for attach_to."
         sketch.AttachmentSupport = [(ref_obj, face)]
         sketch.MapMode = "FlatFace"
-    return None
-
-
-def _attach_origin_plane_on_create(
-    sketch, doc, plane_name: str, *, freecad
-) -> str | None:
-    plane_obj = None
-    for obj in doc.Objects:
-        if obj.TypeId == "App::Origin":
-            for feat in getattr(obj, "OriginFeatures", []):
-                if feat.Label == plane_name:
-                    plane_obj = feat
-                    break
-        if plane_obj:
-            break
-    if plane_obj:
-        sketch.AttachmentSupport = [(plane_obj, "")]
-        sketch.MapMode = "FlatFace"
         return None
-    if plane_name == "XZ_Plane":
-        sketch.Placement = freecad.Placement(
-            freecad.Vector(0, 0, 0),
-            freecad.Rotation(freecad.Vector(1, 0, 0), 90),
-        )
-    elif plane_name == "YZ_Plane":
-        sketch.Placement = freecad.Placement(
-            freecad.Vector(0, 0, 0),
-            freecad.Rotation(freecad.Vector(0, 1, 0), -90),
-        )
+    return f"Unsupported attach_to: {attach_to}"
+
+
+def _attach_origin_plane_on_create(sketch, doc, plane_name: str) -> str | None:
+    plane_obj = find_origin_plane(doc, sketch, plane_name)
+    if plane_obj is None:
+        # Never emulate an attachment with Placement.  A deactivated sketch can
+        # silently lose that rotation during later feature recomputes (P3).
+        return f"Origin plane not found: {plane_name}"
+    sketch.AttachmentSupport = [(plane_obj, "")]
+    sketch.MapMode = "FlatFace"
     return None

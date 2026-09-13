@@ -7,5 +7,5 @@ _rot = FreeCAD.Rotation(_axis, _angle)
 _pl = _obj.Placement
 _new_pl = FreeCAD.Placement(_center, FreeCAD.Rotation()) * FreeCAD.Placement(FreeCAD.Vector(), _rot) * FreeCAD.Placement(-_center, FreeCAD.Rotation()) * _pl
 _obj.Placement = _new_pl
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print('rotated')

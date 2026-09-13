@@ -19,5 +19,5 @@ except Exception as _e:
         'type': type(_e).__name__,
     }))
     raise RuntimeError('Failed to clear expression on ' + _obj.Name + '.' + _prop + ': ' + str(_e))
-_doc.recompute()
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
 print(json.dumps({'ok': True, 'object': _obj.Name, 'prop_path': _prop, 'cleared': True}))

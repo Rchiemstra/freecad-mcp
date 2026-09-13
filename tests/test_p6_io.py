@@ -123,10 +123,10 @@ class TestImportStep:
         import_step_operation(conn, "Doc", "/data/part.step")
         assert_code_contains(_code(conn), "/data/part.step")
 
-    def test_recompute_called(self):
+    def test_recompute_is_deferred_to_native_postcondition(self):
         conn = _ok_conn()
         import_step_operation(conn, "Doc", "/tmp/in.step")
-        assert_code_contains(_code(conn), "_doc.recompute()")
+        assert_code_contains(_code(conn), "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
 
 
 # ---------------------------------------------------------------------------

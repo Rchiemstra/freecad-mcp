@@ -40,6 +40,16 @@ _PARAMETER_SCHEMAS: dict[str, dict] = {
     "request_id": {"type": "string"},
     "save_mode": {"enum": ["discard", "save", "save_as"], "type": "string"},
     "selector": {"type": ["null", "object"]},
+    "doc_selector": {"type": "object"},
+    "revision_keys": {"type": "array"},
+    "session_id": {"type": "string"},
+    "property_name": {"type": "string"},
+    "value_type": {"type": "string"},
+    "operation_id": {"type": "string"},
+    "expected_undo_count": {"type": "integer"},
+    "expected_undo_head": {"type": "string"},
+    "expected_redo_count": {"type": "integer"},
+    "expected_redo_head": {"type": "string"},
     "support": {"type": ["array", "null", "object", "string"]},
     "target_request_id": {"type": "string"},
     "task_description": {"type": "string"},
@@ -340,7 +350,7 @@ def test_phase4_json_listener_round_trips_every_semantic_outcome():
             assert decoded["error"] == mapped
         assert contract["result_examples"], method_name
 
-    assert converted_failures == 76
+    assert converted_failures == 82
 
 
 def test_phase5_json_client_converts_every_documented_failure_to_native_error():
@@ -384,7 +394,7 @@ def test_phase5_json_client_converts_every_documented_failure_to_native_error():
             assert error.data == mapped["data"], method_name
             assert error.semantic_code == mapped["data"]["error_code"], method_name
 
-    assert converted_failures == 76
+    assert converted_failures == 82
 
 
 def test_freecad_rpc_instance_exposes_same_public_names(freecad_rpc_class):

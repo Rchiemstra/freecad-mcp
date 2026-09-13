@@ -10,6 +10,7 @@ _if_exists = $if_exists
 _body = _doc.getObject(_body_name)
 if not _body: raise RuntimeError('Body not found: ' + _body_name)
 _existing = _doc.getObject(_plane_name)
+_post_plane = None
 if _existing and _if_exists == 'skip':
     print(json.dumps({'ok': True, 'skipped': True, 'plane_name': _existing.Name}))
 else:
@@ -41,8 +42,11 @@ else:
         raise RuntimeError('Unsupported datum plane mode: ' + _mode)
     _plane.MapMode = _map_mode
     _plane.AttachmentOffset = FreeCAD.Placement(_attachment_base, FreeCAD.Rotation())
-    _doc.recompute()
+    _post_plane = _plane
+
+# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
+if _post_plane is not None:
     _normal = None
-    try: _normal = _vec(_plane.Shape.Surface.Axis)
+    try: _normal = _vec(_post_plane.Shape.Surface.Axis)
     except Exception: pass
-    print(json.dumps({'ok': True, 'plane_name': _plane.Name, 'body_name': _body.Name, 'mode': _mode, 'map_mode': _map_mode, 'attachment_offset': _vec(_attachment_base), 'normal': _normal}))
+    print(json.dumps({'ok': True, 'plane_name': _post_plane.Name, 'body_name': _body.Name, 'mode': _mode, 'map_mode': _map_mode, 'attachment_offset': _vec(_attachment_base), 'normal': _normal}))

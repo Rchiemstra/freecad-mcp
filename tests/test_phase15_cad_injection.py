@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
+import json
 import sys
 from dataclasses import fields, replace
 from pathlib import Path
@@ -10,9 +13,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from addon.FreeCADMCP.collaboration_api import CollaborationAPI
 from addon.FreeCADMCP.rpc_server import object_factory
 from addon.FreeCADMCP.rpc_server.fem_executor_ops import solver_resolution
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
+    assembly,
     expressions,
     fem_analysis,
     object_crud,
@@ -20,10 +25,16 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
     references,
     spreadsheet,
 )
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import sketch_public
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies import (
     CadCollaborators,
 )
+from addon.FreeCADMCP.rpc_server.methods.dispatch_helpers_ops.mutation_health import (
+    adapt_gui_mutation_result,
+)
 from addon.FreeCADMCP.rpc_server.property_mapper import Object
+from tests.helpers.native_readiness import freecad_with_native_readiness
 
 pytestmark = pytest.mark.unit
 
@@ -32,13 +43,23 @@ class _NativeAPI:
     def __init__(self):
         self.documents = []
         self.structural_scopes = []
+        self.recompute_policies = []
 
     def commit_compatibility_mutation(
-        self, document_name, callback, *, structural=False
+        self,
+        document_name,
+        callback,
+        *,
+        structural=False,
+        recompute=True,
+        postcondition=None,
     ):
         self.documents.append(document_name)
         self.structural_scopes.append(structural)
+        self.recompute_policies.append(recompute)
         callback()
+        if postcondition is not None and postcondition() is False:
+            return {"status": "PostconditionFailed", "committed": False}
         return {"status": "Committed", "committed": True}
 
 
@@ -54,6 +75,12 @@ def _collaborators(**overrides):
         if field.name != "compatibility_api"
     }
     values.update(overrides)
+    freecad = values["freecad"]
+    values["freecad"] = (
+        freecad_with_native_readiness(freecad)
+        if callable(getattr(freecad, "getDocument", None))
+        else freecad_with_native_readiness()
+    )
     return CadCollaborators(compatibility_api=native, **values), native
 
 
@@ -81,6 +108,7 @@ def _provider_module(module_name: str, class_names, calls):
     values = {"__name__": module_name}
 
     for class_name in class_names:
+
         def initialize(_self, view, *, provider_name=class_name):
             calls.append((provider_name, view))
 
@@ -95,8 +123,8 @@ def _provider_module(module_name: str, class_names, calls):
 def test_object_create_uses_the_exact_injected_factory_once():
     calls = []
 
-    def factory(document, obj):
-        calls.append((document, obj))
+    def factory(document, obj, *, recompute=True):
+        calls.append((document, obj, recompute))
         return True
 
     collaborators, native = _collaborators(create_object_gui=factory)
@@ -108,11 +136,13 @@ def test_object_create_uses_the_exact_injected_factory_once():
     assert result == {"success": True, "object_name": "Pad"}
     assert calls[0][0] == "Doc"
     assert calls[0][1].name == "Pad"
+    assert calls[0][2] is False
     assert native.documents == ["Doc"]
     assert native.structural_scopes == [True]
 
 
-def test_object_create_defers_presentation_properties_until_after_native_commit():
+@pytest.mark.parametrize("failure", [None, "properties", "deferred"])
+def test_object_create_defers_presentation_properties_until_after_native_commit(failure):
     class Created:
         def __init__(self):
             self.ViewObject = None
@@ -130,22 +160,39 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
 
     class NativeAPI:
         def commit_compatibility_mutation(
-            self, _document_name, callback, *, structural=False
+            self,
+            _document_name,
+            callback,
+            *,
+            structural=False,
+            postcondition=None,
         ):
             assert structural is True
             callback()
             assert created.ViewObject is None
+            assert postcondition is not None
+            assert postcondition() is True
             created.ViewObject = SimpleNamespace()
             return {"status": "Committed", "committed": True}
 
-    def factory(_document_name, obj):
+    def factory(_document_name, obj, *, recompute=True):
+        assert recompute is False
         assert obj.properties == {"Length": 10}
         document.created = created
+        if failure == "deferred":
+
+            def apply_after_commit():
+                assert created.ViewObject is not None
+                raise RuntimeError("deferred provider unavailable")
+
+            return SimpleNamespace(apply_after_commit=apply_after_commit)
         return True
 
     def set_properties(actual_document, actual_object, properties):
         assert actual_object.ViewObject is not None
         presentation_calls.append((actual_document, actual_object, properties))
+        if failure == "properties":
+            raise RuntimeError("view property unavailable")
 
     collaborators, _native = _collaborators(
         freecad=SimpleNamespace(getDocument=lambda _name: document),
@@ -153,9 +200,11 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
         set_object_property=set_properties,
     )
     collaborators = replace(collaborators, compatibility_api=NativeAPI())
+    rpc = _rpc(collaborators)
+    rpc._adapt_gui_mutation_result = adapt_gui_mutation_result
 
     result = object_crud.create_object(
-        _rpc(collaborators),
+        rpc,
         "Doc",
         {
             "Type": "PartDesign::Feature",
@@ -168,8 +217,15 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
         },
     )
 
-    assert result == {"success": True, "object_name": "Pad"}
-    assert presentation_calls == [
+    assert result["success"] is True
+    assert result["object_name"] == "Pad"
+    if failure:
+        assert result["retryable"] is False
+        assert "unavailable" in result["presentation_warning"]
+    else:
+        assert "presentation_warning" not in result
+    assert document.created is created
+    expected_presentation_calls = [
         (
             document,
             created,
@@ -179,6 +235,7 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
             },
         )
     ]
+    assert presentation_calls == ([] if failure == "deferred" else expected_presentation_calls)
 
 
 @pytest.mark.parametrize(
@@ -186,10 +243,10 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
     [
         "committed",
         "callback_failure",
-        "leaf_recompute_failure",
-        "validation_recompute_failure",
+        "native_recompute_failure",
         "health_failure",
         "publication_failure",
+        "presentation_failure",
     ],
 )
 def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa: C901 - failure matrix
@@ -210,13 +267,8 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
         def recompute(self):
             self.recompute_count += 1
             events.append(("recompute", self.recompute_count))
-            if outcome == "leaf_recompute_failure" and self.recompute_count == 1:
-                raise RuntimeError("leaf recompute failed")
-            if (
-                outcome == "validation_recompute_failure"
-                and self.recompute_count == 2
-            ):
-                raise RuntimeError("validation recompute failed")
+            if outcome == "native_recompute_failure":
+                raise RuntimeError("native recompute failed")
 
     document = Document()
     model_calls = []
@@ -231,20 +283,32 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
             if outcome == "callback_failure":
                 raise RuntimeError("model callback failed")
             return
-        presentation_calls.append(
-            (stage["value"], dict(actual_properties))
-        )
+        presentation_calls.append((stage["value"], dict(actual_properties)))
         events.append(("presentation", stage["value"]))
+        if outcome == "presentation_failure":
+            raise RuntimeError("view property unavailable")
 
     class NativeAPI:
         def commit_compatibility_mutation(
-            self, document_name, callback, *, structural=False
+            self,
+            document_name,
+            callback,
+            *,
+            structural=False,
+            postcondition=None,
         ):
             assert document_name == "Doc"
             assert structural is True
             stage["value"] = "native_callback"
             callback()
             assert presentation_calls == []
+            try:
+                document.recompute()
+            except RuntimeError:
+                return {"status": "RecomputeFailed", "committed": False}
+            assert postcondition is not None
+            if postcondition() is False:
+                return {"status": "PostconditionFailed", "committed": False}
             events.append(("publication", outcome))
             if outcome == "publication_failure":
                 return {"status": "Rejected", "committed": False}
@@ -265,9 +329,12 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
         validate_document_invariants=validate,
     )
     collaborators = replace(collaborators, compatibility_api=NativeAPI())
+    rpc = _rpc(collaborators)
+    if outcome == "presentation_failure":
+        rpc._adapt_gui_mutation_result = adapt_gui_mutation_result
 
     result = object_crud.edit_object(
-        _rpc(collaborators),
+        rpc,
         "Doc",
         "Pad",
         {
@@ -280,8 +347,15 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
     )
 
     assert model_calls == [("native_callback", {"Length": 10})]
-    assert result == {"success": outcome == "committed", "object_name": "Pad"}
-    if outcome == "committed":
+    if outcome == "presentation_failure":
+        assert result["success"] is True
+        assert result["object_name"] == "Pad"
+        assert result["retryable"] is False
+        assert "unavailable" in result["presentation_warning"]
+    else:
+        assert result == {"success": outcome == "committed", "object_name": "Pad"}
+    assert document.recompute_count == (0 if outcome == "callback_failure" else 1)
+    if outcome in {"committed", "presentation_failure"}:
         assert presentation_calls == [
             (
                 "postcommit",
@@ -298,6 +372,363 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
         assert presentation_calls == []
 
 
+def test_typed_delete_forwards_recursive_and_force_with_compatibility_defaults(
+    monkeypatch,
+):
+    seen = []
+
+    def delete_leaf(*_args, **kwargs):
+        seen.append(kwargs)
+        return {
+            "ok": True,
+            "object": "Body",
+            "refused": False,
+            "deleted": ["Body"],
+        }
+
+    monkeypatch.setattr(object_crud, "delete_object_gui", delete_leaf)
+    collaborators, native = _collaborators()
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, **_kwargs: result,
+    )
+
+    result = object_crud.delete_object(
+        rpc,
+        "Doc",
+        "Body",
+        recursive=True,
+        force=False,
+    )
+
+    assert result["deleted"] == ["Body"]
+    assert seen == [
+        {
+            "freecad": collaborators.freecad,
+            "recompute": False,
+            "recursive": True,
+            "force": False,
+        }
+    ]
+    assert native.structural_scopes == [True]
+
+
+def test_force_delete_uses_deferred_recovery_recompute_and_reports_it(monkeypatch):
+    monkeypatch.setattr(
+        object_crud,
+        "delete_object_gui",
+        lambda *_args, **_kwargs: {"ok": True, "deleted": ["BrokenJoint"]},
+    )
+    collaborators, native = _collaborators()
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, success_fields=None, **_kwargs: {
+            "success": True,
+            **(success_fields or {}),
+            **result,
+        },
+    )
+
+    result = object_crud.delete_object(rpc, "Doc", "BrokenJoint", force=True)
+
+    assert native.structural_scopes == [True]
+    assert native.recompute_policies == [False]
+    assert result["recompute"]["policy"] == "deferred_recovery"
+    assert result["recompute"]["required"] is True
+
+
+def test_force_delete_late_result_transform_retains_recovery_metadata(monkeypatch):
+    monkeypatch.setattr(
+        object_crud,
+        "delete_object_gui",
+        lambda *_args, **_kwargs: {"ok": True, "deleted": ["BrokenJoint"]},
+    )
+    collaborators, _native = _collaborators()
+    captured = {}
+
+    def dispatch(callback, *, late_result_transform=None, **_kwargs):
+        captured["transform"] = late_result_transform
+        return callback()
+
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=dispatch,
+        _adapt_gui_mutation_result=lambda result, success_fields=None, **_kwargs: {
+            "success": True,
+            **(success_fields or {}),
+            **result,
+        },
+    )
+    object_crud.delete_object(rpc, "Doc", "BrokenJoint", force=True)
+
+    late = captured["transform"]({"ok": True, "deleted": ["BrokenJoint"]})
+    assert late["success"] is True
+    assert late["object_name"] == "BrokenJoint"
+    assert late["recompute"]["policy"] == "deferred_recovery"
+
+
+@pytest.mark.parametrize(
+    ("module", "method_name", "leaf_name", "args"),
+    [
+        (
+            sketch_public,
+            "sketch_attach",
+            "sketch_attach_gui",
+            ("Doc", "Sketch", "XY_Plane"),
+        ),
+        (assembly, "solve_assembly", "solve_assembly_gui", ("Doc", "Assembly")),
+    ],
+)
+def test_structural_wrappers_reach_native_with_explicit_structural_scope(
+    monkeypatch,
+    module,
+    method_name,
+    leaf_name,
+    args,
+):
+    native_options = []
+
+    class Document:
+        Name = "Doc"
+        Objects = ()
+
+        def commitCompatibilityMutation(self, callback, **options):
+            native_options.append(options)
+            callback()
+            assert options["postcondition"]() is True
+            return {"status": "Committed", "committed": True}
+
+    document = Document()
+    freecad = SimpleNamespace(getDocument=lambda _name: document)
+    leaf_calls = []
+    collaborators, _native = _collaborators(freecad=freecad)
+    collaborators = replace(
+        collaborators,
+        compatibility_api=CollaborationAPI(document_lookup=freecad.getDocument),
+    )
+    monkeypatch.setattr(
+        module,
+        leaf_name,
+        lambda *_args, **kwargs: (
+            leaf_calls.append(kwargs) or {"success": True, "ok": True}
+        ),
+    )
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, **_kwargs: result,
+    )
+
+    result = getattr(module, method_name)(rpc, *args)
+
+    assert result["success"] is True
+    assert len(native_options) == 1
+    assert native_options[0]["structural"] is True
+    assert "trusted_structural" not in native_options[0]
+    assert leaf_calls[0]["recompute"] is False
+
+
+def test_assembly_without_apply_only_solver_fails_before_recompute(monkeypatch):
+    class Assembly:
+        Name = "Assembly"
+
+        @staticmethod
+        def isDerivedFrom(_type_id):
+            return True
+
+    assembly_object = Assembly()
+    recompute_calls = []
+    assembly_object.Document = SimpleNamespace(
+        recompute=lambda: recompute_calls.append(True)
+    )
+    document = SimpleNamespace(
+        getObject=lambda name: assembly_object if name == "Assembly" else None,
+        recompute=lambda: recompute_calls.append(True),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "JointObject",
+        SimpleNamespace(
+            solveIfAllowed=lambda *_args: (_ for _ in ()).throw(
+                RuntimeError("solver unavailable")
+            )
+        ),
+    )
+
+    result = assembly.solve_assembly_gui(
+        "Doc",
+        "Assembly",
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        recompute=False,
+    )
+
+    assert result["error_code"] == "UNSUPPORTED_NATIVE_PHASE_BOUNDARY"
+    assert recompute_calls == []
+
+
+def test_delete_leaf_refuses_or_recursively_deletes_without_orphans():
+    class Node:
+        def __init__(self, name, type_id):
+            self.Name = name
+            self.TypeId = type_id
+            self.State = []
+            self.OutList = []
+            self.InList = []
+            self.Group = []
+
+    root = Node("Body", "PartDesign::Body")
+    child = Node("Pad", "PartDesign::Pad")
+    grandchild = Node("Fillet", "PartDesign::Fillet")
+    root.Group = [child, grandchild]
+    child.InList = [root, grandchild]
+    grandchild.InList = [root]
+
+    class Document:
+        def __init__(self):
+            self.objects = {item.Name: item for item in (root, child, grandchild)}
+            self.removed = []
+            self.recompute_calls = 0
+
+        def getObject(self, name):
+            return self.objects.get(name)
+
+        def removeObject(self, name):
+            self.removed.append(name)
+            self.objects.pop(name, None)
+
+        def recompute(self):
+            self.recompute_calls += 1
+
+    document = Document()
+    freecad = SimpleNamespace(
+        getDocument=lambda _name: document,
+        Console=SimpleNamespace(PrintMessage=lambda _message: None),
+    )
+
+    refused = object_crud.delete_object_gui("Doc", "Body", freecad=freecad)
+
+    assert refused["refused"] is True
+    assert [item["name"] for item in refused["dependents"]] == ["Fillet", "Pad"]
+    assert refused["deleted"] == []
+    assert document.removed == []
+    assert document.recompute_calls == 0
+
+    deleted = object_crud.delete_object_gui(
+        "Doc",
+        "Body",
+        freecad=freecad,
+        recursive=True,
+    )
+
+    assert deleted["refused"] is False
+    assert deleted["deleted"] == ["Fillet", "Pad", "Body"]
+    assert document.removed == ["Fillet", "Pad", "Body"]
+    assert document.objects == {}
+    assert document.recompute_calls == 1
+
+
+def test_delete_leaf_force_reports_preserved_dependents():
+    dependent = SimpleNamespace(
+        Name="Pad",
+        TypeId="PartDesign::Pad",
+        State=["Touched"],
+        OutList=[],
+        InList=[],
+        Group=[],
+    )
+    root = SimpleNamespace(
+        Name="Body",
+        TypeId="PartDesign::Body",
+        State=[],
+        OutList=[],
+        InList=[],
+        Group=[dependent],
+    )
+    objects = {"Body": root, "Pad": dependent}
+    document = SimpleNamespace(
+        getObject=lambda name: objects.get(name),
+        removeObject=lambda name: objects.pop(name, None),
+        recompute=lambda: None,
+    )
+
+    result = object_crud.delete_object_gui(
+        "Doc",
+        "Body",
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: document,
+            Console=SimpleNamespace(PrintMessage=lambda _message: None),
+        ),
+        force=True,
+    )
+
+    assert result["deleted"] == ["Body"]
+    assert result["orphans_left"] == ["Pad"]
+    assert set(objects) == {"Pad"}
+
+
+def test_recursive_feature_delete_removes_deepest_consumers_but_keeps_body_owner():
+    class Node:
+        def __init__(self, name, type_id):
+            self.Name = name
+            self.TypeId = type_id
+            self.State = []
+            self.OutList = []
+            self.InList = []
+            self.Group = []
+
+        def isDerivedFrom(self, type_id):
+            return self.TypeId == type_id
+
+    body = Node("Body", "PartDesign::Body")
+    sketch = Node("Sketch", "Sketcher::SketchObject")
+    pad = Node("Pad", "PartDesign::Pad")
+    fillet = Node("Fillet", "PartDesign::Fillet")
+    body.Group = [sketch, pad, fillet]
+    body.Tip = fillet
+    sketch.InList = [body, pad]
+    pad.InList = [body, fillet]
+    fillet.InList = [body]
+
+    class Document:
+        def __init__(self):
+            self.objects = {
+                item.Name: item for item in (body, sketch, pad, fillet)
+            }
+            self.removed = []
+
+        def getObject(self, name):
+            return self.objects.get(name)
+
+        def removeObject(self, name):
+            self.removed.append(name)
+            self.objects.pop(name, None)
+            if body.Tip is fillet and name == "Fillet":
+                body.Tip = pad
+            if body.Tip is pad and name == "Pad":
+                body.Tip = sketch
+
+        def recompute(self):
+            return None
+
+    document = Document()
+    result = object_crud.delete_object_gui(
+        "Doc",
+        "Pad",
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: document,
+            Console=SimpleNamespace(PrintMessage=lambda _message: None),
+        ),
+        recursive=True,
+    )
+
+    assert result["deleted"] == ["Fillet", "Pad"]
+    assert document.removed == ["Fillet", "Pad"]
+    assert set(document.objects) == {"Body", "Sketch"}
+    assert body.Tip is sketch
+
+
 def test_expression_mutation_receives_the_exact_injected_freecad():
     class Object:
         Name = "Pad"
@@ -311,16 +742,38 @@ def test_expression_mutation_receives_the_exact_injected_freecad():
     class Document:
         def __init__(self):
             self.object = Object()
+            self.recompute_calls = 0
 
         def getObject(self, _name):
             return self.object
 
         def recompute(self):
-            self.recomputed = True
+            self.recompute_calls += 1
 
     document = Document()
-    freecad = SimpleNamespace(getDocument=lambda name: document if name == "Doc" else None)
-    collaborators, native = _collaborators(freecad=freecad)
+    freecad = SimpleNamespace(
+        getDocument=lambda name: document if name == "Doc" else None
+    )
+
+    class NativeAPI:
+        @staticmethod
+        def commit_compatibility_mutation(
+            _document_name,
+            callback,
+            *,
+            structural=False,
+            postcondition=None,
+        ):
+            assert structural is False
+            callback()
+            document.recompute()
+            assert postcondition is not None
+            if postcondition() is False:
+                return {"status": "PostconditionFailed", "committed": False}
+            return {"status": "Committed", "committed": True}
+
+    collaborators, _native = _collaborators(freecad=freecad)
+    collaborators = replace(collaborators, compatibility_api=NativeAPI())
 
     result = expressions.set_expression(
         _rpc(collaborators), "Doc", "Pad", "Length", "Spreadsheet.value"
@@ -328,8 +781,7 @@ def test_expression_mutation_receives_the_exact_injected_freecad():
 
     assert result["success"] is True
     assert document.object.bound == ("Length", "Spreadsheet.value")
-    assert native.documents == ["Doc"]
-    assert native.structural_scopes == [False]
+    assert document.recompute_calls == 1
 
 
 def test_spreadsheet_read_is_not_native_but_create_is():
@@ -349,6 +801,7 @@ def test_spreadsheet_read_is_not_native_but_create_is():
         def __init__(self):
             self.sheet = Sheet()
             self.has_sheet = False
+            self.recompute_calls = 0
 
         def getObject(self, name):
             return self.sheet if name == "NewSheet" and self.has_sheet else None
@@ -359,26 +812,167 @@ def test_spreadsheet_read_is_not_native_but_create_is():
             return self.sheet
 
         def recompute(self):
-            pass
+            self.recompute_calls += 1
 
     document = Document()
     freecad = SimpleNamespace(getDocument=lambda _name: document)
+
+    class NativeAPI:
+        @staticmethod
+        def commit_compatibility_mutation(
+            _document_name,
+            callback,
+            *,
+            structural=False,
+            postcondition=None,
+        ):
+            assert structural is True
+            callback()
+            document.recompute()
+            assert postcondition is not None
+            if postcondition() is False:
+                return {"status": "PostconditionFailed", "committed": False}
+            return {"status": "Committed", "committed": True}
+
     collaborators, native = _collaborators(freecad=freecad)
+    collaborators = replace(collaborators, compatibility_api=NativeAPI())
     rpc = _rpc(collaborators)
 
     created = spreadsheet.spreadsheet_create(rpc, "Doc", "NewSheet")
     read = spreadsheet.spreadsheet_get_cells(rpc, "Doc", "NewSheet", ["A1"])
 
     assert created["success"] is True
-    assert read["cells"] == [{"address": "A1", "alias": "", "contents": "42", "value": "42"}]
-    assert native.documents == ["Doc"]
-    assert native.structural_scopes == [True]
+    assert read["cells"] == [
+        {"address": "A1", "alias": "", "contents": "42", "value": "42"}
+    ]
+    assert native.documents == []
+    assert document.recompute_calls == 1
 
 
-def test_fem_analysis_declares_structural_scope_for_solver_and_result_objects():
+def test_spreadsheet_quantity_reads_are_json_safe_in_addon_and_worker_template(
+    monkeypatch,
+):
+    class Quantity:
+        def __str__(self):
+            return "440 mm"
+
+    class Sheet:
+        Name = "Parameters"
+
+        def getAlias(self, _address):
+            return "SeatWidth"
+
+        def getContents(self, _address):
+            return "440 mm"
+
+        def get(self, _address):
+            return Quantity()
+
+    sheet = Sheet()
+    document = SimpleNamespace(getObject=lambda _name: sheet)
+    freecad = SimpleNamespace(getDocument=lambda _name: document)
+
+    addon_result = spreadsheet.spreadsheet_get_cells_gui(
+        "Doc", "Parameters", ["A1"], freecad=freecad
+    )
+    assert addon_result["cells"][0]["value"] == "440 mm"
+    json.dumps(addon_result)
+
+    template = (
+        Path(__file__).parents[1]
+        / "src"
+        / "freecad_mcp"
+        / "templates"
+        / "parametric"
+        / "spreadsheet_get_cells.py.txt"
+    ).read_text(encoding="utf-8")
+    generated = (
+        template.replace("$doc_name", repr("Doc"))
+        .replace("$doc_missing", repr("Document missing"))
+        .replace("$sheet_name", repr("Parameters"))
+        .replace("$addresses", repr(["A1"]))
+    )
+    output = io.StringIO()
+    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
+    with contextlib.redirect_stdout(output):
+        exec(generated, {})
+    assert json.loads(output.getvalue())["cells"][0]["value"] == "440 mm"
+
+
+def test_sketch_diagnostics_report_available_solver_fields_in_addon_and_template(
+    monkeypatch,
+):
+    sketch = SimpleNamespace(
+        Name="Sketch",
+        Geometry=[],
+        Constraints=[],
+        State=[],
+        ConflictingConstraints=[],
+        RedundantConstraints=[],
+        MalformedConstraints=[],
+        SolverMessage=None,
+        DoF=3,
+        FullyConstrained=False,
+    )
+    document = SimpleNamespace(getObject=lambda _name: sketch)
+    freecad = SimpleNamespace(getDocument=lambda _name: document)
+
+    addon_result = diagnostics.get_sketch_diagnostics_gui(
+        "Doc", "Sketch", freecad=freecad
+    )
+    assert addon_result["dof"] == 3
+    assert addon_result["fully_constrained"] is False
+
+    template = (
+        Path(__file__).parents[1]
+        / "src"
+        / "freecad_mcp"
+        / "templates"
+        / "core"
+        / "get_sketch_diagnostics.py.txt"
+    ).read_text(encoding="utf-8")
+    generated = (
+        template.replace("$doc_name", repr("Doc"))
+        .replace("$doc_missing", repr("Document missing"))
+        .replace("$sketch_name", repr("Sketch"))
+    )
+    output = io.StringIO()
+    monkeypatch.setitem(sys.modules, "FreeCAD", freecad)
+    with contextlib.redirect_stdout(output):
+        exec(generated, {})
+    worker_result = json.loads(output.getvalue())
+    assert worker_result["dof"] == 3
+    assert worker_result["fully_constrained"] is False
+
+
+def test_sketch_diagnostics_do_not_invent_unavailable_solver_values():
+    sketch = SimpleNamespace(
+        Name="Sketch",
+        Geometry=[],
+        Constraints=[],
+        State=[],
+        ConflictingConstraints=[],
+        RedundantConstraints=[],
+        MalformedConstraints=[],
+        SolverMessage=None,
+    )
+    result = diagnostics.get_sketch_diagnostics_gui(
+        "Doc",
+        "Sketch",
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: SimpleNamespace(getObject=lambda _sketch: sketch)
+        ),
+    )
+    assert "dof" not in result
+    assert "fully_constrained" not in result
+
+
+def test_fem_analysis_fails_before_solver_or_native_callback():
     calls = []
     collaborators, native = _collaborators(
-        freecad=SimpleNamespace(getDocument=lambda _name: SimpleNamespace(recompute=lambda: None)),
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: SimpleNamespace(recompute=lambda: None)
+        ),
         run_fem_analysis=lambda document_name, analysis_name: (
             calls.append((document_name, analysis_name))
             or {"success": True, "result_objects": ["CCX_Results"]}
@@ -389,10 +983,39 @@ def test_fem_analysis_declares_structural_scope_for_solver_and_result_objects():
         _rpc(collaborators), "Doc", "Analysis", timeout=30
     )
 
-    assert result == {"success": True, "result_objects": ["CCX_Results"]}
-    assert calls == [("Doc", "Analysis")]
-    assert native.documents == ["Doc"]
-    assert native.structural_scopes == [True]
+    assert result["error_code"] == "UNSUPPORTED_NATIVE_PHASE_BOUNDARY"
+    assert result["operation"] == "run_fem_analysis"
+    assert result["retryable"] is False
+    assert calls == []
+    assert native.documents == []
+
+
+def test_public_gmsh_creation_fails_before_factory_or_native_callback():
+    factory_calls = []
+    collaborators, native = _collaborators(
+        create_object_gui=lambda *_args, **_kwargs: factory_calls.append(True) or True,
+    )
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, **_kwargs: result,
+    )
+
+    result = object_crud.create_object(
+        rpc,
+        "Doc",
+        {
+            "Type": "Fem::FemMeshGmsh",
+            "Name": "Mesh",
+            "Analysis": "Analysis",
+            "Properties": {"Part": "Box"},
+        },
+    )
+
+    assert result["error_code"] == "UNSUPPORTED_NATIVE_PHASE_BOUNDARY"
+    assert result["operation"] == "create_object:Fem::FemMeshGmsh"
+    assert factory_calls == []
+    assert native.documents == []
 
 
 @pytest.mark.parametrize(
@@ -540,7 +1163,9 @@ def test_fem_analysis_python_object_needs_no_explicit_presentation_replay(monkey
     monkeypatch.setattr(
         solver_resolution,
         "_import_module",
-        lambda _name: pytest.fail("a C++ FEM object must not resolve a Python ViewProvider"),
+        lambda _name: pytest.fail(
+            "a C++ FEM object must not resolve a Python ViewProvider"
+        ),
     )
     monkeypatch.setattr(object_factory, "set_object_property", lambda *_args: None)
 
@@ -556,9 +1181,7 @@ def test_fem_analysis_python_object_needs_no_explicit_presentation_replay(monkey
 def test_fem_solver_mystran_replays_same_model_module_view_proxy(monkeypatch):
     provider_calls = []
     model_module_name = "femsolver.mystran.solver"
-    model_module = _provider_module(
-        model_module_name, ["ViewProxy"], provider_calls
-    )
+    model_module = _provider_module(model_module_name, ["ViewProxy"], provider_calls)
     proxy_type = type("Proxy", (), {"__module__": model_module_name})
     created = SimpleNamespace(Name="Mystran", Proxy=proxy_type(), ViewObject=None)
     document = SimpleNamespace(Objects=[], recompute=lambda: None)
@@ -613,9 +1236,7 @@ def test_fem_presentation_resolution_fails_closed_only_on_true_ambiguity(
     monkeypatch.setattr(
         solver_resolution,
         "_import_module",
-        lambda module_name: _provider_module(
-            module_name, ["VPFirst", "VPSecond"], []
-        ),
+        lambda module_name: _provider_module(module_name, ["VPFirst", "VPSecond"], []),
     )
 
     with (
@@ -692,15 +1313,9 @@ def test_fem_solver_and_result_presentations_replay_only_after_native_commit(
         _rpc(collaborators), "Doc", "Analysis", timeout=30
     )
 
-    assert result == {"success": True, "result_object": "CCX_Results"}
-    assert [kind for kind, _view in provider_calls] == [
-        "VPSolverCcxTools",
-        "VPResultMechanical",
-        "VPFemMeshResult",
-    ]
-    assert [view for _kind, view in provider_calls] == [
-        obj.ViewObject for obj in document.Objects
-    ]
+    assert result["error_code"] == "UNSUPPORTED_NATIVE_PHASE_BOUNDARY"
+    assert provider_calls == []
+    assert document.Objects == []
 
 
 def test_failed_fem_analysis_does_not_replay_deferred_presentation(monkeypatch):
@@ -734,22 +1349,64 @@ def test_failed_fem_analysis_does_not_replay_deferred_presentation(monkeypatch):
         _rpc(collaborators), "Doc", "Analysis", timeout=30
     )
 
-    assert result == {"success": False, "error": "solver failed"}
-    assert native.structural_scopes == [True]
+    assert result["error_code"] == "UNSUPPORTED_NATIVE_PHASE_BOUNDARY"
+    assert native.structural_scopes == []
+    assert document.Objects == []
     assert provider_calls == []
     assert solver_resolution.FreeCAD.GuiUp is True
 
 
 def test_transaction_control_uses_injected_dependencies_outside_native_commit():
+    from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
+        clear_operation_terminal_store,
+    )
+
+    clear_operation_terminal_store()
+
     class Document:
+        Name = "Doc"
+        Uid = SimpleNamespace(Value="uid-doc")
+
         def __init__(self):
             self.calls = []
+            self.UndoNames = ["EditA"]
+            self.UndoCount = 1
+            self.RedoNames = []
+            self.RedoCount = 0
+
+        def collaborationIdentity(self):
+            return {
+                "instance_id": 1,
+                "lifecycle_epoch": 1,
+                "state": "Live",
+            }
+
+        def getMutationReadiness(self):
+            return {
+                "ready": True,
+                "stable_event_supported": True,
+                "pending_transaction": False,
+                "booked_transaction": 0,
+                "transaction_locked": False,
+                "recomputing": False,
+                "must_execute": False,
+                "pending_removal": False,
+                "commit_barrier": False,
+                "notification_replay": False,
+                "poisoned": False,
+                "quarantined": False,
+                "diagnostic": "Ready for mutation",
+            }
 
         def recompute(self):
             self.calls.append("recompute")
 
         def undo(self):
             self.calls.append("undo")
+            self.UndoNames = []
+            self.UndoCount = 0
+            self.RedoNames = ["EditA"]
+            self.RedoCount = 1
 
         def redo(self):
             self.calls.append("redo")
@@ -757,17 +1414,54 @@ def test_transaction_control_uses_injected_dependencies_outside_native_commit():
     document = Document()
     waited = []
     collaborators, native = _collaborators(
-        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        freecad=SimpleNamespace(
+            getDocument=lambda _name: document,
+            listDocuments=lambda: {"Doc": document},
+        ),
         recompute_and_wait=lambda name: waited.append(name) or {"ok": True},
     )
-    rpc = _rpc(collaborators)
+    rpc = SimpleNamespace(
+        _cad_collaborators=collaborators,
+        _execution_collaborators=SimpleNamespace(
+            request_identity_provider=lambda: SimpleNamespace(
+                get_request_identity=lambda: {
+                    "authenticated_session_id": "auth-a",
+                    "instance_id": "runtime-owner",
+                }
+            )
+        ),
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
+        _adapt_gui_mutation_result=lambda result, success_fields=None: (
+            result
+            if isinstance(result, dict)
+            else {"success": result is True, **(success_fields or {})}
+        ),
+    )
+    selector = {
+        "document_uid": "uid-doc",
+        "document_instance_id": 1,
+        "lifecycle_epoch": 1,
+        "document_name": "Doc",
+    }
 
     recompute_helpers.recompute_document(rpc, "Doc")
-    recompute_helpers.undo(rpc, "Doc")
-    recompute_helpers.redo(rpc, "Doc")
+    recompute_helpers.undo(
+        rpc,
+        selector,
+        "op-undo",
+        expected_undo_count=1,
+        expected_undo_head="EditA",
+    )
+    recompute_helpers.redo(
+        rpc,
+        selector,
+        "op-redo",
+        expected_redo_count=1,
+        expected_redo_head="EditA",
+    )
     assert recompute_helpers.recompute_and_wait(rpc, "Doc") == {"ok": True}
 
-    assert document.calls == ["recompute", "undo", "redo"]
+    assert document.calls == ["recompute", "undo", "recompute", "redo", "recompute"]
     assert waited == ["Doc"]
     assert native.documents == []
 
@@ -775,20 +1469,87 @@ def test_transaction_control_uses_injected_dependencies_outside_native_commit():
 def test_deferred_reference_repair_stays_atomic_without_native_recompute():
     calls = []
 
-    def repair(document_name, repairs, *, recompute, validate):
-        calls.append((document_name, repairs, recompute, validate))
+    class Document:
+        Name = "Doc"
+        Objects = ()
+
+        def recompute(self):
+            pytest.fail("deferred reference repair must not implicitly recompute")
+
+    document = Document()
+
+    def repair(document_name, repairs, *, recompute, validate, phase):
+        calls.append((document_name, repairs, recompute, validate, phase))
         return {
             "ok": True,
             "repair_committed": True,
             "recompute": {"requested": False, "deferred": True},
         }
 
-    collaborators, native = _collaborators(repair_references_gui=repair)
+    collaborators, native = _collaborators(
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        repair_references_gui=repair,
+    )
     result = references.repair_references(_rpc(collaborators), "Doc", [{}])
 
     assert result["recompute"]["deferred"] is True
-    assert calls == [("Doc", [{}], False, False)]
+    assert calls == [("Doc", [{}], False, False, "complete")]
+    assert native.documents == ["Doc"]
+    assert native.structural_scopes == [False]
+    assert native.recompute_policies == [False]
+
+
+def test_eager_reference_repair_refuses_recompute_true():
+    """WP03 pins repair_references to none; recompute=True is RECOMPUTE_DEFERRED."""
+
+    def repair(*_args, **_kwargs):
+        pytest.fail("repair must not run when recompute=True is refused")
+
+    document = SimpleNamespace(Name="Doc", Objects=())
+    collaborators, native = _collaborators(
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        repair_references_gui=repair,
+    )
+    result = references.repair_references(
+        _rpc(collaborators),
+        "Doc",
+        [{}],
+        recompute=True,
+        validate=True,
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "RECOMPUTE_DEFERRED"
+    assert result["repair_committed"] is False
     assert native.documents == []
+
+
+def test_remaining_invalid_reference_repair_rolls_back_response_truthfully():
+    document = SimpleNamespace(Name="Doc", Objects=())
+
+    def repair(_document_name, _repairs, *, recompute, validate, phase):
+        assert recompute is False
+        assert validate is True
+        assert phase == "complete"
+        return {
+            "ok": False,
+            "repair_committed": True,
+            "remaining_invalid_repaired_properties": [{"property": "Support"}],
+        }
+
+    collaborators, native = _collaborators(
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        repair_references_gui=repair,
+    )
+
+    result = references.repair_references(
+        _rpc(collaborators), "Doc", [{}], validate=True
+    )
+
+    assert result["ok"] is False
+    assert result["repair_committed"] is False
+    assert native.documents == ["Doc"]
+    assert native.recompute_policies == [False]
 
 
 def test_owned_non_sketch_modules_are_locator_free_and_have_no_cad_imports():

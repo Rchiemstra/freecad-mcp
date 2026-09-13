@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 
+def _json_cell_value(value):
+    """Return a JSON-safe evaluated Spreadsheet value without dropping units."""
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    # FreeCAD.Quantity is deliberately represented by its display string, e.g.
+    # ``"440.00 mm"``.  Numeric coercion would lose the unit and a direct
+    # return makes the surrounding RPC response fail JSON serialization.
+    return str(value)
+
+
 def apply_spreadsheet_cell(sheet, cell: dict) -> tuple[dict | None, str | None]:
     addr = cell.get("address") or cell.get("addr")
     alias = cell.get("alias")
@@ -40,7 +51,7 @@ def read_spreadsheet_cell(sheet, item) -> dict:
     except Exception as e:
         row["contents_error"] = str(e)
     try:
-        row["value"] = sheet.get(str(addr))
+        row["value"] = _json_cell_value(sheet.get(str(addr)))
     except Exception as e:
         row["value_error"] = str(e)
     return row

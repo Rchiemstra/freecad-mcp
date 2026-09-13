@@ -11,6 +11,7 @@ from ..p7_assembly import _run_json_code
 from .helpers import (
     _doc_missing,
     _generated_sketch_attach,
+    _typed_parametric_mutation,
 )
 from .sketch_attach_helpers import _offset_breaks_typed_rpc, _try_typed_sketch_attach
 
@@ -61,22 +62,12 @@ def sketch_edit_constraint_operation(
 ) -> ToolResponse:
     if name is None and index is None:
         return tool_fail("Provide constraint name=... or index=... (prefer name after trim/fillet)")
-    lines = render_template_lines(
-        "parametric/sketch_edit_constraint.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        sketch_name=repr(sketch_name),
-        constraint_name=repr(name),
-        constraint_index=repr(index),
-        value=repr(value),
-    )
-    return _run_json_code(
+    return _typed_parametric_mutation(
         freecad,
         only_text_feedback,
-        "\n".join(lines),
+        "sketch_edit_constraint",
+        (doc_name, sketch_name, value, name, index),
         "Failed to edit constraint",
-        screenshot=False,
-        document=doc_name,
     )
 
 def diagnose_parametric_operation(
