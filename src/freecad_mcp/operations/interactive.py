@@ -12,6 +12,9 @@ from ..responses.tool_results import json_response, tool_fail
 from ..template_resources import render_template_text
 from .diagnostics import _diff_states, _response_text
 from .p7_assembly import _doc_preamble, _run_json_code
+from .parametric_ops.activate_document import activate_document_operation
+from .parametric_ops.open_document import open_document_operation
+from .parametric_ops.recompute_and_wait import recompute_and_wait_operation
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -26,22 +29,6 @@ _VIEW_ALIASES = {
 def normalize_view_name(view_name: str) -> str:
     name = str(view_name or "").strip()
     return _VIEW_ALIASES.get(name, name)
-
-
-def open_document_operation(freecad: FreeCADConnection, path: str) -> ToolResponse:
-    result = freecad.open_document(path)
-    if result.get("ok") or result.get("success"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
-
-
-def activate_document_operation(
-    freecad: FreeCADConnection, doc_name: str
-) -> ToolResponse:
-    result = freecad.activate_document(doc_name)
-    if result.get("ok") or result.get("success"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
 
 
 def set_tree_expanded_operation(
@@ -90,16 +77,7 @@ def get_report_view_operation(
     result = freecad.get_report_view(max_lines=max_lines, clear=clear)
     if result.get("ok"):
         return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
-
-
-def recompute_and_wait_operation(
-    freecad: FreeCADConnection, doc_name: str
-) -> ToolResponse:
-    result = freecad.recompute_and_wait(doc_name)
-    if result.get("ok"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
+        return tool_fail(json.dumps(result), structured=result)
 
 
 def set_section_view_operation(
