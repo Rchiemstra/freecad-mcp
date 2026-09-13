@@ -117,20 +117,6 @@ def pocket_feature_gui(
         return str(e)
 
 
-def body_create_gui(doc_name, body_name, *, freecad):
-    try:
-        doc = freecad.getDocument(doc_name)
-        if not doc:
-            return f"Document '{doc_name}' not found."
-        if doc.getObject(body_name):
-            return f"Object already exists: {body_name}"
-        body = doc.addObject("PartDesign::Body", body_name)
-        doc.recompute()
-        return {"success": True, "body": body.Name}
-    except Exception as e:
-        return str(e)
-
-
 def body_set_tip_gui(doc_name, body_name, feature_name, *, freecad):
     try:
         doc = freecad.getDocument(doc_name)

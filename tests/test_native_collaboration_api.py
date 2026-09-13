@@ -146,3 +146,35 @@ def test_typed_cad_adapter_publishes_one_exact_structural_revision_event():
         assert len(native_results) == 1
     finally:
         FreeCAD.closeDocument(document.Name)
+
+
+def test_body_create_native_validation_failure_rolls_back_before_commit():
+    """Exercise the body-specific wrapper against the real native boundary."""
+
+    _require_native_collaboration()
+
+    import FreeCAD
+
+    from addon.FreeCADMCP.collaboration_api import CollaborationAPI
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_create import (
+        run_body_create,
+    )
+
+    document = FreeCAD.newDocument("MCPBodyCreateNativeRollback")
+    bridge = CollaborationAPI(document_lookup=FreeCAD.getDocument)
+    collaborators = SimpleNamespace(
+        freecad=FreeCAD,
+        validate_document_invariants=lambda _document: (_ for _ in ()).throw(
+            RuntimeError("forced body validation failure")
+        ),
+        commit_compatibility_mutation=bridge.commit_compatibility_mutation,
+    )
+
+    try:
+        result = run_body_create(collaborators, document.Name, "RejectedBody")
+
+        assert result["success"] is False
+        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
+        assert document.getObject("RejectedBody") is None
+    finally:
+        FreeCAD.closeDocument(document.Name)

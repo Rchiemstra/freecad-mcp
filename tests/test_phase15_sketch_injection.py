@@ -104,7 +104,6 @@ def _collaborators(api):
             "pocket_feature_gui",
             ("freecad", "set_extrusion_symmetric", "set_feature_bool"),
         ),
-        ("body_create", ("Doc", "Body"), "body_create_gui", ("freecad",)),
         (
             "body_set_tip",
             ("Doc", "Body", "Feature"),
@@ -137,6 +136,33 @@ def test_mutations_use_one_commit_and_exact_injected_dependencies(
     assert tuple(seen[0]) == expected_dependencies
     for name in expected_dependencies:
         assert seen[0][name] is getattr(collaborators, name)
+
+
+def test_body_create_delegates_to_its_typed_mutation_slice(monkeypatch):
+    api = _CompatibilityAPI()
+    collaborators = _collaborators(api)
+    seen = []
+
+    def run_body_create(injected, doc_name, body_name):
+        seen.append((injected, doc_name, body_name))
+        return {
+            "success": True,
+            "ok": True,
+            "body": body_name,
+            "label": body_name,
+        }
+
+    monkeypatch.setattr(sketch_public, "run_body_create", run_body_create)
+
+    result = sketch_public.body_create(_Facade(collaborators), "Doc", "Body")
+
+    assert result == {
+        "success": True,
+        "ok": True,
+        "body": "Body",
+        "label": "Body",
+    }
+    assert seen == [(collaborators, "Doc", "Body")]
 
 
 def test_mutation_wrapper_preserves_historical_failure_result(monkeypatch):
@@ -301,6 +327,7 @@ def test_owned_modules_are_locator_free_and_have_no_cad_imports():
         / "cad_methods_ops"
     )
     names = (
+        "body_create.py",
         "sketch_attach_helpers.py",
         "sketch_constraint_apply.py",
         "sketch_constraint_delete_helpers.py",

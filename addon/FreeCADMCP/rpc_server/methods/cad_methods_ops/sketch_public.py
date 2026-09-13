@@ -1,8 +1,8 @@
 """CAD RPC helpers extracted from ``FreeCADRPC`` (Phase 4 slice 4F)."""
 
+from .body_create import run_body_create
 from .cad_mutation import run_cad_mutation
 from .features_gui import (
-    body_create_gui,
     body_set_tip_gui,
     pad_feature_gui,
     pocket_feature_gui,
@@ -269,12 +269,7 @@ def pocket_feature(
 def body_create(self, doc_name: str, body_name: str) -> dict:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: run_cad_mutation(
-            collaborators,
-            doc_name,
-            lambda: body_create_gui(doc_name, body_name, freecad=collaborators.freecad),
-            structural=True,
-        )
+        lambda: run_body_create(collaborators, doc_name, body_name)
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 

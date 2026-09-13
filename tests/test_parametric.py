@@ -38,6 +38,12 @@ def _ok_conn(output="done"):
         "message": "Python code execution scheduled. \nOutput: " + output,
         "recompute_errors": [],
     }
+    conn.body_create.return_value = {
+        "success": True,
+        "ok": True,
+        "body": "Body",
+        "label": "Body",
+    }
     return conn
 
 
@@ -45,6 +51,12 @@ def _fail_conn(error="oops"):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": error}
+    conn.body_create.return_value = {
+        "success": False,
+        "ok": False,
+        "error_code": "BODY_CREATE_FAILED",
+        "error": error,
+    }
     return conn
 
 
@@ -106,8 +118,10 @@ def test_set_expression_constraints_path():
 
 def test_body_and_attach():
     conn = _ok_conn('{"ok": true}')
+    before = conn.execute_code.call_count
     body_create_operation(conn, True, "Doc", "Body")
-    assert "PartDesign::Body" in _code(conn)
+    conn.body_create.assert_called_once_with("Doc", "Body")
+    assert conn.execute_code.call_count == before
     body_set_tip_operation(conn, True, "Doc", "Body", "Pad")
     assert "Tip" in _code(conn)
 
