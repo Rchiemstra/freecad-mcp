@@ -3,15 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
-
-from ...._shared.protocol.body_create_contract import (
-    BodyCreateCollaborators,
-    BodyDocument,
-    BodyReadDocument,
-    DocumentName,
-)
 
 
 class _CadMutationRollback(RuntimeError):
@@ -228,139 +220,6 @@ def _run_native_recompute_mutation(
     return _native_recompute_result(native_result, captured)
 
 
-_MISSING_BODY_RESULT = object()
-
-
-@dataclass(slots=True)
-class _NativeBodyMutationState:
-    """Typed provisional state that cannot be released before native commit."""
-
-    document: BodyDocument | None = None
-    result: object = _MISSING_BODY_RESULT
-    postcondition_called: bool = False
-
-
-def _body_native_result(
-    native_result: object, state: _NativeBodyMutationState
-) -> object:
-    """Release a provisional Body result only after a verified native commit."""
-
-    if not isinstance(native_result, dict):
-        return _native_rejection(native_result)
-    status = native_result.get("status")
-    if (
-        status == "PostconditionFailed"
-        and state.postcondition_called
-        and _result_failed(state.result)
-    ):
-        if isinstance(state.result, dict):
-            failure: dict[str, object] = {
-                key: value
-                for key, value in state.result.items()
-                if isinstance(key, str)
-            }
-            failure.setdefault("committed", False)
-            failure.setdefault("rollback_succeeded", True)
-            failure.setdefault("rollback_failed", False)
-            return failure
-        return state.result
-    if (
-        status != "Committed"
-        or native_result.get("committed") is not True
-        or state.result is _MISSING_BODY_RESULT
-    ):
-        return _native_rejection(native_result)
-    if not state.postcondition_called:
-        return {
-            "success": False,
-            "ok": False,
-            "error_code": "NATIVE_POSTCONDITION_NOT_RUN",
-            "error": "Native runtime committed without running the postcondition",
-            "committed": True,
-            "outcome": "uncertain",
-            "retry_safe": False,
-        }
-    return state.result
-
-
-def run_body_native_mutation(
-    collaborators: BodyCreateCollaborators,
-    document_name: DocumentName,
-    apply: Callable[[BodyDocument], object],
-    postcondition: Callable[[BodyReadDocument], object],
-) -> object:
-    """Run the Body-only typed path through the required native boundary.
-
-    The fixed policy is intentional: Body creation is structural, both
-    callbacks receive the native-admitted document, recompute is native-owned,
-    and a compatibility fallback is forbidden.
-    """
-
-    state = _NativeBodyMutationState()
-
-    def native_apply(document: BodyDocument) -> object:
-        state.document = document
-        state.result = apply(document)
-        if _result_failed(state.result):
-            raise _CadMutationRollback
-        return state.result
-
-    def native_postcondition(document: BodyReadDocument) -> bool:
-        state.postcondition_called = True
-        if state.document is not document:
-            state.result = {
-                "success": False,
-                "ok": False,
-                "error_code": "DOCUMENT_IDENTITY_MISMATCH",
-                "error": "Native mutation callbacks received different documents",
-            }
-            return False
-        try:
-            state.result = postcondition(document)
-        except Exception as exc:
-            state.result = {
-                "success": False,
-                "ok": False,
-                "error_code": "CAD_POSTCONDITION_FAILED",
-                "error": str(exc),
-            }
-            return False
-        if _result_failed(state.result):
-            return False
-        try:
-            collaborators.validate_document_invariants(document)
-        except Exception as exc:
-            state.result = {
-                "success": False,
-                "ok": False,
-                "error_code": "DOCUMENT_HEALTH_DEGRADED",
-                "error": str(exc),
-            }
-            return False
-        return True
-
-    try:
-        native_result = collaborators.commit_body_create_mutation(
-            document_name,
-            native_apply,
-            native_postcondition,
-        )
-    except LookupError:
-        return {
-            "success": False,
-            "ok": False,
-            "error_code": "DOCUMENT_NOT_FOUND",
-            "error": f"Document {document_name!r} not found",
-            "committed": False,
-            "outcome": "rejected",
-            "retry_safe": True,
-        }
-    except _CadMutationRollback:
-        return state.result
-
-    return _body_native_result(native_result, state)
-
-
 def _make_legacy_native_callback(
     collaborators: Any,
     captured: dict[str, Any],
@@ -504,4 +363,4 @@ def run_cad_mutation(
     )
 
 
-__all__ = ["run_body_native_mutation", "run_cad_mutation"]
+__all__ = ["run_cad_mutation"]

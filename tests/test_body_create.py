@@ -88,9 +88,7 @@ class _RecomputeFailureDocument(_Document):
 class _NativeBridgeDocument(_Document):
     """Document-shaped native binding used through the production bridge."""
 
-    def commitCompatibilityMutation(
-        self, callback, *, structural=False, postcondition=None
-    ):
+    def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None):
         assert structural is True
         before_objects = dict(self.objects)
         before_recomputed = self.recomputed
@@ -106,7 +104,7 @@ class _NativeBridgeDocument(_Document):
             self.objects = before_objects
             self.recomputed = before_recomputed
             self.events.append("abort")
-            raise
+            return {"status": "ApplyFailed", "committed": False}
         self.events.append("commit")
         return {"status": "Committed", "committed": True}
 
@@ -142,9 +140,9 @@ class _CompatibilityAPI:
         before_recomputed = self.document.recomputed
         try:
             callback(self.document) if bind_document else callback()
-        except Exception:
+        except Exception as exc:
             self._restore(before_objects, before_recomputed)
-            raise
+            return {"status": "ApplyFailed", "committed": False, "message": str(exc)}
 
         try:
             self.document.recompute()
@@ -158,9 +156,7 @@ class _CompatibilityAPI:
             }
 
         if postcondition is not None:
-            satisfied = (
-                postcondition(self.document) if bind_document else postcondition()
-            )
+            satisfied = postcondition(self.document) if bind_document else postcondition()
             if not satisfied:
                 self._restore(before_objects, before_recomputed)
                 return {
@@ -178,9 +174,7 @@ class _CompatibilityAPI:
         self.document.events.append("commit")
         return {"status": "Committed", "committed": True}
 
-    def commit_body_create_mutation(
-        self, document_name, callback, postcondition
-    ):
+    def commit_body_create_mutation(self, document_name, callback, postcondition):
         return self.commit_compatibility_mutation(
             document_name,
             callback,
@@ -209,9 +203,7 @@ def _collaborators(
     collaborators = SimpleNamespace(
         freecad=freecad,
         validate_document_invariants=(
-            validator
-            if validator is not None
-            else lambda _document: events.append("validate")
+            validator if validator is not None else lambda _document: events.append("validate")
         ),
         commit_body_create_mutation=api.commit_body_create_mutation,
     )
@@ -334,14 +326,14 @@ def test_native_rejection_never_returns_cached_success():
     collaborators, _api = _collaborators(
         document,
         events,
-        final_result={"status": "Rejected", "committed": False},
+        final_result={"status": "PublicationFailed", "committed": False},
     )
 
     result = run_body_create(collaborators, "Doc", "Body")
 
     assert result["success"] is False
     assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
-    assert result["native_status"] == "Rejected"
+    assert result["native_status"] == "PublicationFailed"
     assert document.objects == {}
     assert events == ["apply", "recompute", "inspect", "validate", "abort"]
 
@@ -460,3 +452,51 @@ def test_body_create_has_no_uncoordinated_source_entry_point():
         / "body_create.py.txt"
     )
     assert not template.exists()
+
+
+@pytest.mark.parametrize(
+    "native_result",
+    [
+        None,
+        {},
+        {"status": "FutureStatus", "committed": False},
+        {"status": "Committed", "committed": False},
+        {"status": "Busy", "committed": True},
+        {"status": "Committed", "committed": 1},
+        {"status": "Committed", "committed": True, "rollback_failed": True},
+        {"status": "Committed", "committed": True, "rollback_succeeded": True},
+        {"status": "Committed", "committed": True, "rollback_failed": "false"},
+    ],
+)
+def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_result):
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_mutation import (
+        _body_native_result,
+        _NativeBodyMutationState,
+    )
+
+    result = _body_native_result(native_result, _NativeBodyMutationState(postcondition_passed=True))
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+    assert result["retry_safe"] is False
+
+
+def test_exception_after_native_apply_does_not_claim_rollback():
+    events = []
+    document = _Document(events)
+
+    def native_exception(_name, apply, _postcondition):
+        apply(document)
+        raise RuntimeError("native result unavailable")
+
+    collaborators = SimpleNamespace(
+        commit_body_create_mutation=native_exception,
+        validate_document_invariants=lambda _: None,
+    )
+    result = run_body_create(collaborators, "Doc", "Body")
+    assert document.getObject("Body") is not None
+    assert result["outcome"] == "uncertain"
+    assert result["committed"] is None
+    assert result["retry_safe"] is False
+
+
+__all__: list[str] = []

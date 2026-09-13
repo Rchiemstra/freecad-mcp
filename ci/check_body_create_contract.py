@@ -6,38 +6,23 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-TYPECHECK_TARGETS = (
-    "addon/FreeCADMCP/_shared/protocol/body_create_contract.py",
-    "src/freecad_mcp/_shared/protocol/body_create_contract.py",
-    "addon/FreeCADMCP/collaboration_api.py",
-    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_create.py",
-    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_dependencies.py",
-    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_mutation.py",
-    "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/collaboration_dependencies.py",
-    "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
-    "src/freecad_mcp/operations/parametric_ops/body_ops.py",
-    "tests/typecheck/body_create_protocol.py",
+# The standard mypy configuration is also used by editors and `python -m mypy`.
+TYPECHECK_TARGETS = tuple(
+    tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    )["tool"]["mypy"]["files"]
 )
 
-NO_EXPLICIT_ANY_TARGETS = (
-    "addon/FreeCADMCP/_shared/protocol/body_create_contract.py",
-    "src/freecad_mcp/_shared/protocol/body_create_contract.py",
-    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_create.py",
-    "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
-    "src/freecad_mcp/operations/parametric_ops/body_ops.py",
-)
 
 _BODY_LEAF = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_create.py"
-_MUTATION = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_mutation.py"
+_MUTATION = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_mutation.py"
 _BRIDGE = "addon/FreeCADMCP/collaboration_api.py"
 _CAD_DEPS = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_dependencies.py"
-_COLLAB_DEPS = (
-    "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/"
-    "collaboration_dependencies.py"
-)
+_COLLAB_DEPS = "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/collaboration_dependencies.py"
 _PUBLIC_ADAPTER = "src/freecad_mcp/operations/parametric_ops/body_ops.py"
 _CLIENT = "src/freecad_mcp/freecad_client_ops/freecad_connection.py"
 _ADDON_CONTRACT = "addon/FreeCADMCP/_shared/protocol/body_create_contract.py"
@@ -45,9 +30,7 @@ _CLIENT_CONTRACT = "src/freecad_mcp/_shared/protocol/body_create_contract.py"
 _TEMPLATE = "src/freecad_mcp/templates/parametric/body_create.py.txt"
 
 
-def _source(
-    root: Path, relative: str, overrides: Mapping[str, str]
-) -> str:
+def _source(root: Path, relative: str, overrides: Mapping[str, str]) -> str:
     return overrides.get(relative, (root / relative).read_text(encoding="utf-8"))
 
 
@@ -94,11 +77,7 @@ def _scan_leaf(source: str) -> list[str]:
         "run_transaction",
     }
     found = sorted(forbidden & set(_called_names(apply_function)))
-    violations = (
-        ["BODY001 leaf owns forbidden execution: " + ", ".join(found)]
-        if found
-        else []
-    )
+    violations = ["BODY001 leaf owns forbidden execution: " + ", ".join(found)] if found else []
     if "inspect" in _called_names(apply_closure):
         violations.append("BODY002 inspection runs inside apply")
     mutation_calls = [
@@ -112,19 +91,14 @@ def _scan_leaf(source: str) -> list[str]:
         return [*violations, "BODY003 Body must use exactly one typed mutation call"]
     call = mutation_calls[0]
     postcondition = call.args[3] if len(call.args) > 3 else None
-    if not (
-        isinstance(postcondition, ast.Attribute)
-        and postcondition.attr == "inspect"
-    ):
+    if not (isinstance(postcondition, ast.Attribute) and postcondition.attr == "inspect"):
         violations.append("BODY004 missing typed postcondition=inspect")
     return violations
 
 
 def _scan_bridge(source: str) -> list[str]:
     tree = ast.parse(source, filename=_BRIDGE)
-    bridge_commit = _class_method(
-        tree, "CollaborationAPI", "commit_body_create_mutation"
-    )
+    bridge_commit = _class_method(tree, "CollaborationAPI", "commit_body_create_mutation")
     lookup_calls = [
         node
         for node in ast.walk(bridge_commit)
@@ -158,10 +132,7 @@ def _scan_bridge(source: str) -> list[str]:
             and postcondition.id == "invoke_postcondition"
         ):
             violations.append("BODY013 typed bridge lost its fixed native policy")
-    if any(
-        isinstance(node, ast.Name) and node.id == "Any"
-        for node in ast.walk(bridge_commit)
-    ):
+    if any(isinstance(node, ast.Name) and node.id == "Any" for node in ast.walk(bridge_commit)):
         violations.append("BODY014 typed native Body bridge contains Any")
     return violations
 
@@ -171,8 +142,34 @@ def _scan_native_release(source: str) -> list[str]:
     native_result = _function(tree, "_body_native_result")
     body_runner = _function(tree, "run_body_native_mutation")
     violations = []
-    if ast.unparse(native_result).count("postcondition_called") < 2:
-        violations.append("BODY007 cached result can escape without native postcondition")
+    # Execute the small result reducer against adversarial native envelopes.
+    # Behavioral sensitivity survives refactoring and checks the actual rejection
+    # branch, rather than inferring safety from a variable-name count.
+    import types
+
+    module = types.ModuleType("addon.FreeCADMCP.rpc_server.methods.cad_methods_ops._body_gate")
+    module.__package__ = "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops"
+    sys.modules[module.__name__] = module
+    try:
+        exec(compile(tree, _MUTATION, "exec"), module.__dict__)
+        state = module._NativeBodyMutationState(postcondition_passed=True)
+        for status in (
+            "Busy",
+            "ApplyFailed",
+            "PostconditionFailed",
+            "PublicationFailed",
+            "RollbackFailed",
+        ):
+            result = module._body_native_result({"status": status, "committed": False}, state)
+            if result is True:
+                violations.append("BODY007 cached success escaped native rejection")
+                break
+        state = module._NativeBodyMutationState()
+        result = module._body_native_result({"status": "Committed", "committed": True}, state)
+        if result is True:
+            violations.append("BODY015 commit escaped without a successful postcondition")
+    finally:
+        sys.modules.pop(module.__name__, None)
 
     commit_calls = [
         node
@@ -215,10 +212,7 @@ def _scan_public_adapter(source: str) -> list[str]:
 
 
 def _contains_any(node: ast.AST) -> bool:
-    return any(
-        isinstance(child, ast.Name) and child.id == "Any"
-        for child in ast.walk(node)
-    )
+    return any(isinstance(child, ast.Name) and child.id == "Any" for child in ast.walk(node))
 
 
 def _scan_typed_surface(root: Path, overrides: Mapping[str, str]) -> list[str]:
@@ -279,23 +273,18 @@ def scan_body_create_architecture(
 
 
 def run_mypy(root: Path) -> int:
-    command = [sys.executable, "-m", "mypy", *TYPECHECK_TARGETS]
-    result = subprocess.run(command, cwd=root, check=False).returncode
-    if result:
-        return result
-    no_any_command = [
-        sys.executable,
-        "-m",
-        "mypy",
-        "--disallow-any-explicit",
-        *NO_EXPLICIT_ANY_TARGETS,
-    ]
-    return subprocess.run(no_any_command, cwd=root, check=False).returncode
+    # All strictness, including the Body-only Any restrictions, lives in the
+    # editor-readable configuration. A single invocation checks imported types
+    # without applying Body-only restrictions to shared legacy response helpers.
+    return subprocess.run(
+        [sys.executable, "-m", "mypy", "--no-incremental"], cwd=root, check=False,
+    ).returncode
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     del argv
     root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root))
     violations = scan_body_create_architecture(root)
     for violation in violations:
         print(violation)

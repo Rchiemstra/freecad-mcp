@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import assert_type
+
+from mcp.types import CallToolResult
 
 from addon.FreeCADMCP._shared.protocol.body_create_contract import (
     BodyCreateRequest,
@@ -18,6 +21,14 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_create import (
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies import (
     CadCollaborators,
 )
+from freecad_mcp._shared.protocol.body_create_contract import (
+    BodyName as ClientBodyName,
+)
+from freecad_mcp._shared.protocol.body_create_contract import (
+    DocumentName as ClientDocumentName,
+)
+from freecad_mcp.freecad_client import FreeCADConnection
+from freecad_mcp.operations.parametric_ops.body_ops import body_create_operation
 
 
 class CompleteBodyCreateDouble:
@@ -79,3 +90,23 @@ incomplete_success: BodyCreateSuccess = {  # type: ignore[typeddict-item]
     "success": True,
     "ok": True,
 }
+
+
+def public_client_preserves_names(client: FreeCADConnection) -> None:
+    document = ClientDocumentName("Doc")
+    body = ClientBodyName("Body")
+    assert_type(client.body_create(document, body), object)
+    assert_type(body_create_operation(client, True, "Doc", "Body"), CallToolResult)
+    client.body_create(body, document)  # type: ignore[arg-type]
+    client.body_create("Doc", "Body")  # type: ignore[arg-type]
+
+
+def postcondition_surface_is_read_only(document: BodyReadDocument) -> None:
+    document.addObject("PartDesign::Body", "Body")  # type: ignore[attr-defined]
+    document.Name = "Renamed"  # type: ignore[misc]
+    body = document.getObject("Body")
+    if body is not None:
+        body.Label = "Changed"  # type: ignore[misc]
+
+
+__all__: list[str] = []

@@ -9,7 +9,7 @@ authors = [
 license = { text = "MIT" }
 requires-python = ">=3.12"
 dependencies = [
-    "mcp[cli]>=1.12.2,<2",
+    "mcp[cli]>=1.26.0,<2",
     "typing-extensions>=4.12",
     "validators>=0.34.0",
 ]
@@ -61,6 +61,57 @@ namespace_packages = true
 follow_imports = "skip"
 warn_unused_ignores = true
 mypy_path = [".", "src"]
+# Keep the reference mutation checked by default in editors, local mypy and CI.
+files = [
+    "addon/FreeCADMCP/_shared/protocol/body_create_contract.py",
+    "src/freecad_mcp/_shared/protocol/body_create_contract.py",
+    "addon/FreeCADMCP/collaboration_api.py",
+    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_create.py",
+    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_mutation.py",
+    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_dependencies.py",
+    "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/collaboration_dependencies.py",
+    "src/freecad_mcp/freecad_client.py",
+    "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
+    "src/freecad_mcp/operations/parametric_ops/body_ops.py",
+    "tests/typecheck/body_create_protocol.py",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "addon.FreeCADMCP._shared.protocol.body_create_contract",
+    "freecad_mcp._shared.protocol.body_create_contract",
+    "addon.FreeCADMCP.collaboration_api",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_create",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_mutation",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies",
+    "addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.collaboration_dependencies",
+    "freecad_mcp.freecad_client",
+    "freecad_mcp.freecad_client_ops.freecad_connection",
+    "freecad_mcp.operations.parametric_ops.body_ops",
+]
+follow_imports = "normal"
+disallow_any_unimported = true
+
+[[tool.mypy.overrides]]
+module = ["freecad_mcp.responses.tool_results"]
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = ["mcp.types"]
+follow_imports = "silent"
+
+
+[[tool.mypy.overrides]]
+module = [
+    "addon.FreeCADMCP._shared.protocol.body_create_contract",
+    "freecad_mcp._shared.protocol.body_create_contract",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_create",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_mutation",
+    "freecad_mcp.freecad_client",
+    "freecad_mcp.freecad_client_ops.freecad_connection",
+    "freecad_mcp.operations.parametric_ops.body_ops",
+]
+disallow_any_explicit = true
 
 [build-system]
 requires = ["hatchling"]

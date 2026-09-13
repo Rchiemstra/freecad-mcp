@@ -83,7 +83,11 @@ class CollaborationAPI:
     ) -> object:
         """Run Body creation only when the exact native contract is present."""
 
-        document = self._document_lookup(document_name)
+        try:
+            document = self._document_lookup(document_name)
+        except NameError as exc:
+            # FreeCAD.getDocument raises NameError for a missing document.
+            raise LookupError(str(exc)) from exc
         if document is None:
             raise LookupError("document_lookup returned no document")
         if not isinstance(document, _NativeBodyDocument):

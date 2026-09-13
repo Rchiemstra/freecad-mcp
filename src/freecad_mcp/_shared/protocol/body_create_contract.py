@@ -15,9 +15,14 @@ BodyName = NewType("BodyName", str)
 class BodyObject(Protocol):
     """The Body surface inspected before native commit."""
 
-    Name: str
-    Label: str
-    TypeId: str
+    @property
+    def Name(self) -> str: ...
+
+    @property
+    def Label(self) -> str: ...
+
+    @property
+    def TypeId(self) -> str: ...
 
     def isDerivedFrom(self, type_name: str) -> bool: ...
 
@@ -25,7 +30,8 @@ class BodyObject(Protocol):
 class BodyReadDocument(Protocol):
     """Read-only document surface available after native recompute."""
 
-    Name: str
+    @property
+    def Name(self) -> str: ...
 
     def getObject(self, name: str) -> BodyObject | None: ...
 
@@ -143,6 +149,7 @@ _CORE_KEYS = frozenset(
         "native_message",
         "rollback_succeeded",
         "rollback_failed",
+        "diagnostics",
     }
 )
 
@@ -234,123 +241,176 @@ def make_body_create_uncertain(
     return result
 
 
-def _diagnostics(response: Mapping[str, object]) -> dict[str, object] | None:
-    extra = {str(key): value for key, value in response.items() if key not in _CORE_KEYS}
-    return extra or None
+def _response_object(raw: object) -> dict[str, object] | None:
+    if not isinstance(raw, Mapping):
+        return None
+    result: dict[str, object] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            return None
+        result[key] = value
+    return result
+
+
+class _ResponseDetails(TypedDict, total=False):
+    native_status: str | None
+    native_message: str
+    rollback_succeeded: bool
+    rollback_failed: bool
+    diagnostics: dict[str, object]
+
+
+def _read_rollback_flags(response: dict[str, object], details: _ResponseDetails) -> bool:
+    for key in ("rollback_succeeded", "rollback_failed"):
+        if key in response:
+            flag = response[key]
+            if not isinstance(flag, bool):
+                return False
+            if key == "rollback_succeeded":
+                details["rollback_succeeded"] = flag
+            else:
+                details["rollback_failed"] = flag
+    return True
+
+
+def _response_details(response: dict[str, object]) -> _ResponseDetails | None:
+    """Check optional fields too, and preserve extensions without nesting them."""
+    details: _ResponseDetails = {}
+    if "native_status" in response:
+        status = response["native_status"]
+        if status is not None and not isinstance(status, str):
+            return None
+        details["native_status"] = status
+    if "native_message" in response:
+        message = response["native_message"]
+        if not isinstance(message, str):
+            return None
+        details["native_message"] = message
+    if not _read_rollback_flags(response, details):
+        return None
+    diagnostics = _response_object(response.get("diagnostics", {}))
+    if diagnostics is None:
+        return None
+    diagnostics.update({key: value for key, value in response.items() if key not in _CORE_KEYS})
+    if diagnostics:
+        details["diagnostics"] = diagnostics
+    return details
+
+
+def _valid_success(response: dict[str, object]) -> bool:
+    return (
+        response.get("success") is True
+        and response.get("ok") is True
+        and response.get("outcome") == "committed"
+        and response.get("committed") is True
+        and response.get("retry_safe") is False
+        and "error" not in response
+        and "error_code" not in response
+        and response.get("native_status", "Committed") == "Committed"
+        and "rollback_succeeded" not in response
+        and response.get("rollback_failed", False) is False
+        and response.get("completion_uncertain", False) is False
+    )
+
+
+def _valid_rejection(response: dict[str, object]) -> bool:
+    return (
+        response.get("outcome") == "rejected"
+        and response.get("committed") is False
+        and isinstance(response.get("retry_safe"), bool)
+        and response.get("rollback_succeeded", True) is True
+        and response.get("rollback_failed", False) is False
+        and response.get("native_status") not in {"Committed", "RollbackFailed"}
+        and response.get("completion_uncertain", False) is False
+    )
+
+
+def _valid_uncertain(response: dict[str, object]) -> bool:
+    return (
+        response.get("outcome") == "uncertain"
+        and "committed" in response
+        and (response["committed"] is None or isinstance(response["committed"], bool))
+        and response.get("retry_safe") is False
+        and not (response["committed"] is False and response.get("native_status") == "Committed")
+        and not (
+            response.get("rollback_succeeded") is True
+            and response.get("rollback_failed") is True
+        )
+    )
+
+
+def _invalid_response(response: dict[str, object]) -> BodyCreateUncertain:
+    # A malformed response is never evidence of rejection. Preserve a positive
+    # commit indication, but don't turn missing or conflicting evidence into False.
+    committed = response.get("committed") is True or response.get("native_status") == "Committed"
+    rollback_failed = (
+        response.get("rollback_failed") is True
+        or response.get("rollback_succeeded") is False
+        or response.get("native_status") == "RollbackFailed"
+    )
+    code = (
+        "BODY_CREATE_COMMITTED_RESPONSE_INVALID"
+        if committed
+        else "BODY_CREATE_ROLLBACK_UNCERTAIN"
+        if rollback_failed
+        else "INVALID_BODY_CREATE_RESPONSE"
+    )
+    return make_body_create_uncertain(
+        code,
+        "body_create returned an invalid contract response; document state requires reconciliation",
+        committed=True if committed else None,
+        diagnostics={"response": response},
+    )
 
 
 def parse_body_create_response(raw_response: object) -> BodyCreateResult:
-    """Validate untrusted JSON data without using a type-only ``cast``."""
-
-    if not isinstance(raw_response, Mapping) or not all(
-        isinstance(key, str) for key in raw_response
-    ):
-        return make_body_create_failure(
+    """Validate all three wire variants; unknown state always stays uncertain."""
+    response = _response_object(raw_response)
+    if response is None:
+        return make_body_create_uncertain(
             "INVALID_RPC_RESPONSE",
             "body_create returned a non-object response",
-            retry_safe=False,
+            committed=None,
         )
-
-    response: dict[str, object] = {}
-    for key, value in raw_response.items():
-        if not isinstance(key, str):
-            return make_body_create_failure(
-                "INVALID_RPC_RESPONSE",
-                "body_create returned an object with a non-string key",
-                retry_safe=False,
-            )
-        response[key] = value
-    diagnostics = _diagnostics(response)
-    committed = response.get("committed")
     version = response.get("contract_version")
-    success = response.get("success")
-    ok = response.get("ok")
-    error = response.get("error")
-    error_code = response.get("error_code")
+    details = _response_details(response)
+    if type(version) is not int or version != BODY_CREATE_CONTRACT_VERSION or details is None:
+        return _invalid_response(response)
+
     body = response.get("body")
     label = response.get("label")
-
-    valid_success = (
-        version == BODY_CREATE_CONTRACT_VERSION
-        and success is True
-        and ok is True
-        and response.get("outcome") == "committed"
-        and committed is True
-        and response.get("retry_safe") is False
+    if (
+        _valid_success(response)
         and isinstance(body, str)
-        and bool(body.strip())
+        and body.strip()
         and isinstance(label, str)
-        and not error
-        and not error_code
-    )
-    if valid_success:
-        assert isinstance(body, str)
-        assert isinstance(label, str)
+    ):
         return make_body_create_success(BodyName(body), label)
 
-    native_status_value = response.get("native_status")
-    native_status = native_status_value if isinstance(native_status_value, str) else None
-    native_message_value = response.get("native_message")
-    native_message = native_message_value if isinstance(native_message_value, str) else None
-    rollback_succeeded_value = response.get("rollback_succeeded")
-    rollback_succeeded = (
-        rollback_succeeded_value if isinstance(rollback_succeeded_value, bool) else None
-    )
-    rollback_failed_value = response.get("rollback_failed")
-    rollback_failed = rollback_failed_value if isinstance(rollback_failed_value, bool) else None
-
-    if committed is True or rollback_succeeded is False or rollback_failed is True:
-        return make_body_create_uncertain(
-            "BODY_CREATE_COMMITTED_RESPONSE_INVALID"
-            if committed is True
-            else "BODY_CREATE_ROLLBACK_UNCERTAIN",
-            "body_create may have changed the document; automatic retry is unsafe",
-            committed=committed if isinstance(committed, bool) else None,
-            native_status=native_status,
-            native_message=native_message,
-            rollback_succeeded=rollback_succeeded,
-            rollback_failed=rollback_failed,
-            diagnostics=diagnostics,
-        )
-
-    declared_failure = (
-        version == BODY_CREATE_CONTRACT_VERSION
-        and success is False
-        and ok is False
-        and response.get("outcome") == "rejected"
-        and committed is False
-        and isinstance(response.get("retry_safe"), bool)
+    error_code = response.get("error_code")
+    error = response.get("error")
+    if (
+        response.get("success") is False
+        and response.get("ok") is False
         and isinstance(error_code, str)
-        and bool(error_code)
+        and error_code.strip()
         and isinstance(error, str)
-        and bool(error)
-    )
-    if declared_failure:
-        assert isinstance(error_code, str)
-        assert isinstance(error, str)
-        return make_body_create_failure(
-            error_code,
-            error,
-            retry_safe=response["retry_safe"] is True,
-            native_status=native_status,
-            native_message=native_message,
-            rollback_succeeded=rollback_succeeded,
-            rollback_failed=rollback_failed,
-            diagnostics=diagnostics,
-        )
-
-    preserved_code = error_code if isinstance(error_code, str) and error_code else None
-    preserved_error = error if isinstance(error, str) and error else None
-    return make_body_create_failure(
-        preserved_code or "INVALID_BODY_CREATE_RESPONSE",
-        preserved_error or "body_create returned an invalid contract response",
-        retry_safe=rollback_succeeded is True,
-        native_status=native_status,
-        native_message=native_message,
-        rollback_succeeded=rollback_succeeded,
-        rollback_failed=rollback_failed,
-        diagnostics=diagnostics,
-    )
+        and error.strip()
+        and "body" not in response
+        and "label" not in response
+    ):
+        if _valid_rejection(response):
+            return make_body_create_failure(
+                error_code,
+                error,
+                retry_safe=response["retry_safe"] is True,
+                **details,
+            )
+        if _valid_uncertain(response):
+            committed = response["committed"]
+            assert committed is None or isinstance(committed, bool)
+            return make_body_create_uncertain(error_code, error, committed=committed, **details)
+    return _invalid_response(response)
 
 
 __all__ = [

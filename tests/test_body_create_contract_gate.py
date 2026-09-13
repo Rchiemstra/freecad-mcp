@@ -12,7 +12,7 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[1]
 BODY_LEAF = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_create.py"
-MUTATION = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_mutation.py"
+MUTATION = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_mutation.py"
 BRIDGE = "addon/FreeCADMCP/collaboration_api.py"
 PUBLIC_ADAPTER = "src/freecad_mcp/operations/parametric_ops/body_ops.py"
 
@@ -45,11 +45,9 @@ def test_body_create_architecture_gate_accepts_the_production_path() -> None:
         ),
         (
             BRIDGE,
-            '"""Run Body creation only when the exact native contract is present."""\n\n'
-            "        document = self._document_lookup(document_name)",
-            '"""Run Body creation only when the exact native contract is present."""\n\n'
-            "        document = self._document_lookup(document_name)\n"
-            "        document = self._document_lookup(document_name)",
+            "            document = self._document_lookup(document_name)",
+            "            document = self._document_lookup(document_name)\n"
+            "            document = self._document_lookup(document_name)",
             "BODY005 bridge must resolve the admitted document exactly once",
         ),
         (
@@ -60,9 +58,16 @@ def test_body_create_architecture_gate_accepts_the_production_path() -> None:
         ),
         (
             MUTATION,
-            "if not state.postcondition_called:",
-            "if False:",
-            "BODY007 cached result can escape without native postcondition",
+            "    if committed is not False or status not in _REJECTED_STATUSES:",
+            "    if state.postcondition_passed:\n        return True\n"
+            "    if committed is not False or status not in _REJECTED_STATUSES:",
+            "BODY007 cached success escaped native rejection",
+        ),
+        (
+            MUTATION,
+            "if state.postcondition_passed and state.failure is None:",
+            "if True:",
+            "BODY015 commit escaped without a successful postcondition",
         ),
     ],
     ids=(
@@ -71,6 +76,7 @@ def test_body_create_architecture_gate_accepts_the_production_path() -> None:
         "independent-document-resolution",
         "absence-of-false-means-success",
         "cached-success-after-native-rejection",
+        "missing-postcondition",
     ),
 )
 def test_gate_rejects_each_known_bad_variant_for_the_intended_reason(
