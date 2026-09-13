@@ -116,7 +116,6 @@ disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
 module = [
-    "freecad_mcp.operations.parametric_ops.body_set_tip",
     "freecad_mcp.operations.parametric_ops.expression_ops",
     "freecad_mcp.operations.parametric_ops.helpers",
     "freecad_mcp.operations.parametric_ops.sketch_attach_helpers",
