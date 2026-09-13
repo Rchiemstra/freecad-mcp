@@ -1,6 +1,8 @@
 """Unit tests for parametric Spreadsheet / expression / Body MCP operations."""
+
 from unittest.mock import MagicMock
 
+import pytest
 from mcp.types import TextContent
 
 from freecad_mcp.operations.core import (
@@ -39,8 +41,12 @@ def _ok_conn(output="done"):
         "recompute_errors": [],
     }
     conn.body_create.return_value = {
+        "contract_version": 1,
         "success": True,
         "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
         "body": "Body",
         "label": "Body",
     }
@@ -52,8 +58,12 @@ def _fail_conn(error="oops"):
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": error}
     conn.body_create.return_value = {
+        "contract_version": 1,
         "success": False,
         "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
         "error_code": "BODY_CREATE_FAILED",
         "error": error,
     }
@@ -163,6 +173,52 @@ def test_body_and_attach():
     )
     conn.sketch_attach.assert_called_once_with("Doc", "Sketch", "XY_Plane", offset)
     assert conn.execute_code.call_count == before
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {},
+        {"error": "rejected"},
+        {"error_code": "REJECTED"},
+        {"success": True},
+        {"success": True, "ok": True, "body": ""},
+        {"success": True, "ok": True, "body": "Body"},
+        {
+            "success": True,
+            "ok": True,
+            "body": "Body",
+            "label": "Body",
+            "error": "contradictory",
+        },
+    ],
+)
+def test_body_create_rejects_malformed_or_contradictory_rpc_results(result):
+    conn = _ok_conn()
+    conn.body_create.return_value = result
+
+    response = body_create_operation(conn, True, "Doc", "Body")
+
+    assert response.isError
+
+
+def test_body_create_accepts_actual_assigned_name_response():
+    conn = _ok_conn()
+    conn.body_create.return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "body": "Body001",
+        "label": "Main body",
+    }
+
+    response = body_create_operation(conn, True, "Doc", "RequestedBody")
+
+    assert response.isError is False
+    conn.body_create.assert_called_once_with("Doc", "RequestedBody")
 
 
 def test_named_constraints_in_code():

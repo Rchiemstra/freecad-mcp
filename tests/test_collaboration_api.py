@@ -26,10 +26,14 @@ class _NativeDocument:
     def __init__(self, result: object) -> None:
         self.result = result
         self.callbacks: list[object] = []
+        self.postconditions: list[object] = []
         self.structural_scopes: list[bool] = []
 
-    def commitCompatibilityMutation(self, callback, *, structural=False):
+    def commitCompatibilityMutation(
+        self, callback, *, structural=False, postcondition=None
+    ):
         self.callbacks.append(callback)
+        self.postconditions.append(postcondition)
         self.structural_scopes.append(structural)
         return self.result
 
@@ -83,6 +87,92 @@ def test_bridge_forwards_only_the_explicit_structural_scope() -> None:
     )
 
     assert document.structural_scopes == [True]
+
+
+def test_bound_callbacks_receive_the_one_native_admitted_document() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    document = _NativeDocument({"status": "Committed", "committed": True})
+    lookup_calls = []
+    callback_documents = []
+    postcondition_documents = []
+
+    def lookup(name):
+        lookup_calls.append(name)
+        return document
+
+    result = api_type(document_lookup=lookup).commit_compatibility_mutation(
+        "Model",
+        lambda admitted: callback_documents.append(admitted),
+        postcondition=lambda admitted: postcondition_documents.append(admitted) or True,
+        bind_document=True,
+        require_native=True,
+    )
+
+    assert result == {"status": "Committed", "committed": True}
+    assert lookup_calls == ["Model"]
+    assert len(document.callbacks) == 1
+    assert len(document.postconditions) == 1
+    document.callbacks[0]()
+    assert document.postconditions[0]() is True
+    assert callback_documents == [document]
+    assert postcondition_documents == [document]
+
+
+def test_native_only_path_rejects_before_callback_when_capability_is_missing() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    callback_calls = []
+
+    result = api_type(
+        document_lookup=lambda _name: object()
+    ).commit_compatibility_mutation(
+        "Model",
+        lambda: callback_calls.append(None),
+        require_native=True,
+    )
+
+    assert result["status"] == "Unsupported"
+    assert result["committed"] is False
+    assert callback_calls == []
+
+
+def test_postcondition_never_uses_the_non_atomic_fallback() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    callback_calls = []
+
+    result = api_type(
+        document_lookup=lambda _name: object()
+    ).commit_compatibility_mutation(
+        "Model",
+        lambda: callback_calls.append(None),
+        postcondition=lambda: True,
+    )
+
+    assert result["status"] == "Unsupported"
+    assert result["committed"] is False
+    assert callback_calls == []
+
+
+def test_native_only_path_rejects_old_binding_before_callback() -> None:
+    api_type = _load_package_module().CollaborationAPI
+    callback_calls = []
+
+    class OldNativeDocument:
+        @staticmethod
+        def commitCompatibilityMutation(callback, *, structural=False):
+            callback_calls.append((callback, structural))
+
+    result = api_type(
+        document_lookup=lambda _name: OldNativeDocument()
+    ).commit_compatibility_mutation(
+        "Model",
+        lambda: callback_calls.append("callback"),
+        postcondition=lambda: True,
+        require_native=True,
+    )
+
+    assert result["status"] == "Unsupported"
+    assert result["committed"] is False
+    assert callback_calls == []
 
 
 def test_bridge_propagates_lookup_and_native_failures_without_translation() -> None:
@@ -183,10 +273,18 @@ def test_public_signatures_expose_no_caller_supplied_authority_inputs() -> None:
     )
     assert list(
         inspect.signature(api_type.commit_compatibility_mutation).parameters
-    ) == ["self", "document_name", "callback", "structural"]
-    assert inspect.signature(api_type.commit_compatibility_mutation).parameters[
-        "structural"
-    ].kind is inspect.Parameter.KEYWORD_ONLY
+    ) == [
+        "self",
+        "document_name",
+        "callback",
+        "structural",
+        "postcondition",
+        "bind_document",
+        "require_native",
+    ]
+    parameters = inspect.signature(api_type.commit_compatibility_mutation).parameters
+    for name in ("structural", "postcondition", "bind_document", "require_native"):
+        assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
     assert _load_package_module().__all__ == ["CollaborationAPI"]
 
 

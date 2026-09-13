@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import json
 
+from ..._shared.protocol.body_create_contract import (
+    BodyCreateRequest,
+    BodyName,
+    DocumentName,
+    parse_body_create_response,
+)
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.tool_results import tool_fail, tool_ok
@@ -16,26 +22,28 @@ def body_create_operation(
     doc_name: str,
     body_name: str,
 ) -> ToolResponse:
+    request = BodyCreateRequest(
+        doc_name=DocumentName(doc_name),
+        body_name=BodyName(body_name),
+    )
     try:
-        result = freecad.body_create(doc_name, body_name)
+        raw_result: object = freecad.body_create(request.doc_name, request.body_name)
     except Exception as exc:
         return tool_fail(f"Failed to create body: {exc}")
-    if not isinstance(result, dict):
+    result = parse_body_create_response(raw_result)
+    structured = dict(result)
+    if result["success"] is False:
         return tool_fail(
-            "Failed to create body: invalid RPC response",
-            error_code="INVALID_RPC_RESPONSE",
-        )
-    if result.get("success") is False or result.get("ok") is False:
-        return tool_fail(
-            f"Failed to create body: {result.get('error', result.get('message', 'unknown error'))}",
-            structured=result,
-            error_code=result.get("error_code"),
+            f"Failed to create body: {result['error']}",
+            structured=structured,
+            error_code=result["error_code"],
         )
     return tool_ok(
         json.dumps(result, ensure_ascii=False, default=str),
-        structured=result,
+        structured=structured,
         only_text_feedback=only_text_feedback,
     )
+
 
 def body_set_tip_operation(
     freecad: FreeCADConnection,

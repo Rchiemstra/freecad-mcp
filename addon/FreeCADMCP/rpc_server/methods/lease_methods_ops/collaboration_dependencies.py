@@ -6,6 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
+from ...._shared.protocol.body_create_contract import (
+    BodyDocument,
+    BodyReadDocument,
+    DocumentName,
+)
+
 
 class CompatibilityMutationAPI(Protocol):
     """The narrow native compatibility-mutation bridge used by the add-on."""
@@ -13,10 +19,20 @@ class CompatibilityMutationAPI(Protocol):
     def commit_compatibility_mutation(
         self,
         document_name: str,
-        callback: Callable[[], Any],
+        callback: Callable[..., Any],
         *,
         structural: bool = False,
+        postcondition: Callable[..., Any] | None = None,
+        bind_document: bool = False,
+        require_native: bool = False,
     ) -> Any: ...
+
+    def commit_body_create_mutation(
+        self,
+        document_name: DocumentName,
+        callback: Callable[[BodyDocument], object],
+        postcondition: Callable[[BodyReadDocument], object],
+    ) -> object: ...
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,6 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ...._shared.protocol.body_create_contract import (
+    BodyDocument,
+    BodyReadDocument,
+    DocumentName,
+)
 from ..lease_methods_ops.collaboration_dependencies import CompatibilityMutationAPI
 
 
@@ -67,14 +72,40 @@ class CadCollaborators:
     def commit_compatibility_mutation(
         self,
         document_name: str,
-        callback: Callable[[], Any],
+        callback: Callable[..., Any],
         *,
         structural: bool = False,
+        postcondition: Callable[..., Any] | None = None,
+        bind_document: bool = False,
+        require_native: bool = False,
     ) -> Any:
         """Delegate exactly once through the injected native boundary."""
 
+        if postcondition is None and not bind_document and not require_native:
+            return self.compatibility_api.commit_compatibility_mutation(
+                document_name, callback, structural=structural
+            )
         return self.compatibility_api.commit_compatibility_mutation(
-            document_name, callback, structural=structural
+            document_name,
+            callback,
+            structural=structural,
+            postcondition=postcondition,
+            bind_document=bind_document,
+            require_native=require_native,
+        )
+
+    def commit_body_create_mutation(
+        self,
+        document_name: DocumentName,
+        callback: Callable[[BodyDocument], object],
+        postcondition: Callable[[BodyReadDocument], object],
+    ) -> object:
+        """Delegate the Body-only contract without widening it to ``Any``."""
+
+        return self.compatibility_api.commit_body_create_mutation(
+            document_name,
+            callback,
+            postcondition,
         )
 
 

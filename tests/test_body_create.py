@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from addon.FreeCADMCP.collaboration_api import CollaborationAPI
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import body_create as subject
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_create import (
     run_body_create,
@@ -32,6 +33,7 @@ class _Document:
         self.objects: dict[str, Any] = {}
         self.assigned_name = assigned_name
         self.recomputed = False
+        self.add_calls = 0
 
     def getObject(self, name):
         body = self.objects.get(name)
@@ -40,6 +42,7 @@ class _Document:
         return body
 
     def addObject(self, object_type, name):
+        self.add_calls += 1
         assert object_type == "PartDesign::Body"
         self.events.append("apply")
         actual_name = self.assigned_name or name
@@ -82,15 +85,42 @@ class _RecomputeFailureDocument(_Document):
         raise RuntimeError("FreeCAD recompute failed")
 
 
-class _CompatibilityAPI:
-    """Transaction-aware stand-in for this branch's native boundary."""
+class _NativeBridgeDocument(_Document):
+    """Document-shaped native binding used through the production bridge."""
 
-    def __init__(self, document: _Document, *, final_result=None) -> None:
+    def commitCompatibilityMutation(
+        self, callback, *, structural=False, postcondition=None
+    ):
+        assert structural is True
+        before_objects = dict(self.objects)
+        before_recomputed = self.recomputed
+        try:
+            callback()
+            self.recompute()
+            if postcondition is not None and not postcondition():
+                self.objects = before_objects
+                self.recomputed = before_recomputed
+                self.events.append("abort")
+                return {"status": "PostconditionFailed", "committed": False}
+        except Exception:
+            self.objects = before_objects
+            self.recomputed = before_recomputed
+            self.events.append("abort")
+            raise
+        self.events.append("commit")
+        return {"status": "Committed", "committed": True}
+
+
+class _CompatibilityAPI:
+    """Stand-in modeling every native phase used by Body creation."""
+
+    def __init__(self, document: _Document | None, *, final_result=None) -> None:
         self.document = document
         self.final_result = final_result
         self.calls = []
 
     def _restore(self, objects, recomputed) -> None:
+        assert self.document is not None
         self.document.objects = objects
         self.document.recomputed = recomputed
         self.document.events.append("abort")
@@ -101,15 +131,43 @@ class _CompatibilityAPI:
         callback,
         *,
         structural=False,
+        postcondition=None,
+        bind_document=False,
+        require_native=False,
     ):
-        self.calls.append((document_name, structural))
+        self.calls.append((document_name, structural, bind_document, require_native))
+        if self.document is None:
+            raise LookupError("document_lookup returned no document")
         before_objects = dict(self.document.objects)
         before_recomputed = self.document.recomputed
         try:
-            callback()
+            callback(self.document) if bind_document else callback()
         except Exception:
             self._restore(before_objects, before_recomputed)
             raise
+
+        try:
+            self.document.recompute()
+        except Exception as exc:
+            self._restore(before_objects, before_recomputed)
+            return {
+                "status": "RecomputeFailed",
+                "committed": False,
+                "rollback_succeeded": True,
+                "message": str(exc),
+            }
+
+        if postcondition is not None:
+            satisfied = (
+                postcondition(self.document) if bind_document else postcondition()
+            )
+            if not satisfied:
+                self._restore(before_objects, before_recomputed)
+                return {
+                    "status": "PostconditionFailed",
+                    "committed": False,
+                    "rollback_succeeded": True,
+                }
 
         if self.final_result is not None:
             result = dict(self.final_result)
@@ -119,6 +177,18 @@ class _CompatibilityAPI:
 
         self.document.events.append("commit")
         return {"status": "Committed", "committed": True}
+
+    def commit_body_create_mutation(
+        self, document_name, callback, postcondition
+    ):
+        return self.commit_compatibility_mutation(
+            document_name,
+            callback,
+            structural=True,
+            postcondition=postcondition,
+            bind_document=True,
+            require_native=True,
+        )
 
 
 def _collaborators(
@@ -135,7 +205,7 @@ def _collaborators(
                 document if document is not None and name == document.Name else None
             )
         )
-    api = _CompatibilityAPI(document, final_result=final_result) if document else None
+    api = _CompatibilityAPI(document, final_result=final_result)
     collaborators = SimpleNamespace(
         freecad=freecad,
         validate_document_invariants=(
@@ -143,9 +213,7 @@ def _collaborators(
             if validator is not None
             else lambda _document: events.append("validate")
         ),
-        commit_compatibility_mutation=(
-            api.commit_compatibility_mutation if api is not None else None
-        ),
+        commit_body_create_mutation=api.commit_body_create_mutation,
     )
     return collaborators, api
 
@@ -158,13 +226,17 @@ def test_body_create_runs_apply_recompute_inspect_validate_then_commits():
     result = run_body_create(collaborators, "Doc", "Body")
 
     assert result == {
+        "contract_version": 1,
         "success": True,
         "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
         "body": "Body",
         "label": "Label for Body",
     }
     assert events == ["apply", "recompute", "inspect", "validate", "commit"]
-    assert api.calls == [("Doc", True)]
+    assert api.calls == [("Doc", True, True, True)]
 
 
 @pytest.mark.parametrize("body_name", [None, 42, [], {}, "", " ", "\t\r\n"])
@@ -182,7 +254,7 @@ def test_invalid_names_abort_without_recompute_or_commit(body_name):
     assert "commit" not in events
 
 
-def test_missing_document_fails_before_entering_the_native_commit():
+def test_missing_document_fails_without_entering_the_apply_callback():
     events = []
     collaborators, api = _collaborators(None, events)
 
@@ -190,7 +262,7 @@ def test_missing_document_fails_before_entering_the_native_commit():
 
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
-    assert api is None
+    assert api.calls == [("Missing", True, True, True)]
     assert events == []
 
 
@@ -231,7 +303,9 @@ def test_recompute_failure_is_rolled_back():
     result = run_body_create(collaborators, "Doc", "Body")
 
     assert result["success"] is False
-    assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
+    assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+    assert result["native_status"] == "RecomputeFailed"
+    assert result["rollback_succeeded"] is True
     assert document.objects == {}
     assert events == ["apply", "recompute", "abort"]
 
@@ -272,6 +346,45 @@ def test_native_rejection_never_returns_cached_success():
     assert events == ["apply", "recompute", "inspect", "validate", "abort"]
 
 
+def test_native_capability_is_required_before_body_apply():
+    events = []
+    document = _Document(events)
+    bridge = CollaborationAPI(document_lookup=lambda _name: document)
+    collaborators = SimpleNamespace(
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
+        validate_document_invariants=lambda _document: events.append("validate"),
+        commit_body_create_mutation=bridge.commit_body_create_mutation,
+    )
+
+    result = run_body_create(collaborators, "Doc", "Body")
+
+    assert result["success"] is False
+    assert result["native_status"] == "Unsupported"
+    assert document.add_calls == 0
+    assert document.objects == {}
+    assert events == []
+
+
+def test_native_rollback_failure_remains_distinguishable():
+    events = []
+    document = _Document(events)
+    collaborators, _api = _collaborators(
+        document,
+        events,
+        final_result={
+            "status": "RollbackFailed",
+            "committed": False,
+            "rollback_succeeded": False,
+        },
+    )
+
+    result = run_body_create(collaborators, "Doc", "Body")
+
+    assert result["success"] is False
+    assert result["native_status"] == "RollbackFailed"
+    assert result["rollback_succeeded"] is False
+
+
 @pytest.mark.parametrize(
     ("document_type", "error_code"),
     [
@@ -296,28 +409,29 @@ def test_inspection_rejects_missing_replaced_or_wrong_type_body(
     assert "commit" not in events
 
 
-def test_apply_and_inspect_use_the_single_bound_document():
+def test_apply_and_inspect_use_the_native_admitted_document():
     events = []
-    admitted = _Document(events)
-    other = _Document([])
+    admitted = _NativeBridgeDocument(events)
+    other = _NativeBridgeDocument([])
     other.objects["Body"] = _body("Body", label="Wrong document")
     lookups = []
 
-    def changing_lookup(_name):
-        lookups.append(True)
+    def changing_lookup(name):
+        lookups.append(name)
         return admitted if len(lookups) == 1 else other
 
-    collaborators, _api = _collaborators(
-        admitted,
-        events,
-        freecad=SimpleNamespace(getDocument=changing_lookup),
+    bridge = CollaborationAPI(document_lookup=changing_lookup)
+    collaborators = SimpleNamespace(
+        validate_document_invariants=lambda _document: events.append("validate"),
+        commit_body_create_mutation=bridge.commit_body_create_mutation,
     )
 
     result = run_body_create(collaborators, "Doc", "Body")
 
     assert result["success"] is True
     assert result["label"] == "Label for Body"
-    assert len(lookups) == 1
+    assert lookups == ["Doc"]
+    assert events == ["apply", "recompute", "inspect", "validate", "commit"]
     assert admitted.getObject("Body") is not None
     assert other.getObject("Body").Label == "Wrong document"
 
