@@ -33,6 +33,21 @@ class _NativeBodyDocument(Protocol):
         postcondition: Callable[[], object] | None = None,
     ) -> object: ...
 
+
+@runtime_checkable
+class _NativeMutationDocument(Protocol):
+    """Runtime surface checked before a typed native callback can be invoked."""
+
+    Name: str
+
+    def commitCompatibilityMutation(
+        self,
+        callback: Callable[[], object],
+        *,
+        structural: bool = False,
+        postcondition: Callable[[], object] | None = None,
+    ) -> object: ...
+
 __all__ = ["CollaborationAPI"]
 
 
@@ -75,6 +90,16 @@ class CollaborationAPI:
             raise TypeError("document_lookup must be callable")
         self._document_lookup = document_lookup
 
+    def _resolve_admitted_document(self, document_name: str) -> object:
+        try:
+            document = self._document_lookup(document_name)
+        except NameError as exc:
+            # FreeCAD.getDocument raises NameError for a missing document.
+            raise LookupError(str(exc)) from exc
+        if document is None:
+            raise LookupError("document_lookup returned no document")
+        return document
+
     def commit_body_create_mutation(
         self,
         document_name: DocumentName,
@@ -83,13 +108,7 @@ class CollaborationAPI:
     ) -> object:
         """Run Body creation only when the exact native contract is present."""
 
-        try:
-            document = self._document_lookup(document_name)
-        except NameError as exc:
-            # FreeCAD.getDocument raises NameError for a missing document.
-            raise LookupError(str(exc)) from exc
-        if document is None:
-            raise LookupError("document_lookup returned no document")
+        document = self._resolve_admitted_document(document_name)
         if not isinstance(document, _NativeBodyDocument):
             return _unsupported(
                 "document must provide the native Body mutation contract"
@@ -108,6 +127,44 @@ class CollaborationAPI:
             return document.commitCompatibilityMutation(
                 invoke_callback,
                 structural=True,
+                postcondition=invoke_postcondition,
+            )
+        except TypeError:
+            if not callback_started:
+                return _unsupported(
+                    "native postcondition callback is not supported"
+                )
+            raise
+
+    def commit_native_mutation(
+        self,
+        document_name: str,
+        callback: Callable[[object], object],
+        postcondition: Callable[[object], object],
+        *,
+        structural: bool = True,
+    ) -> object:
+        """Run a typed native mutation with apply and inspect on one document."""
+
+        document = self._resolve_admitted_document(document_name)
+        if not isinstance(document, _NativeMutationDocument):
+            return _unsupported(
+                "document must provide the native typed mutation contract"
+            )
+
+        callback_started: list[bool] = []
+
+        def invoke_callback() -> object:
+            callback_started.append(True)
+            return callback(document)
+
+        def invoke_postcondition() -> object:
+            return postcondition(document)
+
+        try:
+            return document.commitCompatibilityMutation(
+                invoke_callback,
+                structural=structural,
                 postcondition=invoke_postcondition,
             )
         except TypeError:

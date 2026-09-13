@@ -17,6 +17,7 @@ from ..methods.cad_methods_ops.sketch_gui_constraints import (
 )
 from ..methods.cad_methods_ops.sketch_gui_geometry import sketch_delete_geometry_gui
 from ..methods.cad_methods_ops.snapshot_restore import restore_gui, snapshot_gui
+from ..methods.cad_methods_ops.typed_rpc_discovery import discover_typed_rpc_handlers
 
 
 def _collect_invalid_objects(self):
@@ -128,7 +129,8 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.set_expression = cad_methods.set_expression
     FreeCADRPC.clear_expression = cad_methods.clear_expression
     FreeCADRPC.list_expressions = cad_methods.list_expressions
-    FreeCADRPC.body_create = cad_methods.body_create
+    for method_name, handler in discover_typed_rpc_handlers().items():
+        setattr(FreeCADRPC, method_name, handler)
     FreeCADRPC.body_set_tip = cad_methods.body_set_tip
     FreeCADRPC.sketch_attach = cad_methods.sketch_attach
     FreeCADRPC.sketch_edit_constraint = cad_methods.sketch_edit_constraint

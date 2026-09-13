@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 from ...._shared.protocol.body_create_contract import (
     BodyCreateCollaborators,
@@ -154,6 +156,27 @@ def run_body_create(
     return _BodyCreateExecution(collaborators, request).run()
 
 
+class _BodyCreateRpcFacade(Protocol):
+    _cad_collaborators: BodyCreateCollaborators
+
+    def _dispatch_gui(self, callback: Callable[[], object]) -> object: ...
+
+
+def rpc_body_create(
+    self: _BodyCreateRpcFacade,
+    doc_name: str,
+    body_name: str,
+) -> dict[str, object]:
+    collaborators = self._cad_collaborators
+    res = self._dispatch_gui(
+        lambda: run_body_create(collaborators, doc_name, body_name)
+    )
+    return res if isinstance(res, dict) else {"success": False, "error": res}
+
+
+TYPED_RPC_HANDLER = ("body_create", rpc_body_create)
+
+
 __all__ = [
     "BodyCreateCollaborators",
     "BodyCreateError",
@@ -162,5 +185,7 @@ __all__ = [
     "apply_body_create",
     "build_body_create_request",
     "read_body_result",
+    "rpc_body_create",
     "run_body_create",
+    "TYPED_RPC_HANDLER",
 ]

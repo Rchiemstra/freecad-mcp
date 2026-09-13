@@ -16,6 +16,7 @@ PYTHON_TESTS = (
     "tests/test_body_create.py",
     "tests/test_body_create_response.py",
     "tests/test_body_create_contract_gate.py",
+    "tests/test_typed_platform_discovery.py",
     "tests/test_body_create_json_rpc_contract.py",
     "tests/test_collaboration_api.py",
     "tests/test_parametric.py",

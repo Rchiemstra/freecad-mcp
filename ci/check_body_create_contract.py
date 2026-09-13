@@ -6,16 +6,13 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
-import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-# The standard mypy configuration is also used by editors and `python -m mypy`.
-TYPECHECK_TARGETS = tuple(
-    tomllib.loads(
-        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
-    )["tool"]["mypy"]["files"]
-)
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT))
+
+from ci.discover_typed_slice import run_discovered_mypy
 
 
 _BODY_LEAF = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/body_create.py"
@@ -104,7 +101,7 @@ def _scan_bridge(source: str) -> list[str]:
         for node in ast.walk(bridge_commit)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "_document_lookup"
+        and node.func.attr in {"_document_lookup", "_resolve_admitted_document"}
     ]
     violations = []
     if len(lookup_calls) != 1:
@@ -273,12 +270,8 @@ def scan_body_create_architecture(
 
 
 def run_mypy(root: Path) -> int:
-    # All strictness, including the Body-only Any restrictions, lives in the
-    # editor-readable configuration. A single invocation checks imported types
-    # without applying Body-only restrictions to shared legacy response helpers.
-    return subprocess.run(
-        [sys.executable, "-m", "mypy", "--no-incremental"], cwd=root, check=False,
-    ).returncode
+    # Static pyproject globs and import-following overrides gate the typed slice.
+    return run_discovered_mypy(root)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

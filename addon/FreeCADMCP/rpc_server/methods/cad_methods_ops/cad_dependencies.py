@@ -51,6 +51,9 @@ class CadCollaborators:
             "compatibility_api.commit_compatibility_mutation": getattr(
                 self.compatibility_api, "commit_compatibility_mutation", None
             ),
+            "compatibility_api.commit_native_mutation": getattr(
+                self.compatibility_api, "commit_native_mutation", None
+            ),
             "create_object_gui": self.create_object_gui,
             "insert_part_from_library": self.insert_part_from_library,
             "set_object_property": self.set_object_property,
@@ -106,6 +109,23 @@ class CadCollaborators:
             document_name,
             callback,
             postcondition,
+        )
+
+    def commit_native_mutation(
+        self,
+        document_name: str,
+        callback: Callable[[object], object],
+        postcondition: Callable[[object], object],
+        *,
+        structural: bool = True,
+    ) -> object:
+        """Delegate generic typed native commits without per-op bridge methods."""
+
+        return self.compatibility_api.commit_native_mutation(
+            document_name,
+            callback,
+            postcondition,
+            structural=structural,
         )
 
 

@@ -45,9 +45,8 @@ def test_body_create_architecture_gate_accepts_the_production_path() -> None:
         ),
         (
             BRIDGE,
-            "            document = self._document_lookup(document_name)",
-            "            document = self._document_lookup(document_name)\n"
-            "            document = self._document_lookup(document_name)",
+            '        """Run Body creation only when the exact native contract is present."""\n\n        document = self._resolve_admitted_document(document_name)',
+            '        """Run Body creation only when the exact native contract is present."""\n\n        document = self._resolve_admitted_document(document_name)\n        document = self._resolve_admitted_document(document_name)',
             "BODY005 bridge must resolve the admitted document exactly once",
         ),
         (

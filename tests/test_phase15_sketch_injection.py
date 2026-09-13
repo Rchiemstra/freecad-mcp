@@ -152,9 +152,16 @@ def test_body_create_delegates_to_its_typed_mutation_slice(monkeypatch):
             "label": body_name,
         }
 
-    monkeypatch.setattr(sketch_public, "run_body_create", run_body_create)
+    import importlib
 
-    result = sketch_public.body_create(_Facade(collaborators), "Doc", "Body")
+    body_create_module = importlib.import_module(
+        "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_create"
+    )
+    monkeypatch.setattr(body_create_module, "run_body_create", run_body_create)
+
+    from addon.FreeCADMCP.rpc_server.methods import cad_methods
+
+    result = cad_methods.body_create(_Facade(collaborators), "Doc", "Body")
 
     assert result == {
         "success": True,

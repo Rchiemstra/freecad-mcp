@@ -34,6 +34,15 @@ class CompatibilityMutationAPI(Protocol):
         postcondition: Callable[[BodyReadDocument], object],
     ) -> object: ...
 
+    def commit_native_mutation(
+        self,
+        document_name: str,
+        callback: Callable[[object], object],
+        postcondition: Callable[[object], object],
+        *,
+        structural: bool = True,
+    ) -> object: ...
+
 
 @dataclass(frozen=True, slots=True)
 class CollaborationCollaborators:
