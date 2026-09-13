@@ -40,6 +40,11 @@ from freecad_mcp.operations.core import (
     undo_operation,
     redo_operation,
 )
+from freecad_mcp.operations.core_ops.feature_ops_legacy import (
+    linear_pattern_feature_operation as linear_pattern_feature_legacy,
+    polar_pattern_feature_operation as polar_pattern_feature_legacy,
+    mirror_feature_operation as mirror_feature_legacy,
+)
 from mcp.types import ImageContent, TextContent
 
 
@@ -65,6 +70,38 @@ def _ok_conn(output="done", recompute_errors=None):
         "success": True,
         "message": output,
         "recompute_errors": recompute_errors or [],
+    }
+    return conn
+
+
+def _typed_ok(op: str, feature: str):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    getattr(conn, op).return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "feature": feature,
+        "label": feature,
+    }
+    return conn
+
+
+def _typed_fail(op: str, error: str = "oops"):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    getattr(conn, op).return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "OPERATION_FAILED",
+        "error": error,
     }
     return conn
 
@@ -404,13 +441,15 @@ class TestPocketFeatureOperation:
 
 class TestLinearPatternFeatureOperation:
     def test_success(self):
-        conn = _ok_conn("pattern_name=Array")
-        result = linear_pattern_feature_operation(conn, True, "Doc", "Pocket", "Array", 40.0, 5)
-        assert "Linear pattern" in _text(result) and "created" in _text(result)
+        result = linear_pattern_feature_operation(
+            _typed_ok("linear_pattern_feature", "Array"), True, "Doc", "Pocket", "Array", 40.0, 5
+        )
+        assert not result.isError
+        assert "Array" in _text(result)
 
     def test_params_in_code(self):
         conn = _ok_conn()
-        linear_pattern_feature_operation(
+        linear_pattern_feature_legacy(
             conn, True, "Doc", "Pocket", "Array", 40.0, 5,
             direction="Pad:Edge1", body_name="Body", reversed_dir=True,
         )
@@ -421,22 +460,28 @@ class TestLinearPatternFeatureOperation:
 
     def test_generated_code_compiles(self):
         conn = _ok_conn()
-        linear_pattern_feature_operation(conn, True, "Doc", "Pocket", "Array", 40.0, 5)
+        linear_pattern_feature_legacy(conn, True, "Doc", "Pocket", "Array", 40.0, 5)
         _assert_generated_code_compiles(conn)
 
     def test_failure(self):
-        assert "Failed" in _text(linear_pattern_feature_operation(_fail_conn(), True, "Doc", "Pocket", "Array", 40.0, 5))
+        assert "Failed" in _text(
+            linear_pattern_feature_operation(
+                _typed_fail("linear_pattern_feature"), True, "Doc", "Pocket", "Array", 40.0, 5
+            )
+        )
 
 
 class TestPolarPatternFeatureOperation:
     def test_success(self):
-        conn = _ok_conn("pattern_name=BoltCircle")
-        result = polar_pattern_feature_operation(conn, True, "Doc", "Pocket", "BoltCircle", 6)
-        assert "Polar pattern" in _text(result) and "created" in _text(result)
+        result = polar_pattern_feature_operation(
+            _typed_ok("polar_pattern_feature", "BoltCircle"), True, "Doc", "Pocket", "BoltCircle", 6
+        )
+        assert not result.isError
+        assert "BoltCircle" in _text(result)
 
     def test_params_in_code(self):
         conn = _ok_conn()
-        polar_pattern_feature_operation(
+        polar_pattern_feature_legacy(
             conn, True, "Doc", "Pocket", "BoltCircle", 6,
             angle=180.0, axis="AxisObj:Edge2", body_name="Body", reversed_dir=True,
         )
@@ -447,33 +492,41 @@ class TestPolarPatternFeatureOperation:
 
     def test_generated_code_compiles(self):
         conn = _ok_conn()
-        polar_pattern_feature_operation(conn, True, "Doc", "Pocket", "BoltCircle", 6)
+        polar_pattern_feature_legacy(conn, True, "Doc", "Pocket", "BoltCircle", 6)
         _assert_generated_code_compiles(conn)
 
     def test_failure(self):
-        assert "Failed" in _text(polar_pattern_feature_operation(_fail_conn(), True, "Doc", "Pocket", "BoltCircle", 6))
+        assert "Failed" in _text(
+            polar_pattern_feature_operation(
+                _typed_fail("polar_pattern_feature"), True, "Doc", "Pocket", "BoltCircle", 6
+            )
+        )
 
 
 class TestMirrorFeatureOperation:
     def test_success(self):
-        conn = _ok_conn("mirror_name=PocketMirror")
-        result = mirror_feature_operation(conn, True, "Doc", "Pocket", "PocketMirror")
-        assert "Mirror feature" in _text(result) and "created" in _text(result)
+        result = mirror_feature_operation(
+            _typed_ok("mirror_feature", "PocketMirror"), True, "Doc", "Pocket", "PocketMirror"
+        )
+        assert not result.isError
+        assert "PocketMirror" in _text(result)
 
     def test_params_in_code(self):
         conn = _ok_conn()
-        mirror_feature_operation(conn, True, "Doc", "Pocket", "PocketMirror", plane="Pad:Face1", body_name="Body")
+        mirror_feature_legacy(conn, True, "Doc", "Pocket", "PocketMirror", plane="Pad:Face1", body_name="Body")
         c = _code(conn)
         assert "PartDesign::Mirrored" in c
         assert "'Pocket'" in c and "'PocketMirror'" in c and "'Pad:Face1'" in c and "'Body'" in c
 
     def test_generated_code_compiles(self):
         conn = _ok_conn()
-        mirror_feature_operation(conn, True, "Doc", "Pocket", "PocketMirror")
+        mirror_feature_legacy(conn, True, "Doc", "Pocket", "PocketMirror")
         _assert_generated_code_compiles(conn)
 
     def test_failure(self):
-        assert "Failed" in _text(mirror_feature_operation(_fail_conn(), True, "Doc", "Pocket", "PocketMirror"))
+        assert "Failed" in _text(
+            mirror_feature_operation(_typed_fail("mirror_feature"), True, "Doc", "Pocket", "PocketMirror")
+        )
 
 
 # ---------------------------------------------------------------------------
