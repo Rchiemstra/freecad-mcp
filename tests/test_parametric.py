@@ -136,9 +136,16 @@ def test_body_and_attach():
     assert "Tip" in _code(conn)
 
     conn.sketch_attach.return_value = {
+        "contract_version": 1,
         "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
         "sketch": "Sketch",
-        "attached": {"kind": "origin_plane", "plane": "XY_Plane"},
+        "attached_kind": "origin_plane",
+        "attached_object": "XY_Plane",
+        "attached_subname": "",
     }
     resp = sketch_attach_operation(conn, True, "Doc", "Sketch", "XY_Plane")
     assert not resp.isError
@@ -146,9 +153,16 @@ def test_body_and_attach():
 
     conn.sketch_attach.reset_mock()
     conn.sketch_attach.return_value = {
+        "contract_version": 1,
         "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
         "sketch": "Sketch",
-        "attached": {"kind": "face_ref", "subname": "Face1"},
+        "attached_kind": "face_ref",
+        "attached_object": "Box",
+        "attached_subname": "Face1",
     }
     sketch_attach_operation(
         conn, True, "Doc", "Sketch", {"object": "Box", "subname": "Face1"}
@@ -162,10 +176,16 @@ def test_body_and_attach():
     }
     conn.sketch_attach.reset_mock()
     conn.sketch_attach.return_value = {
+        "contract_version": 1,
         "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
         "sketch": "Sketch",
-        "attached": {"kind": "origin_plane"},
-        "attachment_offset": offset,
+        "attached_kind": "origin_plane",
+        "attached_object": "XY_Plane",
+        "attached_subname": "",
     }
     before = conn.execute_code.call_count
     sketch_attach_operation(
@@ -229,23 +249,46 @@ def test_named_constraints_in_code():
     assert "BoreR" in code
     sketch_constrain_distance_operation(conn, True, "Doc", "Sk", 1, 10.0, name="WallThick")
     assert "WallThick" in _code(conn)
-    sketch_add_constraint_operation(
+    conn.sketch_add_constraint.return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sketch": "Sk",
+        "added_count": 1,
+    }
+    resp = sketch_add_constraint_operation(
         conn,
         True,
         "Doc",
         "Sk",
         [{"type": "Radius", "geo": 0, "value": 3.0, "name": "R1"}],
     )
-    assert "renameConstraint" in _code(conn)
+    assert resp.isError is False
+    conn.sketch_add_constraint.assert_called_once()
+    assert conn.sketch_add_constraint.call_args.args[2][0]["name"] == "R1"
 
 
 def test_sketch_edit_constraint_requires_identity():
     resp = sketch_edit_constraint_operation(_ok_conn(), True, "Doc", "Sk", value=2.0)
     assert resp.isError
-    conn = _ok_conn('{"ok": true}')
-    sketch_edit_constraint_operation(conn, True, "Doc", "Sk", value=4.0, name="WallThick")
-    assert "WallThick" in _code(conn)
-    assert "setDatum" in _code(conn)
+    conn = _ok_conn()
+    conn.sketch_edit_constraint.return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sketch": "Sk",
+        "index": 0,
+        "name": "WallThick",
+    }
+    resp = sketch_edit_constraint_operation(conn, True, "Doc", "Sk", value=4.0, name="WallThick")
+    assert resp.isError is False
+    conn.sketch_edit_constraint.assert_called_once_with("Doc", "Sk", 4.0, "WallThick", None)
 
 
 def test_diagnose_parametric_code():
@@ -263,5 +306,14 @@ def test_failures_surface():
     assert set_expression_operation(_fail_conn(), True, "Doc", "Pad", "Length", "x").isError
     assert body_create_operation(_fail_conn(), True, "Doc", "Body").isError
     fail = _fail_conn()
-    fail.sketch_attach.return_value = {"success": False, "error": "nope"}
+    fail.sketch_attach.return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "SKETCH_NOT_FOUND",
+        "error": "nope",
+    }
     assert sketch_attach_operation(fail, True, "Doc", "Sketch", "XY_Plane").isError
