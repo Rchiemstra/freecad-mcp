@@ -176,7 +176,7 @@ def compare_documents_operation(
     def _capture(doc_name: str, names: list[str] | None) -> dict:
         code = [*_doc_preamble(doc_name),
             render_template_text(
-                "diagnostics/capture_state.py.txt",
+                "diagnostics/geometric_capture.py.txt",
                 object_names=repr(names),
             )
         ]

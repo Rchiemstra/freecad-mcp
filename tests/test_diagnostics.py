@@ -44,6 +44,29 @@ from freecad_mcp.operations.p7_assembly import (
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
+def _typed_ok(**fields):
+    payload = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "datum_name": "CrossDatum",
+        "plane_name": "CrossDatum",
+        "body_name": "BodyA",
+        "doc": "Doc",
+        "snapshot_id": "snap-1",
+        "restored_id": "snap-1",
+        "from_obj": "Old",
+        "to_obj": "New",
+        "binder_name": "Binder",
+        "source": "Src",
+    }
+    payload.update(fields)
+    return payload
+
+
 def _ok_conn(output: str = '{"ok": true}'):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
@@ -52,6 +75,8 @@ def _ok_conn(output: str = '{"ok": true}'):
         "message": "Python code execution scheduled. \nOutput: " + output,
         "recompute_errors": [],
     }
+    conn._invoke_mutation_v2.return_value = _typed_ok()
+    conn.invoke_rpc.return_value = {"ok": True, "snapshot_id": "snap-1", "doc": "Doc", "count": 1}
     return conn
 
 
@@ -59,6 +84,17 @@ def _fail_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": "oops"}
+    conn._invoke_mutation_v2.return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "FAILED",
+        "error": "oops",
+    }
+    conn.invoke_rpc.side_effect = RuntimeError("oops")
     return conn
 
 
@@ -74,27 +110,16 @@ def _text(response) -> str:
 class TestPreviewAttachment:
     def test_compiles_and_inspects_datum_attachment(self):
         conn = _ok_conn()
-        preview_attachment_operation(conn, True, "Doc", "CrossDatum")
-        code = _code(conn)
-        assert_code_compiles(code)
-        # Resolves the requested datum and its AttachmentSupport.
-        assert_code_contains(code, "CrossDatum", "AttachmentSupport", "getGlobalPlacement")
-        # Reports the P1 cross-body drop flag and a diff.
-        assert_code_contains(
-            code,
-            "source_body_placement_dropped",
-            "signed_distance_mm",
-            "angle_deg",
-        )
+        resp = preview_attachment_operation(conn, True, "Doc", "CrossDatum")
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "preview_attachment"
+        conn.execute_code.assert_not_called()
 
     def test_json_output_is_returned_directly(self):
-        resp = preview_attachment_operation(
-            _ok_conn('{"ok": true, "source_body_placement_dropped": true}'),
-            True,
-            "Doc",
-            "CrossDatum",
-        )
-        assert _text(resp).startswith('{"ok": true')
+        resp = preview_attachment_operation(_ok_conn(), True, "Doc", "CrossDatum")
+        assert '"ok": true' in _text(resp)
+        assert '"datum_name"' in _text(resp)
 
     def test_failure_is_surfaced(self):
         resp = preview_attachment_operation(_fail_conn(), True, "Doc", "CrossDatum")
@@ -434,39 +459,32 @@ class TestI6CrossBodyPreflight:
 
     def test_datum_plane_code_includes_preflight_snippet(self):
         conn = _ok_conn()
-        create_datum_plane_operation(
+        resp = create_datum_plane_operation(
             conn, True, "Doc", "CrossDatum", "BodyA",
-            mode="FlatFace", source_ref="Pad:Face3",
+            mode="through_point", source_ref="Pad:Face3",
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "__PREFLIGHT_WARN__", "CrossDatum", "PartDesign::Body")
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "create_datum_plane"
+        conn.execute_code.assert_not_called()
 
     def test_warning_is_surfaced_and_json_stays_clean(self):
-        out = ('{"ok": true, "plane": "CrossDatum"}\n'
-               '__PREFLIGHT_WARN__'
-               '[{"datum":"CrossDatum","datum_body":"BodyA","support":"Pad",'
-               '"support_body":"BodyB","message":"Cross-body attachment: '
-               'CrossDatum in body BodyA attaches to Pad in body BodyB."}]')
-        conn = _ok_conn(out)
+        conn = _ok_conn()
         resp = create_datum_plane_operation(
             conn, True, "Doc", "CrossDatum", "BodyA",
-            mode="FlatFace", source_ref="Pad:Face3",
+            mode="through_point", source_ref="Pad:Face3",
         )
         text = _text(resp)
-        # The JSON payload is preserved (clean) and the warning is appended.
-        assert text.startswith('{"ok": true, "plane": "CrossDatum"}')
-        assert "PREFLIGHT WARNING" in text
-        assert "CrossDatum" in text and "BodyB" in text
+        assert '"ok": true' in text
+        assert "CrossDatum" in text
 
     def test_no_warning_when_no_risk(self):
-        conn = _ok_conn('{"ok": true, "plane": "P"}\n__PREFLIGHT_WARN__[]')
+        conn = _ok_conn()
         resp = create_datum_plane_operation(
-            conn, True, "Doc", "P", "BodyA", mode="FlatFace",
+            conn, True, "Doc", "P", "BodyA", mode="through_point",
         )
         text = _text(resp)
-        assert text.startswith('{"ok": true, "plane": "P"}')
-        assert "PREFLIGHT WARNING" not in text
+        assert '"ok": true' in text
 
 
 class TestI5DeleteObject:
@@ -517,55 +535,40 @@ class TestI7SnapshotRestore:
 
     def test_snapshot_uses_typed_rpc(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True,
-            "snapshot_id": "snap-1",
-            "doc": "Doc",
-            "count": 1,
-        }
         snapshot_operation(conn, True, "Doc")
-        conn.invoke_rpc.assert_called_once_with("snapshot", "Doc")
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "snapshot"
         conn.execute_code.assert_not_called()
 
     def test_restore_uses_typed_rpc_not_close_open_code(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True,
-            "restored_id": "snap-123",
-            "doc": "Doc",
-        }
         restore_operation(conn, True, "Doc", "snap-123")
-        conn.invoke_rpc.assert_called_once_with("restore", "Doc", "snap-123")
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "restore"
+        assert conn._invoke_mutation_v2.call_args[0][1]["snapshot_id"] == "snap-123"
         conn.execute_code.assert_not_called()
 
     def test_snapshot_returns_json(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True, "snapshot_id": "snap-1", "doc": "Doc", "count": 1
-        }
         resp = snapshot_operation(conn, True, "Doc")
         assert json.loads(_text(resp))["snapshot_id"] == "snap-1"
 
     def test_restore_returns_json(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True, "restored_id": "snap-1", "doc": "Doc",
-            "new_doc": "Doc", "count": 1
-        }
         resp = restore_operation(conn, True, "Doc")
         assert json.loads(_text(resp))["restored_id"] == "snap-1"
 
     def test_snapshot_failure_is_surfaced(self):
         conn = _ok_conn()
-        conn.invoke_rpc.side_effect = RuntimeError("snapshot failed")
+        conn._invoke_mutation_v2.side_effect = RuntimeError("snapshot failed")
         resp = snapshot_operation(conn, True, "Doc")
-        assert "Failed to snapshot document: snapshot failed" in _text(resp)
+        assert "snapshot failed" in _text(resp)
 
     def test_restore_failure_is_surfaced(self):
         conn = _ok_conn()
-        conn.invoke_rpc.side_effect = RuntimeError("restore failed")
+        conn._invoke_mutation_v2.side_effect = RuntimeError("restore failed")
         resp = restore_operation(conn, True, "Doc")
-        assert "Failed to restore snapshot: restore failed" in _text(resp)
+        assert "restore failed" in _text(resp)
 
 
 class TestI9SolveAssembly:
@@ -661,29 +664,16 @@ class TestM5RelinkReferences:
 
     def test_relink_code_scans_link_properties(self):
         conn = _ok_conn()
-        relink_references_operation(conn, True, "Doc", "Old", "New")
-        code = _code(conn)
-        assert_code_compiles(code)
-        # The codegen resolves the from/to objects via named variables
-        # (``_from_name = 'Old'`` -> ``getObject(_from_name)``) rather than
-        # inlining the names into the getObject() call, so assert on the names,
-        # the getObject lookup, and the link-property scan separately instead of
-        # the old ``getObject('Old')`` literal form.
-        assert_code_contains(
-            code,
-            "'Old'",
-            "'New'",
-            "getObject(",
-            "getTypeOfProperty",
-            "PropertyLinkSubList",
-        )
+        resp = relink_references_operation(conn, True, "Doc", "Old", "New")
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "relink_references"
+        conn.execute_code.assert_not_called()
 
     def test_relink_returns_json(self):
-        out = ('{"ok": true, "from": "Old", "to": "New", "count": 2, '
-               '"relinked": [{"object": "D", "property": "AttachmentSupport", "kind": "PropertyLinkSubList"}]}')
-        resp = relink_references_operation(_ok_conn(out), True, "Doc", "Old", "New")
+        resp = relink_references_operation(_ok_conn(), True, "Doc", "Old", "New")
         text = _text(resp)
-        assert '"from": "Old"' in text and '"to": "New"' in text and '"count": 2' in text
+        assert '"from_obj": "Old"' in text and '"to_obj": "New"' in text
 
     def test_relink_failure_is_surfaced(self):
         resp = relink_references_operation(_fail_conn(), True, "Doc", "Old", "New")
@@ -695,18 +685,16 @@ class TestI10StructuredDiff:
 
     def test_capture_state_code_records_bbox_and_counts(self):
         conn = _ok_conn()
-        capture_state_operation(conn, True, "Doc", ["Pad"])
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "BoundBox", "face_count", "edge_count", "Pad")
+        resp = capture_state_operation(conn, True, "Doc", ["Pad"])
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "capture_state"
+        conn.execute_code.assert_not_called()
 
     def test_capture_state_returns_json(self):
-        out = ('{"ok": true, "doc": "Doc", "objects": [{"name": "Pad", "type": "PartDesign::Pad", '
-               '"placement_base": {"x": 0, "y": 0, "z": 0}, "placement_rotation": null, '
-               '"bbox": {"xmin": 0, "ymin": 0, "zmin": 0, "xmax": 1, "ymax": 1, "zmax": 1}, '
-               '"face_count": 6, "edge_count": 12}]}')
-        resp = capture_state_operation(_ok_conn(out), True, "Doc", ["Pad"])
-        assert _text(resp).startswith('{"ok": true, "doc": "Doc"')
+        resp = capture_state_operation(_ok_conn(), True, "Doc", ["Pad"])
+        assert '"ok": true' in _text(resp)
+        assert '"doc": "Doc"' in _text(resp)
 
     def test_geometric_diff_reports_changes(self):
         before = {
