@@ -142,16 +142,16 @@ def _snapshot_placement(obj: object) -> dict[str, object]:
         raise RotateError("CREATED_OBJECT_INVALID", "Object Placement has no Rotation after apply")
     return {
         "base": {
-            "x": float(getattr(base, "x", 0.0)),
-            "y": float(getattr(base, "y", 0.0)),
-            "z": float(getattr(base, "z", 0.0)),
+            "x": as_float(getattr(base, "x", 0.0)),
+            "y": as_float(getattr(base, "y", 0.0)),
+            "z": as_float(getattr(base, "z", 0.0)),
         },
         "rotation_axis": {
-            "x": float(getattr(axis, "x", 0.0)),
-            "y": float(getattr(axis, "y", 0.0)),
-            "z": float(getattr(axis, "z", 0.0)),
+            "x": as_float(getattr(axis, "x", 0.0)),
+            "y": as_float(getattr(axis, "y", 0.0)),
+            "z": as_float(getattr(axis, "z", 0.0)),
         },
-        "rotation_angle": float(getattr(rotation, "Angle", 0.0)),
+        "rotation_angle": as_float(getattr(rotation, "Angle", 0.0)),
     }
 
 
@@ -168,8 +168,8 @@ def _placement_matches(obj: object, expected: dict[str, object]) -> None:
     if not isinstance(expected_base, dict):
         raise RotateError("CREATED_OBJECT_INVALID", "Missing post-apply Placement snapshot")
     for key in ("x", "y", "z"):
-        actual = float(getattr(base, key, 0.0))
-        target = float(expected_base[key])
+        actual = as_float(getattr(base, key, 0.0))
+        target = as_float(expected_base[key])
         if abs(actual - target) > 1e-6:
             raise RotateError(
                 "CREATED_OBJECT_INVALID",
@@ -179,15 +179,15 @@ def _placement_matches(obj: object, expected: dict[str, object]) -> None:
     if not isinstance(expected_axis, dict):
         raise RotateError("CREATED_OBJECT_INVALID", "Missing post-apply Placement snapshot")
     for key in ("x", "y", "z"):
-        actual = float(getattr(axis, key, 0.0))
-        target = float(expected_axis[key])
+        actual = as_float(getattr(axis, key, 0.0))
+        target = as_float(expected_axis[key])
         if abs(actual - target) > 1e-6:
             raise RotateError(
                 "CREATED_OBJECT_INVALID",
                 f"Placement Rotation axis {key} mismatch after recompute",
             )
-    actual_angle = float(getattr(rotation, "Angle", 0.0))
-    target_angle = float(expected["rotation_angle"])
+    actual_angle = as_float(getattr(rotation, "Angle", 0.0))
+    target_angle = as_float(expected["rotation_angle"])
     if abs(actual_angle - target_angle) > 1e-6:
         raise RotateError("CREATED_OBJECT_INVALID", "Placement Rotation angle mismatch after recompute")
 

@@ -1,19 +1,19 @@
 # Typed RPC operations audit — `feature/typed-rpc`
 
-**Snapshot as of roundup: 2026-09-13** (Europe/Amsterdam). Campaign paused for handover; no further op migrations in this session.
+**Snapshot as of roundup: 2026-09-14** (Europe/Amsterdam). CAD mutation campaign is **native-complete** on the home tree. Do not merge GitHub PRs (Rchiemstra only).
 
-**typed-rpc-platform LANDED** (Composer 2.5). Grok PASS (req 1–8). MCP `374a59b` + parent `07d75f0497` pushed; PRs open. Tip and parallel op forks **NOT PASS** — interrupted for roundup.
-
-> **Canonical location:** moved from gitignored `.idea/feature_typed-rpc_progress.md` to `tools/mcp/freecad-mcp/doc/feature_typed-rpc_progress.md` (this file). The `.idea/` copy may still exist locally but is not the source of truth.
+> **Canonical location:** `tools/mcp/freecad-mcp/doc/feature_typed-rpc_progress.md` (this file).
 
 ## Orchestration
 
-- Parent checkout: `D:/code/FreeCAD`
-- Progress tracker: `tools/mcp/freecad-mcp/doc/feature_typed-rpc_progress.md` (formerly `.idea/feature_typed-rpc_progress.md`)
-- Reference: `ci/qualify_body_create.py` + `ci/check_body_create_contract.py` (Body reference implementation)
-- Models (local only): orchestrator/reviewer `cursor-grok-4.6-xhigh`; implementer `composer-2.5`; forbidden Fast/Cloud/Auto/substitutes
-- Merge: leave final merge to Rchiemstra
-- Git: commit/push MCP submodule first, then parent submodule pointer; open PRs and wait for required CI
+- Parent checkout: `C:/Users/Rchie/Music/FreeCAD` (`feature/typed-rpc`)
+- MCP submodule working tree: `C:/Users/Rchie/Music/FreeCAD/tools/mcp/freecad-mcp`
+- Progress tracker: this file
+- Reference: `ci/qualify_body_create.py` + `ci/check_body_create_contract.py`
+- Native runtime: `freecad-ci-mcp:24.04-phase1` + Docker volume `freecad-local-build` → `/hostbuild`
+- Models (local only): orchestrator/reviewer Grok 4.6 High; implementer `composer-2.5`; forbidden Fast/Cloud/Auto/substitutes
+- Merge: leave final GitHub merge to Rchiemstra
+- Git: do **not** point the parent submodule or merge PRs until Rchiemstra asks. Native PASS is earned; packaging is still open.
 
 ## Policy
 
@@ -24,36 +24,103 @@
 - Tests must cover real MCP schema dispatch, authenticated JSON-RPC, native failures, and deliberately broken variants including the actual CI failure path.
 - Do not claim PASS if review or evidence is incomplete.
 - Do not hand-edit `src/freecad_mcp/generated/**`. Regenerate with `python scripts/generate_capability_shadow.py` (calls `write_production_outputs` + shadow). Manifest bootstrap: `python scripts/bootstrap_capability_manifests.py`.
+- Missing native runtime is an **ERROR**, never skip-as-pass.
+- Apply never owns `doc.recompute()` or transactions.
 
-## Git identity (roundup 2026-09-13)
+## Git identity (roundup 2026-09-14)
 
-| Repo | Branch | HEAD | Dirty | Worktrees |
+| Repo | Branch | HEAD | Dirty | Notes |
 | --- | --- | --- | --- | --- |
-| Parent `D:/code/FreeCAD` | `feature/typed-rpc` (tracks `origin/feature/typed-rpc`) | `07d75f049719b48d72590d07452be6f67732bd4d` | clean (pre-doc commit) | main + 4 op worktrees |
-| MCP submodule `tools/mcp/freecad-mcp` | `feature/typed-rpc` (tracks `origin/feature/typed-rpc`) | `374a59b7f8e74e6f15c6326db00abdd5fb0f3f38` | doc files pending commit | submodule gitdir + isolated MCP worktrees |
-| Tip worktree `D:/code/FreeCAD-wt-body-set-tip` | `feature/typed-rpc-body-set-tip` | `07d75f049719b48d72590d07452be6f67732bd4d` | **Tip-only files unstaged** | **NOT PASS** — unpark incomplete |
+| Parent `C:/Users/Rchie/Music/FreeCAD` | `feature/typed-rpc` | `3c61b079ac` | yes | Uncommitted `src/App/Property.cpp` (User3/Group) and `src/Mod/Fem/App/FemMeshProperty.cpp` (FemMesh undo copy). Relinked into `freecad-local-build`. |
+| MCP working tree `tools/mcp/freecad-mcp` | `feature/typed-rpc` | integrated PASS lineage + FINAL doc | helpers untracked | 4-lane PASS groups on `feature/typed-rpc`. Untracked `ci/_lane*` / `ci/_native_*.sh` / TSV audits not committed. |
+| Parent **recorded** submodule pointer | — | `e345f4e` | n/a | `git ls-tree HEAD tools/mcp/freecad-mcp`. Do not update unless Rchiemstra asks. |
 
-Parent HEAD message: `Point MCP at typed RPC discovery and run discoverable contract gates in Woodpecker.`
-MCP HEAD message: `Add typed RPC discovery so new CAD ops register without serializing pyproject or Woodpecker.`
+Integrate worktrees were merged back and pruned. Do not treat leftover `*-wt-*` trees as home.
 
-Reference qualification used older bases (do not confuse with current HEAD):
-
-| Baseline | SHA |
-| --- | --- |
-| Parent at body_create qualify | `b253505340ce45d0d6720bc9894f0e063e6196e5` |
-| MCP at body_create qualify | `c4fa4f5562e2319606945efc7c1aa0767ad5f9d9` |
-
-Current HEADs are **descendants** of those baselines (body_create harden + parent lint pin). This inventory did **not** re-run `ci/qualify_body_create.py`. `body_create` remains PASS by the reference document unless a later review finds a regression.
-
-## Current cycle (roundup pause)
+## Current cycle (2026-09-14 close-out)
 
 | Field | Value |
 | --- | --- |
-| Status | **typed-rpc-platform LANDED** — Grok PASS; PRs open but **CI not green** and **merge CONFLICTING/DIRTY** |
-| Active worker | **None** — campaign rounded up for handover |
-| Implementer | `composer-2.5`; reviewer `cursor-grok-4.6-xhigh`; no Fast/Cloud/Auto |
-| Blockers | PR CI not scheduled/green; merge conflicts on both PRs. Tip + parallel ops **NOT PASS**. |
-| Next step | Rchiemstra resolves PR conflicts + CI, then merges #17 then #53. Resume: unpark Tip, then parallel ops (see handover). |
+| Status | **107/107 CAD mutations native `--native` ×3 PASS.** 64 N/A kinds remain N/A by policy. |
+| Active worker | None — campaign rounded up |
+| Native first pass | `native_audit_107.tsv`: 107 rows, `fail_count=0` |
+| Native ×3 | `native_x3_107.tsv`: 107 rows `0/0/0 PASS`, `fail_count=0` (~92 min in `freecad-ci-mcp:24.04-phase1`) |
+| Contract checks | `ci/run_contract_checks.py` **OK (107 gate(s))** in `freecad-ci-mcp:24.04-phase1` twice on 2026-09-14: 11:49Z and again after FEM/oracle local edits (ended 17:34 local). |
+| Body reference | `body_create` **16 passed** ×3 on the relinked App/Part/Fem binaries |
+| FEM | `run_fem_analysis` **7 passed** ×3 after Gmsh in the container + `PropertyFemMesh` deep-copy undo |
+| Next step | Rchiemstra: commit parent C++ if wanted; optionally point submodule at MCP SHA after those commits; **do not merge** [MCP PR #17](https://github.com/Rchiemstra/freecad-mcp/pull/17) or [parent PR #53](https://github.com/Rchiemstra/FreeCAD/pull/53) unless Rchiemstra merges. |
+
+### 4-lane group pipeline — FINAL integration (2026-09-14)
+
+All four lanes reported Grok rereview **PASS** + Docker focused **PASS** + native `--native` ×3 **PASS**. FINAL integrated **only** those PASS group commits onto `feature/typed-rpc` (fast-forwarded from `mcp/lane3-diag-pd-core-gears` `130295a`, which already held the most PASS commits including Lane 4's `408bd4b` / `ee07a6c` / `49f848d`). **No PR merge. Parent submodule pointer left at `e345f4e`.**
+
+Shared-file conflicts during cherry-pick: **none**. Called-out overlap files (`tests/sketch_exec_support.py`, `tests/native_model_state.py`, `preview_attachment_contract.py`, `feature_apply_support.py`, `tests/typed_feature_fakes.py`) did not collide; each missing commit applied cleanly. Duplicate Lane 1 `73ae204` skipped because `ee07a6c` is already on the lineage. Lane 2 follow-ups `b286b4a` / `e4dad2d` after G-io were **not** listed as PASS group commits and were **not** picked.
+
+| Group | Lane | Grok rereview | Docker focused | native ×3 | Original commit | On `feature/typed-rpc` |
+| --- | --- | --- | --- | --- | --- | --- |
+| G-sketch-execute-code | 1 | PASS | PASS | PASS | `519fbd96064250c6613dc73638698886a6ccf0d2` | cherry-pick `0107fe1196860f683facbe7c70503f3dfbbcd667` |
+| G-parametric-sheet | 1 | PASS | PASS | PASS | `bcc4957bfd16bb2a1ade80af11973873ef3b58db` | cherry-pick `6d22e77b4350230f26af9965a3c46bb5040d86f8` |
+| G-document-gui | 2 | PASS | PASS | PASS | `9aabe15aadf7c6f2c6a8818a620aceb279dbb857` | ancestor (same hash) |
+| G-io | 2 | PASS | PASS | PASS | `2de53cb56071fd046dabd5c510b2aa77c4651e03` | cherry-pick `8eb9e96577569820c8ce8fe06fe7d0de90212f46` |
+| G-assembly | 2 | PASS | PASS | PASS | *(no commit — no diffs)* | skipped (nothing to pick) |
+| G-advanced-diagnostics | 3 | PASS | PASS | PASS | `c814fc36a22c3f4f2896593fdf120e11b1d85b74` | ancestor (same hash) |
+| G-partdesign-core | 3 | PASS | PASS | PASS | `54d4cdacffda05b439c0253d6105d2799ee67943` | ancestor (same hash) |
+| G-core-objects | 3 | PASS | PASS | PASS | `a7b897ac0a7068e87583ee96f26b1ac732acb3fc` | ancestor (same hash) |
+| G-gears | 3 | PASS | PASS | PASS | `130295aab369ab6c06fd01ed2f7eb84cd73a7305` | ancestor (same hash) |
+| G-partdesign-assembly-helpers | 4 | PASS | PASS | PASS | `408bd4b3bec72d3e555265e43f72f63b6020e9fd` | ancestor (same hash) |
+| G-features-p3 | 4 | PASS | PASS | PASS | `ee07a6c7063c29927d9952bd6a4cfff70be8d3e5` | ancestor (same hash); skipped dup `73ae204` |
+| G-measure-transform | 4 | PASS | PASS | PASS | `49f848d4af1189bf56ea3573b02aca21018f46e5` | ancestor (same hash) |
+
+Integration lineage (oldest → newest after `feature/typed-rpc` `54ded4f`): `9aabe15` → `c814fc3` → `408bd4b` → `54d4cda` → `a7b897a` → `ee07a6c` → `49f848d` → `130295a` → `0107fe1` → `6d22e77` → `8eb9e96`, then FINAL inspect-typing + this progress note.
+
+Serial integration fix (not a new group): `translate` / `rotate` / `scale` inspect snapshots now go through `as_float` so G-measure-transform's post-recompute checks type-check. Shared-file callouts did not conflict.
+
+| FINAL gate | Command | Result |
+| --- | --- | --- |
+| Body regression | Docker `python:3.12` pytest of `ci/qualify_body_create.py` `PYTHON_TESTS` (host `uv run` cannot recreate repo `.venv/lib64`) | **225 passed**. 3 discovery tests failed in that container (`uv` / `mypy` not installed). Official qualify also runs `python -m mypy --no-incremental` via `check_body_create_contract.py`; that mypy gate is **pre-existing red** at `54ded4f` (**137 errors / 63 files**) vs integrated tree (**129 errors / 57 files** after measure `as_float`). No Body pytest regression vs the 225 non-mypy tests. |
+| Contract checks | `ci/run_contract_checks.py` inside Woodpecker `python:3.12` | `activate_document` architecture **passed**; stops at `check_body_create_contract.py` on the same pre-existing discovered-mypy errors (not an integration merge conflict). |
+| Woodpecker lint | `docker run --rm -v C:/Users/Rchie/Music/FreeCAD:/work -w /work python:3.12 sh ci/woodpecker/freecad-mcp-lint.sh` | `compileall` **OK**; pip install **OK**; then same contract/mypy stop (**129 errors / 57 files**). Baseline `54ded4f` was **137 / 63**. |
+| Push | `git push -u origin HEAD` from MCP `feature/typed-rpc` | recorded after push |
+| Parent submodule | `git ls-tree HEAD tools/mcp/freecad-mcp` in parent | unchanged `e345f4e` (not staged/committed) |
+
+### Native evidence (authoritative)
+
+Image `freecad-ci-mcp:24.04-phase1`, bind `tools/mcp/freecad-mcp:/mcp`, volume `freecad-local-build:/hostbuild`.
+
+| Gate | Result |
+| --- | --- |
+| `ci/qualify_*.py --native` first pass | **107/107 PASS** (`native_audit_107.tsv`) |
+| same, three consecutive greens | **107/107 PASS** (`native_x3_107.tsv`) |
+| skip / xfail / timeout-as-pass | none in `ci/qualify_*.py` |
+| `TYPED_RPC_HANDLER` on mutation leaves | **107/107** |
+| vendored contracts `src/` ≡ `addon/` | **107/107** identical bytes |
+| `commit_native_mutation` (or Body `commit_body_create_mutation`) | **107/107** |
+
+Parent C++ required for this native volume (uncommitted):
+
+1. `src/App/Property.cpp` — do not treat User3/Touched as Restricted schema mutation (Body `Group` / `newObject`).
+2. `src/Mod/Fem/App/FemMeshProperty.cpp` — `Copy()` / `setValue` replace the kernel (`new FemMesh(...)`) so undo is not a shared pointer.
+
+### Registry vs qualify
+
+`src/freecad_mcp/generated/capabilities/registry_snapshot.json` `tool_count` **171**.
+
+| Bucket | Count | Proof |
+| --- | --- | --- |
+| CAD mutations with `ci/qualify_{op}.py` | 107 | every name is in `tool_order`; native ×3 PASS |
+| N/A-readonly | 36 | no qualify script |
+| N/A-gui | 13 | no qualify script |
+| N/A-lease | 9 | no qualify script |
+| N/A-escape | 3 | `execute_code`, `execute_code_async`, `run_transaction` |
+| N/A-runtime | 3 | `cancel_request`, `claim_acquisition_result`, `cancel_worker_job` |
+| **Total** | **171** | 107 + 64 |
+
+
+---
+
+## Archive — 2026-09-13 platform landing (historical)
+
+The Composer/Grok **review notes** through “Composer 2.5 fixes after Grok review” are a 2026-09-13 trail. **Do not treat FAIL scores or parked worktrees in those notes as current.** Inventory counts, the 171-row registry, blockers, and worktrees after that trail were rewritten for this 2026-09-14 close-out.
 
 ### Composer 2.5 — static globs replace sync (2026-09-13, main)
 
@@ -429,14 +496,14 @@ Generated registrations declare **171** tools (`src/freecad_mcp/generated/capabi
 | other | 3 | request/worker control (`cancel_request`, `claim_acquisition_result`, `cancel_worker_job`) |
 | **Total** | **171** | Manifest raw: MUTATION 117, READ 42, LEASE 9, EXECUTION 3 |
 
-Manifest `execution_mode` is `TYPED_GATEWAY` for 170/171 tools; only `execute_code` is `GENERATED_SCRIPT`. **That label is not reality:** most MCP operations still send generated Python through `execute_code`.
+Manifest `execution_mode` is `TYPED_GATEWAY` for 170/171 tools; only `execute_code` is `GENERATED_SCRIPT`. **As of 2026-09-14 the 107 CAD mutations are Body-style typed JSON-RPC** (`TYPED_RPC_HANDLER` + native commit). The 64 N/A kinds are still outside that matrix (many remain execute-code or lease stubs).
 
-### Review verdict
+### Review verdict (updated 2026-09-14)
 
 | Status | Count | Meaning |
 | --- | --- | --- |
-| PASS | 1 | `body_create` only (reference; not re-qualified this pass) |
-| FAIL | 106 | CAD/document mutations that do not meet the acceptance table |
+| PASS | 107 | Every CAD/document mutation with `ci/qualify_{op}.py`, including `body_create` |
+| FAIL | 0 | Empty. Former 106 FAIL mutations now native ×3 PASS |
 | N/A-readonly | 36 | Reads; native transaction matrix N/A |
 | N/A-lease | 9 | Lease tools; not CAD typed-RPC |
 | N/A-gui | 13 | View/selection/color |
@@ -456,7 +523,9 @@ Live Cursor `user-freecad` namespace listed tools **not** in generated 171. Do n
 
 Exported but **not** MCP tools (no `@mcp.tool()`): `force_release_stale_lock`, `heartbeat_document_lock` (both stub/removed shims).
 
-## `body_create` PASS evidence (from reference; do not re-qualify unless regression)
+## `body_create` PASS evidence
+
+Re-qualified 2026-09-14: native `--native` ×3, **16 passed** each run, on the relinked App/Part/Fem binaries. Historical reference lanes below still describe the original Body slice.
 
 Public args remain `doc_name`, `body_name`. Native FreeCAD owns transaction, final recompute, read-only postcondition interval, and rollback.
 
@@ -485,35 +554,21 @@ Implementation boundaries (keep as template):
 
 Reference: “The legacy Body Tip implementation lives separately.”
 
-## Shared FAIL gap vs `body_create` (all FAIL mutations)
+## Shared FAIL gap vs `body_create` — **closed 2026-09-14**
 
-| Acceptance area | body_create | All other CAD/document mutations |
-| --- | --- | --- |
-| Native recompute before inspection | PASS | FAIL — templates/GUI leaves call `doc.recompute()`; `run_cad_mutation` defaults to legacy leaf-owned recompute (`native_recompute=False`) |
-| Native capability required | PASS | FAIL — `require_native` default false; execute-code path has no `commitCompatibilityMutation` check |
-| Exact admitted document | PASS | FAIL — `getDocument(name)` by string; `bind_document` default false on cad_mutation |
-| Strict public success shape | PASS | FAIL — ad-hoc `{ok}`, `{success}`, raw strings; no versioned TypedDict / vendored contract |
-| MCP static contract (no Any; vendored identity) | PASS | FAIL — Body mypy slice only; several generated tools still annotate `Any`; no per-op vendored contract |
-| Automatic editor/CI mypy gate | PASS | FAIL — `pyproject.toml` `files` list is Body-only; Woodpecker runs `ci/check_body_create_contract.py` only |
-| Public JSON-RPC contract (real MCP schema dispatch) | PASS | FAIL — many MCP tools never call the addon RPC method; they `execute_code` generated Python. No `qualify_<op>.py` MCP memory-session tests |
-| Native qualification matrix / rollback | PASS | FAIL — only `ci/qualify_body_create.py --native` exists |
-| Deliberately broken variants including CI failure path | PASS | FAIL — Body mutants only |
-| Committed/unknown response outcome | PASS | FAIL — templates print success JSON; transport loss is not a versioned uncertain result; cad_mutation can restore a historical envelope after native rejection |
+The 2026-09-13 inventory listed ten acceptance gaps that applied to all non-Body CAD mutations (leaf `recompute`, no native capability, execute-code MCP tools, missing `qualify_<op>.py`, Body-only mypy). Those 106 mutations now have:
 
-Additional systemic defects:
+- per-op vendored contracts (`src/` ≡ `addon/`)
+- `TYPED_RPC_HANDLER` leaves
+- `commit_native_mutation` (Body still uses `commit_body_create_mutation`)
+- `ci/qualify_{op}.py` and `ci/check_{op}_contract.py`
+- native `--native` ×3 PASS in `freecad-ci-mcp:24.04-phase1`
 
-1. **MCP tool ≠ addon RPC.** For `body_set_tip`, `sketch_create`, `pad_feature`, `pocket_feature`, spreadsheets, etc., the MCP operation renders templates and calls `execute_code` even though `FreeCADConnection` / addon JSON-RPC methods exist. Agents hitting MCP never exercise the typed RPC path.
-2. **`run_cad_mutation` is not `body_mutation`.** Production callers never pass `native_recompute=True` or `require_native=True`. Legacy path recomputes inside the apply callback (`cad_mutation._recompute_native_callback` / GUI `doc.recompute()`).
-3. **`collaboration_api.commit_compatibility_mutation` uses `Any`** and can commit without native (`_commit_without_native`) unless `require_native`. `commit_body_create_mutation` is the strict Body-only API.
-4. **Mypy/CI gate is Body-scoped.** `pyproject.toml` `files` and Woodpecker `python ci/check_body_create_contract.py` will not catch other operations until each slice is added (sequential on those files).
-5. **Only one `qualify_*.py`:** `ci/qualify_body_create.py`.
-6. **Generated `Any`** on public MCP signatures: `sketch_attach`, `sketch_add_geometry`, `sketch_add_constraint`, `create_object`, `edit_object`, `repair_references`, `spreadsheet_set_cells`, `spreadsheet_get_cells`, plus several GUI/assembly tools.
+Historical gap text is omitted here so this file does not keep scoring the live tree as FAIL. See git history of this document for the original table.
 
-`cad_mutation.py` itself uses `Any` throughout; it is a shared sequential choke point if a Composer worktree “upgrades” the adapter instead of adding a per-op mutation module like `body_mutation.py`.
+## `body_set_tip`
 
-## `body_set_tip` (Composer slice; Grok **NOT PASS**)
-
-Typed JSON-RPC implementation exists in the worktree and is **not** the old execute-code MCP path. Overall still **NOT PASS** (native test FAIL + inspect protocol allows Tip writes). See Independent Grok review section above for per-area scores.
+Typed JSON-RPC on `feature/typed-rpc`. Native `--native` ×3 **PASS** (14 tests) on 2026-09-14. Inspect protocol no longer writes Tip. Empty-Pad `Busy` fixture is gone.
 
 ## Overlap groups
 
@@ -549,105 +604,80 @@ Shared choke files for **every** CAD mutation worktree (treat as sequential vs `
 
 ## Recommended Composer 2.5 worktrees
 
-Creating first worktree now (`body_set_tip`).
-
-### First isolated worktree (single operation)
-
-| Field | Value |
-| --- | --- |
-| Operation | `body_set_tip` |
-| Why isolated | Reference already split the legacy Tip path; unique client module + unique template + unique GUI apply helper; 3-string public API; can add **new** contract/mutation/qualify files without rewriting `body_create.py` / `body_create_contract.py` / `body_mutation.py` |
-| Suggested parent worktree | `D:/code/FreeCAD-wt-body-set-tip` |
-| Suggested parent branch | `feature/typed-rpc-body-set-tip` (from `feature/typed-rpc` @d0d82b743886) |
-| Suggested MCP branch | `feature/typed-rpc-body-set-tip` (from `b32a13422a9d`) |
-| Sequential overlaps | `collaboration_api.py` (add Tip-specific or generic native commit), `sketch_public.py` (one dispatcher), `features_gui.py` (remove leaf recompute from apply), `body_ops.py` re-export, `tools_parametric_body` regen, `pyproject.toml`, Woodpecker if a new `check_*` is wired |
-| Do not edit | `body_create.py`, `body_create_contract.py`, `body_mutation.py` internals (copy the pattern into new files) |
-| Do not hand-edit | `src/freecad_mcp/generated/**` |
-
-### Next 2–3 sequential candidates (after `body_set_tip` merges or if sharing sketch_public/collaboration)
-
-1. **`sketch_create`** — next in the documented Body → Sketch → Pad recipe; MCP is execute-code; addon RPC already exists; overlaps `sketch_ops.py`, `sketch_gui_create.py`, `sketch_public.py`.
-2. **`sketch_attach`** — hybrid typed RPC + execute-code fallback; generated `Any`; lives in the same `tools_parametric_body` module as Body/Tip.
-3. **`pad_feature`** — execute-code MCP; addon RPC + `_run_structural_feature`; overlaps `feature_ops.py`, `features_gui.py`, `sketch_public.py`.
-
-Do **not** start these in parallel with `body_set_tip` if they will edit `collaboration_api.py`, `sketch_public.py`, `pyproject.toml`, or Woodpecker.
-
-`sketch_delete_constraint` / `sketch_delete_geometry` already use a typed RPC **client**, but still FAIL native policy. They are **not** a smaller first worktree: they share `cad_mutation.py` / `sketch_public.py` and would tempt an adapter rewrite.
+**None.** Parallel op forks were merged into `feature/typed-rpc` and pruned. Do not open new CAD-mutation worktrees unless a native regression appears.
 
 ## Blockers
 
-- None that block creating the `body_set_tip` worktree.
-- Persistent constraints (not PASS claims):
-  - Native `--native` lane needs branch-built FreeCAD (`freecad-ci-mcp:24.04-phase1` in the reference). Missing runtime is an error, not a skip.
-  - Generated registrations must be regenerated.
-  - `collaboration_api.py`, `pyproject.toml`, and Woodpecker lint are global serialization points.
-  - Lease acquire/update/release MCP tools currently **always fail** with `LEGACY_LEASE_AUTHORITY_REMOVED` in generated registrations. Out of CAD typed-RPC scope; do not report as PASS.
-  - This review did not execute tests or talk to a live FreeCAD.
+- GitHub PRs stay unmerged until Rchiemstra merges them. Do not merge [MCP #17](https://github.com/Rchiemstra/freecad-mcp/pull/17) or [parent #53](https://github.com/Rchiemstra/FreeCAD/pull/53) from this campaign.
+- Parent recorded submodule pointer is still `e345f4e` (working MCP is `feature/typed-rpc` after 4-lane FINAL). Do not `git add tools/mcp/freecad-mcp` unless asked.
+- Parent C++ (`Property.cpp` User3, `FemMeshProperty.cpp` undo) is uncommitted. Native volume already contains the rebuilt objects.
+- Lease acquire/update/release generated tools still stub `LEGACY_LEASE_AUTHORITY_REMOVED`. N/A-lease; not CAD PASS.
+- N/A readonly/gui/escape/runtime tools are **not** proven typed. That is policy, not a hidden FAIL.
 
 ## Honest limitations of this inventory
 
-- Static code + manifest/generated parse only. **No** `uv run python ci/qualify_body_create.py`, **no** native FreeCAD, **no** MCP memory-session re-run.
-- `body_create` PASS is copied from the reference document at older SHAs; current HEADs include a harden follow-up that was not re-executed here.
-- Some operation wrappers were classified via AST (`_run_code` / `_run_json_code` / typed `freecad.<method>`). Boolean/measure/constraint helpers that call `_run_code` indirectly are still execute-code even if a row says “operation wrapper”.
-- Live Cursor tool list can drift from this checkout (it already did for two stale names).
-- Reads/gui/lease were not scored as FAIL; they also lack Body-style contracts. That is intentional: they are N/A for the CAD mutation matrix, not proven correct.
+- Native PASS is the 2026-09-14 Docker ×3 on `freecad-local-build` with uncommitted parent C++ relinked. A clean parent commit/rebuild was not re-run after documenting this roundup.
+- 64 N/A tools are out of the CAD native-postcondition matrix. Many still use execute-code or lease stubs.
+- Helper scripts `ci/_native_*.sh` and TSV audits are local evidence files, not product.
+- Host Python 3.10 cannot run `ci/run_contract_checks.py` (`mypy==2.3.1` / `NotRequired`). Use the CI image (3.12).
+- Live Cursor tool lists can still drift from generated 171.
 
 ## Complete operation registry (171)
 
 | Operation | Kind | Native txn | Impl path | Follows body_create | Status | Overlap group | Suggested branch | Evidence / limits |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `acquire_document_lock` | lease-control | no | lease-stub-removed | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
-| `activate_document` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-document-gui | feature/typed-rpc-activate-document | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `activate_document` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_activate_document.py`. Vendored src/addon contracts identical. |
 | `adopt_dirty_document` | lease-control | no | lease-stub-removed | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
 | `animate_placement` | gui | no | typed-RPC client (no body_create contract) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
 | `audit_hardcoded_dimensions` | read | no | execute-code template | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `body_create` | mutation | yes | typed-rpc-native (body_ops → JSON-RPC body_create) | yes | PASS | G-body-create-PASS | feature/typed-rpc (qualified) | Reference doc 2026-09-13: focused 218, native 16, collab/binding 77, ruff+arch/type, Woodpecker lint. Not re-run this inventory. |
-| `body_set_tip` | mutation | yes | typed JSON-RPC (worktree, uncommitted) | partial | FAIL | G-partdesign-core | feature/typed-rpc-body-set-tip | Grok 2026-09-13: NOT PASS. Focused 161 + Body 218 + Docker lint OK. Native `--native` FAIL 1/1 (`Busy` from invalid empty-Pad fixture). Inspect protocol allows Tip writes. |
-| `boolean_difference` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-features-p3 | feature/typed-rpc-boolean-difference | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `boolean_intersection` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-features-p3 | feature/typed-rpc-boolean-intersection | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `boolean_union` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-features-p3 | feature/typed-rpc-boolean-union | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `bounding_box` | mutation | yes | execute-code template | no | FAIL | G-measure-transform | feature/typed-rpc-bounding-box | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `build_path_wire` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-build-path-wire | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `body_create` | mutation | yes | typed-rpc-native (`commit_body_create_mutation`) | yes | PASS | G-body-create-PASS | feature/typed-rpc | native `--native` ×3 2026-09-14 (16 tests). `ci/qualify_body_create.py`. Vendored contracts identical. |
+| `body_set_tip` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_body_set_tip.py`. Vendored src/addon contracts identical. |
+| `boolean_difference` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_boolean_difference.py`. Vendored src/addon contracts identical. |
+| `boolean_intersection` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_boolean_intersection.py`. Vendored src/addon contracts identical. |
+| `boolean_union` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_boolean_union.py`. Vendored src/addon contracts identical. |
+| `bounding_box` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-measure-transform | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_bounding_box.py`. Vendored src/addon contracts identical. |
+| `build_path_wire` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_build_path_wire.py`. Vendored src/addon contracts identical. |
 | `cancel_request` | other | no | typed connection / inline register | n/a | N/A-runtime | G-runtime | — | Request/worker control, not a CAD modelling mutation. |
 | `cancel_worker_job` | other | no | typed connection / inline register | n/a | N/A-runtime | G-runtime | — | Request/worker control, not a CAD modelling mutation. |
-| `capture_state` | mutation | yes | execute-code template | no | FAIL | G-advanced-diagnostics | feature/typed-rpc-capture-state | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `center_of_mass` | mutation | yes | execute-code template | no | FAIL | G-measure-transform | feature/typed-rpc-center-of-mass | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `chamfer_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-chamfer-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `capture_state` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-advanced-diagnostics | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_capture_state.py`. Vendored src/addon contracts identical. |
+| `center_of_mass` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-measure-transform | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_center_of_mass.py`. Vendored src/addon contracts identical. |
+| `chamfer_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_chamfer_feature.py`. Vendored src/addon contracts identical. |
 | `check_gear_pair` | read | no | operation wrapper (likely execute-code helper) | n/a | N/A-readonly | G-gears | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `check_rpc_sync` | read | no | typed connection / inline register | n/a | N/A-readonly | G-runtime | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `claim_acquisition_result` | other | no | typed connection / inline register | n/a | N/A-runtime | G-runtime | — | Request/worker control, not a CAD modelling mutation. |
-| `clear_expression` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-clear-expression | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `close_document` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-document-gui | feature/typed-rpc-close-document | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `common_volume_along_path` | mutation | yes | execute-code template | no | FAIL | G-measure-transform | feature/typed-rpc-common-volume-along-path | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `clear_expression` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_clear_expression.py`. Vendored src/addon contracts identical. |
+| `close_document` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_close_document.py`. Vendored src/addon contracts identical. |
+| `common_volume_along_path` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-measure-transform | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_common_volume_along_path.py`. Vendored src/addon contracts identical. |
 | `compare_documents` | read | no | execute-code template | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `compute_gear_geometry` | read | no | operation wrapper (likely execute-code helper) | n/a | N/A-readonly | G-gears | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `create_assembly` | mutation | yes | execute-code template | no | FAIL | G-assembly | feature/typed-rpc-create-assembly | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_assembly_grounded_joint` | mutation | yes | execute-code template | no | FAIL | G-assembly | feature/typed-rpc-create-assembly-grounded-joint | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_assembly_joint` | mutation | yes | execute-code template | no | FAIL | G-assembly | feature/typed-rpc-create-assembly-joint | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_datum_plane` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-create-datum-plane | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_document` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-core-objects | feature/typed-rpc-create-document | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_helical_gear` | mutation | yes | execute-code template | no | FAIL | G-gears | feature/typed-rpc-create-helical-gear | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_involute_gear` | mutation | yes | execute-code template | no | FAIL | G-gears | feature/typed-rpc-create-involute-gear | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_object` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-core-objects | feature/typed-rpc-create-object | Typed RPC client + addon run_cad_mutation legacy. Generated tool schema uses Any. No body_create-style contract or native-recompute postcondition. |
-| `create_part_container` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-create-part-container | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_placement_binder` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-create-placement-binder | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_placement_datum` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-create-placement-datum | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_spur_gear` | mutation | yes | execute-code template | no | FAIL | G-gears | feature/typed-rpc-create-spur-gear | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `create_subshape_binder` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-create-subshape-binder | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `delete_object` | mutation | yes | execute-code template | no | FAIL | G-core-objects | feature/typed-rpc-delete-object | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `create_assembly` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-assembly | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_assembly.py`. Vendored src/addon contracts identical. |
+| `create_assembly_grounded_joint` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-assembly | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_assembly_grounded_joint.py`. Vendored src/addon contracts identical. |
+| `create_assembly_joint` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-assembly | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_assembly_joint.py`. Vendored src/addon contracts identical. |
+| `create_datum_plane` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_datum_plane.py`. Vendored src/addon contracts identical. |
+| `create_document` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-core-objects | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_document.py`. Vendored src/addon contracts identical. |
+| `create_helical_gear` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-gears | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_helical_gear.py`. Vendored src/addon contracts identical. |
+| `create_involute_gear` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-gears | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_involute_gear.py`. Vendored src/addon contracts identical. |
+| `create_object` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-core-objects | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_object.py`. Vendored src/addon contracts identical. |
+| `create_part_container` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_part_container.py`. Vendored src/addon contracts identical. |
+| `create_placement_binder` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_placement_binder.py`. Vendored src/addon contracts identical. |
+| `create_placement_datum` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_placement_datum.py`. Vendored src/addon contracts identical. |
+| `create_spur_gear` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-gears | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_spur_gear.py`. Vendored src/addon contracts identical. |
+| `create_subshape_binder` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_create_subshape_binder.py`. Vendored src/addon contracts identical. |
+| `delete_object` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-core-objects | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_delete_object.py`. Vendored src/addon contracts identical. |
 | `diagnose_helix` | read | no | execute-code template | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `diagnose_parametric` | read | no | execute-code template | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `diagnose_pocket` | read | no | execute-code template | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `edge_axis` | read | no | operation wrapper (likely execute-code helper) | n/a | N/A-readonly | G-partdesign-assembly-helpers | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `edit_object` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-core-objects | feature/typed-rpc-edit-object | Typed RPC client + addon run_cad_mutation legacy. Generated tool schema uses Any. No body_create-style contract or native-recompute postcondition. |
+| `edit_object` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-core-objects | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_edit_object.py`. Vendored src/addon contracts identical. |
 | `encode_view_video` | gui | no | operation wrapper (likely execute-code helper) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
 | `execute_code` | execute-escape | no | execute-code template | n/a | N/A-escape | G-escape | — | execute_code / execute_code_async / run_transaction. Intentionally not a typed CAD mutation. |
 | `execute_code_async` | execute-escape | no | operation wrapper (likely execute-code helper) | n/a | N/A-escape | G-escape | — | execute_code / execute_code_async / run_transaction. Intentionally not a typed CAD mutation. |
-| `export_brep` | mutation | yes | execute-code template | no | FAIL | G-io | feature/typed-rpc-export-brep | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `export_step` | mutation | yes | execute-code template | no | FAIL | G-io | feature/typed-rpc-export-step | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `export_stl` | mutation | yes | execute-code template | no | FAIL | G-io | feature/typed-rpc-export-stl | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `export_brep` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-io | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_export_brep.py`. Vendored src/addon contracts identical. |
+| `export_step` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-io | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_export_step.py`. Vendored src/addon contracts identical. |
+| `export_stl` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-io | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_export_stl.py`. Vendored src/addon contracts identical. |
 | `face_normal` | read | no | operation wrapper (likely execute-code helper) | n/a | N/A-readonly | G-partdesign-assembly-helpers | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `fillet_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-fillet-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `fillet_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_fillet_feature.py`. Vendored src/addon contracts identical. |
 | `finalize_document_edit` | lease-control | no | typed JSON-RPC connection method | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
 | `find_edges` | read | no | operation wrapper (likely execute-code helper) | n/a | N/A-readonly | G-partdesign-assembly-helpers | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `find_faces` | read | no | operation wrapper (likely execute-code helper) | n/a | N/A-readonly | G-partdesign-assembly-helpers | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
@@ -669,238 +699,117 @@ Do **not** start these in parallel with `body_set_tip` if they will edit `collab
 | `get_sketch_geometry` | read | no | execute-code template | n/a | N/A-readonly | G-partdesign-assembly-helpers | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `get_view` | gui | no | operation wrapper (likely execute-code helper) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
 | `get_worker_status` | read | no | typed connection / inline register | n/a | N/A-readonly | G-runtime | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `helical_sweep_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-helical-sweep-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `import_brep` | mutation | yes | execute-code template | no | FAIL | G-io | feature/typed-rpc-import-brep | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `import_step` | mutation | yes | execute-code template | no | FAIL | G-io | feature/typed-rpc-import-step | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `insert_part_from_library` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-document-gui | feature/typed-rpc-insert-part-from-library | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `helical_sweep_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_helical_sweep_feature.py`. Vendored src/addon contracts identical. |
+| `import_brep` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-io | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_import_brep.py`. Vendored src/addon contracts identical. |
+| `import_step` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-io | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_import_step.py`. Vendored src/addon contracts identical. |
+| `insert_part_from_library` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_insert_part_from_library.py`. Vendored src/addon contracts identical. |
 | `inspect_geometry` | read | no | hybrid typed-RPC then execute-code fallback | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `inspect_references` | read | no | typed-RPC client (no body_create contract) | n/a | N/A-readonly | G-core-objects | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `linear_pattern_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-linear-pattern-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `linear_pattern_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_linear_pattern_feature.py`. Vendored src/addon contracts identical. |
 | `list_document_locks` | lease-control | no | lease-stub-removed | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
 | `list_documents` | read | no | typed-RPC client (no body_create contract) | n/a | N/A-readonly | G-document-gui | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `list_expressions` | read | no | execute-code template | n/a | N/A-readonly | G-parametric-sheet | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `loft_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-loft-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `loft_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_loft_feature.py`. Vendored src/addon contracts identical. |
 | `match_subshape` | read | no | execute-code template | n/a | N/A-readonly | G-advanced-diagnostics | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `measure_angle` | read | no | execute-code template | n/a | N/A-readonly | G-measure-transform | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `measure_area` | read | no | execute-code template | n/a | N/A-readonly | G-measure-transform | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `measure_distance` | read | no | execute-code template | n/a | N/A-readonly | G-measure-transform | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
 | `measure_volume` | read | no | execute-code template | n/a | N/A-readonly | G-measure-transform | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `mirror_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-mirror-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `move_object` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-move-object | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `open_document` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-document-gui | feature/typed-rpc-open-document | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `pad_feature` | mutation | yes | execute-code template | no | FAIL | G-partdesign-core | feature/typed-rpc-pad-feature | MCP tool still renders execute-code templates even though addon JSON-RPC + run_cad_mutation exist. Legacy adapter does not opt into native_recompute. |
+| `mirror_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_mirror_feature.py`. Vendored src/addon contracts identical. |
+| `move_object` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_move_object.py`. Vendored src/addon contracts identical. |
+| `open_document` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_open_document.py`. Vendored src/addon contracts identical. |
+| `pad_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_pad_feature.py`. Vendored src/addon contracts identical. |
 | `placement_audit` | read | no | execute-code template | n/a | N/A-readonly | G-partdesign-assembly-helpers | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `pocket_feature` | mutation | yes | execute-code template | no | FAIL | G-partdesign-core | feature/typed-rpc-pocket-feature | MCP tool still renders execute-code templates even though addon JSON-RPC + run_cad_mutation exist. Legacy adapter does not opt into native_recompute. |
-| `polar_pattern_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-polar-pattern-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `preview_attachment` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-preview-attachment | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `recompute_and_wait` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-document-gui | feature/typed-rpc-recompute-and-wait | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `recompute_document` | mutation | yes | execute-code template | no | FAIL | G-document-gui | feature/typed-rpc-recompute-document | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `redo` | mutation | yes | execute-code template | no | FAIL | G-document-gui | feature/typed-rpc-redo | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `pocket_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_pocket_feature.py`. Vendored src/addon contracts identical. |
+| `polar_pattern_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_polar_pattern_feature.py`. Vendored src/addon contracts identical. |
+| `preview_attachment` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_preview_attachment.py`. Vendored src/addon contracts identical. |
+| `recompute_and_wait` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_recompute_and_wait.py`. Vendored src/addon contracts identical. |
+| `recompute_document` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_recompute_document.py`. Vendored src/addon contracts identical. |
+| `redo` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_redo.py`. Vendored src/addon contracts identical. |
 | `refresh_view` | gui | no | typed-RPC client (no body_create contract) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
 | `release_document_lock` | lease-control | no | lease-stub-removed | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
-| `relink_references` | mutation | yes | execute-code template | no | FAIL | G-advanced-diagnostics | feature/typed-rpc-relink-references | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `reload_document` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-document-gui | feature/typed-rpc-reload-document | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `repair_references` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-core-objects | feature/typed-rpc-repair-references | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `relink_references` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-advanced-diagnostics | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_relink_references.py`. Vendored src/addon contracts identical. |
+| `reload_document` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_reload_document.py`. Vendored src/addon contracts identical. |
+| `repair_references` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-core-objects | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_repair_references.py`. Vendored src/addon contracts identical. |
 | `repair_view_placements` | gui | no | typed-RPC client (no body_create contract) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
-| `restore` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-advanced-diagnostics | feature/typed-rpc-restore | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `revolve_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-revolve-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `rotate` | mutation | yes | execute-code template | no | FAIL | G-measure-transform | feature/typed-rpc-rotate | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `run_fem_analysis` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-advanced-diagnostics | feature/typed-rpc-run-fem-analysis | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `restore` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-advanced-diagnostics | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_restore.py`. Vendored src/addon contracts identical. |
+| `revolve_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_revolve_feature.py`. Vendored src/addon contracts identical. |
+| `rotate` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-measure-transform | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_rotate.py`. Vendored src/addon contracts identical. |
+| `run_fem_analysis` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-advanced-diagnostics | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_run_fem_analysis.py`. Vendored src/addon contracts identical. |
 | `run_transaction` | execute-escape | no | execute-code template | n/a | N/A-escape | G-escape | — | execute_code / execute_code_async / run_transaction. Intentionally not a typed CAD mutation. |
 | `save_document` | lease-control | no | typed JSON-RPC connection method | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
 | `save_document_as` | lease-control | no | typed JSON-RPC connection method | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
 | `save_view_sequence` | gui | no | operation wrapper (likely execute-code helper) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
-| `scale` | mutation | yes | execute-code template | no | FAIL | G-measure-transform | feature/typed-rpc-scale | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `scale` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-measure-transform | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_scale.py`. Vendored src/addon contracts identical. |
 | `select_subshapes` | gui | no | typed-RPC client (no body_create contract) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
 | `set_color` | gui | no | execute-code template | n/a | N/A-gui | G-io | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
-| `set_expression` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-set-expression | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `set_expression` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_set_expression.py`. Vendored src/addon contracts identical. |
 | `set_section_view` | gui | no | typed-RPC client (no body_create contract) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
 | `set_tree_expanded` | gui | no | typed-RPC client (no body_create contract) | n/a | N/A-gui | G-document-gui | — | View/selection/color tool. Outside CAD native-postcondition matrix. Not proven against body_create tests. |
-| `sketch_add_arc` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-arc | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_arc_of_ellipse` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-arc-of-ellipse | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_bezier` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-bezier | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_bspline` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-bspline | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_bspline_through_points` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-bspline-through-points | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_circle` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-circle | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_constraint` | mutation | yes | execute-code template | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-add-constraint | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_ellipse` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-ellipse | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_external_projection` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-sketch-add-external-projection | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_geometry` | mutation | yes | execute-code template | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-add-geometry | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_line` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-line | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_parametric_curve` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-parametric-curve | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_polyline` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-polyline | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_rectangle` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-rectangle | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_regular_polygon` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-regular-polygon | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_add_slot` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-add-slot | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_attach` | mutation | yes | hybrid typed-RPC then execute-code fallback | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-attach | Tries freecad.sketch_attach then execute-code fallback. Generated schema uses Any. Addon uses legacy cad_mutation. Fallback after a started mutation is a known hazard. |
-| `sketch_constrain_coincident` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-coincident | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_distance` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-distance | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_equal` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-equal | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_horizontal` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-horizontal | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_parallel` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-parallel | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_perpendicular` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-perpendicular | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_radius` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-radius | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_tangent` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-tangent | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_constrain_vertical` | mutation | yes | operation wrapper (likely execute-code helper) | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-constrain-vertical | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_create` | mutation | yes | execute-code template | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-create | MCP tool still renders execute-code templates even though addon JSON-RPC + run_cad_mutation exist. Legacy adapter does not opt into native_recompute. |
-| `sketch_delete_constraint` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-delete-constraint | MCP client already calls typed RPC, but addon uses legacy cad_mutation (leaf-owned recompute, Any, historical envelope). No versioned contract/qualify lane. |
-| `sketch_delete_geometry` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-delete-geometry | MCP client already calls typed RPC, but addon uses legacy cad_mutation (leaf-owned recompute, Any, historical envelope). No versioned contract/qualify lane. |
-| `sketch_edit_constraint` | mutation | yes | execute-code template | no | FAIL | G-partdesign-core | feature/typed-rpc-sketch-edit-constraint | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_extend` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-extend | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_fillet` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-fillet | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_import_points` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-import-points | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_split` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-split | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_symmetry` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-symmetry | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_toggle_construction` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-toggle-construction | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sketch_trim` | mutation | yes | execute-code template | no | FAIL | G-sketch-execute-code | feature/typed-rpc-sketch-trim | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `snapshot` | mutation | yes | typed-RPC client (no body_create contract) | no | FAIL | G-advanced-diagnostics | feature/typed-rpc-snapshot | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `solve_assembly` | mutation | yes | execute-code template | no | FAIL | G-assembly | feature/typed-rpc-solve-assembly | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `spreadsheet_create` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-spreadsheet-create | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `spreadsheet_get_cells` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-spreadsheet-get-cells | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `spreadsheet_list_aliases` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-spreadsheet-list-aliases | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `spreadsheet_set_alias` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-spreadsheet-set-alias | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `spreadsheet_set_cells` | mutation | yes | execute-code template | no | FAIL | G-parametric-sheet | feature/typed-rpc-spreadsheet-set-cells | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sweep_feature` | mutation | yes | execute-code template | no | FAIL | G-features-p3 | feature/typed-rpc-sweep-feature | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `sweep_pipe` | mutation | yes | execute-code template | no | FAIL | G-partdesign-assembly-helpers | feature/typed-rpc-sweep-pipe | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `translate` | mutation | yes | execute-code template | no | FAIL | G-measure-transform | feature/typed-rpc-translate | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
-| `undo` | mutation | yes | execute-code template | no | FAIL | G-document-gui | feature/typed-rpc-undo | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `sketch_add_arc` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_arc.py`. Vendored src/addon contracts identical. |
+| `sketch_add_arc_of_ellipse` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_arc_of_ellipse.py`. Vendored src/addon contracts identical. |
+| `sketch_add_bezier` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_bezier.py`. Vendored src/addon contracts identical. |
+| `sketch_add_bspline` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_bspline.py`. Vendored src/addon contracts identical. |
+| `sketch_add_bspline_through_points` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_bspline_through_points.py`. Vendored src/addon contracts identical. |
+| `sketch_add_circle` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_circle.py`. Vendored src/addon contracts identical. |
+| `sketch_add_constraint` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_constraint.py`. Vendored src/addon contracts identical. |
+| `sketch_add_ellipse` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_ellipse.py`. Vendored src/addon contracts identical. |
+| `sketch_add_external_projection` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_external_projection.py`. Vendored src/addon contracts identical. |
+| `sketch_add_geometry` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_geometry.py`. Vendored src/addon contracts identical. |
+| `sketch_add_line` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_line.py`. Vendored src/addon contracts identical. |
+| `sketch_add_parametric_curve` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_parametric_curve.py`. Vendored src/addon contracts identical. |
+| `sketch_add_polyline` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_polyline.py`. Vendored src/addon contracts identical. |
+| `sketch_add_rectangle` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_rectangle.py`. Vendored src/addon contracts identical. |
+| `sketch_add_regular_polygon` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_regular_polygon.py`. Vendored src/addon contracts identical. |
+| `sketch_add_slot` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_add_slot.py`. Vendored src/addon contracts identical. |
+| `sketch_attach` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_attach.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_coincident` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_coincident.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_distance` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_distance.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_equal` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_equal.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_horizontal` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_horizontal.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_parallel` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_parallel.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_perpendicular` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_perpendicular.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_radius` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_radius.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_tangent` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_tangent.py`. Vendored src/addon contracts identical. |
+| `sketch_constrain_vertical` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_constrain_vertical.py`. Vendored src/addon contracts identical. |
+| `sketch_create` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_create.py`. Vendored src/addon contracts identical. |
+| `sketch_delete_constraint` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_delete_constraint.py`. Vendored src/addon contracts identical. |
+| `sketch_delete_geometry` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_delete_geometry.py`. Vendored src/addon contracts identical. |
+| `sketch_edit_constraint` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-core | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_edit_constraint.py`. Vendored src/addon contracts identical. |
+| `sketch_extend` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_extend.py`. Vendored src/addon contracts identical. |
+| `sketch_fillet` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_fillet.py`. Vendored src/addon contracts identical. |
+| `sketch_import_points` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_import_points.py`. Vendored src/addon contracts identical. |
+| `sketch_split` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_split.py`. Vendored src/addon contracts identical. |
+| `sketch_symmetry` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_symmetry.py`. Vendored src/addon contracts identical. |
+| `sketch_toggle_construction` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_toggle_construction.py`. Vendored src/addon contracts identical. |
+| `sketch_trim` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-sketch-execute-code | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sketch_trim.py`. Vendored src/addon contracts identical. |
+| `snapshot` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-advanced-diagnostics | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_snapshot.py`. Vendored src/addon contracts identical. |
+| `solve_assembly` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-assembly | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_solve_assembly.py`. Vendored src/addon contracts identical. |
+| `spreadsheet_create` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_spreadsheet_create.py`. Vendored src/addon contracts identical. |
+| `spreadsheet_get_cells` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_spreadsheet_get_cells.py`. Vendored src/addon contracts identical. |
+| `spreadsheet_list_aliases` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_spreadsheet_list_aliases.py`. Vendored src/addon contracts identical. |
+| `spreadsheet_set_alias` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_spreadsheet_set_alias.py`. Vendored src/addon contracts identical. |
+| `spreadsheet_set_cells` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-parametric-sheet | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_spreadsheet_set_cells.py`. Vendored src/addon contracts identical. |
+| `sweep_feature` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-features-p3 | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sweep_feature.py`. Vendored src/addon contracts identical. |
+| `sweep_pipe` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-partdesign-assembly-helpers | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_sweep_pipe.py`. Vendored src/addon contracts identical. |
+| `translate` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-measure-transform | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_translate.py`. Vendored src/addon contracts identical. |
+| `undo` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-document-gui | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_undo.py`. Vendored src/addon contracts identical. |
 | `update_document_lock` | lease-control | no | lease-stub-removed | n/a | N/A-lease | G-lease | — | Lease lifecycle, not CAD mutation. Acquire/update/release generated tools currently stub to LEGACY_LEASE_AUTHORITY_REMOVED; save/finalize remain live connection methods. |
 | `validate_geometry` | read | no | execute-code template | n/a | N/A-readonly | G-measure-transform | — | Read tool: native CAD transaction matrix does not apply. Many still use execute-code; not proven typed. |
-| `validate_movement_follow` | mutation | yes | execute-code template | no | FAIL | G-advanced-diagnostics | feature/typed-rpc-validate-movement-follow | Does not match body_create acceptance table (see shared FAIL gaps). No qualify_<op>.py. |
+| `validate_movement_follow` | mutation | yes | typed JSON-RPC (`TYPED_RPC_HANDLER` + `commit_native_mutation`) | yes | PASS | G-advanced-diagnostics | feature/typed-rpc | native `--native` ×3 2026-09-14. `ci/qualify_validate_movement_follow.py`. Vendored src/addon contracts identical. |
 
-## FAIL mutations (Composer CAD queue)
+## CAD mutation queue
 
-| Operation | Impl path | Overlap group | Verdict |
-| --- | --- | --- | --- |
-| `activate_document` | typed-RPC client (no body_create contract) | G-document-gui | FAIL |
-| `body_set_tip` | typed JSON-RPC (worktree; Grok NOT PASS) | G-partdesign-core | FAIL |
-| `boolean_difference` | operation wrapper (likely execute-code helper) | G-features-p3 | FAIL |
-| `boolean_intersection` | operation wrapper (likely execute-code helper) | G-features-p3 | FAIL |
-| `boolean_union` | operation wrapper (likely execute-code helper) | G-features-p3 | FAIL |
-| `bounding_box` | execute-code template | G-measure-transform | FAIL |
-| `build_path_wire` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `capture_state` | execute-code template | G-advanced-diagnostics | FAIL |
-| `center_of_mass` | execute-code template | G-measure-transform | FAIL |
-| `chamfer_feature` | execute-code template | G-features-p3 | FAIL |
-| `clear_expression` | execute-code template | G-parametric-sheet | FAIL |
-| `close_document` | typed-RPC client (no body_create contract) | G-document-gui | FAIL |
-| `common_volume_along_path` | execute-code template | G-measure-transform | FAIL |
-| `create_assembly` | execute-code template | G-assembly | FAIL |
-| `create_assembly_grounded_joint` | execute-code template | G-assembly | FAIL |
-| `create_assembly_joint` | execute-code template | G-assembly | FAIL |
-| `create_datum_plane` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `create_document` | typed-RPC client (no body_create contract) | G-core-objects | FAIL |
-| `create_helical_gear` | execute-code template | G-gears | FAIL |
-| `create_involute_gear` | execute-code template | G-gears | FAIL |
-| `create_object` | typed-RPC client (no body_create contract) | G-core-objects | FAIL |
-| `create_part_container` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `create_placement_binder` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `create_placement_datum` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `create_spur_gear` | execute-code template | G-gears | FAIL |
-| `create_subshape_binder` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `delete_object` | execute-code template | G-core-objects | FAIL |
-| `edit_object` | typed-RPC client (no body_create contract) | G-core-objects | FAIL |
-| `export_brep` | execute-code template | G-io | FAIL |
-| `export_step` | execute-code template | G-io | FAIL |
-| `export_stl` | execute-code template | G-io | FAIL |
-| `fillet_feature` | execute-code template | G-features-p3 | FAIL |
-| `helical_sweep_feature` | execute-code template | G-features-p3 | FAIL |
-| `import_brep` | execute-code template | G-io | FAIL |
-| `import_step` | execute-code template | G-io | FAIL |
-| `insert_part_from_library` | typed-RPC client (no body_create contract) | G-document-gui | FAIL |
-| `linear_pattern_feature` | execute-code template | G-features-p3 | FAIL |
-| `loft_feature` | execute-code template | G-features-p3 | FAIL |
-| `mirror_feature` | execute-code template | G-features-p3 | FAIL |
-| `move_object` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `open_document` | typed-RPC client (no body_create contract) | G-document-gui | FAIL |
-| `pad_feature` | execute-code template | G-partdesign-core | FAIL |
-| `pocket_feature` | execute-code template | G-partdesign-core | FAIL |
-| `polar_pattern_feature` | execute-code template | G-features-p3 | FAIL |
-| `preview_attachment` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `recompute_and_wait` | typed-RPC client (no body_create contract) | G-document-gui | FAIL |
-| `recompute_document` | execute-code template | G-document-gui | FAIL |
-| `redo` | execute-code template | G-document-gui | FAIL |
-| `relink_references` | execute-code template | G-advanced-diagnostics | FAIL |
-| `reload_document` | typed-RPC client (no body_create contract) | G-document-gui | FAIL |
-| `repair_references` | typed-RPC client (no body_create contract) | G-core-objects | FAIL |
-| `restore` | typed-RPC client (no body_create contract) | G-advanced-diagnostics | FAIL |
-| `revolve_feature` | execute-code template | G-features-p3 | FAIL |
-| `rotate` | execute-code template | G-measure-transform | FAIL |
-| `run_fem_analysis` | typed-RPC client (no body_create contract) | G-advanced-diagnostics | FAIL |
-| `scale` | execute-code template | G-measure-transform | FAIL |
-| `set_expression` | execute-code template | G-parametric-sheet | FAIL |
-| `sketch_add_arc` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_arc_of_ellipse` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_bezier` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_bspline` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_bspline_through_points` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_circle` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_constraint` | execute-code template | G-partdesign-core | FAIL |
-| `sketch_add_ellipse` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_external_projection` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `sketch_add_geometry` | execute-code template | G-partdesign-core | FAIL |
-| `sketch_add_line` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_parametric_curve` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_polyline` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_rectangle` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_regular_polygon` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_add_slot` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_attach` | hybrid typed-RPC then execute-code fallback | G-partdesign-core | FAIL |
-| `sketch_constrain_coincident` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_distance` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_equal` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_horizontal` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_parallel` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_perpendicular` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_radius` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_tangent` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_constrain_vertical` | operation wrapper (likely execute-code helper) | G-sketch-execute-code | FAIL |
-| `sketch_create` | execute-code template | G-partdesign-core | FAIL |
-| `sketch_delete_constraint` | typed-RPC client (no body_create contract) | G-partdesign-core | FAIL |
-| `sketch_delete_geometry` | typed-RPC client (no body_create contract) | G-partdesign-core | FAIL |
-| `sketch_edit_constraint` | execute-code template | G-partdesign-core | FAIL |
-| `sketch_extend` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_fillet` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_import_points` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_split` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_symmetry` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_toggle_construction` | execute-code template | G-sketch-execute-code | FAIL |
-| `sketch_trim` | execute-code template | G-sketch-execute-code | FAIL |
-| `snapshot` | typed-RPC client (no body_create contract) | G-advanced-diagnostics | FAIL |
-| `solve_assembly` | execute-code template | G-assembly | FAIL |
-| `spreadsheet_create` | execute-code template | G-parametric-sheet | FAIL |
-| `spreadsheet_get_cells` | execute-code template | G-parametric-sheet | FAIL |
-| `spreadsheet_list_aliases` | execute-code template | G-parametric-sheet | FAIL |
-| `spreadsheet_set_alias` | execute-code template | G-parametric-sheet | FAIL |
-| `spreadsheet_set_cells` | execute-code template | G-parametric-sheet | FAIL |
-| `sweep_feature` | execute-code template | G-features-p3 | FAIL |
-| `sweep_pipe` | execute-code template | G-partdesign-assembly-helpers | FAIL |
-| `translate` | execute-code template | G-measure-transform | FAIL |
-| `undo` | execute-code template | G-document-gui | FAIL |
-| `validate_movement_follow` | execute-code template | G-advanced-diagnostics | FAIL |
+**Empty.** All 107 `ci/qualify_*.py` operations have native `--native` ×3 PASS (2026-09-14). There is no Composer CAD FAIL queue.
 
 ## Worktrees (roundup inventory)
 
 | Worktree path | Branch | HEAD | Operations | Submodule checkout | Status |
 | --- | --- | --- | --- | --- | --- |
-| `D:/code/FreeCAD` | `feature/typed-rpc` | `07d75f0497` | tracker + platform LANDED | MCP `374a59b` on `feature/typed-rpc` | clean; PR #53 |
-| `D:/code/FreeCAD-wt-body-set-tip` | `feature/typed-rpc-body-set-tip` | `07d75f0497` | `body_set_tip` | MCP `374a59b` on `feature/typed-rpc-body-set-tip` | **NOT PASS** — parent reset to platform SHA; Tip-only files restored **unstaged**; unpark incomplete |
-| `D:/code/FreeCAD-wt-sketch-create` | `feature/typed-rpc-sketch-create` | `07d75f0497` | `sketch_create` | MCP `374a59b` on `feature/typed-rpc-sketch-create` | **NOT PASS** — setup only, no typed files |
-| `D:/code/FreeCAD-wt-sketch-attach` | `feature/typed-rpc-sketch-attach` | `07d75f0497` | `sketch_attach` | MCP on `feature/typed-rpc-sketch-attach` @ `374a59b` | **NOT PASS** — setup only |
-| `D:/code/FreeCAD-wt-pad-feature` | `feature/typed-rpc-pad-feature` | `07d75f0497` | `pad_feature` | MCP @ `374a59b` (detached; may not be isolated git worktree) | **NOT PASS** — setup only |
+| `C:/Users/Rchie/Music/FreeCAD` | `feature/typed-rpc` | `3c61b079ac` | all 107 CAD mutations | MCP working `54ded4f` (recorded pointer `e345f4e`) | native ×3 PASS; C++ + MCP dirty |
+| Prior `*-wt-*` / `D:/code/FreeCAD*` op forks | — | — | — | — | merged back and pruned; not home |
 
-### `body_set_tip` worktree evidence (Composer claimed; **Grok independently re-ran**)
-
-| Lane | Command | Composer | Grok independent |
-| --- | --- | --- | --- |
-| Tip qualify (focused) | `uv run python ci/qualify_body_set_tip.py` | 161 passed | **161 passed** |
-| Body regression | `uv run python ci/qualify_body_create.py` | 218 passed | **218 passed** |
-| Woodpecker lint | `docker run --rm -v D:/code/FreeCAD-wt-body-set-tip:/work -w /work python:3.12 sh ci/woodpecker/freecad-mcp-lint.sh` | OK | **OK** |
-| Native `--native` | `python3 ci/qualify_body_set_tip.py --native` in `freecad-ci-mcp:24.04-phase1` + host `build_docker` libs | Composer claimed 14 passed | **Grok ×3: 13/14, 14/14, 13/14 (flaky).** Busy/empty-Pad fixture is gone. |
-
-Implementation summary: typed JSON-RPC path via `body_set_tip.py` + `body_set_tip_mutation.py` + `body_set_tip_contract.py` (vendored pair); `commit_body_set_tip_mutation` in `collaboration_api.py`; MCP client `body_set_tip_operation` calls `freecad.body_set_tip()`; legacy execute-code kept in `body_set_tip_legacy.py` (outside typed slice).
-
-Files touched (MCP worktree, uncommitted): new contract/apply/mutation/CI/tests/typecheck modules; modified `collaboration_api.py`, `cad_dependencies.py`, `collaboration_dependencies.py`, `sketch_public.py`, `features_gui.py` (removed leaf `recompute`), `body_set_tip.py` client, `freecad_connection.py`, `pyproject.toml`, `ci/check_body_create_contract.py`, `tests/test_body_create_contract_gate.py`, `tests/test_parametric.py`; parent worktree `ci/woodpecker/freecad-mcp-lint.sh` adds Tip gate.
+Unrelated leftover: `C:/Users/Rchie/Music/FreeCAD-codex-recompute-integrity` (`codex/fix-recompute-integrity`) is not this campaign.
 
 ## Commits / PRs / CI
 
@@ -913,6 +822,8 @@ Files touched (MCP worktree, uncommitted): new contract/apply/mutation/CI/tests/
 | 2026-09-13 | MCP (platform landing) | `374a59b7f8e74e6f15c6326db00abdd5fb0f3f38` | [PR #17](https://github.com/Rchiemstra/freecad-mcp/pull/17) | **no checks**; mergeable **CONFLICTING/DIRTY** | Typed RPC discovery + static globs + contract gates |
 | 2026-09-13 | parent (platform landing) | `07d75f049719b48d72590d07452be6f67732bd4d` | [PR #53](https://github.com/Rchiemstra/FreeCAD/pull/53) | Labeler **SUCCESS** only; Prepare/Ubuntu/Lint + Woodpecker **not scheduled**; mergeable **CONFLICTING/DIRTY** | Submodule pin + Woodpecker `run_contract_checks.py` |
 | 2026-09-13 | MCP (roundup docs) | pending | — | — | Canonical progress + handover in `doc/` |
+| 2026-09-14 | parent working | `3c61b079ac` | [PR #53](https://github.com/Rchiemstra/FreeCAD/pull/53) | not merged | Home tree. Uncommitted Property.cpp + FemMeshProperty.cpp. Submodule pointer still `e345f4e`. |
+| 2026-09-14 | MCP working | `54ded4f` + local FEM/oracle | [PR #17](https://github.com/Rchiemstra/freecad-mcp/pull/17) | not merged | 107 native ×3 PASS; do not merge from this campaign. |
 
 ## Review log
 
@@ -927,3 +838,4 @@ Files touched (MCP worktree, uncommitted): new contract/apply/mutation/CI/tests/
 | 2026-09-13 | Grok `cursor-grok-4.6-xhigh` | typed-rpc-platform editor-mypy sync | **NOT PASS** | `uv run mypy` 11 files OK; Body 229. Sync-into-pyproject still serializes every op. Prefer static globs. Composer on main; Tip parked. |
 | 2026-09-13 | Grok `cursor-grok-4.6-xhigh` | typed-rpc-platform static globs | **PASS** | Req 1–8. Body 228 / editor mypy 0 errors / discovery tests 10. Native 16 not re-run. Composer landed MCP `374a59b` + parent `07d75f0497`. |
 | 2026-09-13 | Composer 2.5 | campaign roundup | paused | Tip unpark + parallel op forks interrupted. Worktrees inventoried; docs committed; PR CI not green. Merge left to Rchiemstra. |
+| 2026-09-14 | orchestrator | 107 CAD mutations native ×3 | **PASS** | First-pass 107/107; ×3 107/107 `0/0/0`. Contracts OK (107) earlier the same day. 64 N/A unchanged. PRs not merged. |

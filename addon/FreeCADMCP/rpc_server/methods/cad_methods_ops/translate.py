@@ -105,7 +105,7 @@ class _TranslateExecution:
         )
 
 
-def _snapshot_placement_base(obj: object) -> dict[str, float]:
+def _snapshot_placement_base(obj: object) -> dict[str, object]:
     placement = getattr(obj, "Placement", None)
     if placement is None:
         raise TranslateError("CREATED_OBJECT_INVALID", "Object has no Placement after apply")
@@ -113,9 +113,9 @@ def _snapshot_placement_base(obj: object) -> dict[str, float]:
     if base is None:
         raise TranslateError("CREATED_OBJECT_INVALID", "Object Placement has no Base after apply")
     return {
-        "x": float(getattr(base, "x", 0.0)),
-        "y": float(getattr(base, "y", 0.0)),
-        "z": float(getattr(base, "z", 0.0)),
+        "x": as_float(getattr(base, "x", 0.0)),
+        "y": as_float(getattr(base, "y", 0.0)),
+        "z": as_float(getattr(base, "z", 0.0)),
     }
 
 
@@ -127,8 +127,8 @@ def _placement_base_matches(obj: object, expected: dict[str, object]) -> None:
     if base is None:
         raise TranslateError("CREATED_OBJECT_INVALID", "Object Placement has no Base after recompute")
     for key in ("x", "y", "z"):
-        actual = float(getattr(base, key, 0.0))
-        target = float(expected[key])
+        actual = as_float(getattr(base, key, 0.0))
+        target = as_float(expected[key])
         if abs(actual - target) > 1e-6:
             raise TranslateError(
                 "CREATED_OBJECT_INVALID",

@@ -105,7 +105,7 @@ class _ScaleExecution:
         )
 
 
-def _snapshot_bound_box(obj: object) -> dict[str, float]:
+def _snapshot_bound_box(obj: object) -> dict[str, object]:
     shape = getattr(obj, "Shape", None)
     if shape is None:
         raise ScaleError("CREATED_OBJECT_INVALID", "Object has no Shape after apply")
@@ -113,9 +113,9 @@ def _snapshot_bound_box(obj: object) -> dict[str, float]:
     if box is None:
         raise ScaleError("CREATED_OBJECT_INVALID", "Object Shape has no BoundBox after apply")
     return {
-        "x_length": float(getattr(box, "XLength", 0.0)),
-        "y_length": float(getattr(box, "YLength", 0.0)),
-        "z_length": float(getattr(box, "ZLength", 0.0)),
+        "x_length": as_float(getattr(box, "XLength", 0.0)),
+        "y_length": as_float(getattr(box, "YLength", 0.0)),
+        "z_length": as_float(getattr(box, "ZLength", 0.0)),
     }
 
 
@@ -131,8 +131,8 @@ def _bound_box_matches(obj: object, expected: dict[str, object]) -> None:
         ("y_length", "YLength"),
         ("z_length", "ZLength"),
     ):
-        actual = float(getattr(box, attr, 0.0))
-        target = float(expected[key])
+        actual = as_float(getattr(box, attr, 0.0))
+        target = as_float(expected[key])
         if abs(actual - target) > 1e-6:
             raise ScaleError(
                 "CREATED_OBJECT_INVALID",
