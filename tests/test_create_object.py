@@ -147,3 +147,22 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_
 
 def test_create_object_has_apply_entry_point():
     assert callable(apply_create_object)
+
+
+def test_inspection_rejects_wrong_type_after_recompute():
+    events: list[str] = []
+
+    class _WrongType(FakeDocument):
+        def recompute(self) -> None:
+            super().recompute()
+            created = self.objects.get("Box")
+            if created is not None:
+                created.TypeId = "App::DocumentObject"
+                created.isDerivedFrom = lambda _type_name: False
+
+    document = _WrongType(events)
+    collab, _api = collaborators(document, events)
+    result = run_create_object(collab, "Doc", {"Name": "Box", "Type": "Part::Box"})
+    assert result["success"] is False
+    assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
+    assert "commit" not in events

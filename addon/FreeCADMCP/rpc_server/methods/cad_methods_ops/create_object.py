@@ -30,6 +30,7 @@ class CreateObjectReceipt:
     name: str
     obj: object
     object_type: str
+    properties: tuple[tuple[str, object], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,8 +92,40 @@ def apply_create_object(
     if not isinstance(assigned, str) or not assigned.strip():
         raise CreateObjectError("CREATE_OBJECT_FAILED", "Created object has no name")
     return CreateObjectReceipt(
-        name=assigned, obj=created, object_type=str(request.object_type)
+        name=assigned,
+        obj=created,
+        object_type=str(request.object_type),
+        properties=tuple(
+            (key, value)
+            for key, value in properties.items()
+            if key not in {"ShapeColor", "ViewObject"}
+        ),
     )
+
+
+def _is_type(obj: object, type_id: str) -> bool:
+    derived = getattr(obj, "isDerivedFrom", None)
+    if callable(derived):
+        try:
+            return bool(derived(type_id))
+        except (AttributeError, TypeError):
+            pass
+    return getattr(obj, "TypeId", None) == type_id
+
+
+def _scalar_property(value: object) -> object:
+    raw = getattr(value, "Value", value)
+    return raw
+
+
+def _property_matches(expected: object, actual: object) -> bool:
+    left = _scalar_property(expected)
+    right = _scalar_property(actual)
+    if isinstance(left, bool) or isinstance(right, bool):
+        return left is right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return abs(float(left) - float(right)) <= 1e-6
+    return left == right
 
 
 def read_create_object_result(
@@ -111,6 +144,25 @@ def read_create_object_result(
             "CREATED_OBJECT_REPLACED",
             f"Created object was replaced before commit: {receipt.name!r}",
         )
+    if not _is_type(created, receipt.object_type):
+        raise CreateObjectError(
+            "CREATED_OBJECT_WRONG_TYPE",
+            (
+                f"Created object is not {receipt.object_type!r}: "
+                f"{getattr(created, 'TypeId', None)!r}"
+            ),
+        )
+    for key, expected in receipt.properties:
+        if not hasattr(created, key):
+            raise CreateObjectError(
+                "PROPERTY_NOT_UPDATED",
+                f"Created object is missing property {key!r}",
+            )
+        if not _property_matches(expected, getattr(created, key)):
+            raise CreateObjectError(
+                "PROPERTY_NOT_UPDATED",
+                f"Created object property {key!r} did not keep the assigned value",
+            )
     label = getattr(created, "Label", receipt.name)
     type_id = getattr(created, "TypeId", receipt.object_type)
     return CreateObjectInspection(

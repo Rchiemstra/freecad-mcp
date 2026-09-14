@@ -162,3 +162,15 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_
 
 def test_repair_references_has_apply_entry_point():
     assert callable(apply_repair_references)
+
+
+def test_missing_relink_source_is_not_success():
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.addObject("Part::Feature", "Pad")
+    document.events.clear()
+    collab, _api = collaborators(document, events)
+    result = run_repair_references(collab, "Doc", [{"from": "Missing", "to": "Pad"}])
+    assert result["success"] is False
+    assert result["error_code"] == "OBJECT_NOT_FOUND"
+    assert "commit" not in events

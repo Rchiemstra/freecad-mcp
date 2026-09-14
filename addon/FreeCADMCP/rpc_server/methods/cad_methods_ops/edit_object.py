@@ -27,6 +27,7 @@ class EditObjectReceipt:
 
     name: str
     obj: object
+    properties: tuple[tuple[str, object], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +74,30 @@ def apply_edit_object(
             set_object_property(doc, obj, properties)
         else:
             assign_properties(obj, properties)
-    return EditObjectReceipt(name=str(getattr(obj, "Name", request.object_name)), obj=obj)
+    assigned = [
+        (key, value)
+        for key, value in properties.items()
+        if key not in {"ShapeColor", "ViewObject"}
+    ]
+    return EditObjectReceipt(
+        name=str(getattr(obj, "Name", request.object_name)),
+        obj=obj,
+        properties=tuple(assigned),
+    )
+
+
+def _scalar_property(value: object) -> object:
+    return getattr(value, "Value", value)
+
+
+def _property_matches(expected: object, actual: object) -> bool:
+    left = _scalar_property(expected)
+    right = _scalar_property(actual)
+    if isinstance(left, bool) or isinstance(right, bool):
+        return left is right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return abs(float(left) - float(right)) <= 1e-6
+    return left == right
 
 
 def read_edit_object_result(doc: object, receipt: EditObjectReceipt) -> EditObjectInspection:
@@ -90,6 +114,17 @@ def read_edit_object_result(doc: object, receipt: EditObjectReceipt) -> EditObje
             "EDITED_OBJECT_REPLACED",
             f"Edited object was replaced before commit: {receipt.name!r}",
         )
+    for key, expected in receipt.properties:
+        if not hasattr(edited, key):
+            raise EditObjectError(
+                "PROPERTY_NOT_UPDATED",
+                f"Edited object is missing property {key!r}",
+            )
+        if not _property_matches(expected, getattr(edited, key)):
+            raise EditObjectError(
+                "PROPERTY_NOT_UPDATED",
+                f"Edited object property {key!r} did not keep the assigned value",
+            )
     return EditObjectInspection(
         name=ObjectName(receipt.name),
         label=str(getattr(edited, "Label", receipt.name)),

@@ -23,6 +23,28 @@ def test_delete_object_native_success_inspects_after_recompute(monkeypatch):
     check_success("delete_object", _KIND, _RUN_ARGS, monkeypatch)
 
 
+def test_delete_object_native_object_is_gone_after_recompute():
+    from tests.core_doc_native_matrix import collaborators, require_native_collaboration
+
+    require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.delete_object import run_delete_object
+
+    document = FreeCAD.newDocument("MCPTypeddelete_objectGone")
+    try:
+        document.addObject("App::FeaturePython", "TypedBox")
+        document.recompute()
+        result = run_delete_object(
+            collaborators(FreeCAD, lambda _d: None),
+            document.Name,
+            "TypedBox",
+        )
+        assert result["success"] is True, result
+        assert document.getObject("TypedBox") is None
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
 def test_delete_object_native_validation_failure_restores():
     check_validation_failure("delete_object", _KIND, _RUN_ARGS)
 

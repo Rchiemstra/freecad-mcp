@@ -44,6 +44,8 @@ class RepairReferencesReceipt:
 
     document_name: str
     repaired: tuple[tuple[str, str], ...]
+    relinks: tuple[RelinkRepair, ...]
+    property_repairs: tuple[RepairItem, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,11 +123,39 @@ def _parse_refs(raw: object) -> tuple[RepairRef, ...] | RepairReferencesFailure:
     return tuple(parsed)
 
 
+def _retarget_link_value(current: object, source: object, target: object) -> tuple[object, bool]:
+    if current is source:
+        return target, True
+    if isinstance(current, tuple) and current and current[0] is source:
+        return (target, *current[1:]), True
+    if isinstance(current, (list, tuple)):
+        changed = False
+        updated: list[object] = []
+        for entry in current:
+            new_entry, entry_changed = _retarget_link_value(entry, source, target)
+            changed = changed or entry_changed
+            updated.append(new_entry)
+        if changed:
+            rebuilt: object = list(updated) if isinstance(current, list) else tuple(updated)
+            return rebuilt, True
+    return current, False
+
+
+def _link_still_points_at(current: object, source: object) -> bool:
+    if current is source:
+        return True
+    if isinstance(current, tuple) and current and current[0] is source:
+        return True
+    if isinstance(current, (list, tuple)):
+        return any(_link_still_points_at(entry, source) for entry in current)
+    return False
+
+
 def _relink_all(doc: object, from_name: str, to_name: str) -> int:
     source = get_object(doc, from_name)
     target = get_object(doc, to_name)
     if source is None:
-        return 0
+        raise RepairReferencesError("OBJECT_NOT_FOUND", f"Source object not found: {from_name!r}")
     if target is None:
         raise RepairReferencesError("OBJECT_NOT_FOUND", f"Target object not found: {to_name!r}")
     changed = 0
@@ -150,9 +180,18 @@ def _relink_all(doc: object, from_name: str, to_name: str) -> int:
                 current = getattr(item, prop)
             except Exception:
                 continue
-            if current is source:
-                setattr(item, prop, target)
-                changed += 1
+            updated, did_change = _retarget_link_value(current, source, target)
+            if did_change:
+                try:
+                    setattr(item, prop, updated)
+                    changed += 1
+                except Exception:
+                    continue
+    if changed == 0:
+        raise RepairReferencesError(
+            "RELINK_NOT_APPLIED",
+            f"No link properties referenced {from_name!r}",
+        )
     return changed
 
 
@@ -224,8 +263,25 @@ def apply_repair_references(doc: object, work: _RepairWork) -> RepairReferencesR
         setattr(owner, item.property_name, value)
         repaired.append((str(item.object_name), item.property_name))
     return RepairReferencesReceipt(
-        document_name=document_name(doc), repaired=tuple(repaired)
+        document_name=document_name(doc),
+        repaired=tuple(repaired),
+        relinks=work.relinks,
+        property_repairs=request.repairs,
     )
+
+
+def _reference_matches(current: object, expected: object) -> bool:
+    if current is expected:
+        return True
+    if isinstance(expected, tuple):
+        target, subs = expected[0], expected[1] if len(expected) > 1 else ()
+        if isinstance(current, tuple) and current:
+            current_subs = current[1] if len(current) > 1 else ()
+            return current[0] is target and tuple(current_subs or ()) == tuple(subs or ())
+        return current is target and not subs
+    if isinstance(current, tuple) and current:
+        return current[0] is expected
+    return False
 
 
 def read_repair_references_result(
@@ -239,6 +295,78 @@ def read_repair_references_result(
                 "REPAIRED_OBJECT_MISSING",
                 f"Repaired object is missing: {object_name!r}",
             )
+    for relink in receipt.relinks:
+        source = get_object(doc, relink.from_name)
+        if source is None:
+            continue
+        for item in getattr(doc, "Objects", []) or []:
+            props = getattr(item, "PropertiesList", None)
+            if not isinstance(props, list):
+                continue
+            for prop in props:
+                if not isinstance(prop, str):
+                    continue
+                type_id = ""
+                getter = getattr(item, "getTypeIdOfProperty", None)
+                if callable(getter):
+                    try:
+                        raw_type = getter(prop)
+                    except Exception:
+                        raw_type = ""
+                    type_id = raw_type if isinstance(raw_type, str) else ""
+                if "Link" not in type_id:
+                    continue
+                try:
+                    current = getattr(item, prop)
+                except Exception:
+                    continue
+                if _link_still_points_at(current, source):
+                    raise RepairReferencesError(
+                        "RELINK_NOT_APPLIED",
+                        f"Link {getattr(item, 'Name', '')}.{prop} still references {relink.from_name!r}",
+                    )
+    for item in receipt.property_repairs:
+        owner = get_object(doc, str(item.object_name))
+        if owner is None:
+            raise RepairReferencesError(
+                "REPAIRED_OBJECT_MISSING",
+                f"Repaired object is missing: {item.object_name!r}",
+            )
+        current = getattr(owner, item.property_name, None)
+        expected_refs: list[object] = []
+        for ref in item.references:
+            target = get_object(doc, str(ref.object_name))
+            if target is None:
+                raise RepairReferencesError(
+                    "TARGET_NOT_FOUND",
+                    f"Target object not found: {ref.object_name!r}",
+                )
+            if ref.subelements:
+                expected_refs.append((target, ref.subelements))
+            else:
+                expected_refs.append(target)
+        getter = getattr(owner, "getTypeIdOfProperty", None)
+        prop_type = str(getter(item.property_name)) if callable(getter) else ""
+        if "LinkList" in prop_type or "LinkSubList" in prop_type:
+            actual_list = list(current or [])
+            if len(actual_list) != len(expected_refs):
+                raise RepairReferencesError(
+                    "REPAIR_NOT_APPLIED",
+                    f"{item.object_name}.{item.property_name} did not keep repaired references",
+                )
+            for actual, expected in zip(actual_list, expected_refs, strict=True):
+                if not _reference_matches(actual, expected):
+                    raise RepairReferencesError(
+                        "REPAIR_NOT_APPLIED",
+                        f"{item.object_name}.{item.property_name} did not keep repaired references",
+                    )
+        elif expected_refs:
+            expected = expected_refs[0]
+            if not _reference_matches(current, expected):
+                raise RepairReferencesError(
+                    "REPAIR_NOT_APPLIED",
+                    f"{item.object_name}.{item.property_name} did not keep repaired references",
+                )
     return RepairReferencesInspection(
         document_name=DocumentName(receipt.document_name),
         repaired_count=len(receipt.repaired),

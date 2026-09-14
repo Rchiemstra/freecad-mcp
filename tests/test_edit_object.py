@@ -153,3 +153,23 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_
 
 def test_edit_object_has_apply_entry_point():
     assert callable(apply_edit_object)
+
+
+def test_inspection_rejects_reverted_label_after_recompute():
+    events: list[str] = []
+
+    class _RevertLabel(FakeDocument):
+        def recompute(self) -> None:
+            super().recompute()
+            box = self.objects.get("Box")
+            if box is not None:
+                box.Label = "Box"
+
+    document = _RevertLabel(events)
+    document.addObject("Part::Feature", "Box")
+    document.events.clear()
+    collab, _api = collaborators(document, events)
+    result = run_edit_object(collab, "Doc", "Box", {"Properties": {"Label": "Edited"}})
+    assert result["success"] is False
+    assert result["error_code"] == "PROPERTY_NOT_UPDATED"
+    assert "commit" not in events
