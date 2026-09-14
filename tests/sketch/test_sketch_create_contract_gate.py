@@ -32,7 +32,7 @@ def test_sketch_create_architecture_gate_accepts_the_production_path() -> None:
             LEAF,
             "            self.inspect,",
             "            self.apply,",
-            "SKET004 missing typed postcondition=inspect",
+            "SKETCH_CREATE004 missing typed postcondition=inspect",
         ),
         (
             BRIDGE,
@@ -41,32 +41,32 @@ def test_sketch_create_architecture_gate_accepts_the_production_path() -> None:
             "            )",
             "            callback(document)\n"
             '            return {"status": "Committed", "committed": True}',
-            "SKET006 postcondition path can reach non-native callback fallback",
+            "SKETCH_CREATE006 postcondition path can reach non-native callback fallback",
         ),
         (
             BRIDGE,
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)',
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)\n        document = self._resolve_admitted_document(document_name)',
-            "SKET005 bridge must resolve the admitted document exactly once",
+            "SKETCH_CREATE005 bridge must resolve the admitted document exactly once",
         ),
         (
             PUBLIC_ADAPTER,
             "result = parse_sketch_create_response(raw_result)",
             "result = raw_result",
-            "SKET008 public adapter bypasses response validation",
+            "SKETCH_CREATE008 public adapter bypasses response validation",
         ),
         (
             MUTATION,
             "    if committed is not False or status not in _REJECTED_STATUSES:",
             "    if state.postcondition_passed:\n        return True\n"
             "    if committed is not False or status not in _REJECTED_STATUSES:",
-            "SKET007 cached success escaped native rejection",
+            "SKETCH_CREATE007 cached success escaped native rejection",
         ),
         (
             MUTATION,
             "if state.postcondition_passed and state.failure is None:",
             "if True:",
-            "SKET015 commit escaped without a successful postcondition",
+            "SKETCH_CREATE015 commit escaped without a successful postcondition",
         ),
     ],
     ids=(
@@ -100,7 +100,7 @@ def test_gate_rejects_transaction_or_recompute_ownership_in_the_leaf() -> None:
     assert source.count(marker) == 1
     mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
 
-    assert "SKET001 leaf owns forbidden execution: recompute" in (
+    assert "SKETCH_CREATE001 leaf owns forbidden execution: recompute" in (
         scan_sketch_create_architecture(
             ROOT,
             source_overrides={LEAF: mutated},
@@ -114,7 +114,7 @@ def test_gate_rejects_any_on_the_sketch_create_specific_surface() -> None:
     broken = 'def build_sketch_create_request(\n    doc_name: Any,'
     assert source.count(old) == 1
 
-    assert "SKET014 typed SketchCreate surface contains Any: SketchCreate leaf" in (
+    assert "SKETCH_CREATE014 typed sketch_create surface contains Any: sketch_create leaf" in (
         scan_sketch_create_architecture(
             ROOT,
             source_overrides={LEAF: source.replace(old, broken)},

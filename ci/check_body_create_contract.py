@@ -59,6 +59,36 @@ def _called_names(node: ast.AST) -> list[str]:
     return names
 
 
+def _try_function(tree: ast.AST, name: str) -> ast.FunctionDef | None:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    return None
+
+
+_RUN_FORBIDDEN = frozenset(
+    {
+        "addObject",
+        "removeObject",
+        "closeDocument",
+        "openDocument",
+        "newDocument",
+        "setActiveDocument",
+        "undo",
+        "redo",
+        "saveAs",
+        "restore",
+        "execute_code",
+        "exec",
+        "openTransaction",
+        "commitTransaction",
+        "abortTransaction",
+        "recompute",
+        "run_transaction",
+    }
+)
+
+
 def _scan_leaf(source: str) -> list[str]:
     tree = ast.parse(source, filename=_BODY_LEAF)
     apply_function = _function(tree, "apply_body_create")
@@ -90,6 +120,14 @@ def _scan_leaf(source: str) -> list[str]:
     postcondition = call.args[3] if len(call.args) > 3 else None
     if not (isinstance(postcondition, ast.Attribute) and postcondition.attr == "inspect"):
         violations.append("BODY004 missing typed postcondition=inspect")
+    module_run = _try_function(tree, "run_body_create")
+    if module_run is not None:
+        run_side_effects = sorted(_RUN_FORBIDDEN & set(_called_names(module_run)))
+        if run_side_effects:
+            violations.append(
+                "BODY018 run_body_create owns forbidden CAD side effects: "
+                + ", ".join(run_side_effects)
+            )
     return violations
 
 

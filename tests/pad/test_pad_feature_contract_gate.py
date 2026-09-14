@@ -32,7 +32,7 @@ def test_pad_feature_architecture_gate_accepts_the_production_path() -> None:
             LEAF,
             "            self.inspect,",
             "            self.apply,",
-            "PAD_004 missing typed postcondition=inspect",
+            "PAD_FEATURE004 missing typed postcondition=inspect",
         ),
         (
             BRIDGE,
@@ -41,32 +41,32 @@ def test_pad_feature_architecture_gate_accepts_the_production_path() -> None:
             "            )",
             "            callback(document)\n"
             '            return {"status": "Committed", "committed": True}',
-            "PAD_006 postcondition path can reach non-native callback fallback",
+            "PAD_FEATURE006 postcondition path can reach non-native callback fallback",
         ),
         (
             BRIDGE,
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)',
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)\n        document = self._resolve_admitted_document(document_name)',
-            "PAD_005 bridge must resolve the admitted document exactly once",
+            "PAD_FEATURE005 bridge must resolve the admitted document exactly once",
         ),
         (
             PUBLIC_ADAPTER,
             "result = parse_pad_feature_response(raw_result)",
             "result = raw_result",
-            "PAD_008 public adapter bypasses response validation",
+            "PAD_FEATURE008 public adapter bypasses response validation",
         ),
         (
             MUTATION,
             "    if committed is not False or status not in _REJECTED_STATUSES:",
             "    if state.postcondition_passed:\n        return True\n"
             "    if committed is not False or status not in _REJECTED_STATUSES:",
-            "PAD_007 cached success escaped native rejection",
+            "PAD_FEATURE007 cached success escaped native rejection",
         ),
         (
             MUTATION,
             "if state.postcondition_passed and state.failure is None:",
             "if True:",
-            "PAD_015 commit escaped without a successful postcondition",
+            "PAD_FEATURE015 commit escaped without a successful postcondition",
         ),
     ],
     ids=(
@@ -100,7 +100,7 @@ def test_gate_rejects_transaction_or_recompute_ownership_in_the_leaf() -> None:
     assert source.count(marker) == 1
     mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
 
-    assert "PAD_001 leaf owns forbidden execution: recompute" in (
+    assert "PAD_FEATURE001 leaf owns forbidden execution: recompute" in (
         scan_pad_feature_architecture(
             ROOT,
             source_overrides={LEAF: mutated},
@@ -114,7 +114,7 @@ def test_gate_rejects_any_on_the_pad_feature_specific_surface() -> None:
     broken = 'def build_pad_feature_request(\n    doc_name: Any,'
     assert source.count(old) == 1
 
-    assert "PAD_014 typed PadFeature surface contains Any: PadFeature leaf" in (
+    assert "PAD_FEATURE014 typed pad_feature surface contains Any: pad_feature leaf" in (
         scan_pad_feature_architecture(
             ROOT,
             source_overrides={LEAF: source.replace(old, broken)},

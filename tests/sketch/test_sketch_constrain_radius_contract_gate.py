@@ -95,7 +95,7 @@ def test_gate_rejects_any_on_the_op_specific_surface() -> None:
     old = "collaborators: SketchConstrainRadiusCollaborators"
     broken = "collaborators: Any"
     assert old in source
-    assert "SKETCH_CONSTRAIN_RADIUS014 typed sketch surface contains Any: sketch leaf" in (
+    assert "SKETCH_CONSTRAIN_RADIUS014 typed sketch_constrain_radius surface contains Any: sketch_constrain_radius leaf" in (
         scan_sketch_op_architecture(
             ROOT,
             "sketch_constrain_radius",

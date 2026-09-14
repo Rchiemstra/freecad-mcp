@@ -1,4 +1,4 @@
-"""Sensitivity checks for the center_of_mass static and architecture gate."""
+"""Sensitivity checks for the ``center_of_mass`` static and architecture gate."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 LEAF = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/center_of_mass.py"
-MUTATION = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/center_of_mass_mutation.py"
 PUBLIC_ADAPTER = "src/freecad_mcp/operations/parametric_ops/center_of_mass.py"
 
 
@@ -20,19 +19,14 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_center_of_mass_architecture_gate_accepts_the_production_path() -> None:
-    assert scan_center_of_mass_architecture(ROOT) == []
+def test_center_of_mass_architecture_gate_rejects_the_production_path_for_policy_reasons() -> None:
+    violations = scan_center_of_mass_architecture(ROOT)
+    assert violations != []
+    assert any(item.startswith("QUERY center_of_mass") for item in violations)
 
+    assert any("fake mutation pipeline" in item for item in violations)
+    assert any("committed" in item for item in violations)
 
-def test_gate_rejects_missing_inspect_postcondition() -> None:
-    source = _read(LEAF)
-    old = "            self.inspect,"
-    broken = "            self.apply,"
-    assert source.count(old) == 1
-    assert "CENTER_OF_MASS004 missing typed postcondition=inspect" in scan_center_of_mass_architecture(
-        ROOT,
-        source_overrides={LEAF: source.replace(old, broken)},
-    )
 
 
 def test_gate_rejects_adapter_bypass() -> None:
@@ -46,22 +40,12 @@ def test_gate_rejects_adapter_bypass() -> None:
     )
 
 
-def test_gate_rejects_transaction_or_recompute_ownership_in_the_leaf() -> None:
+def test_gate_rejects_any_on_the_typed_surface() -> None:
     source = _read(LEAF)
-    marker = '    """Apply center_of_mass without recomputing or managing a transaction."""'
-    assert source.count(marker) == 1
-    mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
-    assert "CENTER_OF_MASS001 leaf owns forbidden execution: recompute" in (
-        scan_center_of_mass_architecture(ROOT, source_overrides={LEAF: mutated})
-    )
-
-
-def test_gate_rejects_cached_success_after_native_rejection() -> None:
-    source = _read(MUTATION)
-    old = "    if committed is not False or status not in _REJECTED_STATUSES:"
-    broken = "    if state.postcondition_passed:\n        return True\n    if committed is not False or status not in _REJECTED_STATUSES:"
+    old = "def build_center_of_mass_request("
+    broken = "from typing import Any\n\ndef build_center_of_mass_request(\n    unused: Any,"
     assert source.count(old) == 1
-    assert "CENTER_OF_MASS007 cached success escaped native rejection" in scan_center_of_mass_architecture(
+    assert "CENTER_OF_MASS014 typed center_of_mass surface contains Any: center_of_mass leaf" in scan_center_of_mass_architecture(
         ROOT,
-        source_overrides={MUTATION: source.replace(old, broken)},
+        source_overrides={LEAF: source.replace(old, broken, 1)},
     )

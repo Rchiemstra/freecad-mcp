@@ -95,7 +95,7 @@ def test_gate_rejects_any_on_the_op_specific_surface() -> None:
     old = "collaborators: SketchSymmetryCollaborators"
     broken = "collaborators: Any"
     assert old in source
-    assert "SKETCH_SYMMETRY014 typed sketch surface contains Any: sketch leaf" in (
+    assert "SKETCH_SYMMETRY014 typed sketch_symmetry surface contains Any: sketch_symmetry leaf" in (
         scan_sketch_op_architecture(
             ROOT,
             "sketch_symmetry",

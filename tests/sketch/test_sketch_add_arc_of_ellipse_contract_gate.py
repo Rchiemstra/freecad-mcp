@@ -95,7 +95,7 @@ def test_gate_rejects_any_on_the_op_specific_surface() -> None:
     old = "collaborators: SketchAddArcOfEllipseCollaborators"
     broken = "collaborators: Any"
     assert old in source
-    assert "SKETCH_ADD_ARC_OF_ELLIPSE014 typed sketch surface contains Any: sketch leaf" in (
+    assert "SKETCH_ADD_ARC_OF_ELLIPSE014 typed sketch_add_arc_of_ellipse surface contains Any: sketch_add_arc_of_ellipse leaf" in (
         scan_sketch_op_architecture(
             ROOT,
             "sketch_add_arc_of_ellipse",

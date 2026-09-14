@@ -95,7 +95,7 @@ def test_gate_rejects_any_on_the_op_specific_surface() -> None:
     old = "collaborators: SketchExtendCollaborators"
     broken = "collaborators: Any"
     assert old in source
-    assert "SKETCH_EXTEND014 typed sketch surface contains Any: sketch leaf" in (
+    assert "SKETCH_EXTEND014 typed sketch_extend surface contains Any: sketch_extend leaf" in (
         scan_sketch_op_architecture(
             ROOT,
             "sketch_extend",

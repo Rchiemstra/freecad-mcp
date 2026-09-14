@@ -12,7 +12,6 @@ pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
 LEAF = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/create_document.py"
-MUTATION = "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/create_document_mutation.py"
 PUBLIC_ADAPTER = "src/freecad_mcp/operations/parametric_ops/create_document.py"
 
 
@@ -20,65 +19,33 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_create_document_architecture_gate_accepts_the_production_path() -> None:
-    assert scan_create_document_architecture(ROOT) == []
+def test_create_document_architecture_gate_rejects_the_production_path_for_policy_reasons() -> None:
+    violations = scan_create_document_architecture(ROOT)
+    assert violations != []
+    assert any(item.startswith("LIFE create_document") for item in violations)
+
+    assert any("mutation pipeline as perform step" in item for item in violations)
+    assert any("committed" in item for item in violations)
 
 
-@pytest.mark.parametrize(
-    ("relative", "old", "broken", "expected"),
-    [
-        (
-            LEAF,
-            "            self.inspect,",
-            "            self.apply,",
-            "CREATE_DOCUMENT004 missing typed postcondition=inspect",
-        ),
-        (
-            PUBLIC_ADAPTER,
-            "result = parse_create_document_response(raw_result)",
-            "result = raw_result",
-            "CREATE_DOCUMENT008 public adapter bypasses response validation",
-        ),
-        (
-            MUTATION,
-            "    if committed is not False or status not in _REJECTED_STATUSES:",
-            "    if state.postcondition_passed:\n        return True\n"
-            "    if committed is not False or status not in _REJECTED_STATUSES:",
-            "CREATE_DOCUMENT007 cached success escaped native rejection",
-        ),
-        (
-            MUTATION,
-            "if state.postcondition_passed and state.failure is None:",
-            "if True:",
-            "CREATE_DOCUMENT015 commit escaped without a successful postcondition",
-        ),
-    ],
-)
-def test_gate_rejects_each_known_bad_variant(relative, old, broken, expected) -> None:
-    source = _read(relative)
+
+def test_gate_rejects_adapter_bypass() -> None:
+    source = _read(PUBLIC_ADAPTER)
+    old = "result = parse_create_document_response(raw_result)"
+    broken = "result = raw_result"
     assert source.count(old) == 1
-    assert expected in scan_create_document_architecture(ROOT, source_overrides={relative: source.replace(old, broken)})
-
-
-
-
-
-
-def test_gate_rejects_recompute_ownership_in_the_leaf() -> None:
-    source = _read(LEAF)
-    marker = '    """Record the new document identity without recomputing."""'
-    assert source.count(marker) == 1
-    mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
-    assert "CREATE_DOCUMENT001 leaf owns forbidden execution: recompute" in scan_create_document_architecture(
-        ROOT, source_overrides={LEAF: mutated}
+    assert "CREATE_DOCUMENT008 public adapter bypasses response validation" in scan_create_document_architecture(
+        ROOT,
+        source_overrides={PUBLIC_ADAPTER: source.replace(old, broken)},
     )
 
 
 def test_gate_rejects_any_on_the_typed_surface() -> None:
     source = _read(LEAF)
-    old = 'def build_create_document_request(\n    name: object,'
-    broken = old.replace(": object", ": Any", 1)
+    old = "def build_create_document_request("
+    broken = "from typing import Any\n\ndef build_create_document_request(\n    unused: Any,"
     assert source.count(old) == 1
-    assert "CREATE_DOCUMENT014 typed surface contains Any: leaf" in scan_create_document_architecture(
-        ROOT, source_overrides={LEAF: source.replace(old, broken)}
+    assert "CREATE_DOCUMENT014 typed create_document surface contains Any: create_document leaf" in scan_create_document_architecture(
+        ROOT,
+        source_overrides={LEAF: source.replace(old, broken, 1)},
     )

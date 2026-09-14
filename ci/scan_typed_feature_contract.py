@@ -55,6 +55,42 @@ def _contains_any(node: ast.AST) -> bool:
     return any(isinstance(child, ast.Name) and child.id == "Any" for child in ast.walk(node))
 
 
+_WRITE_LIKE = frozenset(
+    {
+        "addObject",
+        "removeObject",
+        "closeDocument",
+        "openDocument",
+        "newDocument",
+        "setActiveDocument",
+        "undo",
+        "redo",
+        "saveAs",
+        "restore",
+        "execute_code",
+        "exec",
+        "openTransaction",
+        "commitTransaction",
+        "abortTransaction",
+        "recompute",
+        "run_transaction",
+    }
+)
+
+_RUN_FORBIDDEN = _WRITE_LIKE
+
+_GENERATED_EXECUTION = frozenset(
+    {"_run_json_code", "execute_code", "render_template_lines", "_run_code"}
+)
+
+
+def _try_function(tree: ast.AST, name: str) -> ast.FunctionDef | None:
+    try:
+        return _function(tree, name)
+    except ValueError:
+        return None
+
+
 def _paths(op: str) -> dict[str, str]:
     return {
         "leaf": f"addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/{op}.py",
@@ -106,6 +142,43 @@ def _scan_leaf(op: str, source: str) -> list[str]:
     postcondition = call.args[3] if len(call.args) > 3 else None
     if not (isinstance(postcondition, ast.Attribute) and postcondition.attr == "inspect"):
         violations.append(f"{code}004 missing typed postcondition=inspect")
+
+    module_run = _try_function(tree, f"run_{op}")
+    if module_run is not None:
+        run_side_effects = sorted(_RUN_FORBIDDEN & set(_called_names(module_run)))
+        if run_side_effects:
+            violations.append(
+                f"{code}018 run_{op} owns forbidden CAD side effects: "
+                + ", ".join(run_side_effects)
+            )
+
+    inspect_closure = None
+    try:
+        inspect_closure = _class_method(tree, f"_{pascal(op)}Execution", "inspect")
+    except ValueError:
+        inspect_closure = None
+    inspect_method = _try_function(tree, f"read_{op}_result")
+    for label, node in (
+        ("inspect", inspect_closure),
+        (f"read_{op}_result", inspect_method),
+    ):
+        if node is None:
+            continue
+        write_calls = sorted(_WRITE_LIKE & set(_called_names(node)))
+        if write_calls:
+            violations.append(
+                f"{code}019 {label} path performs writes: " + ", ".join(write_calls)
+            )
+
+    apply_writes = _WRITE_LIKE & set(_called_names(apply_function))
+    if module_run is not None and not apply_writes:
+        run_side_effects = sorted(_RUN_FORBIDDEN & set(_called_names(module_run)))
+        if run_side_effects:
+            violations.append(f"{code}020 identity apply with post-run CAD side effects")
+
+    if _GENERATED_EXECUTION & set(_called_names(tree)):
+        violations.append(f"{code}009 public {op} route returned to generated execution")
+
     handler = None
     for node in tree.body:
         if isinstance(node, ast.Assign):
@@ -165,6 +238,19 @@ def _scan_bridge(op: str, source: str) -> list[str]:
     return violations
 
 
+def _mutation_state_class_name(tree: ast.Module, result_name: str, op: str) -> str:
+    native_result = _function(tree, result_name)
+    for child in ast.walk(native_result):
+        if not isinstance(child, ast.arg) or child.annotation is None:
+            continue
+        if isinstance(child.annotation, ast.Name) and child.annotation.id.endswith("MutationState"):
+            return child.annotation.id
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name.endswith("MutationState"):
+            return node.name
+    return f"_{pascal(op)}NativeMutationState"
+
+
 def _scan_native_release(op: str, source: str) -> list[str]:
     paths = _paths(op)
     code = prefix(op)
@@ -172,8 +258,8 @@ def _scan_native_release(op: str, source: str) -> list[str]:
     native_result = _function(tree, f"_{op}_native_result")
     runner = _function(tree, f"run_{op}_native_mutation")
     violations: list[str] = []
-    state_name = f"_{pascal(op)}NativeMutationState"
     result_name = f"_{op}_native_result"
+    state_name = _mutation_state_class_name(tree, result_name, op)
     module = types.ModuleType(
         f"addon.FreeCADMCP.rpc_server.methods.cad_methods_ops._{op}_gate"
     )
@@ -230,7 +316,12 @@ def _scan_native_release(op: str, source: str) -> list[str]:
     return violations
 
 
-def _scan_public_adapter(op: str, source: str) -> list[str]:
+def _scan_public_adapter(
+    op: str,
+    source: str,
+    *,
+    include_freecad_call: bool = True,
+) -> list[str]:
     paths = _paths(op)
     code = prefix(op)
     tree = ast.parse(source, filename=paths["public"])
@@ -241,7 +332,7 @@ def _scan_public_adapter(op: str, source: str) -> list[str]:
         violations.append(f"{code}008 public adapter bypasses response validation")
     if {"_run_json_code", "execute_code", "render_template_lines", "_run_code"} & calls:
         violations.append(f"{code}009 public {op} route returned to generated execution")
-    if op not in calls:
+    if include_freecad_call and op not in calls:
         violations.append(f"{code}017 public adapter does not call freecad.{op}()")
     return violations
 
@@ -304,17 +395,22 @@ def scan_feature_architecture(
     return violations
 
 
-def main_for_op(op: str, argv: Sequence[str] | None = None) -> int:
+def main_for_op(op: str, argv: Sequence[str] | None = None, *, typecheck: bool = True) -> int:
     del argv
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
-    violations = scan_feature_architecture(root, op)
+    from ci.scan_execution_policy_gates import scan_op_architecture
+
+    violations = scan_op_architecture(root, op)
     for violation in violations:
         print(violation)
     if violations:
         return 1
-    typecheck_result = run_discovered_mypy(root)
-    if typecheck_result:
-        return typecheck_result
-    print(f"{op} contract: architecture and static types passed")
+    if typecheck:
+        typecheck_result = run_discovered_mypy(root)
+        if typecheck_result:
+            return typecheck_result
+        print(f"{op} contract: architecture and static types passed")
+        return 0
+    print(f"{op} contract: architecture passed")
     return 0
