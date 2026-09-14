@@ -84,7 +84,6 @@ module = [
     "addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.collaboration_dependencies",
     "freecad_mcp.freecad_client",
     "freecad_mcp.freecad_client_ops.freecad_connection",
-    "freecad_mcp.operations.parametric_ops.*",
     "tests.typecheck.*",
 ]
 follow_imports = "normal"

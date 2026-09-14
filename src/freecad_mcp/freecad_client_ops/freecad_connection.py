@@ -9,10 +9,10 @@ from .._shared.protocol.create_assembly_contract import AssemblyName as CreateAs
 from .._shared.protocol.create_assembly_contract import DocumentName as CreateAssemblyDocumentName
 from .._shared.protocol.create_assembly_grounded_joint_contract import ComponentName
 from .._shared.protocol.create_assembly_grounded_joint_contract import (
-    AssemblyName as str,
+    AssemblyName as GroundedAssemblyName,
 )
 from .._shared.protocol.create_assembly_grounded_joint_contract import (
-    str as str,
+    DocumentName as GroundedDocumentName,
 )
 from .._shared.protocol.create_assembly_joint_contract import AssemblyName as JointAssemblyName
 from .._shared.protocol.create_assembly_joint_contract import DocumentName as JointDocumentName
@@ -36,7 +36,7 @@ from .._shared.protocol.bounding_box_contract import ObjectName as BoundingBoxOb
 from .._shared.protocol.center_of_mass_contract import DocumentName as CenterOfMassDocumentName
 from .._shared.protocol.center_of_mass_contract import ObjectName as CenterOfMassObjectName
 from .._shared.protocol.common_volume_along_path_contract import (
-    str as str,
+    DocumentName as CommonVolumeDocumentName,
 )
 from .._shared.protocol.rotate_contract import DocumentName as RotateDocumentName
 from .._shared.protocol.rotate_contract import ObjectName as RotateObjectName
@@ -55,11 +55,11 @@ if TYPE_CHECKING:
     from .._shared.protocol.pocket_feature_contract import DocumentName as PocketDocumentName
     from .._shared.protocol.pocket_feature_contract import PocketName
     from .._shared.protocol.sketch_add_constraint_contract import (
-        str as str,
+        DocumentName as AddConstraintDocumentName,
     )
     from .._shared.protocol.sketch_add_constraint_contract import SketchName as AddConstraintSketchName
     from .._shared.protocol.sketch_add_geometry_contract import (
-        str as str,
+        DocumentName as AddGeometryDocumentName,
     )
     from .._shared.protocol.sketch_add_geometry_contract import SketchName as AddGeometrySketchName
     from .._shared.protocol.sketch_attach_contract import DocumentName as AttachDocumentName
@@ -67,136 +67,136 @@ if TYPE_CHECKING:
     from .._shared.protocol.sketch_create_contract import DocumentName as SketchCreateDocumentName
     from .._shared.protocol.sketch_create_contract import SketchName as SketchCreateName
     from .._shared.protocol.sketch_delete_constraint_contract import (
-        str as str,
+        DocumentName as DeleteConstraintDocumentName,
     )
     from .._shared.protocol.sketch_delete_constraint_contract import (
-        str as str,
+        SketchName as DeleteConstraintSketchName,
     )
     from .._shared.protocol.sketch_delete_geometry_contract import (
-        str as str,
+        DocumentName as DeleteGeometryDocumentName,
     )
     from .._shared.protocol.sketch_delete_geometry_contract import (
-        str as str,
+        SketchName as DeleteGeometrySketchName,
     )
     from .._shared.protocol.sketch_edit_constraint_contract import (
-        str as str,
+        DocumentName as EditConstraintDocumentName,
     )
     from .._shared.protocol.sketch_edit_constraint_contract import SketchName as EditConstraintSketchName
 
     from collections.abc import Mapping, Sequence
 
     from .._shared.protocol.activate_document_contract import (
-        str as str,
+        DocumentName as ActivateDocumentName,
     )
     from .._shared.protocol.body_create_contract import BodyName
     from .._shared.protocol.body_create_contract import DocumentName as BodyDocumentName
     from .._shared.protocol.close_document_contract import DocumentName as CloseDocumentName
     from .._shared.protocol.create_document_contract import (
-        str as str,
+        DocumentName as CreateDocumentName,
     )
     from .._shared.protocol.create_object_contract import CreateObjectPayload
     from .._shared.protocol.create_object_contract import (
-        str as str,
+        DocumentName as CreateObjectDocumentName,
     )
     from .._shared.protocol.delete_object_contract import (
-        str as str,
+        DocumentName as DeleteObjectDocumentName,
     )
     from .._shared.protocol.delete_object_contract import ObjectName as DeleteObjectName
     from .._shared.protocol.edit_object_contract import DocumentName as EditObjectDocumentName
     from .._shared.protocol.edit_object_contract import EditObjectPayload
     from .._shared.protocol.edit_object_contract import ObjectName as EditObjectName
     from .._shared.protocol.insert_part_from_library_contract import (
-        str as str,
+        DocumentName as InsertPartDocumentName,
     )
     from .._shared.protocol.open_document_contract import PathName as OpenDocumentPath
     from .._shared.protocol.recompute_and_wait_contract import (
-        str as str,
+        DocumentName as RecomputeAndWaitDocumentName,
     )
     from .._shared.protocol.recompute_document_contract import (
-        str as str,
+        DocumentName as RecomputeDocumentName,
     )
     from .._shared.protocol.redo_contract import DocumentName as RedoDocumentName
     from .._shared.protocol.reload_document_contract import (
-        str as str,
+        DocumentName as ReloadDocumentName,
     )
     from .._shared.protocol.repair_references_contract import (
-        str as str,
+        DocumentName as RepairReferencesDocumentName,
     )
     from .._shared.protocol.repair_references_contract import RepairItemPayload
     from .._shared.protocol.undo_contract import DocumentName as UndoDocumentName
 
     from .._shared.protocol.body_create_contract import BodyName, DocumentName
     from .._shared.protocol.boolean_difference_contract import (
-        str as str,
+        DocumentName as BooleanDifferenceDocumentName,
     )
     from .._shared.protocol.boolean_difference_contract import (
-        str as str,
+        FeatureName as BooleanDifferenceFeatureName,
     )
     from .._shared.protocol.boolean_intersection_contract import (
-        str as str,
+        DocumentName as BooleanIntersectionDocumentName,
     )
     from .._shared.protocol.boolean_intersection_contract import (
-        str as str,
+        FeatureName as BooleanIntersectionFeatureName,
     )
     from .._shared.protocol.boolean_union_contract import (
-        str as str,
+        DocumentName as BooleanUnionDocumentName,
     )
     from .._shared.protocol.boolean_union_contract import (
-        str as str,
+        FeatureName as BooleanUnionFeatureName,
     )
     from .._shared.protocol.chamfer_feature_contract import (
-        str as str,
+        DocumentName as ChamferFeatureDocumentName,
     )
     from .._shared.protocol.chamfer_feature_contract import (
-        str as str,
+        FeatureName as ChamferFeatureFeatureName,
     )
     from .._shared.protocol.fillet_feature_contract import (
-        str as str,
+        DocumentName as FilletFeatureDocumentName,
     )
     from .._shared.protocol.fillet_feature_contract import (
-        str as str,
+        FeatureName as FilletFeatureFeatureName,
     )
     from .._shared.protocol.helical_sweep_feature_contract import (
-        str as str,
+        DocumentName as HelicalSweepFeatureDocumentName,
     )
     from .._shared.protocol.helical_sweep_feature_contract import (
-        str as str,
+        FeatureName as HelicalSweepFeatureFeatureName,
     )
     from .._shared.protocol.linear_pattern_feature_contract import (
-        str as str,
+        DocumentName as LinearPatternFeatureDocumentName,
     )
     from .._shared.protocol.linear_pattern_feature_contract import (
-        str as str,
+        FeatureName as LinearPatternFeatureFeatureName,
     )
     from .._shared.protocol.loft_feature_contract import (
-        str as str,
+        DocumentName as LoftFeatureDocumentName,
     )
     from .._shared.protocol.loft_feature_contract import (
-        str as str,
+        FeatureName as LoftFeatureFeatureName,
     )
     from .._shared.protocol.mirror_feature_contract import (
-        str as str,
+        DocumentName as MirrorFeatureDocumentName,
     )
     from .._shared.protocol.mirror_feature_contract import (
-        str as str,
+        FeatureName as MirrorFeatureFeatureName,
     )
     from .._shared.protocol.polar_pattern_feature_contract import (
-        str as str,
+        DocumentName as PolarPatternFeatureDocumentName,
     )
     from .._shared.protocol.polar_pattern_feature_contract import (
-        str as str,
+        FeatureName as PolarPatternFeatureFeatureName,
     )
     from .._shared.protocol.revolve_feature_contract import (
-        str as str,
+        DocumentName as RevolveFeatureDocumentName,
     )
     from .._shared.protocol.revolve_feature_contract import (
-        str as str,
+        FeatureName as RevolveFeatureFeatureName,
     )
     from .._shared.protocol.sweep_feature_contract import (
-        str as str,
+        DocumentName as SweepFeatureDocumentName,
     )
     from .._shared.protocol.sweep_feature_contract import (
-        str as str,
+        FeatureName as SweepFeatureFeatureName,
     )
 
     from .._shared.protocol.body_create_contract import BodyName, DocumentName
@@ -263,7 +263,7 @@ if TYPE_CHECKING:
 class FreeCADConnection:
     """Authenticated JSON-RPC client for one FreeCAD add-on RPC endpoint."""
 
-    def close_document(self, doc_name: str) -> object:
+    def close_document(self, doc_name: CloseDocumentName) -> object:
         routed = self._invoke_mutation_v2(
             "close_document",
             {"doc_name": doc_name},
@@ -283,61 +283,61 @@ class FreeCADConnection:
         def invoke_rpc(self, *args: object, **kwargs: object) -> object: ...
 
         def body_create(
-            self, doc_name: str, body_name: str
+            self, doc_name: BodyDocumentName, body_name: BodyName
         ) -> object: ...
 
-        def create_document(self, name: str) -> object: ...
+        def create_document(self, name: CreateDocumentName) -> object: ...
 
         def create_object(
             self,
-            doc_name: str,
+            doc_name: CreateObjectDocumentName,
             obj_data: CreateObjectPayload,
         ) -> object: ...
 
         def delete_object(
             self,
-            doc_name: str,
-            obj_name: str,
+            doc_name: DeleteObjectDocumentName,
+            obj_name: DeleteObjectName,
             recursive: bool = False,
             force: bool = False,
         ) -> object: ...
 
         def edit_object(
             self,
-            doc_name: str,
-            obj_name: str,
+            doc_name: EditObjectDocumentName,
+            obj_name: EditObjectName,
             properties: EditObjectPayload | Mapping[str, object],
         ) -> object: ...
 
         def repair_references(
             self,
-            doc_name: str,
-            repairs: Sequence[Mapping[str, object]],
+            doc_name: RepairReferencesDocumentName,
+            repairs: Sequence[RepairItemPayload],
             recompute: bool = False,
             validate: bool = False,
         ) -> object: ...
 
-        def activate_document(self, doc_name: str) -> object: ...
+        def activate_document(self, doc_name: ActivateDocumentName) -> object: ...
 
         def insert_part_from_library(
-            self, doc_name: str, relative_path: str
+            self, doc_name: InsertPartDocumentName, relative_path: str
         ) -> object: ...
 
-        def open_document(self, path: str) -> object: ...
+        def open_document(self, path: OpenDocumentPath) -> object: ...
 
         def recompute_and_wait(
-            self, doc_name: str
+            self, doc_name: RecomputeAndWaitDocumentName
         ) -> object: ...
 
-        def recompute_document(self, doc_name: str) -> object: ...
+        def recompute_document(self, doc_name: RecomputeDocumentName) -> object: ...
 
-        def redo(self, doc_name: str) -> object: ...
+        def redo(self, doc_name: RedoDocumentName) -> object: ...
 
-        def reload_document(self, doc_name: str) -> object: ...
+        def reload_document(self, doc_name: ReloadDocumentName) -> object: ...
 
-        def undo(self, doc_name: str) -> object: ...
+        def undo(self, doc_name: UndoDocumentName) -> object: ...
 
-    def create_assembly(self, doc_name: str, assembly_name: str = "Assembly", create_joint_group: object = True, recompute: object = False, if_exists: object = "error") -> object:
+    def create_assembly(self, doc_name: CreateAssemblyDocumentName, assembly_name: CreateAssemblyName = CreateAssemblyName("Assembly"), create_joint_group: object = True, recompute: object = False, if_exists: object = "error") -> object:
         params = {
             "doc_name": doc_name,
             "assembly_name": assembly_name,
@@ -357,7 +357,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "create_assembly")(*[params[name] for name in params])
 
-    def create_assembly_grounded_joint(self, doc_name: str, assembly_name: str, component_name: str, label: object = None, recompute: object = True) -> object:
+    def create_assembly_grounded_joint(self, doc_name: GroundedDocumentName, assembly_name: GroundedAssemblyName, component_name: ComponentName, label: object = None, recompute: object = True) -> object:
         params = {
             "doc_name": doc_name,
             "assembly_name": assembly_name,
@@ -377,7 +377,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "create_assembly_grounded_joint")(*[params[name] for name in params])
 
-    def create_assembly_joint(self, doc_name: str, assembly_name: str, joint_type: object, ref1_component: object, ref2_component: object, ref1_element: object = "", ref2_element: object = "", ref1_vertex: object = None, ref2_vertex: object = None, label: object = None, solve: object = True, presolve: object = True, recompute: object = True, properties: object = None) -> object:
+    def create_assembly_joint(self, doc_name: JointDocumentName, assembly_name: JointAssemblyName, joint_type: object, ref1_component: object, ref2_component: object, ref1_element: object = "", ref2_element: object = "", ref1_vertex: object = None, ref2_vertex: object = None, label: object = None, solve: object = True, presolve: object = True, recompute: object = True, properties: object = None) -> object:
         params = {
             "doc_name": doc_name,
             "assembly_name": assembly_name,
@@ -406,7 +406,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "create_assembly_joint")(*[params[name] for name in params])
 
-    def solve_assembly(self, doc_name: str, assembly_name: str) -> object:
+    def solve_assembly(self, doc_name: SolveDocumentName, assembly_name: SolveAssemblyName) -> object:
         params = {
             "doc_name": doc_name,
             "assembly_name": assembly_name,
@@ -423,7 +423,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "solve_assembly")(*[params[name] for name in params])
 
-    def create_helical_gear(self, doc_name: str, gear_name: str, teeth: object, module: object, width: object, helix_angle: object = 15.0, pressure_angle: object = 20.0, bore_diameter: object = 0.0, clearance: object = 0.0, backlash: object = 0.0, samples_per_flank: object = 12, body_name: object = None) -> object:
+    def create_helical_gear(self, doc_name: HelicalDocumentName, gear_name: HelicalGearName, teeth: object, module: object, width: object, helix_angle: object = 15.0, pressure_angle: object = 20.0, bore_diameter: object = 0.0, clearance: object = 0.0, backlash: object = 0.0, samples_per_flank: object = 12, body_name: object = None) -> object:
         params = {
             "doc_name": doc_name,
             "gear_name": gear_name,
@@ -450,7 +450,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "create_helical_gear")(*[params[name] for name in params])
 
-    def create_involute_gear(self, doc_name: str, gear_name: str, teeth: object, module: object, width: object, pressure_angle: object = 20.0, bore_diameter: object = 0.0, clearance: object = 0.0, backlash: object = 0.0, samples_per_flank: object = 12, body_name: object = None, sketch_name: object = None) -> object:
+    def create_involute_gear(self, doc_name: InvoluteDocumentName, gear_name: InvoluteGearName, teeth: object, module: object, width: object, pressure_angle: object = 20.0, bore_diameter: object = 0.0, clearance: object = 0.0, backlash: object = 0.0, samples_per_flank: object = 12, body_name: object = None, sketch_name: object = None) -> object:
         params = {
             "doc_name": doc_name,
             "gear_name": gear_name,
@@ -477,7 +477,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "create_involute_gear")(*[params[name] for name in params])
 
-    def create_spur_gear(self, doc_name: str, gear_name: str, teeth: object, module: object, width: object, pressure_angle: object = 20.0, bore_diameter: object = 0.0, clearance: object = 0.0, backlash: object = 0.0, samples_per_flank: object = 8, body_name: object = None, sketch_name: object = None, tooth_profile: object = "involute") -> object:
+    def create_spur_gear(self, doc_name: SpurDocumentName, gear_name: SpurGearName, teeth: object, module: object, width: object, pressure_angle: object = 20.0, bore_diameter: object = 0.0, clearance: object = 0.0, backlash: object = 0.0, samples_per_flank: object = 8, body_name: object = None, sketch_name: object = None, tooth_profile: object = "involute") -> object:
         params = {
             "doc_name": doc_name,
             "gear_name": gear_name,
@@ -505,7 +505,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "create_spur_gear")(*[params[name] for name in params])
 
-    def export_brep(self, doc_name: str, obj_name: str, file_path: object) -> object:
+    def export_brep(self, doc_name: ExportBrepDocumentName, obj_name: ExportBrepObjectName, file_path: object) -> object:
         params = {
             "doc_name": doc_name,
             "obj_name": obj_name,
@@ -523,7 +523,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "export_brep")(*[params[name] for name in params])
 
-    def export_step(self, doc_name: str, file_path: object, obj_names: object = None) -> object:
+    def export_step(self, doc_name: ExportStepDocumentName, file_path: object, obj_names: object = None) -> object:
         params = {
             "doc_name": doc_name,
             "file_path": file_path,
@@ -541,7 +541,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "export_step")(*[params[name] for name in params])
 
-    def export_stl(self, doc_name: str, file_path: object, obj_names: object = None, mesh_deviation: object = 0.1) -> object:
+    def export_stl(self, doc_name: ExportStlDocumentName, file_path: object, obj_names: object = None, mesh_deviation: object = 0.1) -> object:
         params = {
             "doc_name": doc_name,
             "file_path": file_path,
@@ -560,7 +560,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "export_stl")(*[params[name] for name in params])
 
-    def import_brep(self, doc_name: str, file_path: object, obj_name: str = "BRepImport") -> object:
+    def import_brep(self, doc_name: ImportBrepDocumentName, file_path: object, obj_name: ImportBrepObjectName = ImportBrepObjectName("BRepImport")) -> object:
         params = {
             "doc_name": doc_name,
             "file_path": file_path,
@@ -578,7 +578,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "import_brep")(*[params[name] for name in params])
 
-    def import_step(self, doc_name: str, file_path: object) -> object:
+    def import_step(self, doc_name: ImportStepDocumentName, file_path: object) -> object:
         params = {
             "doc_name": doc_name,
             "file_path": file_path,
@@ -595,7 +595,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "import_step")(*[params[name] for name in params])
 
-    def bounding_box(self, doc_name: str, obj_name: str) -> object:
+    def bounding_box(self, doc_name: BoundingBoxDocumentName, obj_name: BoundingBoxObjectName) -> object:
         params = {
             "doc_name": doc_name,
             "obj_name": obj_name,
@@ -612,7 +612,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "bounding_box")(*[params[name] for name in params])
 
-    def center_of_mass(self, doc_name: str, obj_name: str) -> object:
+    def center_of_mass(self, doc_name: CenterOfMassDocumentName, obj_name: CenterOfMassObjectName) -> object:
         params = {
             "doc_name": doc_name,
             "obj_name": obj_name,
@@ -629,7 +629,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "center_of_mass")(*[params[name] for name in params])
 
-    def common_volume_along_path(self, doc_name: str, moving_object: object, obstacle_objects: object, path_object: object = None, sample_count: object = 12, samples: object = None, volume_threshold_mm3: object = 1e-6, stop_on_first_hit: object = False) -> object:
+    def common_volume_along_path(self, doc_name: CommonVolumeDocumentName, moving_object: object, obstacle_objects: object, path_object: object = None, sample_count: object = 12, samples: object = None, volume_threshold_mm3: object = 1e-6, stop_on_first_hit: object = False) -> object:
         params = {
             "doc_name": doc_name,
             "moving_object": moving_object,
@@ -652,7 +652,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "common_volume_along_path")(*[params[name] for name in params])
 
-    def rotate(self, doc_name: str, obj_name: str, axis_x: object, axis_y: object, axis_z: object, angle_deg: object, center_x: object = 0.0, center_y: object = 0.0, center_z: object = 0.0) -> object:
+    def rotate(self, doc_name: RotateDocumentName, obj_name: RotateObjectName, axis_x: object, axis_y: object, axis_z: object, angle_deg: object, center_x: object = 0.0, center_y: object = 0.0, center_z: object = 0.0) -> object:
         params = {
             "doc_name": doc_name,
             "obj_name": obj_name,
@@ -676,7 +676,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "rotate")(*[params[name] for name in params])
 
-    def scale(self, doc_name: str, obj_name: str, sx: object, sy: object, sz: object) -> object:
+    def scale(self, doc_name: ScaleDocumentName, obj_name: ScaleObjectName, sx: object, sy: object, sz: object) -> object:
         params = {
             "doc_name": doc_name,
             "obj_name": obj_name,
@@ -696,7 +696,7 @@ class FreeCADConnection:
         server = getattr(self, "server")
         return getattr(server, "scale")(*[params[name] for name in params])
 
-    def translate(self, doc_name: str, obj_name: str, dx: object, dy: object, dz: object) -> object:
+    def translate(self, doc_name: TranslateDocumentName, obj_name: TranslateObjectName, dx: object, dy: object, dz: object) -> object:
         params = {
             "doc_name": doc_name,
             "obj_name": obj_name,
@@ -1582,41 +1582,43 @@ class FreeCADConnection:
 
         def _invoke_mutation_v2(self, *args: object, **kwargs: object) -> object: ...
 
-        def activate_document(self, doc_name: str) -> object: ...
+        def get_active_screenshot(self) -> str | None: ...
+
+        def activate_document(self, doc_name: ActivateDocumentName) -> object: ...
 
         def body_create(
-            self, doc_name: str, body_name: str
+            self, doc_name: DocumentName, body_name: BodyName
         ) -> object: ...
 
         def body_set_tip(
             self,
-            doc_name: str,
-            body_name: str,
-            feature_name: str,
+            doc_name: TipDocumentName,
+            body_name: TipBodyName,
+            feature_name: TipFeatureName,
         ) -> object: ...
 
         def boolean_difference(
             self,
-            doc_name: str,
-            shape1: str,
-            shape2: str,
-            result_name: str,
+            doc_name: BooleanDifferenceDocumentName,
+            shape1: BooleanDifferenceFeatureName,
+            shape2: BooleanDifferenceFeatureName,
+            result_name: BooleanDifferenceFeatureName,
         ) -> object: ...
 
         def boolean_intersection(
             self,
-            doc_name: str,
-            shape1: str,
-            shape2: str,
-            result_name: str,
+            doc_name: BooleanIntersectionDocumentName,
+            shape1: BooleanIntersectionFeatureName,
+            shape2: BooleanIntersectionFeatureName,
+            result_name: BooleanIntersectionFeatureName,
         ) -> object: ...
 
         def boolean_union(
             self,
-            doc_name: str,
-            shape1: str,
-            shape2: str,
-            result_name: str,
+            doc_name: BooleanUnionDocumentName,
+            shape1: BooleanUnionFeatureName,
+            shape2: BooleanUnionFeatureName,
+            result_name: BooleanUnionFeatureName,
         ) -> object: ...
 
         def build_path_wire(self, doc_name: str, wire_name: str, segments: object, tolerance_mm: float = 0.5, container: str | None = None, if_exists: str = "error") -> object: ...
@@ -1625,23 +1627,23 @@ class FreeCADConnection:
 
         def chamfer_feature(
             self,
-            doc_name: str,
-            base_feature: str,
-            chamfer_name: str,
+            doc_name: ChamferFeatureDocumentName,
+            base_feature: ChamferFeatureFeatureName,
+            chamfer_name: ChamferFeatureFeatureName,
             size: float,
             edge_refs: list[str] | None = None,
-            body_name: str | None = None,
+            body_name: ChamferFeatureFeatureName | None = None,
         ) -> object: ...
 
         def clear_expression(self, doc_name: str, object_name: str, prop_path: str) -> object: ...
 
         def create_datum_plane(self, doc_name: str, plane_name: str, body_name: str, mode: str, source_ref: str | None = None, face_a: str | None = None, face_b: str | None = None, offset_along_normal: object = None, map_mode: str = "FlatFace", if_exists: str = "error") -> object: ...
 
-        def create_document(self, name: str) -> object: ...
+        def create_document(self, name: CreateDocumentName) -> object: ...
 
         def create_object(
             self,
-            doc_name: str,
+            doc_name: CreateObjectDocumentName,
             obj_data: CreateObjectPayload,
         ) -> object: ...
 
@@ -1655,88 +1657,88 @@ class FreeCADConnection:
 
         def delete_object(
             self,
-            doc_name: str,
-            obj_name: str,
+            doc_name: DeleteObjectDocumentName,
+            obj_name: DeleteObjectName,
             recursive: bool = False,
             force: bool = False,
         ) -> object: ...
 
         def edit_object(
             self,
-            doc_name: str,
-            obj_name: str,
+            doc_name: EditObjectDocumentName,
+            obj_name: EditObjectName,
             properties: EditObjectPayload | Mapping[str, object],
         ) -> object: ...
 
         def fillet_feature(
             self,
-            doc_name: str,
-            base_feature: str,
-            fillet_name: str,
+            doc_name: FilletFeatureDocumentName,
+            base_feature: FilletFeatureFeatureName,
+            fillet_name: FilletFeatureFeatureName,
             radius: float,
             edge_refs: list[str] | None = None,
-            body_name: str | None = None,
+            body_name: FilletFeatureFeatureName | None = None,
         ) -> object: ...
 
         def helical_sweep_feature(
             self,
-            doc_name: str,
-            profile_sketch: str,
-            helix_name: str,
+            doc_name: HelicalSweepFeatureDocumentName,
+            profile_sketch: HelicalSweepFeatureFeatureName,
+            helix_name: HelicalSweepFeatureFeatureName,
             pitch: float,
             height: float,
             radius: float,
-            body_name: str | None = None,
+            body_name: HelicalSweepFeatureFeatureName | None = None,
             left_handed: bool = False,
             reversed_dir: bool = False,
         ) -> object: ...
 
         def insert_part_from_library(
-            self, doc_name: str, relative_path: str
+            self, doc_name: InsertPartDocumentName, relative_path: str
         ) -> object: ...
 
         def invoke_rpc(self, *args: object, **kwargs: object) -> object: ...
 
         def linear_pattern_feature(
             self,
-            doc_name: str,
-            feature_name: str,
-            pattern_name: str,
+            doc_name: LinearPatternFeatureDocumentName,
+            feature_name: LinearPatternFeatureFeatureName,
+            pattern_name: LinearPatternFeatureFeatureName,
             length: float,
             occurrences: int,
             direction: str = "X_Axis",
-            body_name: str | None = None,
+            body_name: LinearPatternFeatureFeatureName | None = None,
             reversed_dir: bool = False,
         ) -> object: ...
 
         def loft_feature(
             self,
-            doc_name: str,
-            sketch_names: list[str],
-            loft_name: str,
-            body_name: str | None = None,
+            doc_name: LoftFeatureDocumentName,
+            sketch_names: list[LoftFeatureFeatureName],
+            loft_name: LoftFeatureFeatureName,
+            body_name: LoftFeatureFeatureName | None = None,
             ruled: bool = False,
             closed: bool = False,
         ) -> object: ...
 
         def mirror_feature(
             self,
-            doc_name: str,
-            feature_name: str,
-            mirror_name: str,
+            doc_name: MirrorFeatureDocumentName,
+            feature_name: MirrorFeatureFeatureName,
+            mirror_name: MirrorFeatureFeatureName,
             plane: str = "YZ_Plane",
-            body_name: str | None = None,
+            body_name: MirrorFeatureFeatureName | None = None,
         ) -> object: ...
 
         def move_object(self, doc_name: str, obj_name: str, target_container: str, remove_from_old_parent: bool = True) -> object: ...
 
-        def open_document(self, path: str) -> object: ...
+        def open_document(self, path: OpenDocumentPath) -> object: ...
 
         def pad_feature(
             self,
-            doc_name: str,
+            doc_name: PadDocumentName,
             sketch_name: str,
-            pad_name: str,
+            pad_name: PadName,
             length: float,
             body_name: str | None = None,
             symmetric: bool = False,
@@ -1745,9 +1747,9 @@ class FreeCADConnection:
 
         def pocket_feature(
             self,
-            doc_name: str,
+            doc_name: PocketDocumentName,
             sketch_name: str,
-            pocket_name: str,
+            pocket_name: PocketName,
             length: float,
             body_name: str | None = None,
             symmetric: bool = False,
@@ -1756,34 +1758,34 @@ class FreeCADConnection:
 
         def polar_pattern_feature(
             self,
-            doc_name: str,
-            feature_name: str,
-            pattern_name: str,
+            doc_name: PolarPatternFeatureDocumentName,
+            feature_name: PolarPatternFeatureFeatureName,
+            pattern_name: PolarPatternFeatureFeatureName,
             occurrences: int,
             angle: float = 360.0,
             axis: str = "Z_Axis",
-            body_name: str | None = None,
+            body_name: PolarPatternFeatureFeatureName | None = None,
             reversed_dir: bool = False,
         ) -> object: ...
 
         def preview_attachment(self, doc_name: str, datum_name: str) -> object: ...
 
         def recompute_and_wait(
-            self, doc_name: str
+            self, doc_name: RecomputeAndWaitDocumentName
         ) -> object: ...
 
-        def recompute_document(self, doc_name: str) -> object: ...
+        def recompute_document(self, doc_name: RecomputeDocumentName) -> object: ...
 
-        def redo(self, doc_name: str) -> object: ...
+        def redo(self, doc_name: RedoDocumentName) -> object: ...
 
         def relink_references(self, doc_name: str, from_obj: str, to_obj: str) -> object: ...
 
-        def reload_document(self, doc_name: str) -> object: ...
+        def reload_document(self, doc_name: ReloadDocumentName) -> object: ...
 
         def repair_references(
             self,
-            doc_name: str,
-            repairs: Sequence[Mapping[str, object]],
+            doc_name: RepairReferencesDocumentName,
+            repairs: Sequence[RepairItemPayload],
             recompute: bool = False,
             validate: bool = False,
         ) -> object: ...
@@ -1792,12 +1794,12 @@ class FreeCADConnection:
 
         def revolve_feature(
             self,
-            doc_name: str,
-            sketch_name: str,
-            revolve_name: str,
+            doc_name: RevolveFeatureDocumentName,
+            sketch_name: RevolveFeatureFeatureName,
+            revolve_name: RevolveFeatureFeatureName,
             angle: float = 360.0,
             axis: str = "Z_Axis",
-            body_name: str | None = None,
+            body_name: RevolveFeatureFeatureName | None = None,
             symmetric: bool = False,
             reversed_dir: bool = False,
         ) -> object: ...
@@ -1808,8 +1810,8 @@ class FreeCADConnection:
 
         def sketch_add_constraint(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: AddConstraintDocumentName,
+            sketch_name: AddConstraintSketchName,
             constraints: Sequence[object],
         ) -> object: ...
 
@@ -1817,46 +1819,46 @@ class FreeCADConnection:
 
         def sketch_add_geometry(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: AddGeometryDocumentName,
+            sketch_name: AddGeometrySketchName,
             geometry: Sequence[object],
         ) -> object: ...
 
         def sketch_attach(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: AttachDocumentName,
+            sketch_name: AttachSketchName,
             support: object,
             attachment_offset: Mapping[str, object] | None = None,
         ) -> object: ...
 
         def sketch_create(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: SketchCreateDocumentName,
+            sketch_name: SketchCreateName,
             body_name: str | None = None,
             attach_to: str | None = None,
         ) -> object: ...
 
         def sketch_delete_constraint(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: DeleteConstraintDocumentName,
+            sketch_name: DeleteConstraintSketchName,
             constraint_indices: Sequence[int] | None = None,
             constraint_names: Sequence[str] | None = None,
         ) -> object: ...
 
         def sketch_delete_geometry(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: DeleteGeometryDocumentName,
+            sketch_name: DeleteGeometrySketchName,
             geometry_indices: Sequence[int],
         ) -> object: ...
 
         def sketch_edit_constraint(
             self,
-            doc_name: str,
-            sketch_name: str,
+            doc_name: EditConstraintDocumentName,
+            sketch_name: EditConstraintSketchName,
             value: float | None = None,
             name: str | None = None,
             index: int | None = None,
@@ -1876,17 +1878,17 @@ class FreeCADConnection:
 
         def sweep_feature(
             self,
-            doc_name: str,
-            profile_sketch: str,
-            path_sketch: str,
-            sweep_name: str,
-            body_name: str | None = None,
+            doc_name: SweepFeatureDocumentName,
+            profile_sketch: SweepFeatureFeatureName,
+            path_sketch: SweepFeatureFeatureName,
+            sweep_name: SweepFeatureFeatureName,
+            body_name: SweepFeatureFeatureName | None = None,
             frenet: bool = False,
         ) -> object: ...
 
         def sweep_pipe(self, doc_name: str, path_wire: str, diameter_mm: float, solid_name: str, profile_mode: str = "frenet", color: object = None, container: str | None = None, if_exists: str = "error") -> object: ...
 
-        def undo(self, doc_name: str) -> object: ...
+        def undo(self, doc_name: UndoDocumentName) -> object: ...
 
         def validate_movement_follow(self, doc_name: str, source: str, dependents: object, translation: object, axis: object, angle_deg: float, restore: bool = True, tolerance: float = 1e-07) -> object: ...
 
