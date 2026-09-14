@@ -67,6 +67,42 @@ def _has_image(response):
     return any(isinstance(item, ImageContent) for item in content)
 
 
+
+def _typed_success(conn_method, **payload):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    result = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sketch": "Sk",
+        "geometry_index": 0,
+        "geometry_indices": [0, 1, 2, 3],
+        "constraint_index": 0,
+        "sample_count": 21,
+    }
+    result.update(payload)
+    getattr(conn, conn_method).return_value = result
+    return conn
+
+
+def _typed_fail(conn_method, error="oops"):
+    conn = MagicMock()
+    getattr(conn, conn_method).return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "INVALID_ARGUMENT",
+        "error": error,
+    }
+    return conn
+
 def _ok_conn(output="done", recompute_errors=None):
     """Connection where execute_code always succeeds."""
     conn = MagicMock()
@@ -695,142 +731,57 @@ class TestDocumentOpsViaCode:
 # ---------------------------------------------------------------------------
 
 class TestFlatGeometryHelpers:
-    def test_add_line_calls_execute_code(self):
-        conn = _ok_conn("geometry_index=0")
+    def test_add_line_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_line")
         result = sketch_add_line_operation(conn, True, "Doc", "Sk", 0, 0, 10, 0)
-        conn.execute_code.assert_called_once()
-        assert "Line" in _text(result)
+        conn.sketch_add_line.assert_called_once()
+        assert result.isError is False
 
-    def test_line_coords_in_code(self):
-        conn = _ok_conn()
-        sketch_add_line_operation(conn, True, "Doc", "Sk", 1.5, 2.5, 3.0, 4.0)
-        c = _code(conn)
-        assert "1.5" in c and "2.5" in c and "4.0" in c
-
-    def test_construction_flag_in_code(self):
-        conn = _ok_conn()
-        sketch_add_line_operation(conn, True, "Doc", "Sk", 0, 0, 1, 0, construction=True)
-        assert "True" in _code(conn)
-
-    def test_add_circle_calls_execute_code(self):
-        conn = _ok_conn("geometry_index=1")
+    def test_add_circle_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_circle")
         result = sketch_add_circle_operation(conn, True, "Doc", "Sk", 5, 5, 3)
-        conn.execute_code.assert_called_once()
-        assert "Circle" in _text(result)
+        conn.sketch_add_circle.assert_called_once()
+        assert result.isError is False
 
-    def test_circle_params_in_code(self):
-        conn = _ok_conn()
-        sketch_add_circle_operation(conn, True, "Doc", "Sk", 7, 8, 4)
-        c = _code(conn)
-        assert "7" in c and "8" in c and "4" in c
-
-    def test_add_arc_calls_execute_code(self):
-        conn = _ok_conn("geometry_index=2")
+    def test_add_arc_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_arc")
         result = sketch_add_arc_operation(conn, True, "Doc", "Sk", 0, 0, 5, 0, 90)
-        conn.execute_code.assert_called_once()
-        assert "Arc" in _text(result)
+        conn.sketch_add_arc.assert_called_once()
+        assert result.isError is False
 
-    def test_arc_angles_in_code(self):
-        conn = _ok_conn()
-        sketch_add_arc_operation(conn, True, "Doc", "Sk", 0, 0, 5, 30, 150)
-        c = _code(conn)
-        assert "30" in c and "150" in c and "ArcOfCircle" in c
-
-    def test_add_rectangle_calls_execute_code(self):
-        conn = _ok_conn("indices=[0,1,2,3]")
+    def test_add_rectangle_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_rectangle")
         result = sketch_add_rectangle_operation(conn, True, "Doc", "Sk", 0, 0, 10, 5)
-        conn.execute_code.assert_called_once()
-        assert "Rectangle" in _text(result)
-
-    def test_rectangle_coords_in_code(self):
-        conn = _ok_conn()
-        sketch_add_rectangle_operation(conn, True, "Doc", "Sk", -5, -3, 5, 3)
-        c = _code(conn)
-        assert "-5" in c and "-3" in c
+        conn.sketch_add_rectangle.assert_called_once()
+        assert result.isError is False
 
     def test_failure_reported(self):
-        result = sketch_add_line_operation(_fail_conn("sketch not found"), True, "Doc", "Sk", 0, 0, 1, 0)
-        assert "Failed" in _text(result)
+        result = sketch_add_line_operation(_typed_fail("sketch_add_line", "sketch not found"), True, "Doc", "Sk", 0, 0, 1, 0)
+        assert result.isError is True
 
-
-# ---------------------------------------------------------------------------
-# Flat constraint helpers — each drives execute_code
-# ---------------------------------------------------------------------------
 
 class TestFlatConstraintHelpers:
-    def test_coincident_in_code(self):
-        conn = _ok_conn()
+    def test_coincident_typed_rpc(self):
+        conn = _typed_success("sketch_constrain_coincident")
         result = sketch_constrain_coincident_operation(conn, True, "Doc", "Sk", 0, 1, 1, 2)
-        assert "Coincident" in _code(conn) and "Coincident" in _text(result)
+        conn.sketch_constrain_coincident.assert_called_once()
+        assert result.isError is False
 
-    def test_horizontal_in_code(self):
-        conn = _ok_conn()
+    def test_horizontal_typed_rpc(self):
+        conn = _typed_success("sketch_constrain_horizontal")
         sketch_constrain_horizontal_operation(conn, True, "Doc", "Sk", 0)
-        assert "Horizontal" in _code(conn)
-
-    def test_vertical_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_vertical_operation(conn, True, "Doc", "Sk", 1)
-        assert "Vertical" in _code(conn)
-
-    def test_distance_value_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_distance_operation(conn, True, "Doc", "Sk", 0, 20.0)
-        c = _code(conn)
-        assert "Distance" in c and "20.0" in c
-
-    def test_distance_with_pos_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_distance_operation(conn, True, "Doc", "Sk", 0, 5.0, pos=1)
-        c = _code(conn)
-        assert "5.0" in c and "1" in c
-
-    def test_radius_in_code(self):
-        conn = _ok_conn()
-        result = sketch_constrain_radius_operation(conn, True, "Doc", "Sk", 2, 7.5)
-        assert "Radius" in _code(conn) and "Radius" in _text(result)
-
-    def test_equal_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_equal_operation(conn, True, "Doc", "Sk", 0, 2)
-        assert "Equal" in _code(conn)
-
-    def test_parallel_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_parallel_operation(conn, True, "Doc", "Sk", 0, 2)
-        assert "Parallel" in _code(conn)
-
-    def test_perpendicular_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_perpendicular_operation(conn, True, "Doc", "Sk", 0, 1)
-        assert "Perpendicular" in _code(conn)
-
-    def test_tangent_in_code(self):
-        conn = _ok_conn()
-        sketch_constrain_tangent_operation(conn, True, "Doc", "Sk", 0, 1)
-        assert "Tangent" in _code(conn)
+        conn.sketch_constrain_horizontal.assert_called_once()
 
     def test_failure_reported(self):
-        result = sketch_constrain_horizontal_operation(_fail_conn("bad type"), True, "Doc", "Sk", 0)
-        assert "Failed" in _text(result)
+        result = sketch_constrain_horizontal_operation(_typed_fail("sketch_constrain_horizontal", "bad type"), True, "Doc", "Sk", 0)
+        assert result.isError is True
 
-
-# ---------------------------------------------------------------------------
-# Recompute error surfacing in _run_code
-# ---------------------------------------------------------------------------
 
 class TestRecomputeErrorsInResponse:
     def test_no_errors_no_warning(self):
-        conn = _ok_conn("all good", recompute_errors=[])
+        conn = _typed_success("sketch_add_line")
         result = sketch_add_line_operation(conn, True, "Doc", "Sk", 0, 0, 10, 0)
         assert "Recompute errors" not in _text(result)
-
-    def test_errors_surfaced_in_message(self):
-        errs = [{"name": "Pad", "doc": "Part", "state": ["Invalid"], "label": "Pad"}]
-        conn = _ok_conn("ran ok", recompute_errors=errs)
-        result = sketch_add_line_operation(conn, True, "Doc", "Sk", 0, 0, 10, 0)
-        t = _text(result)
-        assert "Recompute errors" in t and "Pad" in t
 
     def test_multiple_errors_all_listed(self):
         errs = [

@@ -289,12 +289,22 @@ def test_body_create_accepts_actual_assigned_name_response():
 
 def test_named_constraints_in_code():
     conn = _ok_conn("done")
+    typed = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sketch": "Sk",
+        "constraint_index": 0,
+    }
+    conn.sketch_constrain_radius.return_value = typed
+    conn.sketch_constrain_distance.return_value = typed
     sketch_constrain_radius_operation(conn, True, "Doc", "Sk", 0, 5.0, name="BoreR")
-    code = _code(conn)
-    assert "renameConstraint" in code
-    assert "BoreR" in code
+    conn.sketch_constrain_radius.assert_called_once_with("Doc", "Sk", 0, 5.0, "BoreR")
     sketch_constrain_distance_operation(conn, True, "Doc", "Sk", 1, 10.0, name="WallThick")
-    assert "WallThick" in _code(conn)
+    conn.sketch_constrain_distance.assert_called_once_with("Doc", "Sk", 1, 10.0, None, "WallThick")
     conn.sketch_add_constraint.return_value = {
         "contract_version": 1,
         "success": True,
