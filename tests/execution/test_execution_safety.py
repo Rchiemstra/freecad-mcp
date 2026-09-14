@@ -12,7 +12,7 @@ from addon.FreeCADMCP.rpc_server.execution_safety import (
 )
 
 SWEEP45_1_CODE = (
-    Path(__file__).resolve().parent / "fixtures" / "sweep45_1_payload.py.txt"
+    Path(__file__).resolve().parents[1] / "fixtures" / "sweep45_1_payload.py.txt"
 ).read_text(encoding="utf-8")
 
 
