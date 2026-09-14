@@ -117,15 +117,11 @@ def test_typed_cad_adapter_publishes_one_exact_structural_revision_event():
             RecordingAPI().commit_compatibility_mutation
         ),
     )
-    def _dispatch_gui(callback, *, late_result_transform=None, **_kwargs):
-        result = callback()
-        if late_result_transform is not None:
-            return late_result_transform(result)
-        return result
+    from tests.helpers.sync_dispatch_gui import synchronous_dispatch_gui
 
     facade = SimpleNamespace(
         _cad_collaborators=collaborators,
-        _dispatch_gui=_dispatch_gui,
+        _dispatch_gui=synchronous_dispatch_gui,
         _adapt_gui_mutation_result=adapt_gui_mutation_result,
     )
 
