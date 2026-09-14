@@ -6,10 +6,35 @@ Layer-B: Code-fragment and API-call checks
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from mcp.types import TextContent
 
+from freecad_mcp._shared.protocol.bounding_box_contract import (
+    make_bounding_box_failure,
+    make_bounding_box_success,
+)
+from freecad_mcp._shared.protocol.center_of_mass_contract import (
+    make_center_of_mass_failure,
+    make_center_of_mass_success,
+)
+from freecad_mcp._shared.protocol.common_volume_along_path_contract import (
+    make_common_volume_along_path_failure,
+    make_common_volume_along_path_success,
+)
+from freecad_mcp._shared.protocol.rotate_contract import (
+    make_rotate_failure,
+    make_rotate_success,
+)
+from freecad_mcp._shared.protocol.scale_contract import (
+    make_scale_failure,
+    make_scale_success,
+)
+from freecad_mcp._shared.protocol.translate_contract import (
+    make_translate_failure,
+    make_translate_success,
+)
 from freecad_mcp.operations.p5_measure import (
     bounding_box_operation,
     center_of_mass_operation,
@@ -25,10 +50,33 @@ from freecad_mcp.operations.p5_measure import (
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
+_MEASURE_IO = (
+    Path(__file__).resolve().parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "measure_io_actions.py"
+).read_text(encoding="utf-8")
+
+
 def _ok_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": True, "message": "done", "recompute_errors": []}
+    conn.bounding_box.return_value = make_bounding_box_success(
+        "Obj1", 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.732051, "world"
+    )
+    conn.center_of_mass.return_value = make_center_of_mass_success(
+        "Obj1", 0.0, 0.0, 0.0, "mm", "CenterOfMass", "world"
+    )
+    conn.common_volume_along_path.return_value = make_common_volume_along_path_success(
+        "Mover", 2, 1e-6, 0.0, False, []
+    )
+    conn.translate.return_value = make_translate_success("Obj1", "Obj1")
+    conn.rotate.return_value = make_rotate_success("Obj1", "Obj1")
+    conn.scale.return_value = make_scale_success("Obj1", "Obj1")
     return conn
 
 
@@ -36,6 +84,14 @@ def _fail_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": "oops"}
+    conn.bounding_box.return_value = make_bounding_box_failure("BOUNDING_BOX_FAILED", "oops")
+    conn.center_of_mass.return_value = make_center_of_mass_failure("CENTER_OF_MASS_FAILED", "oops")
+    conn.common_volume_along_path.return_value = make_common_volume_along_path_failure(
+        "COMMON_VOLUME_ALONG_PATH_FAILED", "oops"
+    )
+    conn.translate.return_value = make_translate_failure("TRANSLATE_FAILED", "oops")
+    conn.rotate.return_value = make_rotate_failure("ROTATE_FAILED", "oops")
+    conn.scale.return_value = make_scale_failure("SCALE_FAILED", "oops")
     return conn
 
 
@@ -173,27 +229,25 @@ class TestBoundingBox:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        bounding_box_operation(conn, "Doc", "Box1")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_boundbox_attribute_read(self):
-        conn = _ok_conn()
-        bounding_box_operation(conn, "Doc", "Box1")
-        assert_code_contains(_code(conn), "_resolve_global_shape", "BoundBox")
+        assert_code_contains(_MEASURE_IO, "resolve_global_shape", "BoundBox")
 
     def test_json_has_expected_keys(self):
-        conn = _ok_conn()
-        bounding_box_operation(conn, "Doc", "Box1")
-        code = _code(conn)
         for key in ("xmin", "ymin", "zmin", "xmax", "ymax", "zmax", "dx", "dy", "dz"):
-            assert_code_contains(code, f"'{key}'")
+            assert_code_contains(_MEASURE_IO, f'"{key}"')
 
     def test_link_safe_world_frame(self):
+        assert_code_contains(
+            _MEASURE_IO, "resolve_global_shape", "LinkedObject", "getGlobalPlacement", '"frame": "world"'
+        )
+
+    def test_typed_rpc_called(self):
         conn = _ok_conn()
-        bounding_box_operation(conn, "Doc", "Link1")
-        code = _code(conn)
-        assert_code_contains(code, "_resolve_global_shape", "LinkedObject", "getGlobalPlacement", "'frame':'world'")
+        bounding_box_operation(conn, "Doc", "Box1")
+        conn.bounding_box.assert_called_once_with("Doc", "Box1")
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -246,21 +300,18 @@ class TestCommonVolumeAlongPath:
         common_volume_along_path_operation(
             conn, "Doc", "Mover", ["Wall", "Block"], path_object="Rail", sample_count=5
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "_resolve_global_shape", ".common(", "discretize", "common_volume_mm3")
+        assert_code_compiles(_MEASURE_IO)
+        assert_code_contains(_MEASURE_IO, "resolve_global_shape", "discretize", "common_volume_mm3")
+        conn.common_volume_along_path.assert_called_once()
 
-    def test_runs_in_worker(self):
+    def test_calls_typed_rpc_not_worker(self):
         from freecad_mcp.operations.p5_measure import common_volume_along_path_operation
         conn = _ok_conn()
         common_volume_along_path_operation(
             conn, "Doc", "Mover", ["Wall"], samples=[{"x": 1, "y": 2, "z": 3}]
         )
-        opts = conn.execute_code.call_args[0][1]
-        if hasattr(opts, "to_dict"):
-            opts = opts.to_dict()
-        assert opts["execution_mode"] == "worker"
-        assert opts["read_only"] is True
+        conn.common_volume_along_path.assert_called_once()
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -273,21 +324,20 @@ class TestCenterOfMass:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        center_of_mass_operation(conn, "Doc", "Obj1")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_CenterOfMass_attribute(self):
-        conn = _ok_conn()
-        center_of_mass_operation(conn, "Doc", "Obj1")
-        assert_code_contains(_code(conn), "CenterOfMass")
+        assert_code_contains(_MEASURE_IO, "CenterOfMass")
 
     def test_json_keys(self):
+        for key in ('"x"', '"y"', '"z"'):
+            assert_code_contains(_MEASURE_IO, key)
+
+    def test_typed_rpc_called(self):
         conn = _ok_conn()
         center_of_mass_operation(conn, "Doc", "Obj1")
-        code = _code(conn)
-        for key in ("'x'", "'y'", "'z'"):
-            assert_code_contains(code, key)
+        conn.center_of_mass.assert_called_once_with("Doc", "Obj1")
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -327,30 +377,19 @@ class TestTranslate:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        translate_operation(conn, True, "Doc", "Obj1", 10, 5, 3)
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_placement_modified(self):
-        conn = _ok_conn()
-        translate_operation(conn, True, "Doc", "Obj1", 10, 0, 0)
-        assert_code_contains(_code(conn), "Placement")
+        assert_code_contains(_MEASURE_IO, "Placement")
 
-    def test_delta_in_code(self):
+    def test_delta_in_rpc(self):
         conn = _ok_conn()
         translate_operation(conn, True, "Doc", "Obj1", 7.5, -3.0, 2.5)
-        code = _code(conn)
-        assert_code_contains(code, "7.5", "-3.0", "2.5")
+        conn.translate.assert_called_once_with("Doc", "Obj1", 7.5, -3.0, 2.5)
 
-    def test_recompute_called(self):
-        conn = _ok_conn()
-        translate_operation(conn, True, "Doc", "Obj1", 0, 0, 0)
-        assert_code_contains(_code(conn), "_doc.recompute()")
+    def test_apply_does_not_recompute(self):
+        assert ".recompute(" not in _MEASURE_IO
 
-
-# ---------------------------------------------------------------------------
-# P5-9  rotate
-# ---------------------------------------------------------------------------
 
 class TestRotate:
     def test_success(self):
@@ -358,36 +397,26 @@ class TestRotate:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        rotate_operation(conn, True, "Doc", "Obj1", 0, 0, 1, 45.0)
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_rotation_api_called(self):
-        conn = _ok_conn()
-        rotate_operation(conn, True, "Doc", "Obj1", 0, 0, 1, 90.0)
-        assert_code_contains(_code(conn), "FreeCAD.Rotation")
+        assert_code_contains(_MEASURE_IO, "Rotation")
 
-    def test_axis_in_code(self):
+    def test_axis_in_rpc(self):
         conn = _ok_conn()
         rotate_operation(conn, True, "Doc", "Obj1", 1.0, 0.0, 0.0, 45.0)
-        code = _code(conn)
-        assert_code_contains(code, "1.0", "0.0")
+        assert conn.rotate.call_args.args[2:5] == (1.0, 0.0, 0.0)
 
-    def test_angle_in_code(self):
+    def test_angle_in_rpc(self):
         conn = _ok_conn()
         rotate_operation(conn, True, "Doc", "Obj1", 0, 0, 1, 120.0)
-        assert_code_contains(_code(conn), "120.0")
+        assert conn.rotate.call_args.args[5] == 120.0
 
-    def test_center_in_code(self):
+    def test_center_in_rpc(self):
         conn = _ok_conn()
         rotate_operation(conn, True, "Doc", "Obj1", 0, 0, 1, 45.0, center_x=5.0, center_y=5.0)
-        code = _code(conn)
-        assert_code_contains(code, "5.0")
+        assert conn.rotate.call_args.args[6:8] == (5.0, 5.0)
 
-
-# ---------------------------------------------------------------------------
-# P5-10  scale
-# ---------------------------------------------------------------------------
 
 class TestScale:
     def test_success(self):
@@ -395,22 +424,15 @@ class TestScale:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        scale_operation(conn, True, "Doc", "Obj1", 2.0, 1.0, 0.5)
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_matrix_scale_called(self):
-        conn = _ok_conn()
-        scale_operation(conn, True, "Doc", "Obj1", 2.0, 2.0, 2.0)
-        assert_code_contains(_code(conn), "FreeCAD.Matrix")
+        assert_code_contains(_MEASURE_IO, "Matrix")
 
-    def test_scale_factors_in_code(self):
+    def test_scale_factors_in_rpc(self):
         conn = _ok_conn()
         scale_operation(conn, True, "Doc", "Obj1", 1.5, 2.5, 0.5)
-        code = _code(conn)
-        assert_code_contains(code, "1.5", "2.5", "0.5")
+        conn.scale.assert_called_once_with("Doc", "Obj1", 1.5, 2.5, 0.5)
 
     def test_transformGeometry_called(self):
-        conn = _ok_conn()
-        scale_operation(conn, True, "Doc", "Obj1", 2.0, 2.0, 2.0)
-        assert_code_contains(_code(conn), "transformGeometry")
+        assert_code_contains(_MEASURE_IO, "transformGeometry")

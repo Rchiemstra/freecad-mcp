@@ -36,6 +36,13 @@ from freecad_mcp.operations.snapshot import (
     restore_operation,
     snapshot_operation,
 )
+from freecad_mcp._shared.protocol.create_assembly_joint_contract import (
+    make_create_assembly_joint_success,
+)
+from freecad_mcp._shared.protocol.solve_assembly_contract import (
+    make_solve_assembly_failure,
+    make_solve_assembly_success,
+)
 from freecad_mcp.operations.p7_assembly import (
     create_assembly_joint_operation,
     create_datum_plane_operation,
@@ -571,27 +578,74 @@ class TestI7SnapshotRestore:
 class TestI9SolveAssembly:
     """I9 — solve_assembly re-solves an Assembly via the real internal solver."""
 
-    def test_generated_code_tries_solve_entry_points(self):
-        conn = _ok_conn()
-        solve_assembly_operation(conn, True, "Doc", "Asm")
-        code = _code(conn)
+    def test_apply_helper_tries_solve_entry_points(self):
+        from pathlib import Path
+
+        code = (
+            Path(__file__).resolve().parents[1]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "assembly_actions.py"
+        ).read_text(encoding="utf-8")
         assert_code_compiles(code)
         assert_code_contains(
             code,
-            "getObject('Asm')",
             "Assembly::AssemblyObject",
             "solveIfAllowed",
-            "recompute",
+            "assembly.solve()",
         )
+        assert "doc.recompute()" not in code
+        assert ".recompute(" not in code
 
     def test_returns_json_with_method(self):
-        out = '{"ok": true, "assembly": "Asm", "method": "assembly.solve()", "status": "0"}'
-        resp = solve_assembly_operation(_ok_conn(out), True, "Doc", "Asm")
-        assert _text(resp).startswith('{"ok": true, "assembly": "Asm"')
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.solve_assembly.return_value = make_solve_assembly_success(
+            "Asm", "assembly.solve()", "0"
+        )
+        resp = solve_assembly_operation(conn, True, "Doc", "Asm")
+        payload = json.loads(_text(resp))
+        assert payload["assembly"] == "Asm"
+        assert payload["method"] == "assembly.solve()"
+        conn.execute_code.assert_not_called()
 
     def test_failure_is_surfaced(self):
-        resp = solve_assembly_operation(_fail_conn(), True, "Doc", "Asm")
-        assert "Failed to solve assembly" in _text(resp)
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.solve_assembly.return_value = make_solve_assembly_failure(
+            "SOLVE_UNAVAILABLE", "oops"
+        )
+        resp = solve_assembly_operation(conn, True, "Doc", "Asm")
+        assert "Failed to run solve_assembly" in _text(resp)
+
+
+class TestM4JointPreflight:
+    """M4 — create_assembly_joint is a typed mutation; preflight lives in templates only."""
+
+    def test_joint_uses_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.create_assembly_joint.return_value = make_create_assembly_joint_success(
+            "J", "J", "Fixed", "Asm"
+        )
+        create_assembly_joint_operation(conn, True, "Doc", "Asm", "Fixed", "C1", "C2")
+        conn.create_assembly_joint.assert_called_once()
+        conn.execute_code.assert_not_called()
+        assert conn.create_assembly_joint.call_args.args[3:5] == ("C1", "C2")
+
+    def test_joint_success_json(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.create_assembly_joint.return_value = make_create_assembly_joint_success(
+            "J", "J", "Fixed", "Asm"
+        )
+        resp = create_assembly_joint_operation(conn, True, "Doc", "Asm", "Fixed", "C1", "C2")
+        payload = json.loads(_text(resp))
+        assert payload["joint"] == "J"
+        assert "PREFLIGHT WARNING" not in _text(resp)
 
 
 class TestM6FaceNormalEdgeAxis:
@@ -736,34 +790,6 @@ class TestI10StructuredDiff:
     def test_capture_failure_is_surfaced(self):
         resp = capture_state_operation(_fail_conn(), True, "Doc")
         assert "Failed to capture state" in _text(resp)
-
-
-class TestM4JointPreflight:
-    """M4 — create_assembly_joint warns when a referenced component's body has
-    cross-body datums attached (P5 guardrail)."""
-
-    def test_joint_code_includes_preflight(self):
-        conn = _ok_conn()
-        create_assembly_joint_operation(
-            conn, True, "Doc", "Asm", "Fixed", "C1", "C2",
-        )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "__PREFLIGHT_WARN__", "C1", "C2")
-
-    def test_joint_warning_surfaced_and_json_clean(self):
-        out = ('{"ok": true, "joint_name": "J"}\n'
-               '__PREFLIGHT_WARN__'
-               '[{"component":"C1","component_body":"BodyA","datum":"D",'
-               '"datum_body":"BodyB","support":"Pad","message":"Joint references C1."}]')
-        conn = _ok_conn(out)
-        resp = create_assembly_joint_operation(
-            conn, True, "Doc", "Asm", "Fixed", "C1", "C2",
-        )
-        text = _text(resp)
-        assert text.startswith('{"ok": true, "joint_name": "J"}')
-        assert "PREFLIGHT WARNING" in text
-        assert "C1" in text
 
 
 class TestP10GetViewFallback:

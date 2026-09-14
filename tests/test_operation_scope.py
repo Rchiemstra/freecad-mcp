@@ -101,9 +101,6 @@ READ_ONLY_GENERATED_OPERATIONS = {
     ("interactive.py", "diagnose_helix_operation"),
     ("interactive.py", "compare_documents_operation"),
     ("p5_measure_ops/measure_ops.py", "_run_read_analysis"),
-    ("p6_io.py", "export_step_operation"),
-    ("p6_io.py", "export_stl_operation"),
-    ("p6_io.py", "export_brep_operation"),
     ("p7_assembly_ops/document_tree_ops.py", "get_document_tree_operation"),
     ("p7_assembly_ops/sketch_projection_ops.py", "get_sketch_geometry_operation"),
     ("parametric_ops/spreadsheet_ops.py", "spreadsheet_get_cells_operation"),
@@ -142,11 +139,6 @@ MUTATIONS_THAT_MUST_NOT_BE_MARKED_READ_ONLY = {
     ("diagnostics_ops/mutation_ops.py", "create_placement_datum_operation"),
     ("diagnostics_ops/mutation_ops.py", "run_transaction_operation"),
     ("diagnostics_ops/mutation_ops.py", "validate_movement_follow_operation"),
-    ("p5_measure_ops/measure_ops.py", "translate_operation"),
-    ("p5_measure_ops/measure_ops.py", "rotate_operation"),
-    ("p5_measure_ops/measure_ops.py", "scale_operation"),
-    ("p6_io.py", "import_step_operation"),
-    ("p6_io.py", "import_brep_operation"),
 }
 
 
