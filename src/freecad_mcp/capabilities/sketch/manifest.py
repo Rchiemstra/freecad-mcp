@@ -3,7 +3,7 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
-from ..schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry
+from ..schema import ExecutionMode, ExecutionPolicy, MutationClass, SubjectManifest, ToolEntry
 
 MANIFEST = SubjectManifest(
     subject="sketch",
@@ -18,6 +18,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_1",
         ),
         ToolEntry(
@@ -29,6 +30,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_1",
         ),
         ToolEntry(
@@ -40,6 +42,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_1",
         ),
         ToolEntry(
@@ -51,6 +54,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_1",
         ),
         ToolEntry(
@@ -62,6 +66,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_1",
         ),
         ToolEntry(
@@ -73,6 +78,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_2",
         ),
         ToolEntry(
@@ -84,6 +90,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_2",
         ),
         ToolEntry(
@@ -95,6 +102,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_2",
         ),
         ToolEntry(
@@ -106,6 +114,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_constraints_2",
         ),
         ToolEntry(
@@ -117,6 +126,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_create_1",
         ),
         ToolEntry(
@@ -128,6 +138,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_create_1",
         ),
         ToolEntry(
@@ -139,6 +150,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_create_1",
         ),
         ToolEntry(
@@ -150,6 +162,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_create_2",
         ),
         ToolEntry(
@@ -161,6 +174,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_create_2",
         ),
         ToolEntry(
@@ -172,6 +186,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a",
         ),
         ToolEntry(
@@ -183,6 +198,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a",
         ),
         ToolEntry(
@@ -194,6 +210,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a",
         ),
         ToolEntry(
@@ -205,6 +222,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a",
         ),
         ToolEntry(
@@ -216,6 +234,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a2",
         ),
         ToolEntry(
@@ -227,6 +246,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a2",
         ),
         ToolEntry(
@@ -238,6 +258,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_a2",
         ),
         ToolEntry(
@@ -249,6 +270,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b",
         ),
         ToolEntry(
@@ -260,6 +282,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b",
         ),
         ToolEntry(
@@ -271,6 +294,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b",
         ),
         ToolEntry(
@@ -282,6 +306,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b",
         ),
         ToolEntry(
@@ -293,6 +318,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b2",
         ),
         ToolEntry(
@@ -304,6 +330,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b2",
         ),
         ToolEntry(
@@ -315,6 +342,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b2",
         ),
         ToolEntry(
@@ -326,6 +354,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b2",
         ),
         ToolEntry(
@@ -337,6 +366,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_curves_b2",
         ),
         ToolEntry(
@@ -348,6 +378,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_primitives",
         ),
         ToolEntry(
@@ -359,6 +390,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_primitives",
         ),
         ToolEntry(
@@ -370,6 +402,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_primitives",
         ),
         ToolEntry(
@@ -381,6 +414,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_sketch_primitives",
         ),
     ),

@@ -3,7 +3,7 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
-from ..schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry
+from ..schema import ExecutionMode, ExecutionPolicy, MutationClass, SubjectManifest, ToolEntry
 
 MANIFEST = SubjectManifest(
     subject="diagnostics",
@@ -18,6 +18,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_diagnostics",
         ),
         ToolEntry(
@@ -29,6 +30,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_diagnostics",
         ),
         ToolEntry(
@@ -40,6 +42,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_diagnostics",
         ),
     ),

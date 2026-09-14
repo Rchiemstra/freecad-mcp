@@ -9,11 +9,12 @@ from typing import Any
 
 from .introspection import (
     infer_execution_mode,
+    infer_execution_policy,
     infer_gui_thread,
     infer_mutation_class,
     operation_path_for_tool,
 )
-from .schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry
+from .schema import ExecutionMode, ExecutionPolicy, MutationClass, SubjectManifest, ToolEntry
 from .subjects import subject_for_register_module
 
 
@@ -88,6 +89,7 @@ def build_tool_entry(
     operation_path = operation_path_for_tool(module_name, tool_name)
     execution_mode = ExecutionMode(infer_execution_mode(operation_path, tool_name))
     docstring = frozen["docstring"]
+    policy_value = infer_execution_policy(tool_name)
     return ToolEntry(
         name=tool_name,
         docstring=docstring,
@@ -98,6 +100,9 @@ def build_tool_entry(
         gui_thread=infer_gui_thread(tool_name, docstring),
         mutation_class=MutationClass(infer_mutation_class(module_name, tool_name)),
         register_module=module_name,
+        execution_policy=(
+            None if policy_value is None else ExecutionPolicy(policy_value)
+        ),
     )
 
 
@@ -134,12 +139,18 @@ def bootstrap_subject_manifests() -> tuple[SubjectManifest, ...]:
 
 
 def render_subject_manifest_module(manifest: SubjectManifest) -> str:
+    needs_execution_policy = any(tool.execution_policy is not None for tool in manifest.tools)
+    schema_imports = ["ExecutionMode", "MutationClass", "SubjectManifest", "ToolEntry"]
+    if needs_execution_policy:
+        schema_imports.append("ExecutionPolicy")
+    schema_imports.sort()
     lines = [
         f'"""Capability manifest for {manifest.subject} (bootstrapped)."""',
         "",
+        "# ruff: noqa: E501",
         "from __future__ import annotations",
         "",
-        "from ..schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry",
+        f"from ..schema import {', '.join(schema_imports)}",
         "",
         "MANIFEST = SubjectManifest(",
         f'    subject="{manifest.subject}",',
@@ -160,6 +171,11 @@ def render_subject_manifest_module(manifest: SubjectManifest) -> str:
         lines.append(
             f"            mutation_class=MutationClass.{tool.mutation_class.name},"
         )
+        if tool.execution_policy is not None:
+            lines.append(
+                "            execution_policy="
+                f"ExecutionPolicy.{tool.execution_policy.name},"
+            )
         if tool.escape_hatch_impl is not None:
             lines.append(
                 f"            escape_hatch_impl={tool.escape_hatch_impl!r},"

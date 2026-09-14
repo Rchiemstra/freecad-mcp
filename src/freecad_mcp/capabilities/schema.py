@@ -25,6 +25,17 @@ class MutationClass(StrEnum):
     EXECUTION = "execution"
 
 
+class ExecutionPolicy(StrEnum):
+    """CAD execution policy classification (separate from MutationClass)."""
+
+    DOCUMENT_MUTATION = "document_mutation"
+    DOCUMENT_QUERY = "document_query"
+    DOCUMENT_LIFECYCLE = "document_lifecycle"
+    HISTORY_OPERATION = "history_operation"
+    EXTERNAL_EFFECT = "external_effect"
+    GUI_GLOBAL = "gui_global"
+
+
 @dataclass(frozen=True, slots=True)
 class ToolEntry:
     """One MCP tool declared in a subject manifest."""
@@ -39,6 +50,7 @@ class ToolEntry:
     mutation_class: MutationClass
     escape_hatch_impl: str | None = None
     register_module: str | None = None
+    execution_policy: ExecutionPolicy | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -55,6 +67,8 @@ class ToolEntry:
             payload["escape_hatch_impl"] = self.escape_hatch_impl
         if self.register_module is not None:
             payload["register_module"] = self.register_module
+        if self.execution_policy is not None:
+            payload["execution_policy"] = self.execution_policy.value
         return payload
 
     @classmethod
@@ -77,6 +91,11 @@ class ToolEntry:
                 None
                 if data.get("register_module") is None
                 else str(data["register_module"])
+            ),
+            execution_policy=(
+                None
+                if data.get("execution_policy") is None
+                else ExecutionPolicy(str(data["execution_policy"]))
             ),
         )
 
@@ -107,6 +126,7 @@ class SubjectManifest:
 
 __all__ = [
     "ExecutionMode",
+    "ExecutionPolicy",
     "MutationClass",
     "SubjectManifest",
     "ToolEntry",
