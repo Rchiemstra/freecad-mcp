@@ -40,6 +40,22 @@ def _ok_conn(output="done"):
         "message": "Python code execution scheduled. \nOutput: " + output,
         "recompute_errors": [],
     }
+
+    conn._invoke_mutation_v2.return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sheet": "Dims",
+        "label": "Dims",
+        "object": "Pad",
+        "prop_path": "Length",
+        "expression": "<<Dims>>.PadH",
+        "address": "A1",
+        "alias": "Wall",
+    }
     conn.body_create.return_value = {
         "contract_version": 1,
         "success": True,
@@ -88,6 +104,16 @@ def _fail_conn(error="oops"):
         "error_code": "BODY_SET_TIP_FAILED",
         "error": error,
     }
+    conn._invoke_mutation_v2.return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "FAILED",
+        "error": error,
+    }
     return conn
 
 
@@ -97,14 +123,16 @@ def _code(conn) -> str:
 
 def test_spreadsheet_create_code():
     conn = _ok_conn('{"ok": true}')
-    spreadsheet_create_operation(conn, True, "Doc", "Dims")
-    code = _code(conn)
-    assert "Spreadsheet::Sheet" in code
-    assert "Dims" in code
+    before = conn.execute_code.call_count
+    resp = spreadsheet_create_operation(conn, True, "Doc", "Dims")
+    assert not resp.isError
+    conn._invoke_mutation_v2.assert_called()
+    assert conn.execute_code.call_count == before
 
 
 def test_spreadsheet_set_cells_and_alias():
     conn = _ok_conn('{"ok": true}')
+    before = conn.execute_code.call_count
     spreadsheet_set_cells_operation(
         conn,
         True,
@@ -112,15 +140,11 @@ def test_spreadsheet_set_cells_and_alias():
         "Dims",
         [{"address": "A1", "value": 2.5, "alias": "Wall"}],
     )
-    code = _code(conn)
-    assert "set(" in code
-    assert "Wall" in code
     spreadsheet_set_alias_operation(conn, True, "Doc", "Dims", "B1", "Bore")
-    assert "setAlias" in _code(conn)
     spreadsheet_list_aliases_operation(conn, True, "Doc", "Dims")
-    assert "aliases" in _code(conn)
     spreadsheet_get_cells_operation(conn, True, "Doc", "Dims", ["A1", {"alias": "Wall"}])
-    assert "getContents" in _code(conn)
+    assert conn._invoke_mutation_v2.call_count >= 4
+    assert conn.execute_code.call_count == before
 
 
 def test_spreadsheet_set_cells_rejects_empty():
@@ -130,21 +154,21 @@ def test_spreadsheet_set_cells_rejects_empty():
 
 def test_set_clear_list_expression():
     conn = _ok_conn('{"ok": true}')
+    before = conn.execute_code.call_count
     set_expression_operation(conn, True, "Doc", "Pad", "Length", "<<Dims>>.PadH")
-    code = _code(conn)
-    assert "setExpression" in code
-    assert "Constraints" not in code or "Length" in code
-    assert "<<Dims>>.PadH" in code
     clear_expression_operation(conn, True, "Doc", "Pad", "Length")
-    assert "clearExpression" in _code(conn) or "setExpression" in _code(conn)
     list_expressions_operation(conn, True, "Doc", "Pad")
+    assert conn._invoke_mutation_v2.call_count >= 2
     assert "ExpressionEngine" in _code(conn)
+    assert conn.execute_code.call_count == before + 1
 
 
 def test_set_expression_constraints_path():
     conn = _ok_conn('{"ok": true}')
     set_expression_operation(conn, True, "Doc", "Sketch", "Constraints[0]", "<<Dims>>.Wall")
-    assert "Constraints[0]" in _code(conn)
+    args = conn._invoke_mutation_v2.call_args
+    assert args[0][0] == "set_expression"
+    assert args[0][1]["prop_path"] == "Constraints[0]"
 
 
 def test_body_and_attach():

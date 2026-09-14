@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
-from ...responses.tool_results import tool_fail
 from ...template_resources import render_template_lines
 from .helpers import _doc_preamble, _run_json_code, _shared_helpers
+from freecad_mcp.operations.parametric_ops.sketch_add_external_projection import (
+    sketch_add_external_projection_operation,
+)
 
 
 def get_sketch_geometry_operation(
@@ -31,45 +33,8 @@ def get_sketch_geometry_operation(
         read_only=True,
     )
 
-def sketch_add_external_projection_operation(
-    freecad: FreeCADConnection,
-    only_text_feedback: bool,
-    doc_name: str,
-    sketch_name: str,
-    source_ref: str,
-    projection_mode: str = "auto",
-    defining: bool = False,
-    allow_gui_geometry_loop: bool = False,
-) -> ToolResponse:
-    if projection_mode not in {"auto", "edge", "face", "point"}:
-        return tool_fail(
-            "projection_mode must be one of: auto, edge, face, point",
-            error_code="INVALID_ARGUMENT",
-        )
-    if not allow_gui_geometry_loop:
-        return tool_fail(
-            (
-                "sketch_add_external_projection requires allow_gui_geometry_loop=true "
-                "because the generated preflight cannot be proven bounded by the "
-                "static geometry-loop guard; pass allow_gui_geometry_loop=True to "
-                "run the bounded preflight and projection on the GUI thread."
-            ),
-            error_code="gui_geometry_loop_opt_in_required",
-        )
-    lines = _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
-        "p7_assembly/sketch_add_external_projection.py.txt",
-        sketch_name=repr(sketch_name),
-        source_ref=repr(source_ref),
-        projection_mode=repr(projection_mode),
-        defining=repr(defining),
-    )
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(lines),
-        "Failed to add external projection",
-        screenshot=True,
-        document=doc_name,
-        execution_mode="gui",
-        allow_gui_geometry_loop=True,
-    )
+
+__all__ = [
+    "get_sketch_geometry_operation",
+    "sketch_add_external_projection_operation",
+]

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from freecad_mcp.operations.parametric_ops.capture_state import capture_state_operation
+from freecad_mcp.operations.parametric_ops.relink_references import relink_references_operation
+
 import json
 import logging
 
@@ -31,47 +34,7 @@ def placement_audit_operation(
         read_only=True,
     )
 
-def relink_references_operation(
-    freecad: FreeCADConnection,
-    only_text_feedback: bool,
-    doc_name: str,
-    from_obj: str,
-    to_obj: str,
-) -> ToolResponse:
-    """M5 — re-point every reference to ``from_obj`` so it points to ``to_obj``,
-    across all link-type properties of all document objects. Makes rebuilds
-    non-destructive. Returns JSON ``{ok, from, to, relinked, count}``.
-    """
-    code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/relink_references.py.txt",
-        from_obj=repr(from_obj),
-        to_obj=repr(to_obj),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed to relink references", screenshot=False, document=doc_name,
-    )
 
-def capture_state_operation(
-    freecad: FreeCADConnection,
-    only_text_feedback: bool,
-    doc_name: str,
-    object_names: list[str] | None = None,
-) -> ToolResponse:
-    """I10 — capture a compact geometric state (placement + bbox + face/edge
-    counts) for ``object_names`` (all objects when None). The returned JSON can
-    be passed to ``geometric_diff`` to produce a text-only diff when a viewable
-    image can't be returned (P10 fallback).
-    """
-    code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/capture_state.py.txt",
-        object_names=repr(object_names),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed to capture state", screenshot=False, document=doc_name,
-        read_only=True,
-    )
 
 def _diff_states(before: dict, current: dict) -> dict:
     before_objs = {o["name"]: o for o in before.get("objects", [])}
@@ -130,7 +93,7 @@ def geometric_diff_operation(
     faces_added/removed, changed}]}`` when a viewable image can't be returned.
     """
     code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/capture_state.py.txt",
+        "diagnostics/geometric_capture.py.txt",
         object_names=repr(object_names),
     )]
     resp = _run_json_code(

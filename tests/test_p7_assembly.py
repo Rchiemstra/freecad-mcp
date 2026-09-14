@@ -22,6 +22,29 @@ from freecad_mcp.operations.p7_assembly import (
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
+def _typed_ok(**fields):
+    payload = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "part_name": "Part",
+        "label": "Label",
+        "object_name": "Obj",
+        "target_container": "Body",
+        "binder_name": "Binder",
+        "plane_name": "Plane",
+        "body_name": "Body",
+        "sketch_name": "Sketch",
+        "wire_name": "Wire",
+        "solid_name": "Solid",
+    }
+    payload.update(fields)
+    return payload
+
+
 def _ok_conn(output: str = '{"ok": true}'):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
@@ -30,6 +53,7 @@ def _ok_conn(output: str = '{"ok": true}'):
         "message": "Python code execution scheduled. \nOutput: " + output,
         "recompute_errors": [],
     }
+    conn._invoke_mutation_v2.return_value = _typed_ok()
     return conn
 
 
@@ -37,6 +61,16 @@ def _fail_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": "oops"}
+    conn._invoke_mutation_v2.return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "FAILED",
+        "error": "oops",
+    }
     return conn
 
 
@@ -111,10 +145,13 @@ class TestAssemblyApiTools:
 class TestPartContainer:
     def test_compiles_and_creates_app_part(self):
         conn = _ok_conn()
-        create_part_container_operation(conn, True, "Doc", "CableVisualization", if_exists="replace")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "App::Part", "if_exists", "replace", "_add_to_container")
+        resp = create_part_container_operation(conn, True, "Doc", "CableVisualization", if_exists="replace")
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "create_part_container"
+        assert conn._invoke_mutation_v2.call_args[0][1]["part_name"] == "CableVisualization"
+        assert conn._invoke_mutation_v2.call_args[0][1]["if_exists"] == "replace"
+        conn.execute_code.assert_not_called()
 
     def test_invalid_if_exists(self):
         resp = create_part_container_operation(_ok_conn(), True, "Doc", "Part", if_exists="bad")
@@ -124,10 +161,12 @@ class TestPartContainer:
 class TestMoveObject:
     def test_compiles_and_reparents(self):
         conn = _ok_conn()
-        move_object_operation(conn, True, "Doc", "Sketch", "Body")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "_remove_from_container", "_add_to_container", "old_parents")
+        resp = move_object_operation(conn, True, "Doc", "Sketch", "Body")
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "move_object"
+        assert conn._invoke_mutation_v2.call_args[0][1]["obj_name"] == "Sketch"
+        conn.execute_code.assert_not_called()
 
     def test_failure_propagates(self):
         resp = move_object_operation(_fail_conn(), True, "Doc", "Sketch", "Body")
@@ -137,7 +176,7 @@ class TestMoveObject:
 class TestSubShapeBinder:
     def test_compiles_and_sets_support_placement_and_validation(self):
         conn = _ok_conn()
-        create_subshape_binder_operation(
+        resp = create_subshape_binder_operation(
             conn,
             True,
             "Doc",
@@ -148,23 +187,17 @@ class TestSubShapeBinder:
             relative=False,
             sync_placement=True,
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "PartDesign::SubShapeBinder",
-            "Support",
-            "Relative",
-            "sync_placement",
-            "bbox_delta_mm",
-            "0.01",
-        )
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "create_subshape_binder"
+        assert conn._invoke_mutation_v2.call_args[0][1]["binder_name"] == "FinalHolderFusionRef"
+        conn.execute_code.assert_not_called()
 
 
 class TestDatumPlane:
     def test_compiles_midpoint_between_faces(self):
         conn = _ok_conn()
-        create_datum_plane_operation(
+        resp = create_datum_plane_operation(
             conn,
             True,
             "Doc",
@@ -175,9 +208,11 @@ class TestDatumPlane:
             face_b="B:Face2",
             offset_along_normal=[0, 0, -0.55],
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "PartDesign::Plane", "AttachmentSupport", "AttachmentOffset", "midpoint_between_faces")
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "create_datum_plane"
+        assert conn._invoke_mutation_v2.call_args[0][1]["mode"] == "midpoint_between_faces"
+        conn.execute_code.assert_not_called()
 
 
 class TestSketchGeometry:
@@ -202,7 +237,7 @@ class TestExternalProjection:
 
     def test_compiles_and_preflights(self):
         conn = _ok_conn()
-        sketch_add_external_projection_operation(
+        resp = sketch_add_external_projection_operation(
             conn,
             True,
             "Doc",
@@ -210,23 +245,14 @@ class TestExternalProjection:
             "Binder:Face1",
             allow_gui_geometry_loop=True,
         )
-        code = _code(conn)
-        options = conn.execute_code.call_args[0][1]
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "_sk.addExternal(_src.Name, _sub",
-            "binder and sketch must share parent container",
-            "Sketcher::SketchObject",
-            "datum normal not parallel to face",
-            "candidate_edges",
-        )
-        assert options.execution_mode == "gui"
-        assert options.allow_gui_geometry_loop is True
+        assert not resp.isError
+        conn._invoke_mutation_v2.assert_called()
+        assert conn._invoke_mutation_v2.call_args[0][0] == "sketch_add_external_projection"
+        conn.execute_code.assert_not_called()
 
     def test_explicit_gui_loop_override_forces_gui_execution(self):
         conn = _ok_conn()
-        sketch_add_external_projection_operation(
+        resp = sketch_add_external_projection_operation(
             conn,
             True,
             "Doc",
@@ -234,10 +260,8 @@ class TestExternalProjection:
             "Binder:Face1",
             allow_gui_geometry_loop=True,
         )
-
-        options = conn.execute_code.call_args[0][1]
-        assert options.execution_mode == "gui"
-        assert options.allow_gui_geometry_loop is True
+        assert not resp.isError
+        assert conn._invoke_mutation_v2.call_args[0][1]["sketch_name"] == "Sketch"
 
     def test_invalid_projection_mode(self):
         resp = sketch_add_external_projection_operation(
