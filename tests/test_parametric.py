@@ -50,6 +50,17 @@ def _ok_conn(output="done"):
         "body": "Body",
         "label": "Body",
     }
+    conn.body_set_tip.return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "body": "Body",
+        "tip": "Pad",
+        "feature": "Pad",
+    }
     return conn
 
 
@@ -65,6 +76,16 @@ def _fail_conn(error="oops"):
         "committed": False,
         "retry_safe": True,
         "error_code": "BODY_CREATE_FAILED",
+        "error": error,
+    }
+    conn.body_set_tip.return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "BODY_SET_TIP_FAILED",
         "error": error,
     }
     return conn
@@ -133,7 +154,8 @@ def test_body_and_attach():
     conn.body_create.assert_called_once_with("Doc", "Body")
     assert conn.execute_code.call_count == before
     body_set_tip_operation(conn, True, "Doc", "Body", "Pad")
-    assert "Tip" in _code(conn)
+    conn.body_set_tip.assert_called_once_with("Doc", "Body", "Pad")
+    assert conn.execute_code.call_count == before
 
     conn.sketch_attach.return_value = {
         "success": True,
@@ -262,6 +284,7 @@ def test_failures_surface():
     assert spreadsheet_create_operation(_fail_conn(), True, "Doc", "Dims").isError
     assert set_expression_operation(_fail_conn(), True, "Doc", "Pad", "Length", "x").isError
     assert body_create_operation(_fail_conn(), True, "Doc", "Body").isError
+    assert body_set_tip_operation(_fail_conn(), True, "Doc", "Body", "Pad").isError
     fail = _fail_conn()
     fail.sketch_attach.return_value = {"success": False, "error": "nope"}
     assert sketch_attach_operation(fail, True, "Doc", "Sketch", "XY_Plane").isError
