@@ -14,6 +14,8 @@ pytestmark = pytest.mark.unit
 
 
 def _item(name: str, *, label: str | None = None, type_id: str = "App::FeaturePython"):
+    expressions: dict[str, object] = {}
+    aliases: dict[str, object] = {}
     obj = SimpleNamespace(
         Name=name,
         Label=label if label is not None else f"Label for {name}",
@@ -21,16 +23,34 @@ def _item(name: str, *, label: str | None = None, type_id: str = "App::FeaturePy
         State=[],
         InList=[],
         Group=[],
-        PropertiesList=[],
+        PropertiesList=["Length"],
+        Length=0.0,
         Placement=SimpleNamespace(Base=SimpleNamespace(x=0.0, y=0.0, z=0.0)),
     )
-    obj.setExpression = lambda *_a, **_k: None
-    obj.clearExpression = lambda *_a, **_k: None
+
+    def set_expression(prop_path, expression=None):
+        expressions[prop_path] = expression
+
+    def clear_expression(prop_path):
+        expressions[prop_path] = None
+
+    def get_expression(prop_path):
+        return expressions.get(prop_path)
+
+    def set_alias(address, alias):
+        aliases[address] = alias
+
+    def get_alias(address):
+        return aliases.get(address)
+
+    obj.setExpression = set_expression
+    obj.clearExpression = clear_expression
+    obj.getExpression = get_expression
     obj.set = lambda *_a, **_k: None
-    obj.setAlias = lambda *_a, **_k: None
+    obj.setAlias = set_alias
     obj.get = lambda *_a, **_k: "1"
     obj.getContents = lambda *_a, **_k: "1"
-    obj.getAlias = lambda *_a, **_k: None
+    obj.getAlias = get_alias
     obj.getCellFromAlias = lambda *_a, **_k: None
     obj.getNonEmptyCells = lambda: []
     obj.addObject = lambda other: obj.Group.append(other)

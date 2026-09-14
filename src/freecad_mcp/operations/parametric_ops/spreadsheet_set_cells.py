@@ -17,8 +17,8 @@ def spreadsheet_set_cells_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, sheet_name: str, cells: object,
 ) -> CallToolResult:
     if not isinstance(cells, list) or not cells:
-        result = make_spreadsheet_set_cells_failure("INVALID_ARGUMENT", "cells must be a non-empty list")
-        return tool_fail(result["error"], structured=dict(result), error_code=result["error_code"])
+        invalid = make_spreadsheet_set_cells_failure("INVALID_ARGUMENT", "cells must be a non-empty list")
+        return tool_fail(invalid["error"], structured=dict(invalid), error_code=invalid["error_code"])
     try:
         raw_result: object = freecad._invoke_mutation_v2(
             "spreadsheet_set_cells",
