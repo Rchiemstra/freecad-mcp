@@ -134,6 +134,9 @@ def run_create_document(
         existing = _app_call(app, "getDocument", str(request.name))
     except CreateDocumentError as exc:
         return _failure(exc)
+    except NameError:
+        # FreeCAD.getDocument raises NameError for a missing document.
+        existing = None
     if existing is not None:
         return _failure(
             CreateDocumentError(

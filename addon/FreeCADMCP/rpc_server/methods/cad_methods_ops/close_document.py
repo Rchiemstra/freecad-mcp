@@ -137,12 +137,17 @@ def run_close_document(
             committed=True,
         )
     remaining = getattr(app, "getDocument", None)
-    if callable(remaining) and remaining(str(request.doc_name)) is not None:
-        return make_close_document_uncertain(
-            "DOCUMENT_CLOSE_REJECTED",
-            f"FreeCAD did not close document {request.doc_name!r}",
-            committed=True,
-        )
+    if callable(remaining):
+        try:
+            if remaining(str(request.doc_name)) is not None:
+                return make_close_document_uncertain(
+                    "DOCUMENT_CLOSE_REJECTED",
+                    f"FreeCAD did not close document {request.doc_name!r}",
+                    committed=True,
+                )
+        except NameError:
+            # FreeCAD.getDocument raises NameError once the document is closed.
+            pass
     return result
 
 
