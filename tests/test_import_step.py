@@ -30,6 +30,10 @@ class _Document:
         self.recomputed = False
         self.add_calls = 0
 
+    @property
+    def Objects(self):
+        return list(self.objects.values())
+
     def getObject(self, name):
         obj = self.objects.get(name)
         if obj is not None and self.recomputed:
@@ -261,6 +265,26 @@ def test_native_capability_is_required_before_apply(monkeypatch):
 def test_import_step_has_typed_rpc_handler():
     assert subject.TYPED_RPC_HANDLER[0] == "import_step"
     assert callable(subject.TYPED_RPC_HANDLER[1])
+
+
+def _empty_import_payload(document, *args, **kwargs):
+    document.events.append("apply")
+    return {
+        "path": "/tmp/in.step",
+        "imported": True,
+    }
+
+
+def test_import_step_fails_when_import_produces_no_objects(monkeypatch):
+    events = []
+    document = _Document(events)
+    monkeypatch.setattr(measure_io_actions, "import_step", _empty_import_payload)
+    collaborators, _api = _collaborators(document, events)
+    result = run_import_step(collaborators, "Doc", "/tmp/in.step")
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_IMPORT_STEP_RESULT"
+    assert "recompute" in events
+    assert "commit" not in events
 
 
 def test_unknown_native_evidence_cannot_release_success():

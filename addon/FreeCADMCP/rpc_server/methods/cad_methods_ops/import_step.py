@@ -22,12 +22,14 @@ from ...._shared.protocol.import_step_contract import (
 from .typed_runtime import as_float, as_int, as_str
 from . import measure_io_actions
 from .import_step_mutation import ImportStepError, run_import_step_native_mutation
+from .typed_rpc_document import object_names
 
 
 @dataclass(frozen=True, slots=True)
 class ImportStepReceipt:
     payload: dict[str, object]
     obj: MutationObject | None
+    added: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,8 +99,10 @@ class _ImportStepExecution:
 def apply_import_step(doc: MutationDocument, request: ImportStepRequest) -> ImportStepReceipt:
     """Apply import_step without recomputing or managing a transaction."""
 
+    before = set(object_names(doc))
     payload = measure_io_actions.import_step(doc, request.file_path)
-    return ImportStepReceipt(payload=payload, obj=None)
+    added = tuple(sorted(set(object_names(doc)) - before))
+    return ImportStepReceipt(payload=payload, obj=None, added=added)
 
 
 
@@ -107,7 +111,12 @@ def read_import_step_result(
 ) -> ImportStepInspection:
     path = receipt.payload.get("path")
     if not isinstance(path, str) or not path.strip():
-        raise ImportStepError("INVALID_IMPORT_STEP_RESULT", "missing export path")
+        raise ImportStepError("INVALID_IMPORT_STEP_RESULT", "missing import path")
+    if not receipt.added:
+        raise ImportStepError("INVALID_IMPORT_STEP_RESULT", "import produced no objects")
+    for name in receipt.added:
+        if doc.getObject(name) is None:
+            raise ImportStepError("CREATED_OBJECT_MISSING", f"Created object is missing: {name!r}")
     return ImportStepInspection(payload=dict(receipt.payload))
 
 
