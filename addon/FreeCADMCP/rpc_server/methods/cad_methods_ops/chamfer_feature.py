@@ -31,6 +31,7 @@ from .feature_apply_support import (
     require_object,
     resolve_optional_body,
     set_attr,
+    set_tip,
     string_list,
 )
 
@@ -66,8 +67,14 @@ def apply_chamfer_feature(doc: FeatureDocument, request: ChamferFeatureRequest) 
         body = resolve_optional_body(doc, base, request.body_name)
         created = create_feature(doc, body, 'PartDesign::Chamfer', request.chamfer_name)
         edges = list(request.edge_refs)
-        set_attr(created, "Base", (base, edges))
+        if edges:
+            set_attr(created, "Base", (base, edges))
+            set_attr(created, "UseAllEdges", False)
+        else:
+            set_attr(created, "UseAllEdges", True)
+            set_attr(created, "Base", (base, [""]))
         set_attr(created, "Size", request.size)
+        set_tip(body, created)
         return ChamferFeatureReceipt(name=str(created.Name), feature=created)
     except ChamferFeatureError:
         raise
