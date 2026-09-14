@@ -19,8 +19,9 @@ from ..template_resources import read_template_lines, render_template_lines
 from .core import (
     _partdesign_bool_property_helper_code,
     _partdesign_extrusion_helper_code,
-    _run_code,
 )
+from .parametric_ops.create_helical_gear import create_helical_gear_operation
+from .parametric_ops.create_involute_gear import create_involute_gear_operation
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -74,80 +75,6 @@ def _gear_footer_code(gear_name: str, bore_diameter: float) -> list[str]:
         bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
         gear_name=repr(gear_name),
     )
-
-
-# ---------------------------------------------------------------------------
-# P4-1  create_involute_gear  (correct mathematical profile)
-# ---------------------------------------------------------------------------
-
-def create_involute_gear_operation(
-    freecad: FreeCADConnection,
-    only_text_feedback: bool,
-    doc_name: str,
-    gear_name: str,
-    teeth: int,
-    module: float,
-    width: float,
-    pressure_angle: float = 20.0,
-    bore_diameter: float = 0.0,
-    clearance: float = 0.0,
-    backlash: float = 0.0,
-    samples_per_flank: int = 12,
-    body_name: str | None = None,
-    sketch_name: str | None = None,
-) -> ToolResponse:
-    lines = (
-        _gear_header_code(doc_name, gear_name, body_name, sketch_name, teeth, module, width,
-                          pressure_angle, bore_diameter, clearance, backlash, samples_per_flank)
-        + list(_INVOLUTE_PROFILE_CODE)
-        + _gear_footer_code(gear_name, bore_diameter)
-    )
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Involute gear '{gear_name}' created", "Failed to create involute gear",
-                     document=doc_name)
-
-
-# ---------------------------------------------------------------------------
-# P4-2  create_helical_gear
-# ---------------------------------------------------------------------------
-
-def create_helical_gear_operation(
-    freecad: FreeCADConnection,
-    only_text_feedback: bool,
-    doc_name: str,
-    gear_name: str,
-    teeth: int,
-    module: float,
-    width: float,
-    helix_angle: float = 15.0,
-    pressure_angle: float = 20.0,
-    bore_diameter: float = 0.0,
-    clearance: float = 0.0,
-    backlash: float = 0.0,
-    samples_per_flank: int = 12,
-    body_name: str | None = None,
-) -> ToolResponse:
-    """
-    Helical gear: generate involute profile on XY plane then use AdditiveHelix
-    to twist it. The helix pitch is computed from width and helix_angle.
-    """
-    lines = (
-        _gear_header_code(doc_name, gear_name, body_name, None, teeth, module, width,
-                          pressure_angle, bore_diameter, clearance, backlash, samples_per_flank)
-        + list(_INVOLUTE_PROFILE_CODE)
-        + render_template_lines(
-            "p4_gears/helical_footer.py.txt",
-            profile_to_sketch="\n".join(_PROFILE_TO_SKETCH_CODE),
-            bore_diameter=repr(bore_diameter),
-            extrusion_helpers="\n".join(_partdesign_extrusion_helper_code()),
-            bool_helpers="\n".join(_partdesign_bool_property_helper_code()),
-            helix_angle=repr(helix_angle),
-            gear_name=repr(gear_name),
-        )
-    )
-    return _run_code(freecad, only_text_feedback, "\n".join(lines),
-                     f"Helical gear '{gear_name}' created", "Failed to create helical gear",
-                     document=doc_name)
 
 
 # ---------------------------------------------------------------------------

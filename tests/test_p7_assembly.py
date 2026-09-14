@@ -3,10 +3,20 @@ Tests for P7 assembly/reference and sketch introspection operations.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from mcp.types import TextContent
 
+from freecad_mcp._shared.protocol.create_assembly_contract import (
+    make_create_assembly_success,
+)
+from freecad_mcp._shared.protocol.create_assembly_grounded_joint_contract import (
+    make_create_assembly_grounded_joint_success,
+)
+from freecad_mcp._shared.protocol.create_assembly_joint_contract import (
+    make_create_assembly_joint_success,
+)
 from freecad_mcp.operations.p7_assembly import (
     create_assembly_grounded_joint_operation,
     create_assembly_joint_operation,
@@ -45,6 +55,17 @@ def _typed_ok(**fields):
     return payload
 
 
+_ASSEMBLY_ACTIONS = (
+    Path(__file__).resolve().parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "assembly_actions.py"
+).read_text(encoding="utf-8")
+
+
 def _ok_conn(output: str = '{"ok": true}'):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
@@ -54,6 +75,15 @@ def _ok_conn(output: str = '{"ok": true}'):
         "recompute_errors": [],
     }
     conn._invoke_mutation_v2.return_value = _typed_ok()
+    conn.create_assembly.return_value = make_create_assembly_success(
+        "MainAssembly", "MainAssembly", "Assembly::AssemblyObject", "JointGroup"
+    )
+    conn.create_assembly_grounded_joint.return_value = make_create_assembly_grounded_joint_success(
+        "Ground", "Ground", "Grounded", "Assembly", "BaseLink"
+    )
+    conn.create_assembly_joint.return_value = make_create_assembly_joint_success(
+        "Screw 1", "Screw 1", "Cylindrical", "Assembly"
+    )
     return conn
 
 
@@ -100,9 +130,13 @@ class TestAssemblyApiTools:
     def test_create_assembly_compiles_and_uses_public_api(self):
         conn = _ok_conn()
         create_assembly_operation(conn, True, "Doc", "MainAssembly", if_exists="replace")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "Assembly.createAssembly", "UtilsAssembly.getJointGroup", "MainAssembly")
+        conn.create_assembly.assert_called_once()
+        conn.execute_code.assert_not_called()
+        assert_code_compiles(_ASSEMBLY_ACTIONS)
+        assert_code_contains(
+            _ASSEMBLY_ACTIONS, "createAssembly", "getJointGroup", "recompute=False"
+        )
+        assert conn.create_assembly.call_args.args[1] == "MainAssembly"
 
     def test_create_assembly_invalid_if_exists(self):
         resp = create_assembly_operation(_ok_conn(), True, "Doc", "Assembly", if_exists="bad")
@@ -111,9 +145,10 @@ class TestAssemblyApiTools:
     def test_create_grounded_joint_compiles_and_uses_public_api(self):
         conn = _ok_conn()
         create_assembly_grounded_joint_operation(conn, True, "Doc", "Assembly", "BaseLink", label="Ground")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "Assembly.createGroundedJoint", "ObjectToGround", "BaseLink")
+        conn.create_assembly_grounded_joint.assert_called_once()
+        assert_code_compiles(_ASSEMBLY_ACTIONS)
+        assert_code_contains(_ASSEMBLY_ACTIONS, "createGroundedJoint", "ObjectToGround")
+        assert conn.create_assembly_grounded_joint.call_args.args[2] == "BaseLink"
 
     def test_create_joint_compiles_and_uses_public_api(self):
         conn = _ok_conn()
@@ -130,16 +165,18 @@ class TestAssemblyApiTools:
             label="Screw 1",
             solve=False,
         )
-        code = _code(conn)
-        assert_code_compiles(code)
+        conn.create_assembly_joint.assert_called_once()
+        conn.execute_code.assert_not_called()
+        assert_code_compiles(_ASSEMBLY_ACTIONS)
         assert_code_contains(
-            code,
-            "Assembly.makeJointReference",
-            "Assembly.createJoint",
-            "solve=_solve",
-            "presolve=_presolve",
-            "Pocket001.Edge1",
+            _ASSEMBLY_ACTIONS,
+            "makeJointReference",
+            "createJoint",
+            "solve=solve",
+            "presolve=presolve",
+            "recompute=False",
         )
+        assert conn.create_assembly_joint.call_args.args[6] == "Pocket001.Edge1"
 
 
 class TestPartContainer:

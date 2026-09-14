@@ -6,8 +6,13 @@ Tests mock freecad.execute_code (success/failure) and verify that the
 generated Python code contains the expected keywords and parameters.
 """
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
+from freecad_mcp._shared.protocol.create_spur_gear_contract import (
+    make_create_spur_gear_failure,
+    make_create_spur_gear_success,
+)
 from freecad_mcp.operations.core import (
     close_document_operation,
     get_recompute_log_operation,
@@ -535,12 +540,22 @@ class TestMirrorFeatureOperation:
 
 class TestCreateSpurGearOperation:
     def test_success(self):
-        conn = _ok_conn("pad_name=Gear\nsketch_name=Gear_Sketch\nteeth=24\nmodule=2.0")
-        result = create_spur_gear_operation(conn, True, "Doc", "Gear", 24, 2.0, 10.0)
-        assert "Spur gear" in _text(result) and "sketch and pad created" in _text(result)
-
-    def test_params_in_code(self):
         conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear_Body", "Gear_Sketch", "Gear", 24, 2.0
+        )
+        result = create_spur_gear_operation(conn, True, "Doc", "Gear", 24, 2.0, 10.0)
+        payload = json.loads(_text(result))
+        assert payload["feature"] == "Gear"
+        assert payload["teeth"] == 24
+        conn.create_spur_gear.assert_called_once()
+        conn.execute_code.assert_not_called()
+
+    def test_params_in_rpc(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear24_Body", "Gear24_Sketch", "Gear24", 24, 2.0
+        )
         create_spur_gear_operation(
             conn,
             True,
@@ -552,58 +567,93 @@ class TestCreateSpurGearOperation:
             pressure_angle=20.0,
             bore_diameter=6.0,
         )
-        c = _code(conn)
-        assert "'Gear24'" in c and "_teeth = int(24)" in c and "_bore_diameter = float(6.0)" in c
+        args = conn.create_spur_gear.call_args.args
+        assert args[1] == "Gear24"
+        assert args[2] == 24
+        assert args[6] == 6.0
 
-    def test_tooth_profile_in_code(self):
+    def test_tooth_profile_in_rpc_and_helper(self):
         conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear24_Body", "Gear24_Sketch", "Gear24", 24, 2.0
+        )
         create_spur_gear_operation(
             conn, True, "Doc", "Gear24", 24, 2.0, 10.0,
             tooth_profile="trapezoid",
         )
-        c = _code(conn)
-        assert "_tooth_profile = 'trapezoid'" in c
-        assert "_valid_profiles" in c
-        assert "_build_trapezoid_points" in c
-        assert "_build_straight_points" in c
-        assert "_build_pin_points" in c
+        assert conn.create_spur_gear.call_args.args[-1] == "trapezoid"
+        code = (
+            Path(__file__).resolve().parents[1]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "gear_actions.py"
+        ).read_text(encoding="utf-8")
+        assert "_normalize_profile" in code
+        assert '"trapezoid"' in code
+        assert '"straight"' in code
+        assert '"pin"' in code
 
     def test_uses_sketch_and_pad_workflow(self):
-        conn = _ok_conn()
-        create_spur_gear_operation(conn, True, "Doc", "Gear24", 24, 2.0, 10.0)
-        c = _code(conn)
-        assert "Sketcher::SketchObject" in c
-        assert "PartDesign::Pad" in c
-        assert "Part::Feature" not in c
-        assert "Sketcher.Constraint('Coincident'" in c
-        assert "_set_extrusion_symmetric(_pad, False)" in c
-        assert "setattr(_feature, 'Midplane', False)" not in c
+        code = (
+            Path(__file__).resolve().parents[1]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "gear_actions.py"
+        ).read_text(encoding="utf-8")
+        assert "Sketcher::SketchObject" in code
+        assert "PartDesign::Pad" in code
+        assert "Part::Feature" not in code
+        assert '"Coincident"' in code
+        assert "_set_extrusion_one_side" in code
 
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
-        create_spur_gear_operation(conn, True, "Doc", "Gear", 24, 2.0, 10.0)
-        _assert_generated_code_compiles(conn)
+    def test_helper_compiles(self):
+        code = (
+            Path(__file__).resolve().parents[1]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "gear_actions.py"
+        ).read_text(encoding="utf-8")
+        compile(code, "gear_actions.py", "exec")
 
-    def test_generated_code_compiles_for_each_tooth_profile(self):
+    def test_helper_compiles_for_each_tooth_profile(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear_Body", "Gear_Sketch", "Gear", 24, 2.0
+        )
         for profile in ["involute", "cycloidal", "trapezoid", "straight", "circular_arc", "pin"]:
-            conn = _ok_conn()
             create_spur_gear_operation(
                 conn, True, "Doc", "Gear", 24, 2.0, 10.0,
                 tooth_profile=profile,
             )
-            _assert_generated_code_compiles(conn)
+        assert conn.create_spur_gear.call_count == 6
 
-    def test_generated_code_compiles_for_profile_aliases(self):
+    def test_helper_compiles_for_profile_aliases(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear_Body", "Gear_Sketch", "Gear", 24, 2.0
+        )
         for profile in ["straight_teeth", "novikov", "lantern"]:
-            conn = _ok_conn()
             create_spur_gear_operation(
                 conn, True, "Doc", "Gear", 24, 2.0, 10.0,
                 tooth_profile=profile,
             )
-            _assert_generated_code_compiles(conn)
+        assert conn.create_spur_gear.call_count == 3
 
     def test_failure(self):
-        assert "Failed" in _text(create_spur_gear_operation(_fail_conn(), True, "Doc", "Gear", 24, 2.0, 10.0))
+        conn = _fail_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_failure(
+            "CREATE_SPUR_GEAR_FAILED", "oops"
+        )
+        assert "Failed" in _text(create_spur_gear_operation(conn, True, "Doc", "Gear", 24, 2.0, 10.0))
 
 
 # ---------------------------------------------------------------------------
