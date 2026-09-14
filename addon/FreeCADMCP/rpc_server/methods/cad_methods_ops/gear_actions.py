@@ -68,10 +68,12 @@ def _set_extrusion_one_side(feature: object) -> None:
 def _attach_xy(body: object, sketch: object) -> None:
     origin = getattr(body, "Origin", None)
     plane = None
+    variants = {"XY_Plane", "XY-plane", "XY-Plane"}
     for feature in getattr(origin, "OriginFeatures", []) or []:
+        role = str(getattr(feature, "Role", ""))
         label = str(getattr(feature, "Label", ""))
         name = str(getattr(feature, "Name", ""))
-        if label == "XY_Plane" or name == "XY_Plane":
+        if role in variants or label in variants or name in variants:
             plane = feature
             break
     if plane is None:
@@ -133,9 +135,9 @@ def _profile_to_sketch(sketch: object, points: list[object], min_length: float) 
                 curve = bspline_cls()
                 interpolate = getattr(curve, "interpolate", None)
                 to_shape = getattr(curve, "toShape", None)
-                if callable(interpolate) and callable(to_shape):
+                if callable(interpolate):
                     interpolate(Points=points, PeriodicFlag=True)
-                    add_geometry(to_shape(), False)
+                    add_geometry(curve, False)
                     return 1
             except Exception:
                 pass
@@ -540,13 +542,16 @@ def create_helical_gear(
     if not callable(factory):
         raise TypedMutationError("INVALID_BODY", "Body must provide newObject")
     feature = factory("PartDesign::AdditiveHelix", gear_name)
-    setattr(feature, "Profile", sketch)
+    setattr(feature, "Profile", (sketch, [""]))
     setattr(feature, "ReferenceAxis", (sketch, ["V_Axis"]))
     setattr(feature, "Mode", 0)
     setattr(feature, "Pitch", pitch_len)
     setattr(feature, "Height", width)
     setattr(feature, "Angle", 0)
     setattr(feature, "Growth", 0)
+    tip_setter = getattr(body, "Tip", None)
+    if tip_setter is not None:
+        setattr(body, "Tip", feature)
     return {
         "body": object_name(body),
         "sketch": object_name(sketch),
@@ -586,6 +591,21 @@ def create_spur_gear(
     )
     if root >= outer:
         raise TypedMutationError("INVALID_ARGUMENT", "root radius must be smaller than outer radius")
+    if _normalize_profile(tooth_profile) == "involute":
+        return create_involute_gear(
+            document,
+            gear_name=gear_name,
+            teeth=teeth,
+            module=module,
+            width=width,
+            pressure_angle=pressure_angle,
+            bore_diameter=bore_diameter,
+            clearance=clearance,
+            backlash=backlash,
+            samples_per_flank=samples_per_flank,
+            body_name=body_name,
+            sketch_name=sketch_name,
+        )
     samples = max(2, min(samples_per_flank, 2))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, sketch_name or (gear_name + "_Sketch"))

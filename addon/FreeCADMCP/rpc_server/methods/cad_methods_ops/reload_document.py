@@ -136,8 +136,18 @@ def run_reload_document(
             "Native commit succeeded but FreeCAD cannot reload documents",
             committed=True,
         )
+    doc_name = str(request.doc_name)
     try:
-        closer(str(request.doc_name))
+        closer(doc_name)
+    except NameError:
+        pass
+    except Exception as exc:
+        return make_reload_document_uncertain(
+            "RELOAD_DOCUMENT_FAILED",
+            str(exc) or type(exc).__name__,
+            committed=True,
+        )
+    try:
         reopened = opener(receipt.file_name)
     except Exception as exc:
         return make_reload_document_uncertain(
@@ -151,7 +161,17 @@ def run_reload_document(
             f"FreeCAD did not reopen {receipt.file_name!r}",
             committed=True,
         )
-    return result
+    try:
+        reopened_name = document_name(reopened)
+    except NameError:
+        reopened_name = doc_name
+    if not reopened_name:
+        return make_reload_document_uncertain(
+            "RELOAD_DOCUMENT_FAILED",
+            f"FreeCAD reopened {receipt.file_name!r} without a document name",
+            committed=True,
+        )
+    return make_reload_document_success(DocumentName(reopened_name))
 
 
 class _ReloadDocumentRpcFacade(Protocol):

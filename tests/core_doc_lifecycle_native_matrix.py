@@ -200,7 +200,7 @@ def check_open_document_validation_failure() -> None:
 
     def capturing_open(path, *args, **kwargs):
         document = original_open(path, *args, **kwargs)
-        admitted_holder["document"] = document
+        admitted_holder["opened_name"] = str(document.Name)
         admitted_holder["before_objects"] = tuple(obj.Name for obj in document.Objects)
         return document
 
@@ -216,13 +216,13 @@ def check_open_document_validation_failure() -> None:
             ),
             path,
         )
-        admitted = admitted_holder.get("document")
-        assert admitted is not None
+        opened_name = admitted_holder.get("opened_name")
+        assert isinstance(opened_name, str) and opened_name
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
         assert result["rollback_succeeded"] is True
-        assert tuple(obj.Name for obj in admitted.Objects) == admitted_holder["before_objects"]
-        opened_name = admitted.Name
+        restored = FreeCAD.getDocument(opened_name)
+        assert tuple(obj.Name for obj in restored.Objects) == admitted_holder["before_objects"]
     finally:
         FreeCAD.openDocument = original_open
         if opened_name and opened_name in FreeCAD.listDocuments():

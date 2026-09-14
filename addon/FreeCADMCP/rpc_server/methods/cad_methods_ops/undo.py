@@ -41,13 +41,15 @@ def _failure(error: UndoError, *, retry_safe: bool = True) -> UndoFailure:
 
 
 def apply_undo(doc: object, request: UndoRequest) -> UndoReceipt:
-    """Apply undo without recomputing or managing a transaction."""
+    """Record document identity; undo runs after native commit."""
 
+    name = document_name(doc)
+    if not name:
+        raise UndoError("INVALID_DOCUMENT", "document has no name")
     action = getattr(doc, "undo", None)
     if not callable(action):
         raise UndoError("INVALID_DOCUMENT", "document cannot undo")
-    action()
-    return UndoReceipt(name=document_name(doc))
+    return UndoReceipt(name=name)
 
 
 def read_undo_result(doc: object, receipt: UndoReceipt) -> UndoInspection:
@@ -111,12 +113,52 @@ def run_undo(
     collaborators: UndoCollaborators,
     doc_name: object,
 ) -> UndoResult:
-    """Run undo through apply, recompute, inspection, and commit."""
+    """Seal document health natively, then undo the previous command."""
 
     request = build_undo_request(doc_name)
     if isinstance(request, dict):
         return request
-    return _UndoExecution(collaborators, request).run()
+    result = _UndoExecution(collaborators, request).run()
+    if not (isinstance(result, dict) and result.get("success") is True):
+        return result
+    app = getattr(collaborators, "freecad", None)
+    getter = getattr(app, "getDocument", None)
+    if not callable(getter):
+        return make_undo_uncertain(
+            "UNDO_FAILED",
+            "Native commit succeeded but FreeCAD cannot look up documents",
+            committed=True,
+        )
+    try:
+        document = getter(str(request.doc_name))
+    except (NameError, LookupError):
+        return make_undo_uncertain(
+            "UNDO_FAILED",
+            f"Document {request.doc_name!r} is not open after native commit",
+            committed=True,
+        )
+    if document is None:
+        return make_undo_uncertain(
+            "UNDO_FAILED",
+            f"Document {request.doc_name!r} is not open after native commit",
+            committed=True,
+        )
+    action = getattr(document, "undo", None)
+    if not callable(action):
+        return make_undo_uncertain(
+            "INVALID_DOCUMENT",
+            "document cannot undo after native commit",
+            committed=True,
+        )
+    try:
+        action()
+    except Exception as exc:
+        return make_undo_uncertain(
+            "UNDO_FAILED",
+            str(exc) or type(exc).__name__,
+            committed=True,
+        )
+    return result
 
 
 class _UndoRpcFacade(Protocol):

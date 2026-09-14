@@ -27,6 +27,18 @@ from .typed_rpc_document import document_name, get_object
 
 
 @dataclass(frozen=True, slots=True)
+class RelinkRepair:
+    from_name: str
+    to_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class _RepairWork:
+    request: RepairReferencesRequest
+    relinks: tuple[RelinkRepair, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class RepairReferencesReceipt:
     """Internal identity captured while applying the mutation."""
 
@@ -109,10 +121,50 @@ def _parse_refs(raw: object) -> tuple[RepairRef, ...] | RepairReferencesFailure:
     return tuple(parsed)
 
 
-def apply_repair_references(doc: object, request: RepairReferencesRequest) -> RepairReferencesReceipt:
+def _relink_all(doc: object, from_name: str, to_name: str) -> int:
+    source = get_object(doc, from_name)
+    target = get_object(doc, to_name)
+    if source is None:
+        raise RepairReferencesError("OBJECT_NOT_FOUND", f"Source object not found: {from_name!r}")
+    if target is None:
+        raise RepairReferencesError("OBJECT_NOT_FOUND", f"Target object not found: {to_name!r}")
+    changed = 0
+    for item in getattr(doc, "Objects", []) or []:
+        props = getattr(item, "PropertiesList", None)
+        if not isinstance(props, list):
+            continue
+        for prop in props:
+            if not isinstance(prop, str):
+                continue
+            type_id = ""
+            getter = getattr(item, "getTypeIdOfProperty", None)
+            if callable(getter):
+                try:
+                    raw_type = getter(prop)
+                except Exception:
+                    raw_type = ""
+                type_id = raw_type if isinstance(raw_type, str) else ""
+            if "Link" not in type_id:
+                continue
+            try:
+                current = getattr(item, prop)
+            except Exception:
+                continue
+            if current is source:
+                setattr(item, prop, target)
+                changed += 1
+    return changed
+
+
+def apply_repair_references(doc: object, work: _RepairWork) -> RepairReferencesReceipt:
     """Repair link properties without recomputing or managing a transaction."""
 
+    request = work.request
     repaired: list[tuple[str, str]] = []
+    for relink in work.relinks:
+        changed = _relink_all(doc, relink.from_name, relink.to_name)
+        if changed:
+            repaired.append((relink.from_name, relink.to_name))
     for item in request.repairs:
         owner = get_object(doc, str(item.object_name))
         if owner is None:
@@ -193,12 +245,12 @@ def read_repair_references_result(
     )
 
 
-def build_repair_references_request(
+def build_repair_references_work(
     doc_name: object,
     repairs: object,
     recompute: object = False,
     validate: object = False,
-) -> RepairReferencesRequest | RepairReferencesFailure:
+) -> _RepairWork | RepairReferencesFailure:
     """Validate the untyped JSON arguments before constructing internal types."""
 
     if not isinstance(doc_name, str) or not doc_name.strip():
@@ -210,12 +262,26 @@ def build_repair_references_request(
             RepairReferencesError("INVALID_ARGUMENT", "At least one repair is required")
         )
     parsed: list[RepairItem] = []
+    relinks: list[RelinkRepair] = []
     for index, raw in enumerate(repairs):
         mapping = _mapping(raw)
         if mapping is None:
             return _failure(
                 RepairReferencesError("INVALID_ARGUMENT", f"Repair {index} must be an object")
             )
+        from_name = mapping.get("from")
+        to_name = mapping.get("to")
+        if from_name is not None or to_name is not None:
+            if not isinstance(from_name, str) or not from_name.strip():
+                return _failure(
+                    RepairReferencesError("INVALID_ARGUMENT", f"Repair {index} requires from")
+                )
+            if not isinstance(to_name, str) or not to_name.strip():
+                return _failure(
+                    RepairReferencesError("INVALID_ARGUMENT", f"Repair {index} requires to")
+                )
+            relinks.append(RelinkRepair(from_name=from_name, to_name=to_name))
+            continue
         object_name = mapping.get("object")
         property_name = mapping.get("property")
         if not isinstance(object_name, str) or not object_name.strip():
@@ -242,23 +308,42 @@ def build_repair_references_request(
         return _failure(
             RepairReferencesError("INVALID_ARGUMENT", "recompute and validate must be booleans")
         )
-    return RepairReferencesRequest(
-        doc_name=DocumentName(doc_name),
-        repairs=tuple(parsed),
-        recompute=recompute_flag,
-        validate=validate_flag,
+    if not parsed and not relinks:
+        return _failure(
+            RepairReferencesError("INVALID_ARGUMENT", "At least one repair is required")
+        )
+    return _RepairWork(
+        request=RepairReferencesRequest(
+            doc_name=DocumentName(doc_name),
+            repairs=tuple(parsed),
+            recompute=recompute_flag,
+            validate=validate_flag,
+        ),
+        relinks=tuple(relinks),
     )
+
+
+def build_repair_references_request(
+    doc_name: object,
+    repairs: object,
+    recompute: object = False,
+    validate: object = False,
+) -> RepairReferencesRequest | RepairReferencesFailure:
+    work = build_repair_references_work(doc_name, repairs, recompute, validate)
+    if isinstance(work, dict):
+        return work
+    return work.request
 
 
 @dataclass(slots=True)
 class _RepairReferencesExecution:
     collaborators: RepairReferencesCollaborators
-    request: RepairReferencesRequest
+    work: _RepairWork
     created: RepairReferencesReceipt | None = None
     inspected: RepairReferencesInspection | None = None
 
     def apply(self, doc: object) -> None:
-        self.created = apply_repair_references(doc, self.request)
+        self.created = apply_repair_references(doc, self.work)
 
     def inspect(self, doc: object) -> None:
         if self.created is None:
@@ -271,7 +356,7 @@ class _RepairReferencesExecution:
     def run(self) -> RepairReferencesResult:
         result = run_repair_references_native_mutation(
             self.collaborators,
-            str(self.request.doc_name),
+            str(self.work.request.doc_name),
             self.apply,
             self.inspect,
         )
@@ -288,6 +373,17 @@ class _RepairReferencesExecution:
         )
 
 
+def _document_missing(collaborators: RepairReferencesCollaborators, doc_name: str) -> bool:
+    app = getattr(collaborators, "freecad", None)
+    getter = getattr(app, "getDocument", None)
+    if not callable(getter):
+        return True
+    try:
+        return getter(doc_name) is None
+    except (NameError, LookupError):
+        return True
+
+
 def run_repair_references(
     collaborators: RepairReferencesCollaborators,
     doc_name: object,
@@ -297,10 +393,19 @@ def run_repair_references(
 ) -> RepairReferencesResult:
     """Run reference repair through apply, recompute, inspection, and commit."""
 
-    request = build_repair_references_request(doc_name, repairs, recompute, validate)
-    if isinstance(request, dict):
-        return request
-    return _RepairReferencesExecution(collaborators, request).run()
+    if not isinstance(doc_name, str) or not doc_name.strip():
+        invalid = build_repair_references_work(doc_name, repairs, recompute, validate)
+        if isinstance(invalid, dict):
+            return invalid
+        return _failure(RepairReferencesError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
+    if _document_missing(collaborators, doc_name):
+        return _failure(
+            RepairReferencesError("DOCUMENT_NOT_FOUND", f"Document {doc_name!r} not found")
+        )
+    work = build_repair_references_work(doc_name, repairs, recompute, validate)
+    if isinstance(work, dict):
+        return work
+    return _RepairReferencesExecution(collaborators, work).run()
 
 
 class _RepairReferencesRpcFacade(Protocol):

@@ -65,6 +65,27 @@ def _failure(error: RunFemAnalysisError, *, retry_safe: bool = True) -> RunFemAn
     return make_run_fem_analysis_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _ensure_fem_mesh(doc: object, analysis: object) -> None:
+    group = getattr(analysis, "Group", None)
+    members = group if isinstance(group, (list, tuple)) else []
+    mesh = None
+    for item in members:
+        type_id = str(getattr(item, "TypeId", ""))
+        if "Fem::FemMeshGmsh" in type_id or "FemMeshGmsh" in type_id:
+            mesh = item
+            break
+    if mesh is None:
+        raise RunFemAnalysisError("GMSH_UNAVAILABLE", "analysis has no Gmsh mesh object")
+    try:
+        from femmesh.gmshtools import GmshTools
+    except ImportError as exc:
+        raise RunFemAnalysisError("GMSH_UNAVAILABLE", "Gmsh tools are unavailable") from exc
+    try:
+        GmshTools(mesh).create_mesh()
+    except Exception as exc:
+        raise RunFemAnalysisError("GMSH_FAILED", str(exc) or type(exc).__name__) from exc
+
+
 def apply_run_fem_analysis(doc: RunFemAnalysisDocument, request: RunFemAnalysisRequest) -> RunFemAnalysisReceipt:
     """Record the analysis object; the solver collaborator runs after identity checks."""
 
@@ -122,6 +143,13 @@ class _RunFemAnalysisExecution:
 
     def apply(self, doc: RunFemAnalysisDocument) -> None:
         self.created = apply_run_fem_analysis(doc, self.request)
+        analysis = require_object(
+            doc,
+            self.request.analysis_name,
+            missing_code="OBJECT_NOT_FOUND",
+            error=RunFemAnalysisError,
+        )
+        _ensure_fem_mesh(doc, analysis)
         runner = getattr(self.collaborators, "run_fem_analysis", None)
         if runner is None:
             raise RunFemAnalysisError("FEM_ANALYSIS_UNAVAILABLE", "run_fem_analysis collaborator is missing")

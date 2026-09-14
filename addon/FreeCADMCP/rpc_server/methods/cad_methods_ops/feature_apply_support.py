@@ -202,17 +202,20 @@ def set_originals(feature: object, source: object) -> str:
     raise RuntimeError("Pattern feature has no Originals/Original property")
 
 
+def _origin_name_variants(name: str) -> set[str]:
+    return {name, name.replace("_", "-"), name.replace("-", "_")}
+
+
 def _origin_feature(container: object, name: str) -> object | None:
     origin = getattr(container, "Origin", None)
-    for feature in getattr(origin, "OriginFeatures", []):
-        if getattr(feature, "Name", "") == name or getattr(feature, "Label", "") == name:
+    variants = _origin_name_variants(name)
+    for feature in getattr(origin, "OriginFeatures", []) or []:
+        role = str(getattr(feature, "Role", ""))
+        label = str(getattr(feature, "Label", ""))
+        obj_name = str(getattr(feature, "Name", ""))
+        if role in variants or label in variants or obj_name in variants:
             return cast(object, feature)
     return None
-
-
-_DOC_LINK_SPECS = frozenset(
-    {"X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane", "Origin"}
-)
 
 
 def resolve_linksub(document: object, body: object | None, spec: str) -> object:
@@ -222,10 +225,6 @@ def resolve_linksub(document: object, body: object | None, spec: str) -> object:
         if obj is None:
             raise LookupError(f"Reference object not found: {object_name}")
         return (obj, [sub_name])
-    if spec in _DOC_LINK_SPECS:
-        obj = lookup_object(document, spec)
-        if obj is not None:
-            return (obj, [""])
     for container in (body, document):
         if container is None:
             continue

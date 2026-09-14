@@ -8,7 +8,10 @@ import hashlib
 _UNSTABLE_DUMP_PROPERTIES = frozenset({"ExpressionEngine"})
 
 # Object.State flags that are execution bookkeeping, not durable model content.
-_TRANSIENT_STATE_FLAGS = frozenset({"Touched", "ImpendingChange", "GeoID", "Pending"})
+_TRANSIENT_STATE_FLAGS = frozenset({"Touched"})
+
+# Unnamed locker bits that flap on rollback (e.g. Body.Group User3); keep schema flags.
+_TRANSIENT_PROPERTY_STATUS_BITS = frozenset({15, 18, 29, 30, 31})
 
 
 def _expression_engine_fingerprint(item: object, name: str) -> tuple[tuple[str, str], ...] | None:
@@ -45,6 +48,16 @@ def _stable_state(item: object) -> tuple[str, ...]:
     return tuple(sorted(str(flag) for flag in state if str(flag) not in _TRANSIENT_STATE_FLAGS))
 
 
+def _stable_property_status(item: object, name: str) -> tuple:
+    status = tuple(item.getPropertyStatus(name))
+    filtered: list[object] = []
+    for flag in status:
+        if isinstance(flag, int) and flag in _TRANSIENT_PROPERTY_STATUS_BITS:
+            continue
+        filtered.append(flag)
+    return tuple(filtered)
+
+
 def model_state(document: object) -> tuple:
     objects = getattr(document, "Objects", ())
     return tuple(
@@ -59,6 +72,7 @@ def model_state(document: object) -> tuple:
                     name,
                     item.getTypeIdOfProperty(name),
                     item.getGroupOfProperty(name),
+                    _stable_property_status(item, name),
                     property_content(item, name),
                 )
                 for name in sorted(item.PropertiesList)

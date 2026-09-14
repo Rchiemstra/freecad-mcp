@@ -72,7 +72,6 @@ def _run(op: str, collab, document_name: str, base: dict[str, object], **overrid
 
 
 def _settled_state(document, op: str):
-    document.recompute()
     return model_state(document), revision_state(document, op)
 
 
@@ -130,6 +129,7 @@ def check_validation_failure(op: str, kind: str, base: dict[str, object]) -> Non
     document = FreeCAD.newDocument(f"MCP{op}NativeRollback")
     try:
         prepare_native_document(document, kind)
+        document.recompute()
         before = _settled_state(document, op)
         result = _run(
             op,

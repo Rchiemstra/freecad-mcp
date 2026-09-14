@@ -73,7 +73,7 @@ def apply_move_object(doc: MoveObjectDocument, request: MoveObjectRequest) -> Mo
     if request.remove_from_old_parent:
         for parent in list(getattr(item, "InList", []) or []):
             group = getattr(parent, "Group", None)
-            if isinstance(group, list) and item in group:
+            if isinstance(group, (list, tuple)) and item in group:
                 remove_from_container(parent, item)
     add_to_container(target, item)
     return MoveObjectReceipt(name=object_name(item) or request.obj_name, item=item, skipped=False)

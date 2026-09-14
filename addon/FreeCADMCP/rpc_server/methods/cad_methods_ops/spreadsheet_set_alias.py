@@ -48,6 +48,8 @@ class SpreadsheetSetAliasReceipt:
 
     name: str
     item: object | None
+    address: str
+    alias: str
     skipped: bool = False
     extra: object = None
 
@@ -72,8 +74,17 @@ def apply_spreadsheet_set_alias(doc: SpreadsheetSetAliasDocument, request: Sprea
     alias_setter = getattr(sheet, "setAlias", None)
     if not callable(alias_setter):
         raise SpreadsheetSetAliasError("INVALID_SHEET", "spreadsheet cannot set aliases")
-    alias_setter(request.address, request.alias)
-    return SpreadsheetSetAliasReceipt(name=object_name(sheet) or request.sheet_name, item=sheet, skipped=False)
+    try:
+        alias_setter(request.address, request.alias)
+    except Exception as exc:
+        raise SpreadsheetSetAliasError("EXPRESSION_ERROR", str(exc) or type(exc).__name__) from exc
+    return SpreadsheetSetAliasReceipt(
+        name=object_name(sheet) or request.sheet_name,
+        item=sheet,
+        address=request.address,
+        alias=request.alias,
+        skipped=False,
+    )
 
 
 def read_spreadsheet_set_alias_result(doc: SpreadsheetSetAliasReadDocument, receipt: SpreadsheetSetAliasReceipt) -> SpreadsheetSetAliasInspection:
@@ -81,15 +92,17 @@ def read_spreadsheet_set_alias_result(doc: SpreadsheetSetAliasReadDocument, rece
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise SpreadsheetSetAliasError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise SpreadsheetSetAliasError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
+    getter = getattr(located, "getAlias", None)
+    if callable(getter):
+        bound = getter(receipt.address)
+        if str(bound or "") != receipt.alias:
+            raise SpreadsheetSetAliasError(
+                "EXPRESSION_ERROR",
+                f"Alias on {receipt.address!r} does not match the requested value",
+            )
 
     extra = receipt.extra
 

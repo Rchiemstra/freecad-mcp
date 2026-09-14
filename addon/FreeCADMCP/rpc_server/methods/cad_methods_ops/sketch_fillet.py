@@ -200,9 +200,34 @@ def apply_sketch_fillet(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    point1 = sketch.getPoint(request.geo1, 2)
-    point2 = sketch.getPoint(request.geo2, 1)
-    sketch.fillet(request.geo1, request.geo2, point1, point2, request.radius, True, False)
+    point1 = None
+    point2 = None
+    best_dist = None
+    for pos1 in (1, 2):
+        try:
+            candidate1 = sketch.getPoint(request.geo1, pos1)
+        except Exception as exc:
+            raise SketchFilletError("INVALID_GEOMETRY", str(exc) or type(exc).__name__) from exc
+        for pos2 in (1, 2):
+            try:
+                candidate2 = sketch.getPoint(request.geo2, pos2)
+            except Exception as exc:
+                raise SketchFilletError("INVALID_GEOMETRY", str(exc) or type(exc).__name__) from exc
+            delta = candidate1 - candidate2
+            dist = float(getattr(delta, "Length", 0.0))
+            if best_dist is None or dist < best_dist:
+                best_dist = dist
+                point1 = candidate1
+                point2 = candidate2
+    if point1 is None or point2 is None or best_dist is None or best_dist > 1e-6:
+        raise SketchFilletError(
+            "INVALID_GEOMETRY",
+            "fillet geometries do not share a coincident vertex",
+        )
+    try:
+        sketch.fillet(request.geo1, request.geo2, point1, point2, request.radius, True, False)
+    except Exception as exc:
+        raise SketchFilletError("FILLET_FAILED", str(exc) or type(exc).__name__) from exc
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

@@ -48,6 +48,8 @@ class SetExpressionReceipt:
 
     name: str
     item: object | None
+    prop_path: str
+    expression: str
     skipped: bool = False
     extra: object = None
 
@@ -76,7 +78,13 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
         setter(request.prop_path, request.expression)
     except Exception as exc:
         raise SetExpressionError("EXPRESSION_ERROR", str(exc) or type(exc).__name__) from exc
-    return SetExpressionReceipt(name=object_name(item) or request.object_name, item=item, skipped=False)
+    return SetExpressionReceipt(
+        name=object_name(item) or request.object_name,
+        item=item,
+        prop_path=request.prop_path,
+        expression=request.expression,
+        skipped=False,
+    )
 
 
 def read_set_expression_result(doc: SetExpressionReadDocument, receipt: SetExpressionReceipt) -> SetExpressionInspection:
@@ -84,15 +92,17 @@ def read_set_expression_result(doc: SetExpressionReadDocument, receipt: SetExpre
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise SetExpressionError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise SetExpressionError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
+    getter = getattr(located, "getExpression", None)
+    if callable(getter):
+        bound = getter(receipt.prop_path)
+        if str(bound or "") != receipt.expression:
+            raise SetExpressionError(
+                "EXPRESSION_ERROR",
+                f"Expression on {receipt.prop_path!r} does not match the requested value",
+            )
 
     extra = receipt.extra
 

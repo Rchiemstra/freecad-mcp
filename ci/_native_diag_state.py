@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.native_model_state import model_state, property_content
+from tests.native_model_state import model_state
 
 
 def _diff(before, after) -> list[str]:
@@ -40,6 +40,36 @@ def _diff(before, after) -> list[str]:
     return lines
 
 
+def _first_property_diff(before, after) -> str | None:
+    before_map = {entry[0]: entry for entry in before}
+    after_map = {entry[0]: entry for entry in after}
+    for name in sorted(set(before_map) | set(after_map)):
+        if name not in before_map or name not in after_map:
+            return f"{name}: object presence"
+        b = before_map[name]
+        a = after_map[name]
+        if b[1] != a[1]:
+            return f"{name}: TypeId"
+        if b[2] != a[2]:
+            return f"{name}: State"
+        if b[3] != a[3]:
+            return f"{name}: InList"
+        if b[4] != a[4]:
+            return f"{name}: OutList"
+        b_props = {item[0]: item for item in b[5]}
+        a_props = {item[0]: item for item in a[5]}
+        for prop in sorted(set(b_props) | set(a_props)):
+            if prop not in b_props:
+                return f"{name}.{prop}: added"
+            if prop not in a_props:
+                return f"{name}.{prop}: removed"
+            if b_props[prop] != a_props[prop]:
+                b_hash = b_props[prop][4]
+                a_hash = a_props[prop][4]
+                return f"{name}.{prop}: hash {b_hash!r} -> {a_hash!r}"
+    return None
+
+
 def _run(op: str, kind: str, base: dict[str, object]) -> None:
     import FreeCAD
     from tests.typed_feature_native_matrix import _run as invoke
@@ -60,13 +90,15 @@ def _run(op: str, kind: str, base: dict[str, object]) -> None:
             document.Name,
             base,
         )
-        document.recompute()
         after = model_state(document), revision_state(document, op)
         print(f"===== {op} success={result.get('success')} code={result.get('error_code')} =====")
         if before[0] == after[0]:
             print("model_state: match")
         else:
             print("model_state: DIFF")
+            first = _first_property_diff(before[0], after[0])
+            if first:
+                print(f" first_diff: {first}")
             for line in _diff(before[0], after[0])[:40]:
                 print(" ", line)
         if before[1] != after[1]:
@@ -81,7 +113,38 @@ def main() -> None:
         "boolean",
         {"doc_name": "Doc", "shape1": "Shape1", "shape2": "Shape2", "result_name": "Result"},
     )
-    _run("pad_feature", "profile", {"doc_name": "Doc", "sketch_name": "Sketch", "pad_name": "Pad", "length": 10.0, "body_name": "Body"})
+    _run(
+        "pad_feature",
+        "profile",
+        {
+            "doc_name": "Doc",
+            "sketch_name": "Sketch",
+            "pad_name": "Pad",
+            "length": 10.0,
+            "body_name": "Body",
+        },
+    )
+    _run(
+        "loft_feature",
+        "profile",
+        {
+            "doc_name": "Doc",
+            "sketch_name": "Sketch",
+            "loft_name": "Loft",
+            "body_name": "Body",
+        },
+    )
+    _run(
+        "chamfer_feature",
+        "profile",
+        {
+            "doc_name": "Doc",
+            "feature_name": "Pad",
+            "chamfer_name": "Chamfer",
+            "size": 1.0,
+            "body_name": "Body",
+        },
+    )
 
 
 if __name__ == "__main__":

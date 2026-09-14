@@ -61,7 +61,19 @@ def apply_insert_part_from_library(
             "INSERT_UNAVAILABLE",
             "insert_part_from_library collaborator is missing",
         )
-    insert(str(request.doc_name), request.relative_path)
+    admitted_name = document_name(doc) or str(request.doc_name)
+    try:
+        insert(admitted_name, request.relative_path)
+    except FileNotFoundError as exc:
+        raise InsertPartFromLibraryError(
+            "INSERT_UNAVAILABLE",
+            str(exc) or "library part not found",
+        ) from exc
+    except Exception as exc:
+        raise InsertPartFromLibraryError(
+            "INSERT_UNAVAILABLE",
+            str(exc) or type(exc).__name__,
+        ) from exc
     added = tuple(sorted(set(object_names(doc)) - before))
     return InsertPartFromLibraryReceipt(
         name=document_name(doc),

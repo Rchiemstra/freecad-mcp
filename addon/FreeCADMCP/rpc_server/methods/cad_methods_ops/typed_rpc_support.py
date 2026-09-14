@@ -127,16 +127,28 @@ def add_named_object(document: object, type_id: str, name: str) -> object:
     return created
 
 
+def _group_members(group: object) -> list[object]:
+    if isinstance(group, list):
+        return list(group)
+    if isinstance(group, tuple):
+        return list(group)
+    return []
+
+
 def add_to_container(container: object | None, item: object) -> None:
     if container is None:
         return
     adder = getattr(container, "addObject", None)
     if adder is not None:
-        invoke(adder, item)
-        return
+        try:
+            invoke(adder, item)
+            return
+        except Exception:
+            pass
     group = getattr(container, "Group", None)
-    if isinstance(group, list) and item not in group:
-        assign_attr(container, "Group", [*group, item])
+    members = _group_members(group)
+    if item not in members:
+        assign_attr(container, "Group", [*members, item])
 
 
 def remove_from_container(container: object | None, item: object) -> None:
@@ -150,8 +162,9 @@ def remove_from_container(container: object | None, item: object) -> None:
         except Exception:
             pass
     group = getattr(container, "Group", None)
-    if isinstance(group, list):
-        assign_attr(container, "Group", [member for member in group if member is not item])
+    members = _group_members(group)
+    if members:
+        assign_attr(container, "Group", [member for member in members if member is not item])
 
 
 def parse_ref(document: object, ref: str, error: Callable[[str, str], BaseException]) -> tuple[object, str]:
