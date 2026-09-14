@@ -267,6 +267,12 @@ def set_tip(body: object, feature: object) -> None:
     set_attr(body, "Tip", feature)
 
 
+def require_nonempty_shape(feature: object, *, missing: str) -> None:
+    shape = getattr(feature, "Shape", None)
+    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+        raise LookupError(missing)
+
+
 def is_read_only_property(item: object, name: str) -> bool:
     checker = getattr(item, "isReadOnly", None)
     if callable(checker):
@@ -300,6 +306,7 @@ __all__ = [
     "optional_name",
     "require_absent",
     "require_body",
+    "require_nonempty_shape",
     "require_object",
     "resolve_linksub",
     "resolve_revolve_axis",

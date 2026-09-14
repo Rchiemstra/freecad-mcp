@@ -28,6 +28,7 @@ from .feature_apply_support import (
     nonempty_string,
     optional_name,
     require_absent,
+    require_nonempty_shape,
     require_object,
     resolve_optional_body,
     set_attr,
@@ -74,7 +75,8 @@ def apply_loft_feature(doc: FeatureDocument, request: LoftFeatureRequest) -> Lof
             set_attr(created, "Sections", sections)
         set_attr(created, "Ruled", request.ruled)
         set_attr(created, "Closed", request.closed)
-        set_tip(body, created)
+        if body is not None:
+            set_tip(body, created)
         return LoftFeatureReceipt(name=str(created.Name), feature=created)
     except LoftFeatureError:
         raise
@@ -113,6 +115,13 @@ def read_loft_feature_result(doc: FeatureReadDocument, receipt: LoftFeatureRecei
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::AdditiveLoft: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise LoftFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return LoftFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

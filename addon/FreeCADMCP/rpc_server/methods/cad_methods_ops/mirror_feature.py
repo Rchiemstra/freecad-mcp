@@ -28,6 +28,7 @@ from .feature_apply_support import (
     optional_name,
     require_absent,
     require_body,
+    require_nonempty_shape,
     require_object,
     resolve_linksub,
     set_named_property,
@@ -111,6 +112,13 @@ def read_mirror_feature_result(doc: FeatureReadDocument, receipt: MirrorFeatureR
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::Mirrored: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise MirrorFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return MirrorFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

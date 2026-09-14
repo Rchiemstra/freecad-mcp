@@ -31,6 +31,7 @@ from .feature_apply_support import (
     optional_name,
     require_absent,
     require_body,
+    require_nonempty_shape,
     require_object,
     resolve_linksub,
     set_feature_bool,
@@ -116,6 +117,13 @@ def read_linear_pattern_feature_result(doc: FeatureReadDocument, receipt: Linear
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::LinearPattern: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise LinearPatternFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return LinearPatternFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

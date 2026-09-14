@@ -29,6 +29,7 @@ from .feature_apply_support import (
     nonempty_string,
     optional_name,
     require_absent,
+    require_nonempty_shape,
     require_object,
     resolve_optional_body,
     set_attr,
@@ -67,10 +68,11 @@ def apply_sweep_feature(doc: FeatureDocument, request: SweepFeatureRequest) -> S
         path = require_object(doc, request.path_sketch, missing="Path sketch not found")
         body = resolve_optional_body(doc, profile, request.body_name)
         created = create_feature(doc, body, 'PartDesign::AdditivePipe', request.sweep_name)
-        set_attr(created, "Profile", profile)
-        set_attr(created, "Spine", path)
+        set_attr(created, "Profile", (profile, [""]))
+        set_attr(created, "Spine", (path, [""]))
         set_feature_bool(created, ("Frenet",), request.frenet)
-        set_tip(body, created)
+        if body is not None:
+            set_tip(body, created)
         return SweepFeatureReceipt(name=str(created.Name), feature=created)
     except SweepFeatureError:
         raise
@@ -109,6 +111,13 @@ def read_sweep_feature_result(doc: FeatureReadDocument, receipt: SweepFeatureRec
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::AdditivePipe: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise SweepFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return SweepFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

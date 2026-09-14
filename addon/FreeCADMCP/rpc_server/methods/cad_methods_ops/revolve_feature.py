@@ -29,6 +29,7 @@ from .feature_apply_support import (
     number_value,
     optional_name,
     require_absent,
+    require_nonempty_shape,
     require_object,
     resolve_revolve_axis,
     resolve_optional_body,
@@ -76,7 +77,8 @@ def apply_revolve_feature(doc: FeatureDocument, request: RevolveFeatureRequest) 
         )
         set_feature_bool(created, ("Symmetric",), request.symmetric)
         set_feature_bool(created, ("Reversed",), request.reversed_dir)
-        set_tip(body, created)
+        if body is not None:
+            set_tip(body, created)
         return RevolveFeatureReceipt(name=str(created.Name), feature=created)
     except RevolveFeatureError:
         raise
@@ -115,6 +117,13 @@ def read_revolve_feature_result(doc: FeatureReadDocument, receipt: RevolveFeatur
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::Revolution: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise RevolveFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return RevolveFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

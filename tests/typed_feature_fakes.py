@@ -44,6 +44,7 @@ class FeatureObj:
         ]
         self.Origin = SimpleNamespace(OriginFeatures=[])
         self.Tip = None
+        self.Shape = SimpleNamespace(isNull=lambda: False, Faces=[object()], Volume=1.0)
         self._document = document
 
     def isDerivedFrom(self, type_name: str) -> bool:

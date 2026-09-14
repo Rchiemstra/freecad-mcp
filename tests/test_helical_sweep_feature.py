@@ -49,6 +49,8 @@ def test_helical_sweep_feature_runs_apply_recompute_inspect_validate_then_commit
     assert result["success"] is True
     assert result["feature"] == _KWARGS[_CREATED]
     assert result["label"] == f"Label for {_KWARGS[_CREATED]}"
+    helix = document.objects[_KWARGS[_CREATED]]
+    assert helix.Radius == 5.0
     assert events == ["apply", "recompute", "inspect", "validate", "commit"]
     assert api.calls == [("Doc", True, True, True)]
 

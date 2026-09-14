@@ -26,6 +26,7 @@ from .feature_apply_support import (
     is_derived_from,
     nonempty_string,
     require_absent,
+    require_nonempty_shape,
     require_object,
     set_attr,
 )
@@ -101,6 +102,13 @@ def read_boolean_difference_result(doc: FeatureReadDocument, receipt: BooleanDif
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not Part::Cut: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise BooleanDifferenceError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return BooleanDifferenceInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

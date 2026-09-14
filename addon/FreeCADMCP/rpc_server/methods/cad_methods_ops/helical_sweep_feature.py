@@ -29,6 +29,7 @@ from .feature_apply_support import (
     number_value,
     optional_name,
     require_absent,
+    require_nonempty_shape,
     require_object,
     resolve_optional_body,
     set_attr,
@@ -67,16 +68,20 @@ def apply_helical_sweep_feature(doc: FeatureDocument, request: HelicalSweepFeatu
         )
         body = resolve_optional_body(doc, profile, request.body_name)
         created = create_feature(doc, body, 'PartDesign::AdditiveHelix', request.helix_name)
-        set_attr(created, "Profile", profile)
+        set_attr(created, "Profile", (profile, [""]))
         set_attr(created, "ReferenceAxis", (profile, ["V_Axis"]))
         set_attr(created, "Mode", 0)
         set_attr(created, "Pitch", request.pitch)
         set_attr(created, "Height", request.height)
+        properties = set(getattr(created, "PropertiesList", []))
+        if not properties or "Radius" in properties:
+            set_attr(created, "Radius", request.radius)
         set_attr(created, "Angle", 0)
         set_attr(created, "Growth", 0)
         set_feature_bool(created, ("LeftHanded",), request.left_handed)
         set_feature_bool(created, ("Reversed",), request.reversed_dir)
-        set_tip(body, created)
+        if body is not None:
+            set_tip(body, created)
         return HelicalSweepFeatureReceipt(name=str(created.Name), feature=created)
     except HelicalSweepFeatureError:
         raise
@@ -115,6 +120,13 @@ def read_helical_sweep_feature_result(doc: FeatureReadDocument, receipt: Helical
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::AdditiveHelix: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise HelicalSweepFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return HelicalSweepFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

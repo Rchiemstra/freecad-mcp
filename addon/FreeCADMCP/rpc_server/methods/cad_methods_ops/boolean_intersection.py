@@ -26,6 +26,7 @@ from .feature_apply_support import (
     is_derived_from,
     nonempty_string,
     require_absent,
+    require_nonempty_shape,
     require_object,
     set_attr,
 )
@@ -99,6 +100,13 @@ def read_boolean_intersection_result(doc: FeatureReadDocument, receipt: BooleanI
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not Part::Common: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise BooleanIntersectionError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return BooleanIntersectionInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

@@ -28,6 +28,7 @@ from .feature_apply_support import (
     number_value,
     optional_name,
     require_absent,
+    require_nonempty_shape,
     require_object,
     resolve_optional_body,
     set_attr,
@@ -74,7 +75,8 @@ def apply_chamfer_feature(doc: FeatureDocument, request: ChamferFeatureRequest) 
             set_attr(created, "UseAllEdges", True)
             set_attr(created, "Base", (base, [""]))
         set_attr(created, "Size", request.size)
-        set_tip(body, created)
+        if body is not None:
+            set_tip(body, created)
         return ChamferFeatureReceipt(name=str(created.Name), feature=created)
     except ChamferFeatureError:
         raise
@@ -113,6 +115,13 @@ def read_chamfer_feature_result(doc: FeatureReadDocument, receipt: ChamferFeatur
             "CREATED_OBJECT_WRONG_TYPE",
             f"Created object is not PartDesign::Chamfer: {receipt.name!r}",
         )
+    try:
+        require_nonempty_shape(
+            feature,
+            missing=f"Created object has empty Shape: {receipt.name!r}",
+        )
+    except LookupError as exc:
+        raise ChamferFeatureError("CREATED_OBJECT_INVALID", str(exc)) from exc
     return ChamferFeatureInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),
