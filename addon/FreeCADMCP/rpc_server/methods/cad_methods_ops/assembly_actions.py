@@ -16,6 +16,10 @@ from .typed_runtime import (
 
 
 def _assembly_api() -> object:
+    try:
+        load_module("AssemblyApp")
+    except TypedMutationError:
+        pass
     return load_module("Assembly")
 
 

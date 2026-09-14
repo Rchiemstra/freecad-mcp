@@ -41,40 +41,7 @@ def _isolate_native_documents():
     _close_all_documents(FreeCAD)
 
 
-import hashlib
-
-
-def _property_content(item, name: str):
-    if name == "Proxy":
-        proxy = getattr(item, "Proxy", None)
-        if proxy is None:
-            return None
-        return f"{type(proxy).__module__}.{type(proxy).__qualname__}"
-    dumped = bytes(item.dumpPropertyContent(name, 0))
-    return hashlib.sha256(dumped).hexdigest()
-
-
-def _model_state(document):
-    return tuple(
-        (
-            item.Name,
-            item.TypeId,
-            tuple(item.State),
-            tuple(sorted(obj.Name for obj in item.InList)),
-            tuple(sorted(obj.Name for obj in item.OutList)),
-            tuple(
-                (
-                    name,
-                    item.getTypeIdOfProperty(name),
-                    item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
-                    _property_content(item, name),
-                )
-                for name in sorted(item.PropertiesList)
-            ),
-        )
-        for item in document.Objects
-    )
+from tests.native_model_state import model_state as _model_state
 
 
 

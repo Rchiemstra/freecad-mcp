@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import os
 from types import SimpleNamespace
 
 import pytest
 
+from tests.native_model_state import model_state
 from tests.typed_feature_native_setup import prepare_native_document, run_kwargs
 
 
@@ -19,39 +19,6 @@ def require_native_collaboration() -> None:
 
     if getattr(FreeCAD, "__mcp_test_stub__", False):
         raise RuntimeError("Native qualification requires a real branch-built FreeCAD")
-
-
-def _property_content(item, name: str):
-    if name == "Proxy":
-        proxy = getattr(item, "Proxy", None)
-        if proxy is None:
-            return None
-        return f"{type(proxy).__module__}.{type(proxy).__qualname__}"
-    dumped = bytes(item.dumpPropertyContent(name, 0))
-    return hashlib.sha256(dumped).hexdigest()
-
-
-def model_state(document):
-    return tuple(
-        (
-            item.Name,
-            item.TypeId,
-            tuple(item.State),
-            tuple(sorted(obj.Name for obj in item.InList)),
-            tuple(sorted(obj.Name for obj in item.OutList)),
-            tuple(
-                (
-                    name,
-                    item.getTypeIdOfProperty(name),
-                    item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
-                    _property_content(item, name),
-                )
-                for name in sorted(item.PropertiesList)
-            ),
-        )
-        for item in document.Objects
-    )
 
 
 def revision_state(document, op: str):
@@ -127,8 +94,14 @@ def check_success(op: str, kind: str, base: dict[str, object], monkeypatch) -> N
 
         def tracked_apply(admitted_document, request):
             events.append("apply")
-            probe.touch()
-            return original_apply(admitted_document, request)
+            receipt = original_apply(admitted_document, request)
+            target = getattr(receipt, "feature", None) or getattr(receipt, "obj", None)
+            touch = getattr(target, "touch", None)
+            if callable(touch):
+                touch()
+            else:
+                probe.touch()
+            return receipt
 
         def tracked_read(admitted_document, receipt):
             events.append("inspect")

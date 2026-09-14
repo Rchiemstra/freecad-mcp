@@ -56,7 +56,10 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
         ctx["assembly"] = str(payload["assembly"])
         return ctx
     if kind == "box":
-        box = document.addObject("Part::Box", "Box")
+        import Part
+
+        box = document.addObject("Part::Feature", "Box")
+        box.Shape = Part.makeBox(10, 10, 10)
         document.recompute()
         ctx["box"] = box.Name
         return ctx

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 from types import SimpleNamespace
 
@@ -12,32 +11,14 @@ import pytest
 pytestmark = pytest.mark.core
 
 
+from tests.native_model_state import model_state as _model_state
+
+
 def _require_native_collaboration() -> None:
     if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") != "1":
         pytest.skip("Compose FreeCAD is adapter-only; use the branch-built lane")
 
 
-def _model_state(document):
-    return tuple(
-        (
-            item.Name,
-            item.TypeId,
-            tuple(item.State),
-            tuple(sorted(obj.Name for obj in item.InList)),
-            tuple(sorted(obj.Name for obj in item.OutList)),
-            tuple(
-                (
-                    name,
-                    item.getTypeIdOfProperty(name),
-                    item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
-                    hashlib.sha256(bytes(item.dumpPropertyContent(name, 0))).hexdigest(),
-                )
-                for name in sorted(item.PropertiesList)
-            ),
-        )
-        for item in document.Objects
-    )
 
 
 def _revision_state(document):

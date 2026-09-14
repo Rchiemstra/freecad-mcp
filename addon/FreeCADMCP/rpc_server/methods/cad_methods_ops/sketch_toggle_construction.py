@@ -194,11 +194,16 @@ def apply_sketch_toggle_construction(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    for geo_index in request.geo_indices:
-        sketch.toggleConstruction(geo_index)
-        geom = sketch.Geometry[geo_index]
-        if geom.Construction != request.construction:
+    setter = getattr(sketch, "setConstruction", None)
+    if callable(setter):
+        for geo_index in request.geo_indices:
+            setter(geo_index, request.construction)
+    else:
+        for geo_index in request.geo_indices:
             sketch.toggleConstruction(geo_index)
+            geom = sketch.Geometry[geo_index]
+            if geom.Construction != request.construction:
+                sketch.toggleConstruction(geo_index)
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

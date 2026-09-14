@@ -63,8 +63,14 @@ def check_success(
 
         def tracked_apply(admitted_document, request):
             events.append("apply")
-            probe.touch()
-            return original_apply(admitted_document, request)
+            receipt = original_apply(admitted_document, request)
+            target = getattr(receipt, "obj", None)
+            touch = getattr(target, "touch", None)
+            if callable(touch):
+                touch()
+            else:
+                probe.touch()
+            return receipt
 
         def tracked_read(admitted_document, receipt):
             events.append("inspect")

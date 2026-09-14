@@ -368,12 +368,14 @@ def common_volume_along_path(
 
 def translate(document: object, obj_name: str, dx: float, dy: float, dz: float) -> dict[str, str]:
     obj = require_object(document, obj_name)
-    placement = getattr(obj, "Placement", None)
-    if placement is None:
+    current = getattr(obj, "Placement", None)
+    if current is None:
         raise TypedMutationError("INVALID_OBJECT", f"Object has no Placement: {obj_name!r}")
-    base = getattr(placement, "Base", None)
-    setattr(placement, "Base", base + _vector(dx, dy, dz))  # type: ignore[operator]
-    setattr(obj, "Placement", placement)
+    placement_cls = module_callable(_freecad(), "Placement")
+    updated = placement_cls(current)
+    base = getattr(updated, "Base", None)
+    setattr(updated, "Base", base + _vector(dx, dy, dz))  # type: ignore[operator]
+    setattr(obj, "Placement", updated)
     return {"object": object_name(obj), "label": str(getattr(obj, "Label", obj_name))}
 
 
@@ -410,6 +412,12 @@ def rotate(
 
 def scale(document: object, obj_name: str, sx: float, sy: float, sz: float) -> dict[str, str]:
     obj = require_object(document, obj_name)
+    type_id = str(getattr(obj, "TypeId", ""))
+    if type_id.startswith("Part::") and type_id != "Part::Feature":
+        raise TypedMutationError(
+            "SCALE_NOT_SUPPORTED",
+            f"Cannot scale parametric primitive directly: {obj_name!r}",
+        )
     shape = getattr(obj, "Shape", None)
     if shape is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object with Shape not found: {obj_name!r}")

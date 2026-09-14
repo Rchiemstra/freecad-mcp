@@ -32,7 +32,7 @@ def prepare_native_document(document, kind: str) -> None:
     if kind == "profile":
         sketch = body.newObject("Sketcher::SketchObject", "Sketch")
         sketch.addGeometry(
-            Part.Circle(FreeCAD.Vector(10, 0, 0), FreeCAD.Vector(0, 0, 1), 3)
+            Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 3)
         )
         document.recompute()
         return
@@ -49,10 +49,13 @@ def prepare_native_document(document, kind: str) -> None:
     if kind == "sweep":
         profile = body.newObject("Sketcher::SketchObject", "Sketch")
         profile.addGeometry(
-            Part.Circle(FreeCAD.Vector(10, 0, 0), FreeCAD.Vector(0, 0, 1), 2)
+            Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 1)
         )
         path = body.newObject("Sketcher::SketchObject", "Path")
-        path.Placement.Rotation = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), 90)
+        xz_plane = document.getObject("XZ_Plane")
+        if xz_plane is not None:
+            path.AttachmentSupport = (xz_plane, [""])
+            path.MapMode = "FlatFace"
         path.addGeometry(
             Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 20, 0))
         )

@@ -46,8 +46,17 @@ def check_create_document_success(monkeypatch) -> None:
 
     def tracked_apply(admitted_document, request):
         events.append("apply")
-        ensure_probe(admitted_document).touch()
-        return original_apply(admitted_document, request)
+        receipt = original_apply(admitted_document, request)
+        for obj in getattr(admitted_document, "Objects", []) or []:
+            if getattr(obj, "TypeId", "") == "App::FeaturePython":
+                continue
+            touch = getattr(obj, "touch", None)
+            if callable(touch):
+                touch()
+                break
+        else:
+            ensure_probe(admitted_document).touch()
+        return receipt
 
     def tracked_read(admitted_document, receipt):
         events.append("inspect")
@@ -138,8 +147,17 @@ def check_open_document_success(monkeypatch) -> None:
 
         def tracked_apply(admitted_document, request):
             events.append("apply")
-            ensure_probe(admitted_document).touch()
-            return original_apply(admitted_document, request)
+            receipt = original_apply(admitted_document, request)
+            for obj in getattr(admitted_document, "Objects", []) or []:
+                if getattr(obj, "TypeId", "") == "App::FeaturePython":
+                    continue
+                touch = getattr(obj, "touch", None)
+                if callable(touch):
+                    touch()
+                    break
+            else:
+                ensure_probe(admitted_document).touch()
+            return receipt
 
         def tracked_read(admitted_document, receipt):
             events.append("inspect")

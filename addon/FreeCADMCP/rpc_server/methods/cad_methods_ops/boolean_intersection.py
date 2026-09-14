@@ -61,8 +61,6 @@ def apply_boolean_intersection(doc: FeatureDocument, request: BooleanIntersectio
         created = create_feature(doc, None, 'Part::Common', request.result_name)
         set_attr(created, "Base", first)
         set_attr(created, "Tool", second)
-        set_attr(first, "Visibility", False)
-        set_attr(second, "Visibility", False)
         return BooleanIntersectionReceipt(name=str(created.Name), feature=created)
     except BooleanIntersectionError:
         raise

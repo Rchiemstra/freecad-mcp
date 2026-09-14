@@ -123,13 +123,28 @@ def _close_points(points: list[object], min_length: float) -> None:
 
 def _profile_to_sketch(sketch: object, points: list[object], min_length: float) -> int:
     part = _part()
+    add_geometry = getattr(sketch, "addGeometry", None)
+    if not callable(add_geometry):
+        raise TypedMutationError("INVALID_SKETCH", "sketch must provide addGeometry")
+    if len(points) >= 4:
+        bspline_cls = getattr(part, "BSplineCurve", None)
+        if bspline_cls is not None:
+            try:
+                curve = bspline_cls()
+                interpolate = getattr(curve, "interpolate", None)
+                to_shape = getattr(curve, "toShape", None)
+                if callable(interpolate) and callable(to_shape):
+                    interpolate(Points=points, PeriodicFlag=True)
+                    add_geometry(to_shape(), False)
+                    return 1
+            except Exception:
+                pass
     sketcher = _sketcher()
     line_segment = module_callable(part, "LineSegment")
     constraint = module_callable(sketcher, "Constraint")
-    add_geometry = getattr(sketch, "addGeometry", None)
     add_constraint = getattr(sketch, "addConstraint", None)
-    if not callable(add_geometry) or not callable(add_constraint):
-        raise TypedMutationError("INVALID_SKETCH", "sketch must provide addGeometry/addConstraint")
+    if not callable(add_constraint):
+        raise TypedMutationError("INVALID_SKETCH", "sketch must provide addConstraint")
     indices: list[object] = []
     for idx in range(len(points) - 1):
         p1 = points[idx]
@@ -351,7 +366,7 @@ def _spur_profile_points(
             _add_point(points, root * math.cos(theta + tooth_angle * 0.25), root * math.sin(theta + tooth_angle * 0.25), min_length=min_length)
             _add_arc(points, root, theta + tooth_angle * 0.25, theta + tooth_angle * 0.75, max(1, samples // 3), min_length)
     elif profile == "cycloidal":
-        steps = max(8, samples * 2)
+        steps = max(8, min(samples * 2, 12))
         for tooth in range(teeth):
             theta = 2.0 * math.pi * tooth / teeth
             for sample in range(steps):
@@ -368,7 +383,7 @@ def _spur_profile_points(
     else:
         hub = max(pitch - 0.75 * module, module * 0.4)
         pin = max(min(module * 0.55, hub * math.sin(tooth_angle * 0.34)), module * 0.18)
-        steps = max(16, samples * 3)
+        steps = max(8, min(samples * 3, 16))
         for tooth in range(teeth):
             theta = 2.0 * math.pi * tooth / teeth
             for sample in range(steps):
@@ -547,10 +562,11 @@ def create_helical_gear(
     if not callable(factory):
         raise TypedMutationError("INVALID_BODY", "Body must provide newObject")
     feature = factory("PartDesign::AdditiveHelix", gear_name)
-    setattr(feature, "Profile", (sketch, [""]))
+    setattr(feature, "Profile", sketch)
+    setattr(feature, "ReferenceAxis", (sketch, ["V_Axis"]))
+    setattr(feature, "Mode", 0)
     setattr(feature, "Pitch", pitch_len)
     setattr(feature, "Height", width)
-    setattr(feature, "Angle", 0)
     return {
         "body": object_name(body),
         "sketch": object_name(sketch),

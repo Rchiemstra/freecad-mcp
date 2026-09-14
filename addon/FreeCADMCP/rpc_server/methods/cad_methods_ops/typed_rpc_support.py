@@ -69,10 +69,7 @@ def call_named(owner: object, method: str, *args: object) -> object | None:
 
 
 def assign_attr(item: object, name: str, value: object) -> None:
-    try:
-        setattr(item, name, value)
-    except Exception:
-        return
+    setattr(item, name, value)
 
 
 def require_object(

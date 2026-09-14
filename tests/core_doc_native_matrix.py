@@ -68,8 +68,22 @@ def check_success(
 
         def tracked_apply(admitted_document, *args, **kwargs):
             events.append("apply")
-            probe.touch()
-            return original_apply(admitted_document, *args, **kwargs)
+            receipt = original_apply(admitted_document, *args, **kwargs)
+            target = getattr(receipt, "feature", None) or getattr(receipt, "obj", None)
+            touch = getattr(target, "touch", None)
+            if callable(touch):
+                touch()
+            else:
+                for obj in getattr(admitted_document, "Objects", []) or []:
+                    if getattr(obj, "TypeId", "") == "App::FeaturePython":
+                        continue
+                    obj_touch = getattr(obj, "touch", None)
+                    if callable(obj_touch):
+                        obj_touch()
+                        break
+                else:
+                    probe.touch()
+            return receipt
 
         def tracked_read(admitted_document, *args, **kwargs):
             events.append("inspect")

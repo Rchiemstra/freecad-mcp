@@ -74,7 +74,6 @@ def apply_revolve_feature(doc: FeatureDocument, request: RevolveFeatureRequest) 
         )
         set_attr(created, "Symmetric", request.symmetric)
         set_attr(created, "Reversed", request.reversed_dir)
-        set_attr(sketch, "Visibility", False)
         return RevolveFeatureReceipt(name=str(created.Name), feature=created)
     except RevolveFeatureError:
         raise

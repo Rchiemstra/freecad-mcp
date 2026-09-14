@@ -230,10 +230,7 @@ def resolve_linksub(document: object, body: object | None, spec: str) -> object:
 
 
 def set_tip(body: object, feature: object) -> None:
-    try:
-        set_attr(body, "Tip", feature)
-    except Exception:
-        return
+    set_attr(body, "Tip", feature)
 
 
 __all__ = [

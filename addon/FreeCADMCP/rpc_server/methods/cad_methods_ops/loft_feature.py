@@ -31,6 +31,7 @@ from .feature_apply_support import (
     require_object,
     resolve_optional_body,
     set_attr,
+    set_tip,
     string_list,
 )
 
@@ -66,9 +67,14 @@ def apply_loft_feature(doc: FeatureDocument, request: LoftFeatureRequest) -> Lof
         ]
         body = resolve_optional_body(doc, profiles[0], request.body_name)
         created = create_feature(doc, body, 'PartDesign::AdditiveLoft', request.loft_name)
-        set_attr(created, "Sections", [(item, [""]) for item in profiles])
+        profile = profiles[0]
+        sections = profiles[1:]
+        set_attr(created, "Profile", profile)
+        if sections:
+            set_attr(created, "Sections", sections)
         set_attr(created, "Ruled", request.ruled)
         set_attr(created, "Closed", request.closed)
+        set_tip(body, created)
         return LoftFeatureReceipt(name=str(created.Name), feature=created)
     except LoftFeatureError:
         raise
