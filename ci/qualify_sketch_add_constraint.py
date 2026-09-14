@@ -13,19 +13,19 @@ import sys
 from pathlib import Path
 
 PYTHON_TESTS = (
-    "tests/test_sketch_add_constraint.py",
-    "tests/test_sketch_add_constraint_response.py",
-    "tests/test_sketch_add_constraint_contract_gate.py",
+    "tests/sketch/test_sketch_add_constraint.py",
+    "tests/sketch/test_sketch_add_constraint_response.py",
+    "tests/sketch/test_sketch_add_constraint_contract_gate.py",
     "tests/test_typed_platform_discovery.py",
-    "tests/test_sketch_add_constraint_json_rpc_contract.py",
-    "tests/test_collaboration_api.py",
+    "tests/sketch/test_sketch_add_constraint_json_rpc_contract.py",
+    "tests/collaboration/test_collaboration_api.py",
     "tests/test_parametric.py",
     "tests/test_instrumented_server_worker.py",
-    "tests/test_mcp_tasks.py",
-    "tests/test_capability_manifest_generator.py",
+    "tests/mcp/test_mcp_tasks.py",
+    "tests/capability/test_capability_manifest_generator.py",
     "tests/test_generated_registration_cutover.py",
-    "tests/test_mcp_tool_modules_register.py",
-    "tests/test_phase18_registered_tool_runtime.py",
+    "tests/mcp/test_mcp_tool_modules_register.py",
+    "tests/phase18/test_phase18_registered_tool_runtime.py",
 )
 
 
@@ -45,7 +45,7 @@ def main() -> int:
         if getattr(FreeCAD, "__mcp_test_stub__", False):
             raise RuntimeError("Native qualification requires a real branch-built FreeCAD")
         os.environ["FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION"] = "1"
-        tests = ("tests/test_native_sketch_add_constraint.py",)
+        tests = ("tests/native/test_native_sketch_add_constraint.py",)
     else:
         result = subprocess.run(
             [sys.executable, "ci/check_sketch_add_constraint_contract.py"],

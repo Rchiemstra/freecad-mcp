@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 
 PYTHON_TESTS = (
-    "tests/test_fillet_feature.py",
-    "tests/test_fillet_feature_response.py",
-    "tests/test_fillet_feature_contract_gate.py",
-    "tests/test_fillet_feature_json_rpc_contract.py",
+    "tests/fillet/test_fillet_feature.py",
+    "tests/fillet/test_fillet_feature_response.py",
+    "tests/fillet/test_fillet_feature_contract_gate.py",
+    "tests/fillet/test_fillet_feature_json_rpc_contract.py",
     "tests/test_typed_platform_discovery.py",
     "tests/test_p3_features.py",
 )
@@ -31,7 +31,7 @@ def main() -> int:
         if getattr(FreeCAD, "__mcp_test_stub__", False):
             raise RuntimeError("Native qualification requires a real branch-built FreeCAD")
         os.environ["FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION"] = "1"
-        tests = ("tests/test_native_fillet_feature.py",)
+        tests = ("tests/native/test_native_fillet_feature.py",)
     else:
         result = subprocess.run(
             [sys.executable, "ci/check_fillet_feature_contract.py"],

@@ -305,7 +305,7 @@ Shared infrastructure only (no `commit_body_set_tip_mutation`, no Tip Woodpecker
 
 - Parent: `ci/woodpecker/freecad-mcp-lint.sh`
 - MCP new: `ci/discover_typed_slice.py`, `ci/run_contract_checks.py`, `addon/.../typed_rpc_discovery.py`, `tests/test_typed_platform_discovery.py`
-- MCP modified: `collaboration_api.py`, `body_create.py`, `sketch_public.py`, `pyproject.toml`, `ci/check_body_create_contract.py`, `ci/qualify_body_create.py`, `tests/test_body_create_contract_gate.py`, `tests/test_phase15_sketch_injection.py`
+- MCP modified: `collaboration_api.py`, `body_create.py`, `sketch_public.py`, `pyproject.toml`, `ci/check_body_create_contract.py`, `ci/qualify_body_create.py`, `tests/body/test_body_create_contract_gate.py`, `tests/phase15/test_phase15_sketch_injection.py`
 
 **Tests (Composer, main MCP worktree):**
 
@@ -407,7 +407,7 @@ Missing Body-lane tests (not Tip mutation cases):
 
 ### Remaining Composer 2.5 defects (same worktree)
 
-1. `tests/test_native_body_set_tip.py::_model_state` — `id(item.Proxy)` for FeaturePython is not stable across rollback/recompute. Validation flake differed on `ExistingAnchor` Proxy/content.
+1. `tests/native/test_native_body_set_tip.py::_model_state` — `id(item.Proxy)` for FeaturePython is not stable across rollback/recompute. Validation flake differed on `ExistingAnchor` Proxy/content.
 2. Native suite isolation — first full run failed `rich_model[apply]` (Body OutList showed duplicate `Pad`); same test passed alone and on a later full run. Likely leftover collaboration/document state after `rollback_failure` fence tests.
 3. Do not claim `--native` 14 passed from one run. Require 3 consecutive green full-suite runs in `freecad-ci-mcp:24.04-phase1`.
 
@@ -425,7 +425,7 @@ Overall: **NOT PASS**. Main checkout HEADs unchanged (`d0d82b743886` / `b32a1342
 | 4 | Strict public success shape | PASS | Versioned TypedDict; `make_body_set_tip_success` only after native `True`; parser + discriminant product tests |
 | 5 | MCP static contract (no Any; vendored identity; mypy) | FAIL | Vendored contracts byte-identical (SHA-256 `AC00F3B8…`); no `Any` on Tip typed modules; mypy 17 files OK. **Defect:** `TipReadDocument.getObject` returns writable `TipBodyObject` (Tip setter). `tests/typecheck/body_set_tip_protocol.py::postcondition_surface_is_read_only` assigns `body.Tip` **without** `type: ignore`, so writes through the inspect surface are allowed. body_create rejects Label/addObject writes |
 | 6 | Automatic editor/CI mypy gate | PASS | Tip files in `pyproject.toml` `files` + `disallow_any_explicit`; Woodpecker calls `ci/check_body_set_tip_contract.py`. Re-ran Docker `python:3.12` lint: OK |
-| 7 | Public JSON-RPC / real MCP schema dispatch | PASS | `tests/test_body_set_tip_json_rpc_contract.py` uses MCP memory session `list_tools`/`call_tool`; HTTP transport only; non-strings never reach JSON-RPC; MCP tool calls `freecad.body_set_tip()` |
+| 7 | Public JSON-RPC / real MCP schema dispatch | PASS | `tests/body/test_body_set_tip_json_rpc_contract.py` uses MCP memory session `list_tools`/`call_tool`; HTTP transport only; non-strings never reach JSON-RPC; MCP tool calls `freecad.body_set_tip()` |
 | 8 | Native qualification matrix / rollback | FAIL | Runtime **exists** (`freecad-ci-mcp:24.04-phase1` + `D:/code/FreeCAD/build_docker` `libFreeCADApp.so`). Grok ran `--native`: **1 failed**. Fixture uses empty Pad → pending recompute → `Busy`. No apply/recompute/inspection/validation rollback matrix (body_create native is 16 tests). Production **can** succeed on an idle valid Body (reviewer probe only; not a committed test) |
 | 9 | Deliberately broken variants incl. CI path | PASS | Gate tests fail TIP007 cached success after native rejection and TIP015 omitted postcondition; `test_native_rejection_never_returns_cached_success` |
 | 10 | Committed/unknown; no cached success; malformed committed | PASS | Parser unknown/non-object → uncertain `committed=None`; malformed committed retains `committed=true` (JSON-RPC test); native Busy is proven rejection not cached success |
@@ -436,7 +436,7 @@ Overall: **NOT PASS**. Main checkout HEADs unchanged (`d0d82b743886` / `b32a1342
 - `body_create.py` / `body_create_contract.py` / `body_mutation.py` internals not rewritten. `cad_mutation.py` untouched. `src/freecad_mcp/generated/**` not hand-edited.
 - Public args remain `doc_name`, `body_name`, `feature_name`.
 - `collaboration_api.commit_body_create_mutation` policy unchanged (lookup extracted to `_resolve_admitted_document`; Body 218 still passed).
-- Typed-slice `Any`: none. `tests/test_body_set_tip.py` imports `Any` (not in mypy `files`).
+- Typed-slice `Any`: none. `tests/body/test_body_set_tip.py` imports `Any` (not in mypy `files`).
 
 ### Commands re-run (Grok)
 
@@ -451,8 +451,8 @@ Native blocker: **not missing runtime**. Runtime present; committed native test 
 
 ### Composer 2.5 required fixes (do not implement here)
 
-1. `tests/test_native_body_set_tip.py::test_body_set_tip_native_success_inspects_after_recompute` — use a **valid idle** Body (closed sketch geometry + Pad; all `Up-to-date` / `MustExecute False` after `recompute`). Empty Pad stays pending → `Busy`. Copy `RecomputeProbe` from `test_body_create_native_success_inspects_after_recompute`. Change Tip between two valid PartDesign features (Pad/Pocket), not Sketch (`RecomputeFailed`: linked object is not a PartDesign feature).
-2. Expand `--native` to the body_create matrix (validation/apply/recompute/inspection rollback, rollback-failure uncertain+fence, postcondition cannot write, rich-model restore) in `tests/test_native_body_set_tip.py` or equivalent.
+1. `tests/native/test_native_body_set_tip.py::test_body_set_tip_native_success_inspects_after_recompute` — use a **valid idle** Body (closed sketch geometry + Pad; all `Up-to-date` / `MustExecute False` after `recompute`). Empty Pad stays pending → `Busy`. Copy `RecomputeProbe` from `test_body_create_native_success_inspects_after_recompute`. Change Tip between two valid PartDesign features (Pad/Pocket), not Sketch (`RecomputeFailed`: linked object is not a PartDesign feature).
+2. Expand `--native` to the body_create matrix (validation/apply/recompute/inspection rollback, rollback-failure uncertain+fence, postcondition cannot write, rich-model restore) in `tests/native/test_native_body_set_tip.py` or equivalent.
 3. `src`+addon `body_set_tip_contract.py` + `tests/typecheck/body_set_tip_protocol.py` — split read-only Tip object (getter only) vs apply setter; `TipReadDocument.getObject` must not allow `body.Tip = ...`; add `# type: ignore[misc]` negative example like body_create Label.
 
 ### Next step
@@ -465,8 +465,8 @@ Addressed all three required fixes in worktree `D:/code/FreeCAD-wt-body-set-tip/
 
 | Fix | Files | What changed |
 | --- | --- | --- |
-| 1. Native success fixture | `tests/test_native_body_set_tip.py` | `_make_idle_body_with_pad_and_pocket`: closed circle sketch + Pad + Pocket, `_assert_document_idle`, initial Tip=Pad; success test changes Tip Pad→Pocket with `RecomputeProbe` + phase order `apply → recompute → inspect → validate` |
-| 2. Native qualification matrix | `tests/test_native_body_set_tip.py` | Ported body_create native tests: validation/apply/recompute/inspection rollback, rollback-failure uncertain+fence, postcondition cannot write, rich-model restore (4 stages), isolated failure recovery, missing-target typed errors |
+| 1. Native success fixture | `tests/native/test_native_body_set_tip.py` | `_make_idle_body_with_pad_and_pocket`: closed circle sketch + Pad + Pocket, `_assert_document_idle`, initial Tip=Pad; success test changes Tip Pad→Pocket with `RecomputeProbe` + phase order `apply → recompute → inspect → validate` |
+| 2. Native qualification matrix | `tests/native/test_native_body_set_tip.py` | Ported body_create native tests: validation/apply/recompute/inspection rollback, rollback-failure uncertain+fence, postcondition cannot write, rich-model restore (4 stages), isolated failure recovery, missing-target typed errors |
 | 3. Read vs write Tip protocols | `src/freecad_mcp/_shared/protocol/body_set_tip_contract.py`, `addon/FreeCADMCP/_shared/protocol/body_set_tip_contract.py`, `body_set_tip.py`, `tests/typecheck/body_set_tip_protocol.py` | Split `TipBodyReadObject` (getter only) vs `TipBodyWriteObject` (setter); `TipReadDocument.getObject` → read type; `TipBodyDocument.getObject` → write type; postcondition negative example uses `# type: ignore[misc]` on `body.Tip = …` |
 
 ### Test evidence (Composer, post-fix)
@@ -587,7 +587,7 @@ Shared choke files for **every** CAD mutation worktree (treat as sequential vs `
 | --- | --- | --- | --- | --- |
 | G-advanced-diagnostics | 16 | sequential if touching shared CI/collaboration/generated | snapshot/restore/relink/capture/FEM/run_transaction/diagnoses. Mixed execute-code and typed RPC (snapshot/restore/run_fem_analysis). | `audit_hardcoded_dimensions`, `capture_state`, `compare_documents`, `diagnose_helix`, `diagnose_parametric`, `diagnose_pocket`, `geometric_diff`, `get_dependency_graph`, `get_sketch_diagnostics`, `inspect_geometry`, `match_subshape`, `relink_references`… |
 | G-assembly | 4 | sequential if touching shared CI/collaboration/generated | create_assembly* / solve_assembly. assembly.py + assembly_ops.py; solve_assembly is native-compat legacy. | `create_assembly`, `create_assembly_grounded_joint`, `create_assembly_joint`, `solve_assembly` |
-| G-body-create-PASS | 1 | sequential if touching shared CI/collaboration/generated | Qualified reference slice. Do not regress. Files: addon body_create.py, body_mutation.py, collaboration_api.commit_body_create_mutation, body_create_contract.py (vendored pair), body_ops.py, ci/qualify_body_create.py, ci/check_body_create_contract.py, tests/test_body_create*.py, pyproject mypy files list, parent Woodpecker lint. | `body_create` |
+| G-body-create-PASS | 1 | sequential if touching shared CI/collaboration/generated | Qualified reference slice. Do not regress. Files: addon body_create.py, body_mutation.py, collaboration_api.commit_body_create_mutation, body_create_contract.py (vendored pair), body_ops.py, ci/qualify_body_create.py, ci/check_body_create_contract.py, tests/body/test_body_create*.py, pyproject mypy files list, parent Woodpecker lint. | `body_create` |
 | G-core-objects | 6 | sequential if touching shared CI/collaboration/generated | create/edit/delete/inspect/repair/insert + create_document. object_ops.py, object_crud.py, reference_ops.py, cad_mutation. Generated Any on create/edit/repair. | `create_document`, `create_object`, `delete_object`, `edit_object`, `inspect_references`, `repair_references` |
 | G-document-gui | 26 | sequential if touching shared CI/collaboration/generated | document open/reload/close/recompute/undo/redo + remaining GUI not in N/A-gui set. interactive.py, document_ops.py, history_ops.py. | `activate_document`, `animate_placement`, `close_document`, `encode_view_video`, `get_gui_state`, `get_object`, `get_objects`, `get_parts_list`, `get_recompute_log`, `get_report_view`, `get_selection`, `get_view`… |
 | G-escape | 3 | sequential if touching shared CI/collaboration/generated | execute_code, execute_code_async, run_transaction. Intentionally not typed CAD mutations. Do not assign a body_create-style worktree first. | `execute_code`, `execute_code_async`, `run_transaction` |

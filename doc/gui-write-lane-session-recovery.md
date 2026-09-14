@@ -441,7 +441,7 @@ the test that would have caught the reported degradation.**
 
 Run from `tools/mcp/freecad-mcp` with `.venv-windows/Scripts/python.exe`.
 
-1. `python -m pytest tests/test_session_recovery_contract.py tests/test_phase18_dispatch_session_elevation.py tests/test_json_rpc_client_transport.py -v`
+1. `python -m pytest tests/test_session_recovery_contract.py tests/phase18/test_phase18_dispatch_session_elevation.py tests/json_rpc/test_json_rpc_client_transport.py -v`
 2. WI-0's pre-fix reproduction (see WI-0 — a pass here pre-fix invalidates the diagnosis).
 3. `python -m pytest tests -m unit` — no regressions across the 133 test modules.
 4. `python -m pytest tests/e2e/test_gui_lane_stays_unblocked.py -m e2e -v`, then
@@ -450,7 +450,7 @@ Run from `tools/mcp/freecad-mcp` with `.venv-windows/Scripts/python.exe`.
    `addon_runtime_id: cee53853-a481-4066-aa1c-540c6ff7d89f`, pid 8616).
 5. Soak, ≥3 TTL cycles, zero refusals.
 6. FreeCAD: build and run the `App` test target for `DocumentCollaborationService`.
-7. `python -m pytest tests/test_architecture_policy.py`, plus a generator re-run
+7. `python -m pytest tests/architecture/test_architecture_policy.py`, plus a generator re-run
    confirming the edited generated files produce a no-op diff (§5.2).
 
 **Commit as two changes:** MCP submodule fix + tests first, then the FreeCAD-side
@@ -501,6 +501,6 @@ Header required on every request: `X-FreeCAD-MCP-Protocol: jsonrpc-2.0`.
 | retry routing | `src/freecad_mcp/generated/capabilities/connection_methods/connection_invoke_v2_ops.py:63,87` |
 | handshake / refresher install | `src/freecad_mcp/server_ops/manifest_auth.py:100-190` |
 | client session custody | `src/freecad_mcp/rpc_session.py` |
-| existing (insufficient) coverage | `tests/test_phase18_dispatch_session_elevation.py:81,108,128` |
+| existing (insufficient) coverage | `tests/phase18/test_phase18_dispatch_session_elevation.py:81,108,128` |
 | FreeCAD RecomputeFailed fixture | `tests/src/App/DocumentCollaborationService.cpp:1477` |
 | C++ result struct | `src/App/DocumentCommitCoordinator.h:36-49` |
