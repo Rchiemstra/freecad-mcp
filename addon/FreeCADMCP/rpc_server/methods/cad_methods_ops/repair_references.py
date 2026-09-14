@@ -125,7 +125,7 @@ def _relink_all(doc: object, from_name: str, to_name: str) -> int:
     source = get_object(doc, from_name)
     target = get_object(doc, to_name)
     if source is None:
-        raise RepairReferencesError("OBJECT_NOT_FOUND", f"Source object not found: {from_name!r}")
+        return 0
     if target is None:
         raise RepairReferencesError("OBJECT_NOT_FOUND", f"Target object not found: {to_name!r}")
     changed = 0

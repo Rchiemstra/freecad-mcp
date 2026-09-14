@@ -241,6 +241,24 @@ def set_tip(body: object, feature: object) -> None:
     set_attr(body, "Tip", feature)
 
 
+def is_read_only_property(item: object, name: str) -> bool:
+    checker = getattr(item, "isReadOnly", None)
+    if callable(checker):
+        try:
+            return bool(checker(name))
+        except Exception:
+            pass
+    editor_mode = getattr(item, "getEditorMode", None)
+    if callable(editor_mode):
+        try:
+            mode = editor_mode(name)
+            if isinstance(mode, (list, tuple)) and "ReadOnly" in mode:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 __all__ = [
     "FeatureLike",
     "MutableFeatureLike",
@@ -249,6 +267,7 @@ __all__ = [
     "create_feature",
     "find_owning_body",
     "is_derived_from",
+    "is_read_only_property",
     "lookup_object",
     "nonempty_string",
     "number_value",

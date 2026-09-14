@@ -50,6 +50,7 @@ def check_success(
 
     subject, runner = load_runner(op)
     document = FreeCAD.newDocument(f"MCPTyped{op}")
+    doc_name = document.Name
     events: list[str] = []
 
     class RecomputeProbe:
@@ -82,12 +83,12 @@ def check_success(
             collaborators(FreeCAD, lambda _d: events.append("validate")),
             *run_args(document, ctx),
         )
-        assert result["success"] is True, result
-        assert result["committed"] is True, result
+        assert result["success"] is True, f"error_code={result.get('error_code')}: {result}"
+        assert result["committed"] is True, f"error_code={result.get('error_code')}: {result}"
         assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
     finally:
         for name in list(FreeCAD.listDocuments()):
-            if name.startswith("MCPTyped") or name == document.Name:
+            if name.startswith("MCPTyped") or name == doc_name:
                 try:
                     FreeCAD.closeDocument(name)
                 except Exception:

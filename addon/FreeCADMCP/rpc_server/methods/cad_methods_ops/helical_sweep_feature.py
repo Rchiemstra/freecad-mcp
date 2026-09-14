@@ -32,6 +32,7 @@ from .feature_apply_support import (
     require_object,
     resolve_optional_body,
     set_attr,
+    set_feature_bool,
     set_tip,
 )
 
@@ -66,16 +67,15 @@ def apply_helical_sweep_feature(doc: FeatureDocument, request: HelicalSweepFeatu
         )
         body = resolve_optional_body(doc, profile, request.body_name)
         created = create_feature(doc, body, 'PartDesign::AdditiveHelix', request.helix_name)
-        set_attr(created, "Profile", (profile, [""]))
+        set_attr(created, "Profile", profile)
         set_attr(created, "ReferenceAxis", (profile, ["V_Axis"]))
         set_attr(created, "Mode", 0)
         set_attr(created, "Pitch", request.pitch)
         set_attr(created, "Height", request.height)
-        set_attr(created, "Radius", request.radius)
         set_attr(created, "Angle", 0)
         set_attr(created, "Growth", 0)
-        set_attr(created, "LeftHanded", request.left_handed)
-        set_attr(created, "Reversed", request.reversed_dir)
+        set_feature_bool(created, ("LeftHanded",), request.left_handed)
+        set_feature_bool(created, ("Reversed",), request.reversed_dir)
         set_tip(body, created)
         return HelicalSweepFeatureReceipt(name=str(created.Name), feature=created)
     except HelicalSweepFeatureError:

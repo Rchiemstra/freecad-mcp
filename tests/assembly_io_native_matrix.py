@@ -74,7 +74,7 @@ def check_success(
         monkeypatch.setattr(subject, f"apply_{op}", tracked_apply)
         monkeypatch.setattr(subject, f"read_{op}_result", tracked_read)
         result = runner(collaborators(FreeCAD, lambda _d: events.append("validate")), *run_args(document.Name, ctx))
-        assert result["success"] is True, result
+        assert result["success"] is True, f"error_code={result.get('error_code')}: {result}"
         assert result["committed"] is True, result
         assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
     finally:

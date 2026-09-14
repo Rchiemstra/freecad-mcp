@@ -114,8 +114,8 @@ def check_success(op: str, kind: str, base: dict[str, object], monkeypatch) -> N
             document.Name,
             base,
         )
-        assert result["success"] is True, result
-        assert result["committed"] is True, result
+        assert result["success"] is True, f"error_code={result.get('error_code')}: {result}"
+        assert result["committed"] is True, f"error_code={result.get('error_code')}: {result}"
         assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
         assert document.getObject(result["feature"]) is not None
     finally:

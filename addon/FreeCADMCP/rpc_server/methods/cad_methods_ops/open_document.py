@@ -127,6 +127,8 @@ def run_open_document(
         return _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", "Opened document has no name"))
     result = _OpenDocumentExecution(collaborators, request).run(opened_name)
     if isinstance(result, dict) and result.get("success") is not True:
+        if result.get("rollback_succeeded") is True:
+            return result
         closer = getattr(app, "closeDocument", None)
         if callable(closer):
             try:

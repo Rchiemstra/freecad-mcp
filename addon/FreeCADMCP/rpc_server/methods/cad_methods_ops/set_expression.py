@@ -19,6 +19,7 @@ from ...._shared.protocol.set_expression_contract import (
     make_set_expression_success,
     make_set_expression_uncertain,
 )
+from .feature_apply_support import is_read_only_property
 from .set_expression_mutation import SetExpressionError, run_set_expression_native_mutation
 from .typed_rpc_support import (
     add_named_object,
@@ -74,6 +75,8 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
     setter = getattr(item, "setExpression", None)
     if not callable(setter):
         raise SetExpressionError("INVALID_OBJECT", "object cannot set expressions")
+    if is_read_only_property(item, request.prop_path):
+        raise SetExpressionError("EXPRESSION_ERROR", f"{request.prop_path!r} is read-only")
     try:
         setter(request.prop_path, request.expression)
     except Exception as exc:

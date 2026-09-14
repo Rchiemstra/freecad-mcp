@@ -23,9 +23,27 @@ def prepare_native_document(document, kind: str) -> None:
 
     body = document.addObject("PartDesign::Body", "Body")
     if kind in {"edge_feature", "pattern"}:
-        base = body.newObject("PartDesign::Feature", "Pad")
-        base.Shape = Part.makeBox(10, 10, 10)
-        body.Tip = base
+        sketch = body.newObject("Sketcher::SketchObject", "Sketch")
+        xy_plane = document.getObject("XY_Plane")
+        if xy_plane is not None:
+            sketch.AttachmentSupport = [(xy_plane, "")]
+            sketch.MapMode = "FlatFace"
+        sketch.addGeometry(
+            Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(10, 0, 0)), False
+        )
+        sketch.addGeometry(
+            Part.LineSegment(FreeCAD.Vector(10, 0, 0), FreeCAD.Vector(10, 10, 0)), False
+        )
+        sketch.addGeometry(
+            Part.LineSegment(FreeCAD.Vector(10, 10, 0), FreeCAD.Vector(0, 10, 0)), False
+        )
+        sketch.addGeometry(
+            Part.LineSegment(FreeCAD.Vector(0, 10, 0), FreeCAD.Vector(0, 0, 0)), False
+        )
+        pad = body.newObject("PartDesign::Pad", "Pad")
+        pad.Profile = (sketch, [""])
+        pad.Length = 10
+        body.Tip = pad
         document.recompute()
         return
 
@@ -36,7 +54,7 @@ def prepare_native_document(document, kind: str) -> None:
             sketch.AttachmentSupport = [(xy_plane, "")]
             sketch.MapMode = "FlatFace"
         sketch.addGeometry(
-            Part.Circle(FreeCAD.Vector(0, 4, 0), FreeCAD.Vector(0, 0, 1), 1)
+            Part.Circle(FreeCAD.Vector(2, 0, 0), FreeCAD.Vector(0, 0, 1), 1)
         )
         document.recompute()
         return

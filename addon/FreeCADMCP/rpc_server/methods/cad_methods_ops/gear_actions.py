@@ -542,7 +542,7 @@ def create_helical_gear(
     if not callable(factory):
         raise TypedMutationError("INVALID_BODY", "Body must provide newObject")
     feature = factory("PartDesign::AdditiveHelix", gear_name)
-    setattr(feature, "Profile", (sketch, [""]))
+    setattr(feature, "Profile", sketch)
     setattr(feature, "ReferenceAxis", (sketch, ["V_Axis"]))
     setattr(feature, "Mode", 0)
     setattr(feature, "Pitch", pitch_len)

@@ -126,23 +126,26 @@ def main() -> None:
     )
     _run(
         "loft_feature",
-        "profile",
+        "loft",
         {
             "doc_name": "Doc",
-            "sketch_name": "Sketch",
+            "sketch_names": ["Sketch1", "Sketch2"],
             "loft_name": "Loft",
-            "body_name": "Body",
+            "body_name": None,
+            "ruled": False,
+            "closed": False,
         },
     )
     _run(
         "chamfer_feature",
-        "profile",
+        "edge_feature",
         {
             "doc_name": "Doc",
-            "feature_name": "Pad",
+            "base_feature": "Pad",
             "chamfer_name": "Chamfer",
             "size": 1.0,
-            "body_name": "Body",
+            "edge_refs": None,
+            "body_name": None,
         },
     )
 

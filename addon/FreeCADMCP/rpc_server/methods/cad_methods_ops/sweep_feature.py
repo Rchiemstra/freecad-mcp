@@ -24,6 +24,7 @@ from .sweep_feature_mutation import SweepFeatureError, run_sweep_feature_native_
 from .feature_apply_support import (
     bool_value,
     create_feature,
+    set_feature_bool,
     is_derived_from,
     nonempty_string,
     optional_name,
@@ -66,9 +67,9 @@ def apply_sweep_feature(doc: FeatureDocument, request: SweepFeatureRequest) -> S
         path = require_object(doc, request.path_sketch, missing="Path sketch not found")
         body = resolve_optional_body(doc, profile, request.body_name)
         created = create_feature(doc, body, 'PartDesign::AdditivePipe', request.sweep_name)
-        set_attr(created, "Profile", (profile, [""]))
-        set_attr(created, "Spine", (path, [""]))
-        set_attr(created, "Frenet", request.frenet)
+        set_attr(created, "Profile", profile)
+        set_attr(created, "Spine", path)
+        set_feature_bool(created, ("Frenet",), request.frenet)
         set_tip(body, created)
         return SweepFeatureReceipt(name=str(created.Name), feature=created)
     except SweepFeatureError:

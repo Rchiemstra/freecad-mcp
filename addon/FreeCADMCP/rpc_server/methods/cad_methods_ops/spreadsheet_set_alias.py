@@ -19,6 +19,7 @@ from ...._shared.protocol.spreadsheet_set_alias_contract import (
     make_spreadsheet_set_alias_success,
     make_spreadsheet_set_alias_uncertain,
 )
+from .feature_apply_support import is_read_only_property
 from .spreadsheet_set_alias_mutation import SpreadsheetSetAliasError, run_spreadsheet_set_alias_native_mutation
 from .typed_rpc_support import (
     add_named_object,
@@ -74,6 +75,8 @@ def apply_spreadsheet_set_alias(doc: SpreadsheetSetAliasDocument, request: Sprea
     alias_setter = getattr(sheet, "setAlias", None)
     if not callable(alias_setter):
         raise SpreadsheetSetAliasError("INVALID_SHEET", "spreadsheet cannot set aliases")
+    if is_read_only_property(sheet, request.address):
+        raise SpreadsheetSetAliasError("EXPRESSION_ERROR", f"{request.address!r} is read-only")
     try:
         alias_setter(request.address, request.alias)
     except Exception as exc:
