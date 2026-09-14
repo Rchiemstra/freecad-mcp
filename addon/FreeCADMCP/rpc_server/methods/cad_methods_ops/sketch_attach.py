@@ -29,6 +29,7 @@ class SketchAttachReceipt:
     attached_kind: str
     attached_object: str
     attached_subname: str
+    support_before: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,27 @@ class _SketchAttachRequest:
 
 def _failure(error: SketchAttachError, *, retry_safe: bool = True) -> SketchAttachFailure:
     return make_sketch_attach_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _is_sketch(obj: object) -> bool:
+    derived = getattr(obj, "isDerivedFrom", None)
+    if callable(derived):
+        try:
+            return bool(derived("Sketcher::SketchObject"))
+        except (AttributeError, TypeError):
+            pass
+    return getattr(obj, "TypeId", None) == "Sketcher::SketchObject"
+
+
+def _attachment_support_ref(support: object) -> str | None:
+    if not support:
+        return None
+    if isinstance(support, (list, tuple)) and support:
+        entry = support[0]
+        if isinstance(entry, (list, tuple)) and entry:
+            ref = entry[0]
+            return str(getattr(ref, "Name", ""))
+    return None
 
 
 def _find_origin_plane(doc: SketchAttachDocument, sketch: object, plane_name: str) -> object | None:
@@ -120,8 +142,9 @@ def apply_sketch_attach(
     sketch = doc.getObject(sketch_name)
     if sketch is None:
         raise SketchAttachError("SKETCH_NOT_FOUND", f"Sketch {sketch_name!r} not found")
-    if not hasattr(sketch, "AttachmentSupport") and getattr(sketch, "TypeId", None) != "Sketcher::SketchObject":
+    if not _is_sketch(sketch):
         raise SketchAttachError("NOT_A_SKETCH", f"Object {sketch_name!r} is not a sketch")
+    support_before = getattr(sketch, "AttachmentSupport", None)
     kind, attached_object, subname = _resolve_support(sketch, doc, support)
     if attachment_offset is not None:
         if not hasattr(sketch, "AttachmentOffset"):
@@ -136,6 +159,7 @@ def apply_sketch_attach(
         attached_kind=kind,
         attached_object=attached_object,
         attached_subname=subname,
+        support_before=support_before,
     )
 
 
@@ -150,6 +174,26 @@ def read_sketch_attach_result(
             "CREATED_OBJECT_REPLACED",
             f"Sketch was replaced before commit: {receipt.name!r}",
         )
+    support_after = getattr(sketch, "AttachmentSupport", None)
+    if support_after == receipt.support_before:
+        raise SketchAttachError(
+            "ATTACHMENT_NOT_UPDATED",
+            f"Sketch {receipt.name!r} AttachmentSupport did not change after attach",
+        )
+    if receipt.attached_kind == "origin_plane":
+        ref_name = _attachment_support_ref(support_after)
+        if ref_name != receipt.attached_object:
+            raise SketchAttachError(
+                "ATTACHMENT_NOT_UPDATED",
+                f"Sketch {receipt.name!r} is not attached to {receipt.attached_object!r}",
+            )
+    elif receipt.attached_kind in {"face_ref", "dict_ref"}:
+        ref_name = _attachment_support_ref(support_after)
+        if ref_name != receipt.attached_object:
+            raise SketchAttachError(
+                "ATTACHMENT_NOT_UPDATED",
+                f"Sketch {receipt.name!r} is not attached to {receipt.attached_object!r}",
+            )
     return SketchAttachInspection(
         name=SketchName(receipt.name),
         attached_kind=receipt.attached_kind,

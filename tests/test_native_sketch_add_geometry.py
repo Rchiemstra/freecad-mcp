@@ -147,6 +147,7 @@ def test_sketch_add_geometry_native_success_inspects_after_recompute(monkeypatch
     recompute_probe.Proxy = RecomputeProbe()
     _idle(document, 'geometry')
     events.clear()
+    geom_before = document.getObject("Sketch").GeometryCount
     original_apply = body_create_module.apply_sketch_add_geometry
     original_read = body_create_module.read_sketch_add_geometry_result
 
@@ -172,6 +173,7 @@ def test_sketch_add_geometry_native_success_inspects_after_recompute(monkeypatch
         created = document.getObject(result['sketch'])
         assert created is not None
         assert created.isDerivedFrom('Sketcher::SketchObject')
+        assert created.GeometryCount >= geom_before + 1
     finally:
         FreeCAD.closeDocument(document.Name)
 

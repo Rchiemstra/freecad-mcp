@@ -37,12 +37,13 @@ def _feature(name: str, *, type_id: str = "PartDesign::Pad"):
 
 
 class _Body:
-    def __init__(self, name: str, tip, events: list[str] | None = None, *, label: str | None = None):
+    def __init__(self, name: str, tip, events: list[str] | None = None, *, label: str | None = None, group=None):
         self.Name = name
         self.Label = label if label is not None else f"Label for {name}"
         self.TypeId = "PartDesign::Body"
         self._tip = tip
         self._events = events
+        self.Group = list(group) if group is not None else ([tip] if tip is not None else [])
 
     def isDerivedFrom(self, type_name: str) -> bool:
         return type_name == "PartDesign::Body"
@@ -89,10 +90,13 @@ class _Document:
         self.events = events
         pad = _feature("Pad", type_id="PartDesign::Pad")
         pocket = _feature("Pocket", type_id="PartDesign::Pocket")
+        other_pad = _feature("OtherPad", type_id="PartDesign::Pad")
         self.objects: dict[str, Any] = {
             "Pad": pad,
             "Pocket": pocket,
-            "Body": _Body("Body", pad, events),
+            "OtherPad": other_pad,
+            "Body": _Body("Body", pad, events, group=[pad, pocket]),
+            "OtherBody": _Body("OtherBody", other_pad, events, group=[other_pad]),
             "Sketch": _feature("Sketch", type_id="Sketcher::SketchObject"),
         }
         self.recomputed = False
@@ -138,7 +142,11 @@ class _MutateThenRaiseDocument(_Document):
         super().__init__(events)
         original = self.objects["Body"]
         self.objects["Body"] = _MutateThenRaiseBody(
-            original.Name, original.Tip, events, label=original.Label
+            original.Name,
+            original.Tip,
+            events,
+            label=original.Label,
+            group=original.Group,
         )
 
 
@@ -368,6 +376,21 @@ def test_sketch_as_tip_is_rejected_as_wrong_type():
 
     assert result["success"] is False
     assert result["error_code"] == "FEATURE_WRONG_TYPE"
+    assert document.objects["Body"].Tip is original_tip
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
+def test_feature_from_other_body_is_rejected():
+    events = []
+    document = _Document(events)
+    original_tip = document.objects["Body"].Tip
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_body_set_tip(collaborators, "Doc", "Body", "OtherPad")
+
+    assert result["success"] is False
+    assert result["error_code"] == "FEATURE_NOT_IN_BODY"
     assert document.objects["Body"].Tip is original_tip
     assert "recompute" not in events
     assert "commit" not in events

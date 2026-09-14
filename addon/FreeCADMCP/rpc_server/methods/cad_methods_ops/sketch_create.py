@@ -67,44 +67,43 @@ def _is_body(obj: object) -> bool:
     return getattr(obj, "TypeId", None) == "PartDesign::Body"
 
 
-def _attach_origin_plane(sketch: object, doc: object, plane_name: str, freecad: object) -> None:
-    plane_obj = None
-    objects = getattr(doc, "Objects", ())
-    for obj in objects:
-        if getattr(obj, "TypeId", None) == "App::Origin":
-            for feat in getattr(obj, "OriginFeatures", []) or ():
-                if getattr(feat, "Label", None) == plane_name:
-                    plane_obj = feat
-                    break
-        if plane_obj is not None:
-            break
+def _find_origin_plane(doc: object, body: object | None, plane_name: str) -> object | None:
+    origins: list[object] = []
+    origin_obj = getattr(body, "Origin", None) if body is not None else None
+    if origin_obj is not None:
+        origins.append(origin_obj)
+    for origin in getattr(doc, "Objects", ()):
+        if getattr(origin, "TypeId", "") == "App::Origin" and origin not in origins:
+            origins.append(origin)
+    for origin in origins:
+        for feat in getattr(origin, "OriginFeatures", []) or []:
+            if getattr(feat, "Label", "") == plane_name or getattr(feat, "Name", "") == plane_name:
+                found: object = feat
+                return found
+        if hasattr(origin, plane_name):
+            named: object = getattr(origin, plane_name)
+            return named
+    return None
+
+
+def _attach_origin_plane(
+    sketch: object, doc: object, body: object | None, plane_name: str, freecad: object
+) -> None:
+    plane_obj = _find_origin_plane(doc, body, plane_name)
     if plane_obj is not None:
         sketch.AttachmentSupport = [(plane_obj, "")]  # type: ignore[attr-defined]
         sketch.MapMode = "FlatFace"  # type: ignore[attr-defined]
         return
-    if plane_name == "XY_Plane":
-        return
-    vector_type = getattr(freecad, "Vector")
-    rotation_type = getattr(freecad, "Rotation")
-    placement_type = getattr(freecad, "Placement")
-    if plane_name == "XZ_Plane":
-        sketch.Placement = placement_type(  # type: ignore[attr-defined]
-            vector_type(0, 0, 0),
-            rotation_type(vector_type(1, 0, 0), 90),
-        )
-        return
-    if plane_name == "YZ_Plane":
-        sketch.Placement = placement_type(  # type: ignore[attr-defined]
-            vector_type(0, 0, 0),
-            rotation_type(vector_type(0, 1, 0), -90),
-        )
-        return
+    if plane_name in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
+        raise SketchCreateError("SUPPORT_NOT_FOUND", f"Origin plane not found: {plane_name}")
     raise SketchCreateError("INVALID_ARGUMENT", f"Unsupported attach_to: {plane_name!r}")
 
 
-def _apply_attach_to(sketch: object, doc: object, attach_to: str, freecad: object) -> None:
+def _apply_attach_to(
+    sketch: object, doc: object, body: object | None, attach_to: str, freecad: object
+) -> None:
     if attach_to in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
-        _attach_origin_plane(sketch, doc, attach_to, freecad)
+        _attach_origin_plane(sketch, doc, body, attach_to, freecad)
         return
     if ":" not in attach_to:
         raise SketchCreateError("INVALID_ARGUMENT", f"Unsupported attach_to: {attach_to!r}")
@@ -148,11 +147,13 @@ def apply_sketch_create(
         if not callable(new_object):
             raise SketchCreateError("BODY_WRONG_TYPE", f"Body cannot own a sketch: {body_name!r}")
         sketch = new_object("Sketcher::SketchObject", sketch_name)
+        attach_body = body
     else:
         sketch = doc.addObject("Sketcher::SketchObject", sketch_name)
+        attach_body = None
 
     if attach_to:
-        _apply_attach_to(sketch, doc, attach_to, freecad)
+        _apply_attach_to(sketch, doc, attach_body, attach_to, freecad)
     return SketchCreateReceipt(name=sketch.Name, sketch=sketch)
 
 

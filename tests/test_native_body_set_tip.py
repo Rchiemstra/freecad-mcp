@@ -510,6 +510,39 @@ def test_body_set_tip_native_missing_targets_keep_typed_errors():
         FreeCAD.closeDocument(document.Name)
 
 
+def test_body_set_tip_native_rejects_feature_from_other_body():
+    _require_native_collaboration()
+    import FreeCAD
+
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_set_tip import (
+        run_body_set_tip,
+    )
+
+    document = FreeCAD.newDocument("MCPBodySetTipForeignFeature")
+    collaborators = _tip_collaborators(FreeCAD, lambda _: None)
+    try:
+        body_one = document.addObject("PartDesign::Body", "BodyOne")
+        body_two = document.addObject("PartDesign::Body", "BodyTwo")
+        document.recompute()
+        pad_one_sketch = _add_closed_circle_sketch(body_one, "PadOneSketch", 10.0)
+        pad_one = body_one.newObject("PartDesign::Pad", "PadOne")
+        pad_one.Profile = pad_one_sketch
+        pad_one.Length = 10.0
+        pad_two_sketch = _add_closed_circle_sketch(body_two, "PadTwoSketch", 10.0)
+        pad_two = body_two.newObject("PartDesign::Pad", "PadTwo")
+        pad_two.Profile = pad_two_sketch
+        pad_two.Length = 10.0
+        document.recompute()
+        body_one.Tip = pad_one
+        document.recompute()
+        result = run_body_set_tip(collaborators, document.Name, "BodyOne", "PadTwo")
+        assert result["success"] is False
+        assert result["error_code"] == "FEATURE_NOT_IN_BODY"
+        assert body_one.Tip is pad_one
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
 @pytest.mark.parametrize("stage", ["apply", "recompute", "inspection", "validation"])
 def test_body_set_tip_native_rollback_restores_rich_model(monkeypatch, stage):
     _require_native_collaboration()

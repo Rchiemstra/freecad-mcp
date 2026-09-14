@@ -30,6 +30,7 @@ class SketchAddConstraintReceipt:
     name: str
     sketch: SketchAddConstraintObject
     added_count: int
+    constraint_count_before: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,13 @@ def _failure(
     error: SketchAddConstraintError, *, retry_safe: bool = True
 ) -> SketchAddConstraintFailure:
     return make_sketch_add_constraint_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _constraint_count(sketch: object) -> int:
+    count = getattr(sketch, "ConstraintCount", None)
+    if isinstance(count, int) and not isinstance(count, bool):
+        return count
+    return len(getattr(sketch, "Constraints", []) or [])
 
 
 def _int_field(data: Mapping[str, object], key: str, default: int | None = None) -> int:
@@ -170,6 +178,7 @@ def apply_sketch_add_constraint(
     add_constraint = getattr(sketch, "addConstraint", None)
     if not callable(add_constraint):
         raise SketchAddConstraintError("NOT_A_SKETCH", f"Object {sketch_name!r} is not an editable sketch")
+    constraint_count_before = _constraint_count(sketch)
     constraint_type = getattr(collaborators.sketcher, "Constraint")
     added = 0
     for constraint in constraints:
@@ -180,7 +189,12 @@ def apply_sketch_add_constraint(
             if callable(rename):
                 rename(idx, name)
         added += 1
-    return SketchAddConstraintReceipt(name=sketch.Name, sketch=sketch, added_count=added)
+    return SketchAddConstraintReceipt(
+        name=sketch.Name,
+        sketch=sketch,
+        added_count=added,
+        constraint_count_before=constraint_count_before,
+    )
 
 
 def read_sketch_add_constraint_result(
@@ -193,6 +207,11 @@ def read_sketch_add_constraint_result(
         raise SketchAddConstraintError(
             "CREATED_OBJECT_REPLACED",
             f"Sketch was replaced before commit: {receipt.name!r}",
+        )
+    if _constraint_count(sketch) < receipt.constraint_count_before + receipt.added_count:
+        raise SketchAddConstraintError(
+            "CONSTRAINT_NOT_ADDED",
+            f"Sketch constraint count did not increase on {receipt.name!r}",
         )
     return SketchAddConstraintInspection(name=SketchName(receipt.name), added_count=receipt.added_count)
 

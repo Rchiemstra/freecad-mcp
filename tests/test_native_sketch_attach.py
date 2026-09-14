@@ -172,6 +172,8 @@ def test_sketch_attach_native_success_inspects_after_recompute(monkeypatch):
         created = document.getObject(result['sketch'])
         assert created is not None
         assert created.isDerivedFrom('Sketcher::SketchObject')
+        assert created.AttachmentSupport
+        assert created.AttachmentSupport[0][0].Name
     finally:
         FreeCAD.closeDocument(document.Name)
 

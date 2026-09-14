@@ -30,6 +30,7 @@ class SketchDeleteGeometryReceipt:
     name: str
     sketch: SketchDeleteGeometryObject
     deleted_count: int
+    geometry_count_before: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,13 @@ def _failure(
     error: SketchDeleteGeometryError, *, retry_safe: bool = True
 ) -> SketchDeleteGeometryFailure:
     return make_sketch_delete_geometry_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _geometry_count(sketch: object) -> int:
+    count = getattr(sketch, "GeometryCount", None)
+    if isinstance(count, int) and not isinstance(count, bool):
+        return count
+    return len(getattr(sketch, "Geometry", []) or [])
 
 
 def apply_sketch_delete_geometry(
@@ -75,8 +83,14 @@ def apply_sketch_delete_geometry(
             "Geometry index out of range: " + ", ".join(str(index) for index in invalid),
         )
     target = sorted(set(geometry_indices))
+    geometry_count_before = _geometry_count(sketch)
     delete(target)
-    return SketchDeleteGeometryReceipt(name=sketch.Name, sketch=sketch, deleted_count=len(target))
+    return SketchDeleteGeometryReceipt(
+        name=sketch.Name,
+        sketch=sketch,
+        deleted_count=len(target),
+        geometry_count_before=geometry_count_before,
+    )
 
 
 def read_sketch_delete_geometry_result(
@@ -89,6 +103,12 @@ def read_sketch_delete_geometry_result(
         raise SketchDeleteGeometryError(
             "CREATED_OBJECT_REPLACED",
             f"Sketch was replaced before commit: {receipt.name!r}",
+        )
+    expected = receipt.geometry_count_before - receipt.deleted_count
+    if _geometry_count(sketch) != expected:
+        raise SketchDeleteGeometryError(
+            "GEOMETRY_NOT_DELETED",
+            f"Sketch geometry count did not decrease on {receipt.name!r}",
         )
     return SketchDeleteGeometryInspection(
         name=SketchName(receipt.name), deleted_count=receipt.deleted_count

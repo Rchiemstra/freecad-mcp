@@ -30,6 +30,7 @@ class SketchDeleteConstraintReceipt:
     name: str
     sketch: SketchDeleteConstraintObject
     deleted_count: int
+    constraint_count_before: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,13 @@ def _failure(
     error: SketchDeleteConstraintError, *, retry_safe: bool = True
 ) -> SketchDeleteConstraintFailure:
     return make_sketch_delete_constraint_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _constraint_count(sketch: object) -> int:
+    count = getattr(sketch, "ConstraintCount", None)
+    if isinstance(count, int) and not isinstance(count, bool):
+        return count
+    return len(getattr(sketch, "Constraints", []) or [])
 
 
 def _resolve_indices(sketch: object, indices: Sequence[int], names: Sequence[str]) -> list[int]:
@@ -99,8 +107,14 @@ def apply_sketch_delete_constraint(
             f"Object {sketch_name!r} is not an editable Sketcher sketch",
         )
     target = _resolve_indices(sketch, constraint_indices, constraint_names)
+    constraint_count_before = _constraint_count(sketch)
     delete(target, True)
-    return SketchDeleteConstraintReceipt(name=sketch.Name, sketch=sketch, deleted_count=len(target))
+    return SketchDeleteConstraintReceipt(
+        name=sketch.Name,
+        sketch=sketch,
+        deleted_count=len(target),
+        constraint_count_before=constraint_count_before,
+    )
 
 
 def read_sketch_delete_constraint_result(
@@ -113,6 +127,12 @@ def read_sketch_delete_constraint_result(
         raise SketchDeleteConstraintError(
             "CREATED_OBJECT_REPLACED",
             f"Sketch was replaced before commit: {receipt.name!r}",
+        )
+    expected = receipt.constraint_count_before - receipt.deleted_count
+    if _constraint_count(sketch) != expected:
+        raise SketchDeleteConstraintError(
+            "CONSTRAINT_NOT_DELETED",
+            f"Sketch constraint count did not decrease on {receipt.name!r}",
         )
     return SketchDeleteConstraintInspection(
         name=SketchName(receipt.name), deleted_count=receipt.deleted_count

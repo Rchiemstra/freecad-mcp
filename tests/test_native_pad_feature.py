@@ -163,7 +163,7 @@ def test_pad_feature_native_success_inspects_after_recompute(monkeypatch):
     monkeypatch.setattr(body_create_module, "read_pad_feature_result", tracked_read)
     collaborators = _collaborators(FreeCAD, lambda _document: events.append("validate"))
     try:
-        result = body_create_module.run_pad_feature(collaborators, document.Name, "Sketch", "NativePad", 10.0, "Body")
+        result = body_create_module.run_pad_feature(collaborators, document.Name, "Sketch", "NativePad", 15.0, "Body")
         assert result["success"] is True
         assert result["committed"] is True
         assert result["retry_safe"] is False
@@ -172,6 +172,7 @@ def test_pad_feature_native_success_inspects_after_recompute(monkeypatch):
         created = document.getObject(result['pad'])
         assert created is not None
         assert created.isDerivedFrom('PartDesign::Pad')
+        assert float(getattr(created.Length, "Value", created.Length)) == pytest.approx(15.0)
     finally:
         FreeCAD.closeDocument(document.Name)
 

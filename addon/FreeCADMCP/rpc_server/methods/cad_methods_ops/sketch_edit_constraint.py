@@ -31,6 +31,7 @@ class SketchEditConstraintReceipt:
     sketch: SketchEditConstraintObject
     index: int
     constraint_name: str
+    expected_value: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,10 +58,19 @@ def _failure(
 
 def _resolve_index(sketch: object, name: str | None, index: int | None) -> int:
     if name is not None:
-        for i, constraint in enumerate(getattr(sketch, "Constraints", []) or []):
-            if getattr(constraint, "Name", "") == name:
-                return i
-        raise SketchEditConstraintError("CONSTRAINT_NOT_FOUND", f"Constraint name not found: {name}")
+        matches = [
+            i
+            for i, constraint in enumerate(getattr(sketch, "Constraints", []) or [])
+            if getattr(constraint, "Name", "") == name
+        ]
+        if not matches:
+            raise SketchEditConstraintError("CONSTRAINT_NOT_FOUND", f"Constraint name not found: {name}")
+        if len(matches) > 1:
+            raise SketchEditConstraintError(
+                "CONSTRAINT_NAME_AMBIGUOUS",
+                f"Constraint name is not unique: {name}",
+            )
+        return matches[0]
     if index is not None:
         constraints = list(getattr(sketch, "Constraints", []) or [])
         if index >= len(constraints):
@@ -70,6 +80,22 @@ def _resolve_index(sketch: object, name: str | None, index: int | None) -> int:
             )
         return index
     raise SketchEditConstraintError("INVALID_ARGUMENT", "Provide constraint name or index")
+
+
+def _constraint_datum(sketch: object, index: int) -> float | None:
+    get_datum = getattr(sketch, "getDatum", None)
+    if callable(get_datum):
+        try:
+            return float(get_datum(index))
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return None
+    constraints = list(getattr(sketch, "Constraints", []) or [])
+    if index >= len(constraints):
+        return None
+    value = getattr(constraints[index], "value", None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def apply_sketch_edit_constraint(
@@ -84,15 +110,16 @@ def apply_sketch_edit_constraint(
     sketch = doc.getObject(sketch_name)
     if sketch is None:
         raise SketchEditConstraintError("SKETCH_NOT_FOUND", f"Sketch {sketch_name!r} not found")
+    if value is None:
+        raise SketchEditConstraintError("INVALID_ARGUMENT", "value is required")
     resolved = _resolve_index(sketch, constraint_name, index)
-    if value is not None:
-        set_datum = getattr(sketch, "setDatum", None)
-        if not callable(set_datum):
-            raise SketchEditConstraintError(
-                "NOT_A_SKETCH",
-                f"Object {sketch_name!r} is not an editable Sketcher sketch",
-            )
-        set_datum(resolved, float(value))
+    set_datum = getattr(sketch, "setDatum", None)
+    if not callable(set_datum):
+        raise SketchEditConstraintError(
+            "NOT_A_SKETCH",
+            f"Object {sketch_name!r} is not an editable Sketcher sketch",
+        )
+    set_datum(resolved, float(value))
     constraints = list(getattr(sketch, "Constraints", []) or [])
     resolved_name = str(getattr(constraints[resolved], "Name", "") or "") if resolved < len(constraints) else ""
     return SketchEditConstraintReceipt(
@@ -100,6 +127,7 @@ def apply_sketch_edit_constraint(
         sketch=sketch,
         index=resolved,
         constraint_name=resolved_name,
+        expected_value=float(value),
     )
 
 
@@ -113,6 +141,12 @@ def read_sketch_edit_constraint_result(
         raise SketchEditConstraintError(
             "CREATED_OBJECT_REPLACED",
             f"Sketch was replaced before commit: {receipt.name!r}",
+        )
+    actual = _constraint_datum(sketch, receipt.index)
+    if actual is None or abs(actual - receipt.expected_value) > 1e-6:
+        raise SketchEditConstraintError(
+            "CONSTRAINT_DATUM_NOT_UPDATED",
+            f"Constraint datum at index {receipt.index} was not updated on {receipt.name!r}",
         )
     return SketchEditConstraintInspection(
         name=SketchName(receipt.name),
@@ -140,6 +174,8 @@ def build_sketch_edit_constraint_request(
         return _failure(
             SketchEditConstraintError("INVALID_ARGUMENT", "Provide constraint name or index")
         )
+    if value is None:
+        return _failure(SketchEditConstraintError("INVALID_ARGUMENT", "value is required"))
     if name is not None and (not isinstance(name, str) or not name.strip()):
         return _failure(
             SketchEditConstraintError("INVALID_ARGUMENT", "name must be a nonempty string")
@@ -148,12 +184,12 @@ def build_sketch_edit_constraint_request(
         return _failure(
             SketchEditConstraintError("INVALID_ARGUMENT", "index must be a non-negative integer")
         )
-    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return _failure(SketchEditConstraintError("INVALID_ARGUMENT", "value must be a number"))
     return _SketchEditConstraintRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
-        value=None if value is None else float(value),
+        value=float(value),
         constraint_name=name if isinstance(name, str) else None,
         index=index if isinstance(index, int) and not isinstance(index, bool) else None,
     )

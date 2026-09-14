@@ -62,6 +62,13 @@ def _is_partdesign_feature(feature: TipNamedObject) -> bool:
         return feature.TypeId.startswith("PartDesign::") and feature.TypeId != "PartDesign::Body"
 
 
+def _feature_belongs_to_body(body: TipBodyWriteObject, feature: TipNamedObject) -> bool:
+    base_feature = getattr(body, "BaseFeature", None)
+    if base_feature is not None and feature is base_feature:
+        return True
+    return feature in getattr(body, "Group", ())
+
+
 def apply_body_set_tip(
     doc: TipBodyDocument,
     body_name: BodyName,
@@ -94,6 +101,11 @@ def apply_body_set_tip(
         raise BodySetTipError(
             "FEATURE_WRONG_TYPE",
             f"Object is not a PartDesign feature: {feature_name!r}",
+        )
+    if not _feature_belongs_to_body(body, feature):
+        raise BodySetTipError(
+            "FEATURE_NOT_IN_BODY",
+            f"Feature {feature_name!r} does not belong to Body {body_name!r}",
         )
 
     body.Tip = feature

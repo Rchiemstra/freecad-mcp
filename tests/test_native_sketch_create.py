@@ -176,6 +176,27 @@ def test_sketch_create_native_success_inspects_after_recompute(monkeypatch):
         FreeCAD.closeDocument(document.Name)
 
 
+def test_sketch_create_native_body_owned_attach_uses_body_origin():
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_create import run_sketch_create
+
+    document = FreeCAD.newDocument("MCPSketchCreateBodyAttach")
+    body = document.addObject("PartDesign::Body", "Body")
+    document.recompute()
+    collaborators = _collaborators(FreeCAD, lambda _document: None)
+    try:
+        result = run_sketch_create(collaborators, document.Name, "BodySketch", "Body", "XY_Plane")
+        assert result["success"] is True
+        sketch = document.getObject("BodySketch")
+        assert sketch is not None
+        assert sketch.AttachmentSupport
+        attached = sketch.AttachmentSupport[0][0]
+        assert attached in body.Origin.OriginFeatures
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
 def test_sketch_create_native_validation_failure_restores_complete_state():
     _require_native_collaboration()
     import FreeCAD

@@ -95,6 +95,23 @@ class _Document:
         return list(self.objects.values())
 
 
+class _OriginPlane:
+    def __init__(self, name: str, label: str) -> None:
+        self.Name = name
+        self.Label = label
+
+
+class _Origin:
+    TypeId = "App::Origin"
+
+    def __init__(self) -> None:
+        self.OriginFeatures = [
+            _OriginPlane("XY_Plane", "XY_Plane"),
+            _OriginPlane("XZ_Plane", "XZ_Plane"),
+            _OriginPlane("YZ_Plane", "YZ_Plane"),
+        ]
+
+
 class _Body:
     def __init__(self, document: _Document, name: str) -> None:
         self.Name = name
@@ -102,16 +119,23 @@ class _Body:
         self.TypeId = "PartDesign::Body"
         self.Group: list[Any] = []
         self.Tip = None
+        self.Origin = _Origin()
         self._document = document
+
+    def isDerivedFrom(self, type_name: str) -> bool:
+        return type_name == "PartDesign::Body"
 
     def newObject(self, object_type, name):
         self._document.add_calls += 1
         self._document.events.append("apply")
         actual_name = self._document.assigned_name or name
-        obj = _target(actual_name, object_type)
-        obj.Shape = _Shape()
-        obj.Profile = None
-        obj.Length = None
+        if object_type == "Sketcher::SketchObject":
+            obj = _Sketch(self._document, actual_name)
+        else:
+            obj = _target(actual_name, object_type)
+            obj.Shape = _Shape()
+            obj.Profile = None
+            obj.Length = None
         self.Group.append(obj)
         self._document.objects[actual_name] = obj
         if self._document.fail_after_apply:
@@ -576,6 +600,21 @@ def test_response_uses_the_actual_name_assigned_by_freecad():
 
     assert result["success"] is True
     assert result["sketch"] == "Sketch001"
+
+
+def test_body_owned_create_with_attach_to_uses_body_origin():
+    events = []
+    document = _Document(events)
+    body = _Body(document, "Body")
+    document.objects["Body"] = body
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_sketch_create(collaborators, "Doc", "BodySketch", "Body", "XY_Plane")
+
+    assert result["success"] is True
+    sketch = document.objects["BodySketch"]
+    assert sketch.AttachmentSupport[0][0] in body.Origin.OriginFeatures
+    assert sketch.MapMode == "FlatFace"
 
 
 def test_sketch_create_has_no_uncoordinated_source_entry_point():

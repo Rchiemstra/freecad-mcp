@@ -172,6 +172,7 @@ def test_sketch_edit_constraint_native_success_inspects_after_recompute(monkeypa
         created = document.getObject(result['sketch'])
         assert created is not None
         assert created.isDerivedFrom('Sketcher::SketchObject')
+        assert float(created.getDatum(0)) == pytest.approx(12.0)
     finally:
         FreeCAD.closeDocument(document.Name)
 

@@ -147,6 +147,7 @@ def test_sketch_add_constraint_native_success_inspects_after_recompute(monkeypat
     recompute_probe.Proxy = RecomputeProbe()
     _idle(document, 'constraint')
     events.clear()
+    constraint_before = document.getObject("Sketch").ConstraintCount
     original_apply = body_create_module.apply_sketch_add_constraint
     original_read = body_create_module.read_sketch_add_constraint_result
 
@@ -172,6 +173,8 @@ def test_sketch_add_constraint_native_success_inspects_after_recompute(monkeypat
         created = document.getObject(result['sketch'])
         assert created is not None
         assert created.isDerivedFrom('Sketcher::SketchObject')
+        assert created.ConstraintCount >= constraint_before + 1
+        assert any(getattr(item, "Name", "") == "D" for item in created.Constraints)
     finally:
         FreeCAD.closeDocument(document.Name)
 

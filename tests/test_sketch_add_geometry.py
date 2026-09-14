@@ -581,6 +581,24 @@ def test_sketch_add_geometry_has_no_uncoordinated_source_entry_point():
     assert not hasattr(subject, 'sketch_add_geometry_gui')
 
 
+def test_line_without_endpoints_aborts_without_recompute_or_commit():
+    events = []
+    document = _Document(events)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_sketch_add_geometry(
+        collaborators,
+        "Doc",
+        "Sketch",
+        [{"type": "line"}],
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
 @pytest.mark.parametrize(
     "native_result",
     [

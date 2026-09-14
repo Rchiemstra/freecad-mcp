@@ -582,6 +582,22 @@ def test_sketch_attach_has_no_uncoordinated_source_entry_point():
     assert not hasattr(subject, 'sketch_attach_gui')
 
 
+def test_attachment_support_object_with_sketch_type_is_rejected():
+    events = []
+    document = _Document(events)
+    fake = _target("Fake", "Part::Feature")
+    fake.AttachmentSupport = []
+    document.objects["Fake"] = fake
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_sketch_attach(collaborators, "Doc", "Fake", "Box:Face1")
+
+    assert result["success"] is False
+    assert result["error_code"] == "NOT_A_SKETCH"
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
 @pytest.mark.parametrize(
     "native_result",
     [

@@ -172,6 +172,7 @@ def test_pocket_feature_native_success_inspects_after_recompute(monkeypatch):
         created = document.getObject(result['pocket'])
         assert created is not None
         assert created.isDerivedFrom('PartDesign::Pocket')
+        assert float(getattr(created.Length, "Value", created.Length)) == pytest.approx(4.0)
     finally:
         FreeCAD.closeDocument(document.Name)
 

@@ -89,6 +89,11 @@ class _Document:
     def recompute(self):
         self.events.append("recompute")
         self.recomputed = True
+        for obj in self.objects.values():
+            if getattr(obj, "TypeId", "") in ("PartDesign::Pad", "PartDesign::Pocket") and not hasattr(
+                obj, "Shape"
+            ):
+                obj.Shape = _Shape()
 
     @property
     def Objects(self):
@@ -109,9 +114,11 @@ class _Body:
         self._document.events.append("apply")
         actual_name = self._document.assigned_name or name
         obj = _target(actual_name, object_type)
-        obj.Shape = _Shape()
+        if object_type not in ("PartDesign::Pad", "PartDesign::Pocket"):
+            obj.Shape = _Shape()
         obj.Profile = None
         obj.Length = None
+        obj.isDerivedFrom = lambda type_name, _type_id=object_type: _type_id == type_name
         self.Group.append(obj)
         self._document.objects[actual_name] = obj
         if self._document.fail_after_apply:
@@ -221,6 +228,7 @@ class _WrongTypeAfterRecomputeDocument(_Document):
         name = 'Pad'
         if name in self.objects:
             self.objects[name].TypeId = "Part::Feature"
+            self.objects[name].isDerivedFrom = lambda _type_name: False
 
 
 class _MutateThenRaiseDocument(_Document):
@@ -411,6 +419,34 @@ def test_duplicate_or_missing_target_aborts_without_recompute_or_commit():
 
     assert result["success"] is False
     assert result["error_code"] == 'OBJECT_ALREADY_EXISTS'
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
+def test_missing_sketch_aborts_without_recompute_or_commit():
+    events = []
+    document = _Document(events)
+    document.objects.pop("Sketch", None)
+    collaborators, _api = _collaborators(document, events)
+
+    result = _call(collaborators)
+
+    assert result["success"] is False
+    assert result["error_code"] == "SKETCH_NOT_FOUND"
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
+def test_missing_body_aborts_without_recompute_or_commit():
+    events = []
+    document = _Document(events)
+    document.objects.pop("Body", None)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_pad_feature(collaborators, "Doc", "Sketch", "Pad", 10.0, "Body")
+
+    assert result["success"] is False
+    assert result["error_code"] == "BODY_NOT_FOUND"
     assert "recompute" not in events
     assert "commit" not in events
 

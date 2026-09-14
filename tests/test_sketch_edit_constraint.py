@@ -582,6 +582,33 @@ def test_sketch_edit_constraint_has_no_uncoordinated_source_entry_point():
     assert not hasattr(subject, 'sketch_edit_constraint_gui')
 
 
+def test_missing_value_aborts_without_recompute_or_commit():
+    events = []
+    document = _Document(events)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_sketch_edit_constraint(collaborators, "Doc", "Sketch", None, "R", None)
+
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
+def test_ambiguous_constraint_name_aborts_without_recompute_or_commit():
+    events = []
+    document = _Document(events)
+    document.objects["Sketch"].Constraints.append(SimpleNamespace(Name="R"))
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_sketch_edit_constraint(collaborators, "Doc", "Sketch", 7.0, "R", None)
+
+    assert result["success"] is False
+    assert result["error_code"] == "CONSTRAINT_NAME_AMBIGUOUS"
+    assert "recompute" not in events
+    assert "commit" not in events
+
+
 @pytest.mark.parametrize(
     "native_result",
     [

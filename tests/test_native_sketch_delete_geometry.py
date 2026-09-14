@@ -163,6 +163,8 @@ def test_sketch_delete_geometry_native_success_inspects_after_recompute(monkeypa
     monkeypatch.setattr(body_create_module, "read_sketch_delete_geometry_result", tracked_read)
     collaborators = _collaborators(FreeCAD, lambda _document: events.append("validate"))
     try:
+        sketch = document.getObject("Sketch")
+        before = sketch.GeometryCount
         result = body_create_module.run_sketch_delete_geometry(collaborators, document.Name, "Sketch", [1])
         assert result["success"] is True
         assert result["committed"] is True
@@ -172,6 +174,7 @@ def test_sketch_delete_geometry_native_success_inspects_after_recompute(monkeypa
         created = document.getObject(result['sketch'])
         assert created is not None
         assert created.isDerivedFrom('Sketcher::SketchObject')
+        assert created.GeometryCount == before - 1
     finally:
         FreeCAD.closeDocument(document.Name)
 

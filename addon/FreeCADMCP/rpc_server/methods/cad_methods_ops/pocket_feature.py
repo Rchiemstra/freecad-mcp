@@ -28,6 +28,7 @@ class PocketFeatureReceipt:
     pocket: PocketFeatureObject
     body_name: str
     sketch_name: str
+    expected_length: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,13 +100,39 @@ def _require_closed_profile(sketch: object, sketch_name: str) -> None:
     if callable(is_closed):
         try:
             closed = bool(is_closed())
-        except (AttributeError, TypeError, RuntimeError):
-            closed = True
+        except (AttributeError, TypeError, RuntimeError) as exc:
+            raise PocketFeatureError(
+                "SKETCH_SHAPE_INVALID",
+                f"Sketch {sketch_name!r} profile shape is invalid: {exc}",
+            ) from exc
         if not closed:
             raise PocketFeatureError(
                 "SKETCH_PROFILE_NOT_CLOSED",
                 f"Sketch {sketch_name!r} profile is not a closed wire",
             )
+
+
+def _extrusion_length(feature: object, feature_name: str) -> float:
+    length = getattr(feature, "Length", None)
+    if length is None:
+        raise PocketFeatureError(
+            "POCKET_LENGTH_MISMATCH",
+            f"Pocket {feature_name!r} has no Length after recompute",
+        )
+    value = getattr(length, "Value", length)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PocketFeatureError(
+            "POCKET_LENGTH_MISMATCH",
+            f"Pocket {feature_name!r} Length is not numeric after recompute",
+        )
+    return float(value)
+
+
+def _profile_sketch(profile: object) -> object | None:
+    if isinstance(profile, (list, tuple)) and profile:
+        first: object = profile[0]
+        return first
+    return profile
 
 
 def apply_pocket_feature(
@@ -143,6 +170,7 @@ def apply_pocket_feature(
         pocket=pocket,
         body_name=str(getattr(body, "Name", "")),
         sketch_name=sketch.Name,
+        expected_length=length,
     )
 
 
@@ -175,6 +203,19 @@ def read_pocket_feature_result(
         raise PocketFeatureError(
             "CREATED_OBJECT_WRONG_TYPE",
             f"Body {receipt.body_name!r} Tip did not advance to {receipt.name!r}",
+        )
+    sketch = doc.getObject(receipt.sketch_name)
+    profile_sketch = _profile_sketch(getattr(pocket, "Profile", None))
+    if sketch is None or profile_sketch is not sketch:
+        raise PocketFeatureError(
+            "POCKET_PROFILE_MISMATCH",
+            f"Pocket {receipt.name!r} Profile does not reference sketch {receipt.sketch_name!r}",
+        )
+    actual_length = _extrusion_length(pocket, receipt.name)
+    if abs(actual_length - receipt.expected_length) > 1e-6:
+        raise PocketFeatureError(
+            "POCKET_LENGTH_MISMATCH",
+            f"Pocket {receipt.name!r} Length {actual_length} does not match {receipt.expected_length}",
         )
     shape = getattr(pocket, "Shape", None)
     if shape is None or bool(getattr(shape, "isNull", lambda: True)()):

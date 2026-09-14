@@ -31,6 +31,7 @@ class SketchAddGeometryReceipt:
     name: str
     sketch: SketchAddGeometryObject
     indices: tuple[int, ...]
+    geometry_count_before: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,13 @@ def _failure(
     error: SketchAddGeometryError, *, retry_safe: bool = True
 ) -> SketchAddGeometryFailure:
     return make_sketch_add_geometry_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _geometry_count(sketch: object) -> int:
+    count = getattr(sketch, "GeometryCount", None)
+    if isinstance(count, int) and not isinstance(count, bool):
+        return count
+    return len(getattr(sketch, "Geometry", []) or [])
 
 
 def _number(value: object, field: str, default: float | None = None) -> float:
@@ -73,8 +81,13 @@ def _add_item(sketch: object, geom: Mapping[str, object], freecad: object, part:
     vector = getattr(freecad, "Vector")
     add_geometry = getattr(sketch, "addGeometry")
     if geom_type == "line":
-        start_x, start_y = _point(geom["start"], "start") if "start" in geom else (0.0, 0.0)
-        end_x, end_y = _point(geom["end"], "end") if "end" in geom else (0.0, 0.0)
+        if "start" not in geom or "end" not in geom:
+            raise SketchAddGeometryError(
+                "INVALID_ARGUMENT",
+                "line geometry requires start and end points",
+            )
+        start_x, start_y = _point(geom["start"], "start")
+        end_x, end_y = _point(geom["end"], "end")
         segment = getattr(part, "LineSegment")(vector(start_x, start_y, 0), vector(end_x, end_y, 0))
         return [int(add_geometry(segment, construction))]
     if geom_type == "circle":
@@ -124,10 +137,16 @@ def apply_sketch_add_geometry(
         raise SketchAddGeometryError("SKETCH_NOT_FOUND", f"Sketch {sketch_name!r} not found")
     if not hasattr(sketch, "addGeometry"):
         raise SketchAddGeometryError("NOT_A_SKETCH", f"Object {sketch_name!r} is not an editable sketch")
+    geometry_count_before = _geometry_count(sketch)
     indices: list[int] = []
     for item in geometry:
         indices.extend(_add_item(sketch, item, collaborators.freecad, collaborators.part))
-    return SketchAddGeometryReceipt(name=sketch.Name, sketch=sketch, indices=tuple(indices))
+    return SketchAddGeometryReceipt(
+        name=sketch.Name,
+        sketch=sketch,
+        indices=tuple(indices),
+        geometry_count_before=geometry_count_before,
+    )
 
 
 def read_sketch_add_geometry_result(
@@ -140,6 +159,11 @@ def read_sketch_add_geometry_result(
         raise SketchAddGeometryError(
             "CREATED_OBJECT_REPLACED",
             f"Sketch was replaced before commit: {receipt.name!r}",
+        )
+    if _geometry_count(sketch) <= receipt.geometry_count_before:
+        raise SketchAddGeometryError(
+            "GEOMETRY_NOT_ADDED",
+            f"Sketch geometry count did not increase on {receipt.name!r}",
         )
     return SketchAddGeometryInspection(name=SketchName(receipt.name), indices=list(receipt.indices))
 
