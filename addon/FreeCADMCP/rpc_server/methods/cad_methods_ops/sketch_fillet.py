@@ -190,6 +190,58 @@ def build_sketch_fillet_request(doc_name: object, sketch_name: object, geo1: obj
         radius=radius_value,
     )
 
+def _shared_vertex(sketch: SketchObject, geo1: int, geo2: int) -> tuple[int, int] | None:
+    best: tuple[int, int] | None = None
+    best_dist: float | None = None
+    for pos1 in (1, 2):
+        try:
+            point1 = sketch.getPoint(geo1, pos1)
+        except Exception as exc:
+            raise SketchFilletError("INVALID_GEOMETRY", str(exc) or type(exc).__name__) from exc
+        for pos2 in (1, 2):
+            try:
+                point2 = sketch.getPoint(geo2, pos2)
+            except Exception as exc:
+                raise SketchFilletError("INVALID_GEOMETRY", str(exc) or type(exc).__name__) from exc
+            dist = float(getattr(point1 - point2, "Length", 0.0))
+            if best_dist is None or dist < best_dist:
+                best_dist = dist
+                best = (pos1, pos2)
+    if best is None or best_dist is None or best_dist > 1e-6:
+        return None
+    return best
+
+
+def _ensure_coincident_corner(
+    sketch: SketchObject,
+    collaborators: SketchFilletCollaborators,
+    geo1: int,
+    geo2: int,
+    pos1: int,
+    pos2: int,
+) -> None:
+    add_constraint = getattr(sketch, "addConstraint", None)
+    if not callable(add_constraint):
+        return
+    constraint = getattr(collaborators.sketcher, "Constraint", None)
+    if constraint is None:
+        return
+    for index in range(sketch.ConstraintCount):
+        existing = sketch.Constraints[index]
+        if (
+            str(getattr(existing, "Type", "")) == "Coincident"
+            and int(getattr(existing, "First", -1)) == geo1
+            and int(getattr(existing, "FirstPos", -1)) == pos1
+            and int(getattr(existing, "Second", -1)) == geo2
+            and int(getattr(existing, "SecondPos", -1)) == pos2
+        ):
+            return
+    try:
+        add_constraint(constraint("Coincident", geo1, pos1, geo2, pos2))
+    except Exception:
+        return
+
+
 def apply_sketch_fillet(
     doc: SketchDocument,
     request: SketchFilletRequest,
@@ -200,32 +252,19 @@ def apply_sketch_fillet(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    point1 = None
-    point2 = None
-    best_dist = None
-    for pos1 in (1, 2):
-        try:
-            candidate1 = sketch.getPoint(request.geo1, pos1)
-        except Exception as exc:
-            raise SketchFilletError("INVALID_GEOMETRY", str(exc) or type(exc).__name__) from exc
-        for pos2 in (1, 2):
-            try:
-                candidate2 = sketch.getPoint(request.geo2, pos2)
-            except Exception as exc:
-                raise SketchFilletError("INVALID_GEOMETRY", str(exc) or type(exc).__name__) from exc
-            delta = candidate1 - candidate2
-            dist = float(getattr(delta, "Length", 0.0))
-            if best_dist is None or dist < best_dist:
-                best_dist = dist
-                point1 = candidate1
-                point2 = candidate2
-    if point1 is None or point2 is None or best_dist is None or best_dist > 1e-6:
+    shared = _shared_vertex(sketch, request.geo1, request.geo2)
+    if shared is None:
         raise SketchFilletError(
             "INVALID_GEOMETRY",
             "fillet geometries do not share a coincident vertex",
         )
+    pos1, pos2 = shared
+    _ensure_coincident_corner(sketch, collaborators, request.geo1, request.geo2, pos1, pos2)
+    fillet_at_point = getattr(sketch, "fillet", None)
+    if not callable(fillet_at_point):
+        raise SketchFilletError("FILLET_FAILED", "sketch does not support fillet")
     try:
-        sketch.fillet(request.geo1, request.geo2, point1, point2, request.radius, True, False)
+        fillet_at_point(request.geo1, pos1, request.radius)
     except Exception as exc:
         raise SketchFilletError("FILLET_FAILED", str(exc) or type(exc).__name__) from exc
     return SketchExecReceipt(

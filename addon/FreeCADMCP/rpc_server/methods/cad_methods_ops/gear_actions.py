@@ -492,6 +492,25 @@ def create_involute_gear(
     }
 
 
+def _helical_profile_to_sketch(
+    sketch: object,
+    *,
+    pitch_radius: float,
+    module: float,
+    bore_diameter: float,
+) -> None:
+    part = _part()
+    add_geometry = getattr(sketch, "addGeometry", None)
+    if not callable(add_geometry):
+        raise TypedMutationError("INVALID_SKETCH", "sketch must provide addGeometry")
+    circle = module_callable(part, "Circle")
+    add_geometry(
+        circle(_vector(pitch_radius, 0.0, 0.0), _vector(0.0, 0.0, 1.0), module),
+        False,
+    )
+    _maybe_bore(sketch, bore_diameter)
+
+
 def create_helical_gear(
     document: object,
     *,
@@ -516,25 +535,14 @@ def create_helical_gear(
         clearance=clearance,
         backlash=backlash,
     )
-    samples = max(2, min(samples_per_flank, 2))
+    del angle, base, outer, root, samples_per_flank
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, gear_name + "_Sketch")
-    points = _involute_points(
-        teeth=teeth,
-        pitch=pitch,
-        base=base,
-        outer=outer,
-        root=root,
-        pressure_angle=angle,
-        backlash=backlash,
-        samples=samples,
-        min_length=1e-8,
-    )
-    _finish_sketch(
+    _helical_profile_to_sketch(
         sketch,
-        points,
+        pitch_radius=pitch,
+        module=module,
         bore_diameter=bore_diameter,
-        min_length=1e-8,
     )
     helix = math.radians(helix_angle)
     pitch_len = width / math.tan(helix) if abs(math.tan(helix)) > 1e-9 else 1e6

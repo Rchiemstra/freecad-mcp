@@ -199,7 +199,8 @@ def apply_sketch_add_bezier(
     poles = [
         collaborators.freecad.Vector(x, y, 0.0) for x, y in request.poles
     ]
-    curve = collaborators.part.BezierCurve()
+    part = collaborators.part
+    curve = part.BezierCurve()
     increase = getattr(curve, "increase", None)
     if callable(increase):
         increase(len(poles) - 1)
@@ -207,10 +208,18 @@ def apply_sketch_add_bezier(
         curve.setPoles(poles)
     except Exception as exc:
         raise SketchAddBezierError("INVALID_ARGUMENT", str(exc) or type(exc).__name__) from exc
+    geometry = curve
+    to_bspline = getattr(curve, "toBSpline", None)
+    if callable(to_bspline):
+        try:
+            geometry = to_bspline()
+        except Exception:
+            geometry = curve
     try:
-        idx = sketch.addGeometry(curve, request.construction)
+        idx = sketch.addGeometry(geometry, request.construction)
     except Exception as exc:
-        raise SketchAddBezierError("GEOMETRY_FAILED", str(exc) or type(exc).__name__) from exc
+        message = str(exc) or type(exc).__name__
+        raise SketchAddBezierError("GEOMETRY_FAILED", message) from exc
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

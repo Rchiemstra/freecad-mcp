@@ -218,13 +218,24 @@ def _origin_feature(container: object, name: str) -> object | None:
     return None
 
 
-def resolve_linksub(document: object, body: object | None, spec: str) -> object:
+def resolve_linksub(
+    document: object,
+    body: object | None,
+    spec: str,
+    *,
+    sketch: object | None = None,
+) -> object:
     if ":" in spec:
         object_name, sub_name = spec.split(":", 1)
         obj = lookup_object(document, object_name)
         if obj is None:
             raise LookupError(f"Reference object not found: {object_name}")
         return (obj, [sub_name])
+    if sketch is not None and spec in {"H_Axis", "V_Axis"}:
+        return (sketch, [spec])
+    doc_axis = getattr(document, spec, None)
+    if doc_axis is not None and spec.endswith("_Axis"):
+        return (doc_axis, [""])
     for container in (body, document):
         if container is None:
             continue
@@ -235,6 +246,21 @@ def resolve_linksub(document: object, body: object | None, spec: str) -> object:
     if obj is not None:
         return (obj, [""])
     raise LookupError(f"Reference not found: {spec}")
+
+
+def resolve_revolve_axis(
+    document: object,
+    body: object | None,
+    sketch: object,
+    spec: str,
+) -> object:
+    """Resolve revolution axes the way PartDesign tests do for sketch profiles."""
+
+    if spec in {"X_Axis", "Y_Axis", "Z_Axis"} and sketch is not None:
+        sketch_axis = {"X_Axis": "V_Axis", "Y_Axis": "H_Axis", "Z_Axis": "V_Axis"}.get(spec)
+        if sketch_axis is not None:
+            return (sketch, [sketch_axis])
+    return resolve_linksub(document, body, spec, sketch=sketch)
 
 
 def set_tip(body: object, feature: object) -> None:
@@ -276,6 +302,7 @@ __all__ = [
     "require_body",
     "require_object",
     "resolve_linksub",
+    "resolve_revolve_axis",
     "resolve_optional_body",
     "set_attr",
     "set_feature_bool",

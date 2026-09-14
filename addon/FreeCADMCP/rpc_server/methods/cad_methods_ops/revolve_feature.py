@@ -30,7 +30,7 @@ from .feature_apply_support import (
     optional_name,
     require_absent,
     require_object,
-    resolve_linksub,
+    resolve_revolve_axis,
     resolve_optional_body,
     set_attr,
     set_feature_bool,
@@ -72,7 +72,7 @@ def apply_revolve_feature(doc: FeatureDocument, request: RevolveFeatureRequest) 
         set_named_property(
             created,
             ("ReferenceAxis", "Axis"),
-            resolve_linksub(doc, body, request.axis),
+            resolve_revolve_axis(doc, body, sketch, request.axis),
         )
         set_feature_bool(created, ("Symmetric",), request.symmetric)
         set_feature_bool(created, ("Reversed",), request.reversed_dir)

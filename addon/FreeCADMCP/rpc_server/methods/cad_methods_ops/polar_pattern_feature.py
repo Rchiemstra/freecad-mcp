@@ -74,7 +74,7 @@ def apply_polar_pattern_feature(doc: FeatureDocument, request: PolarPatternFeatu
         set_named_property(created, ("Angle",), request.angle)
         set_named_property(created, ("Occurrences",), request.occurrences)
         set_named_property(
-            created, ("Axis",), resolve_linksub(doc, body, request.axis)
+            created, ("Axis",), resolve_linksub(doc, body, request.axis, sketch=None)
         )
         set_feature_bool(created, ("Reversed",), request.reversed_dir)
         set_tip(body, created)
