@@ -193,8 +193,19 @@ class _CompatibilityAPI:
 def _seed(document: _Document) -> None:
     seed = "relink"
     if seed in {"sheet", "object", "move", "body", "source", "wire", "sketch", "datum", "relink", "analysis", "snapshot"}:
-        document.objects["Seed"] = _item("Seed", type_id="App::FeaturePython")
-        document.objects["Target"] = _item("Target", type_id="App::FeaturePython")
+        source = _item("Seed", type_id="App::FeaturePython")
+        target = _item("Target", type_id="App::FeaturePython")
+        owner = _item("Owner", type_id="App::FeaturePython")
+        owner.PropertiesList = ["Link", "LinkSub"]
+        owner.Link = source
+        owner.LinkSub = (source, ("Face1",))
+        owner.getTypeIdOfProperty = lambda prop: {
+            "Link": "App::PropertyLink",
+            "LinkSub": "App::PropertyLinkSub",
+        }[prop]
+        document.objects["Seed"] = source
+        document.objects["Target"] = target
+        document.objects["Owner"] = owner
         document.objects["Body"] = _item("Body", type_id="PartDesign::Body")
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
@@ -230,6 +241,8 @@ def test_relink_references_runs_apply_recompute_inspect_validate_then_commits():
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert document.objects["Owner"].Link is document.objects["Target"]
+    assert document.objects["Owner"].LinkSub[0] is document.objects["Target"]
     assert "recompute" in events
     assert "commit" in events
 
@@ -256,7 +269,8 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     monkeypatch.setattr(subject, "apply_relink_references", mutate_then_raise)
     result = run_relink_references(collaborators, "Doc", "Seed", "Target")
     assert result["success"] is False
-    assert "abort" in events or result["outcome"] in {"rejected", "uncertain"}
+    assert result["outcome"] == "rejected"
+    assert "abort" in events
 
 
 def test_recompute_failure_is_rolled_back():
@@ -345,7 +359,8 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     )
     result = run_relink_references(collaborators, "Doc", "Seed", "Target")
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

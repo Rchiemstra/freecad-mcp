@@ -191,7 +191,7 @@ class _CompatibilityAPI:
 
 
 def _seed(document: _Document) -> None:
-    seed = ""
+    seed = "object"
     if seed in {"sheet", "object", "move", "body", "source", "wire", "sketch", "datum", "relink", "analysis", "snapshot"}:
         document.objects["Seed"] = _item("Seed", type_id="App::FeaturePython")
         document.objects["Target"] = _item("Target", type_id="App::FeaturePython")
@@ -225,11 +225,12 @@ def test_capture_state_runs_apply_recompute_inspect_validate_then_commits():
     _seed(document)
     collaborators, _api = _collaborators(document, events)
 
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
 
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert "Seed" in result["objects"]
     assert "recompute" in events
     assert "commit" in events
 
@@ -237,7 +238,7 @@ def test_capture_state_runs_apply_recompute_inspect_validate_then_commits():
 def test_missing_document_fails_without_entering_the_apply_callback():
     events: list[str] = []
     collaborators, api = _collaborators(None, events)
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
     assert events == []
@@ -254,9 +255,10 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
         raise RuntimeError("FreeCAD failed after mutating")
 
     monkeypatch.setattr(subject, "apply_capture_state", mutate_then_raise)
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
-    assert "abort" in events or result["outcome"] in {"rejected", "uncertain"}
+    assert result["outcome"] == "rejected"
+    assert "abort" in events
 
 
 def test_recompute_failure_is_rolled_back():
@@ -264,7 +266,7 @@ def test_recompute_failure_is_rolled_back():
     document = _RecomputeFailureDocument(events)
     _seed(document)
     collaborators, _api = _collaborators(document, events)
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
     assert result.get("native_status") == "RecomputeFailed"
 
@@ -279,7 +281,7 @@ def test_failed_validation_aborts_before_commit():
         raise RuntimeError("document health degraded")
 
     collaborators, _api = _collaborators(document, events, validator=fail_validation)
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
 
@@ -291,7 +293,7 @@ def test_native_rejection_never_returns_cached_success():
     collaborators, _api = _collaborators(
         document, events, final_result={"status": "PublicationFailed", "committed": False}
     )
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
     assert result["native_status"] == "PublicationFailed"
 
@@ -306,7 +308,7 @@ def test_native_capability_is_required_before_apply():
         commit_native_mutation=bridge.commit_native_mutation,
         run_fem_analysis=lambda *_a, **_k: {"success": True},
     )
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
     assert result.get("native_status") == "Unsupported"
     assert events == []
@@ -321,7 +323,7 @@ def test_native_rollback_failure_remains_distinguishable():
         events,
         final_result={"status": "RollbackFailed", "committed": False, "rollback_succeeded": False},
     )
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert result["success"] is False
     assert result["native_status"] == "RollbackFailed"
     assert result["rollback_succeeded"] is False
@@ -343,9 +345,10 @@ def test_apply_and_inspect_use_the_native_admitted_document():
         commit_native_mutation=bridge.commit_native_mutation,
         run_fem_analysis=lambda *_a, **_k: {"success": True},
     )
-    result = run_capture_state(collaborators, "Doc", "Target")
+    result = run_capture_state(collaborators, "Doc", ["Seed"])
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

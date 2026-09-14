@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -21,24 +21,10 @@ from ...._shared.protocol.relink_references_contract import (
 )
 from .relink_references_mutation import RelinkReferencesError, run_relink_references_native_mutation
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
     object_label,
     object_name,
-    object_type_id,
-    optional_string,
-    parse_ref,
-    remove_from_container,
     require_object,
-    resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -65,16 +51,39 @@ def _failure(error: RelinkReferencesError, *, retry_safe: bool = True) -> Relink
     return make_relink_references_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _iter_document_objects(doc: RelinkReferencesDocument) -> Iterable[object]:
+    objects = getattr(doc, "Objects", None)
+    if objects is None:
+        return ()
+    if isinstance(objects, (list, tuple)):
+        return objects
+    return ()
+
+
+def _retarget_link_value(current: object, source: object, target: object) -> tuple[object, bool]:
+    if current is source:
+        return target, True
+    if isinstance(current, tuple) and current and current[0] is source:
+        return (target, *current[1:]), True
+    if isinstance(current, (list, tuple)):
+        changed = False
+        updated: list[object] = []
+        for entry in current:
+            new_entry, entry_changed = _retarget_link_value(entry, source, target)
+            changed = changed or entry_changed
+            updated.append(new_entry)
+        if changed:
+            return (type(current)(updated) if isinstance(current, list) else tuple(updated)), True
+    return current, False
+
+
 def apply_relink_references(doc: RelinkReferencesDocument, request: RelinkReferencesRequest) -> RelinkReferencesReceipt:
     """Retarget link properties without recomputing."""
 
     source = require_object(doc, request.from_obj, missing_code="OBJECT_NOT_FOUND", error=RelinkReferencesError)
     target = require_object(doc, request.to_obj, missing_code="OBJECT_NOT_FOUND", error=RelinkReferencesError)
-    objects = getattr(doc, "Objects", None)
-    if not isinstance(objects, list):
-        objects = []
     changed = 0
-    for item in objects:
+    for item in _iter_document_objects(doc):
         props = getattr(item, "PropertiesList", None)
         if not isinstance(props, list):
             continue
@@ -95,9 +104,10 @@ def apply_relink_references(doc: RelinkReferencesDocument, request: RelinkRefere
                 current = getattr(item, prop)
             except Exception:
                 continue
-            if current is source:
+            updated, did_change = _retarget_link_value(current, source, target)
+            if did_change:
                 try:
-                    setattr(item, prop, target)
+                    setattr(item, prop, updated)
                     changed += 1
                 except Exception:
                     continue

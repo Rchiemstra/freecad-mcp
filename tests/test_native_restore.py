@@ -24,7 +24,37 @@ def _collaborators(FreeCAD, validator):
     return SimpleNamespace(
         validate_document_invariants=validator,
         commit_native_mutation=bridge.commit_native_mutation,
+        freecad=FreeCAD,
     )
+
+
+def _close_named(FreeCAD, name: str) -> None:
+    try:
+        FreeCAD.closeDocument(name)
+    except Exception:
+        pass
+
+
+def _documents(FreeCAD) -> dict[str, object]:
+    listing = getattr(FreeCAD, "listDocuments", None)
+    if not callable(listing):
+        return {}
+    raw = listing()
+    if isinstance(raw, dict):
+        return raw
+    names = raw if isinstance(raw, (list, tuple)) else ()
+    found: dict[str, object] = {}
+    getter = getattr(FreeCAD, "getDocument", None)
+    if not callable(getter):
+        return found
+    for name in names:
+        if not isinstance(name, str):
+            continue
+        try:
+            found[name] = getter(name)
+        except Exception:
+            continue
+    return found
 
 
 def _prepare(document):
@@ -89,7 +119,8 @@ def test_restore_native_success_inspects_after_recompute(monkeypatch):
         assert result["success"] is True
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
-        FreeCAD.closeDocument(document.Name)
+        for name in list(_documents(FreeCAD)):
+            _close_named(FreeCAD, name)
 
 
 def test_restore_native_validation_failure_restores_complete_state():
@@ -210,7 +241,7 @@ def test_restore_native_rollback_failure_is_uncertain_and_fences(monkeypatch):
         result = subject.run_restore(collaborators, document.Name, "snap-test")
         proxy.armed = False
         fenced = subject.run_restore(collaborators, document.Name, "snap-test")
-        assert result["outcome"] == "uncertain" or result["success"] is False
+        assert result["outcome"] == "uncertain"
         assert fenced["success"] is False
     finally:
         proxy.armed = False
@@ -237,6 +268,27 @@ def test_restore_native_inspection_failure_rolls_back(monkeypatch):
         assert _model_state(document) == state_before
     finally:
         FreeCAD.closeDocument(document.Name)
+
+
+def test_restore_native_reloads_snapshot_after_mutation(monkeypatch):
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
+
+    document = FreeCAD.newDocument("MCPRestoreNativeReload")
+    _prepare(document)
+    document.addObject("App::FeaturePython", "Transient")
+    document.recompute()
+    doc_name = document.Name
+    try:
+        result = run_restore(_collaborators(FreeCAD, lambda _d: None), doc_name, "snap-test")
+        assert result["success"] is True
+        remaining = _documents(FreeCAD)
+        assert remaining, "restore close/open left no document"
+        assert all(doc.getObject("Transient") is None for doc in remaining.values())
+    finally:
+        for name in list(_documents(FreeCAD)):
+            _close_named(FreeCAD, name)
 
 
 def test_restore_native_postcondition_cannot_write():

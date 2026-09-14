@@ -71,8 +71,9 @@ def test_capture_state_native_success_inspects_after_recompute(monkeypatch):
     monkeypatch.setattr(subject, "apply_capture_state", tracked_apply)
     monkeypatch.setattr(subject, "read_capture_state_result", tracked_read)
     try:
-        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Target")
+        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, ["Seed"])
         assert result["success"] is True
+        assert "Seed" in result["objects"]
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
         FreeCAD.closeDocument(document.Name)
@@ -89,7 +90,7 @@ def test_capture_state_native_validation_failure_restores_complete_state():
     try:
         result = run_capture_state(
             _collaborators(FreeCAD, lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure"))),
-            document.Name, "Target",
+            document.Name, ["Seed"],
         )
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
@@ -116,7 +117,7 @@ def test_capture_state_native_apply_failure_restores(monkeypatch):
 
     monkeypatch.setattr(subject, "apply_capture_state", mutates_then_raises)
     try:
-        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: None), document.Name, "Target")
+        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: None), document.Name, ["Seed"])
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
@@ -155,7 +156,7 @@ def test_capture_state_native_recompute_failure_rolls_back(monkeypatch):
 
     monkeypatch.setattr(subject, "apply_capture_state", arm)
     try:
-        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: None), document.Name, "Target")
+        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: None), document.Name, ["Seed"])
         assert result["success"] is False
         assert result["native_status"] == "RecomputeFailed"
         assert _model_state(document) == state_before
@@ -193,10 +194,10 @@ def test_capture_state_native_rollback_failure_is_uncertain_and_fences(monkeypat
     monkeypatch.setattr(subject, "apply_capture_state", arm)
     collaborators = _collaborators(FreeCAD, lambda _d: None)
     try:
-        result = subject.run_capture_state(collaborators, document.Name, "Target")
+        result = subject.run_capture_state(collaborators, document.Name, ["Seed"])
         proxy.armed = False
-        fenced = subject.run_capture_state(collaborators, document.Name, "Target")
-        assert result["outcome"] == "uncertain" or result["success"] is False
+        fenced = subject.run_capture_state(collaborators, document.Name, ["Seed"])
+        assert result["outcome"] == "uncertain"
         assert fenced["success"] is False
     finally:
         proxy.armed = False
@@ -217,7 +218,7 @@ def test_capture_state_native_inspection_failure_rolls_back(monkeypatch):
 
     monkeypatch.setattr(subject, "read_capture_state_result", reject)
     try:
-        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: None), document.Name, "Target")
+        result = subject.run_capture_state(_collaborators(FreeCAD, lambda _d: None), document.Name, ["Seed"])
         assert result["success"] is False
         assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
         assert _model_state(document) == state_before
@@ -239,7 +240,7 @@ def test_capture_state_native_postcondition_cannot_write():
         anchor.Label = "Unvalidated change"
 
     try:
-        result = run_capture_state(_collaborators(FreeCAD, validate), document.Name, "Target")
+        result = run_capture_state(_collaborators(FreeCAD, validate), document.Name, ["Seed"])
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
         assert _model_state(document) == state_before

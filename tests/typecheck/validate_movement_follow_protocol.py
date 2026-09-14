@@ -72,7 +72,7 @@ def production_collaborators_are_compatible(
 missing_postcondition: ValidateMovementFollowCollaborators = MissingPostconditionDouble()  # type: ignore[assignment]
 
 document_name = DocumentName("Model")
-valid_request = ValidateMovementFollowRequest(doc_name=document_name, source="Value", dependents=["Seed"], translation=None, axis=None, angle_deg=1.0, restore=True, tolerance=1e-07)
+valid_request = ValidateMovementFollowRequest(doc_name=document_name, source="Value", dependents=["Seed"], translation=[0.0, 0.0, 1.0], axis=[0.0, 0.0, 1.0], angle_deg=1.0, restore=True, tolerance=1e-07)
 
 
 def public_client_preserves_names(client: FreeCADConnection) -> None:

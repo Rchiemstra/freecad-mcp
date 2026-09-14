@@ -79,7 +79,7 @@ class CaptureStateRequest:
     """Validated internal request."""
 
     doc_name: DocumentName
-    object_names: object
+    object_names: list[str] | None
 
 
 class CaptureStateSuccess(TypedDict):
@@ -92,6 +92,7 @@ class CaptureStateSuccess(TypedDict):
     committed: Literal[True]
     retry_safe: Literal[False]
     doc: str
+    objects: dict[str, dict[str, object]]
 
 
 class CaptureStateFailure(TypedDict):
@@ -134,12 +135,12 @@ CaptureStateResult = CaptureStateSuccess | CaptureStateFailure | CaptureStateUnc
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'doc', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'doc', 'objects', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_capture_state_success(doc: str) -> CaptureStateSuccess:
+def make_capture_state_success(doc: str, objects: dict[str, dict[str, object]]) -> CaptureStateSuccess:
     """Construct a complete committed result."""
 
     return {
@@ -150,6 +151,7 @@ def make_capture_state_success(doc: str) -> CaptureStateSuccess:
         "committed": True,
         "retry_safe": False,
         "doc": doc,
+        "objects": objects,
     }
 
 
@@ -359,11 +361,18 @@ def parse_capture_state_response(raw_response: object) -> CaptureStateResult:
         return _invalid_response(response)
 
     doc = response.get('doc')
+    objects = response.get('objects')
     if (
         _valid_success(response)
         and isinstance(doc, str) and doc.strip()
+        and isinstance(objects, dict)
     ):
-        return make_capture_state_success(str(doc))
+        parsed_objects: dict[str, dict[str, object]] = {}
+        for key, value in objects.items():
+            if not isinstance(key, str) or not isinstance(value, dict):
+                return _invalid_response(response)
+            parsed_objects[key] = dict(value)
+        return make_capture_state_success(str(doc), parsed_objects)
 
     error_code = response.get("error_code")
     error = response.get("error")
@@ -374,7 +383,7 @@ def parse_capture_state_response(raw_response: object) -> CaptureStateResult:
         and error_code.strip()
         and isinstance(error, str)
         and error.strip()
-        and 'doc' not in response
+        and 'doc' not in response and 'objects' not in response
     ):
         if _valid_rejection(response):
             return make_capture_state_failure(

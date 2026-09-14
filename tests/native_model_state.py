@@ -120,6 +120,21 @@ def _link_fingerprint(value: object, type_id: str) -> object | None:
     return _object_name(value)
 
 
+def _fem_mesh_fingerprint(mesh: object) -> object:
+    if mesh is None:
+        return ("empty_mesh",)
+    counts = []
+    for attr in ("NodeCount", "EdgeCount", "FaceCount", "TriangleCount", "VolumeCount"):
+        raw = getattr(mesh, attr, None)
+        try:
+            counts.append(int(raw))
+        except (TypeError, ValueError):
+            counts.append(None)
+    if all(count is None for count in counts):
+        return ("femmesh", type(mesh).__name__)
+    return ("femmesh", tuple(counts))
+
+
 def _material_fingerprint(value: object) -> object:
     if value is None:
         return None
@@ -217,6 +232,11 @@ def property_content(item: object, name: str) -> object | None:
         return _link_fingerprint(value, type_id)
     if "PropertyMaterial" in type_id or name == "ShapeMaterial":
         return _material_fingerprint(value)
+    if "FemMesh" in type_id or name == "FemMesh":
+        try:
+            return _fem_mesh_fingerprint(value)
+        except Exception:
+            return ("empty_mesh",)
     if any(token in type_id for token in ("Float", "Integer", "Bool", "String", "Enumeration", "Quantity")):
         return _scalar_fingerprint(value, type_id)
     if isinstance(value, (bool, int, float, str)):

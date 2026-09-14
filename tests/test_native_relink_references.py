@@ -32,12 +32,16 @@ def _prepare(document):
         document.addObject('App::FeaturePython', 'Seed')
     if document.getObject('Target') is None:
         document.addObject('App::FeaturePython', 'Target')
+    seed = document.getObject('Seed')
     body = document.getObject('Body')
     if body is None:
         try:
             body = document.addObject('PartDesign::Body', 'Body')
         except Exception:
             body = document.addObject('App::FeaturePython', 'Body')
+    if seed is not None and body is not None and not hasattr(body, "Source"):
+        body.addProperty("App::PropertyLink", "Source", "Base", "source link")
+        body.Source = seed
     document.recompute()
     return body
 
@@ -75,6 +79,8 @@ def test_relink_references_native_success_inspects_after_recompute(monkeypatch):
     try:
         result = subject.run_relink_references(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Seed", "Target")
         assert result["success"] is True
+        body = document.getObject("Body")
+        assert body is not None and getattr(body, "Source", None) == document.getObject("Target")
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
         FreeCAD.closeDocument(document.Name)
@@ -198,7 +204,7 @@ def test_relink_references_native_rollback_failure_is_uncertain_and_fences(monke
         result = subject.run_relink_references(collaborators, document.Name, "Seed", "Target")
         proxy.armed = False
         fenced = subject.run_relink_references(collaborators, document.Name, "Seed", "Target")
-        assert result["outcome"] == "uncertain" or result["success"] is False
+        assert result["outcome"] == "uncertain"
         assert fenced["success"] is False
     finally:
         proxy.armed = False

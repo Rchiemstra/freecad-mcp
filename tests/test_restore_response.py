@@ -17,7 +17,7 @@ from freecad_mcp.operations.parametric_ops.restore import restore_operation
 
 
 def _success():
-    return make_restore_success(restored_id="Value", doc="Value")
+    return make_restore_success(restored_id="Value", doc="Value", count=1)
 
 
 @pytest.mark.parametrize("raw", [None, [], 1, "timeout", {}, {1: "bad key"}])

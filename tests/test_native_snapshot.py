@@ -129,12 +129,19 @@ def test_snapshot_native_apply_failure_restores(monkeypatch):
         raise RuntimeError("forced failure after structural effects")
 
     monkeypatch.setattr(subject, "apply_snapshot", mutates_then_raises)
+    import FreeCAD as freecad_module
+
+    ring_before = list(getattr(freecad_module, "_mcp_snapshots", []) or [])
+    before_ids = {row.get("id") for row in ring_before if isinstance(row, dict)}
     try:
         result = subject.run_snapshot(_collaborators(FreeCAD, lambda _d: None), document.Name)
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
         assert _model_state(document) == state_before
+        ring = list(getattr(freecad_module, "_mcp_snapshots", []) or [])
+        after_ids = {row.get("id") for row in ring if isinstance(row, dict)}
+        assert after_ids == before_ids
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -207,10 +214,13 @@ def test_snapshot_native_rollback_failure_is_uncertain_and_fences(monkeypatch):
     monkeypatch.setattr(subject, "apply_snapshot", arm)
     collaborators = _collaborators(FreeCAD, lambda _d: None)
     try:
+        ring_before = len(getattr(__import__("FreeCAD"), "_mcp_snapshots", []))
         result = subject.run_snapshot(collaborators, document.Name)
         proxy.armed = False
+        ring_after = len(getattr(__import__("FreeCAD"), "_mcp_snapshots", []))
         fenced = subject.run_snapshot(collaborators, document.Name)
-        assert result["outcome"] == "uncertain" or result["success"] is False
+        assert result["outcome"] == "uncertain"
+        assert ring_after == ring_before
         assert fenced["success"] is False
     finally:
         proxy.armed = False

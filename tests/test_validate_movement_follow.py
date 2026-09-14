@@ -230,6 +230,7 @@ def test_validate_movement_follow_runs_apply_recompute_inspect_validate_then_com
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert document.objects["Seed"].Placement.Base.z == 0.0
     assert "recompute" in events
     assert "commit" in events
 
@@ -256,7 +257,8 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     monkeypatch.setattr(subject, "apply_validate_movement_follow", mutate_then_raise)
     result = run_validate_movement_follow(collaborators, "Doc", "Seed", ["Seed"], [0, 0, 1], [0, 0, 1], 90.0, True, 1e-07)
     assert result["success"] is False
-    assert "abort" in events or result["outcome"] in {"rejected", "uncertain"}
+    assert result["outcome"] == "rejected"
+    assert "abort" in events
 
 
 def test_recompute_failure_is_rolled_back():
@@ -345,7 +347,30 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     )
     result = run_validate_movement_follow(collaborators, "Doc", "Seed", ["Seed"], [0, 0, 1], [0, 0, 1], 90.0, True, 1e-07)
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
+
+
+def test_validate_movement_follow_without_restore_keeps_translation():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_validate_movement_follow(
+        collaborators,
+        "Doc",
+        "Seed",
+        ["Seed"],
+        [0, 0, 1],
+        [0, 0, 1],
+        0.0,
+        False,
+        1e-07,
+    )
+
+    assert result["success"] is True
+    assert document.objects["Seed"].Placement.Base.z == 1.0
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

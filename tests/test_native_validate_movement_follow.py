@@ -198,7 +198,7 @@ def test_validate_movement_follow_native_rollback_failure_is_uncertain_and_fence
         result = subject.run_validate_movement_follow(collaborators, document.Name, "Seed", ["Seed"], [0, 0, 1], [0, 0, 1], 90.0, True, 1e-07)
         proxy.armed = False
         fenced = subject.run_validate_movement_follow(collaborators, document.Name, "Seed", ["Seed"], [0, 0, 1], [0, 0, 1], 90.0, True, 1e-07)
-        assert result["outcome"] == "uncertain" or result["success"] is False
+        assert result["outcome"] == "uncertain"
         assert fenced["success"] is False
     finally:
         proxy.armed = False

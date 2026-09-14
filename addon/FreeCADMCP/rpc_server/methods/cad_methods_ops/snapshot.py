@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -21,24 +24,8 @@ from ...._shared.protocol.snapshot_contract import (
 )
 from .snapshot_mutation import SnapshotError, run_snapshot_native_mutation
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
-    object_label,
-    object_name,
-    object_type_id,
-    optional_string,
-    parse_ref,
-    remove_from_container,
-    require_object,
-    resolve_if_exists,
-    snapshot_ring
+    snapshot_ring,
 )
 
 
@@ -48,6 +35,7 @@ class SnapshotReceipt:
 
     name: str
     item: object | None
+    snapshot_path: str | None = None
     skipped: bool = False
     extra: object = None
 
@@ -65,12 +53,47 @@ def _failure(error: SnapshotError, *, retry_safe: bool = True) -> SnapshotFailur
     return make_snapshot_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _unlink_snapshot_path(path: object) -> None:
+    if isinstance(path, str) and path:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _undo_snapshot_receipt(doc: object | None, receipt: SnapshotReceipt) -> None:
+    if doc is None:
+        return
+    store = snapshot_ring(doc)
+    for index, row in enumerate(store):
+        if isinstance(row, dict) and row.get("id") == receipt.name:
+            store.pop(index)
+            break
+    _unlink_snapshot_path(receipt.snapshot_path)
+
+
+def _undo_ring_appended_since(doc: object | None, length_before: int) -> None:
+    if doc is None:
+        return
+    store = snapshot_ring(doc)
+    while len(store) > length_before:
+        evicted = store.pop()
+        if isinstance(evicted, dict):
+            _unlink_snapshot_path(evicted.get("path"))
+
+
+def _trim_snapshot_ring(doc: object | None, max_size: int = 5) -> None:
+    if doc is None:
+        return
+    store = snapshot_ring(doc)
+    while len(store) > max_size:
+        evicted = store.pop(0)
+        if isinstance(evicted, dict):
+            _unlink_snapshot_path(evicted.get("path"))
+
+
 def apply_snapshot(doc: SnapshotDocument, request: SnapshotRequest) -> SnapshotReceipt:
     """Save a document copy without recomputing."""
-
-    import os
-    import tempfile
-    import time
 
     saver = getattr(doc, "saveCopy", None)
     if not callable(saver):
@@ -80,36 +103,41 @@ def apply_snapshot(doc: SnapshotDocument, request: SnapshotRequest) -> SnapshotR
     try:
         saver(path)
     except Exception as exc:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
         raise SnapshotError("SNAPSHOT_FAILED", str(exc) or type(exc).__name__) from exc
     snapshot_id = "snap-" + str(int(time.time() * 1000))
     store = snapshot_ring(doc)
     store.append({"id": snapshot_id, "path": path, "doc": str(getattr(doc, "Name", "") or request.doc_name)})
-    while len(store) > 5:
-        store.pop(0)
-    return SnapshotReceipt(name=snapshot_id, item=doc, skipped=False, extra=len(store))
+    return SnapshotReceipt(
+        name=snapshot_id,
+        item=doc,
+        snapshot_path=path,
+        skipped=False,
+        extra=len(store),
+    )
 
 
 def read_snapshot_result(doc: SnapshotReadDocument, receipt: SnapshotReceipt) -> SnapshotInspection:
-    """Build the public result after the shared mutation recompute."""
+    """Verify the snapshot ring entry and file exist after native recompute."""
 
-    located: object | None = doc.getObject(receipt.name)
-    if located is None:
-        located = receipt.item
-    if located is None:
-        raise SnapshotError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
-        raise SnapshotError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-
-    extra = receipt.extra
-
+    store = snapshot_ring(doc)
+    found = False
+    for row in store:
+        if isinstance(row, dict) and row.get("id") == receipt.name:
+            found = True
+            path = row.get("path")
+            if not isinstance(path, str) or not os.path.isfile(path):
+                raise SnapshotError("SNAPSHOT_FILE_MISSING", f"Snapshot file is missing: {receipt.name!r}")
+            break
+    if not found:
+        raise SnapshotError("SNAPSHOT_NOT_FOUND", f"Snapshot is missing from the ring: {receipt.name!r}")
     return SnapshotInspection(
         name=SnapshotName(receipt.name),
-        label=object_label(located),
-        extra=extra,
+        label=receipt.name,
+        extra=len(store),
     )
 
 
@@ -130,7 +158,12 @@ class _SnapshotExecution:
     inspected: SnapshotInspection | None = None
 
     def apply(self, doc: SnapshotDocument) -> None:
-        self.created = apply_snapshot(doc, self.request)
+        ring_len_before = len(snapshot_ring(doc))
+        try:
+            self.created = apply_snapshot(doc, self.request)
+        except Exception:
+            _undo_ring_appended_since(doc, ring_len_before)
+            raise
 
     def inspect(self, doc: SnapshotReadDocument) -> None:
         if self.created is None:
@@ -148,6 +181,8 @@ class _SnapshotExecution:
             self.inspect,
         )
         if result is not True:
+            if self.created is not None:
+                _undo_snapshot_receipt(self.created.item, self.created)
             return result
         if self.inspected is None:
             return make_snapshot_uncertain(
@@ -155,7 +190,16 @@ class _SnapshotExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_snapshot_success(snapshot_id=self.inspected.name, doc=self.request.doc_name)
+        if self.created is not None:
+            _trim_snapshot_ring(self.created.item, max_size=5)
+        count = self.inspected.extra
+        if not isinstance(count, int):
+            count = 0
+        return make_snapshot_success(
+            snapshot_id=str(self.inspected.name),
+            doc=str(self.request.doc_name),
+            count=count,
+        )
 
 
 def run_snapshot(

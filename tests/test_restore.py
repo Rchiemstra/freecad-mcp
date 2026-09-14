@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from types import SimpleNamespace
 
 import pytest
@@ -56,6 +58,7 @@ class _Document:
         self.recomputed = False
         self.add_calls = 0
         self._mcp_snapshots: list[object] = []
+        self.restored_paths: list[str] = []
 
     @property
     def Objects(self) -> list[object]:
@@ -84,6 +87,9 @@ class _Document:
 
     def saveCopy(self, path):
         PathWrite(path)
+
+    def restore(self, path):
+        self.restored_paths.append(path)
 
 
 class _MutateThenRaiseDocument(_Document):
@@ -203,7 +209,10 @@ def _seed(document: _Document) -> None:
             document.objects["Seed"].newObject = maker
             document.objects["Body"].newObject = maker
         if seed == "snapshot":
-            document._mcp_snapshots.append({"id": "snap-test", "path": "x.FCStd", "doc": "Doc"})
+            handle, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
+            os.close(handle)
+            PathWrite(path)
+            document._mcp_snapshots.append({"id": "snap-test", "path": path, "doc": "Doc"})
 
 
 def _collaborators(document: _Document | None, events: list[str], *, validator=None, final_result=None):
@@ -230,6 +239,9 @@ def test_restore_runs_apply_recompute_inspect_validate_then_commits():
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert result["restored_id"] == "snap-test"
+    assert result["count"] == 1
+    assert document.restored_paths
     assert "recompute" in events
     assert "commit" in events
 
@@ -256,7 +268,8 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     monkeypatch.setattr(subject, "apply_restore", mutate_then_raise)
     result = run_restore(collaborators, "Doc", "snap-test")
     assert result["success"] is False
-    assert "abort" in events or result["outcome"] in {"rejected", "uncertain"}
+    assert result["outcome"] == "rejected"
+    assert "abort" in events
 
 
 def test_recompute_failure_is_rolled_back():
@@ -345,7 +358,8 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     )
     result = run_restore(collaborators, "Doc", "snap-test")
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

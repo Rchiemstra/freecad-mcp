@@ -93,6 +93,7 @@ class RestoreSuccess(TypedDict):
     retry_safe: Literal[False]
     restored_id: str
     doc: str
+    count: int
 
 
 class RestoreFailure(TypedDict):
@@ -135,12 +136,12 @@ RestoreResult = RestoreSuccess | RestoreFailure | RestoreUncertain
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'restored_id', 'doc', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'restored_id', 'doc', 'count', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_restore_success(restored_id: str, doc: str) -> RestoreSuccess:
+def make_restore_success(restored_id: str, doc: str, count: int) -> RestoreSuccess:
     """Construct a complete committed result."""
 
     return {
@@ -152,6 +153,7 @@ def make_restore_success(restored_id: str, doc: str) -> RestoreSuccess:
         "retry_safe": False,
         "restored_id": restored_id,
         "doc": doc,
+        "count": count,
     }
 
 
@@ -362,12 +364,14 @@ def parse_restore_response(raw_response: object) -> RestoreResult:
 
     restored_id = response.get('restored_id')
     doc = response.get('doc')
+    count = response.get('count')
     if (
         _valid_success(response)
         and isinstance(restored_id, str) and restored_id.strip()
         and isinstance(doc, str) and doc.strip()
+        and isinstance(count, int)
     ):
-        return make_restore_success(str(restored_id), str(doc))
+        return make_restore_success(str(restored_id), str(doc), count)
 
     error_code = response.get("error_code")
     error = response.get("error")
@@ -378,7 +382,7 @@ def parse_restore_response(raw_response: object) -> RestoreResult:
         and error_code.strip()
         and isinstance(error, str)
         and error.strip()
-        and 'restored_id' not in response and 'doc' not in response
+        and 'restored_id' not in response and 'doc' not in response and 'count' not in response
     ):
         if _valid_rejection(response):
             return make_restore_failure(

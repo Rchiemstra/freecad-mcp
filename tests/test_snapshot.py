@@ -230,6 +230,8 @@ def test_snapshot_runs_apply_recompute_inspect_validate_then_commits():
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert isinstance(result.get("snapshot_id"), str)
+    assert result.get("count") == 1
     assert "recompute" in events
     assert "commit" in events
 
@@ -256,7 +258,8 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     monkeypatch.setattr(subject, "apply_snapshot", mutate_then_raise)
     result = run_snapshot(collaborators, "Doc")
     assert result["success"] is False
-    assert "abort" in events or result["outcome"] in {"rejected", "uncertain"}
+    assert result["outcome"] == "rejected"
+    assert "abort" in events
 
 
 def test_recompute_failure_is_rolled_back():
@@ -345,7 +348,8 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     )
     result = run_snapshot(collaborators, "Doc")
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

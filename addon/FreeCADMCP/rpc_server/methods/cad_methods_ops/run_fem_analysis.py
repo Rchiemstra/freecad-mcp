@@ -65,19 +65,58 @@ def _failure(error: RunFemAnalysisError, *, retry_safe: bool = True) -> RunFemAn
     return make_run_fem_analysis_failure(error.code, str(error), retry_safe=retry_safe)
 
 
-def _ensure_fem_mesh(doc: object, analysis: object) -> None:
+def _is_gmsh_mesh(item: object) -> bool:
+    """True for Gmsh mesh objects, including Fem Python wrappers.
+
+    ``ObjectsFem.makeMeshGmsh`` creates ``Fem::FemMeshShapeBaseObjectPython``
+    with ``Proxy.Type == "Fem::FemMeshGmsh"``. TypeId itself is not that string.
+    """
+
+    proxy = getattr(item, "Proxy", None)
+    proxy_type = getattr(proxy, "Type", None) if proxy is not None else None
+    if proxy_type == "Fem::FemMeshGmsh":
+        return True
+    type_id = str(getattr(item, "TypeId", ""))
+    if "Fem::FemMeshGmsh" in type_id or type_id.endswith("FemMeshGmsh"):
+        return True
+    try:
+        from femtools.femutils import is_derived_from  # type: ignore[import-not-found]
+    except ImportError:
+        return False
+    try:
+        return bool(is_derived_from(item, "Fem::FemMeshGmsh"))
+    except Exception:
+        return False
+
+
+def _analysis_members(analysis: object) -> tuple[object, ...]:
     group = getattr(analysis, "Group", None)
-    members = group if isinstance(group, (list, tuple)) else []
-    mesh = None
-    for item in members:
-        type_id = str(getattr(item, "TypeId", ""))
-        if "Fem::FemMeshGmsh" in type_id or "FemMeshGmsh" in type_id:
-            mesh = item
-            break
+    if isinstance(group, (list, tuple)):
+        return tuple(group)
+    if group is None:
+        return ()
+    try:
+        return tuple(group)
+    except TypeError:
+        return ()
+
+
+def _ensure_fem_mesh(doc: object, analysis: object) -> None:
+    members = list(_analysis_members(analysis))
+    document_objects = getattr(doc, "Objects", ()) or ()
+    for item in document_objects:
+        parent = getattr(item, "getParentGroup", None)
+        if callable(parent):
+            try:
+                if parent() is analysis:
+                    members.append(item)
+            except Exception:
+                pass
+    mesh = next((item for item in members if _is_gmsh_mesh(item)), None)
     if mesh is None:
         raise RunFemAnalysisError("GMSH_UNAVAILABLE", "analysis has no Gmsh mesh object")
     try:
-        from femmesh.gmshtools import GmshTools
+        from femmesh.gmshtools import GmshTools  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RunFemAnalysisError("GMSH_UNAVAILABLE", "Gmsh tools are unavailable") from exc
     try:

@@ -83,10 +83,6 @@ def _collaborators(FreeCAD, validator, fem_runner=_fem_executor_success):
     )
 
 
-def _stub_fem_mesh(monkeypatch, subject) -> None:
-    monkeypatch.setattr(subject, "_ensure_fem_mesh", lambda _doc, _analysis: None)
-
-
 def _prepare(document):
     _require_fem_workbench()
     import ObjectsFem
@@ -200,7 +196,6 @@ def test_run_fem_analysis_native_success_inspects_after_recompute(monkeypatch):
         events.append("inspect")
         return original_read(admitted, receipt)
 
-    _stub_fem_mesh(monkeypatch, subject)
     monkeypatch.setattr(subject._RunFemAnalysisExecution, "apply", tracked_apply)
     monkeypatch.setattr(subject, "read_run_fem_analysis_result", tracked_read)
     try:
@@ -219,7 +214,6 @@ def test_run_fem_analysis_native_validation_failure_restores_complete_state(monk
 
     document = FreeCAD.newDocument("MCPRunFemAnalysisNativeRollback")
     _prepare(document)
-    _stub_fem_mesh(monkeypatch, subject)
     state_before = _settled_state(document, "run_fem_analysis")
     try:
         result = run_run_fem_analysis(
@@ -279,7 +273,6 @@ def test_run_fem_analysis_native_recompute_failure_rolls_back(monkeypatch):
     probe = document.addObject("App::FeaturePython", "FailingRecomputeProbe")
     probe.Proxy = proxy
     _prepare(document)
-    _stub_fem_mesh(monkeypatch, subject)
     state_before = _settled_state(document, "run_fem_analysis")
     def arm_probe():
         proxy.armed = True
@@ -314,7 +307,6 @@ def test_run_fem_analysis_native_rollback_failure_is_uncertain_and_fences(monkey
     probe = document.addObject("App::FeaturePython", "PersistentFailureProbe")
     probe.Proxy = proxy
     _prepare(document)
-    _stub_fem_mesh(monkeypatch, subject)
     def arm_probe():
         proxy.armed = True
         probe.touch()
@@ -325,7 +317,7 @@ def test_run_fem_analysis_native_rollback_failure_is_uncertain_and_fences(monkey
         result = subject.run_run_fem_analysis(collaborators, document.Name, "Target", 600)
         proxy.armed = False
         fenced = subject.run_run_fem_analysis(collaborators, document.Name, "Target", 600)
-        assert result["outcome"] == "uncertain" or result["success"] is False
+        assert result["outcome"] == "uncertain"
         assert fenced["success"] is False
     finally:
         proxy.armed = False
@@ -339,7 +331,6 @@ def test_run_fem_analysis_native_inspection_failure_rolls_back(monkeypatch):
 
     document = FreeCAD.newDocument("MCPRunFemAnalysisNativeInspectionFailure")
     _prepare(document)
-    _stub_fem_mesh(monkeypatch, subject)
     state_before = _settled_state(document, "run_fem_analysis")
 
     def reject(_document, _receipt):
@@ -364,7 +355,6 @@ def test_run_fem_analysis_native_postcondition_cannot_write(monkeypatch):
     document = FreeCAD.newDocument("MCPRunFemAnalysisReadOnlyPostcondition")
     anchor = document.addObject("App::FeaturePython", "Anchor")
     _prepare(document)
-    _stub_fem_mesh(monkeypatch, subject)
     state_before = _settled_state(document, "run_fem_analysis")
 
     def validate(_admitted):

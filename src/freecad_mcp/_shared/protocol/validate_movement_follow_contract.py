@@ -80,9 +80,9 @@ class ValidateMovementFollowRequest:
 
     doc_name: DocumentName
     source: str
-    dependents: object
-    translation: object
-    axis: object
+    dependents: list[str]
+    translation: list[float]
+    axis: list[float]
     angle_deg: float
     restore: bool
     tolerance: float

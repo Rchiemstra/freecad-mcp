@@ -17,7 +17,7 @@ from freecad_mcp.operations.parametric_ops.capture_state import capture_state_op
 
 
 def _success():
-    return make_capture_state_success(doc="Value")
+    return make_capture_state_success(doc="Value", objects={"Seed": {"name": "Seed"}})
 
 
 @pytest.mark.parametrize("raw", [None, [], 1, "timeout", {}, {1: "bad key"}])

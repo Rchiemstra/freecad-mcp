@@ -92,6 +92,7 @@ class SnapshotSuccess(TypedDict):
     retry_safe: Literal[False]
     snapshot_id: str
     doc: str
+    count: int
 
 
 class SnapshotFailure(TypedDict):
@@ -134,12 +135,12 @@ SnapshotResult = SnapshotSuccess | SnapshotFailure | SnapshotUncertain
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'snapshot_id', 'doc', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'snapshot_id', 'doc', 'count', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_snapshot_success(snapshot_id: str, doc: str) -> SnapshotSuccess:
+def make_snapshot_success(snapshot_id: str, doc: str, count: int) -> SnapshotSuccess:
     """Construct a complete committed result."""
 
     return {
@@ -151,6 +152,7 @@ def make_snapshot_success(snapshot_id: str, doc: str) -> SnapshotSuccess:
         "retry_safe": False,
         "snapshot_id": snapshot_id,
         "doc": doc,
+        "count": count,
     }
 
 
@@ -361,12 +363,14 @@ def parse_snapshot_response(raw_response: object) -> SnapshotResult:
 
     snapshot_id = response.get('snapshot_id')
     doc = response.get('doc')
+    count = response.get('count')
     if (
         _valid_success(response)
         and isinstance(snapshot_id, str) and snapshot_id.strip()
         and isinstance(doc, str) and doc.strip()
+        and isinstance(count, int)
     ):
-        return make_snapshot_success(str(snapshot_id), str(doc))
+        return make_snapshot_success(str(snapshot_id), str(doc), count)
 
     error_code = response.get("error_code")
     error = response.get("error")
@@ -377,7 +381,7 @@ def parse_snapshot_response(raw_response: object) -> SnapshotResult:
         and error_code.strip()
         and isinstance(error, str)
         and error.strip()
-        and 'snapshot_id' not in response and 'doc' not in response
+        and 'snapshot_id' not in response and 'doc' not in response and 'count' not in response
     ):
         if _valid_rejection(response):
             return make_snapshot_failure(

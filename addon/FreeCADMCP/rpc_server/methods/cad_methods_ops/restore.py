@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 from ...._shared.protocol.restore_contract import (
     RestoreCollaborators,
@@ -14,6 +14,7 @@ from ...._shared.protocol.restore_contract import (
     RestoreReadDocument,
     RestoreRequest,
     RestoreResult,
+    RestoreUncertain,
     DocumentName,
     make_restore_failure,
     make_restore_success,
@@ -21,24 +22,9 @@ from ...._shared.protocol.restore_contract import (
 )
 from .restore_mutation import RestoreError, run_restore_native_mutation
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
-    object_label,
-    object_name,
-    object_type_id,
     optional_string,
-    parse_ref,
-    remove_from_container,
-    require_object,
-    resolve_if_exists,
-    snapshot_ring
+    snapshot_ring,
 )
 
 
@@ -48,6 +34,7 @@ class RestoreReceipt:
 
     name: str
     item: object | None
+    snapshot_path: str | None = None
     skipped: bool = False
     extra: object = None
 
@@ -66,49 +53,140 @@ def _failure(error: RestoreError, *, retry_safe: bool = True) -> RestoreFailure:
 
 
 def apply_restore(doc: RestoreDocument, request: RestoreRequest) -> RestoreReceipt:
-    """Restore a snapshot identity without apply-time recompute."""
+    """Resolve a snapshot identity without apply-time recompute or document reload."""
 
     store = snapshot_ring(doc)
-    restored = ""
+    restored_id = ""
+    snapshot_path: str | None = None
+    doc_name = str(getattr(doc, "Name", "") or request.doc_name)
     rows = list(store)
     if request.snapshot_id is None:
         rows = list(reversed(rows))
     for row in rows:
-        candidate: object | None = None
-        if isinstance(row, dict):
-            candidate = row.get("id")
+        if not isinstance(row, dict):
+            continue
+        candidate = row.get("id")
         if not isinstance(candidate, str):
             continue
+        row_doc = row.get("doc")
+        if isinstance(row_doc, str) and row_doc.strip() and row_doc not in {doc_name, str(request.doc_name)}:
+            continue
         if request.snapshot_id is None or candidate == request.snapshot_id:
-            restored = candidate
+            restored_id = candidate
+            path_value = row.get("path")
+            snapshot_path = path_value if isinstance(path_value, str) and path_value.strip() else None
             break
-    if not restored:
+    if not restored_id:
         raise RestoreError("SNAPSHOT_NOT_FOUND", "snapshot not found")
-    return RestoreReceipt(name=restored, item=doc, skipped=False)
+    return RestoreReceipt(
+        name=restored_id,
+        item=doc,
+        snapshot_path=snapshot_path,
+        skipped=False,
+    )
 
 
 def read_restore_result(doc: RestoreReadDocument, receipt: RestoreReceipt) -> RestoreInspection:
-    """Build the public result after the shared mutation recompute."""
+    """Confirm the admitted document is still present before post-commit restore."""
 
-    located: object | None = doc.getObject(receipt.name)
-    if located is None:
-        located = receipt.item
-    if located is None:
-        raise RestoreError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
-        raise RestoreError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-
-    extra = receipt.extra
-
+    doc_name = getattr(doc, "Name", None)
+    if not isinstance(doc_name, str) or not doc_name.strip():
+        raise RestoreError("CREATED_OBJECT_MISSING", "Document is missing after restore apply")
+    count = len(snapshot_ring(doc))
     return RestoreInspection(
         name=RestoreName(receipt.name),
-        label=object_label(located),
-        extra=extra,
+        label=doc_name,
+        extra=count,
     )
+
+
+def _try_document_reload(method: object, snapshot_path: str) -> Literal[True] | RestoreUncertain:
+    if not callable(method):
+        return True
+    try:
+        method(snapshot_path)
+    except TypeError:
+        try:
+            method()
+        except Exception as exc:
+            return make_restore_uncertain(
+                "RESTORE_FAILED",
+                str(exc) or type(exc).__name__,
+                committed=True,
+            )
+    except Exception as exc:
+        return make_restore_uncertain(
+            "RESTORE_FAILED",
+            str(exc) or type(exc).__name__,
+            committed=True,
+        )
+    return True
+
+
+def _load_snapshot_after_commit(
+    collaborators: RestoreCollaborators,
+    doc_name: str,
+    snapshot_path: str,
+    stub_doc: object | None,
+) -> Literal[True] | RestoreUncertain:
+    import os
+
+    if not os.path.isfile(snapshot_path):
+        return make_restore_uncertain(
+            "RESTORE_FAILED",
+            "snapshot file is missing or unreadable",
+            committed=True,
+        )
+    app = getattr(collaborators, "freecad", None)
+    if app is not None:
+        closer = getattr(app, "closeDocument", None)
+        opener = getattr(app, "openDocument", None)
+        if callable(closer) and callable(opener):
+            try:
+                closer(doc_name)
+            except NameError:
+                pass
+            except Exception as exc:
+                return make_restore_uncertain(
+                    "RESTORE_FAILED",
+                    str(exc) or type(exc).__name__,
+                    committed=True,
+                )
+            try:
+                reopened = opener(snapshot_path)
+            except Exception as exc:
+                return make_restore_uncertain(
+                    "RESTORE_FAILED",
+                    str(exc) or type(exc).__name__,
+                    committed=True,
+                )
+            if reopened is None:
+                return make_restore_uncertain(
+                    "RESTORE_FAILED",
+                    f"FreeCAD did not reopen {snapshot_path!r}",
+                    committed=True,
+                )
+            return True
+    live_doc: object | None = None
+    if app is not None:
+        getter = getattr(app, "getDocument", None)
+        if callable(getter):
+            try:
+                live_doc = getter(doc_name)
+            except Exception:
+                live_doc = None
+    if live_doc is None:
+        live_doc = stub_doc
+    if live_doc is None:
+        return True
+    restorer = getattr(live_doc, "restore", None)
+    load_result = _try_document_reload(restorer, snapshot_path)
+    if load_result is not True:
+        return load_result
+    if callable(restorer):
+        return True
+    loader = getattr(live_doc, "load", None)
+    return _try_document_reload(loader, snapshot_path)
 
 
 def build_restore_request(doc_name: object, snapshot_id: object) -> RestoreRequest | RestoreFailure:
@@ -160,7 +238,26 @@ class _RestoreExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_restore_success(restored_id=self.inspected.name, doc=self.request.doc_name)
+        count = self.inspected.extra
+        if not isinstance(count, int):
+            count = 0
+        success = make_restore_success(
+            restored_id=str(self.inspected.name),
+            doc=str(self.request.doc_name),
+            count=count,
+        )
+        receipt = self.created
+        if receipt is None or not isinstance(receipt.snapshot_path, str) or not receipt.snapshot_path:
+            return success
+        load_result = _load_snapshot_after_commit(
+            self.collaborators,
+            str(self.request.doc_name),
+            receipt.snapshot_path,
+            receipt.item,
+        )
+        if load_result is not True:
+            return load_result
+        return success
 
 
 def run_restore(

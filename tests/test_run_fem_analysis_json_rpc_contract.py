@@ -26,12 +26,16 @@ from freecad_mcp.rpc_session import RpcAuthenticationSession
 
 pytestmark = pytest.mark.unit
 _DEFAULT_RESPONSE = object()
+_DEFAULT_ARGUMENTS = {
+    "doc_name": "AgentDocument",
+    "analysis_name": "Analysis",
+    "timeout": 600,
+}
 
 
 class _RecordingFreeCADTransport:
     def __init__(self, response_result=_DEFAULT_RESPONSE) -> None:
         self.requests: list[tuple[str, dict, dict[str, str]]] = []
-        self.extra_headers: list[tuple[str, str]] = []
         self.closed = False
         self.response_result = response_result
 
@@ -41,12 +45,15 @@ class _RecordingFreeCADTransport:
         envelope = request["params"][0]
         body_result = self.response_result
         if body_result is _DEFAULT_RESPONSE:
-            body_result = dict({"contract_version": 1, "success": True, "ok": True, "outcome": "committed", "committed": True, "retry_safe": False, "analysis_name": "Value"}, **{
-                key: envelope["params"][key]
-                for key in envelope["params"]
-                if key in ['analysis_name']
-            })
-            body_result = {"contract_version": 1, "success": True, "ok": True, "outcome": "committed", "committed": True, "retry_safe": False, "analysis_name": "Value"}
+            body_result = {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "committed",
+                "committed": True,
+                "retry_safe": False,
+                "analysis_name": envelope["params"]["analysis_name"],
+            }
         response = {
             "jsonrpc": "2.0",
             "id": request["id"],
@@ -66,15 +73,27 @@ class _RecordingFreeCADTransport:
         self.closed = True
 
 
-def _invoke_registered(monkeypatch, transport, params):
-    connection = FreeCADConnection(host="127.0.0.1", port=9875, mcp_instance_id="agent-mcp-contract")
+def _invoke_registered(monkeypatch, transport, arguments):
+    connection = FreeCADConnection(
+        host="127.0.0.1",
+        port=9875,
+        mcp_instance_id="agent-mcp-contract",
+    )
     session = RpcAuthenticationSession()
-    session.mark_connected("test-session-token", session_id="test-session", expires_at="2099-01-01T00:00:00Z")
+    session.mark_connected(
+        "test-session-token",
+        session_id="test-session",
+        expires_at="2099-01-01T00:00:00Z",
+    )
     configure_rpc_session(connection, session)
     connection.server.transport.close()
     connection.server.transport = transport
     monkeypatch.setattr(tools_advanced_b2, "server_connection", lambda: connection)
-    monkeypatch.setattr(tools_advanced_b2, "server_state", lambda: SimpleNamespace(only_text_feedback=True))
+    monkeypatch.setattr(
+        tools_advanced_b2,
+        "server_state",
+        lambda: SimpleNamespace(only_text_feedback=True),
+    )
     bind_instrumented_fast_mcp(InstrumentedFastMCP)
     mcp = InstrumentedFastMCP("run_fem_analysis-contract")
     exports = {}
@@ -84,8 +103,8 @@ def _invoke_registered(monkeypatch, transport, params):
         async with create_connected_server_and_client_session(mcp._mcp_server) as client:
             listing = await client.list_tools()
             tool = next(tool for tool in listing.tools if tool.name == "run_fem_analysis")
-            assert "doc_name" in tool.inputSchema.get("required", ["doc_name"])
-            return await client.call_tool("run_fem_analysis", params)
+            assert set(tool.inputSchema["required"]) == {"doc_name", "analysis_name"}
+            return await client.call_tool("run_fem_analysis", arguments)
 
     try:
         return asyncio.run(invoke())
@@ -93,10 +112,11 @@ def _invoke_registered(monkeypatch, transport, params):
         connection.disconnect()
 
 
-def test_run_fem_analysis_sends_authenticated_json_rpc_to_freecad(monkeypatch):
+def test_run_fem_analysis_sends_exact_authenticated_json_rpc_values_to_freecad(monkeypatch):
     transport = _RecordingFreeCADTransport()
-    result = _invoke_registered(monkeypatch, transport, {"doc_name": "AgentDocument", "analysis_name": "Value", "timeout": 1})
-    assert result.isError is False or result.structuredContent["data"]["outcome"] in {"committed", "rejected", "uncertain"}
+    result = _invoke_registered(monkeypatch, transport, dict(_DEFAULT_ARGUMENTS))
+
+    assert result.isError is False
     assert len(transport.requests) == 1
     path, request, headers = transport.requests[0]
     assert path == JSON_RPC_HTTP_PATH
@@ -104,17 +124,56 @@ def test_run_fem_analysis_sends_authenticated_json_rpc_to_freecad(monkeypatch):
     assert request["method"] == "invoke_v2"
     envelope = request["params"][0]
     uuid.UUID(envelope["request_id"])
+    assert envelope["protocol_version"] == 2
+    assert envelope["session_token"] == "test-session-token"
     assert envelope["method"] == "run_fem_analysis"
-    assert envelope["params"]["doc_name"] == "AgentDocument"
+    assert envelope["params"] == _DEFAULT_ARGUMENTS
     assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
     assert headers[JSON_RPC_PROTOCOL_HEADER] == JSON_RPC_PROTOCOL_VALUE
     assert transport.closed is True
 
 
+def test_public_route_never_turns_rejection_into_success(monkeypatch):
+    transport = _RecordingFreeCADTransport(
+        {
+            "contract_version": 1,
+            "success": False,
+            "ok": False,
+            "outcome": "rejected",
+            "committed": False,
+            "retry_safe": True,
+            "error_code": "INVALID_ARGUMENT",
+            "error": "invalid",
+        }
+    )
+    result = _invoke_registered(monkeypatch, transport, dict(_DEFAULT_ARGUMENTS))
+    assert result.isError is True
+    assert result.structuredContent["error_code"] == "INVALID_ARGUMENT"
+    assert result.structuredContent["data"]["committed"] is False
+
+
+def test_public_route_marks_committed_but_invalid_response_non_retryable(monkeypatch):
+    payload = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+    }
+    transport = _RecordingFreeCADTransport(payload)
+    result = _invoke_registered(monkeypatch, transport, dict(_DEFAULT_ARGUMENTS))
+    assert result.isError is True
+    assert result.structuredContent["error_code"] == "RUN_FEM_ANALYSIS_COMMITTED_RESPONSE_INVALID"
+    assert result.structuredContent["data"]["outcome"] == "uncertain"
+    assert result.structuredContent["data"]["committed"] is True
+    assert result.structuredContent["data"]["retry_safe"] is False
+
+
 def test_mcp_schema_rejects_non_string_doc_name_before_json_rpc(monkeypatch):
     transport = _RecordingFreeCADTransport()
-    params = dict({"doc_name": "AgentDocument", "analysis_name": "Value", "timeout": 1})
-    params["doc_name"] = 42
-    result = _invoke_registered(monkeypatch, transport, params)
+    arguments = dict(_DEFAULT_ARGUMENTS)
+    arguments["doc_name"] = 42
+    result = _invoke_registered(monkeypatch, transport, arguments)
     assert result.isError is True
     assert transport.requests == []

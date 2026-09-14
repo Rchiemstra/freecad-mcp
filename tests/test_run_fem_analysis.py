@@ -190,12 +190,35 @@ class _CompatibilityAPI:
         )
 
 
+@pytest.fixture(autouse=True)
+def _host_gmsh_tools(monkeypatch):
+    """Host unit tests have no FreeCAD Fem module; apply still must call create_mesh."""
+
+    import sys
+
+    class FakeGmshTools:
+        def __init__(self, mesh):
+            self.mesh = mesh
+
+        def create_mesh(self):
+            return None
+
+    module = SimpleNamespace(GmshTools=FakeGmshTools)
+    monkeypatch.setitem(sys.modules, "femmesh", SimpleNamespace(gmshtools=module))
+    monkeypatch.setitem(sys.modules, "femmesh.gmshtools", module)
+
+
 def _seed(document: _Document) -> None:
     seed = "analysis"
     if seed in {"sheet", "object", "move", "body", "source", "wire", "sketch", "datum", "relink", "analysis", "snapshot"}:
         document.objects["Seed"] = _item("Seed", type_id="App::FeaturePython")
         document.objects["Target"] = _item("Target", type_id="App::FeaturePython")
         document.objects["Body"] = _item("Body", type_id="PartDesign::Body")
+        mesh = _item("Mesh", type_id="Fem::FemMeshShapeBaseObjectPython")
+        mesh.Proxy = SimpleNamespace(Type="Fem::FemMeshGmsh")
+        document.objects["Mesh"] = mesh
+        document.objects["Target"].Group.append(mesh)
+        document.objects["Target"].getParentGroup = lambda: document.objects["Target"]
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
         if seed == "body":
@@ -307,7 +330,8 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     monkeypatch.setattr(subject, "apply_run_fem_analysis", mutate_then_raise)
     result = run_run_fem_analysis(collaborators, "Doc", "Target", 600)
     assert result["success"] is False
-    assert "abort" in events or result["outcome"] in {"rejected", "uncertain"}
+    assert result["outcome"] == "rejected"
+    assert "abort" in events
 
 
 def test_recompute_failure_is_rolled_back():
@@ -396,7 +420,35 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     )
     result = run_run_fem_analysis(collaborators, "Doc", "Target", 600)
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
+
+
+def test_run_fem_analysis_without_gmsh_member_fails():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    document.objects["Target"].Group.clear()
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_run_fem_analysis(collaborators, "Doc", "Target", 600)
+
+    assert result["success"] is False
+    assert result["error_code"] == "GMSH_UNAVAILABLE"
+
+
+def test_run_fem_analysis_type_id_only_gmsh_still_works():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    legacy_mesh = _item("LegacyMesh", type_id="Fem::FemMeshGmsh")
+    document.objects["Target"].Group = [legacy_mesh]
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_run_fem_analysis(collaborators, "Doc", "Target", 600)
+
+    assert result["success"] is True
+    assert result["outcome"] == "committed"
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():
