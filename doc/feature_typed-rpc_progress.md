@@ -80,7 +80,7 @@ Serial integration fix (not a new group): `translate` / `rotate` / `scale` inspe
 | Body regression | Docker `python:3.12` pytest of `ci/qualify_body_create.py` `PYTHON_TESTS` (host `uv run` cannot recreate repo `.venv/lib64`) | **225 passed**. 3 discovery tests failed in that container (`uv` / `mypy` not installed). Official qualify also runs `python -m mypy --no-incremental` via `check_body_create_contract.py`; that mypy gate is **pre-existing red** at `54ded4f` (**137 errors / 63 files**) vs integrated tree (**129 errors / 57 files** after measure `as_float`). No Body pytest regression vs the 225 non-mypy tests. |
 | Contract checks | `ci/run_contract_checks.py` inside Woodpecker `python:3.12` | `activate_document` architecture **passed**; stops at `check_body_create_contract.py` on the same pre-existing discovered-mypy errors (not an integration merge conflict). |
 | Woodpecker lint | `docker run --rm -v C:/Users/Rchie/Music/FreeCAD:/work -w /work python:3.12 sh ci/woodpecker/freecad-mcp-lint.sh` | `compileall` **OK**; pip install **OK**; then same contract/mypy stop (**129 errors / 57 files**). Baseline `54ded4f` was **137 / 63**. |
-| Push | `git push -u origin HEAD` from MCP `feature/typed-rpc` | recorded after push |
+| Push | `git push -u origin HEAD` from MCP `feature/typed-rpc` | **pushed** `e345f4e..3edff98` to `https://github.com/Rchiemstra/freecad-mcp.git` branch `feature/typed-rpc` |
 | Parent submodule | `git ls-tree HEAD tools/mcp/freecad-mcp` in parent | unchanged `e345f4e` (not staged/committed) |
 
 ### Native evidence (authoritative)
