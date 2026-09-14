@@ -170,7 +170,21 @@ class _CreateAssemblyJointExecution:
 def apply_create_assembly_joint(doc: MutationDocument, request: CreateAssemblyJointRequest) -> CreateAssemblyJointReceipt:
     """Apply create_assembly_joint without recomputing or managing a transaction."""
 
-    payload = assembly_actions.create_joint(doc, assembly_name=request.assembly_name, joint_type=request.joint_type, ref1_component=request.ref1_component, ref2_component=request.ref2_component, ref1_element=request.ref1_element, ref2_element=request.ref2_element, ref1_vertex=request.ref1_vertex, ref2_vertex=request.ref2_vertex, label=request.label, solve=request.solve, presolve=request.presolve, properties=request.properties or {})
+    payload = assembly_actions.create_joint(
+        doc,
+        assembly_name=request.assembly_name,
+        joint_type=request.joint_type,
+        ref1_component=request.ref1_component,
+        ref2_component=request.ref2_component,
+        ref1_element=request.ref1_element,
+        ref2_element=request.ref2_element,
+        ref1_vertex=request.ref1_vertex,
+        ref2_vertex=request.ref2_vertex,
+        label=request.label,
+        solve=False,
+        presolve=False,
+        properties=request.properties or {},
+    )
     target = payload.get("joint")
     found = doc.getObject(str(target)) if isinstance(target, str) else None
     return CreateAssemblyJointReceipt(payload=dict(payload), obj=found)

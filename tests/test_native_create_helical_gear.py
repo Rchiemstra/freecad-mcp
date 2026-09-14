@@ -15,8 +15,32 @@ pytestmark = pytest.mark.core
 _KIND = "box"
 
 
-_RUN_ARGS = lambda doc_name, ctx: (doc_name, "Gear", 12, 2.0, 5.0)
-_RUN_ARGS_MISSING = lambda _doc, _ctx: ("MissingNativeDoc", "Gear", 12, 2.0, 5.0)
+_RUN_ARGS = lambda doc_name, ctx: (
+    doc_name,
+    "Gear",
+    6,
+    2.0,
+    1.0,
+    15.0,
+    20.0,
+    0.0,
+    0.0,
+    0.0,
+    4,
+)
+_RUN_ARGS_MISSING = lambda _doc, _ctx: (
+    "MissingNativeDoc",
+    "Gear",
+    6,
+    2.0,
+    1.0,
+    15.0,
+    20.0,
+    0.0,
+    0.0,
+    0.0,
+    4,
+)
 
 
 def test_create_helical_gear_native_success_inspects_after_recompute(monkeypatch):

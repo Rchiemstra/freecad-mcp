@@ -6,14 +6,6 @@ import tempfile
 from pathlib import Path
 
 
-def _try_assembly_api():
-    try:
-        import Assembly  # noqa: F401
-    except Exception:
-        return False
-    return True
-
-
 def prepare_assembly_document(document, kind: str) -> dict[str, str]:
     import FreeCAD
 
@@ -21,8 +13,6 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
     if kind == "assembly":
         return ctx
     if kind == "assembly_with_base":
-        if not _try_assembly_api():
-            return ctx
         from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import assembly_actions
 
         payload = assembly_actions.create_assembly(
@@ -37,8 +27,6 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
         ctx["base"] = base.Name
         return ctx
     if kind == "assembly_with_two_parts":
-        if not _try_assembly_api():
-            return ctx
         from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import assembly_actions
 
         payload = assembly_actions.create_assembly(
@@ -56,8 +44,6 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
         ctx["b"] = part_b.Name
         return ctx
     if kind == "assembly_only":
-        if not _try_assembly_api():
-            return ctx
         from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import assembly_actions
 
         payload = assembly_actions.create_assembly(

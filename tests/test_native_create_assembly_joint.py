@@ -15,8 +15,24 @@ pytestmark = pytest.mark.core
 _KIND = "assembly_with_two_parts"
 
 
-_RUN_ARGS = lambda doc_name, ctx: (doc_name, ctx.get("assembly", "Assembly"), "Fixed", ctx.get("a", "A"), ctx.get("b", "B"))
-_RUN_ARGS_MISSING = lambda _doc, _ctx: ("MissingNativeDoc", "Assembly", "Fixed", "A", "B")
+_RUN_ARGS = lambda doc_name, ctx: (
+    doc_name,
+    ctx.get("assembly", "Assembly"),
+    "Fixed",
+    ctx.get("a", "A"),
+    ctx.get("b", "B"),
+    "Face1",
+    "Face1",
+)
+_RUN_ARGS_MISSING = lambda _doc, _ctx: (
+    "MissingNativeDoc",
+    "Assembly",
+    "Fixed",
+    "A",
+    "B",
+    "Face1",
+    "Face1",
+)
 
 
 def test_create_assembly_joint_native_success_inspects_after_recompute(monkeypatch):

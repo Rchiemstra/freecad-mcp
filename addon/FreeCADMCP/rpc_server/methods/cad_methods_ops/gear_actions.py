@@ -192,15 +192,6 @@ def _maybe_bore(sketch: object, bore_diameter: float) -> None:
             return
 
 
-def _solve_sketch(sketch: object) -> None:
-    solver = getattr(sketch, "solve", None)
-    if callable(solver):
-        try:
-            solver()
-        except Exception:
-            return
-
-
 def _validate_gear_dims(
     *,
     teeth: int,
@@ -433,7 +424,6 @@ def _finish_sketch(
         ),
     )
     _maybe_bore(sketch, bore_diameter)
-    _solve_sketch(sketch)
     setattr(sketch, "Visibility", False)
 
 
@@ -461,7 +451,7 @@ def create_involute_gear(
         clearance=clearance,
         backlash=backlash,
     )
-    samples = max(6, samples_per_flank)
+    samples = max(3, min(samples_per_flank, 4))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, sketch_name or (gear_name + "_Sketch"))
     points = _involute_points(
@@ -527,7 +517,7 @@ def create_helical_gear(
         clearance=clearance,
         backlash=backlash,
     )
-    samples = max(6, samples_per_flank)
+    samples = max(3, min(samples_per_flank, 4))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, gear_name + "_Sketch")
     points = _involute_points(
@@ -600,7 +590,7 @@ def create_spur_gear(
     )
     if root >= outer:
         raise TypedMutationError("INVALID_ARGUMENT", "root radius must be smaller than outer radius")
-    samples = max(3, samples_per_flank)
+    samples = max(3, min(samples_per_flank, 4))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, sketch_name or (gear_name + "_Sketch"))
     points = _spur_profile_points(
