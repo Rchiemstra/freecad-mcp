@@ -81,7 +81,6 @@ def _collaborators(FreeCAD, validator):
     return SimpleNamespace(
         validate_document_invariants=validator,
         commit_native_mutation=bridge.commit_native_mutation,
-        run_fem_analysis=lambda *_a, **_k: {"success": True, "analysis_name": "Analysis"},
     )
 
 

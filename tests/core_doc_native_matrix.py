@@ -19,18 +19,16 @@ def require_native_collaboration() -> None:
 
 def collaborators(FreeCAD, validator):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
+    from addon.FreeCADMCP.rpc_server.parts_library import insert_part_from_library
+    from addon.FreeCADMCP.rpc_server.property_mapper import set_object_property
 
     bridge = CollaborationAPI(document_lookup=FreeCAD.getDocument)
     return SimpleNamespace(
         freecad=FreeCAD,
         validate_document_invariants=validator,
         commit_native_mutation=bridge.commit_native_mutation,
-        insert_part_from_library=lambda doc_name, _path: FreeCAD.getDocument(doc_name).addObject(
-            "App::FeaturePython", "LibraryPart"
-        ),
-        set_object_property=lambda _doc, obj, properties: [
-            setattr(obj, key, value) for key, value in properties.items()
-        ],
+        insert_part_from_library=insert_part_from_library,
+        set_object_property=set_object_property,
     )
 
 
@@ -65,32 +63,27 @@ def check_success(
         document.recompute()
         events.clear()
 
-        original_apply = getattr(subject, f"apply_{op}", None)
-        original_read = getattr(subject, f"read_{op}_result", None)
-        if original_apply is not None and original_read is not None:
-            def tracked_apply(admitted_document, *args, **kwargs):
-                events.append("apply")
-                probe.touch()
-                return original_apply(admitted_document, *args, **kwargs)
+        original_apply = getattr(subject, f"apply_{op}")
+        original_read = getattr(subject, f"read_{op}_result")
 
-            def tracked_read(admitted_document, *args, **kwargs):
-                events.append("inspect")
-                return original_read(admitted_document, *args, **kwargs)
+        def tracked_apply(admitted_document, *args, **kwargs):
+            events.append("apply")
+            probe.touch()
+            return original_apply(admitted_document, *args, **kwargs)
 
-            monkeypatch.setattr(subject, f"apply_{op}", tracked_apply)
-            monkeypatch.setattr(subject, f"read_{op}_result", tracked_read)
+        def tracked_read(admitted_document, *args, **kwargs):
+            events.append("inspect")
+            return original_read(admitted_document, *args, **kwargs)
 
+        monkeypatch.setattr(subject, f"apply_{op}", tracked_apply)
+        monkeypatch.setattr(subject, f"read_{op}_result", tracked_read)
         result = runner(
             collaborators(FreeCAD, lambda _d: events.append("validate")),
             *run_args(document, ctx),
         )
         assert result["success"] is True
         assert result["committed"] is True
-        assert "validate" in events
-        if original_apply is not None:
-            assert "apply" in events
-            assert "recompute" in events
-            assert "inspect" in events
+        assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
         for name in list(FreeCAD.listDocuments()):
             if name.startswith("MCPTyped") or name == document.Name:
