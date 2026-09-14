@@ -1,8 +1,8 @@
 """
 Tests for P3 3D feature operations.
 
-Layer-A: Schema / error propagation
-Layer-B: Code-fragment and API-call checks
+Layer-A: Schema / error propagation for typed JSON-RPC
+Layer-B: Code-fragment and API-call checks against legacy execute-code
 """
 from __future__ import annotations
 
@@ -21,6 +21,17 @@ from freecad_mcp.operations.p3_features import (
     revolve_feature_operation,
     sweep_feature_operation,
 )
+from freecad_mcp.operations.p3_features_legacy import (
+    boolean_difference_operation as boolean_difference_legacy,
+    boolean_intersection_operation as boolean_intersection_legacy,
+    boolean_union_operation as boolean_union_legacy,
+    chamfer_feature_operation as chamfer_feature_legacy,
+    fillet_feature_operation as fillet_feature_legacy,
+    helical_sweep_feature_operation as helical_sweep_feature_legacy,
+    loft_feature_operation as loft_feature_legacy,
+    revolve_feature_operation as revolve_feature_legacy,
+    sweep_feature_operation as sweep_feature_legacy,
+)
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
@@ -31,10 +42,35 @@ def _ok_conn():
     return conn
 
 
-def _fail_conn():
+def _typed_ok(op: str, feature: str):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": False, "error": "oops"}
+    getattr(conn, op).return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "feature": feature,
+        "label": feature,
+    }
+    return conn
+
+
+def _typed_fail(op: str, error: str = "oops"):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    getattr(conn, op).return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "OPERATION_FAILED",
+        "error": error,
+    }
     return conn
 
 
@@ -53,41 +89,41 @@ def _text(response) -> str:
 
 class TestRevolveFeature:
     def test_success(self):
-        resp = revolve_feature_operation(_ok_conn(), True, "Doc", "Sketch", "Rev1")
+        resp = revolve_feature_operation(_typed_ok("revolve_feature", "Rev1"), True, "Doc", "Sketch", "Rev1")
         assert _text(resp)
 
     def test_failure(self):
-        resp = revolve_feature_operation(_fail_conn(), True, "Doc", "Sketch", "Rev1")
+        resp = revolve_feature_operation(_typed_fail("revolve_feature"), True, "Doc", "Sketch", "Rev1")
         assert "oops" in _text(resp) or "Failed" in _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        revolve_feature_operation(conn, True, "Doc", "Sketch", "Rev1")
+        revolve_feature_legacy(conn, True, "Doc", "Sketch", "Rev1")
         assert_code_compiles(_code(conn))
 
     def test_revolution_type(self):
         conn = _ok_conn()
-        revolve_feature_operation(conn, True, "Doc", "Sketch", "Rev1")
+        revolve_feature_legacy(conn, True, "Doc", "Sketch", "Rev1")
         assert_code_contains(_code(conn), "PartDesign::Revolution")
 
     def test_angle_in_code(self):
         conn = _ok_conn()
-        revolve_feature_operation(conn, True, "Doc", "Sketch", "Rev1", angle=180.0)
+        revolve_feature_legacy(conn, True, "Doc", "Sketch", "Rev1", angle=180.0)
         assert_code_contains(_code(conn), "180.0")
 
     def test_axis_in_code(self):
         conn = _ok_conn()
-        revolve_feature_operation(conn, True, "Doc", "Sketch", "Rev1", axis="Z_Axis")
+        revolve_feature_legacy(conn, True, "Doc", "Sketch", "Rev1", axis="Z_Axis")
         assert_code_contains(_code(conn), "Z_Axis")
 
     def test_sketch_lookup(self):
         conn = _ok_conn()
-        revolve_feature_operation(conn, True, "Doc", "MySketch", "Rev1")
+        revolve_feature_legacy(conn, True, "Doc", "MySketch", "Rev1")
         assert_code_contains(_code(conn), "MySketch")
 
     def test_recompute_called(self):
         conn = _ok_conn()
-        revolve_feature_operation(conn, True, "Doc", "Sketch", "Rev1")
+        revolve_feature_legacy(conn, True, "Doc", "Sketch", "Rev1")
         assert_code_contains(_code(conn), "_doc.recompute()")
 
 
@@ -99,30 +135,30 @@ class TestLoftFeature:
     _sketches = ["Sketch1", "Sketch2", "Sketch3"]
 
     def test_success(self):
-        resp = loft_feature_operation(_ok_conn(), True, "Doc", self._sketches, "Loft1")
+        resp = loft_feature_operation(_typed_ok("loft_feature", "Loft1"), True, "Doc", self._sketches, "Loft1")
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        loft_feature_operation(conn, True, "Doc", self._sketches, "Loft1")
+        loft_feature_legacy(conn, True, "Doc", self._sketches, "Loft1")
         assert_code_compiles(_code(conn))
 
     def test_loft_type(self):
         conn = _ok_conn()
-        loft_feature_operation(conn, True, "Doc", self._sketches, "Loft1")
+        loft_feature_legacy(conn, True, "Doc", self._sketches, "Loft1")
         assert_code_contains(_code(conn), "AdditiveLoft")
 
     def test_sections_set(self):
         conn = _ok_conn()
-        loft_feature_operation(conn, True, "Doc", self._sketches, "Loft1")
+        loft_feature_legacy(conn, True, "Doc", self._sketches, "Loft1")
         assert_code_contains(_code(conn), "Sections")
 
     def test_sketch_names_in_code(self):
         conn = _ok_conn()
-        loft_feature_operation(conn, True, "Doc", self._sketches, "Loft1")
+        loft_feature_legacy(conn, True, "Doc", self._sketches, "Loft1")
         code = _code(conn)
-        for s in self._sketches:
-            assert_code_contains(code, s)
+        for name in self._sketches:
+            assert_code_contains(code, name)
 
 
 # ---------------------------------------------------------------------------
@@ -131,22 +167,22 @@ class TestLoftFeature:
 
 class TestSweepFeature:
     def test_success(self):
-        resp = sweep_feature_operation(_ok_conn(), True, "Doc", "Profile", "Spine", "Sweep1")
+        resp = sweep_feature_operation(_typed_ok("sweep_feature", "Sweep1"), True, "Doc", "Profile", "Spine", "Sweep1")
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        sweep_feature_operation(conn, True, "Doc", "Profile", "Spine", "Sweep1")
+        sweep_feature_legacy(conn, True, "Doc", "Profile", "Spine", "Sweep1")
         assert_code_compiles(_code(conn))
 
     def test_pipe_type(self):
         conn = _ok_conn()
-        sweep_feature_operation(conn, True, "Doc", "Profile", "Spine", "Sweep1")
+        sweep_feature_legacy(conn, True, "Doc", "Profile", "Spine", "Sweep1")
         assert_code_contains(_code(conn), "AdditivePipe")
 
     def test_profile_and_spine_in_code(self):
         conn = _ok_conn()
-        sweep_feature_operation(conn, True, "Doc", "MyProfile", "MySpine", "Sweep1")
+        sweep_feature_legacy(conn, True, "Doc", "MyProfile", "MySpine", "Sweep1")
         code = _code(conn)
         assert_code_contains(code, "MyProfile", "MySpine")
 
@@ -158,28 +194,28 @@ class TestSweepFeature:
 class TestHelicalSweepFeature:
     def test_success(self):
         resp = helical_sweep_feature_operation(
-            _ok_conn(), True, "Doc", "Profile", "Helix1", 2.0, 10.0, 5.0
+            _typed_ok("helical_sweep_feature", "Helix1"), True, "Doc", "Profile", "Helix1", 2.0, 10.0, 5.0
         )
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        helical_sweep_feature_operation(conn, True, "Doc", "Profile", "Helix1", 2.0, 10.0, 5.0)
+        helical_sweep_feature_legacy(conn, True, "Doc", "Profile", "Helix1", 2.0, 10.0, 5.0)
         assert_code_compiles(_code(conn))
 
     def test_helix_type(self):
         conn = _ok_conn()
-        helical_sweep_feature_operation(conn, True, "Doc", "Profile", "Helix1", 2.0, 10.0, 5.0)
+        helical_sweep_feature_legacy(conn, True, "Doc", "Profile", "Helix1", 2.0, 10.0, 5.0)
         assert_code_contains(_code(conn), "AdditiveHelix")
 
     def test_pitch_in_code(self):
         conn = _ok_conn()
-        helical_sweep_feature_operation(conn, True, "Doc", "Profile", "Helix1", 3.5, 10.0, 5.0)
+        helical_sweep_feature_legacy(conn, True, "Doc", "Profile", "Helix1", 3.5, 10.0, 5.0)
         assert_code_contains(_code(conn), "3.5")
 
     def test_height_in_code(self):
         conn = _ok_conn()
-        helical_sweep_feature_operation(conn, True, "Doc", "Profile", "Helix1", 2.0, 20.0, 5.0)
+        helical_sweep_feature_legacy(conn, True, "Doc", "Profile", "Helix1", 2.0, 20.0, 5.0)
         assert_code_contains(_code(conn), "20.0")
 
 
@@ -189,22 +225,24 @@ class TestHelicalSweepFeature:
 
 class TestFilletFeature:
     def test_success(self):
-        resp = fillet_feature_operation(_ok_conn(), True, "Doc", "Body1", ["Edge1", "Edge2"], 1.0)
+        resp = fillet_feature_operation(
+            _typed_ok("fillet_feature", "Fillet1"), True, "Doc", "Pad", "Fillet1", 1.0, ["Edge1", "Edge2"]
+        )
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        fillet_feature_operation(conn, True, "Doc", "Body1", ["Edge1"], 1.0)
+        fillet_feature_legacy(conn, True, "Doc", "Pad", "Fillet1", 1.0, ["Edge1"])
         assert_code_compiles(_code(conn))
 
     def test_fillet_type(self):
         conn = _ok_conn()
-        fillet_feature_operation(conn, True, "Doc", "Body1", ["Edge1"], 1.0)
+        fillet_feature_legacy(conn, True, "Doc", "Pad", "Fillet1", 1.0, ["Edge1"])
         assert_code_contains(_code(conn), "Fillet")
 
     def test_radius_in_code(self):
         conn = _ok_conn()
-        fillet_feature_operation(conn, True, "Doc", "Body1", ["Edge1"], 2.5)
+        fillet_feature_legacy(conn, True, "Doc", "Pad", "Fillet1", 2.5, ["Edge1"])
         assert_code_contains(_code(conn), "2.5")
 
 
@@ -214,22 +252,24 @@ class TestFilletFeature:
 
 class TestChamferFeature:
     def test_success(self):
-        resp = chamfer_feature_operation(_ok_conn(), True, "Doc", "Body1", ["Edge1"], 1.0)
+        resp = chamfer_feature_operation(
+            _typed_ok("chamfer_feature", "Chamfer1"), True, "Doc", "Pad", "Chamfer1", 1.0, ["Edge1"]
+        )
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        chamfer_feature_operation(conn, True, "Doc", "Body1", ["Edge1"], 1.0)
+        chamfer_feature_legacy(conn, True, "Doc", "Pad", "Chamfer1", 1.0, ["Edge1"])
         assert_code_compiles(_code(conn))
 
     def test_chamfer_type(self):
         conn = _ok_conn()
-        chamfer_feature_operation(conn, True, "Doc", "Body1", ["Edge1"], 1.0)
+        chamfer_feature_legacy(conn, True, "Doc", "Pad", "Chamfer1", 1.0, ["Edge1"])
         assert_code_contains(_code(conn), "Chamfer")
 
     def test_size_in_code(self):
         conn = _ok_conn()
-        chamfer_feature_operation(conn, True, "Doc", "Body1", ["Edge1"], 3.0)
+        chamfer_feature_legacy(conn, True, "Doc", "Pad", "Chamfer1", 3.0, ["Edge1"])
         assert_code_contains(_code(conn), "3.0")
 
 
@@ -239,22 +279,22 @@ class TestChamferFeature:
 
 class TestBooleanUnion:
     def test_success(self):
-        resp = boolean_union_operation(_ok_conn(), True, "Doc", "Base1", "Tool1", "Union1")
+        resp = boolean_union_operation(_typed_ok("boolean_union", "Union1"), True, "Doc", "Base1", "Tool1", "Union1")
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        boolean_union_operation(conn, True, "Doc", "Base1", "Tool1", "Union1")
+        boolean_union_legacy(conn, True, "Doc", "Base1", "Tool1", "Union1")
         assert_code_compiles(_code(conn))
 
     def test_fuse_type(self):
         conn = _ok_conn()
-        boolean_union_operation(conn, True, "Doc", "Base1", "Tool1", "Union1")
+        boolean_union_legacy(conn, True, "Doc", "Base1", "Tool1", "Union1")
         assert_code_contains(_code(conn), "Part::Fuse")
 
     def test_base_and_tool_in_code(self):
         conn = _ok_conn()
-        boolean_union_operation(conn, True, "Doc", "Obj_A", "Obj_B", "Union1")
+        boolean_union_legacy(conn, True, "Doc", "Obj_A", "Obj_B", "Union1")
         code = _code(conn)
         assert_code_contains(code, "Obj_A", "Obj_B")
 
@@ -265,17 +305,19 @@ class TestBooleanUnion:
 
 class TestBooleanDifference:
     def test_success(self):
-        resp = boolean_difference_operation(_ok_conn(), True, "Doc", "Base1", "Tool1", "Cut1")
+        resp = boolean_difference_operation(
+            _typed_ok("boolean_difference", "Cut1"), True, "Doc", "Base1", "Tool1", "Cut1"
+        )
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        boolean_difference_operation(conn, True, "Doc", "Base1", "Tool1", "Cut1")
+        boolean_difference_legacy(conn, True, "Doc", "Base1", "Tool1", "Cut1")
         assert_code_compiles(_code(conn))
 
     def test_cut_type(self):
         conn = _ok_conn()
-        boolean_difference_operation(conn, True, "Doc", "Base1", "Tool1", "Cut1")
+        boolean_difference_legacy(conn, True, "Doc", "Base1", "Tool1", "Cut1")
         assert_code_contains(_code(conn), "Part::Cut")
 
 
@@ -285,15 +327,17 @@ class TestBooleanDifference:
 
 class TestBooleanIntersection:
     def test_success(self):
-        resp = boolean_intersection_operation(_ok_conn(), True, "Doc", "Base1", "Tool1", "Common1")
+        resp = boolean_intersection_operation(
+            _typed_ok("boolean_intersection", "Common1"), True, "Doc", "Base1", "Tool1", "Common1"
+        )
         assert _text(resp)
 
     def test_compiles(self):
         conn = _ok_conn()
-        boolean_intersection_operation(conn, True, "Doc", "Base1", "Tool1", "Common1")
+        boolean_intersection_legacy(conn, True, "Doc", "Base1", "Tool1", "Common1")
         assert_code_compiles(_code(conn))
 
     def test_common_type(self):
         conn = _ok_conn()
-        boolean_intersection_operation(conn, True, "Doc", "Base1", "Tool1", "Common1")
+        boolean_intersection_legacy(conn, True, "Doc", "Base1", "Tool1", "Common1")
         assert_code_contains(_code(conn), "Part::Common")

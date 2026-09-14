@@ -27,7 +27,7 @@ from freecad_mcp.operations.core import (
     pad_feature_operation,
     pocket_feature_operation,
 )
-from freecad_mcp.operations.p3_features import (
+from freecad_mcp.operations.p3_features_legacy import (
     helical_sweep_feature_operation,
     loft_feature_operation,
     sweep_feature_operation,
