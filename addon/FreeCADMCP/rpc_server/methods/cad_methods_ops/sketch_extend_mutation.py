@@ -143,7 +143,7 @@ def run_sketch_extend_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchExtendError)
-                else SketchExtendError("SKETCH_EXTEND_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchExtendError("SKETCH_EXTEND_FAILED", str(exc) or type(exc).__name__)
             )
             raise _AbortSketchExtendMutation from exc
 
@@ -161,7 +161,7 @@ def run_sketch_extend_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchExtendError)
-                else SketchExtendError("SKETCH_EXTEND_RESULT_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchExtendError("SKETCH_EXTEND_RESULT_FAILED", str(exc) or type(exc).__name__)
             )
             return False
         try:
@@ -169,7 +169,7 @@ def run_sketch_extend_native_mutation(
         except Exception as exc:
             state.failure = SketchExtendError(
                 "DOCUMENT_HEALTH_DEGRADED",
-                str({exc}) or type({exc}).__name__,
+                str(exc) or type(exc).__name__,
             )
             return False
         state.postcondition_passed = True
@@ -190,13 +190,13 @@ def run_sketch_extend_native_mutation(
             )
         return make_sketch_extend_uncertain(
             "SKETCH_EXTEND_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     except Exception as exc:
         return make_sketch_extend_uncertain(
             "SKETCH_EXTEND_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     return _sketch_extend_native_result(native_result, state)

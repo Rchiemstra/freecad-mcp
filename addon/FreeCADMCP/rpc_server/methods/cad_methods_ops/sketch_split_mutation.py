@@ -143,7 +143,7 @@ def run_sketch_split_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchSplitError)
-                else SketchSplitError("SKETCH_SPLIT_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchSplitError("SKETCH_SPLIT_FAILED", str(exc) or type(exc).__name__)
             )
             raise _AbortSketchSplitMutation from exc
 
@@ -161,7 +161,7 @@ def run_sketch_split_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchSplitError)
-                else SketchSplitError("SKETCH_SPLIT_RESULT_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchSplitError("SKETCH_SPLIT_RESULT_FAILED", str(exc) or type(exc).__name__)
             )
             return False
         try:
@@ -169,7 +169,7 @@ def run_sketch_split_native_mutation(
         except Exception as exc:
             state.failure = SketchSplitError(
                 "DOCUMENT_HEALTH_DEGRADED",
-                str({exc}) or type({exc}).__name__,
+                str(exc) or type(exc).__name__,
             )
             return False
         state.postcondition_passed = True
@@ -190,13 +190,13 @@ def run_sketch_split_native_mutation(
             )
         return make_sketch_split_uncertain(
             "SKETCH_SPLIT_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     except Exception as exc:
         return make_sketch_split_uncertain(
             "SKETCH_SPLIT_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     return _sketch_split_native_result(native_result, state)

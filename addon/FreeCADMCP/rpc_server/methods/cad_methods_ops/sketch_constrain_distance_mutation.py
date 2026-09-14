@@ -143,7 +143,7 @@ def run_sketch_constrain_distance_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchConstrainDistanceError)
-                else SketchConstrainDistanceError("SKETCH_CONSTRAIN_DISTANCE_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchConstrainDistanceError("SKETCH_CONSTRAIN_DISTANCE_FAILED", str(exc) or type(exc).__name__)
             )
             raise _AbortSketchConstrainDistanceMutation from exc
 
@@ -161,7 +161,7 @@ def run_sketch_constrain_distance_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchConstrainDistanceError)
-                else SketchConstrainDistanceError("SKETCH_CONSTRAIN_DISTANCE_RESULT_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchConstrainDistanceError("SKETCH_CONSTRAIN_DISTANCE_RESULT_FAILED", str(exc) or type(exc).__name__)
             )
             return False
         try:
@@ -169,7 +169,7 @@ def run_sketch_constrain_distance_native_mutation(
         except Exception as exc:
             state.failure = SketchConstrainDistanceError(
                 "DOCUMENT_HEALTH_DEGRADED",
-                str({exc}) or type({exc}).__name__,
+                str(exc) or type(exc).__name__,
             )
             return False
         state.postcondition_passed = True
@@ -190,13 +190,13 @@ def run_sketch_constrain_distance_native_mutation(
             )
         return make_sketch_constrain_distance_uncertain(
             "SKETCH_CONSTRAIN_DISTANCE_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     except Exception as exc:
         return make_sketch_constrain_distance_uncertain(
             "SKETCH_CONSTRAIN_DISTANCE_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     return _sketch_constrain_distance_native_result(native_result, state)

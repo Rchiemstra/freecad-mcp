@@ -68,12 +68,12 @@ class FakePart:
     def ArcOfCircle(self, circle: object, start: float, end: float) -> SimpleNamespace:
         return SimpleNamespace(kind="arc", circle=circle, start=start, end=end)
 
-    def Ellipse(self, major_pt: object, minor_radius: float, center: object) -> SimpleNamespace:
+    def Ellipse(self, center: object, major_radius: float, minor_radius: float) -> SimpleNamespace:
         return SimpleNamespace(
             kind="ellipse",
-            major_pt=major_pt,
-            minor_radius=minor_radius,
             center=center,
+            major_radius=major_radius,
+            minor_radius=minor_radius,
         )
 
     def ArcOfEllipse(self, ellipse: object, start: float, end: float) -> SimpleNamespace:
@@ -124,6 +124,15 @@ class FakeSketch:
     def ConstraintCount(self) -> int:
         return len(self.constraints)
 
+    @property
+    def Constraints(self) -> list[object]:
+        return self.constraints
+
+    def getPoint(self, geo_index: int, pos: int) -> FakeVector:
+        if geo_index <= 0:
+            return FakeVector(0.0, 0.0) if int(pos) == 1 else FakeVector(10.0, 0.0)
+        return FakeVector(10.0, 0.0) if int(pos) == 1 else FakeVector(10.0, 10.0)
+
     def isDerivedFrom(self, type_name: str) -> bool:
         return self.TypeId == "Sketcher::SketchObject" and type_name == "Sketcher::SketchObject"
 
@@ -170,17 +179,11 @@ class FakeSketch:
         if self.fail_after_edit:
             raise RuntimeError("FreeCAD failed after mutating the sketch")
 
-    def fillet(
-        self,
-        geo1: int,
-        geo2: int,
-        point1: object,
-        point2: object,
-        radius: float,
-        trim: bool,
-        create_point: bool,
-    ) -> None:
-        self.fillets.append((geo1, geo2, radius, trim, create_point))
+    def fillet(self, geo1: int, geo2: int | float, *rest: object, **_kwargs: object) -> None:
+        if len(rest) == 1 and not isinstance(rest[0], bool):
+            self.fillets.append((geo1, geo2, rest[0]))
+        else:
+            self.fillets.append((geo1, geo2, *rest))
         if not self.events or self.events[-1] != "apply":
             self.events.append("apply")
         if self.fail_after_edit:

@@ -130,6 +130,7 @@ def test_failed_validation_aborts_before_commit():
 
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
+    assert result["error"] == "document health degraded"
     assert "commit" not in events
 
 

@@ -143,7 +143,7 @@ def run_sketch_add_polyline_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchAddPolylineError)
-                else SketchAddPolylineError("SKETCH_ADD_POLYLINE_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchAddPolylineError("SKETCH_ADD_POLYLINE_FAILED", str(exc) or type(exc).__name__)
             )
             raise _AbortSketchAddPolylineMutation from exc
 
@@ -161,7 +161,7 @@ def run_sketch_add_polyline_native_mutation(
             state.failure = (
                 exc
                 if isinstance(exc, SketchAddPolylineError)
-                else SketchAddPolylineError("SKETCH_ADD_POLYLINE_RESULT_FAILED", str({exc}) or type({exc}).__name__)
+                else SketchAddPolylineError("SKETCH_ADD_POLYLINE_RESULT_FAILED", str(exc) or type(exc).__name__)
             )
             return False
         try:
@@ -169,7 +169,7 @@ def run_sketch_add_polyline_native_mutation(
         except Exception as exc:
             state.failure = SketchAddPolylineError(
                 "DOCUMENT_HEALTH_DEGRADED",
-                str({exc}) or type({exc}).__name__,
+                str(exc) or type(exc).__name__,
             )
             return False
         state.postcondition_passed = True
@@ -190,13 +190,13 @@ def run_sketch_add_polyline_native_mutation(
             )
         return make_sketch_add_polyline_uncertain(
             "SKETCH_ADD_POLYLINE_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     except Exception as exc:
         return make_sketch_add_polyline_uncertain(
             "SKETCH_ADD_POLYLINE_NATIVE_EXCEPTION",
-            str({exc}) or type({exc}).__name__,
+            str(exc) or type(exc).__name__,
             committed=None,
         )
     return _sketch_add_polyline_native_result(native_result, state)
