@@ -61,8 +61,7 @@ def apply_boolean_union(doc: FeatureDocument, request: BooleanUnionRequest) -> B
         created = create_feature(doc, None, 'Part::Fuse', request.result_name)
         set_attr(created, "Base", first)
         set_attr(created, "Tool", second)
-        set_attr(first, "Visibility", False)
-        set_attr(second, "Visibility", False)
+        set_attr(created, "Refine", False)
         return BooleanUnionReceipt(name=str(created.Name), feature=created)
     except BooleanUnionError:
         raise
