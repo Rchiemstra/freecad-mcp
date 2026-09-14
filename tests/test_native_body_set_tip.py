@@ -487,18 +487,20 @@ def test_body_set_tip_native_failure_isolated_and_healthy_rollback_recovers():
         failed = run_body_set_tip(
             collaborators, failed_document.Name, failed_body.Name, failed_pocket.Name
         )
+        assert failed["success"] is False
+        assert failed["rollback_succeeded"] is True
+        assert failed_body.Tip is failed_pad
+
         isolated = run_body_set_tip(
             collaborators, healthy_document.Name, healthy_body.Name, healthy_pocket.Name
         )
+        assert isolated["success"] is True
+        assert healthy_body.Tip is healthy_pocket
+
         rejected_names.clear()
         recovered = run_body_set_tip(
             collaborators, failed_document.Name, failed_body.Name, failed_pocket.Name
         )
-
-        assert failed["success"] is False
-        assert failed_body.Tip is failed_pad
-        assert isolated["success"] is True
-        assert healthy_body.Tip is healthy_pocket
         assert recovered["success"] is True
         assert failed_body.Tip is failed_pocket
     finally:
