@@ -54,6 +54,42 @@ def _called_names(node: ast.AST) -> list[str]:
     return names
 
 
+def _is_invoke_call(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and (
+        (isinstance(node.func, ast.Name) and node.func.id == "invoke")
+        or (isinstance(node.func, ast.Attribute) and node.func.attr == "invoke")
+    )
+
+
+def _checks_executor_success(apply_closure: ast.FunctionDef) -> bool:
+    for node in ast.walk(apply_closure):
+        if not isinstance(node, ast.If):
+            continue
+        for compare in ast.walk(node.test):
+            if not isinstance(compare, ast.Compare):
+                continue
+            for op, comparator in zip(compare.ops, compare.comparators):
+                if isinstance(op, ast.IsNot) and isinstance(comparator, ast.Constant) and comparator.value is True:
+                    return True
+    return False
+
+
+def _scan_apply_executor_invoke_gate(apply_closure: ast.FunctionDef) -> list[str]:
+    violations: list[str] = []
+    if "invoke" not in _called_names(apply_closure):
+        violations.append("RUN_FEM_ANALYSIS016 apply must invoke the FEM executor collaborator")
+    invokes_assigned = any(
+        isinstance(node, ast.Assign) and _is_invoke_call(node.value) for node in ast.walk(apply_closure)
+    )
+    if not invokes_assigned:
+        violations.append("RUN_FEM_ANALYSIS017 apply must assign the invoke(...) result before checking success")
+    if not _checks_executor_success(apply_closure):
+        violations.append("RUN_FEM_ANALYSIS018 apply must reject executor results unless success is True")
+    if not any(isinstance(node, ast.Raise) for node in ast.walk(apply_closure)):
+        violations.append("RUN_FEM_ANALYSIS019 apply must raise when FEM executor execution fails")
+    return violations
+
+
 def _scan_leaf(source: str) -> list[str]:
     tree = ast.parse(source, filename=_LEAF)
     apply_function = _function(tree, "apply_run_fem_analysis")
@@ -85,6 +121,7 @@ def _scan_leaf(source: str) -> list[str]:
     postcondition = call.args[3] if len(call.args) > 3 else None
     if not (isinstance(postcondition, ast.Attribute) and postcondition.attr == "inspect"):
         violations.append("RUN_FEM_ANALYSIS004 missing typed postcondition=inspect")
+    violations.extend(_scan_apply_executor_invoke_gate(apply_closure))
     return violations
 
 

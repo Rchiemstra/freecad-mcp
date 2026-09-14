@@ -257,6 +257,43 @@ def test_executor_failure_dict_aborts_before_commit():
     assert result.get("native_status") == "ApplyFailed"
 
 
+def test_recompute_probe_failure_only_after_executor_success(monkeypatch):
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+    probe_phase = {"armed": False}
+
+    def executor_with_inner_recompute(*_args, **_kwargs):
+        document.recompute()
+        return {"success": True}
+
+    collaborators.run_fem_analysis = executor_with_inner_recompute
+    original_apply = subject._RunFemAnalysisExecution.apply
+    original_recompute = document.recompute
+
+    def guarded_recompute():
+        if probe_phase["armed"]:
+            events.append("coordinator_recompute")
+            raise RuntimeError("coordinator recompute failed")
+        events.append("executor_recompute")
+        original_recompute()
+
+    def arm_probe_after_executor(self, doc):
+        original_apply(self, doc)
+        probe_phase["armed"] = True
+
+    monkeypatch.setattr(document, "recompute", guarded_recompute)
+    monkeypatch.setattr(subject._RunFemAnalysisExecution, "apply", arm_probe_after_executor)
+
+    result = run_run_fem_analysis(collaborators, "Doc", "Target", 600)
+
+    assert result["success"] is False
+    assert result.get("native_status") == "RecomputeFailed"
+    assert events.count("executor_recompute") == 1
+    assert "coordinator_recompute" in events
+
+
 def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     events: list[str] = []
     document = _Document(events)

@@ -89,6 +89,18 @@ def _require_fem_executor_prereqs(document, analysis) -> None:
         pytest.fail(f"FEM executor prerequisites failed for native qualification: {prereq_msg}")
 
 
+def _wrap_execution_apply(monkeypatch, subject, after_executor):
+    """Arm recompute probes only after identity apply and FEM executor complete."""
+
+    original_apply = subject._RunFemAnalysisExecution.apply
+
+    def wrapped_apply(self, doc):
+        original_apply(self, doc)
+        after_executor()
+
+    monkeypatch.setattr(subject._RunFemAnalysisExecution, "apply", wrapped_apply)
+
+
 def _collaborators(FreeCAD, validator):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
     from addon.FreeCADMCP.rpc_server.fem_executor import run_fem_analysis
@@ -200,19 +212,19 @@ def test_run_fem_analysis_native_success_inspects_after_recompute(monkeypatch):
     probe.Proxy = RecomputeProbe()
     _prepare(document)
     events.clear()
-    original_apply = subject.apply_run_fem_analysis
+    original_apply = subject._RunFemAnalysisExecution.apply
     original_read = subject.read_run_fem_analysis_result
 
-    def tracked_apply(admitted, request):
+    def tracked_apply(self, doc):
         events.append("apply")
+        original_apply(self, doc)
         probe.touch()
-        return original_apply(admitted, request)
 
     def tracked_read(admitted, receipt):
         events.append("inspect")
         return original_read(admitted, receipt)
 
-    monkeypatch.setattr(subject, "apply_run_fem_analysis", tracked_apply)
+    monkeypatch.setattr(subject._RunFemAnalysisExecution, "apply", tracked_apply)
     monkeypatch.setattr(subject, "read_run_fem_analysis_result", tracked_read)
     try:
         result = subject.run_run_fem_analysis(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Target", 600)
@@ -289,15 +301,11 @@ def test_run_fem_analysis_native_recompute_failure_rolls_back(monkeypatch):
     probe.Proxy = proxy
     _prepare(document)
     state_before = _model_state(document)
-    original = subject.apply_run_fem_analysis
-
-    def arm(admitted, request):
-        receipt = original(admitted, request)
+    def arm_probe():
         proxy.armed = True
         probe.touch()
-        return receipt
 
-    monkeypatch.setattr(subject, "apply_run_fem_analysis", arm)
+    _wrap_execution_apply(monkeypatch, subject, arm_probe)
     try:
         result = subject.run_run_fem_analysis(_collaborators(FreeCAD, lambda _d: None), document.Name, "Target", 600)
         assert result["success"] is False
@@ -326,15 +334,11 @@ def test_run_fem_analysis_native_rollback_failure_is_uncertain_and_fences(monkey
     probe = document.addObject("App::FeaturePython", "PersistentFailureProbe")
     probe.Proxy = proxy
     _prepare(document)
-    original = subject.apply_run_fem_analysis
-
-    def arm(admitted, request):
-        receipt = original(admitted, request)
+    def arm_probe():
         proxy.armed = True
         probe.touch()
-        return receipt
 
-    monkeypatch.setattr(subject, "apply_run_fem_analysis", arm)
+    _wrap_execution_apply(monkeypatch, subject, arm_probe)
     collaborators = _collaborators(FreeCAD, lambda _d: None)
     try:
         result = subject.run_run_fem_analysis(collaborators, document.Name, "Target", 600)
