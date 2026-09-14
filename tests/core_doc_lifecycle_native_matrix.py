@@ -82,7 +82,6 @@ def check_create_document_validation_failure() -> None:
         document = original_new(name, *args, **kwargs)
         if name == doc_name:
             admitted_holder["document"] = document
-            admitted_holder["before_objects"] = tuple(obj.Name for obj in document.Objects)
         return document
 
     FreeCAD.newDocument = capturing_new
@@ -94,12 +93,11 @@ def check_create_document_validation_failure() -> None:
             ),
             doc_name,
         )
-        admitted = admitted_holder.get("document")
-        assert admitted is not None
+        assert admitted_holder.get("document") is not None
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
         assert result["rollback_succeeded"] is True
-        assert tuple(obj.Name for obj in admitted.Objects) == admitted_holder["before_objects"]
+        assert doc_name not in FreeCAD.listDocuments()
     finally:
         FreeCAD.newDocument = original_new
         if doc_name in FreeCAD.listDocuments():
