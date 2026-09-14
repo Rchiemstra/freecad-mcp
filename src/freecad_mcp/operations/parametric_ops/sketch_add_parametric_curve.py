@@ -8,6 +8,7 @@ from ..._shared.protocol.sketch_add_parametric_curve_contract import (
     SketchAddParametricCurveRequest,
     DocumentName,
     SketchName,
+    make_sketch_add_parametric_curve_failure,
     make_sketch_add_parametric_curve_uncertain,
     parse_sketch_add_parametric_curve_response,
 )
@@ -27,6 +28,26 @@ def sketch_add_parametric_curve_operation(
     samples: int = 100,
     construction: bool = False,
 ) -> CallToolResult:
+    if samples < 10 or samples > 2000:
+        failure = make_sketch_add_parametric_curve_failure(
+            "INVALID_ARGUMENT",
+            "samples must be between 10 and 2000",
+        )
+        return tool_fail(
+            f"Failed to run sketch_add_parametric_curve: {failure['error']}",
+            structured=dict(failure),
+            error_code=failure["error_code"],
+        )
+    if t_start >= t_end:
+        failure = make_sketch_add_parametric_curve_failure(
+            "INVALID_ARGUMENT",
+            "t_start must be less than t_end",
+        )
+        return tool_fail(
+            f"Failed to run sketch_add_parametric_curve: {failure['error']}",
+            structured=dict(failure),
+            error_code=failure["error_code"],
+        )
     request = SketchAddParametricCurveRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),

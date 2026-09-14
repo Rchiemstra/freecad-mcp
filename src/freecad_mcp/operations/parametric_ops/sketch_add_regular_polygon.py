@@ -8,6 +8,7 @@ from ..._shared.protocol.sketch_add_regular_polygon_contract import (
     SketchAddRegularPolygonRequest,
     DocumentName,
     SketchName,
+    make_sketch_add_regular_polygon_failure,
     make_sketch_add_regular_polygon_uncertain,
     parse_sketch_add_regular_polygon_response,
 )
@@ -27,6 +28,16 @@ def sketch_add_regular_polygon_operation(
     angle: float = 0.0,
     construction: bool = False,
 ) -> CallToolResult:
+    if sides < 3:
+        failure = make_sketch_add_regular_polygon_failure(
+            "INVALID_ARGUMENT",
+            "regular polygon requires at least 3 sides",
+        )
+        return tool_fail(
+            f"Failed to run sketch_add_regular_polygon: {failure['error']}",
+            structured=dict(failure),
+            error_code=failure["error_code"],
+        )
     request = SketchAddRegularPolygonRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),

@@ -8,6 +8,7 @@ from ..._shared.protocol.sketch_fillet_contract import (
     SketchFilletRequest,
     DocumentName,
     SketchName,
+    make_sketch_fillet_failure,
     make_sketch_fillet_uncertain,
     parse_sketch_fillet_response,
 )
@@ -24,6 +25,16 @@ def sketch_fillet_operation(
     geo2: int,
     radius: float,
 ) -> CallToolResult:
+    if radius <= 0:
+        failure = make_sketch_fillet_failure(
+            "INVALID_ARGUMENT",
+            "fillet radius must be > 0",
+        )
+        return tool_fail(
+            f"Failed to run sketch_fillet: {failure['error']}",
+            structured=dict(failure),
+            error_code=failure["error_code"],
+        )
     request = SketchFilletRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),

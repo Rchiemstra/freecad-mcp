@@ -8,6 +8,7 @@ from ..._shared.protocol.sketch_add_polyline_contract import (
     SketchAddPolylineRequest,
     DocumentName,
     SketchName,
+    make_sketch_add_polyline_failure,
     make_sketch_add_polyline_uncertain,
     parse_sketch_add_polyline_response,
 )
@@ -24,6 +25,16 @@ def sketch_add_polyline_operation(
     closed: bool = False,
     construction: bool = False,
 ) -> CallToolResult:
+    if len(points) < 2:
+        failure = make_sketch_add_polyline_failure(
+            "INVALID_ARGUMENT",
+            "polyline requires at least 2 points",
+        )
+        return tool_fail(
+            f"Failed to run sketch_add_polyline: {failure['error']}",
+            structured=dict(failure),
+            error_code=failure["error_code"],
+        )
     request = SketchAddPolylineRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),

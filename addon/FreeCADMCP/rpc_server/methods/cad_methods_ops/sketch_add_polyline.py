@@ -171,7 +171,7 @@ def build_sketch_add_polyline_request(doc_name: object, sketch_name: object, poi
     sketch_name_value = _require_name(sketch_name, 'sketch_name')
     if isinstance(sketch_name_value, dict):
         return sketch_name_value
-    points_value = _require_points(points, 'points', min_count=2)
+    points_value = _require_points(points, 'polyline', min_count=2)
     if isinstance(points_value, dict):
         return points_value
     closed_value = _require_bool(closed, 'closed', default=False)

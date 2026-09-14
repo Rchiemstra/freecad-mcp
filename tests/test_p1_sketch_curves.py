@@ -148,7 +148,7 @@ class TestSketchAddEllipse:
     def test_routes_typed_rpc(self):
         conn = _ok_conn("sketch_add_ellipse")
         sketch_add_ellipse_operation(conn, True, "Doc", "Sk", 2.0, 3.0, 10, 5)
-        conn.sketch_add_ellipse.assert_called_once_with("Doc", "Sk", 2.0, 3.0, 10, 5)
+        conn.sketch_add_ellipse.assert_called_once_with("Doc", "Sk", 2.0, 3.0, 10, 5, 0.0, False)
 
 
 class TestSketchAddArcOfEllipse:
