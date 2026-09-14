@@ -45,12 +45,25 @@ from tests.helpers.geometric import (
 def _ok_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": True, "message": "ok", "recompute_errors": []}
+    success = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "gear": "Gear",
+        "label": "Gear",
+    }
+    conn.create_involute_gear.return_value = success
+    conn.create_helical_gear.return_value = success
     return conn
 
 
-def _code(conn) -> str:
-    return conn.execute_code.call_args[0][0]
+def _typed_call(conn):
+    if conn.create_helical_gear.called:
+        return conn.create_helical_gear.call_args
+    return conn.create_involute_gear.call_args
 
 
 def _text(response) -> str:
@@ -97,7 +110,7 @@ class TestEightGearCodes:
                 conn, True, "Doc", gear_id, teeth, module, width,
                 pressure_angle=pa, bore_diameter=bore,
             )
-        assert_code_compiles(_code(conn))
+        assert _typed_call(conn) is not None
 
     @pytest.mark.parametrize("gear_id,teeth,module,width,pa,bore,helix", GEAR_CASES)
     def test_involute_formula_present(self, gear_id, teeth, module, width, pa, bore, helix):
@@ -112,8 +125,9 @@ class TestEightGearCodes:
                 conn, True, "Doc", gear_id, teeth, module, width,
                 pressure_angle=pa,
             )
-        code = _code(conn)
-        assert_code_contains(code, "_ix", "_iy", "_polar")
+        args = _typed_call(conn).args
+        assert teeth in args
+        assert module in args
 
     @pytest.mark.parametrize("gear_id,teeth,module,width,pa,bore,helix", GEAR_CASES)
     def test_tooth_count_in_code(self, gear_id, teeth, module, width, pa, bore, helix):
@@ -128,7 +142,7 @@ class TestEightGearCodes:
                 conn, True, "Doc", gear_id, teeth, module, width,
                 pressure_angle=pa,
             )
-        assert_code_contains(_code(conn), str(teeth))
+        assert teeth in _typed_call(conn).args
 
 
 class TestEightGearGeometry:

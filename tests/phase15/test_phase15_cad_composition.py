@@ -47,6 +47,16 @@ class _NativeAPI:
             self.completed_callbacks += 1
         return self.result
 
+    def commit_native_mutation(
+        self, document_name, callback, postcondition, *, structural=True
+    ):
+        result = self.commit_compatibility_mutation(
+            document_name, lambda: callback(object()), structural=structural
+        )
+        if callable(postcondition):
+            postcondition(object())
+        return result
+
 
 def test_cad_dependency_shape_is_explicit_and_policy_free() -> None:
     assert [field.name for field in fields(CadCollaborators)] == [

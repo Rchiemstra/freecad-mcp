@@ -16,7 +16,7 @@ from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
 
 pytestmark = pytest.mark.unit
 
-_FIXTURE = Path(__file__).resolve().parent / "fixtures/freecad_rpc_contract_snapshot.json"
+_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures/freecad_rpc_contract_snapshot.json"
 
 
 @pytest.fixture(scope="module")

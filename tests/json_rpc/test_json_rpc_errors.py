@@ -14,7 +14,7 @@ from addon.FreeCADMCP.rpc_server.json_rpc_errors import json_rpc_error_from_resu
 pytestmark = pytest.mark.unit
 
 _SEMANTIC_SNAPSHOT = (
-    Path(__file__).resolve().parent / "fixtures/freecad_rpc_contract_snapshot.json"
+    Path(__file__).resolve().parents[1] / "fixtures/freecad_rpc_contract_snapshot.json"
 )
 
 

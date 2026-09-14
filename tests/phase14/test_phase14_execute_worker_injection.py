@@ -71,6 +71,16 @@ class _CompatibilityAPI:
         self.callback_results.append(result)
         return self.native_result
 
+    def commit_native_mutation(
+        self, document_name, callback, postcondition, *, structural=True
+    ):
+        result = self.commit_compatibility_mutation(
+            document_name, lambda: callback(object()), structural=structural
+        )
+        if callable(postcondition):
+            postcondition(object())
+        return result
+
 
 def _rpc_with_execution(**overrides):
     initial = rpc_server.FreeCADRPC()

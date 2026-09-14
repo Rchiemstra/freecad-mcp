@@ -41,6 +41,16 @@ class _NativeAPI:
         callback()
         return {"status": "Committed", "committed": True}
 
+    def commit_native_mutation(
+        self, document_name, callback, postcondition, *, structural=True
+    ):
+        result = self.commit_compatibility_mutation(
+            document_name, lambda: callback(object()), structural=structural
+        )
+        if callable(postcondition):
+            postcondition(object())
+        return result
+
 
 def _collaborators(**overrides):
     native = _NativeAPI()
@@ -137,6 +147,16 @@ def test_object_create_defers_presentation_properties_until_after_native_commit(
             assert created.ViewObject is None
             created.ViewObject = SimpleNamespace()
             return {"status": "Committed", "committed": True}
+
+        def commit_native_mutation(
+            self, document_name, callback, postcondition, *, structural=True
+        ):
+            result = self.commit_compatibility_mutation(
+                document_name, lambda: callback(object()), structural=structural
+            )
+            if callable(postcondition):
+                postcondition(object())
+            return result
 
     def factory(_document_name, obj):
         assert obj.properties == {"Length": 10}
@@ -250,6 +270,16 @@ def test_object_edit_applies_presentation_once_only_after_native_commit(  # noqa
                 return {"status": "Rejected", "committed": False}
             stage["value"] = "postcommit"
             return {"status": "Committed", "committed": True}
+
+        def commit_native_mutation(
+            self, document_name, callback, postcondition, *, structural=True
+        ):
+            result = self.commit_compatibility_mutation(
+                document_name, lambda: callback(object()), structural=structural
+            )
+            if callable(postcondition):
+                postcondition(object())
+            return result
 
     def validate(_document):
         events.append(("health", outcome))
@@ -651,6 +681,16 @@ def test_fem_solver_and_result_presentations_replay_only_after_native_commit(
             for obj in document.Objects:
                 obj.ViewObject = object()
             return {"status": "Committed", "committed": True}
+
+        def commit_native_mutation(
+            self, document_name, callback, postcondition, *, structural=True
+        ):
+            result = self.commit_compatibility_mutation(
+                document_name, lambda: callback(object()), structural=structural
+            )
+            if callable(postcondition):
+                postcondition(object())
+            return result
 
     def run_analysis(_document_name, _analysis_name):
         assert solver_resolution.FreeCAD.GuiUp is False

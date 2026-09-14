@@ -192,7 +192,7 @@ def test_discover_typed_mypy_files_includes_paired_leaf_and_client_op(
 
 def test_uv_run_mypy_passes_on_production_pyproject() -> None:
     result = subprocess.run(
-        ["uv", "run", "mypy", "--no-incremental"],
+        [sys.executable, "-m", "mypy", "--no-incremental"],
         cwd=ROOT,
         check=False,
     )

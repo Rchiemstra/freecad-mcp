@@ -764,8 +764,15 @@ def _is_phase18_compatibility_surface(parsed: ParsedFile) -> bool:
     return _normalized_display(parsed) in PHASE18_COMPATIBILITY_SHIM_PATHS
 
 
+def _is_typed_protocol_contract(parsed: ParsedFile) -> bool:
+    display = _normalized_display(parsed).replace("\\", "/")
+    return display.endswith("_contract.py") and "/_shared/protocol/" in display
+
+
 def _is_arch106_107_exempt(parsed: ParsedFile, root: Path) -> bool:
     display = _normalized_display(parsed)
+    if _is_typed_protocol_contract(parsed):
+        return True
     if display in DISPATCH_COMPOSITION_PATHS:
         return True
     if _is_phase18_compatibility_surface(parsed):

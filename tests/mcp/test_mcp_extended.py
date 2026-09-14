@@ -290,44 +290,46 @@ class TestGetObjectsOperation:
 # ---------------------------------------------------------------------------
 
 class TestSketchCreateOperation:
-    def test_calls_execute_code(self):
-        conn = _ok_conn("sketch_name=Sketch")
+    def test_calls_typed_rpc(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "Doc", "Sketch")
-        conn.execute_code.assert_called_once()
+        conn.sketch_create.assert_called_once_with("Doc", "Sketch", None, None)
+        conn.execute_code.assert_not_called()
 
-    def test_doc_and_sketch_name_in_code(self):
-        conn = _ok_conn()
+    def test_doc_and_sketch_name_passed(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "MyDoc", "MySk")
-        assert "'MyDoc'" in _code(conn) and "'MySk'" in _code(conn)
+        conn.sketch_create.assert_called_once_with("MyDoc", "MySk", None, None)
 
-    def test_body_uses_newObject(self):
-        conn = _ok_conn()
+    def test_body_name_passed(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "Doc", "Sk", body_name="Body")
-        assert "'Body'" in _code(conn) and "newObject" in _code(conn)
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", "Body", None)
 
-    def test_attach_xy_plane_in_code(self):
-        conn = _ok_conn()
+    def test_attach_xy_plane_passed(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "Doc", "Sk", attach_to="XY_Plane")
-        assert "XY_Plane" in _code(conn) and "MapMode" in _code(conn)
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", None, "XY_Plane")
 
-    def test_attach_face_in_code(self):
-        conn = _ok_conn()
+    def test_attach_face_passed(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "Doc", "Sk", attach_to="Box:Face1")
-        c = _code(conn)
-        assert "'Box'" in c and "'Face1'" in c
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", None, "Box:Face1")
 
-    def test_generated_code_compiles_with_body_and_plane_attachment(self):
-        conn = _ok_conn()
+    def test_body_and_plane_attachment_passed(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "Doc", "Sk", body_name="Body", attach_to="XY_Plane")
-        _assert_generated_code_compiles(conn)
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", "Body", "XY_Plane")
 
-    def test_generated_code_compiles_with_face_attachment(self):
-        conn = _ok_conn()
+    def test_face_attachment_passed(self):
+        conn = _typed_success("sketch_create")
         sketch_create_operation(conn, True, "Doc", "Sk", attach_to="Box:Face1")
-        _assert_generated_code_compiles(conn)
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", None, "Box:Face1")
 
     def test_failure_message(self):
-        assert "Failed" in _text(sketch_create_operation(_fail_conn(), True, "Doc", "Sk"))
+        assert "Failed" in _text(
+            sketch_create_operation(_typed_fail("sketch_create"), True, "Doc", "Sk")
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -335,48 +337,48 @@ class TestSketchCreateOperation:
 # ---------------------------------------------------------------------------
 
 class TestSketchAddGeometryOperation:
-    def test_success_calls_execute_code(self):
-        conn = _ok_conn("indices=[0,1,2,3]")
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}
-        ])
-        conn.execute_code.assert_called_once()
+    def test_success_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        conn.sketch_add_geometry.assert_called_once_with("Doc", "Sk", geometry)
+        conn.execute_code.assert_not_called()
 
-    def test_sketch_name_in_code(self):
-        conn = _ok_conn()
+    def test_sketch_name_passed(self):
+        conn = _typed_success("sketch_add_geometry")
         sketch_add_geometry_operation(conn, True, "Doc", "MySk", [])
-        assert "'MySk'" in _code(conn)
+        conn.sketch_add_geometry.assert_called_once_with("Doc", "MySk", [])
 
-    def test_line_coords_in_code(self):
-        conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "line", "start": {"x": 1.5, "y": 2.5}, "end": {"x": 3.0, "y": 4.0}}
-        ])
-        c = _code(conn)
-        assert "1.5" in c and "2.5" in c and "3.0" in c
+    def test_line_coords_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{"type": "line", "start": {"x": 1.5, "y": 2.5}, "end": {"x": 3.0, "y": 4.0}}]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert conn.sketch_add_geometry.call_args.args[2] == geometry
 
-    def test_circle_in_code(self):
-        conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "circle", "center": {"x": 5, "y": 5}, "radius": 3}
-        ])
-        assert "Circle" in _code(conn)
+    def test_circle_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{"type": "circle", "center": {"x": 5, "y": 5}, "radius": 3}]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert conn.sketch_add_geometry.call_args.args[2][0]["type"] == "circle"
 
-    def test_arc_in_code(self):
-        conn = _ok_conn()
-        sketch_add_geometry_operation(conn, True, "Doc", "Sk", [
-            {"type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,
-             "start_angle": 0, "end_angle": 90}
-        ])
-        assert "ArcOfCircle" in _code(conn)
+    def test_arc_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{
+            "type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,
+            "start_angle": 0, "end_angle": 90,
+        }]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert conn.sketch_add_geometry.call_args.args[2][0]["type"] == "arc"
 
     def test_screenshot_attached(self):
-        conn = _ok_conn()
+        conn = _typed_success("sketch_add_geometry")
         conn.get_active_screenshot.return_value = "imgdata"
         assert _has_image(sketch_add_geometry_operation(conn, False, "Doc", "Sk", []))
 
     def test_failure(self):
-        assert "Failed" in _text(sketch_add_geometry_operation(_fail_conn(), True, "Doc", "Sk", []))
+        assert "Failed" in _text(
+            sketch_add_geometry_operation(_typed_fail("sketch_add_geometry"), True, "Doc", "Sk", [])
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -385,22 +387,25 @@ class TestSketchAddGeometryOperation:
 
 class TestSketchAddConstraintOperation:
     def test_success(self):
-        conn = _ok_conn()
-        result = sketch_add_constraint_operation(conn, True, "Doc", "Sk", [
-            {"type": "Horizontal", "geo": 0}
-        ])
-        conn.execute_code.assert_called_once()
-        assert "Constraints added" in _text(result)
+        conn = _typed_success("sketch_add_constraint")
+        constraints = [{"type": "Horizontal", "geo": 0}]
+        result = sketch_add_constraint_operation(conn, True, "Doc", "Sk", constraints)
+        conn.sketch_add_constraint.assert_called_once_with("Doc", "Sk", constraints)
+        conn.execute_code.assert_not_called()
+        assert not result.isError
 
-    def test_constraint_type_in_code(self):
-        conn = _ok_conn()
-        sketch_add_constraint_operation(conn, True, "Doc", "Sk", [
-            {"type": "Coincident", "geo1": 0, "pos1": 1, "geo2": 1, "pos2": 2}
-        ])
-        assert "Coincident" in _code(conn)
+    def test_constraint_type_passed(self):
+        conn = _typed_success("sketch_add_constraint")
+        constraints = [{"type": "Coincident", "geo1": 0, "pos1": 1, "geo2": 1, "pos2": 2}]
+        sketch_add_constraint_operation(conn, True, "Doc", "Sk", constraints)
+        assert conn.sketch_add_constraint.call_args.args[2][0]["type"] == "Coincident"
 
     def test_failure(self):
-        assert "Failed" in _text(sketch_add_constraint_operation(_fail_conn(), True, "Doc", "Sk", []))
+        assert "Failed" in _text(
+            sketch_add_constraint_operation(
+                _typed_fail("sketch_add_constraint"), True, "Doc", "Sk", []
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -409,44 +414,30 @@ class TestSketchAddConstraintOperation:
 
 class TestPadFeatureOperation:
     def test_success(self):
-        # pad/pocket now return a structured JSON workflow result.
-        conn = _ok_conn('{"ok": true, "feature": "Pad", "body": "Body", "tip": "Pad", "solid_count": 1}')
+        conn = _typed_success("pad_feature", pad="Pad", label="Pad")
         result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 15.0)
+        conn.pad_feature.assert_called_once_with("Doc", "Sk", "Pad", 15.0, None, False, False)
         assert not result.isError
-        assert '"feature": "Pad"' in _text(result)
 
-    def test_params_in_code(self):
-        conn = _ok_conn()
+    def test_params_passed(self):
+        conn = _typed_success("pad_feature", pad="MyPad", label="MyPad")
         pad_feature_operation(conn, True, "Doc", "Sk", "MyPad", 25.0, body_name="Body")
-        c = _code(conn)
-        assert "25.0" in c and "'MyPad'" in c and "'Body'" in c
+        conn.pad_feature.assert_called_once_with("Doc", "Sk", "MyPad", 25.0, "Body", False, False)
 
-    def test_symmetric_in_code(self):
-        conn = _ok_conn()
+    def test_symmetric_passed(self):
+        conn = _typed_success("pad_feature", pad="P", label="P")
         pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True)
-        c = _code(conn)
-        assert "True" in c and "SideType" in c
+        assert conn.pad_feature.call_args.args[5] is True
 
-    def test_does_not_assign_symmetric_property_directly(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True)
-        assert "_pad.Symmetric =" not in _code(conn)
-
-    def test_does_not_set_deprecated_midplane_for_default_one_side(self):
-        conn = _ok_conn()
-        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10)
-        c = _code(conn)
-        assert "_set_extrusion_symmetric(_pad, False)" in c
-        assert "setattr(_feature, 'Midplane', True)" in c
-        assert "setattr(_feature, 'Midplane', False)" not in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
+    def test_reversed_passed(self):
+        conn = _typed_success("pad_feature", pad="P", label="P")
         pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True, reversed_dir=True)
-        _assert_generated_code_compiles(conn)
+        conn.pad_feature.assert_called_once_with("Doc", "Sk", "P", 10, None, True, True)
 
     def test_failure(self):
-        assert "Failed" in _text(pad_feature_operation(_fail_conn(), True, "Doc", "Sk", "P", 10))
+        assert "Failed" in _text(
+            pad_feature_operation(_typed_fail("pad_feature"), True, "Doc", "Sk", "P", 10)
+        )
 
 
 # ---------------------------------------------------------------------------

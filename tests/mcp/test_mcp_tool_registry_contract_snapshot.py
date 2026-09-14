@@ -13,7 +13,7 @@ from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
 pytestmark = pytest.mark.unit
 
 _FIXTURE = (
-    Path(__file__).resolve().parent / "fixtures" / "mcp_tool_registry_contract_snapshot.json"
+    Path(__file__).resolve().parents[1] / "fixtures" / "mcp_tool_registry_contract_snapshot.json"
 )
 
 

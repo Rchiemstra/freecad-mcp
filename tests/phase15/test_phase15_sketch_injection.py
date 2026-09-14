@@ -24,6 +24,16 @@ class _CompatibilityAPI:
         callback()
         return {"status": "Committed", "committed": True}
 
+    def commit_native_mutation(
+        self, document_name, callback, postcondition, *, structural=True
+    ):
+        result = self.commit_compatibility_mutation(
+            document_name, lambda: callback(object()), structural=structural
+        )
+        if callable(postcondition):
+            postcondition(object())
+        return result
+
 
 class _Facade:
     def __init__(self, collaborators):
@@ -281,6 +291,16 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
                 return {"status": "Rejected", "committed": False}
             stage["value"] = "postcommit"
             return {"status": "Committed", "committed": True}
+
+        def commit_native_mutation(
+            self, document_name, callback, postcondition, *, structural=True
+        ):
+            result = self.commit_compatibility_mutation(
+                document_name, lambda: callback(object()), structural=structural
+            )
+            if callable(postcondition):
+                postcondition(object())
+            return result
 
     api = CompatibilityAPI()
 
