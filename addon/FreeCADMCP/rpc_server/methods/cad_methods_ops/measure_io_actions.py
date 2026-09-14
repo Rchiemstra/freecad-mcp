@@ -62,6 +62,32 @@ def _raw_shape(obj: object) -> tuple[object | None, object | None]:
     return None, None
 
 
+def _is_document_child(obj: object) -> bool:
+    for parent in getattr(obj, "InList", None) or []:
+        if getattr(parent, "TypeId", "") == "App::Document":
+            return True
+    return False
+
+
+def _read_global_placement(obj: object) -> object:
+    if _is_document_child(obj):
+        placement = getattr(obj, "Placement", None)
+        if placement is None:
+            raise TypedMutationError("INVALID_OBJECT", "object must provide Placement")
+        return placement
+    geo_feature = getattr(_freecad(), "GeoFeature", None)
+    if geo_feature is not None:
+        getter = getattr(geo_feature, "getGlobalPlacementOf", None)
+        if callable(getter):
+            placement = getter(obj, obj, "")
+            if placement is not None:
+                return placement
+    placement = getattr(obj, "Placement", None)
+    if placement is None:
+        raise TypedMutationError("INVALID_OBJECT", "object must provide Placement")
+    return placement
+
+
 def resolve_global_shape(obj: object) -> tuple[object, dict[str, object]]:
     shape, source = _raw_shape(obj)
     if shape is None or source is None:
@@ -69,14 +95,16 @@ def resolve_global_shape(obj: object) -> tuple[object, dict[str, object]]:
             "SHAPE_NOT_FOUND",
             f"No usable Shape on {getattr(obj, 'Name', obj)!r}",
         )
-    getter = getattr(obj, "getGlobalPlacement", None)
-    if not callable(getter):
-        raise TypedMutationError("INVALID_OBJECT", "object must provide getGlobalPlacement")
-    placement = getter()
-    copied = getattr(shape, "copy", None)
-    if not callable(copied):
-        raise TypedMutationError("INVALID_SHAPE", "shape must provide copy")
-    out = copied()
+    placement = _read_global_placement(obj)
+    part = load_module("Part")
+    shape_cls = module_callable(part, "Shape")
+    try:
+        out = shape_cls(shape)
+    except Exception:
+        copied = getattr(shape, "copy", None)
+        if not callable(copied):
+            raise TypedMutationError("INVALID_SHAPE", "shape must provide copy")
+        out = copied()
     transform = getattr(out, "transformShape", None)
     matrix = getattr(placement, "toMatrix", None)
     if not callable(transform) or not callable(matrix):
