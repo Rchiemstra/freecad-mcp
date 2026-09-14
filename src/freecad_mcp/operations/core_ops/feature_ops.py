@@ -6,3 +6,13 @@ from ..parametric_ops.mirror_feature import mirror_feature_operation
 from ..parametric_ops.pad_feature import pad_feature_operation
 from ..parametric_ops.pocket_feature import pocket_feature_operation
 from ..parametric_ops.polar_pattern_feature import polar_pattern_feature_operation
+
+
+__all__ = [
+    "create_spur_gear_operation",
+    "linear_pattern_feature_operation",
+    "mirror_feature_operation",
+    "pad_feature_operation",
+    "pocket_feature_operation",
+    "polar_pattern_feature_operation",
+]

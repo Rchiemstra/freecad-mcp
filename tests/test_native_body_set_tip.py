@@ -41,6 +41,9 @@ def _isolate_native_documents():
     _close_all_documents(FreeCAD)
 
 
+import hashlib
+
+
 def _property_content(item, name: str):
     if name == "Proxy":
         proxy = getattr(item, "Proxy", None)
@@ -52,11 +55,6 @@ def _property_content(item, name: str):
 
 
 def _model_state(document):
-    """Freeze native property values/schema, relationships and recompute state.
-
-    FeaturePython Proxy identity is not native transaction state and is not
-    stable across rollback or recompute. Snapshot the proxy type instead.
-    """
     return tuple(
         (
             item.Name,
@@ -77,6 +75,7 @@ def _model_state(document):
         )
         for item in document.Objects
     )
+
 
 
 def _revision_state(document):

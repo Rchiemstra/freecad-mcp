@@ -21,6 +21,16 @@ def require_native_collaboration() -> None:
         raise RuntimeError("Native qualification requires a real branch-built FreeCAD")
 
 
+def _property_content(item, name: str):
+    if name == "Proxy":
+        proxy = getattr(item, "Proxy", None)
+        if proxy is None:
+            return None
+        return f"{type(proxy).__module__}.{type(proxy).__qualname__}"
+    dumped = bytes(item.dumpPropertyContent(name, 0))
+    return hashlib.sha256(dumped).hexdigest()
+
+
 def model_state(document):
     return tuple(
         (
@@ -35,9 +45,7 @@ def model_state(document):
                     item.getTypeIdOfProperty(name),
                     item.getGroupOfProperty(name),
                     tuple(item.getPropertyStatus(name)),
-                    id(item.Proxy)
-                    if name == "Proxy"
-                    else hashlib.sha256(bytes(item.dumpPropertyContent(name, 0))).hexdigest(),
+                    _property_content(item, name),
                 )
                 for name in sorted(item.PropertiesList)
             ),

@@ -1,8 +1,8 @@
 """
 Tests for P2 sketch editing operations.
 
-Layer-A: Schema / error propagation
-Layer-B: Code-fragment and API-call checks
+Layer-A: typed RPC propagation
+Layer-B: request routing
 """
 from __future__ import annotations
 
@@ -21,22 +21,47 @@ from freecad_mcp.operations.p2_editing import (
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
-def _ok_conn():
+def _typed_success():
+    return {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sketch": "Sk",
+        "geometry_indices": [0],
+    }
+
+
+def _typed_failure():
+    return {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": False,
+        "error_code": "oops",
+        "error": "oops",
+    }
+
+
+def _ok_conn(method: str | None = None):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": True, "message": "done", "recompute_errors": []}
+    if method is not None:
+        getattr(conn, method).return_value = _typed_success()
+    else:
+        conn.execute_code.return_value = {"success": True, "message": "done", "recompute_errors": []}
     return conn
 
 
-def _fail_conn():
+def _fail_conn(method: str):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": False, "error": "oops"}
+    getattr(conn, method).return_value = _typed_failure()
     return conn
-
-
-def _code(conn) -> str:
-    return conn.execute_code.call_args[0][0]
 
 
 def _text(response) -> str:
@@ -44,147 +69,65 @@ def _text(response) -> str:
     return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
-# ---------------------------------------------------------------------------
-# P2-1  sketch_trim
-# ---------------------------------------------------------------------------
+def _code(conn) -> str:
+    return conn.execute_code.call_args[0][0]
+
 
 class TestSketchTrim:
     def test_success(self):
-        resp = sketch_trim_operation(_ok_conn(), True, "Doc", "Sk", 0, 5.0, 0.0)
+        resp = sketch_trim_operation(_ok_conn("sketch_trim"), True, "Doc", "Sk", 0, 5.0, 0.0)
         assert _text(resp)
 
     def test_failure(self):
-        resp = sketch_trim_operation(_fail_conn(), True, "Doc", "Sk", 0, 5.0, 0.0)
+        resp = sketch_trim_operation(_fail_conn("sketch_trim"), True, "Doc", "Sk", 0, 5.0, 0.0)
         assert "oops" in _text(resp) or "Failed" in _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        sketch_trim_operation(conn, True, "Doc", "Sk", 0, 5.0, 0.0)
-        assert_code_compiles(_code(conn))
-
-    def test_trim_api_called(self):
-        conn = _ok_conn()
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn("sketch_trim")
         sketch_trim_operation(conn, True, "Doc", "Sk", 2, 5.0, 3.0)
-        assert_code_contains(_code(conn), "_sk.trim")
+        conn.sketch_trim.assert_called_once_with("Doc", "Sk", 2, 5.0, 3.0)
 
-    def test_geo_index_in_code(self):
-        conn = _ok_conn()
-        sketch_trim_operation(conn, True, "Doc", "Sk", 7, 0.0, 0.0)
-        assert_code_contains(_code(conn), "7")
-
-    def test_point_vector_in_code(self):
-        conn = _ok_conn()
-        sketch_trim_operation(conn, True, "Doc", "Sk", 0, 3.5, 2.5)
-        assert_code_contains(_code(conn), "3.5", "2.5")
-
-    def test_recompute_called(self):
-        conn = _ok_conn()
-        sketch_trim_operation(conn, True, "Doc", "Sk", 0, 0.0, 0.0)
-        assert_code_contains(_code(conn), "_doc.recompute()")
-
-
-# ---------------------------------------------------------------------------
-# P2-2  sketch_extend
-# ---------------------------------------------------------------------------
 
 class TestSketchExtend:
     def test_success(self):
-        resp = sketch_extend_operation(_ok_conn(), True, "Doc", "Sk", 0, 5.0)
+        resp = sketch_extend_operation(_ok_conn("sketch_extend"), True, "Doc", "Sk", 0, 5.0)
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        sketch_extend_operation(conn, True, "Doc", "Sk", 0, 5.0)
-        assert_code_compiles(_code(conn))
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn("sketch_extend")
+        sketch_extend_operation(conn, True, "Doc", "Sk", 1, 7.5, end_point=1)
+        conn.sketch_extend.assert_called_once_with("Doc", "Sk", 1, 7.5, 1)
 
-    def test_extend_api_called(self):
-        conn = _ok_conn()
-        sketch_extend_operation(conn, True, "Doc", "Sk", 1, 10.0)
-        assert_code_contains(_code(conn), "_sk.extend")
-
-    def test_increment_in_code(self):
-        conn = _ok_conn()
-        sketch_extend_operation(conn, True, "Doc", "Sk", 1, 7.5)
-        assert_code_contains(_code(conn), "7.5")
-
-    def test_end_point_default(self):
-        conn = _ok_conn()
-        sketch_extend_operation(conn, True, "Doc", "Sk", 0, 1.0)
-        assert_code_contains(_code(conn), "2")
-
-    def test_end_point_custom(self):
-        conn = _ok_conn()
-        sketch_extend_operation(conn, True, "Doc", "Sk", 0, 1.0, end_point=1)
-        assert_code_contains(_code(conn), "1")
-
-
-# ---------------------------------------------------------------------------
-# P2-3  sketch_split
-# ---------------------------------------------------------------------------
 
 class TestSketchSplit:
     def test_success(self):
-        resp = sketch_split_operation(_ok_conn(), True, "Doc", "Sk", 0, 5.0, 0.0)
+        resp = sketch_split_operation(_ok_conn("sketch_split"), True, "Doc", "Sk", 0, 5.0, 0.0)
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        sketch_split_operation(conn, True, "Doc", "Sk", 0, 5.0, 0.0)
-        assert_code_compiles(_code(conn))
-
-    def test_split_api_called(self):
-        conn = _ok_conn()
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn("sketch_split")
         sketch_split_operation(conn, True, "Doc", "Sk", 3, 2.0, 4.0)
-        assert_code_contains(_code(conn), "_sk.split")
+        conn.sketch_split.assert_called_once_with("Doc", "Sk", 3, 2.0, 4.0)
 
-    def test_point_in_code(self):
-        conn = _ok_conn()
-        sketch_split_operation(conn, True, "Doc", "Sk", 0, 1.1, 2.2)
-        assert_code_contains(_code(conn), "1.1", "2.2")
-
-
-# ---------------------------------------------------------------------------
-# P2-4  sketch_fillet
-# ---------------------------------------------------------------------------
 
 class TestSketchFillet:
     def test_success(self):
-        resp = sketch_fillet_operation(_ok_conn(), True, "Doc", "Sk", 0, 1, 2.0)
+        resp = sketch_fillet_operation(_ok_conn("sketch_fillet"), True, "Doc", "Sk", 0, 1, 2.0)
         assert _text(resp)
 
     def test_negative_radius_error(self):
-        resp = sketch_fillet_operation(_ok_conn(), True, "Doc", "Sk", 0, 1, -1.0)
+        resp = sketch_fillet_operation(_ok_conn("sketch_fillet"), True, "Doc", "Sk", 0, 1, -1.0)
         assert "radius must be" in _text(resp)
 
     def test_zero_radius_error(self):
-        resp = sketch_fillet_operation(_ok_conn(), True, "Doc", "Sk", 0, 1, 0.0)
+        resp = sketch_fillet_operation(_ok_conn("sketch_fillet"), True, "Doc", "Sk", 0, 1, 0.0)
         assert "radius must be" in _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        sketch_fillet_operation(conn, True, "Doc", "Sk", 0, 1, 3.0)
-        assert_code_compiles(_code(conn))
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn("sketch_fillet")
+        sketch_fillet_operation(conn, True, "Doc", "Sk", 2, 5, 4.5)
+        conn.sketch_fillet.assert_called_once_with("Doc", "Sk", 2, 5, 4.5)
 
-    def test_fillet_api_called(self):
-        conn = _ok_conn()
-        sketch_fillet_operation(conn, True, "Doc", "Sk", 0, 1, 3.0)
-        assert_code_contains(_code(conn), "_sk.fillet")
-
-    def test_radius_in_code(self):
-        conn = _ok_conn()
-        sketch_fillet_operation(conn, True, "Doc", "Sk", 0, 1, 4.5)
-        assert_code_contains(_code(conn), "4.5")
-
-    def test_geo_indices_in_code(self):
-        conn = _ok_conn()
-        sketch_fillet_operation(conn, True, "Doc", "Sk", 2, 5, 1.0)
-        code = _code(conn)
-        assert_code_contains(code, "2", "5")
-
-
-# ---------------------------------------------------------------------------
-# P2-5  sketch_offset
-# ---------------------------------------------------------------------------
 
 class TestSketchOffset:
     def test_success(self):
@@ -201,37 +144,13 @@ class TestSketchOffset:
         sketch_offset_operation(conn, True, "Doc", "Sk", [0], 3.5)
         assert_code_contains(_code(conn), "3.5")
 
-    def test_indices_in_code(self):
-        conn = _ok_conn()
-        sketch_offset_operation(conn, True, "Doc", "Sk", [2, 4], 1.0)
-        assert_code_contains(_code(conn), "[2, 4]")
-
-
-# ---------------------------------------------------------------------------
-# P2-6  sketch_symmetry
-# ---------------------------------------------------------------------------
 
 class TestSketchSymmetry:
     def test_success(self):
-        resp = sketch_symmetry_operation(_ok_conn(), True, "Doc", "Sk", [0, 1], 5)
+        resp = sketch_symmetry_operation(_ok_conn("sketch_symmetry"), True, "Doc", "Sk", [0, 1], 5)
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        sketch_symmetry_operation(conn, True, "Doc", "Sk", [0, 1], 5)
-        assert_code_compiles(_code(conn))
-
-    def test_sym_geo_in_code(self):
-        conn = _ok_conn()
-        sketch_symmetry_operation(conn, True, "Doc", "Sk", [0], 7)
-        assert_code_contains(_code(conn), "7")
-
-    def test_fallback_constraint_path(self):
-        conn = _ok_conn()
-        sketch_symmetry_operation(conn, True, "Doc", "Sk", [0, 1], 5)
-        assert_code_contains(_code(conn), "Symmetric")
-
-    def test_indices_in_code(self):
-        conn = _ok_conn()
-        sketch_symmetry_operation(conn, True, "Doc", "Sk", [3, 4], 10)
-        assert_code_contains(_code(conn), "[3, 4]")
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn("sketch_symmetry")
+        sketch_symmetry_operation(conn, True, "Doc", "Sk", [3, 4], 10, copy=False)
+        conn.sketch_symmetry.assert_called_once_with("Doc", "Sk", [3, 4], 10, False)

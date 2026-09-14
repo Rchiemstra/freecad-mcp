@@ -16,7 +16,41 @@ def _require_native_collaboration() -> None:
         pytest.skip("Compose FreeCAD is adapter-only; use the branch-built lane")
 
 
+import hashlib
+
+
+def _property_content(item, name: str):
+    if name == "Proxy":
+        proxy = getattr(item, "Proxy", None)
+        if proxy is None:
+            return None
+        return f"{type(proxy).__module__}.{type(proxy).__qualname__}"
+    dumped = bytes(item.dumpPropertyContent(name, 0))
+    return hashlib.sha256(dumped).hexdigest()
+
+
 def _model_state(document):
+    return tuple(
+        (
+            item.Name,
+            item.TypeId,
+            tuple(item.State),
+            tuple(sorted(obj.Name for obj in item.InList)),
+            tuple(sorted(obj.Name for obj in item.OutList)),
+            tuple(
+                (
+                    name,
+                    item.getTypeIdOfProperty(name),
+                    item.getGroupOfProperty(name),
+                    tuple(item.getPropertyStatus(name)),
+                    _property_content(item, name),
+                )
+                for name in sorted(item.PropertiesList)
+            ),
+        )
+        for item in document.Objects
+    )
+
     """Freeze native property values/schema, relationships and recompute state.
 
     Python proxies are external fault injectors in these tests. Their identity
@@ -35,9 +69,7 @@ def _model_state(document):
                     item.getTypeIdOfProperty(name),
                     item.getGroupOfProperty(name),
                     tuple(item.getPropertyStatus(name)),
-                    id(item.Proxy)
-                    if name == "Proxy"
-                    else hashlib.sha256(bytes(item.dumpPropertyContent(name, 0))).hexdigest(),
+                    _property_content(item, name),
                 )
                 for name in sorted(item.PropertiesList)
             ),

@@ -10,12 +10,46 @@ import pytest
 pytestmark = pytest.mark.core
 
 
-def _require_native() -> None:
+def _require_native_collaboration() -> None:
     if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") != "1":
-        raise RuntimeError("Native qualification requires FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION=1")
+        pytest.skip("Compose FreeCAD is adapter-only; use the branch-built lane")
+
+
+import hashlib
+
+
+def _property_content(item, name: str):
+    if name == "Proxy":
+        proxy = getattr(item, "Proxy", None)
+        if proxy is None:
+            return None
+        return f"{type(proxy).__module__}.{type(proxy).__qualname__}"
+    dumped = bytes(item.dumpPropertyContent(name, 0))
+    return hashlib.sha256(dumped).hexdigest()
 
 
 def _model_state(document):
+    return tuple(
+        (
+            item.Name,
+            item.TypeId,
+            tuple(item.State),
+            tuple(sorted(obj.Name for obj in item.InList)),
+            tuple(sorted(obj.Name for obj in item.OutList)),
+            tuple(
+                (
+                    name,
+                    item.getTypeIdOfProperty(name),
+                    item.getGroupOfProperty(name),
+                    tuple(item.getPropertyStatus(name)),
+                    _property_content(item, name),
+                )
+                for name in sorted(item.PropertiesList)
+            ),
+        )
+        for item in document.Objects
+    )
+
     import hashlib
 
     return tuple(
@@ -31,9 +65,7 @@ def _model_state(document):
                     item.getTypeIdOfProperty(name),
                     item.getGroupOfProperty(name),
                     tuple(item.getPropertyStatus(name)),
-                    id(item.Proxy)
-                    if name == "Proxy"
-                    else hashlib.sha256(bytes(item.dumpPropertyContent(name, 0))).hexdigest(),
+                    _property_content(item, name),
                 )
                 for name in sorted(item.PropertiesList)
             ),
@@ -81,7 +113,7 @@ def _prepare(document):
 
 
 def test_restore_native_success_inspects_after_recompute(monkeypatch):
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
@@ -119,7 +151,7 @@ def test_restore_native_success_inspects_after_recompute(monkeypatch):
 
 
 def test_restore_native_validation_failure_restores_complete_state():
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
 
@@ -140,7 +172,7 @@ def test_restore_native_validation_failure_restores_complete_state():
 
 
 def test_restore_native_apply_failure_restores(monkeypatch):
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
@@ -166,7 +198,7 @@ def test_restore_native_apply_failure_restores(monkeypatch):
 
 
 def test_restore_native_recompute_failure_rolls_back(monkeypatch):
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
@@ -205,7 +237,7 @@ def test_restore_native_recompute_failure_rolls_back(monkeypatch):
 
 
 def test_restore_native_rollback_failure_is_uncertain_and_fences(monkeypatch):
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
@@ -244,7 +276,7 @@ def test_restore_native_rollback_failure_is_uncertain_and_fences(monkeypatch):
 
 
 def test_restore_native_inspection_failure_rolls_back(monkeypatch):
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
@@ -266,7 +298,7 @@ def test_restore_native_inspection_failure_rolls_back(monkeypatch):
 
 
 def test_restore_native_postcondition_cannot_write():
-    _require_native()
+    _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
 
