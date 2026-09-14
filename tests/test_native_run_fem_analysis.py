@@ -58,6 +58,37 @@ def _require_fem_workbench() -> None:
         pytest.fail(f"FEM workbench unavailable for native qualification: {exc}")
 
 
+def _require_fem_executor_prereqs(document, analysis) -> None:
+    import shutil
+
+    from addon.FreeCADMCP.rpc_server.fem_executor_ops.solver_resolution import resolve_solver
+
+    _require_fem_workbench()
+    import ObjectsFem
+
+    solver_factory = (
+        getattr(ObjectsFem, "makeSolverCalculiXCcxTools", None)
+        or getattr(ObjectsFem, "makeSolverCalculixCcxTools", None)
+    )
+    if solver_factory is None:
+        pytest.fail("CalculiX solver factory unavailable for native FEM qualification")
+
+    if shutil.which("ccx") is None and shutil.which("ccx_2.19") is None:
+        pytest.fail("CalculiX executable (ccx) not found on PATH for native FEM qualification")
+
+    try:
+        from femtools import ccxtools
+    except ImportError as exc:
+        pytest.fail(f"femtools unavailable for native FEM qualification: {exc}")
+
+    solver = resolve_solver(document, analysis)
+    fea = ccxtools.FemToolsCcx(analysis=analysis, solver=solver)
+    fea.update_objects()
+    prereq_msg = fea.check_prerequisites()
+    if prereq_msg:
+        pytest.fail(f"FEM executor prerequisites failed for native qualification: {prereq_msg}")
+
+
 def _collaborators(FreeCAD, validator):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
     from addon.FreeCADMCP.rpc_server.fem_executor import run_fem_analysis
@@ -74,10 +105,83 @@ def _prepare(document):
     _require_fem_workbench()
     import ObjectsFem
 
-    if document.getObject("Target") is None:
-        ObjectsFem.makeAnalysis(document, "Target")
+    existing = document.getObject("Target")
+    if existing is not None:
+        _require_fem_executor_prereqs(document, existing)
+        return existing
+
+    beam = document.addObject("Part::Box", "Beam")
+    beam.Length = 100.0
+    beam.Width = 10.0
+    beam.Height = 10.0
     document.recompute()
-    return document.getObject("Target")
+
+    analysis = ObjectsFem.makeAnalysis(document, "Target")
+
+    material = ObjectsFem.makeMaterialSolid(document, "Material")
+    material.Material = {
+        "Name": "Steel",
+        "Density": "7900 kg/m^3",
+        "YoungsModulus": "210 GPa",
+        "PoissonRatio": "0.3",
+    }
+    material.References = [(beam, "")]
+    analysis.addObject(material)
+
+    mesh = analysis.addObject(ObjectsFem.makeMeshGmsh(document, "Mesh"))[0]
+    geom_attr = "Shape" if hasattr(mesh, "Shape") else "Part"
+    setattr(mesh, geom_attr, beam)
+    mesh.CharacteristicLengthMax = 10.0
+    mesh.CharacteristicLengthMin = 5.0
+    document.recompute()
+
+    from femmesh.gmshtools import GmshTools
+
+    GmshTools(mesh).create_mesh()
+
+    fixed_face = next(
+        (
+            f"Face{index}"
+            for index, face in enumerate(beam.Shape.Faces, start=1)
+            if abs(face.CenterOfMass.x - 0.0) < 1e-6
+        ),
+        None,
+    )
+    loaded_face = next(
+        (
+            f"Face{index}"
+            for index, face in enumerate(beam.Shape.Faces, start=1)
+            if abs(face.CenterOfMass.x - float(beam.Length)) < 1e-6
+        ),
+        None,
+    )
+    if fixed_face is None or loaded_face is None:
+        pytest.fail("Failed to resolve cantilever beam faces for native FEM qualification")
+
+    fixed = ObjectsFem.makeConstraintFixed(document, "Fixed")
+    fixed.References = [(beam, fixed_face)]
+    analysis.addObject(fixed)
+
+    load = ObjectsFem.makeConstraintForce(document, "Load")
+    load.References = [(beam, loaded_face)]
+    z_edge = next(
+        (
+            f"Edge{index}"
+            for index, edge in enumerate(beam.Shape.Edges, start=1)
+            if abs(edge.tangentAt(0).z) > 0.99
+        ),
+        None,
+    )
+    if z_edge is None:
+        pytest.fail("Failed to resolve load direction edge for native FEM qualification")
+    load.Direction = (beam, z_edge)
+    load.Reversed = True
+    load.Force = "100 N"
+    analysis.addObject(load)
+
+    document.recompute()
+    _require_fem_executor_prereqs(document, analysis)
+    return analysis
 
 
 def test_run_fem_analysis_native_success_inspects_after_recompute(monkeypatch):

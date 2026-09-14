@@ -125,7 +125,19 @@ class _RunFemAnalysisExecution:
         runner = getattr(self.collaborators, "run_fem_analysis", None)
         if runner is None:
             raise RunFemAnalysisError("FEM_ANALYSIS_UNAVAILABLE", "run_fem_analysis collaborator is missing")
-        invoke(runner, str(self.request.doc_name), self.request.analysis_name)
+        executor_result = invoke(runner, str(self.request.doc_name), self.request.analysis_name)
+        if not isinstance(executor_result, dict) or executor_result.get("success") is not True:
+            code = "FEM_EXECUTION_FAILED"
+            if isinstance(executor_result, dict):
+                executor_code = executor_result.get("error_code")
+                if isinstance(executor_code, str) and executor_code.strip():
+                    code = executor_code.strip()
+                message = executor_result.get("error")
+                if not isinstance(message, str) or not message.strip():
+                    message = "FEM analysis execution failed"
+            else:
+                message = "FEM analysis executor returned an invalid result"
+            raise RunFemAnalysisError(code, message)
 
     def inspect(self, doc: RunFemAnalysisReadDocument) -> None:
         if self.created is None:

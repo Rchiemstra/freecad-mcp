@@ -243,6 +243,20 @@ def test_missing_document_fails_without_entering_the_apply_callback():
     assert events == []
 
 
+def test_executor_failure_dict_aborts_before_commit():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+    collaborators.run_fem_analysis = lambda *_a, **_k: {"success": False, "error": "solver failed"}
+
+    result = run_run_fem_analysis(collaborators, "Doc", "Target", 600)
+
+    assert result["success"] is False
+    assert result["error_code"] == "FEM_EXECUTION_FAILED"
+    assert result.get("native_status") == "ApplyFailed"
+
+
 def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     events: list[str] = []
     document = _Document(events)
