@@ -119,11 +119,24 @@ def run_activate_document(
     if isinstance(request, dict):
         return request
     result = _ActivateDocumentExecution(collaborators, request).run()
-    if isinstance(result, dict) and result.get("success") is True:
-        app = getattr(collaborators, "freecad", None)
-        setter = getattr(app, "setActiveDocument", None)
-        if callable(setter):
-            setter(str(request.doc_name))
+    if not (isinstance(result, dict) and result.get("success") is True):
+        return result
+    app = getattr(collaborators, "freecad", None)
+    setter = getattr(app, "setActiveDocument", None)
+    if not callable(setter):
+        return make_activate_document_uncertain(
+            "ACTIVATE_DOCUMENT_FAILED",
+            "Native commit succeeded but FreeCAD cannot activate documents",
+            committed=True,
+        )
+    try:
+        setter(str(request.doc_name))
+    except Exception as exc:
+        return make_activate_document_uncertain(
+            "ACTIVATE_DOCUMENT_FAILED",
+            str(exc) or type(exc).__name__,
+            committed=True,
+        )
     return result
 
 

@@ -23,7 +23,15 @@ pytestmark = pytest.mark.unit
 def test_activate_document_runs_apply_recompute_validate_then_commits():
     events: list[str] = []
     document = FakeDocument(events)
-    collab, _api = collaborators(document, events)
+    collab, api = collaborators(document, events)
+    activated: list[str] = []
+    original_set_active = api.setActiveDocument
+
+    def track_set_active(name: str) -> None:
+        activated.append(name)
+        original_set_active(name)
+
+    collab.freecad.setActiveDocument = track_set_active
 
     result = run_activate_document(collab, "Doc")
 
@@ -32,6 +40,7 @@ def test_activate_document_runs_apply_recompute_validate_then_commits():
     assert "recompute" in events
     assert "validate" in events
     assert "commit" in events
+    assert activated == ["Doc"]
 
 
 def test_invalid_arguments_abort_without_commit():
@@ -143,6 +152,40 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_
     assert result["success"] is False
     assert result["outcome"] == "uncertain"
     assert result["retry_safe"] is False
+
+
+def test_activate_document_missing_setter_is_uncertain():
+    events: list[str] = []
+    document = FakeDocument(events)
+    collab, _api = collaborators(document, events)
+    collab.freecad.setActiveDocument = None
+
+    result = run_activate_document(collab, "Doc")
+
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+    assert result["error_code"] == "ACTIVATE_DOCUMENT_FAILED"
+    assert result["committed"] is True
+    assert "commit" in events
+
+
+def test_activate_document_setter_exception_is_uncertain():
+    events: list[str] = []
+    document = FakeDocument(events)
+    collab, _api = collaborators(document, events)
+
+    def boom(_name: str) -> None:
+        raise RuntimeError("activation exploded")
+
+    collab.freecad.setActiveDocument = boom
+
+    result = run_activate_document(collab, "Doc")
+
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+    assert result["error_code"] == "ACTIVATE_DOCUMENT_FAILED"
+    assert result["committed"] is True
+    assert "commit" in events
 
 
 def test_activate_document_has_apply_entry_point():

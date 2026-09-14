@@ -32,6 +32,7 @@ def test_undo_runs_apply_recompute_validate_then_commits():
     assert "recompute" in events
     assert "validate" in events
     assert "commit" in events
+    assert events.index("commit") < events.index("apply")
 
 
 def test_invalid_arguments_abort_without_commit():
@@ -143,6 +144,25 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_
     assert result["success"] is False
     assert result["outcome"] == "uncertain"
     assert result["retry_safe"] is False
+
+
+def test_undo_post_commit_exception_is_uncertain():
+    events: list[str] = []
+    document = FakeDocument(events)
+
+    def boom() -> None:
+        raise RuntimeError("undo exploded")
+
+    document.undo = boom
+    collab, _api = collaborators(document, events)
+
+    result = run_undo(collab, "Doc")
+
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+    assert result["error_code"] == "UNDO_FAILED"
+    assert result["committed"] is True
+    assert "commit" in events
 
 
 def test_undo_has_apply_entry_point():

@@ -66,7 +66,7 @@ def test_gate_rejects_each_known_bad_variant(relative, old, broken, expected) ->
 
 def test_gate_rejects_recompute_ownership_in_the_leaf() -> None:
     source = _read(LEAF)
-    marker = '    """Apply undo without recomputing or managing a transaction."""'
+    marker = '    """Record document identity; undo runs after native commit."""'
     assert source.count(marker) == 1
     mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
     assert "UNDO001 leaf owns forbidden execution: recompute" in scan_undo_architecture(
