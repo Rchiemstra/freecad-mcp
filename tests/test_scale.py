@@ -15,17 +15,36 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import measure_io_actio
 pytestmark = pytest.mark.unit
 
 
+def _box_item(name: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        Name=name,
+        Label=name,
+        TypeId="Part::Box",
+        isDerivedFrom=lambda t: t == "Part::Box",
+        Placement=SimpleNamespace(
+            Base=SimpleNamespace(x=0.0, y=0.0, z=0.0),
+            Rotation=SimpleNamespace(
+                Axis=SimpleNamespace(x=0.0, y=0.0, z=1.0),
+                Angle=0.0,
+            ),
+        ),
+        Shape=SimpleNamespace(
+            BoundBox=SimpleNamespace(XLength=10.0, YLength=10.0, ZLength=10.0),
+        ),
+    )
+
+
 class _Document:
     Name = "Doc"
 
     def __init__(self, events: list[str]) -> None:
         self.events = events
         self.objects: dict[str, Any] = {
-            "Box": SimpleNamespace(Name="Box", Label="Box", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
-            "Mover": SimpleNamespace(Name="Mover", Label="Mover", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
-            "Wall": SimpleNamespace(Name="Wall", Label="Wall", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
+            "Box": _box_item("Box"),
+            "Mover": _box_item("Mover"),
+            "Wall": _box_item("Wall"),
             "Assembly": SimpleNamespace(Name="Assembly", Label="Assembly", TypeId="Assembly::AssemblyObject", isDerivedFrom=lambda t: t == "Assembly::AssemblyObject"),
-            "Base": SimpleNamespace(Name="Base", Label="Base", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
+            "Base": _box_item("Base"),
         }
         self.recomputed = False
         self.add_calls = 0
@@ -148,50 +167,17 @@ class _CompatibilityAPI:
         )
 
 
-def _fake_payload(document, *args, **kwargs):
+def _fake_payload(document, obj_name, sx, sy, sz, **kwargs):
     document.events.append("apply")
-    obj = document.addObject("App::FeaturePython", "Created")
+    obj = document.objects.get(str(obj_name))
+    if obj is not None:
+        box = obj.Shape.BoundBox
+        box.XLength *= float(sx)
+        box.YLength *= float(sy)
+        box.ZLength *= float(sz)
     return {
-        "assembly": obj.Name,
-        "label": obj.Label,
-        "type": obj.TypeId,
-        "joint_group": None,
-        "joint": obj.Name,
-        "joint_type": "Fixed",
-        "component": "Base",
-        "method": "assembly.solve()",
-        "status": "ok",
-        "body": obj.Name,
-        "sketch": obj.Name,
-        "feature": obj.Name,
-        "teeth": 8,
-        "module": 2.0,
-        "path": "/tmp/out",
-        "exported": True,
-        "object": "Box",
-        "faces": 12,
-        "imported": True,
-        "xmin": 0.0,
-        "ymin": 0.0,
-        "zmin": 0.0,
-        "xmax": 1.0,
-        "ymax": 1.0,
-        "zmax": 1.0,
-        "dx": 1.0,
-        "dy": 1.0,
-        "dz": 1.0,
-        "diagonal": 1.732,
-        "frame": "world",
-        "x": 0.5,
-        "y": 0.5,
-        "z": 0.5,
-        "unit": "mm",
-        "moving_object": "Mover",
-        "sample_count": 1,
-        "volume_threshold_mm3": 1e-6,
-        "max_common_volume_mm3": 0.0,
-        "any_collision": False,
-        "samples": [],
+        "object": str(obj_name),
+        "label": str(getattr(obj, "Label", obj_name)),
     }
 
 

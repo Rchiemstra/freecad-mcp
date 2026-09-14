@@ -29,6 +29,7 @@ from .rotate_mutation import RotateError, run_rotate_native_mutation
 class RotateReceipt:
     payload: dict[str, object]
     obj: MutationObject | None
+    expected: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,13 +129,77 @@ class _RotateExecution:
         )
 
 
+def _snapshot_placement(obj: object) -> dict[str, object]:
+    placement = getattr(obj, "Placement", None)
+    if placement is None:
+        raise RotateError("CREATED_OBJECT_INVALID", "Object has no Placement after apply")
+    base = getattr(placement, "Base", None)
+    if base is None:
+        raise RotateError("CREATED_OBJECT_INVALID", "Object Placement has no Base after apply")
+    rotation = getattr(placement, "Rotation", None)
+    axis = getattr(rotation, "Axis", None) if rotation is not None else None
+    if rotation is None or axis is None:
+        raise RotateError("CREATED_OBJECT_INVALID", "Object Placement has no Rotation after apply")
+    return {
+        "base": {
+            "x": float(getattr(base, "x", 0.0)),
+            "y": float(getattr(base, "y", 0.0)),
+            "z": float(getattr(base, "z", 0.0)),
+        },
+        "rotation_axis": {
+            "x": float(getattr(axis, "x", 0.0)),
+            "y": float(getattr(axis, "y", 0.0)),
+            "z": float(getattr(axis, "z", 0.0)),
+        },
+        "rotation_angle": float(getattr(rotation, "Angle", 0.0)),
+    }
+
+
+def _placement_matches(obj: object, expected: dict[str, object]) -> None:
+    placement = getattr(obj, "Placement", None)
+    if placement is None:
+        raise RotateError("CREATED_OBJECT_INVALID", "Object has no Placement after recompute")
+    base = getattr(placement, "Base", None)
+    rotation = getattr(placement, "Rotation", None)
+    axis = getattr(rotation, "Axis", None) if rotation is not None else None
+    if base is None or rotation is None or axis is None:
+        raise RotateError("CREATED_OBJECT_INVALID", "Object Placement is incomplete after recompute")
+    expected_base = expected["base"]
+    if not isinstance(expected_base, dict):
+        raise RotateError("CREATED_OBJECT_INVALID", "Missing post-apply Placement snapshot")
+    for key in ("x", "y", "z"):
+        actual = float(getattr(base, key, 0.0))
+        target = float(expected_base[key])
+        if abs(actual - target) > 1e-6:
+            raise RotateError(
+                "CREATED_OBJECT_INVALID",
+                f"Placement Base {key} mismatch after recompute",
+            )
+    expected_axis = expected["rotation_axis"]
+    if not isinstance(expected_axis, dict):
+        raise RotateError("CREATED_OBJECT_INVALID", "Missing post-apply Placement snapshot")
+    for key in ("x", "y", "z"):
+        actual = float(getattr(axis, key, 0.0))
+        target = float(expected_axis[key])
+        if abs(actual - target) > 1e-6:
+            raise RotateError(
+                "CREATED_OBJECT_INVALID",
+                f"Placement Rotation axis {key} mismatch after recompute",
+            )
+    actual_angle = float(getattr(rotation, "Angle", 0.0))
+    target_angle = float(expected["rotation_angle"])
+    if abs(actual_angle - target_angle) > 1e-6:
+        raise RotateError("CREATED_OBJECT_INVALID", "Placement Rotation angle mismatch after recompute")
+
+
 def apply_rotate(doc: MutationDocument, request: RotateRequest) -> RotateReceipt:
     """Apply rotate without recomputing or managing a transaction."""
 
     payload = measure_io_actions.rotate(doc, request.obj_name, axis_x=request.axis_x, axis_y=request.axis_y, axis_z=request.axis_z, angle_deg=request.angle_deg, center_x=request.center_x, center_y=request.center_y, center_z=request.center_z)
     target = payload.get("object")
     found = doc.getObject(str(target)) if isinstance(target, str) else None
-    return RotateReceipt(payload=dict(payload), obj=found)
+    expected = _snapshot_placement(found) if found is not None else None
+    return RotateReceipt(payload=dict(payload), obj=found, expected=expected)
 
 
 
@@ -150,6 +215,9 @@ def read_rotate_result(
         raise RotateError("CREATED_OBJECT_MISSING", f"Created object is missing: {name!r}")
     if receipt.obj is not None and obj is not receipt.obj:
         raise RotateError("CREATED_OBJECT_REPLACED", f"Created object was replaced: {name!r}")
+    if receipt.expected is None:
+        raise RotateError("CREATED_OBJECT_INVALID", "Missing post-apply Placement snapshot")
+    _placement_matches(obj, receipt.expected)
 
     payload = dict(receipt.payload)
     if hasattr(obj, "Label") and "label" in payload:

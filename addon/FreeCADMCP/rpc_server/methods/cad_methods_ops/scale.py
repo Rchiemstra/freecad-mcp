@@ -29,6 +29,7 @@ from .scale_mutation import ScaleError, run_scale_native_mutation
 class ScaleReceipt:
     payload: dict[str, object]
     obj: MutationObject | None
+    expected: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,13 +105,49 @@ class _ScaleExecution:
         )
 
 
+def _snapshot_bound_box(obj: object) -> dict[str, float]:
+    shape = getattr(obj, "Shape", None)
+    if shape is None:
+        raise ScaleError("CREATED_OBJECT_INVALID", "Object has no Shape after apply")
+    box = getattr(shape, "BoundBox", None)
+    if box is None:
+        raise ScaleError("CREATED_OBJECT_INVALID", "Object Shape has no BoundBox after apply")
+    return {
+        "x_length": float(getattr(box, "XLength", 0.0)),
+        "y_length": float(getattr(box, "YLength", 0.0)),
+        "z_length": float(getattr(box, "ZLength", 0.0)),
+    }
+
+
+def _bound_box_matches(obj: object, expected: dict[str, object]) -> None:
+    shape = getattr(obj, "Shape", None)
+    if shape is None:
+        raise ScaleError("CREATED_OBJECT_INVALID", "Object has no Shape after recompute")
+    box = getattr(shape, "BoundBox", None)
+    if box is None:
+        raise ScaleError("CREATED_OBJECT_INVALID", "Object Shape has no BoundBox after recompute")
+    for key, attr in (
+        ("x_length", "XLength"),
+        ("y_length", "YLength"),
+        ("z_length", "ZLength"),
+    ):
+        actual = float(getattr(box, attr, 0.0))
+        target = float(expected[key])
+        if abs(actual - target) > 1e-6:
+            raise ScaleError(
+                "CREATED_OBJECT_INVALID",
+                f"Shape BoundBox {attr} mismatch after recompute",
+            )
+
+
 def apply_scale(doc: MutationDocument, request: ScaleRequest) -> ScaleReceipt:
     """Apply scale without recomputing or managing a transaction."""
 
     payload = measure_io_actions.scale(doc, request.obj_name, request.sx, request.sy, request.sz)
     target = payload.get("object")
     found = doc.getObject(str(target)) if isinstance(target, str) else None
-    return ScaleReceipt(payload=dict(payload), obj=found)
+    expected = _snapshot_bound_box(found) if found is not None else None
+    return ScaleReceipt(payload=dict(payload), obj=found, expected=expected)
 
 
 
@@ -126,6 +163,9 @@ def read_scale_result(
         raise ScaleError("CREATED_OBJECT_MISSING", f"Created object is missing: {name!r}")
     if receipt.obj is not None and obj is not receipt.obj:
         raise ScaleError("CREATED_OBJECT_REPLACED", f"Created object was replaced: {name!r}")
+    if receipt.expected is None:
+        raise ScaleError("CREATED_OBJECT_INVALID", "Missing post-apply Shape snapshot")
+    _bound_box_matches(obj, receipt.expected)
 
     payload = dict(receipt.payload)
     if hasattr(obj, "Label") and "label" in payload:

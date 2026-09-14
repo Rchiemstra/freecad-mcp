@@ -29,6 +29,7 @@ from .translate_mutation import TranslateError, run_translate_native_mutation
 class TranslateReceipt:
     payload: dict[str, object]
     obj: MutationObject | None
+    expected: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,13 +105,45 @@ class _TranslateExecution:
         )
 
 
+def _snapshot_placement_base(obj: object) -> dict[str, float]:
+    placement = getattr(obj, "Placement", None)
+    if placement is None:
+        raise TranslateError("CREATED_OBJECT_INVALID", "Object has no Placement after apply")
+    base = getattr(placement, "Base", None)
+    if base is None:
+        raise TranslateError("CREATED_OBJECT_INVALID", "Object Placement has no Base after apply")
+    return {
+        "x": float(getattr(base, "x", 0.0)),
+        "y": float(getattr(base, "y", 0.0)),
+        "z": float(getattr(base, "z", 0.0)),
+    }
+
+
+def _placement_base_matches(obj: object, expected: dict[str, object]) -> None:
+    placement = getattr(obj, "Placement", None)
+    if placement is None:
+        raise TranslateError("CREATED_OBJECT_INVALID", "Object has no Placement after recompute")
+    base = getattr(placement, "Base", None)
+    if base is None:
+        raise TranslateError("CREATED_OBJECT_INVALID", "Object Placement has no Base after recompute")
+    for key in ("x", "y", "z"):
+        actual = float(getattr(base, key, 0.0))
+        target = float(expected[key])
+        if abs(actual - target) > 1e-6:
+            raise TranslateError(
+                "CREATED_OBJECT_INVALID",
+                f"Placement Base {key} mismatch after recompute",
+            )
+
+
 def apply_translate(doc: MutationDocument, request: TranslateRequest) -> TranslateReceipt:
     """Apply translate without recomputing or managing a transaction."""
 
     payload = measure_io_actions.translate(doc, request.obj_name, request.dx, request.dy, request.dz)
     target = payload.get("object")
     found = doc.getObject(str(target)) if isinstance(target, str) else None
-    return TranslateReceipt(payload=dict(payload), obj=found)
+    expected = _snapshot_placement_base(found) if found is not None else None
+    return TranslateReceipt(payload=dict(payload), obj=found, expected=expected)
 
 
 
@@ -126,6 +159,9 @@ def read_translate_result(
         raise TranslateError("CREATED_OBJECT_MISSING", f"Created object is missing: {name!r}")
     if receipt.obj is not None and obj is not receipt.obj:
         raise TranslateError("CREATED_OBJECT_REPLACED", f"Created object was replaced: {name!r}")
+    if receipt.expected is None:
+        raise TranslateError("CREATED_OBJECT_INVALID", "Missing post-apply Placement snapshot")
+    _placement_base_matches(obj, receipt.expected)
 
     payload = dict(receipt.payload)
     if hasattr(obj, "Label") and "label" in payload:
