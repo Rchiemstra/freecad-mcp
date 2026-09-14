@@ -62,8 +62,9 @@ follow_imports = "skip"
 warn_unused_ignores = true
 mypy_path = [".", "src"]
 # Typed slice entrypoints: contracts and typecheck protocols auto-include new ops.
-# Leaves, mutations, and client ops are pulled via follow_imports=normal on the
-# cad_methods_ops.* and parametric_ops.* overrides below (no per-op file list).
+# Leaves and mutations are pulled via follow_imports=normal on cad_methods_ops.*.
+# Public MCP adapters keep follow_imports=silent so CallToolResult signatures
+# are visible to typecheck protocols without reporting adapter-internal errors.
 files = [
     "addon/FreeCADMCP/_shared/protocol/*_contract.py",
     "src/freecad_mcp/_shared/protocol/*_contract.py",
@@ -95,6 +96,10 @@ follow_imports = "normal"
 
 [[tool.mypy.overrides]]
 module = ["mcp.types"]
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+module = ["freecad_mcp.operations.parametric_ops.*"]
 follow_imports = "silent"
 
 [[tool.mypy.overrides]]
