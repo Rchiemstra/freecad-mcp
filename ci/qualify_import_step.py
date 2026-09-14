@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 
 PYTHON_TESTS = (
-    "tests/import/test_import_step.py",
-    "tests/import/test_import_step_response.py",
-    "tests/import/test_import_step_contract_gate.py",
-    "tests/import/test_import_step_json_rpc_contract.py",
+    "tests/import_cad/test_import_step.py",
+    "tests/import_cad/test_import_step_response.py",
+    "tests/import_cad/test_import_step_contract_gate.py",
+    "tests/import_cad/test_import_step_json_rpc_contract.py",
     "tests/test_typed_platform_discovery.py",
 )
 

@@ -1,4 +1,4 @@
-"""Agent-to-FreeCAD wire contract for the ``import_brep`` MCP operation."""
+"""Agent-to-FreeCAD wire contract for the ``import_step`` MCP operation."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from freecad_mcp._shared.protocol.json_rpc_client import (
     JSON_RPC_PROTOCOL_HEADER,
     JSON_RPC_PROTOCOL_VALUE,
 )
-from freecad_mcp._shared.protocol.import_brep_contract import make_import_brep_success
+from freecad_mcp._shared.protocol.import_step_contract import make_import_step_success
 from freecad_mcp.freecad_client import FreeCADConnection
 from freecad_mcp.freecad_client_ops.connection_methods.connection_headers_ops import (
     configure_rpc_session,
@@ -41,7 +41,7 @@ class _RecordingFreeCADTransport:
         envelope = request["params"][0]
         body_result = self.response_result
         if body_result is _DEFAULT_RESPONSE:
-            from tests.import.test_import_brep_response import _success
+            from tests.import_cad.test_import_step_response import _success
             body_result = _success()
         response = {
             "jsonrpc": "2.0",
@@ -85,15 +85,15 @@ def _invoke(monkeypatch, transport, arguments):
         raising=False,
     )
     bind_instrumented_fast_mcp(InstrumentedFastMCP)
-    mcp = InstrumentedFastMCP("import_brep-contract")
+    mcp = InstrumentedFastMCP("import_step-contract")
     exports = {}
-    tools_io_import._register_import_brep(mcp, dependencies=object(), exports=exports)
+    tools_io_import._register_import_step(mcp, dependencies=object(), exports=exports)
 
     async def invoke():
         async with create_connected_server_and_client_session(mcp._mcp_server) as client:
             listing = await client.list_tools()
-            tool = next(tool for tool in listing.tools if tool.name == "import_brep")
-            return await client.call_tool("import_brep", arguments)
+            tool = next(tool for tool in listing.tools if tool.name == "import_step")
+            return await client.call_tool("import_step", arguments)
 
     try:
         return asyncio.run(invoke())
@@ -101,38 +101,38 @@ def _invoke(monkeypatch, transport, arguments):
         connection.disconnect()
 
 
-def test_import_brep_sends_authenticated_json_rpc_to_freecad(monkeypatch):
+def test_import_step_sends_authenticated_json_rpc_to_freecad(monkeypatch):
     transport = _RecordingFreeCADTransport()
     arguments = {"doc_name": "AgentDocument"}
     # Fill remaining required tool fields with benign values.
-    if "import_brep" == "create_assembly_grounded_joint":
+    if "import_step" == "create_assembly_grounded_joint":
         arguments.update({"assembly_name": "Assembly", "component_name": "Base"})
-    elif "import_brep" == "create_assembly_joint":
+    elif "import_step" == "create_assembly_joint":
         arguments.update({
             "assembly_name": "Assembly",
             "joint_type": "Fixed",
             "ref1_component": "A",
             "ref2_component": "B",
         })
-    elif "import_brep" == "solve_assembly":
+    elif "import_step" == "solve_assembly":
         arguments.update({"assembly_name": "Assembly"})
-    elif "import_brep" in {"create_helical_gear", "create_involute_gear", "create_spur_gear"}:
+    elif "import_step" in {"create_helical_gear", "create_involute_gear", "create_spur_gear"}:
         arguments.update({"gear_name": "Gear", "teeth": 8, "module": 2.0, "width": 10.0})
-    elif "import_brep" == "export_brep":
+    elif "import_step" == "export_brep":
         arguments.update({"obj_name": "Box", "file_path": "/tmp/out.brep"})
-    elif "import_brep" in {"export_step", "export_stl"}:
+    elif "import_step" in {"export_step", "export_stl"}:
         arguments.update({"file_path": "/tmp/out"})
-    elif "import_brep" in {"import_brep", "import_step"}:
+    elif "import_step" in {"import_brep", "import_step"}:
         arguments.update({"file_path": "/tmp/in"})
-    elif "import_brep" in {"bounding_box", "center_of_mass"}:
+    elif "import_step" in {"bounding_box", "center_of_mass"}:
         arguments.update({"obj_name": "Box"})
-    elif "import_brep" == "common_volume_along_path":
+    elif "import_step" == "common_volume_along_path":
         arguments.update({"moving_object": "Mover", "obstacle_objects": ["Wall"], "samples": [{"x": 0, "y": 0, "z": 0}]})
-    elif "import_brep" == "rotate":
+    elif "import_step" == "rotate":
         arguments.update({"obj_name": "Box", "axis_x": 0, "axis_y": 0, "axis_z": 1, "angle_deg": 90})
-    elif "import_brep" == "scale":
+    elif "import_step" == "scale":
         arguments.update({"obj_name": "Box", "sx": 1, "sy": 1, "sz": 1})
-    elif "import_brep" == "translate":
+    elif "import_step" == "translate":
         arguments.update({"obj_name": "Box", "dx": 1, "dy": 0, "dz": 0})
     result = _invoke(monkeypatch, transport, arguments)
     assert result.isError is False
@@ -143,9 +143,9 @@ def test_import_brep_sends_authenticated_json_rpc_to_freecad(monkeypatch):
     assert request["method"] == "invoke_v2"
     envelope = request["params"][0]
     uuid.UUID(envelope["request_id"])
-    assert envelope["method"] == "import_brep"
+    assert envelope["method"] == "import_step"
     assert envelope["params"]["doc_name"] == "AgentDocument"
     assert envelope["session_token"] == "test-session-token"
-    assert envelope["operation"]["name"] == "Import BREP"
+    assert envelope["operation"]["name"] == "Import STEP"
     assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
     assert transport.closed is True

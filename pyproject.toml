@@ -91,7 +91,7 @@ follow_imports = "normal"
 disallow_any_unimported = true
 
 [[tool.mypy.overrides]]
-module = ["freecad_mcp.responses.tool_results"]
+module = ["freecad_mcp.responses.tool_results", "freecad_mcp.responses.constants"]
 follow_imports = "normal"
 
 [[tool.mypy.overrides]]
