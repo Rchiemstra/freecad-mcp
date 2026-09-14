@@ -13,7 +13,7 @@ from tests.assembly_io_native_matrix import (
 
 pytestmark = pytest.mark.core
 
-_KIND = "box"
+_KIND = "import_brep"
 
 
 _RUN_ARGS = lambda doc_name, ctx: (doc_name, ctx["path"], "Imported")

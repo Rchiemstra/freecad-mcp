@@ -17,30 +17,6 @@ def _require_native_collaboration() -> None:
 
 from tests.native_model_state import model_state as _model_state
 
-    import hashlib
-
-    return tuple(
-        (
-            item.Name,
-            item.TypeId,
-            tuple(item.State),
-            tuple(sorted(obj.Name for obj in item.InList)),
-            tuple(sorted(obj.Name for obj in item.OutList)),
-            tuple(
-                (
-                    name,
-                    item.getTypeIdOfProperty(name),
-                    item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
-                    _property_content(item, name),
-                )
-                for name in sorted(item.PropertiesList)
-            ),
-        )
-        for item in document.Objects
-    )
-
-
 def _collaborators(FreeCAD, validator):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
 

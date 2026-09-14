@@ -200,8 +200,9 @@ def apply_sketch_fillet(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    point = sketch.getPoint(request.geo1, 2)
-    sketch.fillet(request.geo1, request.geo2, point, point, request.radius, True, False)
+    point1 = sketch.getPoint(request.geo1, 2)
+    point2 = sketch.getPoint(request.geo2, 1)
+    sketch.fillet(request.geo1, request.geo2, point1, point2, request.radius, True, False)
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

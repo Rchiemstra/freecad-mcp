@@ -63,6 +63,16 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
         document.recompute()
         ctx["box"] = box.Name
         return ctx
+    if kind == "import_step":
+        path = export_temp_path(".step")
+        write_box_step(path)
+        ctx["path"] = path
+        return ctx
+    if kind == "import_brep":
+        path = export_temp_path(".brep")
+        write_box_brep(path)
+        ctx["path"] = path
+        return ctx
     if kind == "volume":
         mover = document.addObject("Part::Box", "Mover")
         mover.Length = 5

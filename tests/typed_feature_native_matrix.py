@@ -71,6 +71,11 @@ def _run(op: str, collab, document_name: str, base: dict[str, object], **overrid
     return runner(collab, **run_kwargs(base, document_name, overrides))
 
 
+def _settled_state(document, op: str):
+    document.recompute()
+    return model_state(document), revision_state(document, op)
+
+
 def check_success(op: str, kind: str, base: dict[str, object], monkeypatch) -> None:
     require_native_collaboration()
     import FreeCAD
@@ -92,20 +97,15 @@ def check_success(op: str, kind: str, base: dict[str, object], monkeypatch) -> N
         original_apply = getattr(subject, f"apply_{op}")
         original_read = getattr(subject, f"read_{op}_result")
 
-        def tracked_apply(admitted_document, request):
+        def tracked_apply(admitted_document, *args, **kwargs):
             events.append("apply")
-            receipt = original_apply(admitted_document, request)
-            target = getattr(receipt, "feature", None) or getattr(receipt, "obj", None)
-            touch = getattr(target, "touch", None)
-            if callable(touch):
-                touch()
-            else:
-                probe.touch()
+            receipt = original_apply(admitted_document, *args, **kwargs)
+            probe.touch()
             return receipt
 
-        def tracked_read(admitted_document, receipt):
+        def tracked_read(admitted_document, *args, **kwargs):
             events.append("inspect")
-            return original_read(admitted_document, receipt)
+            return original_read(admitted_document, *args, **kwargs)
 
         monkeypatch.setattr(subject, f"apply_{op}", tracked_apply)
         monkeypatch.setattr(subject, f"read_{op}_result", tracked_read)
@@ -115,9 +115,9 @@ def check_success(op: str, kind: str, base: dict[str, object], monkeypatch) -> N
             document.Name,
             base,
         )
-        assert result["success"] is True
-        assert result["committed"] is True
-        assert events == ["apply", "recompute", "inspect", "validate"]
+        assert result["success"] is True, result
+        assert result["committed"] is True, result
+        assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
         assert document.getObject(result["feature"]) is not None
     finally:
         FreeCAD.closeDocument(document.Name)
@@ -130,8 +130,7 @@ def check_validation_failure(op: str, kind: str, base: dict[str, object]) -> Non
     document = FreeCAD.newDocument(f"MCP{op}NativeRollback")
     try:
         prepare_native_document(document, kind)
-        document.recompute()
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
         result = _run(
             op,
             collaborators(
@@ -141,10 +140,10 @@ def check_validation_failure(op: str, kind: str, base: dict[str, object]) -> Non
             document.Name,
             base,
         )
-        assert result["success"] is False
-        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
-        assert result["rollback_succeeded"] is True
-        assert (model_state(document), revision_state(document, op)) == before
+        assert result["success"] is False, result
+        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED", result
+        assert result["rollback_succeeded"] is True, result
+        assert _settled_state(document, op) == before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -160,7 +159,7 @@ def check_apply_failure(op: str, kind: str, base: dict[str, object], monkeypatch
         anchor = document.addObject("App::FeaturePython", "ExistingAnchor")
         anchor.Label = "Before"
         document.recompute()
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
         original_apply = getattr(subject, f"apply_{op}")
 
         def mutates_then_raises(admitted_document, request):
@@ -174,7 +173,7 @@ def check_apply_failure(op: str, kind: str, base: dict[str, object], monkeypatch
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
-        assert (model_state(document), revision_state(document, op)) == before
+        assert _settled_state(document, op) == before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -200,7 +199,7 @@ def check_recompute_failure(op: str, kind: str, base: dict[str, object], monkeyp
         probe = document.addObject("App::FeaturePython", "FailingRecomputeProbe")
         probe.Proxy = proxy
         document.recompute()
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
         original_apply = getattr(subject, f"apply_{op}")
 
         def arm_recompute_failure(admitted_document, request):
@@ -213,7 +212,7 @@ def check_recompute_failure(op: str, kind: str, base: dict[str, object], monkeyp
         result = _run(op, collaborators(FreeCAD, lambda _document: None), document.Name, base)
         assert result["success"] is False
         assert result["native_status"] == "RecomputeFailed"
-        assert (model_state(document), revision_state(document, op)) == before
+        assert _settled_state(document, op) == before
     finally:
         proxy.armed = False
         FreeCAD.closeDocument(document.Name)
@@ -273,7 +272,7 @@ def check_inspection_failure(op: str, kind: str, base: dict[str, object], monkey
     try:
         prepare_native_document(document, kind)
         document.recompute()
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
 
         def reject_inspection(_document, _receipt):
             raise error_cls("CREATED_OBJECT_WRONG_TYPE", "forced post-recompute inspection failure")
@@ -283,7 +282,7 @@ def check_inspection_failure(op: str, kind: str, base: dict[str, object], monkey
         assert result["success"] is False
         assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
         assert result["rollback_succeeded"] is True
-        assert (model_state(document), revision_state(document, op)) == before
+        assert _settled_state(document, op) == before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -341,11 +340,11 @@ def check_duplicate_and_missing(op: str, kind: str, base: dict[str, object]) -> 
         document.recompute()
         first = _run(op, collab, document.Name, base)
         assert first["success"] is True
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
         result = _run(op, collab, document.Name, base)
         assert result["error_code"] == "OBJECT_ALREADY_EXISTS"
         assert result["native_status"] == "ApplyFailed"
-        assert (model_state(document), revision_state(document, op)) == before
+        assert _settled_state(document, op) == before
         missing = _run(op, collab, "NoSuchFeatureQualificationDocument", base)
         assert missing["error_code"] == "DOCUMENT_NOT_FOUND"
         assert missing["outcome"] == "rejected"
@@ -386,7 +385,7 @@ def check_rich_model_restore(
         probe = document.addObject("App::FeaturePython", "Probe")
         probe.Proxy = proxy
         document.recompute()
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
         original_apply = getattr(subject, f"apply_{op}")
         original_inspect = getattr(subject, f"read_{op}_result")
 
@@ -417,7 +416,7 @@ def check_rich_model_restore(
         result = _run(op, collaborators(FreeCAD, validate), document.Name, base)
         assert result["outcome"] == "rejected"
         assert result["rollback_succeeded"] is True
-        assert (model_state(document), revision_state(document, op)) == before
+        assert _settled_state(document, op) == before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -433,7 +432,7 @@ def check_postcondition_cannot_write(
         prepare_native_document(document, kind)
         anchor = document.addObject("App::FeaturePython", "Anchor")
         document.recompute()
-        before = model_state(document), revision_state(document, op)
+        before = _settled_state(document, op)
 
         def validate(admitted):
             if write == "property":
@@ -444,6 +443,6 @@ def check_postcondition_cannot_write(
         result = _run(op, collaborators(FreeCAD, validate), document.Name, base)
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
-        assert (model_state(document), revision_state(document, op)) == before
+        assert _settled_state(document, op) == before
     finally:
         FreeCAD.closeDocument(document.Name)

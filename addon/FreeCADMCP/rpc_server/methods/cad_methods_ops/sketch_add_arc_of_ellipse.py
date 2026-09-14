@@ -219,14 +219,8 @@ def apply_sketch_add_arc_of_ellipse(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    rot = math.radians(request.angle)
-    major_pt = collaborators.freecad.Vector(
-        request.cx + request.major_radius * math.cos(rot),
-        request.cy + request.major_radius * math.sin(rot),
-        0.0,
-    )
     center = collaborators.freecad.Vector(request.cx, request.cy, 0.0)
-    ellipse = collaborators.part.Ellipse(major_pt, request.minor_radius, center)
+    ellipse = collaborators.part.Ellipse(center, request.major_radius, request.minor_radius)
     idx = sketch.addGeometry(
         collaborators.part.ArcOfEllipse(
             ellipse, math.radians(request.start_angle), math.radians(request.end_angle)

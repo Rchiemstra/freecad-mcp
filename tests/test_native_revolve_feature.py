@@ -19,7 +19,7 @@ from tests.typed_feature_native_matrix import (
 
 pytestmark = pytest.mark.core
 
-_KWARGS = {'doc_name': 'Doc', 'sketch_name': 'Sketch', 'revolve_name': 'Revolve', 'angle': 360.0, 'axis': 'Z_Axis', 'body_name': None, 'symmetric': False, 'reversed_dir': False}
+_KWARGS = {'doc_name': 'Doc', 'sketch_name': 'Sketch', 'revolve_name': 'Revolve', 'angle': 360.0, 'axis': 'X_Axis', 'body_name': None, 'symmetric': False, 'reversed_dir': False}
 _KIND = 'profile'
 _CREATED = 'revolve_name'
 

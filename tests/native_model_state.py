@@ -7,6 +7,9 @@ import hashlib
 # dumpPropertyContent for these properties varies across rollback even when restored.
 _UNSTABLE_DUMP_PROPERTIES = frozenset({"ExpressionEngine"})
 
+# Object.State flags that are execution bookkeeping, not durable model content.
+_TRANSIENT_STATE_FLAGS = frozenset({"Touched", "ImpendingChange", "GeoID", "Pending"})
+
 
 def _expression_engine_fingerprint(item: object, name: str) -> tuple[tuple[str, str], ...] | None:
     engine = getattr(item, name, None)
@@ -35,13 +38,20 @@ def property_content(item: object, name: str) -> str | tuple[tuple[str, str], ..
     return hashlib.sha256(dumped).hexdigest()
 
 
+def _stable_state(item: object) -> tuple[str, ...]:
+    state = getattr(item, "State", ())
+    if not isinstance(state, (list, tuple)):
+        return ()
+    return tuple(sorted(str(flag) for flag in state if str(flag) not in _TRANSIENT_STATE_FLAGS))
+
+
 def model_state(document: object) -> tuple:
     objects = getattr(document, "Objects", ())
     return tuple(
         (
             item.Name,
             item.TypeId,
-            tuple(item.State),
+            _stable_state(item),
             tuple(sorted(obj.Name for obj in item.InList)),
             tuple(sorted(obj.Name for obj in item.OutList)),
             tuple(
@@ -49,7 +59,6 @@ def model_state(document: object) -> tuple:
                     name,
                     item.getTypeIdOfProperty(name),
                     item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
                     property_content(item, name),
                 )
                 for name in sorted(item.PropertiesList)

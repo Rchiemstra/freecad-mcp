@@ -210,6 +210,11 @@ def _origin_feature(container: object, name: str) -> object | None:
     return None
 
 
+_DOC_LINK_SPECS = frozenset(
+    {"X_Axis", "Y_Axis", "Z_Axis", "XY_Plane", "XZ_Plane", "YZ_Plane", "Origin"}
+)
+
+
 def resolve_linksub(document: object, body: object | None, spec: str) -> object:
     if ":" in spec:
         object_name, sub_name = spec.split(":", 1)
@@ -217,6 +222,10 @@ def resolve_linksub(document: object, body: object | None, spec: str) -> object:
         if obj is None:
             raise LookupError(f"Reference object not found: {object_name}")
         return (obj, [sub_name])
+    if spec in _DOC_LINK_SPECS:
+        obj = lookup_object(document, spec)
+        if obj is not None:
+            return (obj, [""])
     for container in (body, document):
         if container is None:
             continue

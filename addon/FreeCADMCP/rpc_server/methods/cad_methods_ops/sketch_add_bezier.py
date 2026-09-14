@@ -192,6 +192,8 @@ def apply_sketch_add_bezier(
     """Mutate the sketch without recomputing or managing a transaction."""
 
     sketch = _require_sketch(doc, request.sketch_name)
+    if len(request.poles) < 2:
+        raise SketchAddBezierError("INVALID_ARGUMENT", "poles requires at least 2 points")
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
     poles = [

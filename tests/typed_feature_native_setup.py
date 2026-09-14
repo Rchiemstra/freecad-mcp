@@ -31,23 +31,38 @@ def prepare_native_document(document, kind: str) -> None:
 
     if kind == "profile":
         sketch = body.newObject("Sketcher::SketchObject", "Sketch")
+        xy_plane = document.getObject("XY_Plane")
+        if xy_plane is not None:
+            sketch.AttachmentSupport = [(xy_plane, "")]
+            sketch.MapMode = "FlatFace"
         sketch.addGeometry(
-            Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 3)
+            Part.Circle(FreeCAD.Vector(0, 4, 0), FreeCAD.Vector(0, 0, 1), 1)
         )
         document.recompute()
         return
 
     if kind == "loft":
         first = body.newObject("Sketcher::SketchObject", "Sketch1")
+        xy_plane = document.getObject("XY_Plane")
+        if xy_plane is not None:
+            first.AttachmentSupport = [(xy_plane, "")]
+            first.MapMode = "FlatFace"
         first.addGeometry(Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 5))
         second = body.newObject("Sketcher::SketchObject", "Sketch2")
-        second.Placement.Base = FreeCAD.Vector(0, 0, 10)
+        xz_plane = document.getObject("XZ_Plane")
+        if xz_plane is not None:
+            second.AttachmentSupport = [(xz_plane, "")]
+            second.MapMode = "FlatFace"
         second.addGeometry(Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 3))
         document.recompute()
         return
 
     if kind == "sweep":
         profile = body.newObject("Sketcher::SketchObject", "Sketch")
+        xy_plane = document.getObject("XY_Plane")
+        if xy_plane is not None:
+            profile.AttachmentSupport = [(xy_plane, "")]
+            profile.MapMode = "FlatFace"
         profile.addGeometry(
             Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), 1)
         )

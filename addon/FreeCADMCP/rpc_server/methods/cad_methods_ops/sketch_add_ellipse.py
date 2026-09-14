@@ -211,20 +211,9 @@ def apply_sketch_add_ellipse(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    rot = math.radians(request.angle)
     center = collaborators.freecad.Vector(request.cx, request.cy, 0.0)
-    major_pt = collaborators.freecad.Vector(
-        request.cx + request.major_radius * math.cos(rot),
-        request.cy + request.major_radius * math.sin(rot),
-        0.0,
-    )
-    minor_pt = collaborators.freecad.Vector(
-        request.cx - request.minor_radius * math.sin(rot),
-        request.cy + request.minor_radius * math.cos(rot),
-        0.0,
-    )
     idx = sketch.addGeometry(
-        collaborators.part.Ellipse(center, major_pt, minor_pt),
+        collaborators.part.Ellipse(center, request.major_radius, request.minor_radius),
         request.construction,
     )
     return SketchExecReceipt(

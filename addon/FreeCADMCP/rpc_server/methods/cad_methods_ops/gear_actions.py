@@ -420,26 +420,12 @@ def _finish_sketch(
     sketch: object,
     points: list[object],
     *,
-    pitch: float,
-    base: float,
-    outer: float,
-    root: float,
     bore_diameter: float,
     min_length: float,
 ) -> None:
     _close_points(points, min_length)
     _profile_to_sketch(sketch, points, min_length)
-    _construction_circles(
-        sketch,
-        (
-            ("RootRadius", root),
-            ("BaseRadius", base),
-            ("PitchRadius", pitch),
-            ("OuterRadius", outer),
-        ),
-    )
     _maybe_bore(sketch, bore_diameter)
-    setattr(sketch, "Visibility", False)
 
 
 def create_involute_gear(
@@ -466,7 +452,7 @@ def create_involute_gear(
         clearance=clearance,
         backlash=backlash,
     )
-    samples = max(3, min(samples_per_flank, 4))
+    samples = max(2, min(samples_per_flank, 2))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, sketch_name or (gear_name + "_Sketch"))
     points = _involute_points(
@@ -483,10 +469,6 @@ def create_involute_gear(
     _finish_sketch(
         sketch,
         points,
-        pitch=pitch,
-        base=base,
-        outer=outer,
-        root=root,
         bore_diameter=bore_diameter,
         min_length=1e-8,
     )
@@ -532,7 +514,7 @@ def create_helical_gear(
         clearance=clearance,
         backlash=backlash,
     )
-    samples = max(3, min(samples_per_flank, 4))
+    samples = max(2, min(samples_per_flank, 2))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, gear_name + "_Sketch")
     points = _involute_points(
@@ -549,10 +531,6 @@ def create_helical_gear(
     _finish_sketch(
         sketch,
         points,
-        pitch=pitch,
-        base=base,
-        outer=outer,
-        root=root,
         bore_diameter=bore_diameter,
         min_length=1e-8,
     )
@@ -567,6 +545,8 @@ def create_helical_gear(
     setattr(feature, "Mode", 0)
     setattr(feature, "Pitch", pitch_len)
     setattr(feature, "Height", width)
+    setattr(feature, "Angle", 0)
+    setattr(feature, "Growth", 0)
     return {
         "body": object_name(body),
         "sketch": object_name(sketch),
@@ -606,7 +586,7 @@ def create_spur_gear(
     )
     if root >= outer:
         raise TypedMutationError("INVALID_ARGUMENT", "root radius must be smaller than outer radius")
-    samples = max(3, min(samples_per_flank, 4))
+    samples = max(2, min(samples_per_flank, 2))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, sketch_name or (gear_name + "_Sketch"))
     points = _spur_profile_points(
@@ -625,10 +605,6 @@ def create_spur_gear(
     _finish_sketch(
         sketch,
         points,
-        pitch=pitch,
-        base=base,
-        outer=outer,
-        root=root,
         bore_diameter=bore_diameter,
         min_length=1e-7,
     )

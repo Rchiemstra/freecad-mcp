@@ -69,20 +69,7 @@ def check_success(
         def tracked_apply(admitted_document, *args, **kwargs):
             events.append("apply")
             receipt = original_apply(admitted_document, *args, **kwargs)
-            target = getattr(receipt, "feature", None) or getattr(receipt, "obj", None)
-            touch = getattr(target, "touch", None)
-            if callable(touch):
-                touch()
-            else:
-                for obj in getattr(admitted_document, "Objects", []) or []:
-                    if getattr(obj, "TypeId", "") == "App::FeaturePython":
-                        continue
-                    obj_touch = getattr(obj, "touch", None)
-                    if callable(obj_touch):
-                        obj_touch()
-                        break
-                else:
-                    probe.touch()
+            probe.touch()
             return receipt
 
         def tracked_read(admitted_document, *args, **kwargs):
@@ -95,9 +82,9 @@ def check_success(
             collaborators(FreeCAD, lambda _d: events.append("validate")),
             *run_args(document, ctx),
         )
-        assert result["success"] is True
-        assert result["committed"] is True
-        assert events == ["apply", "recompute", "inspect", "validate"]
+        assert result["success"] is True, result
+        assert result["committed"] is True, result
+        assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
     finally:
         for name in list(FreeCAD.listDocuments()):
             if name.startswith("MCPTyped") or name == document.Name:

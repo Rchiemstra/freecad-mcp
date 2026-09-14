@@ -31,6 +31,7 @@ from .feature_apply_support import (
     require_object,
     resolve_optional_body,
     set_attr,
+    set_tip,
 )
 
 
@@ -68,6 +69,7 @@ def apply_sweep_feature(doc: FeatureDocument, request: SweepFeatureRequest) -> S
         set_attr(created, "Profile", profile)
         set_attr(created, "Spine", path)
         set_attr(created, "Frenet", request.frenet)
+        set_tip(body, created)
         return SweepFeatureReceipt(name=str(created.Name), feature=created)
     except SweepFeatureError:
         raise

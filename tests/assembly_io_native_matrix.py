@@ -61,27 +61,22 @@ def check_success(
         original_apply = getattr(subject, f"apply_{op}")
         original_read = getattr(subject, f"read_{op}_result")
 
-        def tracked_apply(admitted_document, request):
+        def tracked_apply(admitted_document, *args, **kwargs):
             events.append("apply")
-            receipt = original_apply(admitted_document, request)
-            target = getattr(receipt, "obj", None)
-            touch = getattr(target, "touch", None)
-            if callable(touch):
-                touch()
-            else:
-                probe.touch()
+            receipt = original_apply(admitted_document, *args, **kwargs)
+            probe.touch()
             return receipt
 
-        def tracked_read(admitted_document, receipt):
+        def tracked_read(admitted_document, *args, **kwargs):
             events.append("inspect")
-            return original_read(admitted_document, receipt)
+            return original_read(admitted_document, *args, **kwargs)
 
         monkeypatch.setattr(subject, f"apply_{op}", tracked_apply)
         monkeypatch.setattr(subject, f"read_{op}_result", tracked_read)
         result = runner(collaborators(FreeCAD, lambda _d: events.append("validate")), *run_args(document.Name, ctx))
-        assert result["success"] is True
-        assert result["committed"] is True
-        assert events == ["apply", "recompute", "inspect", "validate"]
+        assert result["success"] is True, result
+        assert result["committed"] is True, result
+        assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
     finally:
         FreeCAD.closeDocument(document.Name)
 

@@ -32,6 +32,7 @@ from .feature_apply_support import (
     require_object,
     resolve_optional_body,
     set_attr,
+    set_tip,
 )
 
 
@@ -70,8 +71,11 @@ def apply_helical_sweep_feature(doc: FeatureDocument, request: HelicalSweepFeatu
         set_attr(created, "Mode", 0)
         set_attr(created, "Pitch", request.pitch)
         set_attr(created, "Height", request.height)
+        set_attr(created, "Angle", 0)
+        set_attr(created, "Growth", 0)
         set_attr(created, "LeftHanded", request.left_handed)
         set_attr(created, "Reversed", request.reversed_dir)
+        set_tip(body, created)
         return HelicalSweepFeatureReceipt(name=str(created.Name), feature=created)
     except HelicalSweepFeatureError:
         raise

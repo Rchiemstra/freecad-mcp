@@ -33,7 +33,9 @@ from .feature_apply_support import (
     resolve_linksub,
     resolve_optional_body,
     set_attr,
+    set_feature_bool,
     set_named_property,
+    set_tip,
 )
 
 
@@ -72,8 +74,9 @@ def apply_revolve_feature(doc: FeatureDocument, request: RevolveFeatureRequest) 
             ("ReferenceAxis", "Axis"),
             resolve_linksub(doc, body, request.axis),
         )
-        set_attr(created, "Symmetric", request.symmetric)
-        set_attr(created, "Reversed", request.reversed_dir)
+        set_feature_bool(created, ("Symmetric",), request.symmetric)
+        set_feature_bool(created, ("Reversed",), request.reversed_dir)
+        set_tip(body, created)
         return RevolveFeatureReceipt(name=str(created.Name), feature=created)
     except RevolveFeatureError:
         raise

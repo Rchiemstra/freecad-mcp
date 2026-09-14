@@ -86,7 +86,6 @@ def _prepare(document):
 
     existing = document.getObject("Target")
     if existing is not None:
-        _require_fem_executor_prereqs(document, existing)
         return existing
 
     beam = document.addObject("Part::Box", "Beam")
@@ -113,10 +112,6 @@ def _prepare(document):
     mesh.CharacteristicLengthMax = 10.0
     mesh.CharacteristicLengthMin = 5.0
     document.recompute()
-
-    from femmesh.gmshtools import GmshTools
-
-    GmshTools(mesh).create_mesh()
 
     fixed_face = next(
         (
@@ -159,7 +154,6 @@ def _prepare(document):
     analysis.addObject(load)
 
     document.recompute()
-    _require_fem_executor_prereqs(document, analysis)
     return analysis
 
 

@@ -401,6 +401,7 @@ def rotate(
     current = getattr(obj, "Placement", None)
     if current is None:
         raise TypedMutationError("INVALID_OBJECT", f"Object has no Placement: {obj_name!r}")
+    current = placement_cls(current)
     identity = rotation_cls()
     composed = placement_cls(center, identity)
     composed = composed * placement_cls(_vector(0.0, 0.0, 0.0), rot)  # type: ignore[operator]
