@@ -20,7 +20,7 @@ from ...._shared.protocol.create_spur_gear_contract import (
     make_create_spur_gear_success,
     make_create_spur_gear_uncertain,
 )
-from .typed_runtime import as_float, as_int, as_str
+from .typed_runtime import TypedMutationError, as_float, as_int, as_str
 from . import gear_actions
 from .create_spur_gear_mutation import CreateSpurGearError, run_create_spur_gear_native_mutation
 
@@ -190,6 +190,22 @@ def read_create_spur_gear_result(
     if receipt.obj is not None and obj is not receipt.obj:
         raise CreateSpurGearError("CREATED_OBJECT_REPLACED", f"Created object was replaced: {name!r}")
 
+    body_name = receipt.payload.get("body")
+    sketch_name = receipt.payload.get("sketch")
+    if not isinstance(body_name, str) or not isinstance(sketch_name, str):
+        raise CreateSpurGearError("INVALID_CREATE_SPUR_GEAR_RESULT", "missing created identity")
+    try:
+        gear_actions.inspect_created_gear(
+            doc,
+            body_name=body_name,
+            sketch_name=sketch_name,
+            feature_name=name,
+            feature=obj,
+            width=request.width,
+            helical=False,
+        )
+    except TypedMutationError as exc:
+        raise CreateSpurGearError(exc.code, str(exc)) from exc
     payload = dict(receipt.payload)
     if hasattr(obj, "Label") and "label" in payload:
         payload["label"] = str(obj.Label)

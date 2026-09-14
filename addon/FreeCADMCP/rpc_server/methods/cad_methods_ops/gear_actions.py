@@ -655,8 +655,79 @@ def create_spur_gear(
     }
 
 
+def _is_type(obj: object, type_id: str) -> bool:
+    derived = getattr(obj, "isDerivedFrom", None)
+    if callable(derived):
+        try:
+            return bool(derived(type_id))
+        except (AttributeError, TypeError):
+            pass
+    return getattr(obj, "TypeId", None) == type_id
+
+
+def _numeric(value: object) -> float | None:
+    raw = getattr(value, "Value", value)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return float(raw)
+
+
+def inspect_created_gear(
+    document: object,
+    *,
+    body_name: str,
+    sketch_name: str,
+    feature_name: str,
+    feature: object,
+    width: float,
+    helical: bool,
+) -> None:
+    """Verify the extruded or helical gear solid after native recompute."""
+
+    body = getattr(document, "getObject")(body_name)
+    sketch = getattr(document, "getObject")(sketch_name)
+    if body is None:
+        raise TypedMutationError("CREATED_OBJECT_MISSING", f"Gear body is missing: {body_name!r}")
+    if sketch is None:
+        raise TypedMutationError("CREATED_OBJECT_MISSING", f"Gear sketch is missing: {sketch_name!r}")
+    expected_type = "PartDesign::AdditiveHelix" if helical else "PartDesign::Pad"
+    if not _is_type(feature, expected_type):
+        raise TypedMutationError(
+            "CREATED_OBJECT_WRONG_TYPE",
+            f"Created gear is not {expected_type}: {getattr(feature, 'TypeId', None)!r}",
+        )
+    group = getattr(body, "Group", None)
+    if isinstance(group, (list, tuple)) and feature not in group:
+        if getattr(body, "Tip", None) is not feature:
+            raise TypedMutationError(
+                "CREATED_OBJECT_WRONG_TYPE",
+                f"Gear {feature_name!r} is not a member of Body {body_name!r}",
+            )
+    dim_name = "Height" if helical else "Length"
+    actual = _numeric(getattr(feature, dim_name, None))
+    if actual is None or abs(actual - width) > 1e-6:
+        raise TypedMutationError(
+            "GEAR_WIDTH_MISMATCH",
+            f"Gear {feature_name!r} {dim_name} {actual} does not match {width}",
+        )
+    profile = getattr(feature, "Profile", None)
+    profile_obj = profile[0] if isinstance(profile, (list, tuple)) and profile else profile
+    if profile_obj is not sketch:
+        raise TypedMutationError(
+            "GEAR_PROFILE_MISMATCH",
+            f"Gear {feature_name!r} Profile does not reference sketch {sketch_name!r}",
+        )
+    shape = getattr(feature, "Shape", None)
+    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+        raise TypedMutationError(
+            "GEAR_SHAPE_EMPTY",
+            f"Gear {feature_name!r} has no solid after recompute",
+        )
+
+
 __all__ = [
     "create_helical_gear",
     "create_involute_gear",
     "create_spur_gear",
+    "inspect_created_gear",
 ]

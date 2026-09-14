@@ -151,6 +151,16 @@ class _CompatibilityAPI:
 def _fake_payload(document, *args, **kwargs):
     document.events.append("apply")
     obj = document.addObject("App::FeaturePython", "Created")
+    width = kwargs.get("width", 10.0)
+    helical = "helix_angle" in kwargs
+    obj.TypeId = "PartDesign::AdditiveHelix" if helical else "PartDesign::Pad"
+    obj.isDerivedFrom = lambda type_name, current=obj.TypeId: type_name == current
+    obj.Length = width
+    obj.Height = width
+    obj.Profile = (obj, [""])
+    obj.Shape = SimpleNamespace(isNull=lambda: False)
+    obj.Group = [obj]
+    obj.Tip = obj
     return {
         "assembly": obj.Name,
         "label": obj.Label,
