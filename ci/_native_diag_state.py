@@ -92,13 +92,16 @@ def _run(op: str, kind: str, base: dict[str, object]) -> None:
         )
         after = model_state(document), revision_state(document, op)
         print(f"===== {op} success={result.get('success')} code={result.get('error_code')} =====")
-        if before[0] == after[0]:
+        if before == after:
+            print("settled_state: match")
+        elif before[0] == after[0]:
             print("model_state: match")
+            print("revision_state: DIFF", len(before[1]), len(after[1]))
         else:
-            print("model_state: DIFF")
+            print("settled_state: DIFF")
             first = _first_property_diff(before[0], after[0])
             if first:
-                print(f" first_diff: {first}")
+                print(f" first_property_mismatch: {first}")
             for line in _diff(before[0], after[0])[:40]:
                 print(" ", line)
         if before[1] != after[1]:

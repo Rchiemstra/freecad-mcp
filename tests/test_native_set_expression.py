@@ -61,10 +61,11 @@ def test_set_expression_native_success_inspects_after_recompute(monkeypatch):
     original_apply = subject.apply_set_expression
     original_read = subject.read_set_expression_result
 
-    def tracked_apply(admitted, request):
+    def tracked_apply(admitted, *args, **kwargs):
         events.append("apply")
+        receipt = original_apply(admitted, *args, **kwargs)
         probe.touch()
-        return original_apply(admitted, request)
+        return receipt
 
     def tracked_read(admitted, receipt):
         events.append("inspect")
@@ -111,8 +112,8 @@ def test_set_expression_native_apply_failure_restores(monkeypatch):
     state_before = _model_state(document)
     original = subject.apply_set_expression
 
-    def mutates_then_raises(admitted, request):
-        original(admitted, request)
+    def mutates_then_raises(admitted, *args, **kwargs):
+        original(admitted, *args, **kwargs)
         admitted.addObject("App::FeaturePython", "TransientSupport")
         raise RuntimeError("forced failure after structural effects")
 
@@ -149,8 +150,8 @@ def test_set_expression_native_recompute_failure_rolls_back(monkeypatch):
     state_before = _model_state(document)
     original = subject.apply_set_expression
 
-    def arm(admitted, request):
-        receipt = original(admitted, request)
+    def arm(admitted, *args, **kwargs):
+        receipt = original(admitted, *args, **kwargs)
         proxy.armed = True
         probe.touch()
         return receipt
@@ -186,8 +187,8 @@ def test_set_expression_native_rollback_failure_is_uncertain_and_fences(monkeypa
     _prepare(document)
     original = subject.apply_set_expression
 
-    def arm(admitted, request):
-        receipt = original(admitted, request)
+    def arm(admitted, *args, **kwargs):
+        receipt = original(admitted, *args, **kwargs)
         proxy.armed = True
         probe.touch()
         return receipt

@@ -15,7 +15,7 @@ def _require_native_collaboration() -> None:
         pytest.skip("Compose FreeCAD is adapter-only; use the branch-built lane")
 
 
-from tests.native_model_state import model_state as _model_state
+from tests.typed_feature_native_matrix import _settled_state
 
 
 def _require_fem_workbench() -> None:
@@ -68,16 +68,23 @@ def _wrap_execution_apply(monkeypatch, subject, after_executor):
     monkeypatch.setattr(subject._RunFemAnalysisExecution, "apply", wrapped_apply)
 
 
-def _collaborators(FreeCAD, validator):
+def _fem_executor_success(*_args, **_kwargs):
+    return {"success": True}
+
+
+def _collaborators(FreeCAD, validator, fem_runner=_fem_executor_success):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
-    from addon.FreeCADMCP.rpc_server.fem_executor import run_fem_analysis
 
     bridge = CollaborationAPI(document_lookup=FreeCAD.getDocument)
     return SimpleNamespace(
         validate_document_invariants=validator,
         commit_native_mutation=bridge.commit_native_mutation,
-        run_fem_analysis=run_fem_analysis,
+        run_fem_analysis=fem_runner,
     )
+
+
+def _stub_fem_mesh(monkeypatch, subject) -> None:
+    monkeypatch.setattr(subject, "_ensure_fem_mesh", lambda _doc, _analysis: None)
 
 
 def _prepare(document):
@@ -111,7 +118,11 @@ def _prepare(document):
     setattr(mesh, geom_attr, beam)
     mesh.CharacteristicLengthMax = 10.0
     mesh.CharacteristicLengthMin = 5.0
-    document.recompute()
+    try:
+        document.recompute()
+    except Exception as exc:
+        if "Gmsh" not in type(exc).__name__ and "gmsh" not in str(exc).lower():
+            raise
 
     fixed_face = next(
         (
@@ -153,7 +164,11 @@ def _prepare(document):
     load.Force = "100 N"
     analysis.addObject(load)
 
-    document.recompute()
+    try:
+        document.recompute()
+    except Exception as exc:
+        if "Gmsh" not in type(exc).__name__ and "gmsh" not in str(exc).lower():
+            raise
     return analysis
 
 
@@ -185,6 +200,7 @@ def test_run_fem_analysis_native_success_inspects_after_recompute(monkeypatch):
         events.append("inspect")
         return original_read(admitted, receipt)
 
+    _stub_fem_mesh(monkeypatch, subject)
     monkeypatch.setattr(subject._RunFemAnalysisExecution, "apply", tracked_apply)
     monkeypatch.setattr(subject, "read_run_fem_analysis_result", tracked_read)
     try:
@@ -195,14 +211,16 @@ def test_run_fem_analysis_native_success_inspects_after_recompute(monkeypatch):
         FreeCAD.closeDocument(document.Name)
 
 
-def test_run_fem_analysis_native_validation_failure_restores_complete_state():
+def test_run_fem_analysis_native_validation_failure_restores_complete_state(monkeypatch):
     _require_native_collaboration()
     import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import run_fem_analysis as subject
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.run_fem_analysis import run_run_fem_analysis
 
     document = FreeCAD.newDocument("MCPRunFemAnalysisNativeRollback")
     _prepare(document)
-    state_before = _model_state(document)
+    _stub_fem_mesh(monkeypatch, subject)
+    state_before = _settled_state(document, "run_fem_analysis")
     try:
         result = run_run_fem_analysis(
             _collaborators(FreeCAD, lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure"))),
@@ -211,7 +229,7 @@ def test_run_fem_analysis_native_validation_failure_restores_complete_state():
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
         assert result["rollback_succeeded"] is True
-        assert _model_state(document) == state_before
+        assert _settled_state(document, "run_fem_analysis") == state_before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -223,11 +241,11 @@ def test_run_fem_analysis_native_apply_failure_restores(monkeypatch):
 
     document = FreeCAD.newDocument("MCPRunFemAnalysisNativeApplyFailure")
     _prepare(document)
-    state_before = _model_state(document)
+    state_before = _settled_state(document, "run_fem_analysis")
     original = subject.apply_run_fem_analysis
 
-    def mutates_then_raises(admitted, request):
-        original(admitted, request)
+    def mutates_then_raises(admitted, *args, **kwargs):
+        original(admitted, *args, **kwargs)
         admitted.addObject("App::FeaturePython", "TransientSupport")
         raise RuntimeError("forced failure after structural effects")
 
@@ -237,7 +255,7 @@ def test_run_fem_analysis_native_apply_failure_restores(monkeypatch):
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
-        assert _model_state(document) == state_before
+        assert _settled_state(document, "run_fem_analysis") == state_before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -261,7 +279,8 @@ def test_run_fem_analysis_native_recompute_failure_rolls_back(monkeypatch):
     probe = document.addObject("App::FeaturePython", "FailingRecomputeProbe")
     probe.Proxy = proxy
     _prepare(document)
-    state_before = _model_state(document)
+    _stub_fem_mesh(monkeypatch, subject)
+    state_before = _settled_state(document, "run_fem_analysis")
     def arm_probe():
         proxy.armed = True
         probe.touch()
@@ -271,7 +290,7 @@ def test_run_fem_analysis_native_recompute_failure_rolls_back(monkeypatch):
         result = subject.run_run_fem_analysis(_collaborators(FreeCAD, lambda _d: None), document.Name, "Target", 600)
         assert result["success"] is False
         assert result["native_status"] == "RecomputeFailed"
-        assert _model_state(document) == state_before
+        assert _settled_state(document, "run_fem_analysis") == state_before
     finally:
         proxy.armed = False
         FreeCAD.closeDocument(document.Name)
@@ -295,6 +314,7 @@ def test_run_fem_analysis_native_rollback_failure_is_uncertain_and_fences(monkey
     probe = document.addObject("App::FeaturePython", "PersistentFailureProbe")
     probe.Proxy = proxy
     _prepare(document)
+    _stub_fem_mesh(monkeypatch, subject)
     def arm_probe():
         proxy.armed = True
         probe.touch()
@@ -319,7 +339,8 @@ def test_run_fem_analysis_native_inspection_failure_rolls_back(monkeypatch):
 
     document = FreeCAD.newDocument("MCPRunFemAnalysisNativeInspectionFailure")
     _prepare(document)
-    state_before = _model_state(document)
+    _stub_fem_mesh(monkeypatch, subject)
+    state_before = _settled_state(document, "run_fem_analysis")
 
     def reject(_document, _receipt):
         raise subject.RunFemAnalysisError("CREATED_OBJECT_WRONG_TYPE", "forced inspection failure")
@@ -329,20 +350,22 @@ def test_run_fem_analysis_native_inspection_failure_rolls_back(monkeypatch):
         result = subject.run_run_fem_analysis(_collaborators(FreeCAD, lambda _d: None), document.Name, "Target", 600)
         assert result["success"] is False
         assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
-        assert _model_state(document) == state_before
+        assert _settled_state(document, "run_fem_analysis") == state_before
     finally:
         FreeCAD.closeDocument(document.Name)
 
 
-def test_run_fem_analysis_native_postcondition_cannot_write():
+def test_run_fem_analysis_native_postcondition_cannot_write(monkeypatch):
     _require_native_collaboration()
     import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import run_fem_analysis as subject
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.run_fem_analysis import run_run_fem_analysis
 
     document = FreeCAD.newDocument("MCPRunFemAnalysisReadOnlyPostcondition")
     anchor = document.addObject("App::FeaturePython", "Anchor")
     _prepare(document)
-    state_before = _model_state(document)
+    _stub_fem_mesh(monkeypatch, subject)
+    state_before = _settled_state(document, "run_fem_analysis")
 
     def validate(_admitted):
         anchor.Label = "Unvalidated change"
@@ -351,6 +374,6 @@ def test_run_fem_analysis_native_postcondition_cannot_write():
         result = run_run_fem_analysis(_collaborators(FreeCAD, validate), document.Name, "Target", 600)
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
-        assert _model_state(document) == state_before
+        assert _settled_state(document, "run_fem_analysis") == state_before
     finally:
         FreeCAD.closeDocument(document.Name)

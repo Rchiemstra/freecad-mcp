@@ -162,8 +162,8 @@ def check_apply_failure(op: str, kind: str, base: dict[str, object], monkeypatch
         before = _settled_state(document, op)
         original_apply = getattr(subject, f"apply_{op}")
 
-        def mutates_then_raises(admitted_document, request):
-            original_apply(admitted_document, request)
+        def mutates_then_raises(admitted_document, *args, **kwargs):
+            original_apply(admitted_document, *args, **kwargs)
             admitted_document.addObject("App::FeaturePython", "TransientSupport")
             anchor.Label = "Changed by rejected apply"
             raise RuntimeError("forced failure after structural effects")
@@ -202,8 +202,8 @@ def check_recompute_failure(op: str, kind: str, base: dict[str, object], monkeyp
         before = _settled_state(document, op)
         original_apply = getattr(subject, f"apply_{op}")
 
-        def arm_recompute_failure(admitted_document, request):
-            receipt = original_apply(admitted_document, request)
+        def arm_recompute_failure(admitted_document, *args, **kwargs):
+            receipt = original_apply(admitted_document, *args, **kwargs)
             proxy.armed = True
             probe.touch()
             return receipt
@@ -240,8 +240,8 @@ def check_rollback_failure_fences(op: str, kind: str, base: dict[str, object], m
         document.recompute()
         original_apply = getattr(subject, f"apply_{op}")
 
-        def arm_persistent_failure(admitted_document, request):
-            receipt = original_apply(admitted_document, request)
+        def arm_persistent_failure(admitted_document, *args, **kwargs):
+            receipt = original_apply(admitted_document, *args, **kwargs)
             proxy.armed = True
             probe.touch()
             return receipt
@@ -339,10 +339,15 @@ def check_duplicate_and_missing(op: str, kind: str, base: dict[str, object]) -> 
         prepare_native_document(document, kind)
         document.recompute()
         first = _run(op, collab, document.Name, base)
-        assert first["success"] is True
+        assert first["success"] is True, (
+            f"first duplicate call error_code={first.get('error_code')!r}: {first}"
+        )
         before = _settled_state(document, op)
         result = _run(op, collab, document.Name, base)
-        assert result["error_code"] == "OBJECT_ALREADY_EXISTS"
+        assert result["error_code"] == "OBJECT_ALREADY_EXISTS", (
+            f"second duplicate call error_code={result.get('error_code')!r}, "
+            f"first={first.get('error_code')!r}: {result}"
+        )
         assert result["native_status"] == "ApplyFailed"
         assert _settled_state(document, op) == before
         missing = _run(op, collab, "NoSuchFeatureQualificationDocument", base)
@@ -389,8 +394,8 @@ def check_rich_model_restore(
         original_apply = getattr(subject, f"apply_{op}")
         original_inspect = getattr(subject, f"read_{op}_result")
 
-        def change_model(admitted, request):
-            receipt = original_apply(admitted, request)
+        def change_model(admitted, *args, **kwargs):
+            receipt = original_apply(admitted, *args, **kwargs)
             support = admitted.addObject("PartDesign::Feature", "TransientSupport")
             body.addObject(support)
             body.Tip = support

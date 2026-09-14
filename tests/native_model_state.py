@@ -120,6 +120,21 @@ def _link_fingerprint(value: object, type_id: str) -> object | None:
     return _object_name(value)
 
 
+def _material_fingerprint(value: object) -> object:
+    if value is None:
+        return None
+    uuid = getattr(value, "UUID", None)
+    if uuid:
+        return ("material", str(uuid))
+    name = getattr(value, "Name", None)
+    if name:
+        return ("material", str(name))
+    label = getattr(value, "Label", None)
+    if label:
+        return ("material", str(label))
+    return ("material", type(value).__name__)
+
+
 def _scalar_fingerprint(value: object, type_id: str) -> object:
     if "Quantity" in type_id:
         return _quantity_fingerprint(value)
@@ -200,6 +215,8 @@ def property_content(item: object, name: str) -> object | None:
             pass
     if "Link" in type_id:
         return _link_fingerprint(value, type_id)
+    if "PropertyMaterial" in type_id or name == "ShapeMaterial":
+        return _material_fingerprint(value)
     if any(token in type_id for token in ("Float", "Integer", "Bool", "String", "Enumeration", "Quantity")):
         return _scalar_fingerprint(value, type_id)
     if isinstance(value, (bool, int, float, str)):
