@@ -50,29 +50,6 @@ def _model_state(document):
         for item in document.Objects
     )
 
-    import hashlib
-
-    return tuple(
-        (
-            item.Name,
-            item.TypeId,
-            tuple(item.State),
-            tuple(sorted(obj.Name for obj in item.InList)),
-            tuple(sorted(obj.Name for obj in item.OutList)),
-            tuple(
-                (
-                    name,
-                    item.getTypeIdOfProperty(name),
-                    item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
-                    _property_content(item, name),
-                )
-                for name in sorted(item.PropertiesList)
-            ),
-        )
-        for item in document.Objects
-    )
-
 
 def _collaborators(FreeCAD, validator):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
@@ -85,16 +62,9 @@ def _collaborators(FreeCAD, validator):
 
 
 def _prepare(document):
-    if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
-    body = document.getObject('Body')
-    if body is None:
-        try:
-            body = document.addObject('PartDesign::Body', 'Body')
-        except Exception:
-            body = document.addObject('App::FeaturePython', 'Body')
-    document.recompute()
-    return body
+    from tests.typed_feature_native_setup import prepare_native_document
+
+    prepare_native_document(document, "edge_feature")
 
 
 def test_create_datum_plane_native_success_inspects_after_recompute(monkeypatch):
@@ -128,7 +98,7 @@ def test_create_datum_plane_native_success_inspects_after_recompute(monkeypatch)
     monkeypatch.setattr(subject, "apply_create_datum_plane", tracked_apply)
     monkeypatch.setattr(subject, "read_create_datum_plane_result", tracked_read)
     try:
-        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         assert result["success"] is True
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
@@ -146,7 +116,7 @@ def test_create_datum_plane_native_validation_failure_restores_complete_state():
     try:
         result = run_create_datum_plane(
             _collaborators(FreeCAD, lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure"))),
-            document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error",
+            document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error",
         )
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
@@ -173,7 +143,7 @@ def test_create_datum_plane_native_apply_failure_restores(monkeypatch):
 
     monkeypatch.setattr(subject, "apply_create_datum_plane", mutates_then_raises)
     try:
-        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: None), document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: None), document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
@@ -212,7 +182,7 @@ def test_create_datum_plane_native_recompute_failure_rolls_back(monkeypatch):
 
     monkeypatch.setattr(subject, "apply_create_datum_plane", arm)
     try:
-        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: None), document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: None), document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         assert result["success"] is False
         assert result["native_status"] == "RecomputeFailed"
         assert _model_state(document) == state_before
@@ -250,9 +220,9 @@ def test_create_datum_plane_native_rollback_failure_is_uncertain_and_fences(monk
     monkeypatch.setattr(subject, "apply_create_datum_plane", arm)
     collaborators = _collaborators(FreeCAD, lambda _d: None)
     try:
-        result = subject.run_create_datum_plane(collaborators, document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        result = subject.run_create_datum_plane(collaborators, document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         proxy.armed = False
-        fenced = subject.run_create_datum_plane(collaborators, document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        fenced = subject.run_create_datum_plane(collaborators, document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         assert result["outcome"] == "uncertain" or result["success"] is False
         assert fenced["success"] is False
     finally:
@@ -274,7 +244,7 @@ def test_create_datum_plane_native_inspection_failure_rolls_back(monkeypatch):
 
     monkeypatch.setattr(subject, "read_create_datum_plane_result", reject)
     try:
-        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: None), document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: None), document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         assert result["success"] is False
         assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
         assert _model_state(document) == state_before
@@ -296,7 +266,7 @@ def test_create_datum_plane_native_postcondition_cannot_write():
         anchor.Label = "Unvalidated change"
 
     try:
-        result = run_create_datum_plane(_collaborators(FreeCAD, validate), document.Name, "Created", "Body", "through_point", "Seed", None, None, None, "FlatFace", "error")
+        result = run_create_datum_plane(_collaborators(FreeCAD, validate), document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
         assert _model_state(document) == state_before

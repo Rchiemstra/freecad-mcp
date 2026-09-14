@@ -20,25 +20,16 @@ from ...._shared.protocol.create_datum_plane_contract import (
     make_create_datum_plane_uncertain,
 )
 from .create_datum_plane_mutation import CreateDatumPlaneError, run_create_datum_plane_native_mutation
+from .typed_runtime import is_derived_from
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
     assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
     object_label,
     object_name,
-    object_type_id,
     optional_string,
     parse_ref,
-    remove_from_container,
     require_object,
     resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -49,7 +40,6 @@ class CreateDatumPlaneReceipt:
     name: str
     item: object | None
     skipped: bool = False
-    extra: object = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,11 +48,20 @@ class CreateDatumPlaneInspection:
 
     name: CreateDatumPlaneName
     label: str
-    extra: object = None
 
 
 def _failure(error: CreateDatumPlaneError, *, retry_safe: bool = True) -> CreateDatumPlaneFailure:
     return make_create_datum_plane_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _body_xy_plane(body: object) -> object | None:
+    origin = getattr(body, "Origin", None)
+    for feature in getattr(origin, "OriginFeatures", []) or []:
+        label = str(getattr(feature, "Label", ""))
+        name = str(getattr(feature, "Name", ""))
+        if label == "XY_Plane" or name == "XY_Plane":
+            return feature
+    return None
 
 
 def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatumPlaneRequest) -> CreateDatumPlaneReceipt:
@@ -72,10 +71,15 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
     skipped = resolve_if_exists(doc, request.plane_name, request.if_exists, error=CreateDatumPlaneError)
     if skipped is not None:
         return CreateDatumPlaneReceipt(name=object_name(skipped) or request.plane_name, item=skipped, skipped=True)
-    plane = call_named(body, "newObject", "PartDesign::Plane", request.plane_name)
+    factory = getattr(body, "newObject", None)
+    if not callable(factory):
+        raise CreateDatumPlaneError("INVALID_BODY", "Body must provide newObject")
+    plane = factory("PartDesign::Plane", request.plane_name)
     if plane is None:
-        plane = add_named_object(doc, "PartDesign::Plane", request.plane_name)
-        add_to_container(body, plane)
+        raise CreateDatumPlaneError(
+            "CREATE_DATUM_PLANE_FAILED",
+            f"Failed to create PartDesign::Plane: {request.plane_name!r}",
+        )
     if request.mode not in {
         "midpoint_between_faces",
         "through_point",
@@ -84,11 +88,23 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
         "plane_from_binder_face",
     }:
         raise CreateDatumPlaneError("INVALID_ARGUMENT", f"Unsupported datum plane mode: {request.mode}")
-    support = request.source_ref or request.face_a
-    if support:
-        obj, sub = parse_ref(doc, support, CreateDatumPlaneError)
-        assign_attr(plane, "AttachmentSupport", [(obj, sub)])
-    assign_attr(plane, "MapMode", request.map_mode)
+    if request.mode == "through_point":
+        if request.source_ref:
+            obj, sub = parse_ref(doc, request.source_ref, CreateDatumPlaneError)
+            assign_attr(plane, "AttachmentSupport", [(obj, sub)])
+            assign_attr(plane, "MapMode", request.map_mode)
+        else:
+            xy_plane = _body_xy_plane(body)
+            if xy_plane is None:
+                raise CreateDatumPlaneError("OBJECT_NOT_FOUND", "Body origin XY_Plane not found")
+            assign_attr(plane, "AttachmentSupport", [(xy_plane, "")])
+            assign_attr(plane, "MapMode", "FlatFace")
+    else:
+        support = request.source_ref or request.face_a
+        if support:
+            obj, sub = parse_ref(doc, support, CreateDatumPlaneError)
+            assign_attr(plane, "AttachmentSupport", [(obj, sub)])
+        assign_attr(plane, "MapMode", request.map_mode)
     return CreateDatumPlaneReceipt(name=object_name(plane) or request.plane_name, item=plane, skipped=False)
 
 
@@ -97,22 +113,17 @@ def read_create_datum_plane_result(doc: CreateDatumPlaneReadDocument, receipt: C
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise CreateDatumPlaneError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise CreateDatumPlaneError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-
-    extra = receipt.extra
-
+    if not is_derived_from(located, "PartDesign::Plane"):
+        raise CreateDatumPlaneError(
+            "CREATED_OBJECT_WRONG_TYPE",
+            f"Created object is not PartDesign::Plane: {receipt.name!r}",
+        )
     return CreateDatumPlaneInspection(
         name=CreateDatumPlaneName(receipt.name),
         label=object_label(located),
-        extra=extra,
     )
 
 

@@ -50,29 +50,6 @@ def _model_state(document):
         for item in document.Objects
     )
 
-    import hashlib
-
-    return tuple(
-        (
-            item.Name,
-            item.TypeId,
-            tuple(item.State),
-            tuple(sorted(obj.Name for obj in item.InList)),
-            tuple(sorted(obj.Name for obj in item.OutList)),
-            tuple(
-                (
-                    name,
-                    item.getTypeIdOfProperty(name),
-                    item.getGroupOfProperty(name),
-                    tuple(item.getPropertyStatus(name)),
-                    _property_content(item, name),
-                )
-                for name in sorted(item.PropertiesList)
-            ),
-        )
-        for item in document.Objects
-    )
-
 
 def _collaborators(FreeCAD, validator):
     from addon.FreeCADMCP.collaboration_api import CollaborationAPI
@@ -85,18 +62,9 @@ def _collaborators(FreeCAD, validator):
 
 
 def _prepare(document):
-    if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
-    if document.getObject('Target') is None:
-        document.addObject('App::FeaturePython', 'Target')
-    body = document.getObject('Body')
-    if body is None:
-        try:
-            body = document.addObject('PartDesign::Body', 'Body')
-        except Exception:
-            body = document.addObject('App::FeaturePython', 'Body')
+    seed = document.addObject("Part::Box", "Seed")
+    seed.setExpression("Length", "10 mm")
     document.recompute()
-    return body
 
 
 def test_clear_expression_native_success_inspects_after_recompute(monkeypatch):

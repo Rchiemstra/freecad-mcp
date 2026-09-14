@@ -21,24 +21,10 @@ from ...._shared.protocol.clear_expression_contract import (
 )
 from .clear_expression_mutation import ClearExpressionError, run_clear_expression_native_mutation
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
     object_label,
     object_name,
-    object_type_id,
-    optional_string,
-    parse_ref,
-    remove_from_container,
     require_object,
-    resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -48,8 +34,8 @@ class ClearExpressionReceipt:
 
     name: str
     item: object | None
+    prop_path: str
     skipped: bool = False
-    extra: object = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,17 +44,28 @@ class ClearExpressionInspection:
 
     name: ClearExpressionName
     label: str
-    extra: object = None
 
 
 def _failure(error: ClearExpressionError, *, retry_safe: bool = True) -> ClearExpressionFailure:
     return make_clear_expression_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _has_property(item: object, prop_path: str) -> bool:
+    props = getattr(item, "PropertiesList", None)
+    if isinstance(props, (list, tuple)) and prop_path in props:
+        return True
+    return hasattr(item, prop_path)
+
+
 def apply_clear_expression(doc: ClearExpressionDocument, request: ClearExpressionRequest) -> ClearExpressionReceipt:
     """Clear an expression without recomputing."""
 
     item = require_object(doc, request.object_name, missing_code="OBJECT_NOT_FOUND", error=ClearExpressionError)
+    if not _has_property(item, request.prop_path):
+        raise ClearExpressionError(
+            "OBJECT_NOT_FOUND",
+            f"Property not found: {request.prop_path!r}",
+        )
     clearer = getattr(item, "clearExpression", None)
     setter = getattr(item, "setExpression", None)
     try:
@@ -82,7 +79,12 @@ def apply_clear_expression(doc: ClearExpressionDocument, request: ClearExpressio
         raise
     except Exception as exc:
         raise ClearExpressionError("EXPRESSION_ERROR", str(exc) or type(exc).__name__) from exc
-    return ClearExpressionReceipt(name=object_name(item) or request.object_name, item=item, skipped=False)
+    return ClearExpressionReceipt(
+        name=object_name(item) or request.object_name,
+        item=item,
+        prop_path=request.prop_path,
+        skipped=False,
+    )
 
 
 def read_clear_expression_result(doc: ClearExpressionReadDocument, receipt: ClearExpressionReceipt) -> ClearExpressionInspection:
@@ -90,22 +92,20 @@ def read_clear_expression_result(doc: ClearExpressionReadDocument, receipt: Clea
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise ClearExpressionError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise ClearExpressionError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-
-    extra = receipt.extra
-
+    getter = getattr(located, "getExpression", None)
+    if callable(getter):
+        expression = getter(receipt.prop_path)
+        if expression not in (None, ""):
+            raise ClearExpressionError(
+                "EXPRESSION_ERROR",
+                f"Expression was not cleared on {receipt.prop_path!r}",
+            )
     return ClearExpressionInspection(
         name=ClearExpressionName(receipt.name),
         label=object_label(located),
-        extra=extra,
     )
 
 
