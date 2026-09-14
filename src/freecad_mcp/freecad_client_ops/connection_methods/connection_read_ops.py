@@ -14,7 +14,31 @@ create_object = _generated.create_object
 edit_object = _generated.edit_object
 inspect_references = _generated.inspect_references
 repair_references = _generated.repair_references
-delete_object = _generated.delete_object
+
+
+def delete_object(
+    conn,
+    doc_name: str,
+    obj_name: str,
+    recursive: bool = False,
+    force: bool = False,
+):
+    routed = conn._invoke_mutation_v2(
+        "delete_object",
+        {
+            "doc_name": doc_name,
+            "obj_name": obj_name,
+            "recursive": recursive,
+            "force": force,
+        },
+        document_names=(doc_name,),
+        operation_name="Delete object",
+    )
+    if routed is not None:
+        return routed
+    return conn.server.delete_object(doc_name, obj_name)
+
+
 reload_document = _generated.reload_document
 insert_part_from_library = _generated.insert_part_from_library
 execute_code = _generated.execute_code
