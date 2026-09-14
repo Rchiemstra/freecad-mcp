@@ -28,7 +28,7 @@ def create_assembly_operation(
         return tool_fail("if_exists must be error, skip, or replace")
     request = CreateAssemblyRequest(
         doc_name=DocumentName(doc_name),
-        assembly_name=AssemblyName(assembly_name) if isinstance(assembly_name, str) and assembly_name else assembly_name,
+        assembly_name=AssemblyName(assembly_name),
         create_joint_group=create_joint_group,
         recompute=recompute,
         if_exists=if_exists

@@ -24,7 +24,7 @@ def import_brep_operation(
     request = ImportBrepRequest(
         doc_name=DocumentName(doc_name),
         file_path=file_path,
-        obj_name=ObjectName(obj_name) if isinstance(obj_name, str) and obj_name else obj_name
+        obj_name=ObjectName(obj_name)
     )
     try:
         raw_result: object = freecad.import_brep(doc_name, file_path, obj_name)

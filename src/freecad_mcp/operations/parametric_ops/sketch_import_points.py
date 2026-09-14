@@ -26,7 +26,7 @@ def sketch_import_points_operation(
     request = SketchImportPointsRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
-        points=points,
+        points=tuple((float(point['x']), float(point['y'])) for point in points),
         construction=construction,
     )
     try:

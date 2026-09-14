@@ -31,11 +31,11 @@ def sketch_add_bspline_operation(
     request = SketchAddBsplineRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
-        poles=poles,
+        poles=tuple((float(point['x']), float(point['y'])) for point in poles),
         degree=degree,
-        weights=weights,
-        knots=knots,
-        multiplicities=multiplicities,
+        weights=None if weights is None else tuple(weights),
+        knots=None if knots is None else tuple(knots),
+        multiplicities=None if multiplicities is None else tuple(multiplicities),
         periodic=periodic,
         construction=construction,
     )

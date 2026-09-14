@@ -26,7 +26,7 @@ def sketch_toggle_construction_operation(
     request = SketchToggleConstructionRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
-        geo_indices=geo_indices,
+        geo_indices=tuple(geo_indices),
         construction=construction,
     )
     try:

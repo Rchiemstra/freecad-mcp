@@ -26,7 +26,7 @@ def sketch_add_bezier_operation(
     request = SketchAddBezierRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
-        poles=poles,
+        poles=tuple((float(point['x']), float(point['y'])) for point in poles),
         construction=construction,
     )
     try:

@@ -38,7 +38,7 @@ def sketch_add_polyline_operation(
     request = SketchAddPolylineRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
-        points=points,
+        points=tuple((float(point['x']), float(point['y'])) for point in points),
         closed=closed,
         construction=construction,
     )

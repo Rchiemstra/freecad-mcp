@@ -17,8 +17,8 @@ def build_path_wire_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, wire_name: str, segments: object, tolerance_mm: float = 0.5, container: str | None = None, if_exists: str = "error",
 ) -> CallToolResult:
     if if_exists not in {"error", "skip", "replace"}:
-        result = make_build_path_wire_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
-        return tool_fail(result["error"], structured=dict(result), error_code=result["error_code"])
+        failure = make_build_path_wire_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
+        return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
         raw_result: object = freecad._invoke_mutation_v2(
             "build_path_wire",

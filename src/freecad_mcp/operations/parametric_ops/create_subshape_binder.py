@@ -17,8 +17,8 @@ def create_subshape_binder_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, binder_name: str, source_object: str, sub_elements: object = None, target_body: str | None = None, target_container: str | None = None, relative: bool = False, sync_placement: bool = True, if_exists: str = "error",
 ) -> CallToolResult:
     if if_exists not in {"error", "skip", "replace"}:
-        result = make_create_subshape_binder_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
-        return tool_fail(result["error"], structured=dict(result), error_code=result["error_code"])
+        failure = make_create_subshape_binder_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
+        return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
         raw_result: object = freecad._invoke_mutation_v2(
             "create_subshape_binder",

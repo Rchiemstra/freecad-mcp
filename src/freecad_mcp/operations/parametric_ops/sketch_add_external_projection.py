@@ -17,14 +17,14 @@ def sketch_add_external_projection_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, sketch_name: str, source_ref: str, projection_mode: str = "auto", defining: bool = False, allow_gui_geometry_loop: bool = False,
 ) -> CallToolResult:
     if projection_mode not in {"auto", "edge", "face", "point"}:
-        result = make_sketch_add_external_projection_failure("INVALID_ARGUMENT", "projection_mode must be one of: auto, edge, face, point")
-        return tool_fail(result["error"], structured=dict(result), error_code=result["error_code"])
+        failure = make_sketch_add_external_projection_failure("INVALID_ARGUMENT", "projection_mode must be one of: auto, edge, face, point")
+        return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     if not allow_gui_geometry_loop:
-        result = make_sketch_add_external_projection_failure(
+        failure = make_sketch_add_external_projection_failure(
             "gui_geometry_loop_opt_in_required",
             "sketch_add_external_projection requires allow_gui_geometry_loop=true",
         )
-        return tool_fail(result["error"], structured=dict(result), error_code=result["error_code"])
+        return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
         raw_result: object = freecad._invoke_mutation_v2(
             "sketch_add_external_projection",
