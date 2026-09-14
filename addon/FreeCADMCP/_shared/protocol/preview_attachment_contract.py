@@ -92,6 +92,11 @@ class PreviewAttachmentSuccess(TypedDict):
     committed: Literal[True]
     retry_safe: Literal[False]
     datum_name: str
+    support: NotRequired[object]
+    placement: NotRequired[object]
+    distance: NotRequired[object]
+    normal_angle_deg: NotRequired[object]
+    source_body_placement_dropped: NotRequired[bool]
 
 
 class PreviewAttachmentFailure(TypedDict):
@@ -134,15 +139,41 @@ PreviewAttachmentResult = PreviewAttachmentSuccess | PreviewAttachmentFailure | 
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'datum_name', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version",
+        "success",
+        "ok",
+        "outcome",
+        "committed",
+        "retry_safe",
+        "datum_name",
+        "support",
+        "placement",
+        "distance",
+        "normal_angle_deg",
+        "source_body_placement_dropped",
+        "error_code",
+        "error",
+        "native_status",
+        "native_message",
+        "rollback_succeeded",
+        "rollback_failed",
+        "diagnostics",
     }
 )
 
 
-def make_preview_attachment_success(datum_name: str) -> PreviewAttachmentSuccess:
+def make_preview_attachment_success(
+    datum_name: str,
+    *,
+    support: object = None,
+    placement: object = None,
+    distance: object = None,
+    normal_angle_deg: object = None,
+    source_body_placement_dropped: object = None,
+) -> PreviewAttachmentSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: PreviewAttachmentSuccess = {
         "contract_version": PREVIEW_ATTACHMENT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -151,6 +182,17 @@ def make_preview_attachment_success(datum_name: str) -> PreviewAttachmentSuccess
         "retry_safe": False,
         "datum_name": datum_name,
     }
+    if support is not None:
+        result["support"] = support
+    if placement is not None:
+        result["placement"] = placement
+    if distance is not None:
+        result["distance"] = distance
+    if normal_angle_deg is not None:
+        result["normal_angle_deg"] = normal_angle_deg
+    if source_body_placement_dropped is not None:
+        result["source_body_placement_dropped"] = bool(source_body_placement_dropped)
+    return result
 
 
 def make_preview_attachment_failure(
@@ -363,7 +405,14 @@ def parse_preview_attachment_response(raw_response: object) -> PreviewAttachment
         _valid_success(response)
         and isinstance(datum_name, str) and datum_name.strip()
     ):
-        return make_preview_attachment_success(str(datum_name))
+        return make_preview_attachment_success(
+            str(datum_name),
+            support=response.get("support"),
+            placement=response.get("placement"),
+            distance=response.get("distance"),
+            normal_angle_deg=response.get("normal_angle_deg"),
+            source_body_placement_dropped=response.get("source_body_placement_dropped"),
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

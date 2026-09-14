@@ -84,7 +84,8 @@ def _invoke_registered(monkeypatch, transport, params):
         async with create_connected_server_and_client_session(mcp._mcp_server) as client:
             listing = await client.list_tools()
             tool = next(tool for tool in listing.tools if tool.name == "preview_attachment")
-            assert "doc_name" in tool.inputSchema.get("required", ["doc_name"])
+            required = tool.inputSchema.get("required") or []
+            assert "doc_name" in required
             return await client.call_tool("preview_attachment", params)
 
     try:
@@ -96,7 +97,7 @@ def _invoke_registered(monkeypatch, transport, params):
 def test_preview_attachment_sends_authenticated_json_rpc_to_freecad(monkeypatch):
     transport = _RecordingFreeCADTransport()
     result = _invoke_registered(monkeypatch, transport, {"doc_name": "AgentDocument", "datum_name": "Value"})
-    assert result.isError is False or result.structuredContent["data"]["outcome"] in {"committed", "rejected", "uncertain"}
+    assert result.isError is False
     assert len(transport.requests) == 1
     path, request, headers = transport.requests[0]
     assert path == JSON_RPC_HTTP_PATH

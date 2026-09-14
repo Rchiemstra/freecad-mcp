@@ -91,9 +91,17 @@ def _sub_type(_sub):
 def _sub_radius(_sub):
     try:
         if hasattr(_sub, 'Surface'):
-            return float(getattr(_sub.Surface, 'Radius', getattr(_sub.Surface, 'Radius1', 0.0)))
+            _r = getattr(_sub.Surface, 'Radius', None)
+            if _r is None:
+                _r = getattr(_sub.Surface, 'Radius1', None)
+            if _r is None:
+                return None
+            return float(_r)
         if hasattr(_sub, 'Curve'):
-            return float(getattr(_sub.Curve, 'Radius', 0.0))
+            _r = getattr(_sub.Curve, 'Radius', None)
+            if _r is None:
+                return None
+            return float(_r)
     except Exception:
         return None
     return None
@@ -141,7 +149,9 @@ for _i, _sub in enumerate(_subshapes, start=1):
         _dist = float((_c - _cv).Length)
         if _dist > _center_tol:
             continue
-    if _radius is not None and _r is not None:
+    if _radius is not None:
+        if _r is None:
+            continue
         if abs(_r - float(_radius)) > _tol:
             continue
     _results.append({

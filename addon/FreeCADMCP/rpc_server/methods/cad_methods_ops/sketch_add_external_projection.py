@@ -21,25 +21,16 @@ from ...._shared.protocol.sketch_add_external_projection_contract import (
 )
 from .sketch_add_external_projection_mutation import SketchAddExternalProjectionError, run_sketch_add_external_projection_native_mutation
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
     as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
     invoke,
     nonempty_string,
     object_label,
     object_name,
-    object_type_id,
-    optional_string,
     parse_ref,
-    remove_from_container,
     require_object,
-    resolve_if_exists,
-    snapshot_ring
 )
+
+_ALLOWED_PROJECTION_MODES = frozenset({"auto", "edge", "face", "point"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,15 +56,43 @@ def _failure(error: SketchAddExternalProjectionError, *, retry_safe: bool = True
     return make_sketch_add_external_projection_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _external_geometry_count(sketch: object) -> int:
+    geometry = getattr(sketch, "ExternalGeometry", None)
+    if geometry is None:
+        return 0
+    try:
+        return len(list(geometry))
+    except Exception:
+        return 0
+
+
+def _call_add_external(adder: object, sketch: object, source_obj: object, sub: str, defining: bool) -> None:
+    source_name = object_name(source_obj)
+    try:
+        invoke(adder, source_name, sub)
+    except Exception as exc:
+        raise SketchAddExternalProjectionError("SKETCH_ADD_EXTERNAL_PROJECTION_FAILED", str(exc))
+
+
 def apply_sketch_add_external_projection(doc: SketchAddExternalProjectionDocument, request: SketchAddExternalProjectionRequest) -> SketchAddExternalProjectionReceipt:
     """Add external geometry to a sketch without recomputing."""
 
     sketch = require_object(doc, request.sketch_name, missing_code="OBJECT_NOT_FOUND", error=SketchAddExternalProjectionError)
-    obj, sub = parse_ref(doc, request.source_ref, SketchAddExternalProjectionError)
+    source_obj, sub = parse_ref(doc, request.source_ref, SketchAddExternalProjectionError)
     adder = getattr(sketch, "addExternal", None)
-    if callable(adder):
-        adder(object_name(obj), sub)
-    return SketchAddExternalProjectionReceipt(name=object_name(sketch) or request.sketch_name, item=sketch, skipped=False)
+    if not callable(adder):
+        raise SketchAddExternalProjectionError(
+            "INVALID_OBJECT",
+            f"Sketch does not support addExternal: {request.sketch_name!r}",
+        )
+    before_count = _external_geometry_count(sketch)
+    _call_add_external(adder, sketch, source_obj, sub, request.defining)
+    return SketchAddExternalProjectionReceipt(
+        name=object_name(sketch) or request.sketch_name,
+        item=sketch,
+        skipped=False,
+        extra={"external_before": before_count},
+    )
 
 
 def read_sketch_add_external_projection_result(doc: SketchAddExternalProjectionReadDocument, receipt: SketchAddExternalProjectionReceipt) -> SketchAddExternalProjectionInspection:
@@ -81,44 +100,58 @@ def read_sketch_add_external_projection_result(doc: SketchAddExternalProjectionR
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise SketchAddExternalProjectionError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise SketchAddExternalProjectionError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
 
-    extra = receipt.extra
+    extra = receipt.extra if isinstance(receipt.extra, dict) else {}
+    after_count = _external_geometry_count(located)
+    if after_count == 0:
+        raise SketchAddExternalProjectionError(
+            "SKETCH_ADD_EXTERNAL_FAILED",
+            "External geometry is empty after recompute",
+        )
 
     return SketchAddExternalProjectionInspection(
         name=SketchAddExternalProjectionName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra={**extra, "external_after": after_count},
     )
 
 
 def build_sketch_add_external_projection_request(doc_name: object, sketch_name: object, source_ref: object, projection_mode: object, defining: object, allow_gui_geometry_loop: object) -> SketchAddExternalProjectionRequest | SketchAddExternalProjectionFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(SketchAddExternalProjectionError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    sketch_name_value = nonempty_string(sketch_name, 'sketch_name')
+    sketch_name_value = nonempty_string(sketch_name, "sketch_name")
     if sketch_name_value is None:
         return _failure(SketchAddExternalProjectionError("INVALID_ARGUMENT", "sketch_name must be a nonempty string"))
-    source_ref_value = nonempty_string(source_ref, 'source_ref')
+    source_ref_value = nonempty_string(source_ref, "source_ref")
     if source_ref_value is None:
         return _failure(SketchAddExternalProjectionError("INVALID_ARGUMENT", "source_ref must be a nonempty string"))
-    projection_mode_value = nonempty_string(projection_mode, 'projection_mode')
+    projection_mode_value = nonempty_string(projection_mode, "projection_mode")
     if projection_mode_value is None:
         return _failure(SketchAddExternalProjectionError("INVALID_ARGUMENT", "projection_mode must be a nonempty string"))
+    if projection_mode_value not in _ALLOWED_PROJECTION_MODES:
+        return _failure(
+            SketchAddExternalProjectionError(
+                "INVALID_ARGUMENT",
+                "projection_mode must be one of: auto, edge, face, point",
+            )
+        )
     defining_value = as_bool(defining, False)
     if defining_value is None:
         return _failure(SketchAddExternalProjectionError("INVALID_ARGUMENT", "defining must be a boolean"))
     allow_gui_geometry_loop_value = as_bool(allow_gui_geometry_loop, False)
     if allow_gui_geometry_loop_value is None:
         return _failure(SketchAddExternalProjectionError("INVALID_ARGUMENT", "allow_gui_geometry_loop must be a boolean"))
+    if allow_gui_geometry_loop_value is not True:
+        return _failure(
+            SketchAddExternalProjectionError(
+                "gui_geometry_loop_opt_in_required",
+                "sketch_add_external_projection requires allow_gui_geometry_loop=true",
+            )
+        )
     return SketchAddExternalProjectionRequest(
         doc_name=DocumentName(doc_name_value),
         sketch_name=sketch_name_value,

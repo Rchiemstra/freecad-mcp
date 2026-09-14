@@ -198,8 +198,22 @@ def _seed(document: _Document) -> None:
         document.objects["Body"] = _item("Body", type_id="PartDesign::Body")
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
+        if seed == "datum":
+            target = document.objects["Target"]
+            target.AttachmentSupport = [(document.objects["Seed"], "Face1")]
+            target.Placement = SimpleNamespace(
+                Base=SimpleNamespace(x=0.0, y=0.0, z=1.0),
+                Rotation=SimpleNamespace(Axis=SimpleNamespace(x=0.0, y=0.0, z=1.0), Angle=0.0),
+            )
         if seed == "body":
-            maker = lambda type_id, name: document.addObject(type_id, name)
+            def maker(type_id, name):
+                created = document.addObject(type_id, name)
+                body = document.objects.get("Body")
+                if body is not None:
+                    body.Group.append(created)
+                    created.InList.append(body)
+                return created
+
             document.objects["Seed"].newObject = maker
             document.objects["Body"].newObject = maker
         if seed == "snapshot":
@@ -230,6 +244,8 @@ def test_preview_attachment_runs_apply_recompute_inspect_validate_then_commits()
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert "support" in result
+    assert "source_body_placement_dropped" in result
     assert "recompute" in events
     assert "commit" in events
 

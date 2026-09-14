@@ -20,25 +20,19 @@ from ...._shared.protocol.create_subshape_binder_contract import (
     make_create_subshape_binder_uncertain,
 )
 from .create_subshape_binder_mutation import CreateSubshapeBinderError, run_create_subshape_binder_native_mutation
+from .typed_runtime import is_derived_from
 from .typed_rpc_support import (
     add_named_object,
     add_to_container,
     as_bool,
-    as_float,
-    as_int,
     assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
     object_label,
     object_name,
     object_type_id,
     optional_string,
-    parse_ref,
-    remove_from_container,
     require_object,
     resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -65,19 +59,86 @@ def _failure(error: CreateSubshapeBinderError, *, retry_safe: bool = True) -> Cr
     return make_create_subshape_binder_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _validate_sub_elements(sub_elements: object) -> list[str] | None:
+    if sub_elements is None:
+        return None
+    if not isinstance(sub_elements, list):
+        raise CreateSubshapeBinderError("INVALID_ARGUMENT", "sub_elements must be None or a list of nonempty strings")
+    validated: list[str] = []
+    for index, item in enumerate(sub_elements):
+        value = nonempty_string(item, "sub_elements")
+        if value is None:
+            raise CreateSubshapeBinderError(
+                "INVALID_ARGUMENT",
+                f"sub_elements[{index}] must be a nonempty string",
+            )
+        validated.append(value)
+    return validated
+
+
+def _resolve_owner(doc: CreateSubshapeBinderDocument, request: CreateSubshapeBinderRequest) -> object | None:
+    if request.target_body:
+        return require_object(doc, request.target_body, missing_code="OBJECT_NOT_FOUND", error=CreateSubshapeBinderError)
+    if request.target_container:
+        return require_object(
+            doc,
+            request.target_container,
+            missing_code="OBJECT_NOT_FOUND",
+            error=CreateSubshapeBinderError,
+        )
+    return None
+
+
+def _object_in_owner(located: object, owner: object) -> bool:
+    group = list(getattr(owner, "Group", None) or [])
+    if located in group:
+        return True
+    in_list = list(getattr(located, "InList", None) or [])
+    return owner in in_list
+
+
 def apply_create_subshape_binder(doc: CreateSubshapeBinderDocument, request: CreateSubshapeBinderRequest) -> CreateSubshapeBinderReceipt:
     """Create a SubShapeBinder without recomputing."""
 
     skipped = resolve_if_exists(doc, request.binder_name, request.if_exists, error=CreateSubshapeBinderError)
     if skipped is not None:
         return CreateSubshapeBinderReceipt(name=object_name(skipped) or request.binder_name, item=skipped, skipped=True)
-    owner = require_object(doc, request.target_body, missing_code="OBJECT_NOT_FOUND", error=CreateSubshapeBinderError) if request.target_body else None
+    owner = _resolve_owner(doc, request)
     source_obj = require_object(doc, request.source_object, missing_code="OBJECT_NOT_FOUND", error=CreateSubshapeBinderError)
-    created = add_named_object(doc, "PartDesign::SubShapeBinder", request.binder_name)
-    if owner is not None:
-        add_to_container(owner, created)
-    assign_attr(created, "Support", [(source_obj, "")])
-    return CreateSubshapeBinderReceipt(name=object_name(created) or request.binder_name, item=created, skipped=False)
+    sub_elements = _validate_sub_elements(request.sub_elements)
+    created: object | None = None
+    factory = getattr(owner, "newObject", None) if owner is not None else None
+    if owner is not None and callable(factory):
+        try:
+            created = factory("PartDesign::SubShapeBinder", request.binder_name)
+        except Exception:
+            created = None
+    if created is None:
+        created = add_named_object(doc, "PartDesign::SubShapeBinder", request.binder_name)
+        if owner is not None:
+            add_to_container(owner, created)
+    try:
+        if sub_elements:
+            support = [(source_obj, tuple(sub_elements))]
+        else:
+            support = [(source_obj, ("",))]
+        assign_attr(created, "Support", support)
+        assign_attr(created, "Relative", request.relative)
+        bind_mode = "Synchronized" if request.sync_placement else "Frozen"
+        assign_attr(created, "BindMode", bind_mode)
+        if hasattr(created, "TraceSupport"):
+            assign_attr(created, "TraceSupport", request.sync_placement)
+    except CreateSubshapeBinderError:
+        raise
+    except Exception as exc:
+        raise CreateSubshapeBinderError("CREATE_SUBSHAPE_BINDER_FAILED", str(exc)) from exc
+    owner_name = object_name(owner) if owner is not None else None
+    return CreateSubshapeBinderReceipt(
+        name=object_name(created) or request.binder_name,
+        item=created,
+        skipped=False,
+        extra={"owner_name": owner_name},
+    )
 
 
 def read_create_subshape_binder_result(doc: CreateSubshapeBinderReadDocument, receipt: CreateSubshapeBinderReceipt) -> CreateSubshapeBinderInspection:
@@ -85,35 +146,49 @@ def read_create_subshape_binder_result(doc: CreateSubshapeBinderReadDocument, re
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise CreateSubshapeBinderError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise CreateSubshapeBinderError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
 
-    extra = receipt.extra
+    type_id = object_type_id(located)
+    if "SubShapeBinder" not in type_id and not is_derived_from(located, "PartDesign::SubShapeBinder"):
+        raise CreateSubshapeBinderError(
+            "CREATED_OBJECT_WRONG_TYPE",
+            f"Created object is not PartDesign::SubShapeBinder: {receipt.name!r}",
+        )
+
+    owner_name = None
+    if isinstance(receipt.extra, dict):
+        owner_name = receipt.extra.get("owner_name")
+    if owner_name:
+        owner = doc.getObject(str(owner_name))
+        if owner is not None and not _object_in_owner(located, owner):
+            raise CreateSubshapeBinderError(
+                "POSTCONDITION_FAILED",
+                f"Binder is not grouped under owner: {owner_name!r}",
+            )
 
     return CreateSubshapeBinderInspection(
         name=CreateSubshapeBinderName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra=receipt.extra,
     )
 
 
 def build_create_subshape_binder_request(doc_name: object, binder_name: object, source_object: object, sub_elements: object, target_body: object, target_container: object, relative: object, sync_placement: object, if_exists: object) -> CreateSubshapeBinderRequest | CreateSubshapeBinderFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(CreateSubshapeBinderError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    binder_name_value = nonempty_string(binder_name, 'binder_name')
+    binder_name_value = nonempty_string(binder_name, "binder_name")
     if binder_name_value is None:
         return _failure(CreateSubshapeBinderError("INVALID_ARGUMENT", "binder_name must be a nonempty string"))
-    source_object_value = nonempty_string(source_object, 'source_object')
+    source_object_value = nonempty_string(source_object, "source_object")
     if source_object_value is None:
         return _failure(CreateSubshapeBinderError("INVALID_ARGUMENT", "source_object must be a nonempty string"))
+    try:
+        _validate_sub_elements(sub_elements)
+    except CreateSubshapeBinderError as exc:
+        return _failure(exc)
     if target_body is None:
         target_body_value: str | None = None
     else:
@@ -132,10 +207,10 @@ def build_create_subshape_binder_request(doc_name: object, binder_name: object, 
     sync_placement_value = as_bool(sync_placement, True)
     if sync_placement_value is None:
         return _failure(CreateSubshapeBinderError("INVALID_ARGUMENT", "sync_placement must be a boolean"))
-    if_exists_value = nonempty_string(if_exists, 'if_exists')
+    if_exists_value = nonempty_string(if_exists, "if_exists")
     if if_exists_value is None:
         return _failure(CreateSubshapeBinderError("INVALID_ARGUMENT", "if_exists must be a nonempty string"))
-    if if_exists not in {"error", "skip", "replace"}:
+    if if_exists_value not in {"error", "skip", "replace"}:
         return _failure(CreateSubshapeBinderError("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace"))
     return CreateSubshapeBinderRequest(
         doc_name=DocumentName(doc_name_value),

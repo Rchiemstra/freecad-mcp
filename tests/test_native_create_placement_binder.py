@@ -28,16 +28,10 @@ def _collaborators(FreeCAD, validator):
 
 
 def _prepare(document):
-    if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
-    body = document.getObject('Body')
-    if body is None:
-        try:
-            body = document.addObject('PartDesign::Body', 'Body')
-        except Exception:
-            body = document.addObject('App::FeaturePython', 'Body')
-    document.recompute()
-    return body
+    from tests.typed_feature_native_setup import prepare_native_document
+
+    prepare_native_document(document, "edge_feature")
+    return document.getObject("Body")
 
 
 def test_create_placement_binder_native_success_inspects_after_recompute(monkeypatch):
@@ -71,7 +65,7 @@ def test_create_placement_binder_native_success_inspects_after_recompute(monkeyp
     monkeypatch.setattr(subject, "apply_create_placement_binder", tracked_apply)
     monkeypatch.setattr(subject, "read_create_placement_binder_result", tracked_read)
     try:
-        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Body", "Created", "Pad", True, "Synchronized")
         assert result["success"] is True
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
@@ -89,7 +83,7 @@ def test_create_placement_binder_native_validation_failure_restores_complete_sta
     try:
         result = run_create_placement_binder(
             _collaborators(FreeCAD, lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure"))),
-            document.Name, "Body", "Created", "Seed", True, "Synchronized",
+            document.Name, "Body", "Created", "Pad", True, "Synchronized",
         )
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
@@ -116,7 +110,7 @@ def test_create_placement_binder_native_apply_failure_restores(monkeypatch):
 
     monkeypatch.setattr(subject, "apply_create_placement_binder", mutates_then_raises)
     try:
-        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: None), document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: None), document.Name, "Body", "Created", "Pad", True, "Synchronized")
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
@@ -155,7 +149,7 @@ def test_create_placement_binder_native_recompute_failure_rolls_back(monkeypatch
 
     monkeypatch.setattr(subject, "apply_create_placement_binder", arm)
     try:
-        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: None), document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: None), document.Name, "Body", "Created", "Pad", True, "Synchronized")
         assert result["success"] is False
         assert result["native_status"] == "RecomputeFailed"
         assert _model_state(document) == state_before
@@ -193,9 +187,9 @@ def test_create_placement_binder_native_rollback_failure_is_uncertain_and_fences
     monkeypatch.setattr(subject, "apply_create_placement_binder", arm)
     collaborators = _collaborators(FreeCAD, lambda _d: None)
     try:
-        result = subject.run_create_placement_binder(collaborators, document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        result = subject.run_create_placement_binder(collaborators, document.Name, "Body", "Created", "Pad", True, "Synchronized")
         proxy.armed = False
-        fenced = subject.run_create_placement_binder(collaborators, document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        fenced = subject.run_create_placement_binder(collaborators, document.Name, "Body", "Created", "Pad", True, "Synchronized")
         assert result["outcome"] == "uncertain" or result["success"] is False
         assert fenced["success"] is False
     finally:
@@ -217,7 +211,7 @@ def test_create_placement_binder_native_inspection_failure_rolls_back(monkeypatc
 
     monkeypatch.setattr(subject, "read_create_placement_binder_result", reject)
     try:
-        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: None), document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        result = subject.run_create_placement_binder(_collaborators(FreeCAD, lambda _d: None), document.Name, "Body", "Created", "Pad", True, "Synchronized")
         assert result["success"] is False
         assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
         assert _model_state(document) == state_before
@@ -239,7 +233,7 @@ def test_create_placement_binder_native_postcondition_cannot_write():
         anchor.Label = "Unvalidated change"
 
     try:
-        result = run_create_placement_binder(_collaborators(FreeCAD, validate), document.Name, "Body", "Created", "Seed", True, "Synchronized")
+        result = run_create_placement_binder(_collaborators(FreeCAD, validate), document.Name, "Body", "Created", "Pad", True, "Synchronized")
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
         assert _model_state(document) == state_before

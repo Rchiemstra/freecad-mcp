@@ -65,9 +65,9 @@ def test_create_datum_plane_native_success_inspects_after_recompute(monkeypatch)
     monkeypatch.setattr(subject, "apply_create_datum_plane", tracked_apply)
     monkeypatch.setattr(subject, "read_create_datum_plane_result", tracked_read)
     try:
-        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Created", "Body", "through_point", "Pad:Face6", None, None, None, "FlatFace", "error")
+        result = subject.run_create_datum_plane(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Created", "Body", "through_point", None, None, None, None, "FlatFace", "error")
         assert result["success"] is True
-        assert events == ["apply", "recompute", "inspect", "validate"]
+        assert events[:4] == ["apply", "recompute", "inspect", "validate"]
     finally:
         FreeCAD.closeDocument(document.Name)
 

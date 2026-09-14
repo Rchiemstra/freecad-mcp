@@ -21,24 +21,13 @@ from ...._shared.protocol.move_object_contract import (
 )
 from .move_object_mutation import MoveObjectError, run_move_object_native_mutation
 from .typed_rpc_support import (
-    add_named_object,
     add_to_container,
     as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
     object_label,
     object_name,
-    object_type_id,
-    optional_string,
-    parse_ref,
     remove_from_container,
     require_object,
-    resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -65,9 +54,19 @@ def _failure(error: MoveObjectError, *, retry_safe: bool = True) -> MoveObjectFa
     return make_move_object_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _object_in_owner(located: object, owner: object) -> bool:
+    group = list(getattr(owner, "Group", None) or [])
+    if located in group:
+        return True
+    in_list = list(getattr(located, "InList", None) or [])
+    return owner in in_list
+
+
 def apply_move_object(doc: MoveObjectDocument, request: MoveObjectRequest) -> MoveObjectReceipt:
     """Move an object into a container without recomputing."""
 
+    if request.obj_name == request.target_container:
+        raise MoveObjectError("INVALID_ARGUMENT", "obj_name and target_container must differ")
     item = require_object(doc, request.obj_name, missing_code="OBJECT_NOT_FOUND", error=MoveObjectError)
     target = require_object(doc, request.target_container, missing_code="OBJECT_NOT_FOUND", error=MoveObjectError)
     if request.remove_from_old_parent:
@@ -76,7 +75,12 @@ def apply_move_object(doc: MoveObjectDocument, request: MoveObjectRequest) -> Mo
             if isinstance(group, (list, tuple)) and item in group:
                 remove_from_container(parent, item)
     add_to_container(target, item)
-    return MoveObjectReceipt(name=object_name(item) or request.obj_name, item=item, skipped=False)
+    return MoveObjectReceipt(
+        name=object_name(item) or request.obj_name,
+        item=item,
+        skipped=False,
+        extra={"target_container": request.target_container},
+    )
 
 
 def read_move_object_result(doc: MoveObjectReadDocument, receipt: MoveObjectReceipt) -> MoveObjectInspection:
@@ -84,33 +88,38 @@ def read_move_object_result(doc: MoveObjectReadDocument, receipt: MoveObjectRece
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise MoveObjectError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise MoveObjectError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
 
-    extra = receipt.extra
+    target_name = None
+    if isinstance(receipt.extra, dict):
+        target_name = receipt.extra.get("target_container")
+    if target_name:
+        target = doc.getObject(str(target_name))
+        if target is None:
+            raise MoveObjectError("MOVE_FAILED", f"Target container is missing: {target_name!r}")
+        if not _object_in_owner(located, target):
+            raise MoveObjectError(
+                "POSTCONDITION_FAILED",
+                f"Object is not grouped under target container: {target_name!r}",
+            )
 
     return MoveObjectInspection(
         name=MoveObjectName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra=receipt.extra,
     )
 
 
 def build_move_object_request(doc_name: object, obj_name: object, target_container: object, remove_from_old_parent: object) -> MoveObjectRequest | MoveObjectFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(MoveObjectError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    obj_name_value = nonempty_string(obj_name, 'obj_name')
+    obj_name_value = nonempty_string(obj_name, "obj_name")
     if obj_name_value is None:
         return _failure(MoveObjectError("INVALID_ARGUMENT", "obj_name must be a nonempty string"))
-    target_container_value = nonempty_string(target_container, 'target_container')
+    target_container_value = nonempty_string(target_container, "target_container")
     if target_container_value is None:
         return _failure(MoveObjectError("INVALID_ARGUMENT", "target_container must be a nonempty string"))
     remove_from_old_parent_value = as_bool(remove_from_old_parent, True)

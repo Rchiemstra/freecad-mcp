@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -60,8 +60,57 @@ def _body_xy_plane(body: object) -> object | None:
         label = str(getattr(feature, "Label", ""))
         name = str(getattr(feature, "Name", ""))
         if label == "XY_Plane" or name == "XY_Plane":
-            return feature
+            located: object = feature
+            return located
     return None
+
+
+def _validate_offset_along_normal(offset_along_normal: object) -> float | list[float] | None:
+    if offset_along_normal is None:
+        return None
+    if isinstance(offset_along_normal, (int, float)) and not isinstance(offset_along_normal, bool):
+        return float(offset_along_normal)
+    if isinstance(offset_along_normal, Sequence) and not isinstance(offset_along_normal, (str, bytes)):
+        if len(offset_along_normal) != 3:
+            raise CreateDatumPlaneError(
+                "INVALID_ARGUMENT",
+                "offset_along_normal must be None, a number, or a sequence of 3 numbers",
+            )
+        values: list[float] = []
+        for index, item in enumerate(offset_along_normal):
+            if not isinstance(item, (int, float)) or isinstance(item, bool):
+                raise CreateDatumPlaneError(
+                    "INVALID_ARGUMENT",
+                    f"offset_along_normal[{index}] must be a number",
+                )
+            values.append(float(item))
+        return values
+    raise CreateDatumPlaneError(
+        "INVALID_ARGUMENT",
+        "offset_along_normal must be None, a number, or a sequence of 3 numbers",
+    )
+
+
+def _apply_offset_along_normal(plane: object, offset: float | list[float] | None) -> None:
+    if offset is None:
+        return
+    attachment_offset = getattr(plane, "AttachmentOffset", None)
+    if attachment_offset is None:
+        return
+    base = getattr(attachment_offset, "Base", None)
+    if base is None:
+        return
+    if isinstance(offset, list):
+        base.x = offset[0]
+        base.y = offset[1]
+        base.z = offset[2]
+    else:
+        base.z = offset
+
+
+def _attach_support(plane: object, doc: CreateDatumPlaneDocument, ref: str) -> None:
+    obj, sub = parse_ref(doc, ref, CreateDatumPlaneError)
+    assign_attr(plane, "AttachmentSupport", [(obj, sub)])
 
 
 def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatumPlaneRequest) -> CreateDatumPlaneReceipt:
@@ -88,10 +137,23 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
         "plane_from_binder_face",
     }:
         raise CreateDatumPlaneError("INVALID_ARGUMENT", f"Unsupported datum plane mode: {request.mode}")
-    if request.mode == "through_point":
+
+    offset = _validate_offset_along_normal(request.offset_along_normal)
+
+    if request.mode in {"midpoint_between_faces", "between_parallel_planes"}:
+        if not request.face_a or not request.face_b:
+            raise CreateDatumPlaneError("INVALID_ARGUMENT", f"{request.mode} requires face_a and face_b")
+        obj_a, sub_a = parse_ref(doc, request.face_a, CreateDatumPlaneError)
+        obj_b, sub_b = parse_ref(doc, request.face_b, CreateDatumPlaneError)
+        try:
+            assign_attr(plane, "AttachmentSupport", [(obj_a, sub_a), (obj_b, sub_b)])
+        except Exception:
+            assign_attr(plane, "AttachmentSupport", [(obj_a, sub_a)])
+            _apply_offset_along_normal(plane, offset)
+        assign_attr(plane, "MapMode", request.map_mode)
+    elif request.mode == "through_point":
         if request.source_ref:
-            obj, sub = parse_ref(doc, request.source_ref, CreateDatumPlaneError)
-            assign_attr(plane, "AttachmentSupport", [(obj, sub)])
+            _attach_support(plane, doc, request.source_ref)
             assign_attr(plane, "MapMode", request.map_mode)
         else:
             xy_plane = _body_xy_plane(body)
@@ -102,9 +164,22 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
     else:
         support = request.source_ref or request.face_a
         if support:
-            obj, sub = parse_ref(doc, support, CreateDatumPlaneError)
-            assign_attr(plane, "AttachmentSupport", [(obj, sub)])
+            _attach_support(plane, doc, support)
+            if request.face_b:
+                obj_b, sub_b = parse_ref(doc, request.face_b, CreateDatumPlaneError)
+                current = getattr(plane, "AttachmentSupport", None)
+                if current is not None:
+                    try:
+                        values = list(getattr(current, "getValues", lambda: current)() or [])
+                    except Exception:
+                        values = list(current) if isinstance(current, list) else []
+                    values.append((obj_b, sub_b))
+                    assign_attr(plane, "AttachmentSupport", values)
         assign_attr(plane, "MapMode", request.map_mode)
+        _apply_offset_along_normal(plane, offset)
+
+    if hasattr(plane, "Relative"):
+        assign_attr(plane, "Relative", True)
     return CreateDatumPlaneReceipt(name=object_name(plane) or request.plane_name, item=plane, skipped=False)
 
 
@@ -128,16 +203,16 @@ def read_create_datum_plane_result(doc: CreateDatumPlaneReadDocument, receipt: C
 
 
 def build_create_datum_plane_request(doc_name: object, plane_name: object, body_name: object, mode: object, source_ref: object, face_a: object, face_b: object, offset_along_normal: object, map_mode: object, if_exists: object) -> CreateDatumPlaneRequest | CreateDatumPlaneFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    plane_name_value = nonempty_string(plane_name, 'plane_name')
+    plane_name_value = nonempty_string(plane_name, "plane_name")
     if plane_name_value is None:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "plane_name must be a nonempty string"))
-    body_name_value = nonempty_string(body_name, 'body_name')
+    body_name_value = nonempty_string(body_name, "body_name")
     if body_name_value is None:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "body_name must be a nonempty string"))
-    mode_value = nonempty_string(mode, 'mode')
+    mode_value = nonempty_string(mode, "mode")
     if mode_value is None:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "mode must be a nonempty string"))
     if source_ref is None:
@@ -158,14 +233,18 @@ def build_create_datum_plane_request(doc_name: object, plane_name: object, body_
         face_b_value = optional_string(face_b)
         if face_b_value is None:
             return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "face_b must be a nonempty string or None"))
-    map_mode_value = nonempty_string(map_mode, 'map_mode')
+    map_mode_value = nonempty_string(map_mode, "map_mode")
     if map_mode_value is None:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "map_mode must be a nonempty string"))
-    if_exists_value = nonempty_string(if_exists, 'if_exists')
+    if_exists_value = nonempty_string(if_exists, "if_exists")
     if if_exists_value is None:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "if_exists must be a nonempty string"))
-    if if_exists not in {"error", "skip", "replace"}:
+    if if_exists_value not in {"error", "skip", "replace"}:
         return _failure(CreateDatumPlaneError("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace"))
+    try:
+        _validate_offset_along_normal(offset_along_normal)
+    except CreateDatumPlaneError as exc:
+        return _failure(exc)
     return CreateDatumPlaneRequest(
         doc_name=DocumentName(doc_name_value),
         plane_name=plane_name_value,

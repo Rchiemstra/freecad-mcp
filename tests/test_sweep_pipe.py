@@ -198,8 +198,23 @@ def _seed(document: _Document) -> None:
         document.objects["Body"] = _item("Body", type_id="PartDesign::Body")
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
+        if seed == "wire":
+            wire_seed = _item("Seed", type_id="Part::Feature")
+            wire_seed.Shape = SimpleNamespace(
+                Edges=[object()],
+                Wires=[],
+                isNull=lambda: False,
+            )
+            document.objects["Seed"] = wire_seed
         if seed == "body":
-            maker = lambda type_id, name: document.addObject(type_id, name)
+            def maker(type_id, name):
+                created = document.addObject(type_id, name)
+                body = document.objects.get("Body")
+                if body is not None:
+                    body.Group.append(created)
+                    created.InList.append(body)
+                return created
+
             document.objects["Seed"].newObject = maker
             document.objects["Body"].newObject = maker
         if seed == "snapshot":

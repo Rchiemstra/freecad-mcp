@@ -23,22 +23,13 @@ from .create_part_container_mutation import CreatePartContainerError, run_create
 from .typed_rpc_support import (
     add_named_object,
     add_to_container,
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
     nonempty_string,
     object_label,
     object_name,
     object_type_id,
     optional_string,
-    parse_ref,
-    remove_from_container,
     require_object,
     resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -65,6 +56,14 @@ def _failure(error: CreatePartContainerError, *, retry_safe: bool = True) -> Cre
     return make_create_part_container_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _object_in_owner(located: object, owner: object) -> bool:
+    group = list(getattr(owner, "Group", None) or [])
+    if located in group:
+        return True
+    in_list = list(getattr(located, "InList", None) or [])
+    return owner in in_list
+
+
 def apply_create_part_container(doc: CreatePartContainerDocument, request: CreatePartContainerRequest) -> CreatePartContainerReceipt:
     """Create an App::Part without recomputing or managing a transaction."""
 
@@ -72,11 +71,22 @@ def apply_create_part_container(doc: CreatePartContainerDocument, request: Creat
     if skipped is not None:
         return CreatePartContainerReceipt(name=object_name(skipped) or request.part_name, item=skipped, skipped=True)
     created = add_named_object(doc, "App::Part", request.part_name)
-    parent = None
+    parent_name = None
     if request.parent_container:
-        parent = require_object(doc, request.parent_container, missing_code="OBJECT_NOT_FOUND", error=CreatePartContainerError)
+        parent = require_object(
+            doc,
+            request.parent_container,
+            missing_code="OBJECT_NOT_FOUND",
+            error=CreatePartContainerError,
+        )
         add_to_container(parent, created)
-    return CreatePartContainerReceipt(name=object_name(created) or request.part_name, item=created, skipped=False)
+        parent_name = object_name(parent)
+    return CreatePartContainerReceipt(
+        name=object_name(created) or request.part_name,
+        item=created,
+        skipped=False,
+        extra={"parent_container": parent_name},
+    )
 
 
 def read_create_part_container_result(doc: CreatePartContainerReadDocument, receipt: CreatePartContainerReceipt) -> CreatePartContainerInspection:
@@ -84,34 +94,37 @@ def read_create_part_container_result(doc: CreatePartContainerReadDocument, rece
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise CreatePartContainerError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise CreatePartContainerError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
 
     type_id = object_type_id(located)
-    if 'App::Part' not in type_id and type_id:
+    if "App::Part" not in type_id:
         raise CreatePartContainerError("CREATED_OBJECT_WRONG_TYPE", f"Created object is not App::Part: {receipt.name!r}")
 
-    extra = receipt.extra
+    parent_name = None
+    if isinstance(receipt.extra, dict):
+        parent_name = receipt.extra.get("parent_container")
+    if parent_name:
+        parent = doc.getObject(str(parent_name))
+        if parent is not None and not _object_in_owner(located, parent):
+            raise CreatePartContainerError(
+                "POSTCONDITION_FAILED",
+                f"Part container is not grouped under parent: {parent_name!r}",
+            )
 
     return CreatePartContainerInspection(
         name=CreatePartContainerName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra=receipt.extra,
     )
 
 
 def build_create_part_container_request(doc_name: object, part_name: object, parent_container: object, if_exists: object) -> CreatePartContainerRequest | CreatePartContainerFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(CreatePartContainerError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    part_name_value = nonempty_string(part_name, 'part_name')
+    part_name_value = nonempty_string(part_name, "part_name")
     if part_name_value is None:
         return _failure(CreatePartContainerError("INVALID_ARGUMENT", "part_name must be a nonempty string"))
     if parent_container is None:
@@ -120,10 +133,10 @@ def build_create_part_container_request(doc_name: object, part_name: object, par
         parent_container_value = optional_string(parent_container)
         if parent_container_value is None:
             return _failure(CreatePartContainerError("INVALID_ARGUMENT", "parent_container must be a nonempty string or None"))
-    if_exists_value = nonempty_string(if_exists, 'if_exists')
+    if_exists_value = nonempty_string(if_exists, "if_exists")
     if if_exists_value is None:
         return _failure(CreatePartContainerError("INVALID_ARGUMENT", "if_exists must be a nonempty string"))
-    if if_exists not in {"error", "skip", "replace"}:
+    if if_exists_value not in {"error", "skip", "replace"}:
         return _failure(CreatePartContainerError("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace"))
     return CreatePartContainerRequest(
         doc_name=DocumentName(doc_name_value),

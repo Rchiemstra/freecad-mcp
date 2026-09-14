@@ -27,6 +27,7 @@ def main() -> int:
     if args.native:
         try:
             import FreeCAD
+            import Part  # noqa: F401 - initialize native module before pytest
         except ImportError as exc:
             raise RuntimeError("Native qualification requires a real branch-built FreeCAD") from exc
         if getattr(FreeCAD, "__mcp_test_stub__", False):

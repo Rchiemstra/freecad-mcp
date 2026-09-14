@@ -28,14 +28,15 @@ def _collaborators(FreeCAD, validator):
 
 
 def _prepare(document):
-    if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
-    body = document.getObject('Body')
+    import Part
+
+    if document.getObject("Seed") is None:
+        line = Part.makeLine((0, 0, 0), (10, 0, 0))
+        seed = document.addObject("Part::Feature", "Seed")
+        seed.Shape = Part.Wire([line])
+    body = document.getObject("Body")
     if body is None:
-        try:
-            body = document.addObject('PartDesign::Body', 'Body')
-        except Exception:
-            body = document.addObject('App::FeaturePython', 'Body')
+        body = document.addObject("PartDesign::Body", "Body")
     document.recompute()
     return body
 
@@ -73,6 +74,11 @@ def test_sweep_pipe_native_success_inspects_after_recompute(monkeypatch):
     try:
         result = subject.run_sweep_pipe(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Seed", 1.5, "Created", "frenet", None, None, "error")
         assert result["success"] is True
+        created = document.getObject("Created")
+        assert created is not None
+        assert "Part::Feature" in created.TypeId
+        shape = created.Shape
+        assert shape is not None and (shape.Volume > 0 or len(shape.Faces) > 0)
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
         FreeCAD.closeDocument(document.Name)

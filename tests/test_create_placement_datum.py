@@ -199,7 +199,14 @@ def _seed(document: _Document) -> None:
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
         if seed == "body":
-            maker = lambda type_id, name: document.addObject(type_id, name)
+            def maker(type_id, name):
+                created = document.addObject(type_id, name)
+                body = document.objects.get("Body")
+                if body is not None:
+                    body.Group.append(created)
+                    created.InList.append(body)
+                return created
+
             document.objects["Seed"].newObject = maker
             document.objects["Body"].newObject = maker
         if seed == "snapshot":

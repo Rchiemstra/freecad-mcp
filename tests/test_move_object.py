@@ -198,8 +198,17 @@ def _seed(document: _Document) -> None:
         document.objects["Body"] = _item("Body", type_id="PartDesign::Body")
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
+        if seed == "move":
+            document.objects["Parent"] = _item("Parent", type_id="App::Part")
         if seed == "body":
-            maker = lambda type_id, name: document.addObject(type_id, name)
+            def maker(type_id, name):
+                created = document.addObject(type_id, name)
+                body = document.objects.get("Body")
+                if body is not None:
+                    body.Group.append(created)
+                    created.InList.append(body)
+                return created
+
             document.objects["Seed"].newObject = maker
             document.objects["Body"].newObject = maker
         if seed == "snapshot":
@@ -230,6 +239,7 @@ def test_move_object_runs_apply_recompute_inspect_validate_then_commits():
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert document.objects["Seed"] in document.objects["Body"].Group
     assert "recompute" in events
     assert "commit" in events
 

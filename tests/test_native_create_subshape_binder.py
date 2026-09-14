@@ -28,14 +28,11 @@ def _collaborators(FreeCAD, validator):
 
 
 def _prepare(document):
-    if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
-    body = document.getObject('Body')
+    body = document.getObject("Body")
     if body is None:
-        try:
-            body = document.addObject('PartDesign::Body', 'Body')
-        except Exception:
-            body = document.addObject('App::FeaturePython', 'Body')
+        body = document.addObject("PartDesign::Body", "Body")
+    if document.getObject("Seed") is None:
+        document.addObject("Part::Box", "Seed")
     document.recompute()
     return body
 
@@ -54,7 +51,7 @@ def test_create_subshape_binder_native_success_inspects_after_recompute(monkeypa
 
     probe = document.addObject("App::FeaturePython", "RecomputeProbe")
     probe.Proxy = RecomputeProbe()
-    _prepare(document)
+    body = _prepare(document)
     events.clear()
     original_apply = subject.apply_create_subshape_binder
     original_read = subject.read_create_subshape_binder_result
@@ -71,8 +68,12 @@ def test_create_subshape_binder_native_success_inspects_after_recompute(monkeypa
     monkeypatch.setattr(subject, "apply_create_subshape_binder", tracked_apply)
     monkeypatch.setattr(subject, "read_create_subshape_binder_result", tracked_read)
     try:
-        result = subject.run_create_subshape_binder(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Created", "Seed", None, None, "Body", False, True, "error")
+        result = subject.run_create_subshape_binder(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Created", "Seed", None, "Body", None, False, True, "error")
         assert result["success"] is True
+        created = document.getObject("Created")
+        assert created is not None
+        assert "SubShapeBinder" in created.TypeId
+        assert created in body.Group
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
         FreeCAD.closeDocument(document.Name)

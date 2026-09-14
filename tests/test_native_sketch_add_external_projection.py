@@ -28,18 +28,11 @@ def _collaborators(FreeCAD, validator):
 
 
 def _prepare(document):
-    if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
-    if document.getObject('Target') is None:
-        document.addObject('App::FeaturePython', 'Target')
-    body = document.getObject('Body')
-    if body is None:
-        try:
-            body = document.addObject('PartDesign::Body', 'Body')
-        except Exception:
-            body = document.addObject('App::FeaturePython', 'Body')
+    from tests.typed_feature_native_setup import prepare_native_document
+
+    prepare_native_document(document, "edge_feature")
     document.recompute()
-    return body
+    return document.getObject("Body")
 
 
 def test_sketch_add_external_projection_native_success_inspects_after_recompute(monkeypatch):
@@ -73,7 +66,7 @@ def test_sketch_add_external_projection_native_success_inspects_after_recompute(
     monkeypatch.setattr(subject, "apply_sketch_add_external_projection", tracked_apply)
     monkeypatch.setattr(subject, "read_sketch_add_external_projection_result", tracked_read)
     try:
-        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Seed", "Seed", "auto", False, True)
+        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Sketch", "X_Axis", "edge", False, True)
         assert result["success"] is True
         assert events == ["apply", "recompute", "inspect", "validate"]
     finally:
@@ -91,7 +84,7 @@ def test_sketch_add_external_projection_native_validation_failure_restores_compl
     try:
         result = run_sketch_add_external_projection(
             _collaborators(FreeCAD, lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure"))),
-            document.Name, "Seed", "Seed", "auto", False, True,
+            document.Name, "Sketch", "X_Axis", "auto", False, True,
         )
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
@@ -118,7 +111,7 @@ def test_sketch_add_external_projection_native_apply_failure_restores(monkeypatc
 
     monkeypatch.setattr(subject, "apply_sketch_add_external_projection", mutates_then_raises)
     try:
-        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: None), document.Name, "Seed", "Seed", "auto", False, True)
+        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: None), document.Name, "Sketch", "X_Axis", "auto", False, True)
         assert result["success"] is False
         assert result["native_status"] == "ApplyFailed"
         assert document.getObject("TransientSupport") is None
@@ -157,7 +150,7 @@ def test_sketch_add_external_projection_native_recompute_failure_rolls_back(monk
 
     monkeypatch.setattr(subject, "apply_sketch_add_external_projection", arm)
     try:
-        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: None), document.Name, "Seed", "Seed", "auto", False, True)
+        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: None), document.Name, "Sketch", "X_Axis", "auto", False, True)
         assert result["success"] is False
         assert result["native_status"] == "RecomputeFailed"
         assert _model_state(document) == state_before
@@ -195,9 +188,9 @@ def test_sketch_add_external_projection_native_rollback_failure_is_uncertain_and
     monkeypatch.setattr(subject, "apply_sketch_add_external_projection", arm)
     collaborators = _collaborators(FreeCAD, lambda _d: None)
     try:
-        result = subject.run_sketch_add_external_projection(collaborators, document.Name, "Seed", "Seed", "auto", False, True)
+        result = subject.run_sketch_add_external_projection(collaborators, document.Name, "Sketch", "X_Axis", "auto", False, True)
         proxy.armed = False
-        fenced = subject.run_sketch_add_external_projection(collaborators, document.Name, "Seed", "Seed", "auto", False, True)
+        fenced = subject.run_sketch_add_external_projection(collaborators, document.Name, "Sketch", "X_Axis", "auto", False, True)
         assert result["outcome"] == "uncertain" or result["success"] is False
         assert fenced["success"] is False
     finally:
@@ -219,7 +212,7 @@ def test_sketch_add_external_projection_native_inspection_failure_rolls_back(mon
 
     monkeypatch.setattr(subject, "read_sketch_add_external_projection_result", reject)
     try:
-        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: None), document.Name, "Seed", "Seed", "auto", False, True)
+        result = subject.run_sketch_add_external_projection(_collaborators(FreeCAD, lambda _d: None), document.Name, "Sketch", "X_Axis", "auto", False, True)
         assert result["success"] is False
         assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
         assert _model_state(document) == state_before
@@ -241,7 +234,7 @@ def test_sketch_add_external_projection_native_postcondition_cannot_write():
         anchor.Label = "Unvalidated change"
 
     try:
-        result = run_sketch_add_external_projection(_collaborators(FreeCAD, validate), document.Name, "Seed", "Seed", "auto", False, True)
+        result = run_sketch_add_external_projection(_collaborators(FreeCAD, validate), document.Name, "Sketch", "X_Axis", "auto", False, True)
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
         assert _model_state(document) == state_before

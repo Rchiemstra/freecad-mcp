@@ -47,10 +47,21 @@ def _supports(_o):
         _sup = getattr(_o, 'Support', None)
     if _sup is None:
         return []
+    _vals = []
     try:
-        return [s for s in _sup.getValues() if s is not None]
+        _vals = list(_sup.getValues())
     except Exception:
-        return []
+        if isinstance(_sup, (list, tuple)):
+            _vals = list(_sup)
+    _out = []
+    for _entry in _vals:
+        if _entry is None:
+            continue
+        if isinstance(_entry, (list, tuple)) and _entry:
+            _out.append(_entry[0])
+        else:
+            _out.append(_entry)
+    return _out
 
 
 # Build a map: parent body name -> list of cross-body datums referencing it.

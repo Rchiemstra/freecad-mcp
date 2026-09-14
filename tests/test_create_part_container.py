@@ -234,6 +234,20 @@ def test_create_part_container_runs_apply_recompute_inspect_validate_then_commit
     assert "commit" in events
 
 
+def test_create_part_container_parents_into_requested_container():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    parent = _item("Parent", type_id="App::Part")
+    document.objects["Parent"] = parent
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_create_part_container(collaborators, "Doc", "Created", "Parent", "error")
+
+    assert result["success"] is True
+    assert document.objects["Created"] in parent.Group
+
+
 def test_missing_document_fails_without_entering_the_apply_callback():
     events: list[str] = []
     collaborators, api = _collaborators(None, events)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -20,25 +20,15 @@ from ...._shared.protocol.create_placement_datum_contract import (
     make_create_placement_datum_uncertain,
 )
 from .create_placement_datum_mutation import CreatePlacementDatumError, run_create_placement_datum_native_mutation
+from .typed_runtime import is_derived_from
 from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
     assign_attr,
-    call_named,
-    invoke,
+    as_bool,
     nonempty_string,
     object_label,
     object_name,
-    object_type_id,
-    optional_string,
     parse_ref,
-    remove_from_container,
     require_object,
-    resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -65,16 +55,65 @@ def _failure(error: CreatePlacementDatumError, *, retry_safe: bool = True) -> Cr
     return make_create_placement_datum_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _validate_offset(offset: object) -> float | list[float] | None:
+    if offset is None:
+        return None
+    if isinstance(offset, (int, float)) and not isinstance(offset, bool):
+        return float(offset)
+    if isinstance(offset, Sequence) and not isinstance(offset, (str, bytes)) and len(offset) == 3:
+        values: list[float] = []
+        for index, item in enumerate(offset):
+            if not isinstance(item, (int, float)) or isinstance(item, bool):
+                raise CreatePlacementDatumError(
+                    "INVALID_ARGUMENT",
+                    f"offset[{index}] must be a number",
+                )
+            values.append(float(item))
+        return values
+    raise CreatePlacementDatumError(
+        "INVALID_ARGUMENT",
+        "offset must be None, a number, or a sequence of 3 numbers",
+    )
+
+
+def _apply_attachment_offset(plane: object, offset: float | list[float] | None) -> None:
+    if offset is None:
+        return
+    attachment_offset = getattr(plane, "AttachmentOffset", None)
+    if attachment_offset is None:
+        return
+    base = getattr(attachment_offset, "Base", None)
+    if base is None:
+        return
+    if isinstance(offset, list):
+        base.x = offset[0]
+        base.y = offset[1]
+        base.z = offset[2]
+    else:
+        base.z = offset
+
+
 def apply_create_placement_datum(doc: CreatePlacementDatumDocument, request: CreatePlacementDatumRequest) -> CreatePlacementDatumReceipt:
     """Create a placement-aware datum without recomputing."""
 
     body = require_object(doc, request.owner_body, missing_code="OBJECT_NOT_FOUND", error=CreatePlacementDatumError)
-    plane = call_named(body, "newObject", "PartDesign::Plane", request.name)
+    factory = getattr(body, "newObject", None)
+    if not callable(factory):
+        raise CreatePlacementDatumError("INVALID_BODY", "owner_body must provide newObject")
+    plane = factory("PartDesign::Plane", request.name)
     if plane is None:
-        plane = add_named_object(doc, "PartDesign::Plane", request.name)
-        add_to_container(body, plane)
+        raise CreatePlacementDatumError(
+            "CREATE_FAILED",
+            f"Failed to create PartDesign::Plane: {request.name!r}",
+        )
     obj, sub = parse_ref(doc, request.source, CreatePlacementDatumError)
     assign_attr(plane, "AttachmentSupport", [(obj, sub)])
+    if sub and str(sub).startswith("Face"):
+        assign_attr(plane, "MapMode", "FlatFace")
+    offset = _validate_offset(request.offset)
+    _apply_attachment_offset(plane, offset)
+    if hasattr(plane, "Relative"):
+        assign_attr(plane, "Relative", request.relative)
     return CreatePlacementDatumReceipt(name=object_name(plane) or request.name, item=plane, skipped=False)
 
 
@@ -83,41 +122,41 @@ def read_create_placement_datum_result(doc: CreatePlacementDatumReadDocument, re
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise CreatePlacementDatumError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise CreatePlacementDatumError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-
-    extra = receipt.extra
-
+    if not is_derived_from(located, "PartDesign::Plane"):
+        raise CreatePlacementDatumError(
+            "CREATED_OBJECT_WRONG_TYPE",
+            f"Created object is not PartDesign::Plane: {receipt.name!r}",
+        )
     return CreatePlacementDatumInspection(
         name=CreatePlacementDatumName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra=receipt.extra,
     )
 
 
 def build_create_placement_datum_request(doc_name: object, owner_body: object, name: object, source: object, relative: object, offset: object) -> CreatePlacementDatumRequest | CreatePlacementDatumFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(CreatePlacementDatumError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    owner_body_value = nonempty_string(owner_body, 'owner_body')
+    owner_body_value = nonempty_string(owner_body, "owner_body")
     if owner_body_value is None:
         return _failure(CreatePlacementDatumError("INVALID_ARGUMENT", "owner_body must be a nonempty string"))
-    name_value = nonempty_string(name, 'name')
+    name_value = nonempty_string(name, "name")
     if name_value is None:
         return _failure(CreatePlacementDatumError("INVALID_ARGUMENT", "name must be a nonempty string"))
-    source_value = nonempty_string(source, 'source')
+    source_value = nonempty_string(source, "source")
     if source_value is None:
         return _failure(CreatePlacementDatumError("INVALID_ARGUMENT", "source must be a nonempty string"))
     relative_value = as_bool(relative, True)
     if relative_value is None:
         return _failure(CreatePlacementDatumError("INVALID_ARGUMENT", "relative must be a boolean"))
+    try:
+        _validate_offset(offset)
+    except CreatePlacementDatumError as exc:
+        return _failure(exc)
     return CreatePlacementDatumRequest(
         doc_name=DocumentName(doc_name_value),
         owner_body=owner_body_value,

@@ -191,15 +191,31 @@ class _CompatibilityAPI:
 
 
 def _seed(document: _Document) -> None:
-    seed = ""
+    seed = "sketch"
     if seed in {"sheet", "object", "move", "body", "source", "wire", "sketch", "datum", "relink", "analysis", "snapshot"}:
         document.objects["Seed"] = _item("Seed", type_id="App::FeaturePython")
         document.objects["Target"] = _item("Target", type_id="App::FeaturePython")
         document.objects["Body"] = _item("Body", type_id="PartDesign::Body")
         if seed == "sheet":
             document.objects["Target"].TypeId = "Spreadsheet::Sheet"
+        if seed == "sketch":
+            sketch = _item("Seed", type_id="Sketcher::SketchObject")
+            sketch.Geometry = [object()]
+            sketch.Shape = SimpleNamespace(
+                Edges=[object()],
+                Wires=[],
+                isNull=lambda: False,
+            )
+            document.objects["Seed"] = sketch
         if seed == "body":
-            maker = lambda type_id, name: document.addObject(type_id, name)
+            def maker(type_id, name):
+                created = document.addObject(type_id, name)
+                body = document.objects.get("Body")
+                if body is not None:
+                    body.Group.append(created)
+                    created.InList.append(body)
+                return created
+
             document.objects["Seed"].newObject = maker
             document.objects["Body"].newObject = maker
         if seed == "snapshot":
@@ -230,6 +246,7 @@ def test_build_path_wire_runs_apply_recompute_inspect_validate_then_commits():
     assert result["success"] is True
     assert result["outcome"] == "committed"
     assert result["committed"] is True
+    assert result["wire_name"] == "Created"
     assert "recompute" in events
     assert "commit" in events
 
@@ -345,7 +362,7 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     )
     result = run_build_path_wire(collaborators, "Doc", "Created", [{"sketch": "Seed", "geo_index": 0}], 0.5, None, "error")
     assert lookups == ["Doc"]
-    assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+    assert result["success"] is True
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

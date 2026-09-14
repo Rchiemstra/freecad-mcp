@@ -34,6 +34,7 @@ def sketch_add_external_projection_operation(
             "source_ref": source_ref,
             "projection_mode": projection_mode,
             "defining": defining,
+            "allow_gui_geometry_loop": allow_gui_geometry_loop,
             },
             document_names=(doc_name,),
             operation_name="Add external projection",

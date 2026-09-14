@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -20,25 +20,21 @@ from ...._shared.protocol.build_path_wire_contract import (
     make_build_path_wire_uncertain,
 )
 from .build_path_wire_mutation import BuildPathWireError, run_build_path_wire_native_mutation
+from .typed_runtime import TypedMutationError, load_module, module_callable
 from .typed_rpc_support import (
     add_named_object,
     add_to_container,
-    as_bool,
     as_float,
     as_int,
     assign_attr,
-    call_named,
     invoke,
     nonempty_string,
     object_label,
     object_name,
     object_type_id,
     optional_string,
-    parse_ref,
-    remove_from_container,
     require_object,
     resolve_if_exists,
-    snapshot_ring
 )
 
 
@@ -65,16 +61,134 @@ def _failure(error: BuildPathWireError, *, retry_safe: bool = True) -> BuildPath
     return make_build_path_wire_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _validate_segments(segments: object) -> list[tuple[str, int]]:
+    if not isinstance(segments, list):
+        raise BuildPathWireError("INVALID_ARGUMENT", "segments must be a list")
+    validated: list[tuple[str, int]] = []
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, Mapping):
+            raise BuildPathWireError("INVALID_ARGUMENT", f"segments[{index}] must be a mapping")
+        sketch_name = nonempty_string(segment.get("sketch"), "sketch")
+        if sketch_name is None:
+            raise BuildPathWireError(
+                "INVALID_ARGUMENT",
+                f"segments[{index}].sketch must be a nonempty string",
+            )
+        geo_index = as_int(segment.get("geo_index"), None)
+        if geo_index is None or geo_index < 0:
+            raise BuildPathWireError(
+                "INVALID_ARGUMENT",
+                f"segments[{index}].geo_index must be a nonnegative integer",
+            )
+        validated.append((sketch_name, geo_index))
+    if not validated:
+        raise BuildPathWireError("INVALID_ARGUMENT", "No path segments supplied")
+    return validated
+
+
+def _extract_sketch_edge(sketch: object, geo_index: int) -> object:
+    shape = getattr(sketch, "Shape", None)
+    edges = list(getattr(shape, "Edges", None) or [])
+    if geo_index < len(edges):
+        return edges[geo_index]
+    geometry = list(getattr(sketch, "Geometry", None) or [])
+    if geo_index < len(geometry):
+        try:
+            part = load_module("Part")
+        except TypedMutationError as exc:
+            raise BuildPathWireError("INVALID_ARGUMENT", str(exc)) from exc
+        edge_maker = module_callable(part, "Edge")
+        try:
+            return edge_maker(geometry[geo_index])
+        except Exception as exc:
+            raise BuildPathWireError(
+                "OBJECT_NOT_FOUND",
+                f"Could not build edge {geo_index} from sketch geometry",
+            ) from exc
+    raise BuildPathWireError("OBJECT_NOT_FOUND", f"Edge index {geo_index} not found on sketch")
+
+
+def _wire_from_single_edge(edge: object) -> object | None:
+    wires = list(getattr(edge, "Wires", None) or [])
+    if wires:
+        wire: object = wires[0]
+        copy_fn = getattr(wire, "copy", None)
+        if callable(copy_fn):
+            try:
+                copied: object = invoke(copy_fn)
+                return copied
+            except Exception:
+                return wire
+        return wire
+    shape_type = getattr(edge, "ShapeType", None)
+    if shape_type == "Wire":
+        copy_fn = getattr(edge, "copy", None)
+        if callable(copy_fn):
+            try:
+                copied = invoke(copy_fn)
+                return copied
+            except Exception:
+                return edge
+        return edge
+    return None
+
+
+def _build_wire_from_edges(edges: Sequence[object], tolerance_mm: float) -> object | None:
+    try:
+        part = load_module("Part")
+        wire_maker = module_callable(part, "Wire")
+        built: object = wire_maker(list(edges))
+        return built
+    except TypedMutationError:
+        return None
+    except Exception:
+        if len(edges) == 1:
+            fallback = _wire_from_single_edge(edges[0])
+            if fallback is not None:
+                return fallback
+        return None
+
+
+def _wire_is_empty(shape: object) -> bool:
+    if shape is None:
+        return True
+    is_null = getattr(shape, "isNull", None)
+    if callable(is_null):
+        try:
+            if bool(is_null()):
+                return True
+        except Exception:
+            return True
+    edges = list(getattr(shape, "Edges", None) or [])
+    wires = list(getattr(shape, "Wires", None) or [])
+    return not edges and not wires
+
+
 def apply_build_path_wire(doc: BuildPathWireDocument, request: BuildPathWireRequest) -> BuildPathWireReceipt:
     """Apply the mutation without recomputing or managing a transaction."""
 
-    if not request.segments:
-        raise BuildPathWireError("INVALID_ARGUMENT", "No path segments supplied")
-
+    segments = _validate_segments(request.segments)
     skipped = resolve_if_exists(doc, request.wire_name, request.if_exists, error=BuildPathWireError)
     if skipped is not None:
         return BuildPathWireReceipt(name=object_name(skipped) or request.wire_name, item=skipped, skipped=True)
-    created = add_named_object(doc, 'Part::Feature', request.wire_name)
+
+    edges: list[object] = []
+    for sketch_name, geo_index in segments:
+        sketch = require_object(doc, sketch_name, missing_code="OBJECT_NOT_FOUND", error=BuildPathWireError)
+        edges.append(_extract_sketch_edge(sketch, geo_index))
+
+    created = add_named_object(doc, "Part::Feature", request.wire_name)
+    wire_shape = _build_wire_from_edges(edges, request.tolerance_mm)
+    if wire_shape is not None:
+        assign_attr(created, "Shape", wire_shape)
+    if request.container:
+        container = require_object(
+            doc,
+            request.container,
+            missing_code="OBJECT_NOT_FOUND",
+            error=BuildPathWireError,
+        )
+        add_to_container(container, created)
     return BuildPathWireReceipt(name=object_name(created) or request.wire_name, item=created, skipped=False)
 
 
@@ -83,38 +197,36 @@ def read_build_path_wire_result(doc: BuildPathWireReadDocument, receipt: BuildPa
 
     located: object | None = doc.getObject(receipt.name)
     if located is None:
-        located = receipt.item
-    if located is None:
         raise BuildPathWireError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
-    if (
-        receipt.item is not None
-        and located is not receipt.item
-        and object_name(located) != receipt.name
-    ):
+    if receipt.item is not None and located is not receipt.item:
         raise BuildPathWireError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
 
     type_id = object_type_id(located)
-    if 'Part::Feature' not in type_id and type_id:
+    if "Part::Feature" not in type_id:
         raise BuildPathWireError("CREATED_OBJECT_WRONG_TYPE", f"Created object is not Part::Feature: {receipt.name!r}")
 
-    extra = receipt.extra
+    shape = getattr(located, "Shape", None)
+    if shape is not None and _wire_is_empty(shape):
+        raise BuildPathWireError("CREATED_OBJECT_INVALID", f"Created wire has an empty Shape: {receipt.name!r}")
 
     return BuildPathWireInspection(
         name=BuildPathWireName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra=receipt.extra,
     )
 
 
 def build_build_path_wire_request(doc_name: object, wire_name: object, segments: object, tolerance_mm: object, container: object, if_exists: object) -> BuildPathWireRequest | BuildPathWireFailure:
-    doc_name_value = nonempty_string(doc_name, 'doc_name')
+    doc_name_value = nonempty_string(doc_name, "doc_name")
     if doc_name_value is None:
         return _failure(BuildPathWireError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
-    wire_name_value = nonempty_string(wire_name, 'wire_name')
+    wire_name_value = nonempty_string(wire_name, "wire_name")
     if wire_name_value is None:
         return _failure(BuildPathWireError("INVALID_ARGUMENT", "wire_name must be a nonempty string"))
-    if not isinstance(segments, list):
-        return _failure(BuildPathWireError("INVALID_ARGUMENT", "segments must be a list"))
+    try:
+        _validate_segments(segments)
+    except BuildPathWireError as exc:
+        return _failure(exc)
     tolerance_mm_value = as_float(tolerance_mm, 0.5)
     if tolerance_mm_value is None:
         return _failure(BuildPathWireError("INVALID_ARGUMENT", "tolerance_mm must be a number"))
@@ -124,10 +236,10 @@ def build_build_path_wire_request(doc_name: object, wire_name: object, segments:
         container_value = optional_string(container)
         if container_value is None:
             return _failure(BuildPathWireError("INVALID_ARGUMENT", "container must be a nonempty string or None"))
-    if_exists_value = nonempty_string(if_exists, 'if_exists')
+    if_exists_value = nonempty_string(if_exists, "if_exists")
     if if_exists_value is None:
         return _failure(BuildPathWireError("INVALID_ARGUMENT", "if_exists must be a nonempty string"))
-    if if_exists not in {"error", "skip", "replace"}:
+    if if_exists_value not in {"error", "skip", "replace"}:
         return _failure(BuildPathWireError("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace"))
     return BuildPathWireRequest(
         doc_name=DocumentName(doc_name_value),
