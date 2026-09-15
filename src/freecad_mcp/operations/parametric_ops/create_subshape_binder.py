@@ -20,28 +20,7 @@ def create_subshape_binder_operation(
         failure = make_create_subshape_binder_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
         return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "create_subshape_binder",
-            {
-            "doc_name": doc_name,
-            "binder_name": binder_name,
-            "source_object": source_object,
-            "sub_elements": sub_elements,
-            "target_body": target_body,
-            "target_container": target_container,
-            "relative": relative,
-            "sync_placement": sync_placement,
-            "if_exists": if_exists,
-            },
-            document_names=(doc_name,),
-            operation_name="Create subshape binder",
-        )
-        if raw_result is None:
-            raw_result = make_create_subshape_binder_uncertain(
-                "CREATE_SUBSHAPE_BINDER_TRANSPORT_UNCERTAIN",
-                "create_subshape_binder response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.create_subshape_binder(doc_name, binder_name, source_object, sub_elements, target_body, target_container, relative, sync_placement, if_exists)
     except Exception as exc:
         raw_result = make_create_subshape_binder_uncertain(
             "CREATE_SUBSHAPE_BINDER_TRANSPORT_UNCERTAIN",

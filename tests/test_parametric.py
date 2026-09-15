@@ -347,14 +347,23 @@ def test_sketch_edit_constraint_requires_identity():
     conn.sketch_edit_constraint.assert_called_once_with("Doc", "Sk", 4.0, "WallThick", None)
 
 
-def test_diagnose_parametric_code():
+def test_diagnose_parametric_routes_typed_rpc():
     conn = _ok_conn('{"ok": true}')
+    conn.diagnose_parametric.return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "observed",
+        "retry_safe": False,
+        "expression_issues": [],
+        "invalid_objects": [],
+    }
+    before = conn.execute_code.call_count
     diagnose_parametric_operation(conn, True, "Doc")
-    code = _code(conn)
-    assert "expression_issues" in code
-    assert "invalid_objects" in code
+    conn.diagnose_parametric.assert_called_with("Doc", None)
     diagnose_parametric_operation(conn, True, "Doc", "Pad")
-    assert "Pad" in _code(conn)
+    conn.diagnose_parametric.assert_called_with("Doc", "Pad")
+    assert conn.execute_code.call_count == before
 
 
 def test_failures_surface():

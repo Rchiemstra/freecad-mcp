@@ -20,22 +20,7 @@ def spreadsheet_set_cells_operation(
         invalid = make_spreadsheet_set_cells_failure("INVALID_ARGUMENT", "cells must be a non-empty list")
         return tool_fail(invalid["error"], structured=dict(invalid), error_code=invalid["error_code"])
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "spreadsheet_set_cells",
-            {
-            "doc_name": doc_name,
-            "sheet_name": sheet_name,
-            "cells": cells,
-            },
-            document_names=(doc_name,),
-            operation_name="Set spreadsheet cells",
-        )
-        if raw_result is None:
-            raw_result = make_spreadsheet_set_cells_uncertain(
-                "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN",
-                "spreadsheet_set_cells response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.spreadsheet_set_cells(doc_name, sheet_name, cells)
     except Exception as exc:
         raw_result = make_spreadsheet_set_cells_uncertain(
             "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN",

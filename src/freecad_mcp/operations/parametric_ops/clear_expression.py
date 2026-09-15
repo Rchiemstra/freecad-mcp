@@ -17,22 +17,7 @@ def clear_expression_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, object_name: str, prop_path: str,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "clear_expression",
-            {
-            "doc_name": doc_name,
-            "object_name": object_name,
-            "prop_path": prop_path,
-            },
-            document_names=(doc_name,),
-            operation_name="Clear expression",
-        )
-        if raw_result is None:
-            raw_result = make_clear_expression_uncertain(
-                "CLEAR_EXPRESSION_TRANSPORT_UNCERTAIN",
-                "clear_expression response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.clear_expression(doc_name, object_name, prop_path)
     except Exception as exc:
         raw_result = make_clear_expression_uncertain(
             "CLEAR_EXPRESSION_TRANSPORT_UNCERTAIN",

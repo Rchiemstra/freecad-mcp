@@ -4,11 +4,19 @@ import logging
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
-from ...template_resources import render_template_text
-from ..p7_assembly import _doc_preamble, _run_json_code
-from .helpers import _diag_preamble
+from ..parametric_ops.audit_hardcoded_dimensions import (
+    audit_hardcoded_dimensions_operation as _typed_audit_hardcoded_dimensions,
+)
+from ..parametric_ops.get_dependency_graph import (
+    get_dependency_graph_operation as _typed_get_dependency_graph,
+)
+from ..parametric_ops.inspect_geometry import (
+    inspect_geometry_operation as _typed_inspect_geometry,
+)
+from ..parametric_ops.match_subshape import match_subshape_operation as _typed_match_subshape
 
 logger = logging.getLogger("FreeCADMCPserver")
+
 
 def audit_hardcoded_dimensions_operation(
     freecad: FreeCADConnection,
@@ -17,18 +25,9 @@ def audit_hardcoded_dimensions_operation(
     body_name: str,
     flag_aliases: bool = True,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/audit_hardcoded_dimensions.py.txt",
-        body_name=repr(body_name),
-        flag_aliases=repr(flag_aliases),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed hard-coded dimension audit",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    del only_text_feedback
+    return _typed_audit_hardcoded_dimensions(freecad, doc_name, body_name, flag_aliases)
+
 
 def inspect_geometry_operation(
     freecad: FreeCADConnection,
@@ -39,6 +38,7 @@ def inspect_geometry_operation(
     activate: bool = False,
     restore_active_document: bool = True,
 ) -> ToolResponse:
+    del only_text_feedback, restore_active_document
     if activate:
         try:
             freecad.activate_document(doc_name)
@@ -49,19 +49,8 @@ def inspect_geometry_operation(
             freecad.select_subshapes(doc_name, selection, clear=True)
         except Exception as exc:
             logger.warning("inspect_geometry select_subshapes failed: %s", exc)
+    return _typed_inspect_geometry(freecad, doc_name, object_name, subshape)
 
-    code = [*_diag_preamble(doc_name), render_template_text(
-        "diagnostics/inspect_geometry.py.txt",
-        object_name=repr(object_name),
-        subshape=repr(subshape),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed geometry inspection",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
 
 def get_dependency_graph_operation(
     freecad: FreeCADConnection,
@@ -69,17 +58,9 @@ def get_dependency_graph_operation(
     doc_name: str,
     root: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/get_dependency_graph.py.txt",
-        root=repr(root),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed to build dependency graph",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    del only_text_feedback
+    return _typed_get_dependency_graph(freecad, doc_name, root)
+
 
 def match_subshape_operation(
     freecad: FreeCADConnection,
@@ -91,18 +72,7 @@ def match_subshape_operation(
     limit: int = 10,
     tolerance: float = 1.0,
 ) -> ToolResponse:
-    code = [*_diag_preamble(doc_name), render_template_text(
-        "diagnostics/match_subshape.py.txt",
-        source_object=repr(source_object),
-        source_subshape=repr(source_subshape),
-        target_object=repr(target_object),
-        limit=repr(limit),
-        tolerance=repr(tolerance),
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed subshape matching",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
+    del only_text_feedback
+    return _typed_match_subshape(
+        freecad, doc_name, source_object, source_subshape, target_object, limit, tolerance
     )

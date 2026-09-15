@@ -2,8 +2,7 @@
 P3 — 3-D feature operations: revolve, loft, sweep, helix, fillet, chamfer, booleans.
 
 Public operation names stay on this module for generated tool imports. The
-typed JSON-RPC implementations live in ``parametric_ops``; execute-code
-templates remain in ``p3_features_legacy``.
+typed JSON-RPC implementations live in ``parametric_ops``.
 """
 from __future__ import annotations
 

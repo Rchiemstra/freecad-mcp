@@ -13,4 +13,12 @@ export LD_LIBRARY_PATH="${SO_DIRS}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 echo "PYTHONPATH=$PYTHONPATH"
 echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+
+if [ -x "$BUILD/bin/FreeCADCmd" ]; then
+  ln -sf "$BUILD/bin/FreeCADCmd" /usr/bin/FreeCADCmd
+fi
+if [ -e "$BUILD/lib/libFreeCADApp.so" ]; then
+  ln -sf "$BUILD/lib/libFreeCADApp.so" /usr/lib/libFreeCADApp.so
+fi
+
 exec "$@"

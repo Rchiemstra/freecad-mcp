@@ -17,22 +17,7 @@ def spreadsheet_get_cells_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, sheet_name: str, addresses: object,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "spreadsheet_get_cells",
-            {
-            "doc_name": doc_name,
-            "sheet_name": sheet_name,
-            "addresses": addresses,
-            },
-            document_names=(doc_name,),
-            operation_name="Get spreadsheet cells",
-        )
-        if raw_result is None:
-            raw_result = make_spreadsheet_get_cells_uncertain(
-                "SPREADSHEET_GET_CELLS_TRANSPORT_UNCERTAIN",
-                "spreadsheet_get_cells response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.spreadsheet_get_cells(doc_name, sheet_name, addresses)
     except Exception as exc:
         raw_result = make_spreadsheet_get_cells_uncertain(
             "SPREADSHEET_GET_CELLS_TRANSPORT_UNCERTAIN",

@@ -13,7 +13,6 @@ from .parametric_ops.expression_ops import (
 )
 from .parametric_ops.helpers import (
     _doc_missing,
-    _generated_sketch_attach,
     _typed_rpc_unavailable,
     _typed_rpc_unavailable_result,
     _typed_sketch_attach_result,
@@ -33,7 +32,6 @@ from .parametric_ops.spreadsheet_ops import (
 
 __all__ = [
     "_doc_missing",
-    "_generated_sketch_attach",
     "_typed_rpc_unavailable",
     "_typed_rpc_unavailable_result",
     "_typed_sketch_attach_result",

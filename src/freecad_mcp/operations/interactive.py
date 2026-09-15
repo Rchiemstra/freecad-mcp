@@ -9,10 +9,10 @@ from typing import Any
 from ..freecad_client import FreeCADConnection
 from ..responses.constants import ToolResponse
 from ..responses.tool_results import json_response, tool_fail
-from ..template_resources import render_template_text
-from .diagnostics import _diff_states, _response_text
-from .p7_assembly import _doc_preamble, _run_json_code
+from .diagnostics import _diff_states
+from .diagnostics_ops.helpers import _response_text
 from .parametric_ops.activate_document import activate_document_operation
+from .parametric_ops.capture_state import capture_state_operation
 from .parametric_ops.open_document import open_document_operation
 from .parametric_ops.recompute_and_wait import recompute_and_wait_operation
 
@@ -102,21 +102,17 @@ def diagnose_pocket_operation(
     doc_name: str,
     pocket_name: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name),
-        render_template_text(
-            "diagnostics/diagnose_pocket.py.txt",
-            pocket_name=repr(pocket_name),
+    try:
+        raw = freecad.diagnose_pocket(doc_name, pocket_name)
+    except Exception as exc:
+        return tool_fail(f"Failed pocket diagnosis: {exc}")
+    if isinstance(raw, dict) and raw.get("success") is False:
+        return tool_fail(
+            "Failed pocket diagnosis: " + str(raw.get("error", "unknown")),
+            structured=raw,
+            error_code=str(raw.get("error_code", "DIAGNOSE_POCKET_FAILED")),
         )
-    ]
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(code),
-        "Failed pocket diagnosis",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    return json_response(raw if isinstance(raw, dict) else {"ok": True, "payload": raw})
 
 
 def diagnose_helix_operation(
@@ -125,21 +121,17 @@ def diagnose_helix_operation(
     doc_name: str,
     helix_name: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name),
-        render_template_text(
-            "diagnostics/diagnose_helix.py.txt",
-            helix_name=repr(helix_name),
+    try:
+        raw = freecad.diagnose_helix(doc_name, helix_name)
+    except Exception as exc:
+        return tool_fail(f"Failed helix diagnosis: {exc}")
+    if isinstance(raw, dict) and raw.get("success") is False:
+        return tool_fail(
+            "Failed helix diagnosis: " + str(raw.get("error", "unknown")),
+            structured=raw,
+            error_code=str(raw.get("error_code", "DIAGNOSE_HELIX_FAILED")),
         )
-    ]
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(code),
-        "Failed helix diagnosis",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    return json_response(raw if isinstance(raw, dict) else {"ok": True, "payload": raw})
 
 
 def compare_documents_operation(
@@ -152,26 +144,16 @@ def compare_documents_operation(
     """Compare two open documents (e.g. V7 vs V8) via paired capture_state."""
 
     def _capture(doc_name: str, names: list[str] | None) -> dict:
-        code = [*_doc_preamble(doc_name),
-            render_template_text(
-                "diagnostics/geometric_capture.py.txt",
-                object_names=repr(names),
-            )
-        ]
-        resp = _run_json_code(
-            freecad,
-            True,
-            "\n".join(code),
-            f"Failed to capture state for {doc_name}",
-            screenshot=False,
-            document=doc_name,
-            read_only=True,
-        )
-        text = _response_text(resp)
-        try:
-            return json.loads(text)
-        except Exception:
+        resp = capture_state_operation(freecad, True, doc_name, names)
+        if resp.isError:
+            text = _response_text(resp)
             return {"ok": False, "error": text, "doc": doc_name, "objects": []}
+        structured = resp.structuredContent.get("data", {}) if resp.structuredContent else {}
+        if not isinstance(structured, dict):
+            return {"ok": False, "error": "invalid capture_state response", "doc": doc_name, "objects": []}
+        objects = structured.get("objects", {})
+        rows = list(objects.values()) if isinstance(objects, dict) else []
+        return {"ok": True, "doc": structured.get("doc", doc_name), "objects": rows}
 
     pairs: list[tuple[str, str]] = []
     for item in object_pairs or []:

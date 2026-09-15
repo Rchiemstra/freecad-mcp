@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from freecad_mcp.operations.parametric_ops.capture_state import capture_state_operation
-from freecad_mcp.operations.parametric_ops.relink_references import relink_references_operation
-
 import json
 import logging
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.tool_results import json_response, tool_fail
-from ...template_resources import render_template_text
-from ..p7_assembly import _doc_preamble, _run_json_code
+from ..parametric_ops.capture_state import capture_state_operation
 from .helpers import _response_text
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -25,14 +21,16 @@ def placement_audit_operation(
     ``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,
     global_placement_base, cross_body_datums}]}``.
     """
-    code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/placement_audit.py.txt",
-    )]
-    return _run_json_code(
-        freecad, only_text_feedback, "\n".join(code),
-        "Failed to audit placements", screenshot=False, document=doc_name,
-        read_only=True,
-    )
+    try:
+        raw = freecad.placement_audit(doc_name)
+    except Exception as exc:
+        return tool_fail(f"Failed to audit placements: {exc}")
+    if isinstance(raw, dict) and raw.get("success") is False:
+        return tool_fail(
+            "Failed to audit placements: " + str(raw.get("error", "unknown")),
+            structured=raw,
+        )
+    return json_response(raw if isinstance(raw, dict) else {"ok": True, "payload": raw})
 
 
 
@@ -92,21 +90,14 @@ def geometric_diff_operation(
     ``{ok, doc, diffs: [{name, bbox_before/after, placement_before/after,
     faces_added/removed, changed}]}`` when a viewable image can't be returned.
     """
-    code = [*_doc_preamble(doc_name), render_template_text(
-        "diagnostics/geometric_capture.py.txt",
-        object_names=repr(object_names),
-    )]
-    resp = _run_json_code(
-        freecad, True, "\n".join(code),
-        "Failed to capture state for diff", screenshot=False, document=doc_name,
-        read_only=True,
-    )
-    text = _response_text(resp)
-    try:
-        current = json.loads(text)
-    except Exception:
+    resp = capture_state_operation(freecad, True, doc_name, object_names)
+    if resp.isError:
         return tool_fail(
-            "Failed to capture current state for diff: " + text,
+            "Failed to capture current state for diff: " + _response_text(resp),
             error_code="MALFORMED_RESPONSE",
         )
+    structured = resp.structuredContent.get("data", {}) if resp.structuredContent else {}
+    objects = structured.get("objects", {}) if isinstance(structured, dict) else {}
+    rows = list(objects.values()) if isinstance(objects, dict) else []
+    current = {"ok": True, "doc": structured.get("doc", doc_name), "objects": rows}
     return json_response(_diff_states(before, current))

@@ -17,21 +17,7 @@ def restore_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, snapshot_id: str | None = None,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "restore",
-            {
-            "doc_name": doc_name,
-            "snapshot_id": snapshot_id,
-            },
-            document_names=(doc_name,),
-            operation_name="Restore document snapshot",
-        )
-        if raw_result is None:
-            raw_result = make_restore_uncertain(
-                "RESTORE_TRANSPORT_UNCERTAIN",
-                "restore response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.restore(doc_name, snapshot_id)
     except Exception as exc:
         raw_result = make_restore_uncertain(
             "RESTORE_TRANSPORT_UNCERTAIN",

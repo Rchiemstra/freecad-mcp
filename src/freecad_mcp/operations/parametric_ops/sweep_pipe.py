@@ -20,27 +20,7 @@ def sweep_pipe_operation(
         failure = make_sweep_pipe_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
         return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "sweep_pipe",
-            {
-            "doc_name": doc_name,
-            "path_wire": path_wire,
-            "diameter_mm": diameter_mm,
-            "solid_name": solid_name,
-            "profile_mode": profile_mode,
-            "color": color,
-            "container": container,
-            "if_exists": if_exists,
-            },
-            document_names=(doc_name,),
-            operation_name="Sweep pipe",
-        )
-        if raw_result is None:
-            raw_result = make_sweep_pipe_uncertain(
-                "SWEEP_PIPE_TRANSPORT_UNCERTAIN",
-                "sweep_pipe response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.sweep_pipe(doc_name, path_wire, diameter_mm, solid_name, profile_mode, color, container, if_exists)
     except Exception as exc:
         raw_result = make_sweep_pipe_uncertain(
             "SWEEP_PIPE_TRANSPORT_UNCERTAIN",

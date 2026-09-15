@@ -17,23 +17,7 @@ def spreadsheet_set_alias_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, sheet_name: str, address: str, alias: str,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "spreadsheet_set_alias",
-            {
-            "doc_name": doc_name,
-            "sheet_name": sheet_name,
-            "address": address,
-            "alias": alias,
-            },
-            document_names=(doc_name,),
-            operation_name="Set spreadsheet alias",
-        )
-        if raw_result is None:
-            raw_result = make_spreadsheet_set_alias_uncertain(
-                "SPREADSHEET_SET_ALIAS_TRANSPORT_UNCERTAIN",
-                "spreadsheet_set_alias response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.spreadsheet_set_alias(doc_name, sheet_name, address, alias)
     except Exception as exc:
         raw_result = make_spreadsheet_set_alias_uncertain(
             "SPREADSHEET_SET_ALIAS_TRANSPORT_UNCERTAIN",

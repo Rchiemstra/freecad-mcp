@@ -17,22 +17,7 @@ def relink_references_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, from_obj: str, to_obj: str,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "relink_references",
-            {
-            "doc_name": doc_name,
-            "from_obj": from_obj,
-            "to_obj": to_obj,
-            },
-            document_names=(doc_name,),
-            operation_name="Relink references",
-        )
-        if raw_result is None:
-            raw_result = make_relink_references_uncertain(
-                "RELINK_REFERENCES_TRANSPORT_UNCERTAIN",
-                "relink_references response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.relink_references(doc_name, from_obj, to_obj)
     except Exception as exc:
         raw_result = make_relink_references_uncertain(
             "RELINK_REFERENCES_TRANSPORT_UNCERTAIN",

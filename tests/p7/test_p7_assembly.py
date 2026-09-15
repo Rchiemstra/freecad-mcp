@@ -17,6 +17,12 @@ from freecad_mcp._shared.protocol.create_assembly_grounded_joint_contract import
 from freecad_mcp._shared.protocol.create_assembly_joint_contract import (
     make_create_assembly_joint_success,
 )
+from freecad_mcp._shared.protocol.get_document_tree_contract import (
+    make_get_document_tree_success,
+)
+from freecad_mcp._shared.protocol.get_sketch_geometry_contract import (
+    make_get_sketch_geometry_success,
+)
 from freecad_mcp.operations.p7_assembly import (
     create_assembly_grounded_joint_operation,
     create_assembly_joint_operation,
@@ -84,6 +90,12 @@ def _ok_conn(output: str = '{"ok": true}'):
     conn.create_assembly_joint.return_value = make_create_assembly_joint_success(
         "Screw 1", "Screw 1", "Cylindrical", "Assembly"
     )
+    conn.get_document_tree.return_value = make_get_document_tree_success(
+        "Doc", "Cable", 3, [{"name": "Cable", "children": []}]
+    )
+    conn.get_sketch_geometry.return_value = make_get_sketch_geometry_success(
+        "CableRouteSketch", 2, [], [], []
+    )
     return conn
 
 
@@ -114,16 +126,16 @@ def _text(response) -> str:
 
 
 class TestDocumentTree:
-    def test_compiles_and_uses_group_tree(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         get_document_tree_operation(conn, "Doc", root_filter="Cable", max_depth=3)
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "root_filter", "Group", "children", "max_depth")
+        conn.get_document_tree.assert_called_once_with("Doc", "Cable", 3, None, None, None)
+        conn.execute_code.assert_not_called()
 
     def test_json_output_is_returned_directly(self):
-        resp = get_document_tree_operation(_ok_conn('{"doc_name": "Doc"}'), "Doc")
-        assert _text(resp).startswith('{"doc_name": "Doc"}')
+        resp = get_document_tree_operation(_ok_conn(), "Doc", root_filter="Cable", max_depth=3)
+        assert '"doc_name": "Doc"' in _text(resp)
+        assert '"outcome": "observed"' in _text(resp)
 
 
 class TestAssemblyApiTools:
@@ -253,12 +265,16 @@ class TestDatumPlane:
 
 
 class TestSketchGeometry:
-    def test_compiles_and_reports_external_geometry(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         get_sketch_geometry_operation(conn, "Doc", "CableRouteSketch")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "GeometryFacade", "getGlobalPlacement", "ExternalGeometry", "negative_index")
+        conn.get_sketch_geometry.assert_called_once_with("Doc", "CableRouteSketch", True, True, True)
+        conn.execute_code.assert_not_called()
+
+    def test_json_output(self):
+        resp = get_sketch_geometry_operation(_ok_conn(), "Doc", "CableRouteSketch")
+        assert '"sketch_name": "CableRouteSketch"' in _text(resp)
+        assert '"outcome": "observed"' in _text(resp)
 
 
 class TestExternalProjection:

@@ -87,8 +87,7 @@ class SnapshotSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["observed"]
     retry_safe: Literal[False]
     snapshot_id: str
     doc: str
@@ -147,8 +146,7 @@ def make_snapshot_success(snapshot_id: str, doc: str, count: int) -> SnapshotSuc
         "contract_version": SNAPSHOT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
+        "outcome": "observed",
         "retry_safe": False,
         "snapshot_id": snapshot_id,
         "doc": doc,

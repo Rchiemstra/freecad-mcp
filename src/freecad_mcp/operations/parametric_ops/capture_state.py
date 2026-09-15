@@ -17,21 +17,7 @@ def capture_state_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, object_names: object = None,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "capture_state",
-            {
-            "doc_name": doc_name,
-            "object_names": object_names,
-            },
-            document_names=(doc_name,),
-            operation_name="Capture state",
-        )
-        if raw_result is None:
-            raw_result = make_capture_state_uncertain(
-                "CAPTURE_STATE_TRANSPORT_UNCERTAIN",
-                "capture_state response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.capture_state(doc_name, object_names)
     except Exception as exc:
         raw_result = make_capture_state_uncertain(
             "CAPTURE_STATE_TRANSPORT_UNCERTAIN",

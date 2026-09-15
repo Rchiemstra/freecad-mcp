@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
-from ...template_resources import render_template_lines
-from .helpers import _doc_preamble, _run_json_code, _shared_helpers
-from freecad_mcp.operations.parametric_ops.create_datum_plane import create_datum_plane_operation
-from freecad_mcp.operations.parametric_ops.create_part_container import create_part_container_operation
-from freecad_mcp.operations.parametric_ops.create_subshape_binder import create_subshape_binder_operation
-from freecad_mcp.operations.parametric_ops.move_object import move_object_operation
+from ..parametric_ops.create_datum_plane import create_datum_plane_operation
+from ..parametric_ops.create_part_container import create_part_container_operation
+from ..parametric_ops.create_subshape_binder import create_subshape_binder_operation
+from ..parametric_ops.get_document_tree import get_document_tree_operation as _typed_get_document_tree
+from ..parametric_ops.move_object import move_object_operation
 
 
 def get_document_tree_operation(
@@ -19,21 +18,14 @@ def get_document_tree_operation(
     include_properties: list[str] | None = None,
     selected_nodes: list[str] | None = None,
 ) -> ToolResponse:
-    lines = _doc_preamble(doc_name) + _shared_helpers() + render_template_lines(
-        "p7_assembly/get_document_tree.py.txt",
-        root_filter=repr(root_filter),
-        max_depth=repr(max_depth),
-        include=repr(include),
-        include_properties=repr(include_properties),
-        selected_nodes=repr(selected_nodes),
-    )
-    return _run_json_code(
+    return _typed_get_document_tree(
         freecad,
-        True,
-        "\n".join(lines),
-        "Failed to get document tree",
-        document=doc_name,
-        read_only=True,
+        doc_name,
+        root_filter or "",
+        max_depth,
+        include,
+        include_properties,
+        selected_nodes,
     )
 
 

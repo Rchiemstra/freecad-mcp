@@ -62,37 +62,25 @@ def test_mutation_gate_rejects_close_document_in_run_boolean_union() -> None:
     assert any("BOOLEAN_UNION018 run_boolean_union owns forbidden CAD side effects" in item for item in violations)
 
 
-def test_close_document_production_fails_lifecycle_policy() -> None:
-    violations = scan_op_architecture(ROOT, "close_document")
-    assert violations
-    assert any(item.startswith("LIFE close_document") for item in violations)
-    assert not any("CLOSE_DOCUMENT003" in item for item in violations)
-    assert any("mutation pipeline as perform step" in item for item in violations)
+def test_close_document_production_passes_lifecycle_policy() -> None:
+    assert scan_op_architecture(ROOT, "close_document") == []
 
 
-def test_bounding_box_production_fails_query_policy() -> None:
-    violations = scan_op_architecture(ROOT, "bounding_box")
-    assert violations
-    assert any(item.startswith("QUERY bounding_box") for item in violations)
-    assert any("fake mutation pipeline" in item for item in violations)
-    assert any("committed" in item for item in violations)
-    assert not any("BOUNDING_BOX003" in item for item in violations)
+def test_bounding_box_production_passes_query_policy() -> None:
+    assert scan_op_architecture(ROOT, "bounding_box") == []
 
 
-def test_undo_and_redo_production_fail_history_split() -> None:
-    undo_violations = scan_op_architecture(ROOT, "undo")
-    redo_violations = scan_op_architecture(ROOT, "redo")
-    assert undo_violations and redo_violations
-    assert any("HIST undo/redo model split" in item for item in undo_violations)
-    assert any("run_undo_native_mutation" in item for item in undo_violations)
-    assert any("run_redo_native_mutation" in item for item in redo_violations)
+def test_undo_and_redo_production_pass_history_policy() -> None:
+    assert scan_op_architecture(ROOT, "undo") == []
+    assert scan_op_architecture(ROOT, "redo") == []
 
 
-def test_export_step_production_fails_external_effect_policy() -> None:
-    violations = scan_op_architecture(ROOT, "export_step")
-    assert violations
-    assert any(item.startswith("EXT export_step") for item in violations)
-    assert any("inside native apply" in item for item in violations)
+def test_export_step_production_passes_external_effect_policy() -> None:
+    assert scan_op_architecture(ROOT, "export_step") == []
+
+
+def test_set_color_production_passes_gui_global_policy() -> None:
+    assert scan_op_architecture(ROOT, "set_color") == []
 
 
 def test_gui_synthetic_committed_and_transaction_fail() -> None:
@@ -128,5 +116,24 @@ def parse_set_color_response(raw):
 def test_dispatcher_uses_registry_policy_for_bounding_box() -> None:
     assert policy_for_op(ROOT, "bounding_box") == "document_query"
     violations = scan_op_architecture(ROOT, "bounding_box")
-    assert violations
+    assert violations == []
     assert not any("must use exactly one typed mutation call" in item for item in violations)
+
+
+def test_sketch_offset_production_passes_mutation_policy() -> None:
+    assert scan_op_architecture(ROOT, "sketch_offset") == []
+
+
+def test_measure_distance_production_passes_query_policy() -> None:
+    assert policy_for_op(ROOT, "measure_distance") == "document_query"
+    assert scan_op_architecture(ROOT, "measure_distance") == []
+
+
+def test_get_document_tree_production_passes_query_policy() -> None:
+    assert policy_for_op(ROOT, "get_document_tree") == "document_query"
+    assert scan_op_architecture(ROOT, "get_document_tree") == []
+
+
+def test_diagnose_pocket_production_passes_query_policy() -> None:
+    assert policy_for_op(ROOT, "diagnose_pocket") == "document_query"
+    assert scan_op_architecture(ROOT, "diagnose_pocket") == []

@@ -19,13 +19,8 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_capture_state_architecture_gate_rejects_the_production_path_for_policy_reasons() -> None:
-    violations = scan_capture_state_architecture(ROOT)
-    assert violations != []
-    assert any(item.startswith("QUERY capture_state") for item in violations)
-
-    assert any("fake mutation pipeline" in item for item in violations)
-    assert any("committed" in item for item in violations)
+def test_capture_state_architecture_gate_accepts_the_production_path() -> None:
+    assert scan_capture_state_architecture(ROOT) == []
 
 
 

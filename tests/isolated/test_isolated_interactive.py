@@ -421,58 +421,42 @@ class TestInteractiveRpcOps:
 
 
 class TestDiagnosePocket:
-    def test_compiles_and_reports_key_fields(self):
-        conn = _ok_conn(
-            json.dumps(
-                {
-                    "ok": True,
-                    "pocket": "Pocket",
-                    "reversed": True,
-                    "length": 2.0,
-                    "direction": {"x": 0, "y": 0, "z": -1},
-                }
-            )
-        )
+    def test_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_pocket.return_value = {
+            "ok": True,
+            "pocket": "Pocket",
+            "reversed": True,
+            "length": 2.0,
+            "direction": {"x": 0, "y": 0, "z": -1},
+        }
         diagnose_pocket_operation(conn, True, "Doc", "Pocket")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "Pocket",
-            "Reversed",
-            "Direction",
-            "Length",
-            "Profile",
-            "shape_null",
-            "direction_vs_sketch",
-        )
+        conn.diagnose_pocket.assert_called_once_with("Doc", "Pocket")
+        conn.execute_code.assert_not_called()
 
     def test_returns_json_payload(self):
         payload = {"ok": True, "pocket": "P1", "reversed": False, "length": 3.0}
-        conn = _ok_conn(json.dumps(payload))
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_pocket.return_value = payload
         text = _text(diagnose_pocket_operation(conn, True, "Doc", "P1"))
         assert '"pocket": "P1"' in text or '"pocket":"P1"' in text.replace(" ", "")
 
 
 class TestDiagnoseHelix:
-    def test_compiles_and_reports_key_fields(self):
-        conn = _ok_conn(json.dumps({"ok": True, "helix": "Helix", "pitch": 1.0}))
+    def test_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_helix.return_value = {"ok": True, "helix": "Helix", "pitch": 1.0}
         diagnose_helix_operation(conn, True, "Doc", "Helix")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "Helix",
-            "Pitch",
-            "Height",
-            "LeftHanded",
-            "Placement",
-            "left_handed",
-            "shape_null",
-        )
+        conn.diagnose_helix.assert_called_once_with("Doc", "Helix")
+        conn.execute_code.assert_not_called()
 
     def test_returns_json_payload(self):
-        conn = _ok_conn(json.dumps({"ok": True, "helix": "H1", "pitch": 2.5}))
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_helix.return_value = {"ok": True, "helix": "H1", "pitch": 2.5}
         text = _text(diagnose_helix_operation(conn, True, "Doc", "H1"))
         assert "H1" in text
 
@@ -528,15 +512,26 @@ class TestCompareDocuments:
             },
         }
 
-        def fake_run_json_code(freecad, only_text, code, err, **kwargs):
-            from freecad_mcp.responses import tool_ok
+        def fake_capture(freecad, only_text, doc_name, names=None):
+            from freecad_mcp.responses.tool_results import tool_ok
 
-            doc = kwargs.get("document")
-            return tool_ok(json.dumps(states[doc]))
+            state = states[doc_name]
+            objects = {row["name"]: row for row in state["objects"]}
+            payload = {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "committed",
+                "committed": True,
+                "retry_safe": False,
+                "doc": state["doc"],
+                "objects": objects,
+            }
+            return tool_ok(json.dumps(payload), structured=payload)
 
         monkeypatch.setattr(
-            "freecad_mcp.operations.interactive._run_json_code",
-            fake_run_json_code,
+            "freecad_mcp.operations.interactive.capture_state_operation",
+            fake_capture,
         )
         resp = compare_documents_operation(
             freecad, True, "V7", "V8", object_pairs=[{"a": "Body", "b": "Body"}]
@@ -549,19 +544,28 @@ class TestCompareDocuments:
 
 class TestInspectGeometryActivate:
     def test_activate_selects_subshape(self):
-        conn = _ok_conn(
-            json.dumps({"ok": True, "object": "Box", "subshape": "Face1"})
-        )
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.inspect_geometry.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "object": "Box",
+            "subshape": "Face1",
+        }
         conn.activate_document.return_value = {"ok": True}
         conn.select_subshapes.return_value = {"ok": True}
         inspect_geometry_operation(
             conn, True, "Doc", "Box", subshape="Face1", activate=True
         )
+        conn.inspect_geometry.assert_called_once_with("Doc", "Box", "Face1")
         conn.activate_document.assert_called_once_with("Doc")
         conn.select_subshapes.assert_called_once_with(
             "Doc", ["Box:Face1"], clear=True
         )
-        assert_code_compiles(_code(conn))
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

@@ -334,6 +334,18 @@ MANIFEST = SubjectManifest(
             register_module="tools_sketch_curves_b2",
         ),
         ToolEntry(
+            name="sketch_offset",
+            docstring='Offset sketch geometry inward or outward.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the geometry elements to offset.\n    offset: Offset distance in mm (nonzero).\n    copy: If true, keep the original elements (default).\n    construction: If true, add offset curves as construction geometry.\n\nReturns:\n    Success message and a screenshot.',
+            signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', offset: 'float', copy: 'bool' = True, construction: 'bool' = False) -> 'CallToolResult'",
+            operation_path="freecad_mcp.operations.sketch_offset_operation",
+            rpc_method="sketch_offset",
+            execution_mode=ExecutionMode.TYPED_GATEWAY,
+            gui_thread=False,
+            mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
+            register_module="tools_sketch_curves_b2",
+        ),
+        ToolEntry(
             name="sketch_split",
             docstring='Split a sketch curve into two pieces at the given point.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to split.\n    point_x: X coordinate of the split point.\n    point_y: Y coordinate of the split point.\n\nReturns:\n    Success message and a screenshot.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', point_x: 'float', point_y: 'float') -> 'CallToolResult'",

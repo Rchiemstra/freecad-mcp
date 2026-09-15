@@ -518,10 +518,170 @@ def import_brep(document: object, file_path: str, obj_name: str) -> dict[str, ob
     return {"path": file_path, "object": object_name(obj), "imported": True}
 
 
+def _parse_edge_ref(document: object, ref: str) -> object:
+    parts = ref.split(":")
+    obj = require_object(document, parts[0])
+    shape, _meta = resolve_global_shape(obj)
+    if len(parts) > 1:
+        sub = parts[1]
+        if sub.startswith("Edge"):
+            index = int(sub[4:]) - 1
+            edges = getattr(shape, "Edges", None) or []
+            if index < 0 or index >= len(edges):
+                raise TypedMutationError("INVALID_ARGUMENT", f"edge index out of range: {ref!r}")
+            return edges[index]
+    return shape
+
+
+def measure_distance(document: object, shape1_ref: str, shape2_ref: str) -> dict[str, object]:
+    obj1 = require_object(document, shape1_ref)
+    obj2 = require_object(document, shape2_ref)
+    shape1, _meta1 = resolve_global_shape(obj1)
+    shape2, _meta2 = resolve_global_shape(obj2)
+    dist_to_shape = getattr(shape1, "distToShape", None)
+    if not callable(dist_to_shape):
+        raise TypedMutationError("MEASURE_DISTANCE_FAILED", "shape does not support distToShape")
+    result = dist_to_shape(shape2)
+    distance = float(result[0]) if isinstance(result, (list, tuple)) and result else float(result)
+    return {"distance": round(distance, 6), "unit": "mm"}
+
+
+def measure_angle(document: object, edge1_ref: str, edge2_ref: str) -> dict[str, object]:
+    edge1 = _parse_edge_ref(document, edge1_ref)
+    edge2 = _parse_edge_ref(document, edge2_ref)
+    tangent_at = getattr(edge1, "tangentAt", None)
+    if not callable(tangent_at):
+        raise TypedMutationError("MEASURE_ANGLE_FAILED", "edge does not support tangentAt")
+    first_param = getattr(edge1, "FirstParameter", 0.0)
+    second_param = getattr(edge2, "FirstParameter", 0.0)
+    vector1 = tangent_at(first_param)
+    vector2 = getattr(edge2, "tangentAt")(second_param)
+    length1 = float(getattr(vector1, "Length", 0.0) or 0.0)
+    length2 = float(getattr(vector2, "Length", 0.0) or 0.0)
+    if length1 <= 0 or length2 <= 0:
+        raise TypedMutationError("MEASURE_ANGLE_FAILED", "edge tangent has zero length")
+    dot = getattr(vector1, "dot", None)
+    if not callable(dot):
+        raise TypedMutationError("MEASURE_ANGLE_FAILED", "tangent vector does not support dot")
+    cosine = max(-1.0, min(1.0, float(dot(vector2)) / (length1 * length2)))
+    angle_deg = math.degrees(math.acos(cosine))
+    return {"angle_deg": round(angle_deg, 6), "unit": "degrees"}
+
+
+def measure_area(document: object, obj_name: str) -> dict[str, object]:
+    obj = require_object(document, obj_name)
+    shape, meta = resolve_global_shape(obj)
+    area = float(getattr(shape, "Area", 0.0) or 0.0)
+    payload: dict[str, object] = {
+        "object": object_name(obj),
+        "area_mm2": round(area, 6),
+        "area_cm2": round(area / 100.0, 6),
+        "unit": "mm²",
+        "frame": "world",
+    }
+    payload.update(meta)
+    return payload
+
+
+def measure_volume(document: object, obj_name: str) -> dict[str, object]:
+    obj = require_object(document, obj_name)
+    shape, meta = resolve_global_shape(obj)
+    volume = float(getattr(shape, "Volume", 0.0) or 0.0)
+    payload: dict[str, object] = {
+        "object": object_name(obj),
+        "volume_mm3": round(volume, 6),
+        "unit": "mm³",
+        "frame": "world",
+    }
+    payload.update(meta)
+    return payload
+
+
+def get_global_shape(document: object, obj_name: str) -> dict[str, object]:
+    obj = require_object(document, obj_name)
+    shape, meta = resolve_global_shape(obj)
+    box = getattr(shape, "BoundBox", None)
+    if box is None:
+        raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no BoundBox: {obj_name!r}")
+    com = None
+    center = getattr(shape, "CenterOfMass", None)
+    if center is not None:
+        com = [
+            round(float(getattr(center, "x", 0.0)), 6),
+            round(float(getattr(center, "y", 0.0)), 6),
+            round(float(getattr(center, "z", 0.0)), 6),
+        ]
+    payload: dict[str, object] = {
+        "object": object_name(obj),
+        "frame": "world",
+        "volume_mm3": round(float(getattr(shape, "Volume", 0.0) or 0.0), 6),
+        "area_mm2": round(float(getattr(shape, "Area", 0.0) or 0.0), 6),
+        "center_of_mass": com,
+        "bbox": {
+            "xmin": round(float(getattr(box, "XMin", 0.0)), 6),
+            "ymin": round(float(getattr(box, "YMin", 0.0)), 6),
+            "zmin": round(float(getattr(box, "ZMin", 0.0)), 6),
+            "xmax": round(float(getattr(box, "XMax", 0.0)), 6),
+            "ymax": round(float(getattr(box, "YMax", 0.0)), 6),
+            "zmax": round(float(getattr(box, "ZMax", 0.0)), 6),
+            "dx": round(float(getattr(box, "XLength", 0.0)), 6),
+            "dy": round(float(getattr(box, "YLength", 0.0)), 6),
+            "dz": round(float(getattr(box, "ZLength", 0.0)), 6),
+            "diagonal": round(float(getattr(box, "DiagonalLength", 0.0)), 6),
+        },
+        "solids": len(getattr(shape, "Solids", []) or []),
+        "faces": len(getattr(shape, "Faces", []) or []),
+        "edges": len(getattr(shape, "Edges", []) or []),
+    }
+    payload.update(meta)
+    return payload
+
+
+def validate_geometry(document: object, obj_name: str) -> dict[str, object]:
+    obj = require_object(document, obj_name)
+    shape = getattr(obj, "Shape", None)
+    if shape is None:
+        raise TypedMutationError("OBJECT_NOT_FOUND", "Object has no Shape")
+    is_null = bool(getattr(shape, "isNull", lambda: True)())
+    is_valid = bool(getattr(shape, "isValid", lambda: False)())
+    is_closed = bool(getattr(shape, "isClosed", lambda: False)())
+    result: dict[str, object] = {
+        "object": object_name(obj),
+        "is_null": is_null,
+        "is_valid": is_valid,
+        "is_closed": is_closed,
+        "volume_mm3": round(float(getattr(shape, "Volume", 0.0) or 0.0), 6),
+        "area_mm2": round(float(getattr(shape, "Area", 0.0) or 0.0), 6),
+        "face_count": len(getattr(shape, "Faces", []) or []),
+        "edge_count": len(getattr(shape, "Edges", []) or []),
+        "vertex_count": len(getattr(shape, "Vertexes", []) or []),
+        "shape_type": str(getattr(shape, "ShapeType", "")),
+    }
+    check = getattr(shape, "check", None)
+    if callable(check):
+        try:
+            check(False)
+            result["check_ok"] = True
+            result["check_errors"] = []
+        except Exception as exc:
+            result["check_ok"] = False
+            result["check_errors"] = [str(exc)]
+    else:
+        result["check_ok"] = is_valid
+        result["check_errors"] = []
+    return result
+
+
 __all__ = [
     "bounding_box",
     "center_of_mass",
     "common_volume_along_path",
+    "get_global_shape",
+    "measure_angle",
+    "measure_area",
+    "measure_distance",
+    "measure_volume",
+    "validate_geometry",
     "export_brep",
     "export_step",
     "export_stl",

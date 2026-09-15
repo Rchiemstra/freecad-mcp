@@ -17,23 +17,7 @@ def set_expression_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, object_name: str, prop_path: str, expression: str,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "set_expression",
-            {
-            "doc_name": doc_name,
-            "object_name": object_name,
-            "prop_path": prop_path,
-            "expression": expression,
-            },
-            document_names=(doc_name,),
-            operation_name="Set expression",
-        )
-        if raw_result is None:
-            raw_result = make_set_expression_uncertain(
-                "SET_EXPRESSION_TRANSPORT_UNCERTAIN",
-                "set_expression response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.set_expression(doc_name, object_name, prop_path, expression)
     except Exception as exc:
         raw_result = make_set_expression_uncertain(
             "SET_EXPRESSION_TRANSPORT_UNCERTAIN",

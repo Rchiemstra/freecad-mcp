@@ -17,27 +17,7 @@ def validate_movement_follow_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, source: str, dependents: object, translation: object, axis: object, angle_deg: float, restore: bool = True, tolerance: float = 1e-07,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "validate_movement_follow",
-            {
-            "doc_name": doc_name,
-            "source": source,
-            "dependents": dependents,
-            "translation": translation,
-            "axis": axis,
-            "angle_deg": angle_deg,
-            "restore": restore,
-            "tolerance": tolerance,
-            },
-            document_names=(doc_name,),
-            operation_name="Validate movement follow",
-        )
-        if raw_result is None:
-            raw_result = make_validate_movement_follow_uncertain(
-                "VALIDATE_MOVEMENT_FOLLOW_TRANSPORT_UNCERTAIN",
-                "validate_movement_follow response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.validate_movement_follow(doc_name, source, dependents, translation, axis, angle_deg, restore, tolerance)
     except Exception as exc:
         raw_result = make_validate_movement_follow_uncertain(
             "VALIDATE_MOVEMENT_FOLLOW_TRANSPORT_UNCERTAIN",

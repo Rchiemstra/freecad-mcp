@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
-from ...template_resources import render_template_lines
-from ..p7_assembly import _run_json_code
-from .helpers import _doc_missing
+from .diagnose_parametric import diagnose_parametric_operation as _typed_diagnose_parametric
 from .sketch_attach import sketch_attach_operation
 from .sketch_edit_constraint import sketch_edit_constraint_operation
 
@@ -15,21 +13,7 @@ def diagnose_parametric_operation(
     doc_name: str,
     object_name: str | None = None,
 ) -> ToolResponse:
-    lines = render_template_lines(
-        "parametric/diagnose_parametric.py.txt",
-        doc_name=repr(doc_name),
-        doc_missing=_doc_missing(doc_name),
-        object_name=repr(object_name),
-    )
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(lines),
-        "Failed to diagnose parametric model",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    return _typed_diagnose_parametric(freecad, only_text_feedback, doc_name, object_name)
 
 
 __all__ = [

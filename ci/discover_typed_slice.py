@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 _PLATFORM_FILES = (
@@ -70,14 +71,43 @@ def discover_typed_mypy_files(root: Path) -> list[str]:
     return sorted(files)
 
 
-def run_discovered_mypy(root: Path) -> int:
-    """Typecheck the typed slice using the static ``pyproject.toml`` editor config."""
-
-    return subprocess.run(
-        [sys.executable, "-m", "mypy", "--no-incremental"],
+def _invoke_discovered_mypy(root: Path) -> subprocess.CompletedProcess[str]:
+    cache_dir = tempfile.mkdtemp(prefix="mypy-cache-")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--no-incremental",
+            "--cache-dir",
+            cache_dir,
+        ],
         cwd=root,
         check=False,
-    ).returncode
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout:
+        print(result.stdout, end="", flush=True)
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr, flush=True)
+    return result
+
+
+def run_discovered_mypy(root: Path, *, retry_internal_error: bool = False) -> int:
+    """Typecheck the typed slice using the static ``pyproject.toml`` editor config."""
+
+    attempts = 2 if retry_internal_error else 1
+    last: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(attempts):
+        last = _invoke_discovered_mypy(root)
+        combined = (last.stdout or "") + (last.stderr or "")
+        if last.returncode == 0 or "INTERNAL ERROR" not in combined:
+            return last.returncode
+        if attempt == 0 and retry_internal_error:
+            print("retrying sketch_offset typecheck after mypy internal error", flush=True)
+    assert last is not None
+    return last.returncode
 
 
 def discover_contract_check_scripts(root: Path) -> list[Path]:

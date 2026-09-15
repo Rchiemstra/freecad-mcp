@@ -45,11 +45,6 @@ from freecad_mcp.operations.core import (
     undo_operation,
     redo_operation,
 )
-from freecad_mcp.operations.core_ops.feature_ops_legacy import (
-    linear_pattern_feature_operation as linear_pattern_feature_legacy,
-    polar_pattern_feature_operation as polar_pattern_feature_legacy,
-    mirror_feature_operation as mirror_feature_legacy,
-)
 from mcp.types import ImageContent, TextContent
 
 
@@ -446,25 +441,20 @@ class TestPadFeatureOperation:
 
 class TestPocketFeatureOperation:
     def test_success(self):
-        # pad/pocket now return a structured JSON workflow result.
-        conn = _ok_conn('{"ok": true, "feature": "Pocket", "body": "Body", "tip": "Pocket", "solid_count": 1}')
+        conn = _typed_success("pocket_feature", pocket="Pocket", label="Pocket")
         result = pocket_feature_operation(conn, True, "Doc", "Sk", "Pocket", 5.0)
+        conn.pocket_feature.assert_called_once_with("Doc", "Sk", "Pocket", 5.0, None, False, False)
         assert not result.isError
-        assert '"feature": "Pocket"' in _text(result)
 
-    def test_does_not_assign_symmetric_property_directly(self):
-        conn = _ok_conn()
-        pocket_feature_operation(conn, True, "Doc", "Sk", "P", 5, symmetric=True)
-        c = _code(conn)
-        assert "SideType" in c and "_pkt.Symmetric =" not in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
+    def test_symmetric_passed(self):
+        conn = _typed_success("pocket_feature", pocket="P", label="P")
         pocket_feature_operation(conn, True, "Doc", "Sk", "P", 5, symmetric=True, reversed_dir=True)
-        _assert_generated_code_compiles(conn)
+        conn.pocket_feature.assert_called_once_with("Doc", "Sk", "P", 5, None, True, True)
 
     def test_failure(self):
-        assert "Failed" in _text(pocket_feature_operation(_fail_conn(), True, "Doc", "Sk", "P", 5))
+        assert "Failed" in _text(
+            pocket_feature_operation(_typed_fail("pocket_feature"), True, "Doc", "Sk", "P", 5)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -479,21 +469,15 @@ class TestLinearPatternFeatureOperation:
         assert not result.isError
         assert "Array" in _text(result)
 
-    def test_params_in_code(self):
-        conn = _ok_conn()
-        linear_pattern_feature_legacy(
+    def test_params_passed(self):
+        conn = _typed_ok("linear_pattern_feature", "Array")
+        linear_pattern_feature_operation(
             conn, True, "Doc", "Pocket", "Array", 40.0, 5,
             direction="Pad:Edge1", body_name="Body", reversed_dir=True,
         )
-        c = _code(conn)
-        assert "PartDesign::LinearPattern" in c
-        assert "'Pocket'" in c and "'Array'" in c and "float(40.0)" in c and "int(5)" in c
-        assert "'Pad:Edge1'" in c and "'Body'" in c and "Reversed" in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
-        linear_pattern_feature_legacy(conn, True, "Doc", "Pocket", "Array", 40.0, 5)
-        _assert_generated_code_compiles(conn)
+        conn.linear_pattern_feature.assert_called_once_with(
+            "Doc", "Pocket", "Array", 40.0, 5, "Pad:Edge1", "Body", True
+        )
 
     def test_failure(self):
         assert "Failed" in _text(
@@ -511,21 +495,15 @@ class TestPolarPatternFeatureOperation:
         assert not result.isError
         assert "BoltCircle" in _text(result)
 
-    def test_params_in_code(self):
-        conn = _ok_conn()
-        polar_pattern_feature_legacy(
+    def test_params_passed(self):
+        conn = _typed_ok("polar_pattern_feature", "BoltCircle")
+        polar_pattern_feature_operation(
             conn, True, "Doc", "Pocket", "BoltCircle", 6,
             angle=180.0, axis="AxisObj:Edge2", body_name="Body", reversed_dir=True,
         )
-        c = _code(conn)
-        assert "PartDesign::PolarPattern" in c
-        assert "'Pocket'" in c and "'BoltCircle'" in c and "float(180.0)" in c and "int(6)" in c
-        assert "'AxisObj:Edge2'" in c and "'Body'" in c and "Reversed" in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
-        polar_pattern_feature_legacy(conn, True, "Doc", "Pocket", "BoltCircle", 6)
-        _assert_generated_code_compiles(conn)
+        conn.polar_pattern_feature.assert_called_once_with(
+            "Doc", "Pocket", "BoltCircle", 180.0, 6, "AxisObj:Edge2", "Body", True
+        )
 
     def test_failure(self):
         assert "Failed" in _text(
@@ -543,17 +521,14 @@ class TestMirrorFeatureOperation:
         assert not result.isError
         assert "PocketMirror" in _text(result)
 
-    def test_params_in_code(self):
-        conn = _ok_conn()
-        mirror_feature_legacy(conn, True, "Doc", "Pocket", "PocketMirror", plane="Pad:Face1", body_name="Body")
-        c = _code(conn)
-        assert "PartDesign::Mirrored" in c
-        assert "'Pocket'" in c and "'PocketMirror'" in c and "'Pad:Face1'" in c and "'Body'" in c
-
-    def test_generated_code_compiles(self):
-        conn = _ok_conn()
-        mirror_feature_legacy(conn, True, "Doc", "Pocket", "PocketMirror")
-        _assert_generated_code_compiles(conn)
+    def test_params_passed(self):
+        conn = _typed_ok("mirror_feature", "PocketMirror")
+        mirror_feature_operation(
+            conn, True, "Doc", "Pocket", "PocketMirror", plane="Pad:Face1", body_name="Body"
+        )
+        conn.mirror_feature.assert_called_once_with(
+            "Doc", "Pocket", "PocketMirror", "Pad:Face1", "Body"
+        )
 
     def test_failure(self):
         assert "Failed" in _text(
@@ -792,33 +767,48 @@ class TestRecomputeErrorsInResponse:
 # ---------------------------------------------------------------------------
 
 class TestGetRecomputeLogOperation:
-    def test_calls_execute_code(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
+        conn.get_recompute_log.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "MyDoc",
+            "errors": [],
+        }
         get_recompute_log_operation(conn, "MyDoc")
-        conn.execute_code.assert_called_once()
-
-    def test_doc_name_in_code(self):
-        conn = _ok_conn()
-        get_recompute_log_operation(conn, "MyDoc")
-        assert "'MyDoc'" in _code(conn)
-
-    def test_code_uses_getDocument(self):
-        conn = _ok_conn()
-        get_recompute_log_operation(conn, "Part")
-        assert "getDocument" in _code(conn)
-
-    def test_code_checks_state(self):
-        conn = _ok_conn()
-        get_recompute_log_operation(conn, "Part")
-        assert "State" in _code(conn)
+        conn.get_recompute_log.assert_called_once_with("MyDoc")
+        conn.execute_code.assert_not_called()
 
     def test_failure_reported(self):
-        result = get_recompute_log_operation(_fail_conn("no doc"), "Part")
+        conn = _fail_conn("no doc")
+        conn.get_recompute_log.return_value = {
+            "contract_version": 1,
+            "success": False,
+            "ok": False,
+            "outcome": "rejected",
+            "retry_safe": True,
+            "error_code": "DOCUMENT_NOT_FOUND",
+            "error": "no doc",
+        }
+        result = get_recompute_log_operation(conn, "Part")
         assert "Failed" in _text(result)
 
-    def test_success_message(self):
-        result = get_recompute_log_operation(_ok_conn("{}"), "Part")
-        assert "Recompute log" in _text(result)
+    def test_success_returns_json(self):
+        conn = _ok_conn()
+        conn.get_recompute_log.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "Part",
+            "errors": [],
+        }
+        result = get_recompute_log_operation(conn, "Part")
+        assert '"doc": "Part"' in _text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -826,44 +816,52 @@ class TestGetRecomputeLogOperation:
 # ---------------------------------------------------------------------------
 
 class TestGetSketchDiagnosticsOperation:
-    def test_calls_execute_code(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
-        get_sketch_diagnostics_operation(conn, "Doc", "Sketch")
-        conn.execute_code.assert_called_once()
-
-    def test_doc_and_sketch_in_code(self):
-        conn = _ok_conn()
+        conn.get_sketch_diagnostics.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "MyDoc",
+            "sketch": "MySk",
+            "geometry_count": 2,
+            "constraint_count": 1,
+        }
         get_sketch_diagnostics_operation(conn, "MyDoc", "MySk")
-        c = _code(conn)
-        assert "'MyDoc'" in c and "'MySk'" in c
-
-    def test_code_queries_geometry_count(self):
-        conn = _ok_conn()
-        get_sketch_diagnostics_operation(conn, "Doc", "Sk")
-        assert "Geometry" in _code(conn)
-
-    def test_code_queries_constraints(self):
-        conn = _ok_conn()
-        get_sketch_diagnostics_operation(conn, "Doc", "Sk")
-        assert "Constraints" in _code(conn)
-
-    def test_code_checks_solver_message(self):
-        conn = _ok_conn()
-        get_sketch_diagnostics_operation(conn, "Doc", "Sk")
-        assert "SolverMessage" in _code(conn)
-
-    def test_code_checks_closed_wire(self):
-        conn = _ok_conn()
-        get_sketch_diagnostics_operation(conn, "Doc", "Sk")
-        assert "isClosed" in _code(conn)
+        conn.get_sketch_diagnostics.assert_called_once_with("MyDoc", "MySk")
+        conn.execute_code.assert_not_called()
 
     def test_failure_reported(self):
-        result = get_sketch_diagnostics_operation(_fail_conn("no sketch"), "Doc", "Sk")
+        conn = _fail_conn("no sketch")
+        conn.get_sketch_diagnostics.return_value = {
+            "contract_version": 1,
+            "success": False,
+            "ok": False,
+            "outcome": "rejected",
+            "retry_safe": True,
+            "error_code": "SKETCH_NOT_FOUND",
+            "error": "no sketch",
+        }
+        result = get_sketch_diagnostics_operation(conn, "Doc", "Sk")
         assert "Failed" in _text(result)
 
-    def test_success_message(self):
-        result = get_sketch_diagnostics_operation(_ok_conn("{}"), "Doc", "Sk")
-        assert "diagnostics" in _text(result)
+    def test_success_returns_json(self):
+        conn = _ok_conn()
+        conn.get_sketch_diagnostics.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "Doc",
+            "sketch": "Sk",
+            "geometry_count": 2,
+            "constraint_count": 1,
+        }
+        result = get_sketch_diagnostics_operation(conn, "Doc", "Sk")
+        assert '"geometry_count": 2' in _text(result)
 
 
 # ---------------------------------------------------------------------------

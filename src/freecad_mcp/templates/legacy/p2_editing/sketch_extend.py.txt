@@ -1,3 +1,0 @@
-_sk.extend($geo_index, $increment, $end_point)
-_doc.recompute()
-print($message)

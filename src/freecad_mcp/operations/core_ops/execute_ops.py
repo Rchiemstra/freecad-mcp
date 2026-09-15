@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from ...execute_options import ExecuteOptions
@@ -7,7 +8,7 @@ from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.execute_result import from_execute_result
 from ...responses.tool_results import tool_fail, tool_ok
-from ...template_resources import render_template_lines
+from ..parametric_ops.capture_state import capture_state_operation
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -99,23 +100,21 @@ def _get_view_geometry_fallback(
     focus_object: str | None,
     focus_objects: list[str] | None,
 ) -> ToolResponse:
-    focus_for_fallback = focus_object
-    if not focus_for_fallback and focus_objects:
-        focus_for_fallback = focus_objects[0]
-    code = "\n".join(render_template_lines(
-        "diagnostics/active_state.py.txt",
-        focus_object=repr(focus_for_fallback),
-    ))
-    res = freecad.execute_code(
-        code,
-        ExecuteOptions(recompute="none", read_only=True, capture_view=False),
-    )
-    if not res.get("success"):
-        raise RuntimeError("active_state fallback failed")
-    output = res.get("message", "")
-    marker = "Output:"
-    if marker in output:
-        output = output.split(marker, 1)[1].strip()
+    doc = None
+    try:
+        gui = freecad.get_gui_state()
+        if isinstance(gui, dict):
+            doc = gui.get("active_document") or gui.get("activeDocument")
+    except Exception:
+        doc = None
+    if not doc:
+        raise RuntimeError("active_state fallback requires an active document")
+    names = None
+    if focus_object:
+        names = [focus_object]
+    elif focus_objects:
+        names = list(focus_objects)
+    response = capture_state_operation(freecad, True, str(doc), names)
     note = (
         "Cannot get a viewable screenshot in the current view type "
         "(such as headless, TechDraw or Spreadsheet). Returning a "
@@ -123,7 +122,10 @@ def _get_view_geometry_fallback(
         "geometric_diff for richer text-only diffs, and find_faces / "
         "face_normal for specific subshapes."
     )
-    return tool_ok(note + "\n" + output, structured=res)
+    if response.isError:
+        raise RuntimeError("capture_state fallback failed")
+    structured = response.structuredContent.get("data", {}) if response.structuredContent else {}
+    return tool_ok(note + "\n" + json.dumps(structured, default=str), structured=structured)
 
 
 def get_view_operation(

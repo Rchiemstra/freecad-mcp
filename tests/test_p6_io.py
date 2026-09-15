@@ -31,6 +31,10 @@ from freecad_mcp._shared.protocol.import_step_contract import (
     make_import_step_failure,
     make_import_step_success,
 )
+from freecad_mcp._shared.protocol.set_color_contract import (
+    make_set_color_failure,
+    make_set_color_success,
+)
 from freecad_mcp.operations.p6_io import (
     export_brep_operation,
     export_step_operation,
@@ -62,6 +66,9 @@ def _ok_conn():
     conn.export_brep.return_value = make_export_brep_success("/tmp/out.brep", True, "Obj1")
     conn.import_step.return_value = make_import_step_success("/tmp/in.step", True)
     conn.import_brep.return_value = make_import_brep_success("/tmp/in.brep", "BRepImport", True)
+    conn.set_color.return_value = make_set_color_success(
+        "RedPart", 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.732, "world"
+    )
     return conn
 
 
@@ -74,6 +81,7 @@ def _fail_conn():
     conn.export_brep.return_value = make_export_brep_failure("EXPORT_BREP_FAILED", "oops")
     conn.import_step.return_value = make_import_step_failure("IMPORT_STEP_FAILED", "oops")
     conn.import_brep.return_value = make_import_brep_failure("IMPORT_BREP_FAILED", "oops")
+    conn.set_color.return_value = make_set_color_failure("SET_COLOR_FAILED", "oops")
     return conn
 
 
@@ -258,28 +266,22 @@ class TestSetColor:
         resp = set_color_operation(_ok_conn(), True, "Doc", "Obj1", 1.0, 0.0, 0.0)
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        set_color_operation(conn, True, "Doc", "Obj1", 0.5, 0.5, 0.5)
-        assert_code_compiles(_code(conn))
+    def test_failure(self):
+        resp = set_color_operation(_fail_conn(), True, "Doc", "Obj1", 1.0, 0.0, 0.0)
+        assert "Failed" in _text(resp) or "oops" in _text(resp)
 
-    def test_ShapeColor_set(self):
-        conn = _ok_conn()
-        set_color_operation(conn, True, "Doc", "Obj1", 1.0, 0.0, 0.0)
-        assert_code_contains(_code(conn), "ShapeColor")
-
-    def test_rgb_values_in_code(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         set_color_operation(conn, True, "Doc", "Obj1", 0.2, 0.6, 0.8)
-        code = _code(conn)
-        assert_code_contains(code, "0.2", "0.6", "0.8")
+        conn.set_color.assert_called_once_with("Doc", "Obj1", 0.2, 0.6, 0.8, 0.0)
+        conn.execute_code.assert_not_called()
 
-    def test_transparency_in_code(self):
+    def test_transparency_passed(self):
         conn = _ok_conn()
         set_color_operation(conn, True, "Doc", "Obj1", 1.0, 1.0, 1.0, transparency=0.5)
-        assert_code_contains(_code(conn), "Transparency")
+        conn.set_color.assert_called_once_with("Doc", "Obj1", 1.0, 1.0, 1.0, 0.5)
 
-    def test_object_name_in_code(self):
+    def test_object_name_in_rpc(self):
         conn = _ok_conn()
         set_color_operation(conn, True, "Doc", "RedPart", 1.0, 0.0, 0.0)
-        assert_code_contains(_code(conn), "RedPart")
+        assert conn.set_color.call_args.args[1] == "RedPart"

@@ -17,21 +17,7 @@ def preview_attachment_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, datum_name: str,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "preview_attachment",
-            {
-            "doc_name": doc_name,
-            "datum_name": datum_name,
-            },
-            document_names=(doc_name,),
-            operation_name="Preview attachment",
-        )
-        if raw_result is None:
-            raw_result = make_preview_attachment_uncertain(
-                "PREVIEW_ATTACHMENT_TRANSPORT_UNCERTAIN",
-                "preview_attachment response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.preview_attachment(doc_name, datum_name)
     except Exception as exc:
         raw_result = make_preview_attachment_uncertain(
             "PREVIEW_ATTACHMENT_TRANSPORT_UNCERTAIN",

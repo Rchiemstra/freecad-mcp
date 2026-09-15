@@ -131,18 +131,17 @@ class TestSketchFillet:
 
 class TestSketchOffset:
     def test_success(self):
-        resp = sketch_offset_operation(_ok_conn(), True, "Doc", "Sk", [0, 1], 2.0)
+        resp = sketch_offset_operation(_ok_conn("sketch_offset"), True, "Doc", "Sk", [0, 1], 2.0)
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        sketch_offset_operation(conn, True, "Doc", "Sk", [0, 1], 2.0)
-        assert_code_compiles(_code(conn))
+    def test_zero_offset_error(self):
+        resp = sketch_offset_operation(_ok_conn("sketch_offset"), True, "Doc", "Sk", [0], 0.0)
+        assert "offset must be" in _text(resp)
 
-    def test_offset_in_code(self):
-        conn = _ok_conn()
-        sketch_offset_operation(conn, True, "Doc", "Sk", [0], 3.5)
-        assert_code_contains(_code(conn), "3.5")
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn("sketch_offset")
+        sketch_offset_operation(conn, True, "Doc", "Sk", [0, 1], 2.0, copy=False, construction=True)
+        conn.sketch_offset.assert_called_once_with("Doc", "Sk", [0, 1], 2.0, False, True)
 
 
 class TestSketchSymmetry:

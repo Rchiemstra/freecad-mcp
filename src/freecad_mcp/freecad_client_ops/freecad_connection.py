@@ -256,6 +256,8 @@ if TYPE_CHECKING:
     from .._shared.protocol.sketch_split_contract import SketchName as SketchSplitSketchName
     from .._shared.protocol.sketch_fillet_contract import DocumentName as SketchFilletDocumentName
     from .._shared.protocol.sketch_fillet_contract import SketchName as SketchFilletSketchName
+    from .._shared.protocol.sketch_offset_contract import DocumentName as SketchOffsetDocumentName
+    from .._shared.protocol.sketch_offset_contract import SketchName as SketchOffsetSketchName
     from .._shared.protocol.sketch_symmetry_contract import DocumentName as SketchSymmetryDocumentName
     from .._shared.protocol.sketch_symmetry_contract import SketchName as SketchSymmetrySketchName
 
@@ -628,6 +630,225 @@ class FreeCADConnection:
             return routed
         server = getattr(self, "server")
         return getattr(server, "center_of_mass")(*[params[name] for name in params])
+
+    def measure_distance(self, doc_name: str, shape1_ref: str, shape2_ref: str) -> object:
+        params = {"doc_name": doc_name, "shape1_ref": shape1_ref, "shape2_ref": shape2_ref}
+        routed = self._invoke_mutation_v2("measure_distance", params, document_names=(doc_name,), operation_name="Measure distance")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "measure_distance")(*[params[k] for k in params])
+
+    def measure_angle(self, doc_name: str, edge1_ref: str, edge2_ref: str) -> object:
+        params = {"doc_name": doc_name, "edge1_ref": edge1_ref, "edge2_ref": edge2_ref}
+        routed = self._invoke_mutation_v2("measure_angle", params, document_names=(doc_name,), operation_name="Measure angle")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "measure_angle")(*[params[k] for k in params])
+
+    def measure_area(self, doc_name: str, obj_name: str) -> object:
+        params = {"doc_name": doc_name, "obj_name": obj_name}
+        routed = self._invoke_mutation_v2("measure_area", params, document_names=(doc_name,), operation_name="Measure area")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "measure_area")(*[params[k] for k in params])
+
+    def measure_volume(self, doc_name: str, obj_name: str) -> object:
+        params = {"doc_name": doc_name, "obj_name": obj_name}
+        routed = self._invoke_mutation_v2("measure_volume", params, document_names=(doc_name,), operation_name="Measure volume")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "measure_volume")(*[params[k] for k in params])
+
+    def get_global_shape(self, doc_name: str, obj_name: str) -> object:
+        params = {"doc_name": doc_name, "obj_name": obj_name}
+        routed = self._invoke_mutation_v2("get_global_shape", params, document_names=(doc_name,), operation_name="Get global shape")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "get_global_shape")(*[params[k] for k in params])
+
+    def validate_geometry(self, doc_name: str, obj_name: str) -> object:
+        params = {"doc_name": doc_name, "obj_name": obj_name}
+        routed = self._invoke_mutation_v2("validate_geometry", params, document_names=(doc_name,), operation_name="Validate geometry")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "validate_geometry")(*[params[k] for k in params])
+
+    def set_color(self, doc_name: str, obj_name: str, r: float, g: float, b: float, transparency: float = 0.0) -> object:
+        params = {"doc_name": doc_name, "obj_name": obj_name, "r": r, "g": g, "b": b, "transparency": transparency}
+        routed = self._invoke_mutation_v2("set_color", params, document_names=(doc_name,), operation_name="Set color")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "set_color")(*[params[k] for k in params])
+
+    def get_document_tree(self, doc_name: str, root_filter: str = "", max_depth: int = 4, include: object = None, include_properties: object = None, selected_nodes: object = None) -> object:
+        params = {"doc_name": doc_name, "root_filter": root_filter, "max_depth": max_depth, "include": include, "include_properties": include_properties, "selected_nodes": selected_nodes}
+        routed = self._invoke_mutation_v2("get_document_tree", params, document_names=(doc_name,), operation_name="Get document tree")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "get_document_tree")(*[params[k] for k in params])
+
+    def get_sketch_geometry(self, doc_name: str, sketch_name: str, include_constraints: bool = True, include_external: bool = False, global_coords: bool = False) -> object:
+        params = {"doc_name": doc_name, "sketch_name": sketch_name, "include_constraints": include_constraints, "include_external": include_external, "global_coords": global_coords}
+        routed = self._invoke_mutation_v2("get_sketch_geometry", params, document_names=(doc_name,), operation_name="Get sketch geometry")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "get_sketch_geometry")(*[params[k] for k in params])
+
+    def capture_state(self, doc_name: str, object_names: object = None) -> object:
+        params = {"doc_name": doc_name, "object_names": object_names}
+        routed = self._invoke_mutation_v2("capture_state", params, document_names=(doc_name,), operation_name="Capture state")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "capture_state")(*[params[k] for k in params])
+
+    def snapshot(self, doc_name: str) -> object:
+        params = {"doc_name": doc_name}
+        routed = self._invoke_mutation_v2("snapshot", params, document_names=(doc_name,), operation_name="Snapshot")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "snapshot")(*[params[k] for k in params])
+
+    def get_recompute_log(self, doc_name: str) -> object:
+        params = {"doc_name": doc_name}
+        routed = self._invoke_mutation_v2("get_recompute_log", params, document_names=(doc_name,), operation_name="Get recompute log")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "get_recompute_log")(*[params[k] for k in params])
+
+    def get_sketch_diagnostics(self, doc_name: str, sketch_name: str) -> object:
+        params = {"doc_name": doc_name, "sketch_name": sketch_name}
+        routed = self._invoke_mutation_v2("get_sketch_diagnostics", params, document_names=(doc_name,), operation_name="Get sketch diagnostics")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "get_sketch_diagnostics")(*[params[k] for k in params])
+
+    def run_transaction(
+        self,
+        doc_name: str,
+        label: str,
+        code: str,
+        dry_run: bool = False,
+        commit_on_success: bool = True,
+    ) -> object:
+        params = {
+            "doc_name": doc_name,
+            "label": label,
+            "code": code,
+            "dry_run": dry_run,
+            "commit_on_success": commit_on_success,
+        }
+        routed = self._invoke_mutation_v2("run_transaction", params, document_names=(doc_name,), operation_name="Run transaction")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "run_transaction")(*[params[k] for k in params])
+
+    def diagnose_pocket(self, doc_name: str, pocket_name: str) -> object:
+        params = {"doc_name": doc_name, "pocket_name": pocket_name}
+        routed = self._invoke_mutation_v2("diagnose_pocket", params, document_names=(doc_name,), operation_name="Diagnose pocket")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "diagnose_pocket")(*[params[k] for k in params])
+
+    def diagnose_helix(self, doc_name: str, helix_name: str) -> object:
+        params = {"doc_name": doc_name, "helix_name": helix_name}
+        routed = self._invoke_mutation_v2("diagnose_helix", params, document_names=(doc_name,), operation_name="Diagnose helix")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "diagnose_helix")(*[params[k] for k in params])
+
+    def placement_audit(self, doc_name: str) -> object:
+        params = {"doc_name": doc_name}
+        routed = self._invoke_mutation_v2("placement_audit", params, document_names=(doc_name,), operation_name="Placement audit")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "placement_audit")(*[params[k] for k in params])
+
+    def find_faces(self, doc_name: str, object_name: str, **kwargs: object) -> object:
+        params = {"doc_name": doc_name, "object_name": object_name, **kwargs}
+        routed = self._invoke_mutation_v2("find_faces", params, document_names=(doc_name,), operation_name="Find faces")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "find_faces")(*[params[k] for k in params])
+
+    def find_edges(self, doc_name: str, object_name: str, **kwargs: object) -> object:
+        params = {"doc_name": doc_name, "object_name": object_name, **kwargs}
+        routed = self._invoke_mutation_v2("find_edges", params, document_names=(doc_name,), operation_name="Find edges")
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "find_edges")(*[params[k] for k in params])
+
+    def audit_hardcoded_dimensions(
+        self, doc_name: str, body_name: str, flag_aliases: bool = True
+    ) -> object:
+        params = {"doc_name": doc_name, "body_name": body_name, "flag_aliases": flag_aliases}
+        routed = self._invoke_mutation_v2(
+            "audit_hardcoded_dimensions", params, document_names=(doc_name,), operation_name="Audit hardcoded dimensions"
+        )
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "audit_hardcoded_dimensions")(*[params[k] for k in params])
+
+    def inspect_geometry(
+        self, doc_name: str, object_name: str, subshape: str | None = None
+    ) -> object:
+        params = {"doc_name": doc_name, "object_name": object_name, "subshape": subshape}
+        routed = self._invoke_mutation_v2(
+            "inspect_geometry", params, document_names=(doc_name,), operation_name="Inspect geometry"
+        )
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "inspect_geometry")(*[params[k] for k in params])
+
+    def get_dependency_graph(self, doc_name: str, root: str) -> object:
+        params = {"doc_name": doc_name, "root": root}
+        routed = self._invoke_mutation_v2(
+            "get_dependency_graph", params, document_names=(doc_name,), operation_name="Get dependency graph"
+        )
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "get_dependency_graph")(*[params[k] for k in params])
+
+    def match_subshape(
+        self,
+        doc_name: str,
+        source_object: str,
+        source_subshape: str,
+        target_object: str,
+        limit: int = 10,
+        tolerance: float = 1.0,
+    ) -> object:
+        params = {
+            "doc_name": doc_name,
+            "source_object": source_object,
+            "source_subshape": source_subshape,
+            "target_object": target_object,
+            "limit": limit,
+            "tolerance": tolerance,
+        }
+        routed = self._invoke_mutation_v2(
+            "match_subshape", params, document_names=(doc_name,), operation_name="Match subshape"
+        )
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "match_subshape")(*[params[k] for k in params])
+
+    def face_normal(self, doc_name: str, object_name: str, face: str) -> object:
+        params = {"doc_name": doc_name, "object_name": object_name, "face": face}
+        routed = self._invoke_mutation_v2(
+            "face_normal", params, document_names=(doc_name,), operation_name="Face normal"
+        )
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "face_normal")(*[params[k] for k in params])
+
+    def edge_axis(self, doc_name: str, object_name: str, edge: str) -> object:
+        params = {"doc_name": doc_name, "object_name": object_name, "edge": edge}
+        routed = self._invoke_mutation_v2(
+            "edge_axis", params, document_names=(doc_name,), operation_name="Edge axis"
+        )
+        if routed is not None:
+            return routed
+        return getattr(getattr(self, "server"), "edge_axis")(*[params[k] for k in params])
 
     def common_volume_along_path(self, doc_name: CommonVolumeDocumentName, moving_object: object, obstacle_objects: object, path_object: object = None, sample_count: object = 12, samples: object = None, volume_threshold_mm3: object = 1e-6, stop_on_first_hit: object = False) -> object:
         params = {
@@ -1535,6 +1756,42 @@ class FreeCADConnection:
             params,
             document_names=(doc_name,),
             operation_name='Fillet sketch geometry',
+        )
+        if routed is not None:
+            return routed
+        return {
+            "contract_version": 1,
+            "success": False,
+            "ok": False,
+            "outcome": "uncertain",
+            "committed": None,
+            "retry_safe": False,
+            "error_code": "INVALID_RPC_RESPONSE",
+            "error": "typed RPC v2 context is unavailable",
+        }
+
+    def sketch_offset(
+        self,
+        doc_name: SketchOffsetDocumentName,
+        sketch_name: SketchOffsetSketchName,
+        geo_indices: list[int],
+        offset: float,
+        copy: bool = True,
+        construction: bool = False,
+    ) -> object:
+        params: dict[str, object] = {
+            "doc_name": doc_name,
+            "sketch_name": sketch_name,
+            "geo_indices": geo_indices,
+            "offset": offset,
+            "copy": copy,
+            "construction": construction,
+        }
+        routed = self._invoke_mutation_v2(
+            "sketch_offset",
+            params,
+            document_names=(doc_name,),
+            operation_name="Offset sketch geometry",
         )
         if routed is not None:
             return routed

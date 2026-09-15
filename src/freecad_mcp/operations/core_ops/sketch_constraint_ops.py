@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .sketch_constraint_ops_legacy import _run_constraint
 from ..parametric_ops.sketch_add_arc import sketch_add_arc_operation
 from ..parametric_ops.sketch_add_circle import sketch_add_circle_operation
 from ..parametric_ops.sketch_add_line import sketch_add_line_operation
@@ -16,7 +15,6 @@ from ..parametric_ops.sketch_constrain_tangent import sketch_constrain_tangent_o
 from ..parametric_ops.sketch_constrain_vertical import sketch_constrain_vertical_operation
 
 __all__ = [
-    "_run_constraint",
     "sketch_add_arc_operation",
     "sketch_add_circle_operation",
     "sketch_add_line_operation",

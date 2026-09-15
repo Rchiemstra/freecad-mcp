@@ -17,25 +17,7 @@ def create_placement_datum_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, owner_body: str, name: str, source: str, relative: bool = True, offset: object = None,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "create_placement_datum",
-            {
-            "doc_name": doc_name,
-            "owner_body": owner_body,
-            "name": name,
-            "source": source,
-            "relative": relative,
-            "offset": offset,
-            },
-            document_names=(doc_name,),
-            operation_name="Create placement datum",
-        )
-        if raw_result is None:
-            raw_result = make_create_placement_datum_uncertain(
-                "CREATE_PLACEMENT_DATUM_TRANSPORT_UNCERTAIN",
-                "create_placement_datum response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.create_placement_datum(doc_name, owner_body, name, source, relative, offset)
     except Exception as exc:
         raw_result = make_create_placement_datum_uncertain(
             "CREATE_PLACEMENT_DATUM_TRANSPORT_UNCERTAIN",

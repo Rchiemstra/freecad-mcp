@@ -58,7 +58,31 @@ class FakeCurve:
         self.weights = weights
 
 
+class FakeOffsetShape:
+    def __init__(self, edges: list[object] | None = None) -> None:
+        self.Edges = edges or [SimpleNamespace(kind="offset_edge")]
+
+    def makeOffset2D(self, offset: float) -> SimpleNamespace:
+        start = FakeVector(0.0, offset, 0.0)
+        end = FakeVector(10.0, offset, 0.0)
+        return SimpleNamespace(
+            Edges=[
+                SimpleNamespace(
+                    kind="offset_edge",
+                    offset=offset,
+                    Vertexes=[SimpleNamespace(Point=start), SimpleNamespace(Point=end)],
+                )
+            ]
+        )
+
+
 class FakePart:
+    def Edge(self, _geometry: object) -> FakeOffsetShape:
+        return FakeOffsetShape()
+
+    def Wire(self, shapes: list[object]) -> FakeOffsetShape:
+        return FakeOffsetShape([SimpleNamespace(kind="wire_member") for _ in shapes])
+
     def LineSegment(self, start: object, end: object) -> SimpleNamespace:
         return SimpleNamespace(kind="line", start=start, end=end)
 
@@ -191,6 +215,13 @@ class FakeSketch:
 
     def addSymmetric(self, indices: list[int], symmetry_geo: int) -> None:
         self.symmetries.append((list(indices), symmetry_geo))
+        if not self.events or self.events[-1] != "apply":
+            self.events.append("apply")
+        if self.fail_after_edit:
+            raise RuntimeError("FreeCAD failed after mutating the sketch")
+
+    def delGeometry(self, geo_index: int) -> None:
+        del self.Geometry[geo_index]
         if not self.events or self.events[-1] != "apply":
             self.events.append("apply")
         if self.fail_after_edit:

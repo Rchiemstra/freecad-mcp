@@ -31,9 +31,33 @@ from freecad_mcp._shared.protocol.scale_contract import (
     make_scale_failure,
     make_scale_success,
 )
+from freecad_mcp._shared.protocol.get_global_shape_contract import (
+    make_get_global_shape_failure,
+    make_get_global_shape_success,
+)
+from freecad_mcp._shared.protocol.measure_angle_contract import (
+    make_measure_angle_failure,
+    make_measure_angle_success,
+)
+from freecad_mcp._shared.protocol.measure_area_contract import (
+    make_measure_area_failure,
+    make_measure_area_success,
+)
+from freecad_mcp._shared.protocol.measure_distance_contract import (
+    make_measure_distance_failure,
+    make_measure_distance_success,
+)
+from freecad_mcp._shared.protocol.measure_volume_contract import (
+    make_measure_volume_failure,
+    make_measure_volume_success,
+)
 from freecad_mcp._shared.protocol.translate_contract import (
     make_translate_failure,
     make_translate_success,
+)
+from freecad_mcp._shared.protocol.validate_geometry_contract import (
+    make_validate_geometry_failure,
+    make_validate_geometry_success,
 )
 from freecad_mcp.operations.p5_measure import (
     bounding_box_operation,
@@ -77,6 +101,16 @@ def _ok_conn():
     conn.translate.return_value = make_translate_success("Obj1", "Obj1")
     conn.rotate.return_value = make_rotate_success("Obj1", "Obj1")
     conn.scale.return_value = make_scale_success("Obj1", "Obj1")
+    conn.measure_distance.return_value = make_measure_distance_success(10.0, "mm")
+    conn.measure_angle.return_value = make_measure_angle_success(45.0, "deg")
+    conn.measure_area.return_value = make_measure_area_success("Obj1", 100.0, 1.0, "mm2", "world")
+    conn.measure_volume.return_value = make_measure_volume_success("Obj1", 1000.0, "mm3", "world")
+    conn.get_global_shape.return_value = make_get_global_shape_success(
+        "Obj1", "world", 1000.0, 600.0, {"x": 0, "y": 0, "z": 0}, {}, 1, 6, 12
+    )
+    conn.validate_geometry.return_value = make_validate_geometry_success(
+        "Obj1", False, True, True, 1000.0, 600.0, 6, 12, 8, "Solid", True, []
+    )
     return conn
 
 
@@ -92,11 +126,13 @@ def _fail_conn():
     conn.translate.return_value = make_translate_failure("TRANSLATE_FAILED", "oops")
     conn.rotate.return_value = make_rotate_failure("ROTATE_FAILED", "oops")
     conn.scale.return_value = make_scale_failure("SCALE_FAILED", "oops")
+    conn.measure_distance.return_value = make_measure_distance_failure("MEASURE_DISTANCE_FAILED", "oops")
+    conn.measure_angle.return_value = make_measure_angle_failure("MEASURE_ANGLE_FAILED", "oops")
+    conn.measure_area.return_value = make_measure_area_failure("MEASURE_AREA_FAILED", "oops")
+    conn.measure_volume.return_value = make_measure_volume_failure("MEASURE_VOLUME_FAILED", "oops")
+    conn.get_global_shape.return_value = make_get_global_shape_failure("GET_GLOBAL_SHAPE_FAILED", "oops")
+    conn.validate_geometry.return_value = make_validate_geometry_failure("VALIDATE_GEOMETRY_FAILED", "oops")
     return conn
-
-
-def _code(conn) -> str:
-    return conn.execute_code.call_args[0][0]
 
 
 def _text(response) -> str:
@@ -117,31 +153,16 @@ class TestMeasureDistance:
         resp = measure_distance_operation(_fail_conn(), "Doc", "Obj1", "Obj2")
         assert "oops" in _text(resp) or "Failed" in _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        measure_distance_operation(conn, "Doc", "Obj1", "Obj2")
-        assert_code_compiles(_code(conn))
-
-    def test_distToShape_called(self):
-        conn = _ok_conn()
-        measure_distance_operation(conn, "Doc", "Obj1", "Obj2")
-        assert_code_contains(_code(conn), "distToShape")
-
-    def test_object_names_in_code(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         measure_distance_operation(conn, "Doc", "ShapeA", "ShapeB")
-        code = _code(conn)
-        assert_code_contains(code, "ShapeA", "ShapeB")
+        conn.measure_distance.assert_called_once_with("Doc", "ShapeA", "ShapeB")
+        conn.execute_code.assert_not_called()
 
     def test_json_output(self):
-        conn = _ok_conn()
-        measure_distance_operation(conn, "Doc", "A", "B")
-        assert_code_contains(_code(conn), "json.dumps")
-
-    def test_unit_mm(self):
-        conn = _ok_conn()
-        measure_distance_operation(conn, "Doc", "A", "B")
-        assert_code_contains(_code(conn), "'mm'")
+        resp = measure_distance_operation(_ok_conn(), "Doc", "A", "B")
+        assert '"distance"' in _text(resp)
+        assert '"unit"' in _text(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -153,20 +174,15 @@ class TestMeasureAngle:
         resp = measure_angle_operation(_ok_conn(), "Doc", "Obj1:Edge1", "Obj2:Edge2")
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        measure_angle_operation(conn, "Doc", "Obj1:Edge1", "Obj2:Edge2")
-        assert_code_compiles(_code(conn))
-
-    def test_tangent_at_called(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         measure_angle_operation(conn, "Doc", "A:Edge1", "B:Edge2")
-        assert_code_contains(_code(conn), "tangentAt")
+        conn.measure_angle.assert_called_once_with("Doc", "A:Edge1", "B:Edge2")
+        conn.execute_code.assert_not_called()
 
-    def test_acos_in_code(self):
-        conn = _ok_conn()
-        measure_angle_operation(conn, "Doc", "A", "B")
-        assert_code_contains(_code(conn), "math.acos")
+    def test_json_output(self):
+        resp = measure_angle_operation(_ok_conn(), "Doc", "A", "B")
+        assert '"angle_deg"' in _text(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -178,20 +194,15 @@ class TestMeasureArea:
         resp = measure_area_operation(_ok_conn(), "Doc", "Obj1")
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        measure_area_operation(conn, "Doc", "Obj1")
-        assert_code_compiles(_code(conn))
-
-    def test_area_attribute_read(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         measure_area_operation(conn, "Doc", "Box1")
-        assert_code_contains(_code(conn), ".Area")
+        conn.measure_area.assert_called_once_with("Doc", "Box1")
+        conn.execute_code.assert_not_called()
 
     def test_json_output(self):
-        conn = _ok_conn()
-        measure_area_operation(conn, "Doc", "Box1")
-        assert_code_contains(_code(conn), "area_mm2")
+        resp = measure_area_operation(_ok_conn(), "Doc", "Box1")
+        assert '"area_mm2"' in _text(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -203,20 +214,15 @@ class TestMeasureVolume:
         resp = measure_volume_operation(_ok_conn(), "Doc", "Obj1")
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        measure_volume_operation(conn, "Doc", "Obj1")
-        assert_code_compiles(_code(conn))
-
-    def test_volume_attribute_read(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         measure_volume_operation(conn, "Doc", "Sphere1")
-        assert_code_contains(_code(conn), ".Volume")
+        conn.measure_volume.assert_called_once_with("Doc", "Sphere1")
+        conn.execute_code.assert_not_called()
 
     def test_json_output(self):
-        conn = _ok_conn()
-        measure_volume_operation(conn, "Doc", "Sphere1")
-        assert_code_contains(_code(conn), "volume_mm3")
+        resp = measure_volume_operation(_ok_conn(), "Doc", "Sphere1")
+        assert '"volume_mm3"' in _text(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -260,17 +266,18 @@ class TestGetGlobalShape:
         resp = get_global_shape_operation(_ok_conn(), "Doc", "Obj1")
         assert _text(resp)
 
-    def test_compiles(self):
-        from freecad_mcp.operations.p5_measure import get_global_shape_operation
-        conn = _ok_conn()
-        get_global_shape_operation(conn, "Doc", "Box1")
-        assert_code_compiles(_code(conn))
-
-    def test_uses_global_helper(self):
+    def test_routes_typed_rpc(self):
         from freecad_mcp.operations.p5_measure import get_global_shape_operation
         conn = _ok_conn()
         get_global_shape_operation(conn, "Doc", "Link1")
-        assert_code_contains(_code(conn), "_resolve_global_shape", "bbox", "volume_mm3")
+        conn.get_global_shape.assert_called_once_with("Doc", "Link1")
+        conn.execute_code.assert_not_called()
+
+    def test_json_output(self):
+        from freecad_mcp.operations.p5_measure import get_global_shape_operation
+        resp = get_global_shape_operation(_ok_conn(), "Doc", "Link1")
+        assert '"volume_mm3"' in _text(resp)
+        assert '"bbox"' in _text(resp) or '"area_mm2"' in _text(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -349,22 +356,16 @@ class TestValidateGeometry:
         resp = validate_geometry_operation(_ok_conn(), "Doc", "Obj1")
         assert _text(resp)
 
-    def test_compiles(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         validate_geometry_operation(conn, "Doc", "Obj1")
-        assert_code_compiles(_code(conn))
+        conn.validate_geometry.assert_called_once_with("Doc", "Obj1")
+        conn.execute_code.assert_not_called()
 
-    def test_isValid_check(self):
-        conn = _ok_conn()
-        validate_geometry_operation(conn, "Doc", "Obj1")
-        assert_code_contains(_code(conn), "isValid")
-
-    def test_check_called_with_exception_capture(self):
-        conn = _ok_conn()
-        validate_geometry_operation(conn, "Doc", "Obj1")
-        code = _code(conn)
-        assert_code_contains(code, "check(False)", "check_ok", "check_errors", "except Exception as _check_err")
-        assert "analyze" not in code
+    def test_json_output(self):
+        resp = validate_geometry_operation(_ok_conn(), "Doc", "Obj1")
+        assert '"is_valid"' in _text(resp)
+        assert '"check_ok"' in _text(resp)
 
 
 # ---------------------------------------------------------------------------

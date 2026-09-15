@@ -26,25 +26,7 @@ def sketch_add_external_projection_operation(
         )
         return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "sketch_add_external_projection",
-            {
-            "doc_name": doc_name,
-            "sketch_name": sketch_name,
-            "source_ref": source_ref,
-            "projection_mode": projection_mode,
-            "defining": defining,
-            "allow_gui_geometry_loop": allow_gui_geometry_loop,
-            },
-            document_names=(doc_name,),
-            operation_name="Add external projection",
-        )
-        if raw_result is None:
-            raw_result = make_sketch_add_external_projection_uncertain(
-                "SKETCH_ADD_EXTERNAL_PROJECTION_TRANSPORT_UNCERTAIN",
-                "sketch_add_external_projection response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.sketch_add_external_projection(doc_name, sketch_name, source_ref, projection_mode, defining, allow_gui_geometry_loop)
     except Exception as exc:
         raw_result = make_sketch_add_external_projection_uncertain(
             "SKETCH_ADD_EXTERNAL_PROJECTION_TRANSPORT_UNCERTAIN",

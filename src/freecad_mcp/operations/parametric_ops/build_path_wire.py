@@ -20,25 +20,7 @@ def build_path_wire_operation(
         failure = make_build_path_wire_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
         return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "build_path_wire",
-            {
-            "doc_name": doc_name,
-            "wire_name": wire_name,
-            "segments": segments,
-            "tolerance_mm": tolerance_mm,
-            "container": container,
-            "if_exists": if_exists,
-            },
-            document_names=(doc_name,),
-            operation_name="Build path wire",
-        )
-        if raw_result is None:
-            raw_result = make_build_path_wire_uncertain(
-                "BUILD_PATH_WIRE_TRANSPORT_UNCERTAIN",
-                "build_path_wire response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.build_path_wire(doc_name, wire_name, segments, tolerance_mm, container, if_exists)
     except Exception as exc:
         raw_result = make_build_path_wire_uncertain(
             "BUILD_PATH_WIRE_TRANSPORT_UNCERTAIN",

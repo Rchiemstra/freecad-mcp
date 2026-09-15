@@ -20,23 +20,7 @@ def create_part_container_operation(
         failure = make_create_part_container_failure("INVALID_ARGUMENT", "if_exists must be one of: error, skip, replace")
         return tool_fail(failure["error"], structured=dict(failure), error_code=failure["error_code"])
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "create_part_container",
-            {
-            "doc_name": doc_name,
-            "part_name": part_name,
-            "parent_container": parent_container,
-            "if_exists": if_exists,
-            },
-            document_names=(doc_name,),
-            operation_name="Create part container",
-        )
-        if raw_result is None:
-            raw_result = make_create_part_container_uncertain(
-                "CREATE_PART_CONTAINER_TRANSPORT_UNCERTAIN",
-                "create_part_container response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.create_part_container(doc_name, part_name, parent_container, if_exists)
     except Exception as exc:
         raw_result = make_create_part_container_uncertain(
             "CREATE_PART_CONTAINER_TRANSPORT_UNCERTAIN",

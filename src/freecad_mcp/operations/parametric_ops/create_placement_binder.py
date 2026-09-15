@@ -17,25 +17,7 @@ def create_placement_binder_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, owner_body: str, name: str, source: str, relative: bool = True, bind_mode: str = "Synchronized",
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "create_placement_binder",
-            {
-            "doc_name": doc_name,
-            "owner_body": owner_body,
-            "name": name,
-            "source": source,
-            "relative": relative,
-            "bind_mode": bind_mode,
-            },
-            document_names=(doc_name,),
-            operation_name="Create placement binder",
-        )
-        if raw_result is None:
-            raw_result = make_create_placement_binder_uncertain(
-                "CREATE_PLACEMENT_BINDER_TRANSPORT_UNCERTAIN",
-                "create_placement_binder response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.create_placement_binder(doc_name, owner_body, name, source, relative, bind_mode)
     except Exception as exc:
         raw_result = make_create_placement_binder_uncertain(
             "CREATE_PLACEMENT_BINDER_TRANSPORT_UNCERTAIN",

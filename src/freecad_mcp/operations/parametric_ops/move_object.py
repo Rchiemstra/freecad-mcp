@@ -17,23 +17,7 @@ def move_object_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, obj_name: str, target_container: str, remove_from_old_parent: bool = True,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "move_object",
-            {
-            "doc_name": doc_name,
-            "obj_name": obj_name,
-            "target_container": target_container,
-            "remove_from_old_parent": remove_from_old_parent,
-            },
-            document_names=(doc_name,),
-            operation_name="Move object",
-        )
-        if raw_result is None:
-            raw_result = make_move_object_uncertain(
-                "MOVE_OBJECT_TRANSPORT_UNCERTAIN",
-                "move_object response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.move_object(doc_name, obj_name, target_container, remove_from_old_parent)
     except Exception as exc:
         raw_result = make_move_object_uncertain(
             "MOVE_OBJECT_TRANSPORT_UNCERTAIN",

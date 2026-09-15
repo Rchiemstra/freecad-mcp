@@ -17,22 +17,7 @@ def run_fem_analysis_operation(
     freecad: FreeCADConnection, only_text_feedback: bool, doc_name: str, analysis_name: str, timeout: int = 600,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad._invoke_mutation_v2(
-            "run_fem_analysis",
-            {
-            "doc_name": doc_name,
-            "analysis_name": analysis_name,
-            "timeout": timeout,
-            },
-            document_names=(doc_name,),
-            operation_name="Run FEM analysis",
-        )
-        if raw_result is None:
-            raw_result = make_run_fem_analysis_uncertain(
-                "RUN_FEM_ANALYSIS_TRANSPORT_UNCERTAIN",
-                "run_fem_analysis response unavailable: JSON-RPC session is not connected",
-                committed=None,
-            )
+        raw_result: object = freecad.run_fem_analysis(doc_name, analysis_name, timeout)
     except Exception as exc:
         raw_result = make_run_fem_analysis_uncertain(
             "RUN_FEM_ANALYSIS_TRANSPORT_UNCERTAIN",
