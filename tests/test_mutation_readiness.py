@@ -65,6 +65,31 @@ class _Document:
         self._readiness = _native_payload()
 
 
+def test_document_readiness_exposes_identity_and_history_heads():
+    document = _Document()
+    document.Uid = SimpleNamespace(Value="uid-history-1")
+    document.UndoNames = ["EditSketch"]
+    document.UndoCount = 2
+    document.RedoNames = ["Pad"]
+    document.RedoCount = 1
+
+    def collaborationIdentity():
+        return {"instance_id": 9, "lifecycle_epoch": 4, "state": "Live"}
+
+    document.collaborationIdentity = collaborationIdentity
+
+    readiness = mutation_readiness.document_readiness(document)
+
+    assert readiness["document_uid"] == "uid-history-1"
+    assert readiness["document_instance_id"] == 9
+    assert readiness["lifecycle_epoch"] == 4
+    assert readiness["document_name"] == document.Name
+    assert readiness["undo_count"] == 2
+    assert readiness["undo_head"] == "EditSketch"
+    assert readiness["redo_count"] == 1
+    assert readiness["redo_head"] == "Pad"
+
+
 def test_native_not_ready_and_recomputing_are_authoritative_stable_blockers():
     document = _Document(
         readiness={"ready": False, "recomputing": True, "must_execute": True}

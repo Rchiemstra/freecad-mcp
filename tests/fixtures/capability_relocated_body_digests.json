@@ -13,7 +13,7 @@
     "connection_invoke_v2_helpers": "dd7a2ea68896c4ddb6bee9fc9a6c14115ed20d0ecf47077d385ecc08d01c90a7",
     "connection_invoke_v2_ops": "1b85f8d61495a9cabebbbbdca6a4af62eb77b0e80df57d796e45a9f8f91776f1",
     "connection_lease_ops": "afbdd5d6274d626c56bc4c2631526e540220400c3f65665220db69a9ce412f9f",
-    "connection_model_ops": "ccebb8b68a24169d278e439b19e9808b9b2de964baee13d56e8d31225704d294",
+    "connection_model_ops": "6094331762d88f8f18053243b4fc8e41328cf5d765574252a7825a20f6b88988",
     "connection_read_ops": "0cbcb26f4edad3146e3c6f34f5acd6ac268d024ae5f797030340a78d447c7ed2",
     "connection_save_ops": "3900ed53c8e1f8682e61de2743b04ae0f03754352fe4be2e82b37219956291ae",
     "connection_sketch_ops": "36a5576908f13ba8e1acd6d88c7212c39f8d4310e99b1418159641536bb09101",

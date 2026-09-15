@@ -4,6 +4,8 @@ from freecad_mcp.generated.capabilities.connection_methods import (
     connection_model_ops as _generated,
 )
 
+_history_operation_id = _generated._history_operation_id
+_prepare_history_mutation = _generated._prepare_history_mutation
 sketch_attach = _generated.sketch_attach
 sketch_edit_constraint = _generated.sketch_edit_constraint
 diagnose_parametric = _generated.diagnose_parametric
@@ -14,6 +16,8 @@ run_fem_analysis = _generated.run_fem_analysis
 get_mutation_readiness = _generated.get_mutation_readiness
 
 __all__ = [  # noqa: RUF022
+    '_history_operation_id',
+    '_prepare_history_mutation',
     'sketch_attach',
     'sketch_edit_constraint',
     'diagnose_parametric',
