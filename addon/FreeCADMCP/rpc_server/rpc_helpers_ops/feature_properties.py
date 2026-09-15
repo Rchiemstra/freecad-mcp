@@ -19,16 +19,17 @@ def _set_extrusion_symmetric(feature, value):
     """Set symmetric pad/pocket extrusion without touching deprecated Midplane."""
     properties = set(getattr(feature, "PropertiesList", []))
     if "SideType" in properties:
-        candidates = ("Two sides", "Symmetric") if value else ("One side",)
-        last_error = None
-        for candidate in candidates:
+        if value:
             try:
-                feature.SideType = candidate
+                feature.SideType = "Symmetric"
                 return "SideType"
-            except Exception as err:
-                last_error = err
-        if last_error:
-            raise last_error
+            except Exception:
+                if "Midplane" in properties:
+                    feature.Midplane = True
+                    return "Midplane"
+                raise
+        feature.SideType = "One side"
+        return "SideType"
     if "Symmetric" in properties:
         feature.Symmetric = bool(value)
         return "Symmetric"

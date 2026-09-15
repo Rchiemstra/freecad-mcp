@@ -65,10 +65,10 @@ _type = str(_safe('Type') or _safe('SideType') or '')
 _symmetric = None
 if 'Symmetric' in _props:
     _symmetric = bool(_safe('Symmetric'))
+elif 'SideType' in _props:
+    _symmetric = str(_safe('SideType')) == 'Symmetric'
 elif 'Midplane' in _props:
     _symmetric = bool(_safe('Midplane'))
-elif 'SideType' in _props:
-    _symmetric = str(_safe('SideType')) in ('Two sides', 'Symmetric')
 
 _shape = _safe('Shape')
 _null = True
