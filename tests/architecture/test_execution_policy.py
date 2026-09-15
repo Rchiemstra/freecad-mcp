@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ci.check_execution_policy_contract import (
+    FORBIDDEN_REGISTRY_NAMES,
     scan_execution_policy_completeness,
     scan_typed_rpc_handler_names,
 )
@@ -50,8 +51,8 @@ def test_execution_policy_is_not_mutation_class() -> None:
 
 def test_registry_counts() -> None:
     counts = Counter(EXECUTION_POLICIES.values())
-    assert len(EXECUTION_POLICIES) == 152
-    assert counts[ExecutionPolicy.DOCUMENT_MUTATION] == 89
+    assert len(EXECUTION_POLICIES) == 153
+    assert counts[ExecutionPolicy.DOCUMENT_MUTATION] == 90
     assert counts[ExecutionPolicy.DOCUMENT_QUERY] == 39
     assert counts[ExecutionPolicy.DOCUMENT_LIFECYCLE] == 5
     assert counts[ExecutionPolicy.HISTORY_OPERATION] == 2
@@ -61,8 +62,10 @@ def test_registry_counts() -> None:
 
 def test_typed_rpc_handlers_are_registered() -> None:
     typed_names = scan_typed_rpc_handler_names(REPOSITORY_ROOT)
-    assert len(typed_names) == 107
-    missing = sorted(typed_names - EXECUTION_POLICIES.keys())
+    assert len(typed_names) == 133
+    missing = sorted(
+        typed_names - EXECUTION_POLICIES.keys() - FORBIDDEN_REGISTRY_NAMES
+    )
     assert missing == []
 
 

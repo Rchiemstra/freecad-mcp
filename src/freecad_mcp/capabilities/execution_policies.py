@@ -125,7 +125,6 @@ _DOCUMENT_MUTATION = (
     "relink_references",
     "repair_references",
     "restore",
-    "run_transaction",
     "revolve_feature",
     "rotate",
     "scale",

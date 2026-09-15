@@ -17,9 +17,10 @@ sys.path.insert(0, str(_ROOT / "src"))
 from freecad_mcp.capabilities.load import all_subject_manifests  # noqa: E402
 from freecad_mcp.capabilities.schema import ExecutionPolicy, MutationClass, ToolEntry  # noqa: E402
 
-_FORBIDDEN_REGISTRY_NAMES = frozenset(
+FORBIDDEN_REGISTRY_NAMES = frozenset(
     {"execute_code", "execute_code_async", "run_transaction"}
 )
+_FORBIDDEN_REGISTRY_NAMES = FORBIDDEN_REGISTRY_NAMES
 _NON_CAD_REGISTER_PREFIXES = ("tools_lease", "tools_runtime", "tools_worker")
 
 
@@ -100,7 +101,7 @@ def scan_execution_policy_completeness(
         ]
 
     cad_tool_names = {entry.name for entry in tool_entries if is_cad_tool(entry)}
-    required_names = typed_names | cad_tool_names
+    required_names = (typed_names | cad_tool_names) - _FORBIDDEN_REGISTRY_NAMES
 
     schema_values = {member.value for member in ExecutionPolicy}
     addon_enum_path = (
@@ -195,7 +196,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     counts = _policy_counts(addon)
     print(
         "execution policy contract: OK "
-        f"(152 names; "
+        f"({len(addon)} names; "
         f"DOCUMENT_MUTATION={counts['document_mutation']}, "
         f"DOCUMENT_QUERY={counts['document_query']}, "
         f"DOCUMENT_LIFECYCLE={counts['document_lifecycle']}, "

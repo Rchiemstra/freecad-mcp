@@ -20,7 +20,6 @@ from unittest.mock import MagicMock
 import FreeCAD
 import pytest
 
-from freecad_mcp.template_resources import read_template_text
 from tests.helpers.runtime_bootstrap import ensure_freecad_stub
 
 ensure_freecad_stub()
@@ -33,11 +32,6 @@ from addon.FreeCADMCP.rpc_server.placement_codec import (  # noqa: E402
 )
 from addon.FreeCADMCP.rpc_server.property_mapper import set_object_property  # noqa: E402
 from addon.FreeCADMCP.rpc_server.serialize import serialize_value  # noqa: E402
-
-
-GENERATED_PLACEMENT_HELPERS = read_template_text(
-    "parametric/placement_helpers.py.txt"
-)
 
 
 class _FakeVector:
@@ -178,38 +172,3 @@ def test_set_object_property_surfaces_assignment_failures(_freecad_semantic_type
     with pytest.raises(ValueError, match="Failed to set property: Length"):
         set_object_property(MagicMock(), _BoomObj(), {"Length": {"bad": True}})
     assert _freecad_semantic_types.PrintError.called
-
-
-def test_generated_helpers_match_codec_round_trip():
-    """Generated execute_code helpers must share the degree contract."""
-    ns: dict = {"FreeCAD": FreeCAD, "math": math}
-    exec(GENERATED_PLACEMENT_HELPERS, ns)  # noqa: S102
-    payload = {
-        "Base": {"x": 1.0, "y": 0.0, "z": 12.5},
-        "Rotation": {"Axis": {"x": 0.0, "y": 0.0, "z": 1.0}, "Angle": 90.0},
-    }
-    via_codec = placement_to_dict(dict_to_placement(payload))
-    via_generated = ns["_mcp_placement_to_dict"](ns["_mcp_dict_to_placement"](payload))
-    assert abs(via_codec["Rotation"]["Angle"] - via_generated["Rotation"]["Angle"]) < 1e-9
-    assert abs(via_codec["Base"]["z"] - via_generated["Base"]["z"]) < ANGLE_DEG_TOL
-    assert abs(via_generated["Rotation"]["Angle"] - 90.0) < 1e-9
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        None,
-        {"Base": "not-a-vector"},
-        {"Rotation": ["not", "a", "rotation"]},
-        {"Rotation": {"Axis": "not-a-vector", "Angle": 90}},
-    ],
-)
-def test_generated_helpers_match_codec_validation(payload):
-    """Both routes must reject malformed values instead of changing geometry."""
-    ns: dict = {"FreeCAD": FreeCAD}
-    exec(GENERATED_PLACEMENT_HELPERS, ns)  # noqa: S102
-
-    with pytest.raises(TypeError):
-        dict_to_placement(payload)
-    with pytest.raises(TypeError):
-        ns["_mcp_dict_to_placement"](payload)

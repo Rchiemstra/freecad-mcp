@@ -1,6 +1,0 @@
-_sh = Part.Shape()
-_sh.importBrep($file_path)
-_obj = _doc.addObject('Part::Feature', $obj_name)
-_obj.Shape = _sh
-_doc.recompute()
-print(json.dumps({'imported': True, 'name': _obj.Name}))
