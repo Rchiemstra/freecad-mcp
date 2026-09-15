@@ -11,6 +11,16 @@ try:
 except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP.automation_pause import status as automation_pause_status
 
+try:
+    from ....part3_collaboration.history_head import capture_redo_head, capture_undo_head
+    from ....part3_collaboration.identity import bootstrap_identity_selector
+except ImportError:  # pragma: no cover - flat addon import path
+    from addon.FreeCADMCP.part3_collaboration.history_head import (
+        capture_redo_head,
+        capture_undo_head,
+    )
+    from addon.FreeCADMCP.part3_collaboration.identity import bootstrap_identity_selector
+
 _QUARANTINED: dict[tuple[str, int, str], str] = {}
 
 _NATIVE_BOOLEAN_FIELDS = frozenset(
@@ -276,6 +286,21 @@ def document_readiness(document: Any) -> dict[str, Any]:  # noqa: C901
     if not diagnostic and callable(native_diagnostic):
         with suppress(Exception):
             diagnostic = str(native_diagnostic() or "")
+    identity_fields = {
+        "document_uid": "",
+        "document_instance_id": 0,
+        "lifecycle_epoch": 0,
+        "document_name": name,
+    }
+    with suppress(Exception):
+        selector = bootstrap_identity_selector(document)
+        identity_fields = {
+            "document_uid": selector.document_uid,
+            "document_instance_id": selector.document_instance_id,
+            "lifecycle_epoch": selector.lifecycle_epoch,
+            "document_name": selector.document_name or name,
+        }
+    history_fields = {**capture_undo_head(document), **capture_redo_head(document)}
     return {
         "document": name,
         "ready": not reasons and not native_ready_false,
@@ -300,6 +325,8 @@ def document_readiness(document: Any) -> dict[str, Any]:  # noqa: C901
         "native_readiness_available": True,
         "runtime_compatible": True,
         "diagnostic": diagnostic or None,
+        **identity_fields,
+        **history_fields,
     }
 
 
