@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
+
+from .feature_lookup_support import MutableFeatureLike
 
 
 def nonempty_string(value: object, field: str) -> str:
@@ -58,15 +61,15 @@ def create_feature(
     body: object | None,
     object_type: str,
     name: str,
-) -> object:
+) -> MutableFeatureLike:
     if body is not None:
         factory = getattr(body, "newObject", None)
         if callable(factory):
-            return factory(object_type, name)
+            return cast(MutableFeatureLike, factory(object_type, name))
     factory = getattr(document, "addObject", None)
     if not callable(factory):
         raise RuntimeError("document cannot create objects")
-    return factory(object_type, name)
+    return cast(MutableFeatureLike, factory(object_type, name))
 
 
 def set_attr(obj: object, name: str, value: object) -> None:

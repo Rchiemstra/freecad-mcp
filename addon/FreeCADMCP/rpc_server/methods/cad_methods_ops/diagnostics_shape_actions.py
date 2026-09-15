@@ -1,11 +1,53 @@
-# mypy: ignore-errors
 """Shape/subshape diagnostics helpers for typed query handlers."""
 
 from __future__ import annotations
 
 import math
+from typing import cast
 
-from .typed_runtime import TypedMutationError, require_object
+from .typed_runtime import (
+    TypedMutationError,
+    load_module,
+    module_callable,
+    require_object,
+)
+
+
+def _vector(x: float, y: float, z: float = 0.0) -> object:
+    freecad = load_module("FreeCAD")
+    return module_callable(freecad, "Vector")(x, y, z)
+
+
+def _placement() -> object:
+    freecad = load_module("FreeCAD")
+    return module_callable(freecad, "Placement")()
+
+
+def _transform_point(placement: object, point: object) -> object:
+    multiply = getattr(placement, "__mul__", None)
+    if not callable(multiply):
+        raise TypeError("placement does not support point transform")
+    return multiply(point)
+
+
+def _vector_length(value: object) -> float:
+    return float(getattr(value, "Length", 0.0))
+
+
+def _vector_sub(left: object, right: object) -> object:
+    subtract = getattr(left, "__sub__", None)
+    if not callable(subtract):
+        raise TypeError("vector does not support subtraction")
+    return subtract(right)
+
+
+def _subshape_collection_item(shape: object | None, collection: str, index: int) -> object | None:
+    if shape is None:
+        return None
+    items = getattr(shape, collection, None)
+    if not isinstance(items, (list, tuple)) or index < 0 or index >= len(items):
+        return None
+    return cast(object, items[index])
 
 
 def _vec(value: object) -> dict[str, float] | None:
@@ -16,6 +58,13 @@ def _vec(value: object) -> dict[str, float] | None:
         "y": round(float(getattr(value, "y", 0.0)), 6),
         "z": round(float(getattr(value, "z", 0.0)), 6),
     }
+
+
+def _row_number(row: dict[str, object], field: str) -> float:
+    value = row.get(field, 0.0)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
 
 
 def find_subshapes(
@@ -31,22 +80,20 @@ def find_subshapes(
     center_tol: float = 1.0,
     limit: int = 10,
 ) -> dict[str, object]:
-    import FreeCAD  # noqa: PLC0415
-
     obj = require_object(document, object_name)
     shape = getattr(obj, "Shape", None)
     if shape is None or getattr(shape, "isNull", lambda: True)():
-        raise TypedMutationError(f"Object has no shape: {object_name}")
-    gp = obj.getGlobalPlacement()
+        raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no shape: {object_name}")
+    gp = _global_placement(obj)
     kind_singular = "Face" if kind == "Faces" else "Edge"
 
     def to_vec(point: object) -> object | None:
         if point is None:
             return None
         if isinstance(point, dict):
-            return FreeCAD.Vector(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
+            return _vector(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
         if isinstance(point, (list, tuple)):
-            return FreeCAD.Vector(float(point[0]), float(point[1]), float(point[2]))
+            return _vector(float(point[0]), float(point[1]), float(point[2]))
         return None
 
     nv = to_vec(normal_approx)
@@ -54,15 +101,15 @@ def find_subshapes(
     results: list[dict[str, object]] = []
     for index, sub in enumerate(getattr(shape, kind, []), start=1):
         try:
-            center = gp * sub.CenterOfMass
+            center = _transform_point(gp, getattr(sub, "CenterOfMass"))
         except Exception:
             try:
-                center = gp * sub.CenterOfBoundBox
+                center = _transform_point(gp, getattr(sub, "CenterOfBoundBox"))
             except Exception:
                 continue
-        if cv is not None and float((center - cv).Length) > center_tol:
+        if cv is not None and _vector_length(_vector_sub(center, cv)) > center_tol:
             continue
-        measure = float(sub.Area) if kind == "Faces" else float(sub.Length)
+        measure = float(getattr(sub, "Area", 0.0)) if kind == "Faces" else float(getattr(sub, "Length", 0.0))
         results.append(
             {
                 "sub": f"{kind_singular}{index}",
@@ -71,11 +118,13 @@ def find_subshapes(
             }
         )
     if cv is not None:
-        results.sort(key=lambda row: float((to_vec(row["global_center"]) - cv).Length))  # type: ignore[operator]
+        results.sort(
+            key=lambda row: _vector_length(_vector_sub(to_vec(row["global_center"]), cv))
+        )
     elif kind == "Faces":
-        results.sort(key=lambda row: row.get("area", 0.0), reverse=True)  # type: ignore[arg-type,return-value]
+        results.sort(key=lambda row: _row_number(row, "area"), reverse=True)
     else:
-        results.sort(key=lambda row: row.get("length", 0.0), reverse=True)  # type: ignore[arg-type,return-value]
+        results.sort(key=lambda row: _row_number(row, "length"), reverse=True)
     return {
         "ok": True,
         "object": str(getattr(obj, "Name", object_name)),
@@ -91,24 +140,26 @@ def diagnose_pocket(document: object, pocket_name: str) -> dict[str, object]:
     bbox = None
     if shape is not None and not getattr(shape, "isNull", lambda: True)():
         try:
-            box = shape.BoundBox
+            box = getattr(shape, "BoundBox", None)
             bbox = {
-                "xmin": float(box.XMin),
-                "ymin": float(box.YMin),
-                "zmin": float(box.ZMin),
-                "xmax": float(box.XMax),
-                "ymax": float(box.YMax),
-                "zmax": float(box.ZMax),
+                "xmin": float(getattr(box, "XMin", 0.0)),
+                "ymin": float(getattr(box, "YMin", 0.0)),
+                "zmin": float(getattr(box, "ZMin", 0.0)),
+                "xmax": float(getattr(box, "XMax", 0.0)),
+                "ymax": float(getattr(box, "YMax", 0.0)),
+                "zmax": float(getattr(box, "ZMax", 0.0)),
             }
         except Exception:
             bbox = None
+    faces = getattr(shape, "Faces", None) if shape is not None else None
+    face_count = len(faces) if isinstance(faces, (list, tuple)) else None
     return {
         "ok": True,
         "pocket": pocket_name,
         "type_id": str(getattr(obj, "TypeId", "")),
         "shape_null": shape is None or getattr(shape, "isNull", lambda: True)(),
         "bbox": bbox,
-        "face_count": len(shape.Faces) if shape is not None and hasattr(shape, "Faces") else None,
+        "face_count": face_count,
     }
 
 
@@ -147,10 +198,10 @@ def _parent_of(document: object, obj: object) -> object | None:
     for candidate in getattr(document, "Objects", []) or []:
         group = getattr(candidate, "Group", None) or []
         if obj in group:
-            return candidate
+            return cast(object, candidate)
         out_list = getattr(candidate, "OutList", None) or []
         if obj in out_list:
-            return candidate
+            return cast(object, candidate)
     return None
 
 
@@ -159,67 +210,88 @@ def _subshape_object(obj: object, subshape: str) -> object | None:
     if shape is None:
         return None
     if subshape.startswith("Face"):
-        index = int(subshape[4:]) - 1
-        return shape.Faces[index]
+        return _subshape_collection_item(shape, "Faces", int(subshape[4:]) - 1)
     if subshape.startswith("Edge"):
-        index = int(subshape[4:]) - 1
-        return shape.Edges[index]
+        return _subshape_collection_item(shape, "Edges", int(subshape[4:]) - 1)
     return None
 
 
 def subshape_pose(document: object, object_name: str, subshape: str) -> dict[str, object]:
-    import FreeCAD  # noqa: PLC0415
-
     obj = require_object(document, object_name)
     shape = getattr(obj, "Shape", None)
     if shape is None or getattr(shape, "isNull", lambda: True)():
-        raise TypedMutationError(f"Object has no shape: {object_name}")
+        raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no shape: {object_name}")
     if not subshape or not (subshape.startswith("Face") or subshape.startswith("Edge")):
-        raise TypedMutationError(f'subshape must be like "Face3" or "Edge2": {subshape!r}')
+        raise TypedMutationError(
+            "INVALID_ARGUMENT",
+            f'subshape must be like "Face3" or "Edge2": {subshape!r}',
+        )
     sub_obj = _subshape_object(obj, subshape)
     if sub_obj is None:
-        raise TypedMutationError(f"Subshape not found: {subshape}")
-    gp = obj.getGlobalPlacement()
+        raise TypedMutationError("SHAPE_NOT_FOUND", f"Subshape not found: {subshape}")
+    gp = _global_placement(obj)
     center = None
     try:
-        center = gp * sub_obj.CenterOfMass
+        center = _transform_point(gp, getattr(sub_obj, "CenterOfMass"))
     except Exception:
         try:
-            center = gp * sub_obj.CenterOfBoundBox
+            center = _transform_point(gp, getattr(sub_obj, "CenterOfBoundBox"))
         except Exception:
             center = None
     normal = None
     try:
         if hasattr(sub_obj, "Surface"):
-            u_param = sub_obj.ParameterRange[0]
-            v_param = sub_obj.ParameterRange[2]
-            n = sub_obj.normalAt(u_param, v_param)
-        else:
-            axis = getattr(sub_obj.Curve, "Axis", None)
-            if axis is not None:
-                n = FreeCAD.Vector(axis.x, axis.y, axis.z)
+            param_range = getattr(sub_obj, "ParameterRange", None)
+            if isinstance(param_range, (list, tuple)) and len(param_range) >= 3:
+                normal_at = getattr(sub_obj, "normalAt", None)
+                if callable(normal_at):
+                    n = normal_at(param_range[0], param_range[2])
+                else:
+                    n = None
             else:
-                direction = getattr(sub_obj.Curve, "Direction", None)
-                n = FreeCAD.Vector(direction.x, direction.y, direction.z) if direction is not None else None
+                n = None
+        else:
+            curve = getattr(sub_obj, "Curve", None)
+            axis = getattr(curve, "Axis", None) if curve is not None else None
+            if axis is not None:
+                n = _vector(getattr(axis, "x", 0.0), getattr(axis, "y", 0.0), getattr(axis, "z", 0.0))
+            else:
+                direction = getattr(curve, "Direction", None) if curve is not None else None
+                n = (
+                    _vector(
+                        getattr(direction, "x", 0.0),
+                        getattr(direction, "y", 0.0),
+                        getattr(direction, "z", 0.0),
+                    )
+                    if direction is not None
+                    else None
+                )
         if n is not None:
-            normal = gp.Rotation * n
-            normal.normalize()
+            rotation = getattr(gp, "Rotation", None)
+            rot_mul = getattr(rotation, "__mul__", None) if rotation is not None else None
+            if callable(rot_mul):
+                normal = rot_mul(n)
+                normalize = getattr(normal, "normalize", None)
+                if callable(normalize):
+                    normalize()
     except Exception:
         normal = None
     surface_type = ""
     try:
         if hasattr(sub_obj, "Surface"):
-            surface_type = type(sub_obj.Surface).__name__
+            surface_type = type(getattr(sub_obj, "Surface")).__name__
         elif hasattr(sub_obj, "Curve"):
-            surface_type = type(sub_obj.Curve).__name__
+            surface_type = type(getattr(sub_obj, "Curve")).__name__
     except Exception:
         surface_type = ""
     radius = None
     try:
         if hasattr(sub_obj, "Surface"):
-            radius = float(getattr(sub_obj.Surface, "Radius", getattr(sub_obj.Surface, "Radius1", 0.0)))
+            surface = getattr(sub_obj, "Surface", None)
+            radius = float(getattr(surface, "Radius", getattr(surface, "Radius1", 0.0)))
         elif hasattr(sub_obj, "Curve"):
-            radius = float(getattr(sub_obj.Curve, "Radius", 0.0))
+            curve = getattr(sub_obj, "Curve", None)
+            radius = float(getattr(curve, "Radius", 0.0))
     except Exception:
         radius = None
     return {
@@ -242,8 +314,6 @@ def edge_axis(document: object, object_name: str, edge: str) -> dict[str, object
 
 
 def inspect_geometry(document: object, object_name: str, subshape: str | None = None) -> dict[str, object]:
-    import FreeCAD  # noqa: PLC0415
-
     obj = require_object(document, object_name)
     chain: list[dict[str, object]] = []
     cursor: object | None = obj
@@ -260,16 +330,18 @@ def inspect_geometry(document: object, object_name: str, subshape: str | None = 
     try:
         global_pl = _global_placement(obj)
     except Exception:
-        global_pl = getattr(obj, "Placement", FreeCAD.Placement())
+        global_pl = getattr(obj, "Placement", _placement())
     local_bb = None
     global_bb = None
     shape = getattr(obj, "Shape", None)
     if shape is not None and not getattr(shape, "isNull", lambda: True)():
-        local_bb = _bb(shape.BoundBox)
+        local_bb = _bb(getattr(shape, "BoundBox", None))
         try:
-            copy = shape.copy()
-            copy.Placement = global_pl
-            global_bb = _bb(copy.BoundBox)
+            copy_fn = getattr(shape, "copy", None)
+            copy = copy_fn() if callable(copy_fn) else None
+            if copy is not None:
+                setattr(copy, "Placement", global_pl)
+                global_bb = _bb(getattr(copy, "BoundBox", None))
         except Exception:
             global_bb = None
     placement = getattr(obj, "Placement", None)
@@ -407,33 +479,47 @@ def match_subshape(
     tgt = require_object(document, target_object)
     src_shape = _subshape_object(src, source_subshape)
     if src_shape is None:
-        raise TypedMutationError("Source subshape not found")
-    src_area = float(src_shape.Area) if hasattr(src_shape, "Area") else None
-    src_center = _vec(src_shape.CenterOfMass)
+        raise TypedMutationError("SHAPE_NOT_FOUND", "Source subshape not found")
+    src_area = float(getattr(src_shape, "Area", 0.0)) if hasattr(src_shape, "Area") else None
+    src_center = _vec(getattr(src_shape, "CenterOfMass", None))
     src_normal = None
     try:
         if source_subshape.startswith("Face"):
             index = int(source_subshape[4:]) - 1
-            face = src.Shape.Faces[index]
-            u0, u1, v0, v1 = face.ParameterRange
-            normal = _global_placement(src).Rotation.multVec(face.normalAt((u0 + u1) * 0.5, (v0 + v1) * 0.5)).normalize()
-            src_normal = _vec(normal)
+            face = _subshape_collection_item(getattr(src, "Shape", None), "Faces", index)
+            if face is not None:
+                param_range = getattr(face, "ParameterRange", None)
+                normal_at = getattr(face, "normalAt", None)
+                global_pl = _global_placement(src)
+                rotation = getattr(global_pl, "Rotation", None)
+                mult_vec = getattr(rotation, "multVec", None) if rotation is not None else None
+                if (
+                    isinstance(param_range, (list, tuple))
+                    and len(param_range) >= 4
+                    and callable(normal_at)
+                    and callable(mult_vec)
+                ):
+                    normal = mult_vec(
+                        normal_at((param_range[0] + param_range[1]) * 0.5, (param_range[2] + param_range[3]) * 0.5)
+                    ).normalize()
+                    src_normal = _vec(normal)
     except Exception:
         src_normal = None
     kind = "Faces" if source_subshape.startswith("Face") else "Edges"
     candidates: list[dict[str, object]] = []
-    for index, sub in enumerate(getattr(tgt.Shape, kind, []), start=1):
+    target_shape = getattr(tgt, "Shape", None)
+    for index, sub in enumerate(getattr(target_shape, kind, []), start=1):
         name = kind[:-1] + str(index)
         score = 0.0
-        area = float(sub.Area) if hasattr(sub, "Area") else None
+        area = float(getattr(sub, "Area", 0.0)) if hasattr(sub, "Area") else None
         if src_area and area:
             score += max(0.0, 1.0 - abs(src_area - area) / max(src_area, area))
-        center = _vec(sub.CenterOfMass)
+        center = _vec(getattr(sub, "CenterOfMass", None))
         if center and src_center:
             dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(center.values(), src_center.values())))
             score += max(0.0, 1.0 - dist / max(tolerance, 1e-9))
         candidates.append({"subshape": name, "score": round(score, 6), "area": area, "global_center": center})
-    candidates.sort(key=lambda row: row["score"], reverse=True)  # type: ignore[arg-type,return-value]
+    candidates.sort(key=lambda row: _row_number(row, "score"), reverse=True)
     return {
         "ok": True,
         "source": f"{source_object}:{source_subshape}",

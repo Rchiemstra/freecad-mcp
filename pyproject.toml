@@ -60,7 +60,7 @@ explicit_package_bases = true
 namespace_packages = true
 follow_imports = "skip"
 warn_unused_ignores = true
-mypy_path = [".", "src"]
+mypy_path = [".", "src", "typings"]
 # Typed slice entrypoints: contracts and typecheck protocols auto-include new ops.
 # Leaves and mutations are pulled via follow_imports=normal on cad_methods_ops.*.
 # Public MCP adapters keep follow_imports=silent so CallToolResult signatures

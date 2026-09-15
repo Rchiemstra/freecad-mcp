@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .typed_rpc_support import assign_attr, call_named, invoke
+from .typed_runtime import TypedMutationError, load_module
 
 
 def _group_members(group: object) -> list[object]:
@@ -59,17 +60,18 @@ def snapshot_ring(document: object) -> list[object]:
     store = getattr(document, "_mcp_snapshots", None)
     if isinstance(store, list):
         return store
+    freecad: object | None = None
     try:
-        import FreeCAD
-    except ImportError:
-        FreeCAD = None  # type: ignore[misc, assignment]
-    if FreeCAD is not None:
-        current = getattr(FreeCAD, "_mcp_snapshots", None)
+        freecad = load_module("FreeCAD")
+    except (TypedMutationError, ImportError):
+        pass
+    if freecad is not None:
+        current = getattr(freecad, "_mcp_snapshots", None)
         if isinstance(current, list):
             return current
         try:
-            setattr(FreeCAD, "_mcp_snapshots", [])
-            current = getattr(FreeCAD, "_mcp_snapshots", None)
+            setattr(freecad, "_mcp_snapshots", [])
+            current = getattr(freecad, "_mcp_snapshots", None)
             if isinstance(current, list):
                 return current
         except Exception:
