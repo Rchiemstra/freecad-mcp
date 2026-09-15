@@ -1,6 +1,13 @@
-"""Typed ``clear_expression`` mutation."""
 
+"""Typed ``clear_expression`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    nonempty_string,
+    object_label,
+    object_name,
+    require_object,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,12 +27,7 @@ from ...._shared.protocol.clear_expression_contract import (
     make_clear_expression_uncertain,
 )
 from .clear_expression_mutation import ClearExpressionError, run_clear_expression_native_mutation
-from .typed_rpc_support import (
-    nonempty_string,
-    object_label,
-    object_name,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,35 +2,17 @@
 
 from __future__ import annotations
 
-import importlib
-import pkgutil
 from collections.abc import Callable
 from types import ModuleType
+
+from . import typed_rpc_handler_modules
 
 _HANDLER_SYMBOL = "TYPED_RPC_HANDLER"
 
 
-def _load_sibling_modules(package: ModuleType) -> list[ModuleType]:
-    if package.__path__ is None:
-        return []
-    modules: list[ModuleType] = []
-    for info in pkgutil.iter_modules(package.__path__):
-        if info.ispkg:
-            continue
-        modules.append(importlib.import_module(f"{package.__name__}.{info.name}"))
-    return modules
-
-
-def discover_typed_rpc_handlers(
-    package: ModuleType | None = None,
-) -> dict[str, Callable[..., object]]:
-    """Import sibling modules and collect ``TYPED_RPC_HANDLER`` registrations."""
-
-    if package is None:
-        package = importlib.import_module(__name__.rsplit(".", 1)[0])
-
+def _collect_handlers(modules: tuple[ModuleType, ...]) -> dict[str, Callable[..., object]]:
     handlers: dict[str, Callable[..., object]] = {}
-    for module in _load_sibling_modules(package):
+    for module in modules:
         registration = getattr(module, _HANDLER_SYMBOL, None)
         if registration is None:
             continue
@@ -47,6 +29,15 @@ def discover_typed_rpc_handlers(
             raise ValueError(f"duplicate typed RPC handler: {method_name}")
         handlers[method_name] = handler
     return handlers
+
+
+def discover_typed_rpc_handlers(
+    package: ModuleType | None = None,
+) -> dict[str, Callable[..., object]]:
+    """Collect ``TYPED_RPC_HANDLER`` registrations from statically imported leaf modules."""
+
+    del package  # static discovery ignores dynamic package scans
+    return _collect_handlers(typed_rpc_handler_modules._HANDLER_MODULES)
 
 
 def bind_typed_rpc_handlers(

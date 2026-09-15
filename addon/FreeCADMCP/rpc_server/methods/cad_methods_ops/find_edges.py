@@ -2,7 +2,7 @@
 from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 
 def _failure(code: str, message: str) -> dict[str, object]:
@@ -23,7 +23,7 @@ def run_find_edges(collaborators: object, doc_name: str, object_name: str) -> di
         return _failure("OBJECT_NOT_FOUND", "Object not found")
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.find_subshapes(document, object_name, "Edges")
+        payload = diagnostics_shape_actions.find_subshapes(document, object_name, "Edges")
     except Exception as exc:
         return _failure("FIND_EDGES_FAILED", str(exc) or type(exc).__name__)
     return {"success": True, "ok": True, "outcome": "observed", "retry_safe": False, **payload}

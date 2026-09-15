@@ -850,6 +850,10 @@ def sketch_fillet(conn, *args, **kwargs):
     """Generated client stub for sketch_fillet (mutation)."""
     raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)
 
+def sketch_offset(conn, *args, **kwargs):
+    """Generated client stub for sketch_offset (mutation)."""
+    raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)
+
 def sketch_split(conn, *args, **kwargs):
     """Generated client stub for sketch_split (mutation)."""
     raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)

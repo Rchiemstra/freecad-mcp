@@ -1,6 +1,23 @@
-"""Typed ``chamfer_feature`` mutation."""
 
+"""Typed ``chamfer_feature`` mutation."""
 from __future__ import annotations
+
+from .feature_lookup_support import (
+    is_derived_from,
+    require_absent,
+    require_object,
+    resolve_optional_body,
+)
+from .feature_mutate_support import (
+    create_feature,
+    nonempty_string,
+    number_value,
+    optional_name,
+    require_nonempty_shape,
+    set_attr,
+    set_tip,
+    string_list,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,20 +38,7 @@ from ...._shared.protocol.chamfer_feature_contract import (
     make_chamfer_feature_uncertain,
 )
 from .chamfer_feature_mutation import ChamferFeatureError, run_chamfer_feature_native_mutation
-from .feature_apply_support import (
-    create_feature,
-    is_derived_from,
-    nonempty_string,
-    number_value,
-    optional_name,
-    require_absent,
-    require_nonempty_shape,
-    require_object,
-    resolve_optional_body,
-    set_attr,
-    set_tip,
-    string_list,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

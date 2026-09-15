@@ -79,6 +79,6 @@ def test_gate_rejects_any_on_the_typed_surface() -> None:
     old = 'def build_repair_references_request(\n    doc_name: object,\n    repairs: object,'
     broken = old.replace(": object", ": Any", 1)
     assert source.count(old) == 1
-    assert "REPAIR_REFERENCES014 typed surface contains Any: leaf" in scan_repair_references_architecture(
+    assert "REPAIR_REFERENCES014 typed repair_references surface contains Any: repair_references leaf" in scan_repair_references_architecture(
         ROOT, source_overrides={LEAF: source.replace(old, broken)}
     )

@@ -662,6 +662,10 @@ def sketch_fillet(conn, *args, **kwargs):
     """INERT shadow stub for sketch_fillet (mutation)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
+def sketch_offset(conn, *args, **kwargs):
+    """INERT shadow stub for sketch_offset (mutation)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
 def sketch_split(conn, *args, **kwargs):
     """INERT shadow stub for sketch_split (mutation)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)

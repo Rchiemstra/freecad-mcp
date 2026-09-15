@@ -17,11 +17,31 @@ from freecad_mcp._shared.protocol.create_assembly_grounded_joint_contract import
 from freecad_mcp._shared.protocol.create_assembly_joint_contract import (
     make_create_assembly_joint_success,
 )
+from freecad_mcp._shared.protocol.create_datum_plane_contract import (
+    make_create_datum_plane_failure,
+    make_create_datum_plane_success,
+)
+from freecad_mcp._shared.protocol.create_part_container_contract import (
+    make_create_part_container_failure,
+    make_create_part_container_success,
+)
+from freecad_mcp._shared.protocol.create_subshape_binder_contract import (
+    make_create_subshape_binder_failure,
+    make_create_subshape_binder_success,
+)
 from freecad_mcp._shared.protocol.get_document_tree_contract import (
     make_get_document_tree_success,
 )
 from freecad_mcp._shared.protocol.get_sketch_geometry_contract import (
     make_get_sketch_geometry_success,
+)
+from freecad_mcp._shared.protocol.move_object_contract import (
+    make_move_object_failure,
+    make_move_object_success,
+)
+from freecad_mcp._shared.protocol.sketch_add_external_projection_contract import (
+    make_sketch_add_external_projection_failure,
+    make_sketch_add_external_projection_success,
 )
 from freecad_mcp.operations.p7_assembly import (
     create_assembly_grounded_joint_operation,
@@ -38,29 +58,6 @@ from freecad_mcp.operations.p7_assembly import (
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
-def _typed_ok(**fields):
-    payload = {
-        "contract_version": 1,
-        "success": True,
-        "ok": True,
-        "outcome": "committed",
-        "committed": True,
-        "retry_safe": False,
-        "part_name": "Part",
-        "label": "Label",
-        "object_name": "Obj",
-        "target_container": "Body",
-        "binder_name": "Binder",
-        "plane_name": "Plane",
-        "body_name": "Body",
-        "sketch_name": "Sketch",
-        "wire_name": "Wire",
-        "solid_name": "Solid",
-    }
-    payload.update(fields)
-    return payload
-
-
 _ASSEMBLY_ACTIONS = (
     Path(__file__).resolve().parents[2]
     / "addon"
@@ -72,15 +69,9 @@ _ASSEMBLY_ACTIONS = (
 ).read_text(encoding="utf-8")
 
 
-def _ok_conn(output: str = '{"ok": true}'):
+def _ok_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {
-        "success": True,
-        "message": "Python code execution scheduled. \nOutput: " + output,
-        "recompute_errors": [],
-    }
-    conn._invoke_mutation_v2.return_value = _typed_ok()
     conn.create_assembly.return_value = make_create_assembly_success(
         "MainAssembly", "MainAssembly", "Assembly::AssemblyObject", "JointGroup"
     )
@@ -96,28 +87,31 @@ def _ok_conn(output: str = '{"ok": true}'):
     conn.get_sketch_geometry.return_value = make_get_sketch_geometry_success(
         "CableRouteSketch", 2, [], [], []
     )
+    conn.create_part_container.return_value = make_create_part_container_success(
+        "CableVisualization", "CableVisualization"
+    )
+    conn.move_object.return_value = make_move_object_success("Sketch", "Body")
+    conn.create_subshape_binder.return_value = make_create_subshape_binder_success(
+        "FinalHolderFusionRef"
+    )
+    conn.create_datum_plane.return_value = make_create_datum_plane_success("CableDatum", "CableBody")
+    conn.sketch_add_external_projection.return_value = make_sketch_add_external_projection_success(
+        "Sketch"
+    )
     return conn
 
 
-def _fail_conn():
+def _fail_conn(error: str = "oops"):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": False, "error": "oops"}
-    conn._invoke_mutation_v2.return_value = {
-        "contract_version": 1,
-        "success": False,
-        "ok": False,
-        "outcome": "rejected",
-        "committed": False,
-        "retry_safe": True,
-        "error_code": "FAILED",
-        "error": "oops",
-    }
+    conn.create_part_container.return_value = make_create_part_container_failure("FAILED", error)
+    conn.move_object.return_value = make_move_object_failure("FAILED", error)
+    conn.create_subshape_binder.return_value = make_create_subshape_binder_failure("FAILED", error)
+    conn.create_datum_plane.return_value = make_create_datum_plane_failure("FAILED", error)
+    conn.sketch_add_external_projection.return_value = make_sketch_add_external_projection_failure(
+        "FAILED", error
+    )
     return conn
-
-
-def _code(conn) -> str:
-    return conn.execute_code.call_args[0][0]
 
 
 def _text(response) -> str:
@@ -196,10 +190,7 @@ class TestPartContainer:
         conn = _ok_conn()
         resp = create_part_container_operation(conn, True, "Doc", "CableVisualization", if_exists="replace")
         assert not resp.isError
-        conn._invoke_mutation_v2.assert_called()
-        assert conn._invoke_mutation_v2.call_args[0][0] == "create_part_container"
-        assert conn._invoke_mutation_v2.call_args[0][1]["part_name"] == "CableVisualization"
-        assert conn._invoke_mutation_v2.call_args[0][1]["if_exists"] == "replace"
+        conn.create_part_container.assert_called_once_with("Doc", "CableVisualization", None, "replace")
         conn.execute_code.assert_not_called()
 
     def test_invalid_if_exists(self):
@@ -212,9 +203,7 @@ class TestMoveObject:
         conn = _ok_conn()
         resp = move_object_operation(conn, True, "Doc", "Sketch", "Body")
         assert not resp.isError
-        conn._invoke_mutation_v2.assert_called()
-        assert conn._invoke_mutation_v2.call_args[0][0] == "move_object"
-        assert conn._invoke_mutation_v2.call_args[0][1]["obj_name"] == "Sketch"
+        conn.move_object.assert_called_once_with("Doc", "Sketch", "Body", True)
         conn.execute_code.assert_not_called()
 
     def test_failure_propagates(self):
@@ -237,9 +226,17 @@ class TestSubShapeBinder:
             sync_placement=True,
         )
         assert not resp.isError
-        conn._invoke_mutation_v2.assert_called()
-        assert conn._invoke_mutation_v2.call_args[0][0] == "create_subshape_binder"
-        assert conn._invoke_mutation_v2.call_args[0][1]["binder_name"] == "FinalHolderFusionRef"
+        conn.create_subshape_binder.assert_called_once_with(
+            "Doc",
+            "FinalHolderFusionRef",
+            "Final_Holder_Fusion",
+            ["Face71"],
+            "CableBody",
+            None,
+            False,
+            True,
+            "error",
+        )
         conn.execute_code.assert_not_called()
 
 
@@ -258,9 +255,18 @@ class TestDatumPlane:
             offset_along_normal=[0, 0, -0.55],
         )
         assert not resp.isError
-        conn._invoke_mutation_v2.assert_called()
-        assert conn._invoke_mutation_v2.call_args[0][0] == "create_datum_plane"
-        assert conn._invoke_mutation_v2.call_args[0][1]["mode"] == "midpoint_between_faces"
+        conn.create_datum_plane.assert_called_once_with(
+            "Doc",
+            "CableDatum",
+            "CableBody",
+            "midpoint_between_faces",
+            None,
+            "A:Face1",
+            "B:Face2",
+            [0, 0, -0.55],
+            "FlatFace",
+            "error",
+        )
         conn.execute_code.assert_not_called()
 
 
@@ -299,8 +305,9 @@ class TestExternalProjection:
             allow_gui_geometry_loop=True,
         )
         assert not resp.isError
-        conn._invoke_mutation_v2.assert_called()
-        assert conn._invoke_mutation_v2.call_args[0][0] == "sketch_add_external_projection"
+        conn.sketch_add_external_projection.assert_called_once_with(
+            "Doc", "Sketch", "Binder:Face1", "auto", False, True
+        )
         conn.execute_code.assert_not_called()
 
     def test_explicit_gui_loop_override_forces_gui_execution(self):
@@ -314,7 +321,7 @@ class TestExternalProjection:
             allow_gui_geometry_loop=True,
         )
         assert not resp.isError
-        assert conn._invoke_mutation_v2.call_args[0][1]["sketch_name"] == "Sketch"
+        assert conn.sketch_add_external_projection.call_args.args[1] == "Sketch"
 
     def test_invalid_projection_mode(self):
         resp = sketch_add_external_projection_operation(

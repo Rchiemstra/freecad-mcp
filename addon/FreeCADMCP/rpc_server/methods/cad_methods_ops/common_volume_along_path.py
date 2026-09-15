@@ -14,7 +14,7 @@ from ...._shared.protocol.common_volume_along_path_contract import (
     make_common_volume_along_path_failure,
     make_common_volume_along_path_success,
 )
-from . import measure_io_actions
+from . import measure_path_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_int, as_str
 
@@ -139,7 +139,7 @@ def run_common_volume_along_path(
         return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
     try:
-        payload = measure_io_actions.common_volume_along_path(
+        payload = measure_path_actions.common_volume_along_path(
             document,
             moving_object=request.moving_object,
             obstacle_objects=request.obstacle_objects,

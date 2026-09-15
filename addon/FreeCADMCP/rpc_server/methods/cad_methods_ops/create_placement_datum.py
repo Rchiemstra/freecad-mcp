@@ -1,6 +1,16 @@
-"""Typed ``create_placement_datum`` mutation."""
 
+"""Typed ``create_placement_datum`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    as_bool,
+    assign_attr,
+    nonempty_string,
+    object_label,
+    object_name,
+    parse_ref,
+    require_object,
+)
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -21,15 +31,7 @@ from ...._shared.protocol.create_placement_datum_contract import (
 )
 from .create_placement_datum_mutation import CreatePlacementDatumError, run_create_placement_datum_native_mutation
 from .typed_runtime import is_derived_from
-from .typed_rpc_support import (
-    assign_attr,
-    as_bool,
-    nonempty_string,
-    object_label,
-    object_name,
-    parse_ref,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

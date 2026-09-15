@@ -373,64 +373,102 @@ def scan_template_tombstones(
     return violations
 
 
+def _freecad_mcp_distributions():
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    seen: set[str] = set()
+    for package_name in ("freecad-mcp", "freecad_mcp"):
+        try:
+            dist = distribution(package_name)
+        except PackageNotFoundError:
+            continue
+        if dist.metadata["Name"] in seen:
+            continue
+        seen.add(dist.metadata["Name"])
+        yield dist
+
+
+def _distribution_template_violations(dist) -> list[str]:
+    violations: list[str] = []
+    files = dist.files
+    if files is None:
+        return violations
+    for entry in files:
+        parts = entry.parts
+        if "templates" in parts:
+            violations.append(
+                "template tombstone: installed package distribution "
+                f"{dist.metadata['Name']} ships templates at {entry.as_posix()}"
+            )
+        if any(part == "template_resources" for part in parts):
+            violations.append(
+                "template tombstone: installed package distribution "
+                f"{dist.metadata['Name']} ships template_resources at {entry.as_posix()}"
+            )
+    return violations
+
+
+def _installed_package_template_violations() -> list[str]:
+    violations: list[str] = []
+    distributions = list(_freecad_mcp_distributions())
+    for dist in distributions:
+        violations.extend(_distribution_template_violations(dist))
+
+    try:
+        import freecad_mcp
+    except ModuleNotFoundError:
+        return violations
+
+    package_file = Path(freecad_mcp.__file__).resolve()
+    package_dir = package_file.parent
+    templates_dir = package_dir / "templates"
+    if templates_dir.exists():
+        violations.append(
+            "template tombstone: installed package contains templates directory "
+            f"at {templates_dir}"
+        )
+    if importlib.util.find_spec(_TEMPLATE_RESOURCES) is not None:
+        violations.append(
+            "template tombstone: installed package still exposes "
+            "freecad_mcp.template_resources"
+        )
+    return violations
+
+
 def scan_installed_package_tombstones() -> list[str]:
     """Fail if an installed freecad_mcp wheel still ships templates or template_resources."""
 
-    violations: list[str] = []
     src_path = _ROOT / "src"
     src_path_str = str(src_path)
     src_resolved = src_path.resolve()
-    removed_src = False
+    original_path = list(sys.path)
+    original_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "freecad_mcp" or name.startswith("freecad_mcp.")
+    }
 
     filtered_path: list[str] = []
     for entry in sys.path:
         if entry == src_path_str:
-            removed_src = True
             continue
         try:
             if Path(entry).resolve() == src_resolved:
-                removed_src = True
                 continue
         except OSError:
             pass
         filtered_path.append(entry)
     sys.path[:] = filtered_path
 
-    for name in list(sys.modules):
-        if name == "freecad_mcp" or name.startswith("freecad_mcp."):
-            del sys.modules[name]
+    for name in original_modules:
+        del sys.modules[name]
 
     try:
-        import freecad_mcp
-
-        package_file = Path(freecad_mcp.__file__).resolve()
-        try:
-            package_file.relative_to(src_resolved)
-        except ValueError:
-            pass
-        else:
-            violations.append(
-                "template tombstone: installed package check resolved to source tree "
-                f"at {package_file}"
-            )
-
-        package_dir = package_file.parent
-        templates_dir = package_dir / "templates"
-        if templates_dir.exists():
-            violations.append(
-                "template tombstone: installed package contains templates directory "
-                f"at {templates_dir}"
-            )
-        if importlib.util.find_spec(_TEMPLATE_RESOURCES) is not None:
-            violations.append(
-                "template tombstone: installed package still exposes "
-                "freecad_mcp.template_resources"
-            )
+        return _installed_package_template_violations()
     finally:
-        if removed_src and src_path_str not in sys.path:
-            sys.path.insert(0, src_path_str)
-
-    return violations
+        sys.path[:] = original_path
+        for name, module in original_modules.items():
+            sys.modules[name] = module
 
 
 def main(argv: Sequence[str] | None = None) -> int:

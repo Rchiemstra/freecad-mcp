@@ -13,6 +13,7 @@ import pytest
 from jsonschema.validators import Draft202012Validator
 
 from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
+from tests.typed_rpc_fakes import CompatibilityAPI, FakeDocument, collaborators
 
 pytestmark = pytest.mark.unit
 
@@ -36,18 +37,22 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
 ):
     expected = _snapshot()["production_listener_examples"]
     default_instance = freecad_rpc_class()
-    freecad = SimpleNamespace(
-        getDocument=lambda _name: None,
-        listDocuments=dict,
-        getUserAppDataDir=lambda: "/profile/",
-    )
+    events: list[str] = []
+    contract_document = FakeDocument(events, name="ContractDocument")
+    phase_document = FakeDocument(events, name="Phase1ContractDocument")
+    compatibility_api = CompatibilityAPI(contract_document, events=events)
+    compatibility_api.documents["Phase1ContractDocument"] = phase_document
+    typed_cad_collaborators, _ = collaborators(contract_document, events)
+    freecad = typed_cad_collaborators.freecad
     collaboration_collaborators = replace(
         default_instance._collaboration_collaborators,
         freecad=freecad,
+        compatibility_api=compatibility_api,
     )
     execution_collaborators = replace(
         default_instance._execution_collaborators,
         freecad=freecad,
+        compatibility_api=compatibility_api,
         session_manager=object(),
         runtime_manifest=None,
         actual_endpoint={"host": "127.0.0.1", "port": 9988},
@@ -71,8 +76,10 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
         execution_collaborators=execution_collaborators,
         cad_collaborators=replace(
             default_instance._cad_collaborators,
-            compatibility_api=collaboration_collaborators.compatibility_api,
-            freecad=freecad,
+            freecad=typed_cad_collaborators.freecad,
+            validate_document_invariants=typed_cad_collaborators.validate_document_invariants,
+            set_object_property=typed_cad_collaborators.set_object_property,
+            compatibility_api=compatibility_api,
         ),
     )
     dispatcher = SimpleXMLRPCDispatcher(allow_none=True, encoding=None)
@@ -90,21 +97,10 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
         "error": "Document authority is owned by native FreeCAD collaboration.",
     }
 
-    create_module = inspect.getmodule(freecad_rpc_class.create_document)
-    assert create_module is not None
-    monkeypatch.setattr(create_module.FreeCAD, "getDocument", lambda _name: None)
-    instance._request_checkpoint = lambda *_args, **_kwargs: None
-    instance._current_inflight = lambda: None
-    instance._create_document_gui = lambda _name: True
     instance._dispatch_gui = lambda callback: callback()
-    instance._unknown_mutation_evidence = lambda *_args, **_kwargs: {
-        "document_health": {},
-        "mutation_scope": {"declared_documents": ["Phase1ContractDocument"]},
-    }
     actual["create_document"] = dispatcher._dispatch(
         "create_document", ("Phase1ContractDocument",)
     )
-    instance._dispatch_gui = lambda *_args, **_kwargs: True
     actual["create_object"] = dispatcher._dispatch(
         "create_object",
         ("ContractDocument", {"Name": "ContractObject", "Type": "Part::Feature"}),

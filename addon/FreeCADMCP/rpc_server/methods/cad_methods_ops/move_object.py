@@ -1,6 +1,18 @@
-"""Typed ``move_object`` mutation."""
 
+"""Typed ``move_object`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    as_bool,
+    nonempty_string,
+    object_label,
+    object_name,
+    require_object,
+)
+from .typed_rpc_container_support import (
+    add_to_container,
+    remove_from_container,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,15 +32,7 @@ from ...._shared.protocol.move_object_contract import (
     make_move_object_uncertain,
 )
 from .move_object_mutation import MoveObjectError, run_move_object_native_mutation
-from .typed_rpc_support import (
-    add_to_container,
-    as_bool,
-    nonempty_string,
-    object_label,
-    object_name,
-    remove_from_container,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

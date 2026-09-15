@@ -164,10 +164,21 @@ def repair_references(
         return conn.server.repair_references(doc_name, repairs, recompute, validate)
 
 
-def delete_object(conn, doc_name: str, obj_name: str) -> dict[str, Any]:
+def delete_object(
+        conn,
+        doc_name: str,
+        obj_name: str,
+        recursive: bool = False,
+        force: bool = False,
+    ) -> dict[str, Any]:
         routed = conn._invoke_mutation_v2(
             "delete_object",
-            {"doc_name": doc_name, "obj_name": obj_name},
+            {
+                "doc_name": doc_name,
+                "obj_name": obj_name,
+                "recursive": recursive,
+                "force": force,
+            },
             document_names=(doc_name,),
             operation_name="Delete object",
         )

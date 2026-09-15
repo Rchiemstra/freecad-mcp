@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_io_actions
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_shape_actions
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.inspect_geometry import run_inspect_geometry
 from tests.typed_rpc_fakes import FakeDocument, FakeObject, collaborators
 
@@ -27,7 +27,7 @@ def test_inspect_geometry_observed_without_native_mutation():
         "local_bbox": {"xmin": 0.0},
         "global_bbox": {"xmin": 0.0},
     }
-    with patch.object(diagnostics_io_actions, "inspect_geometry", return_value=payload):
+    with patch.object(diagnostics_shape_actions, "inspect_geometry", return_value=payload):
         result = run_inspect_geometry(collab, "Doc", "Box", None)
 
     assert result["success"] is True

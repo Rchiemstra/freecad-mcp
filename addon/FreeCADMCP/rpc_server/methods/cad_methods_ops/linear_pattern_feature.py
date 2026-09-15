@@ -1,6 +1,27 @@
-"""Typed ``linear_pattern_feature`` mutation."""
 
+"""Typed ``linear_pattern_feature`` mutation."""
 from __future__ import annotations
+
+from .feature_lookup_support import (
+    is_derived_from,
+    require_absent,
+    require_body,
+    require_object,
+    resolve_linksub,
+)
+from .feature_mutate_support import (
+    bool_value,
+    count_value,
+    create_feature,
+    nonempty_string,
+    number_value,
+    optional_name,
+    require_nonempty_shape,
+    set_feature_bool,
+    set_named_property,
+    set_originals,
+    set_tip,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,24 +42,7 @@ from ...._shared.protocol.linear_pattern_feature_contract import (
     make_linear_pattern_feature_uncertain,
 )
 from .linear_pattern_feature_mutation import LinearPatternFeatureError, run_linear_pattern_feature_native_mutation
-from .feature_apply_support import (
-    bool_value,
-    count_value,
-    create_feature,
-    is_derived_from,
-    nonempty_string,
-    number_value,
-    optional_name,
-    require_absent,
-    require_body,
-    require_nonempty_shape,
-    require_object,
-    resolve_linksub,
-    set_feature_bool,
-    set_named_property,
-    set_originals,
-    set_tip,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

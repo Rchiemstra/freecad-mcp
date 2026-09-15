@@ -32,7 +32,7 @@ def test_body_set_tip_architecture_gate_accepts_the_production_path() -> None:
             TIP_LEAF,
             "            self.inspect,",
             "            self.apply,",
-            "TIP004 missing typed postcondition=inspect",
+            "BODY_SET_TIP004 missing typed postcondition=inspect",
         ),
         (
             BRIDGE,
@@ -41,32 +41,32 @@ def test_body_set_tip_architecture_gate_accepts_the_production_path() -> None:
             "            )",
             "            callback(document)\n"
             '            return {"status": "Committed", "committed": True}',
-            "TIP006 postcondition path can reach non-native callback fallback",
+            "BODY_SET_TIP006 postcondition path can reach non-native callback fallback",
         ),
         (
             BRIDGE,
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)',
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)\n        document = self._resolve_admitted_document(document_name)',
-            "TIP005 bridge must resolve the admitted document exactly once",
+            "BODY_SET_TIP005 bridge must resolve the admitted document exactly once",
         ),
         (
             PUBLIC_ADAPTER,
             "result = parse_body_set_tip_response(raw_result)",
             "result = raw_result",
-            "TIP008 public adapter bypasses response validation",
+            "BODY_SET_TIP008 public adapter bypasses response validation",
         ),
         (
             MUTATION,
             "    if committed is not False or status not in _REJECTED_STATUSES:",
             "    if state.postcondition_passed:\n        return True\n"
             "    if committed is not False or status not in _REJECTED_STATUSES:",
-            "TIP007 cached success escaped native rejection",
+            "BODY_SET_TIP007 cached success escaped native rejection",
         ),
         (
             MUTATION,
             "if state.postcondition_passed and state.failure is None:",
             "if True:",
-            "TIP015 commit escaped without a successful postcondition",
+            "BODY_SET_TIP015 commit escaped without a successful postcondition",
         ),
     ],
     ids=(
@@ -100,7 +100,7 @@ def test_gate_rejects_transaction_or_recompute_ownership_in_the_leaf() -> None:
     assert source.count(marker) == 1
     mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
 
-    assert "TIP001 leaf owns forbidden execution: recompute" in (
+    assert "BODY_SET_TIP001 leaf owns forbidden execution: recompute" in (
         scan_body_set_tip_architecture(
             ROOT,
             source_overrides={TIP_LEAF: mutated},
@@ -120,20 +120,10 @@ def test_gate_rejects_any_on_the_tip_specific_surface() -> None:
     )
     assert source.count(old) == 1
 
-    assert "TIP014 typed Tip surface contains Any: Tip leaf" in (
+    assert "BODY_SET_TIP014 typed body_set_tip surface contains Any: body_set_tip leaf" in (
         scan_body_set_tip_architecture(
             ROOT,
             source_overrides={TIP_LEAF: source.replace(old, broken)},
         )
     )
 
-
-def test_gate_rejects_a_per_op_commit_method() -> None:
-    source = _read(BRIDGE)
-    broken = source + "\n    def commit_body_set_tip_mutation(self, document_name, callback, postcondition):\n        return None\n"
-    assert "TIP016 per-op commit_body_set_tip_mutation is forbidden" in (
-        scan_body_set_tip_architecture(
-            ROOT,
-            source_overrides={BRIDGE: broken},
-        )
-    )

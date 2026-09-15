@@ -8,6 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.rpc_server.methods.lifecycle_methods_ops import document_create
+from freecad_mcp._shared.protocol.create_document_contract import (
+    DocumentName,
+    make_create_document_success,
+)
 from freecad_mcp.operations.core_ops.document_ops import create_document_operation
 
 pytestmark = pytest.mark.unit
@@ -34,19 +38,10 @@ class _CreateBackend:
     def __init__(self) -> None:
         self.names: list[str] = []
 
-    def create_document(self, name: str) -> dict[str, object]:
-        self.names.append(name)
-        return {
-            "success": True,
-            "document_name": name,
-            "request_id": "historic-request",
-            "credential": {
-                "lease_id": "historic-lease",
-                "document_session_uuid": "historic-document-session",
-                "generation": 1,
-                "token": "must-not-cross-tool-boundary",
-            },
-        }
+    def create_document(self, name: DocumentName | str) -> dict[str, object]:
+        document_name = DocumentName(str(name))
+        self.names.append(str(document_name))
+        return make_create_document_success(document_name)
 
     def acknowledge_acquisition_claim(self, _request_id: str) -> None:
         raise AssertionError("MCP must not acknowledge a historic acquisition claim")
@@ -75,13 +70,9 @@ def test_registered_create_document_uses_no_removed_server_state(monkeypatch) ->
     result = exports["create_document"](None, "NativeDocument")
 
     assert backend.names == ["NativeDocument"]
-    assert result.structuredContent["data"] == {
-        "success": True,
-        "document_name": "NativeDocument",
-        "request_id": "historic-request",
-        "credential_stored": False,
-        "token_exported": False,
-    }
+    assert result.structuredContent["data"] == make_create_document_success(
+        DocumentName("NativeDocument")
+    )
 
 
 def test_create_operation_has_no_credential_custody_collaborators() -> None:
@@ -95,7 +86,8 @@ def test_create_operation_has_no_credential_custody_collaborators() -> None:
 
     assert "must-not-cross-tool-boundary" not in serialized
     assert "historic-lease" not in serialized
-    assert result.structuredContent["data"]["credential_stored"] is False
+    assert result.structuredContent["data"]["success"] is True
+    assert result.structuredContent["data"]["document_name"] == "NativeDocument"
 
 
 def test_create_lookup_and_evidence_stay_inside_gui_dispatch(monkeypatch) -> None:

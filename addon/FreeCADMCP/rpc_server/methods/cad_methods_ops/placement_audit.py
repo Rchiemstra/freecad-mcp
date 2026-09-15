@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, optional_recompute
 
 
@@ -31,7 +31,7 @@ def run_placement_audit(collaborators: object, doc_name: str) -> dict[str, objec
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.placement_audit(document)
+        payload = diagnostics_shape_actions.placement_audit(document)
     except Exception as exc:
         return _failure("PLACEMENT_AUDIT_FAILED", str(exc) or type(exc).__name__)
     return {"success": True, "ok": True, "outcome": "observed", "retry_safe": False, **payload}

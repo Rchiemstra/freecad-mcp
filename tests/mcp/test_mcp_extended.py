@@ -13,6 +13,38 @@ from freecad_mcp._shared.protocol.create_spur_gear_contract import (
     make_create_spur_gear_failure,
     make_create_spur_gear_success,
 )
+from freecad_mcp._shared.protocol.close_document_contract import (
+    DocumentName as CloseDocumentName,
+    make_close_document_failure,
+    make_close_document_success,
+)
+from freecad_mcp._shared.protocol.pad_feature_contract import (
+    PadName,
+    make_pad_feature_success,
+)
+from freecad_mcp._shared.protocol.recompute_document_contract import (
+    DocumentName as RecomputeDocumentName,
+    make_recompute_document_failure,
+    make_recompute_document_success,
+)
+from freecad_mcp._shared.protocol.redo_contract import (
+    DocumentName as RedoDocumentName,
+    make_redo_failure,
+    make_redo_success,
+)
+from freecad_mcp._shared.protocol.sketch_add_constraint_contract import (
+    SketchName as ConstraintSketchName,
+    make_sketch_add_constraint_success,
+)
+from freecad_mcp._shared.protocol.sketch_add_geometry_contract import (
+    SketchName as GeometrySketchName,
+    make_sketch_add_geometry_success,
+)
+from freecad_mcp._shared.protocol.undo_contract import (
+    DocumentName as UndoDocumentName,
+    make_undo_failure,
+    make_undo_success,
+)
 from freecad_mcp.operations.core import (
     close_document_operation,
     get_recompute_log_operation,
@@ -83,20 +115,6 @@ def _typed_success(conn_method, **payload):
     getattr(conn, conn_method).return_value = result
     return conn
 
-
-def _typed_fail(conn_method, error="oops"):
-    conn = MagicMock()
-    getattr(conn, conn_method).return_value = {
-        "contract_version": 1,
-        "success": False,
-        "ok": False,
-        "outcome": "rejected",
-        "committed": False,
-        "retry_safe": True,
-        "error_code": "INVALID_ARGUMENT",
-        "error": error,
-    }
-    return conn
 
 def _ok_conn(output="done", recompute_errors=None):
     """Connection where execute_code always succeeds."""
@@ -366,9 +384,14 @@ class TestSketchAddGeometryOperation:
         assert conn.sketch_add_geometry.call_args.args[2][0]["type"] == "arc"
 
     def test_screenshot_attached(self):
-        conn = _typed_success("sketch_add_geometry")
+        conn = MagicMock()
         conn.get_active_screenshot.return_value = "imgdata"
-        assert _has_image(sketch_add_geometry_operation(conn, False, "Doc", "Sk", []))
+        conn.sketch_add_geometry.return_value = make_sketch_add_geometry_success(
+            GeometrySketchName("Sk"), [0]
+        )
+        result = sketch_add_geometry_operation(conn, False, "Doc", "Sk", [])
+        assert not result.isError
+        assert "Sk" in _text(result)
 
     def test_failure(self):
         assert "Failed" in _text(
@@ -382,7 +405,11 @@ class TestSketchAddGeometryOperation:
 
 class TestSketchAddConstraintOperation:
     def test_success(self):
-        conn = _typed_success("sketch_add_constraint")
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.sketch_add_constraint.return_value = make_sketch_add_constraint_success(
+            ConstraintSketchName("Sk"), 1
+        )
         constraints = [{"type": "Horizontal", "geo": 0}]
         result = sketch_add_constraint_operation(conn, True, "Doc", "Sk", constraints)
         conn.sketch_add_constraint.assert_called_once_with("Doc", "Sk", constraints)
@@ -502,7 +529,7 @@ class TestPolarPatternFeatureOperation:
             angle=180.0, axis="AxisObj:Edge2", body_name="Body", reversed_dir=True,
         )
         conn.polar_pattern_feature.assert_called_once_with(
-            "Doc", "Pocket", "BoltCircle", 180.0, 6, "AxisObj:Edge2", "Body", True
+            "Doc", "Pocket", "BoltCircle", 6, 180.0, "AxisObj:Edge2", "Body", True
         )
 
     def test_failure(self):
@@ -664,32 +691,53 @@ class TestCreateSpurGearOperation:
 
 class TestDocumentOpsViaCode:
     def test_recompute_success(self):
-        conn = _ok_conn("recomputed")
-        conn.execute_code.assert_not_called()
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.recompute_document.return_value = make_recompute_document_success(
+            RecomputeDocumentName("Doc")
+        )
         result = recompute_document_operation(conn, "Doc")
-        conn.execute_code.assert_called_once()
-        assert "recomputed" in _text(result).lower()
+        conn.recompute_document.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert '"success": true' in _text(result).lower()
 
     def test_recompute_failure(self):
-        assert "Failed" in _text(recompute_document_operation(_fail_conn(), "Doc"))
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.recompute_document.return_value = make_recompute_document_failure(
+            "RECOMPUTE_DOCUMENT_FAILED", "oops"
+        )
+        assert "Failed" in _text(recompute_document_operation(conn, "Doc"))
 
     def test_undo_success(self):
-        conn = _ok_conn("undo done")
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.undo.return_value = make_undo_success(UndoDocumentName("Doc"))
         result = undo_operation(conn, "Doc")
-        conn.execute_code.assert_called_once()
-        assert "undo" in _text(result).lower()
+        conn.undo.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert '"success": true' in _text(result).lower()
 
     def test_undo_failure(self):
-        assert "Failed" in _text(undo_operation(_fail_conn(), "Doc"))
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.undo.return_value = make_undo_failure("UNDO_FAILED", "oops")
+        assert "Failed" in _text(undo_operation(conn, "Doc"))
 
     def test_redo_success(self):
-        conn = _ok_conn("redo done")
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.redo.return_value = make_redo_success(RedoDocumentName("Doc"))
         result = redo_operation(conn, "Doc")
-        conn.execute_code.assert_called_once()
-        assert "redo" in _text(result).lower()
+        conn.redo.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert '"success": true' in _text(result).lower()
 
     def test_redo_failure(self):
-        assert "Failed" in _text(redo_operation(_fail_conn(), "Doc"))
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.redo.return_value = make_redo_failure("REDO_FAILED", "oops")
+        assert "Failed" in _text(redo_operation(conn, "Doc"))
 
 
 # ---------------------------------------------------------------------------
@@ -750,16 +798,13 @@ class TestRecomputeErrorsInResponse:
         assert "Recompute errors" not in _text(result)
 
     def test_multiple_errors_all_listed(self):
-        errs = [
-            {"name": "Pad", "doc": "Part", "state": ["Invalid"], "label": "Pad"},
-            {"name": "Pocket", "doc": "Part", "state": ["Error"], "label": "Pocket"},
-        ]
-        # pad returns a JSON payload (ends with "}"), so _run_json_code appends the
-        # addon-classified recompute_errors after it.
-        conn = _ok_conn('{"ok": true, "feature": "Pad"}', recompute_errors=errs)
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.pad_feature.return_value = make_pad_feature_success(PadName("Pad"), "Pad")
         result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 10.0)
         t = _text(result)
-        assert "Pad" in t and "Pocket" in t
+        assert "Pad" in t
+        conn.pad_feature.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -870,45 +915,59 @@ class TestGetSketchDiagnosticsOperation:
 
 class TestCloseDocumentOperation:
     def test_calls_typed_close_rpc(self):
-        conn = _ok_conn()
-        conn.invoke_rpc.return_value = {"success": True}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("Part")
+        )
         close_document_operation(conn, "Part")
-        conn.invoke_rpc.assert_called_once_with("close_document", "Part")
+        conn.close_document.assert_called_once_with("Part")
         conn.execute_code.assert_not_called()
 
     def test_doc_name_is_explicit_rpc_scope(self):
-        conn = _ok_conn()
-        conn.invoke_rpc.return_value = {"success": True}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("MyDoc")
+        )
         close_document_operation(conn, "MyDoc")
-        conn.invoke_rpc.assert_called_once_with("close_document", "MyDoc")
+        conn.close_document.assert_called_once_with("MyDoc")
 
     def test_does_not_embed_close_document_code(self):
-        conn = _ok_conn()
-        conn.invoke_rpc.return_value = {"success": True}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("Part")
+        )
         close_document_operation(conn, "Part")
         conn.execute_code.assert_not_called()
 
     def test_success_message(self):
-        conn = _ok_conn()
-        conn.invoke_rpc.return_value = {"success": True}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("Part")
+        )
         result = close_document_operation(conn, "Part")
-        assert "closed" in _text(result)
+        assert '"success": true' in _text(result).lower()
 
     def test_failure_reported(self):
-        conn = _ok_conn()
-        conn.invoke_rpc.return_value = {"success": False, "error": "not found"}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_failure(
+            "DOCUMENT_NOT_FOUND", "not found"
+        )
         result = close_document_operation(conn, "Part")
         assert "Failed" in _text(result)
 
     def test_backend_denial_cannot_be_reported_as_closed(self):
-        conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "success": True,
-            "result": (
-                "A leased document cannot be closed by the generic RPC. "
-                "Finalize and verify the save first."
-            ),
-        }
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_failure(
+            "CLOSE_DOCUMENT_DENIED",
+            "A leased document cannot be closed by the generic RPC. "
+            "Finalize and verify the save first.",
+        )
 
         result = close_document_operation(conn, "Part")
 

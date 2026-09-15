@@ -79,6 +79,6 @@ def test_gate_rejects_any_on_the_typed_surface() -> None:
     old = 'def build_delete_object_request(\n    doc_name: object,\n    obj_name: object,'
     broken = old.replace(": object", ": Any", 1)
     assert source.count(old) == 1
-    assert "DELETE_OBJECT014 typed surface contains Any: leaf" in scan_delete_object_architecture(
+    assert "DELETE_OBJECT014 typed delete_object surface contains Any: delete_object leaf" in scan_delete_object_architecture(
         ROOT, source_overrides={LEAF: source.replace(old, broken)}
     )

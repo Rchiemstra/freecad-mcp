@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .typed_connection_rpc import attach_connection_rpc
 from .typed_feature_rpc import attach_p3_feature_rpc
 from .._shared.protocol.create_assembly_contract import AssemblyName as CreateAssemblyName
 from .._shared.protocol.create_assembly_contract import DocumentName as CreateAssemblyDocumentName
@@ -2150,4 +2151,5 @@ class FreeCADConnection:
         def validate_movement_follow(self, doc_name: str, source: str, dependents: object, translation: object, axis: object, angle_deg: float, restore: bool = True, tolerance: float = 1e-07) -> object: ...
 
 
+attach_connection_rpc(FreeCADConnection)
 attach_p3_feature_rpc(FreeCADConnection)

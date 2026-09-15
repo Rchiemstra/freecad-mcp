@@ -1,6 +1,15 @@
-"""Typed ``validate_movement_follow`` mutation."""
 
+"""Typed ``validate_movement_follow`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    as_bool,
+    as_float,
+    nonempty_string,
+    object_label,
+    object_name,
+    require_object,
+)
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -21,14 +30,7 @@ from ...._shared.protocol.validate_movement_follow_contract import (
     make_validate_movement_follow_uncertain,
 )
 from .validate_movement_follow_mutation import ValidateMovementFollowError, run_validate_movement_follow_native_mutation
-from .typed_rpc_support import (
-    as_bool,
-    as_float,
-    nonempty_string,
-    object_label,
-    object_name,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

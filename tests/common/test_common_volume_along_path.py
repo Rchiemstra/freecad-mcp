@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import common_volume_along_path as subject
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import measure_io_actions
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import measure_path_actions
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.common_volume_along_path import run_common_volume_along_path
 from tests.typed_rpc_fakes import FakeDocument, FakeObject, collaborators
 
@@ -31,7 +31,7 @@ def test_common_volume_along_path_observed_without_native_mutation():
     document.objects["Mover"] = FakeObject("Mover", "Part::Box")
     document.objects["Wall"] = FakeObject("Wall", "Part::Box")
     collab, _api = collaborators(document, events)
-    with patch.object(measure_io_actions, "common_volume_along_path", return_value=_payload()):
+    with patch.object(measure_path_actions, "common_volume_along_path", return_value=_payload()):
         result = run_common_volume_along_path(
             collab,
             "Doc",

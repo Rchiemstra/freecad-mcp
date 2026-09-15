@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_io_actions
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_shape_actions
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.face_normal import run_face_normal
 from tests.typed_rpc_fakes import FakeDocument, FakeObject, collaborators
 
@@ -25,7 +25,7 @@ def test_face_normal_observed_without_native_mutation():
         "global_center": {"x": 0.0, "y": 0.0, "z": 0.0},
         "global_normal": {"x": 0.0, "y": 0.0, "z": 1.0},
     }
-    with patch.object(diagnostics_io_actions, "face_normal", return_value=payload):
+    with patch.object(diagnostics_shape_actions, "face_normal", return_value=payload):
         result = run_face_normal(collab, "Doc", "Box", "Face1")
 
     assert result["success"] is True

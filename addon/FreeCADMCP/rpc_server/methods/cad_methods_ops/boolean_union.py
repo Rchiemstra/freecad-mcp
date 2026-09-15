@@ -1,6 +1,18 @@
-"""Typed ``boolean_union`` mutation."""
 
+"""Typed ``boolean_union`` mutation."""
 from __future__ import annotations
+
+from .feature_lookup_support import (
+    is_derived_from,
+    require_absent,
+    require_object,
+)
+from .feature_mutate_support import (
+    create_feature,
+    nonempty_string,
+    require_nonempty_shape,
+    set_attr,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,15 +33,7 @@ from ...._shared.protocol.boolean_union_contract import (
     make_boolean_union_uncertain,
 )
 from .boolean_union_mutation import BooleanUnionError, run_boolean_union_native_mutation
-from .feature_apply_support import (
-    create_feature,
-    is_derived_from,
-    nonempty_string,
-    require_absent,
-    require_nonempty_shape,
-    require_object,
-    set_attr,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

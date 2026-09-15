@@ -79,6 +79,6 @@ def test_gate_rejects_any_on_the_typed_surface() -> None:
     old = 'def build_insert_part_from_library_request(\n    doc_name: object, relative_path: object'
     broken = old.replace(": object", ": Any", 1)
     assert source.count(old) == 1
-    assert "INSERT_PART_FROM_LIBRARY014 typed surface contains Any: leaf" in scan_insert_part_from_library_architecture(
+    assert "INSERT_PART_FROM_LIBRARY014 typed insert_part_from_library surface contains Any: insert_part_from_library leaf" in scan_insert_part_from_library_architecture(
         ROOT, source_overrides={LEAF: source.replace(old, broken)}
     )

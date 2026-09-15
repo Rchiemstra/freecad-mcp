@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_io_actions
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_shape_actions
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.audit_hardcoded_dimensions import run_audit_hardcoded_dimensions
 from tests.typed_rpc_fakes import FakeDocument, FakeObject, collaborators
 
@@ -24,7 +24,7 @@ def test_audit_hardcoded_dimensions_observed_without_native_mutation():
         "count": 0,
         "findings": [],
     }
-    with patch.object(diagnostics_io_actions, "audit_hardcoded_dimensions", return_value=payload):
+    with patch.object(diagnostics_shape_actions, "audit_hardcoded_dimensions", return_value=payload):
         result = run_audit_hardcoded_dimensions(collab, "Doc", "Body", True)
 
     assert result["success"] is True

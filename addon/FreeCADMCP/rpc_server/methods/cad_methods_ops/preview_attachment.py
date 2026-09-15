@@ -1,6 +1,13 @@
-"""Typed ``preview_attachment`` mutation."""
 
+"""Typed ``preview_attachment`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    nonempty_string,
+    object_label,
+    object_name,
+    require_object,
+)
 
 import math
 from collections.abc import Callable, Mapping, Sequence
@@ -21,12 +28,7 @@ from ...._shared.protocol.preview_attachment_contract import (
     make_preview_attachment_uncertain,
 )
 from .preview_attachment_mutation import PreviewAttachmentError, run_preview_attachment_native_mutation
-from .typed_rpc_support import (
-    nonempty_string,
-    object_label,
-    object_name,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

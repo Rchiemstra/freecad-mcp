@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from typing import Protocol, cast
 
 
@@ -46,12 +45,51 @@ def as_float(value: object) -> float:
 
 def load_module(name: str) -> object:
     try:
-        return importlib.import_module(name)
-    except Exception as exc:
+        if name == "FreeCAD":
+            import FreeCAD
+
+            return FreeCAD
+        if name == "Part":
+            import Part
+
+            return Part
+        if name == "Sketcher":
+            import Sketcher
+
+            return Sketcher
+        if name == "Import":
+            import Import
+
+            return Import
+        if name == "Mesh":
+            import Mesh
+
+            return Mesh
+        if name == "Assembly":
+            import Assembly
+
+            return Assembly
+        if name == "AssemblyApp":
+            import AssemblyApp
+
+            return AssemblyApp
+        if name == "UtilsAssembly":
+            import UtilsAssembly
+
+            return UtilsAssembly
+        if name == "JointObject":
+            import JointObject
+
+            return JointObject
+    except ImportError as exc:
         raise TypedMutationError(
             "MISSING_DEPENDENCY",
             f"Required module {name!r} is not available: {exc}",
         ) from exc
+    raise TypedMutationError(
+        "MISSING_DEPENDENCY",
+        f"Required module {name!r} is not available",
+    )
 
 
 def module_callable(module: object, name: str) -> DynCallable:

@@ -1,6 +1,26 @@
-"""Typed ``revolve_feature`` mutation."""
 
+"""Typed ``revolve_feature`` mutation."""
 from __future__ import annotations
+
+from .feature_lookup_support import (
+    is_derived_from,
+    require_absent,
+    require_object,
+    resolve_optional_body,
+    resolve_revolve_axis,
+)
+from .feature_mutate_support import (
+    bool_value,
+    create_feature,
+    nonempty_string,
+    number_value,
+    optional_name,
+    require_nonempty_shape,
+    set_attr,
+    set_feature_bool,
+    set_named_property,
+    set_tip,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,23 +41,7 @@ from ...._shared.protocol.revolve_feature_contract import (
     make_revolve_feature_uncertain,
 )
 from .revolve_feature_mutation import RevolveFeatureError, run_revolve_feature_native_mutation
-from .feature_apply_support import (
-    bool_value,
-    create_feature,
-    is_derived_from,
-    nonempty_string,
-    number_value,
-    optional_name,
-    require_absent,
-    require_nonempty_shape,
-    require_object,
-    resolve_revolve_axis,
-    resolve_optional_body,
-    set_attr,
-    set_feature_bool,
-    set_named_property,
-    set_tip,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

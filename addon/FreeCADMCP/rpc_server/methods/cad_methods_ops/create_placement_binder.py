@@ -1,6 +1,16 @@
-"""Typed ``create_placement_binder`` mutation."""
 
+"""Typed ``create_placement_binder`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    as_bool,
+    assign_attr,
+    nonempty_string,
+    object_label,
+    object_name,
+    object_type_id,
+    require_object,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,15 +31,7 @@ from ...._shared.protocol.create_placement_binder_contract import (
 )
 from .create_placement_binder_mutation import CreatePlacementBinderError, run_create_placement_binder_native_mutation
 from .typed_runtime import is_derived_from
-from .typed_rpc_support import (
-    as_bool,
-    assign_attr,
-    nonempty_string,
-    object_label,
-    object_name,
-    object_type_id,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

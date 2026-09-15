@@ -15,7 +15,7 @@ from ...._shared.protocol.audit_hardcoded_dimensions_contract import (
     make_audit_hardcoded_dimensions_failure,
     make_audit_hardcoded_dimensions_success,
 )
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_int, as_str
 
@@ -59,7 +59,7 @@ def run_audit_hardcoded_dimensions(
         return _failure(AuditHardcodedDimensionsError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.audit_hardcoded_dimensions(document, str(request.body_name), bool(request.flag_aliases))
+        payload = diagnostics_shape_actions.audit_hardcoded_dimensions(document, str(request.body_name), bool(request.flag_aliases))
     except Exception as exc:
         return _failure(AuditHardcodedDimensionsError("AUDIT_HARDCODED_DIMENSIONS_FAILED", str(exc) or type(exc).__name__))
     return make_audit_hardcoded_dimensions_success(

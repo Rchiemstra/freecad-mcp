@@ -94,11 +94,17 @@ class ProxyLane:
         uri: str,
         timeout: float,
         header_provider: Callable[[str, tuple[Any, ...]], tuple[tuple[str, str], ...]],
+        *,
+        transport: JsonRpcHttpTransport | None = None,
     ) -> None:
         self._header_provider = header_provider
         self._lock = threading.RLock()
         self._request_ids = itertools.count(1)
-        self.transport = JsonRpcHttpTransport(uri, timeout=timeout)
+        self.transport = (
+            transport
+            if transport is not None
+            else JsonRpcHttpTransport(uri, timeout=timeout)
+        )
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):

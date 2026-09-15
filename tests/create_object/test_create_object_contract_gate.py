@@ -79,6 +79,6 @@ def test_gate_rejects_any_on_the_typed_surface() -> None:
     old = 'def build_create_object_request(\n    doc_name: object, obj_data: object'
     broken = old.replace(": object", ": Any", 1)
     assert source.count(old) == 1
-    assert "CREATE_OBJECT014 typed surface contains Any: leaf" in scan_create_object_architecture(
+    assert "CREATE_OBJECT014 typed create_object surface contains Any: create_object leaf" in scan_create_object_architecture(
         ROOT, source_overrides={LEAF: source.replace(old, broken)}
     )

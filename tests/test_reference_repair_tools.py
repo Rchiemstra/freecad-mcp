@@ -50,10 +50,14 @@ def test_inspect_references_passes_recovery_options_without_screenshot():
 def test_repair_references_defaults_to_deferred_recompute():
     connection = MagicMock()
     connection.repair_references.return_value = {
+        "contract_version": 1,
+        "success": True,
         "ok": True,
-        "repair_committed": True,
-        "applied": [{"object": "Binder", "property": "Support"}],
-        "recompute": {"requested": False, "ok": None, "deferred": True},
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "document_name": "Model",
+        "repaired_count": 1,
     }
     repairs = [{
         "object": "Binder",
@@ -64,7 +68,10 @@ def test_repair_references_defaults_to_deferred_recompute():
     response = repair_references_operation(connection, "Model", repairs)
 
     assert response.isError is False
-    assert json.loads(_text(response))["recompute"]["deferred"] is True
+    payload = json.loads(_text(response))
+    assert payload["repaired_count"] == 1
+    assert payload["document_name"] == "Model"
+    assert "recompute" not in payload
     connection.repair_references.assert_called_once_with(
         "Model", repairs, recompute=False, validate=False
     )
@@ -74,8 +81,13 @@ def test_repair_references_defaults_to_deferred_recompute():
 def test_repair_preflight_failure_is_structured_tool_error():
     connection = MagicMock()
     result = {
+        "contract_version": 1,
+        "success": False,
         "ok": False,
-        "repair_committed": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "REPAIR_PREFLIGHT_FAILED",
         "error": "Repair preflight failed: Box.Edge999 does not exist",
     }
     connection.repair_references.return_value = result
@@ -83,10 +95,10 @@ def test_repair_preflight_failure_is_structured_tool_error():
     response = repair_references_operation(connection, "Model", [{}], validate=True)
 
     assert response.isError is True
-    assert response.structuredContent["status"] == "failed"
-    assert response.structuredContent["data"] == result
-    assert response.structuredContent["repair_committed"] is False
-    assert "repair_committed" in _text(response)
+    assert response.structuredContent["success"] is False
+    assert response.structuredContent["error_code"] == "REPAIR_PREFLIGHT_FAILED"
+    assert response.structuredContent["committed"] is False
+    assert "Repair preflight failed" in _text(response)
 
 
 def test_preflight_counts_exact_properties(monkeypatch):

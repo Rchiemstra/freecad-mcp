@@ -15,7 +15,7 @@ from ...._shared.protocol.match_subshape_contract import (
     make_match_subshape_failure,
     make_match_subshape_success,
 )
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str
 
@@ -65,7 +65,7 @@ def run_match_subshape(
         return _failure(MatchSubshapeError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.match_subshape(document, str(request.source_object), str(request.source_subshape), str(request.target_object), int(request.limit), float(request.tolerance))
+        payload = diagnostics_shape_actions.match_subshape(document, str(request.source_object), str(request.source_subshape), str(request.target_object), int(request.limit), float(request.tolerance))
     except Exception as exc:
         return _failure(MatchSubshapeError("MATCH_SUBSHAPE_FAILED", str(exc) or type(exc).__name__))
     return make_match_subshape_success(

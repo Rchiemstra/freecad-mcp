@@ -79,6 +79,6 @@ def test_gate_rejects_any_on_the_typed_surface() -> None:
     old = 'def build_edit_object_request(\n    doc_name: object, obj_name: object, properties: object'
     broken = old.replace(": object", ": Any", 1)
     assert source.count(old) == 1
-    assert "EDIT_OBJECT014 typed surface contains Any: leaf" in scan_edit_object_architecture(
+    assert "EDIT_OBJECT014 typed edit_object surface contains Any: edit_object leaf" in scan_edit_object_architecture(
         ROOT, source_overrides={LEAF: source.replace(old, broken)}
     )

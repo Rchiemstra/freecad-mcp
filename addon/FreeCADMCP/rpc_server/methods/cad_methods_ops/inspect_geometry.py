@@ -15,7 +15,7 @@ from ...._shared.protocol.inspect_geometry_contract import (
     make_inspect_geometry_failure,
     make_inspect_geometry_success,
 )
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str
 
@@ -60,7 +60,7 @@ def run_inspect_geometry(
     optional_recompute(collaborators, document)
     subshape = request.subshape if isinstance(request.subshape, str) and request.subshape else None
     try:
-        payload = diagnostics_io_actions.inspect_geometry(
+        payload = diagnostics_shape_actions.inspect_geometry(
             document,
             str(request.object_name),
             subshape,

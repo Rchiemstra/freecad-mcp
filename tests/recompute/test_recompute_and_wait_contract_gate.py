@@ -79,6 +79,6 @@ def test_gate_rejects_any_on_the_typed_surface() -> None:
     old = 'def build_recompute_and_wait_request(doc_name: object)'
     broken = old.replace(": object", ": Any", 1)
     assert source.count(old) == 1
-    assert "RECOMPUTE_AND_WAIT014 typed surface contains Any: leaf" in scan_recompute_and_wait_architecture(
+    assert "RECOMPUTE_AND_WAIT014 typed recompute_and_wait surface contains Any: recompute_and_wait leaf" in scan_recompute_and_wait_architecture(
         ROOT, source_overrides={LEAF: source.replace(old, broken)}
     )

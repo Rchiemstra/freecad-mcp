@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_io_actions
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import diagnostics_shape_actions
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.match_subshape import run_match_subshape
 from tests.typed_rpc_fakes import FakeDocument, FakeObject, collaborators
 
@@ -24,7 +24,7 @@ def test_match_subshape_observed_without_native_mutation():
         "target": "Cylinder",
         "matches": [],
     }
-    with patch.object(diagnostics_io_actions, "match_subshape", return_value=payload):
+    with patch.object(diagnostics_shape_actions, "match_subshape", return_value=payload):
         result = run_match_subshape(collab, "Doc", "Box", "Face1", "Cylinder", 10, 1.0)
 
     assert result["success"] is True

@@ -66,9 +66,7 @@ def _ok_conn():
     conn.export_brep.return_value = make_export_brep_success("/tmp/out.brep", True, "Obj1")
     conn.import_step.return_value = make_import_step_success("/tmp/in.step", True)
     conn.import_brep.return_value = make_import_brep_success("/tmp/in.brep", "BRepImport", True)
-    conn.set_color.return_value = make_set_color_success(
-        "RedPart", 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.732, "world"
-    )
+    conn.set_color.return_value = make_set_color_success("RedPart", 1.0, 0.0, 0.0, 0.0)
     return conn
 
 

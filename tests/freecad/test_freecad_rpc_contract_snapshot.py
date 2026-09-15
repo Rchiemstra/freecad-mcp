@@ -20,9 +20,29 @@ _JSON_TYPES = frozenset(
 )
 _PARAMETER_SCHEMAS: dict[str, dict] = {
     "attachment_offset": {"type": ["null", "object"]},
+    "addresses": {"type": "array"},
+    "axis": {"type": ["array", "object", "string"]},
+    "cells": {"type": "array"},
+    "color": {"type": ["null", "object", "string"]},
+    "dependents": {"type": "array"},
+    "geometry_indices": {"type": "array"},
     "client_monotonic_ns": {"type": "integer"},
+    "constraints": {"type": "array"},
     "constraint_indices": {"type": ["array", "null"]},
     "constraint_names": {"type": ["array", "null"]},
+    "geometry": {"type": "array"},
+    "include": {"type": ["array", "string"]},
+    "include_properties": {"type": ["array", "boolean"]},
+    "obj_data": {"type": "object"},
+    "object_names": {"type": "array"},
+    "offset": {"type": ["null", "object"]},
+    "offset_along_normal": {"type": ["null", "array"]},
+    "properties": {"type": "object"},
+    "repairs": {"type": "array"},
+    "segments": {"type": "array"},
+    "selected_nodes": {"type": "array"},
+    "translation": {"type": ["array", "object"]},
+    "sub_elements": {"type": ["array", "null"]},
     "credential": {"type": "object"},
     "destination": {"type": "string"},
     "doc_name": {"type": "string"},
@@ -120,6 +140,8 @@ def _wire_schema(
     lowered = _annotation_text(annotation).lower().replace(" ", "")
     schema_type = _schema_type_from_text(lowered, default)
     if schema_type is None:
+        if parameter_name in _PARAMETER_SCHEMAS:
+            return _PARAMETER_SCHEMAS[parameter_name]
         return {}
     types = {schema_type}
     if default is None or "|none" in lowered or "optional[" in lowered:
@@ -340,7 +362,7 @@ def test_phase4_json_listener_round_trips_every_semantic_outcome():
             assert decoded["error"] == mapped
         assert contract["result_examples"], method_name
 
-    assert converted_failures == 76
+    assert converted_failures == 169
 
 
 def test_phase5_json_client_converts_every_documented_failure_to_native_error():
@@ -384,7 +406,7 @@ def test_phase5_json_client_converts_every_documented_failure_to_native_error():
             assert error.data == mapped["data"], method_name
             assert error.semantic_code == mapped["data"]["error_code"], method_name
 
-    assert converted_failures == 76
+    assert converted_failures == 169
 
 
 def test_freecad_rpc_instance_exposes_same_public_names(freecad_rpc_class):

@@ -10,6 +10,19 @@ from unittest.mock import MagicMock
 import pytest
 from mcp.types import TextContent
 
+from freecad_mcp._shared.protocol.activate_document_contract import (
+    DocumentName as ActivateDocumentName,
+    make_activate_document_success,
+)
+from freecad_mcp._shared.protocol.open_document_contract import (
+    DocumentName as OpenDocumentName,
+    make_open_document_success,
+)
+from freecad_mcp._shared.protocol.recompute_and_wait_contract import (
+    DocumentName as RecomputeDocumentName,
+    make_recompute_and_wait_failure,
+    make_recompute_and_wait_success,
+)
 from freecad_mcp.operations.core import get_view_operation
 from freecad_mcp.operations.diagnostics import inspect_geometry_operation
 from freecad_mcp.operations.interactive import (
@@ -314,16 +327,20 @@ class TestViewAliases:
 class TestInteractiveRpcOps:
     def test_open_document_calls_rpc(self):
         conn = MagicMock()
-        conn.open_document.return_value = {"ok": True, "document": "V7"}
+        conn.open_document.return_value = make_open_document_success(
+            OpenDocumentName("V7"), r"C:\models\v7.FCStd"
+        )
         text = _text(open_document_operation(conn, r"C:\models\v7.FCStd"))
-        assert json.loads(text)["document"] == "V7"
+        assert json.loads(text)["document_name"] == "V7"
         conn.open_document.assert_called_once_with(r"C:\models\v7.FCStd")
 
     def test_activate_document_calls_rpc(self):
         conn = MagicMock()
-        conn.activate_document.return_value = {"ok": True, "document": "V8"}
+        conn.activate_document.return_value = make_activate_document_success(
+            ActivateDocumentName("V8"), "V8"
+        )
         text = _text(activate_document_operation(conn, "V8"))
-        assert json.loads(text)["document"] == "V8"
+        assert json.loads(text)["document_name"] == "V8"
 
     def test_set_tree_expanded_calls_rpc(self):
         conn = MagicMock()
@@ -376,24 +393,18 @@ class TestInteractiveRpcOps:
 
     def test_recompute_and_wait_calls_rpc(self):
         conn = MagicMock()
-        conn.recompute_and_wait.return_value = {
-            "ok": True,
-            "document": "Part",
-            "recomputed_count": 3,
-            "errors": [],
-            "pending_recompute": [],
-            "settled": True,
-        }
+        conn.recompute_and_wait.return_value = make_recompute_and_wait_success(
+            RecomputeDocumentName("Part"), True
+        )
         payload = json.loads(_text(recompute_and_wait_operation(conn, "Part")))
-        assert payload["settled"] is True and payload["recomputed_count"] == 3
+        assert payload["settled"] is True and payload["document_name"] == "Part"
         conn.recompute_and_wait.assert_called_once_with("Part")
 
     def test_recompute_and_wait_failure_surfaces(self):
         conn = MagicMock()
-        conn.recompute_and_wait.return_value = {
-            "ok": False,
-            "error": "Document not found: Nope",
-        }
+        conn.recompute_and_wait.return_value = make_recompute_and_wait_failure(
+            "DOCUMENT_NOT_FOUND", "Document not found: Nope"
+        )
         resp = recompute_and_wait_operation(conn, "Nope")
         assert resp.isError and "Document not found" in _text(resp)
 

@@ -1,6 +1,29 @@
-"""Typed ``set_expression`` mutation."""
 
+"""Typed ``set_expression`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    as_bool,
+    as_float,
+    as_int,
+    assign_attr,
+    call_named,
+    invoke,
+    nonempty_string,
+    object_label,
+    object_name,
+    object_type_id,
+    optional_string,
+    parse_ref,
+    require_object,
+    resolve_if_exists,
+)
+from .typed_rpc_container_support import (
+    add_named_object,
+    add_to_container,
+    remove_from_container,
+    snapshot_ring,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -19,28 +42,9 @@ from ...._shared.protocol.set_expression_contract import (
     make_set_expression_success,
     make_set_expression_uncertain,
 )
-from .feature_apply_support import is_read_only_property
+from .feature_mutate_support import is_read_only_property
 from .set_expression_mutation import SetExpressionError, run_set_expression_native_mutation
-from .typed_rpc_support import (
-    add_named_object,
-    add_to_container,
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
-    nonempty_string,
-    object_label,
-    object_name,
-    object_type_id,
-    optional_string,
-    parse_ref,
-    remove_from_container,
-    require_object,
-    resolve_if_exists,
-    snapshot_ring
-)
+
 
 
 @dataclass(frozen=True, slots=True)

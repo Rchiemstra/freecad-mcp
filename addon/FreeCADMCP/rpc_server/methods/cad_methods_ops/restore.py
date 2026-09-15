@@ -1,6 +1,12 @@
-"""Typed ``restore`` mutation."""
 
+"""Typed ``restore`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    nonempty_string,
+    optional_string,
+)
+from .typed_rpc_container_support import snapshot_ring
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,11 +27,7 @@ from ...._shared.protocol.restore_contract import (
     make_restore_uncertain,
 )
 from .restore_mutation import RestoreError, run_restore_native_mutation
-from .typed_rpc_support import (
-    nonempty_string,
-    optional_string,
-    snapshot_ring,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

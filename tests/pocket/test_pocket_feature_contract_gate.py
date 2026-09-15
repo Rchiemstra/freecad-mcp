@@ -32,7 +32,7 @@ def test_pocket_feature_architecture_gate_accepts_the_production_path() -> None:
             LEAF,
             "            self.inspect,",
             "            self.apply,",
-            "POCK004 missing typed postcondition=inspect",
+            "POCKET_FEATURE004 missing typed postcondition=inspect",
         ),
         (
             BRIDGE,
@@ -41,32 +41,32 @@ def test_pocket_feature_architecture_gate_accepts_the_production_path() -> None:
             "            )",
             "            callback(document)\n"
             '            return {"status": "Committed", "committed": True}',
-            "POCK006 postcondition path can reach non-native callback fallback",
+            "POCKET_FEATURE006 postcondition path can reach non-native callback fallback",
         ),
         (
             BRIDGE,
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)',
             '        """Run a typed native mutation with apply and inspect on one document."""\n\n        document = self._resolve_admitted_document(document_name)\n        document = self._resolve_admitted_document(document_name)',
-            "POCK005 bridge must resolve the admitted document exactly once",
+            "POCKET_FEATURE005 bridge must resolve the admitted document exactly once",
         ),
         (
             PUBLIC_ADAPTER,
             "result = parse_pocket_feature_response(raw_result)",
             "result = raw_result",
-            "POCK008 public adapter bypasses response validation",
+            "POCKET_FEATURE008 public adapter bypasses response validation",
         ),
         (
             MUTATION,
             "    if committed is not False or status not in _REJECTED_STATUSES:",
             "    if state.postcondition_passed:\n        return True\n"
             "    if committed is not False or status not in _REJECTED_STATUSES:",
-            "POCK007 cached success escaped native rejection",
+            "POCKET_FEATURE007 cached success escaped native rejection",
         ),
         (
             MUTATION,
             "if state.postcondition_passed and state.failure is None:",
             "if True:",
-            "POCK015 commit escaped without a successful postcondition",
+            "POCKET_FEATURE015 commit escaped without a successful postcondition",
         ),
     ],
     ids=(
@@ -100,7 +100,7 @@ def test_gate_rejects_transaction_or_recompute_ownership_in_the_leaf() -> None:
     assert source.count(marker) == 1
     mutated = source.replace(marker, marker + "\n\n    doc.recompute()")
 
-    assert "POCK001 leaf owns forbidden execution: recompute" in (
+    assert "POCKET_FEATURE001 leaf owns forbidden execution: recompute" in (
         scan_pocket_feature_architecture(
             ROOT,
             source_overrides={LEAF: mutated},
@@ -114,7 +114,7 @@ def test_gate_rejects_any_on_the_pocket_feature_specific_surface() -> None:
     broken = 'def build_pocket_feature_request(\n    doc_name: Any,'
     assert source.count(old) == 1
 
-    assert "POCK014 typed PocketFeature surface contains Any: PocketFeature leaf" in (
+    assert "POCKET_FEATURE014 typed pocket_feature surface contains Any: pocket_feature leaf" in (
         scan_pocket_feature_architecture(
             ROOT,
             source_overrides={LEAF: source.replace(old, broken)},

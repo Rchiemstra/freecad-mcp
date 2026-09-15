@@ -1,6 +1,23 @@
-"""Typed ``sweep_feature`` mutation."""
 
+"""Typed ``sweep_feature`` mutation."""
 from __future__ import annotations
+
+from .feature_lookup_support import (
+    is_derived_from,
+    require_absent,
+    require_object,
+    resolve_optional_body,
+)
+from .feature_mutate_support import (
+    bool_value,
+    create_feature,
+    nonempty_string,
+    optional_name,
+    require_nonempty_shape,
+    set_attr,
+    set_feature_bool,
+    set_tip,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,20 +38,7 @@ from ...._shared.protocol.sweep_feature_contract import (
     make_sweep_feature_uncertain,
 )
 from .sweep_feature_mutation import SweepFeatureError, run_sweep_feature_native_mutation
-from .feature_apply_support import (
-    bool_value,
-    create_feature,
-    set_feature_bool,
-    is_derived_from,
-    nonempty_string,
-    optional_name,
-    require_absent,
-    require_nonempty_shape,
-    require_object,
-    resolve_optional_body,
-    set_attr,
-    set_tip,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

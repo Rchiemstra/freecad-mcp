@@ -15,7 +15,7 @@ from ...._shared.protocol.face_normal_contract import (
     make_face_normal_failure,
     make_face_normal_success,
 )
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str
 
@@ -59,7 +59,7 @@ def run_face_normal(
         return _failure(FaceNormalError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.face_normal(document, str(request.object_name), str(request.face))
+        payload = diagnostics_shape_actions.face_normal(document, str(request.object_name), str(request.face))
     except Exception as exc:
         return _failure(FaceNormalError("FACE_NORMAL_FAILED", str(exc) or type(exc).__name__))
     return make_face_normal_success(

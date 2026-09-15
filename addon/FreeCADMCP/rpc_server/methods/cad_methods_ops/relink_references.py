@@ -1,6 +1,13 @@
-"""Typed ``relink_references`` mutation."""
 
+"""Typed ``relink_references`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    nonempty_string,
+    object_label,
+    object_name,
+    require_object,
+)
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -20,12 +27,7 @@ from ...._shared.protocol.relink_references_contract import (
     make_relink_references_uncertain,
 )
 from .relink_references_mutation import RelinkReferencesError, run_relink_references_native_mutation
-from .typed_rpc_support import (
-    nonempty_string,
-    object_label,
-    object_name,
-    require_object,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,6 +13,9 @@ if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
 from addon.FreeCADMCP.rpc_server import rpc_server
+from freecad_mcp._shared.protocol.sketch_add_external_projection_contract import (
+    make_sketch_add_external_projection_success,
+)
 from freecad_mcp.operations.p7_assembly import (
     sketch_add_external_projection_operation,
 )
@@ -43,23 +46,32 @@ class _DispatcherMustNotBeUsed:
         raise AssertionError("risky payload was dispatched to FreeCAD's GUI thread")
 
 
-def _external_projection_payload(*, allow_gui_geometry_loop):
+def test_external_projection_explicit_override_uses_typed_rpc():
     connection = MagicMock()
     connection.get_active_screenshot.return_value = None
-    connection.execute_code.return_value = {
-        "success": False,
-        "error": "capture only",
-    }
-    sketch_add_external_projection_operation(
+    connection.sketch_add_external_projection.return_value = (
+        make_sketch_add_external_projection_success("Sketch")
+    )
+
+    result = sketch_add_external_projection_operation(
         connection,
         True,
         "Doc",
         "Sketch",
         "Binder:Face1",
-        allow_gui_geometry_loop=allow_gui_geometry_loop,
+        allow_gui_geometry_loop=True,
     )
-    code, options = connection.execute_code.call_args[0]
-    return code, options.to_dict()
+
+    connection.execute_code.assert_not_called()
+    connection.sketch_add_external_projection.assert_called_once_with(
+        "Doc",
+        "Sketch",
+        "Binder:Face1",
+        "auto",
+        False,
+        True,
+    )
+    assert result.isError is False
 
 
 def test_external_projection_default_is_blocked_by_actual_loop_guard():
@@ -79,25 +91,6 @@ def test_external_projection_default_is_blocked_by_actual_loop_guard():
     assert envelope["status"] == "failed"
     assert envelope["error_code"] == "gui_geometry_loop_opt_in_required"
     assert "allow_gui_geometry_loop=true" in envelope["error"]
-
-
-def test_external_projection_explicit_override_reaches_gui_dispatch():
-    code, options = _external_projection_payload(allow_gui_geometry_loop=True)
-    rpc = rpc_server.FreeCADRPC()
-    dispatched = {}
-
-    def fake_dispatch_gui(task, timeout):
-        dispatched["called"] = True
-        dispatched["timeout"] = timeout
-        return {"ok": True, "session": {}, "stdout": ""}
-
-    rpc._dispatch_gui = fake_dispatch_gui
-    result = rpc.execute_code(code, options)
-
-    assert options["execution_mode"] == "gui"
-    assert options["allow_gui_geometry_loop"] is True
-    assert result["success"] is True
-    assert dispatched["called"] is True
 
 
 def test_transformed_symmetric_difference_forced_gui_routes_to_worker(monkeypatch):

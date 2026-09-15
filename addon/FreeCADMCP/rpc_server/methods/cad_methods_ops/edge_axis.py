@@ -15,7 +15,7 @@ from ...._shared.protocol.edge_axis_contract import (
     make_edge_axis_failure,
     make_edge_axis_success,
 )
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str
 
@@ -59,7 +59,7 @@ def run_edge_axis(
         return _failure(EdgeAxisError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.edge_axis(document, str(request.object_name), str(request.edge))
+        payload = diagnostics_shape_actions.edge_axis(document, str(request.object_name), str(request.edge))
     except Exception as exc:
         return _failure(EdgeAxisError("EDGE_AXIS_FAILED", str(exc) or type(exc).__name__))
     return make_edge_axis_success(

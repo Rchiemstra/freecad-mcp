@@ -15,7 +15,7 @@ from ...._shared.protocol.get_dependency_graph_contract import (
     make_get_dependency_graph_failure,
     make_get_dependency_graph_success,
 )
-from . import diagnostics_io_actions
+from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_int, as_str
 
@@ -57,7 +57,7 @@ def run_get_dependency_graph(
         return _failure(GetDependencyGraphError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_io_actions.get_dependency_graph(document, str(request.root))
+        payload = diagnostics_shape_actions.get_dependency_graph(document, str(request.root))
     except Exception as exc:
         return _failure(GetDependencyGraphError("GET_DEPENDENCY_GRAPH_FAILED", str(exc) or type(exc).__name__))
     return make_get_dependency_graph_success(

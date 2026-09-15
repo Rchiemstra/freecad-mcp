@@ -1148,28 +1148,28 @@
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
-        "line": 83,
+        "line": 84,
         "column": 4,
         "symbol": "lease_heartbeat_batch",
         "kind": "Attribute"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
-        "line": 83,
+        "line": 84,
         "column": 39,
         "symbol": "lease_heartbeat_batch",
         "kind": "Attribute"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
-        "line": 91,
+        "line": 92,
         "column": 4,
         "symbol": "heartbeat_document_lock",
         "kind": "Attribute"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/rpc_server_ops/facade_bindings.py",
-        "line": 91,
+        "line": 92,
         "column": 41,
         "symbol": "heartbeat_document_lock",
         "kind": "Attribute"

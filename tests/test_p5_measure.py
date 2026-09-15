@@ -84,6 +84,16 @@ _MEASURE_IO = (
     / "measure_io_actions.py"
 ).read_text(encoding="utf-8")
 
+_MEASURE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "measure_path_actions.py"
+).read_text(encoding="utf-8")
+
 
 def _ok_conn():
     conn = MagicMock()
@@ -307,8 +317,8 @@ class TestCommonVolumeAlongPath:
         common_volume_along_path_operation(
             conn, "Doc", "Mover", ["Wall", "Block"], path_object="Rail", sample_count=5
         )
-        assert_code_compiles(_MEASURE_IO)
-        assert_code_contains(_MEASURE_IO, "resolve_global_shape", "discretize", "common_volume_mm3")
+        assert_code_compiles(_MEASURE_PATH)
+        assert_code_contains(_MEASURE_PATH, "resolve_global_shape", "discretize", "common_volume_mm3")
         conn.common_volume_along_path.assert_called_once()
 
     def test_calls_typed_rpc_not_worker(self):

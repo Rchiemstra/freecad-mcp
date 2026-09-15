@@ -130,6 +130,7 @@ COMPOSITION_MODULE_PATHS = frozenset(
         "src/freecad_mcp/freecad_client_ops/connection_methods/connection_read_ops.py",
         "src/freecad_mcp/freecad_client_ops/connection_methods/connection_view_ops.py",
         "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
+        "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
         "src/freecad_mcp/operations/__init__.py",
         "src/freecad_mcp/operations/core.py",
         "src/freecad_mcp/operations/diagnostics.py",

@@ -1,6 +1,16 @@
-"""Typed ``sketch_add_external_projection`` mutation."""
 
+"""Typed ``sketch_add_external_projection`` mutation."""
 from __future__ import annotations
+
+from .typed_rpc_support import (
+    as_bool,
+    invoke,
+    nonempty_string,
+    object_label,
+    object_name,
+    parse_ref,
+    require_object,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,15 +30,7 @@ from ...._shared.protocol.sketch_add_external_projection_contract import (
     make_sketch_add_external_projection_uncertain,
 )
 from .sketch_add_external_projection_mutation import SketchAddExternalProjectionError, run_sketch_add_external_projection_native_mutation
-from .typed_rpc_support import (
-    as_bool,
-    invoke,
-    nonempty_string,
-    object_label,
-    object_name,
-    parse_ref,
-    require_object,
-)
+
 
 _ALLOWED_PROJECTION_MODES = frozenset({"auto", "edge", "face", "point"})
 

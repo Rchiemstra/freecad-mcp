@@ -1,6 +1,23 @@
-"""Typed ``mirror_feature`` mutation."""
 
+"""Typed ``mirror_feature`` mutation."""
 from __future__ import annotations
+
+from .feature_lookup_support import (
+    is_derived_from,
+    require_absent,
+    require_body,
+    require_object,
+    resolve_linksub,
+)
+from .feature_mutate_support import (
+    create_feature,
+    nonempty_string,
+    optional_name,
+    require_nonempty_shape,
+    set_named_property,
+    set_originals,
+    set_tip,
+)
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,20 +38,7 @@ from ...._shared.protocol.mirror_feature_contract import (
     make_mirror_feature_uncertain,
 )
 from .mirror_feature_mutation import MirrorFeatureError, run_mirror_feature_native_mutation
-from .feature_apply_support import (
-    create_feature,
-    is_derived_from,
-    nonempty_string,
-    optional_name,
-    require_absent,
-    require_body,
-    require_nonempty_shape,
-    require_object,
-    resolve_linksub,
-    set_named_property,
-    set_originals,
-    set_tip,
-)
+
 
 
 @dataclass(frozen=True, slots=True)

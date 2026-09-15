@@ -149,7 +149,9 @@ class CompatibilityAPI:
         return document
 
     def openDocument(self, path: str) -> FakeDocument:
-        name = path.rsplit("/", 1)[-1].removesuffix(".FCStd") or "Opened"
+        from pathlib import Path as PathLib
+
+        name = PathLib(path).stem or "Opened"
         return self.newDocument(name)
 
     def closeDocument(self, name: str) -> None:

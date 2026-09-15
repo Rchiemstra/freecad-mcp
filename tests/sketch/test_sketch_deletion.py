@@ -12,6 +12,13 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_gui_geometry imp
     sketch_delete_geometry_gui,
 )
 from addon.FreeCADMCP.rpc_server.mutation_guard import make_method_spec
+from freecad_mcp._shared.protocol.sketch_delete_constraint_contract import (
+    SketchName,
+    make_sketch_delete_constraint_success,
+)
+from freecad_mcp._shared.protocol.sketch_delete_geometry_contract import (
+    make_sketch_delete_geometry_success,
+)
 from freecad_mcp.freecad_client import FreeCADConnection
 from freecad_mcp.operations.core import (
     sketch_delete_constraint_operation,
@@ -158,14 +165,12 @@ def test_geometry_deletion_is_batched_and_reports_dependent_constraints(monkeypa
 def test_operation_wrappers_use_typed_rpc_methods():
     connection = MagicMock()
     connection.get_active_screenshot.return_value = None
-    connection.sketch_delete_constraint.return_value = {
-        "success": True,
-        "deleted_count": 2,
-    }
-    connection.sketch_delete_geometry.return_value = {
-        "success": True,
-        "deleted_count": 1,
-    }
+    connection.sketch_delete_constraint.return_value = make_sketch_delete_constraint_success(
+        SketchName("Sketch"), 2
+    )
+    connection.sketch_delete_geometry.return_value = make_sketch_delete_geometry_success(
+        SketchName("Sketch"), 1
+    )
 
     constraint_result = sketch_delete_constraint_operation(
         connection,
