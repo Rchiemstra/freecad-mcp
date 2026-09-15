@@ -20,8 +20,8 @@
     "connection_spreadsheet_ops": "1ae3b47ada524673d901b2e013fa6e2fd529c1a99be9abee64d14defcfc2ac57",
     "connection_stale_ops": "2acaca31435271e4bebf58ed376e14b8186d52c802c7a54b282e01340dae4bfe",
     "connection_v2_context_helpers": "c5c292607982c0de4b361be08eee86196d0ac86abe5834bb9f4cd3e718fcf784",
-    "connection_v2_ops": "9b3ecbcae408544ddccb0edef672227dc6c4ff34503ca532e01b2610a01b02fa",
-    "connection_view_ops": "c141eb2195b427ea54f4cf62d50b65b153b1bf9103dc51ed138aedfbc7cf8852"
+    "connection_v2_ops": "7ba7df357116518b40a47830a673398db59ec40718fdb645a684febf0d4845f3",
+    "connection_view_ops": "c466ac7e65ad5ca5c9abd958fc2b2981c5752ab64a3a85569742aaab359e1aac"
   },
   "register_modules": {
     "tools_advanced_a": "418d102c00bbb60354607ef360fecfc54936d5b9cc24fb00218c766f89e94c8e",
