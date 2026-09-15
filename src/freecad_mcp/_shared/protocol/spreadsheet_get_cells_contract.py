@@ -80,7 +80,7 @@ class SpreadsheetGetCellsRequest:
 
     doc_name: DocumentName
     sheet_name: str
-    addresses: object
+    addresses: list[object]
 
 
 class SpreadsheetGetCellsSuccess(TypedDict):

@@ -68,7 +68,7 @@ def run_spreadsheet_get_cells(
     if sheet is None:
         return _failure(SpreadsheetGetCellsError("OBJECT_NOT_FOUND", "Object not found"))
     optional_recompute(collaborators, document)
-    cells: list[dict[str, object]] = []
+    cells: list[object] = []
     for item in request.addresses:
         try:
             row = read_spreadsheet_cell(sheet, item)
