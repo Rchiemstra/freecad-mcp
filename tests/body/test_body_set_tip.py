@@ -572,10 +572,10 @@ def test_apply_and_inspect_use_the_native_admitted_document():
 def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_result):
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.body_set_tip_mutation import (
         _NativeTipMutationState,
-        _tip_native_result,
+        _body_set_tip_native_result,
     )
 
-    result = _tip_native_result(native_result, _NativeTipMutationState(postcondition_passed=True))
+    result = _body_set_tip_native_result(native_result, _NativeTipMutationState(postcondition_passed=True))
     assert result["success"] is False
     assert result["outcome"] == "uncertain"
     assert result["retry_safe"] is False

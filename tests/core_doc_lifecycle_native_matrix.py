@@ -2,76 +2,22 @@
 
 from __future__ import annotations
 
-import importlib
-import os
-from collections.abc import Callable
-from typing import Any
-
-import pytest
-
 from tests.core_doc_native_matrix import collaborators, load_runner, require_native_collaboration
 from tests.core_doc_native_setup import prepare_core_document
 
 
-def _install_admitted_probe(
-    events: list[str],
-    probe_holder: dict[str, object],
-) -> Callable[[object], object]:
-    class RecomputeProbe:
-        def execute(self, _object):
-            events.append("recompute")
-
-    def ensure_probe(admitted_document: object) -> object:
-        if "probe" not in probe_holder:
-            probe = admitted_document.addObject("App::FeaturePython", "RecomputeProbe")
-            probe.Proxy = RecomputeProbe()
-            probe_holder["probe"] = probe
-        return probe_holder["probe"]
-
-    return ensure_probe
-
-
-def check_create_document_success(monkeypatch) -> None:
+def check_create_document_success(_monkeypatch) -> None:
     require_native_collaboration()
     import FreeCAD
 
-    subject, runner = load_runner("create_document")
-    doc_name = "MCPCreateDocumentNativePhaseOrder"
-    events: list[str] = []
-    probe_holder: dict[str, object] = {}
-    ensure_probe = _install_admitted_probe(events, probe_holder)
-
-    original_apply = getattr(subject, "apply_create_document")
-    original_read = getattr(subject, "read_create_document_result")
-
-    def tracked_apply(admitted_document, request):
-        events.append("apply")
-        receipt = original_apply(admitted_document, request)
-        for obj in getattr(admitted_document, "Objects", []) or []:
-            if getattr(obj, "TypeId", "") == "App::FeaturePython":
-                continue
-            touch = getattr(obj, "touch", None)
-            if callable(touch):
-                touch()
-                break
-        else:
-            ensure_probe(admitted_document).touch()
-        return receipt
-
-    def tracked_read(admitted_document, receipt):
-        events.append("inspect")
-        return original_read(admitted_document, receipt)
-
-    monkeypatch.setattr(subject, "apply_create_document", tracked_apply)
-    monkeypatch.setattr(subject, "read_create_document_result", tracked_read)
+    _, runner = load_runner("create_document")
+    doc_name = "MCPCreateDocumentNativeVerified"
     try:
-        result = runner(
-            collaborators(FreeCAD, lambda _d: events.append("validate")),
-            doc_name,
-        )
+        result = runner(collaborators(FreeCAD, lambda _d: None), doc_name)
         assert result["success"] is True
-        assert result["committed"] is True
-        assert events == ["apply", "recompute", "inspect", "validate"]
+        assert result["outcome"] == "verified"
+        assert result["document_name"] == doc_name
+        assert doc_name in FreeCAD.listDocuments()
     finally:
         if doc_name in FreeCAD.listDocuments():
             FreeCAD.closeDocument(doc_name)
@@ -81,34 +27,21 @@ def check_create_document_validation_failure() -> None:
     require_native_collaboration()
     import FreeCAD
 
-    _, runner = load_runner("create_document")
-    doc_name = "MCPCreateDocumentNativeRollback"
-    admitted_holder: dict[str, Any] = {}
+    subject, runner = load_runner("create_document")
+    doc_name = "MCPCreateDocumentNativeCompensated"
+    original_verify = subject.verify_create_document
 
-    original_new = FreeCAD.newDocument
+    def fail_verify(_app: object, _request: object) -> None:
+        return None
 
-    def capturing_new(name, *args, **kwargs):
-        document = original_new(name, *args, **kwargs)
-        if name == doc_name:
-            admitted_holder["document"] = document
-        return document
-
-    FreeCAD.newDocument = capturing_new
+    subject.verify_create_document = fail_verify
     try:
-        result = runner(
-            collaborators(
-                FreeCAD,
-                lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure")),
-            ),
-            doc_name,
-        )
-        assert admitted_holder.get("document") is not None
+        result = runner(collaborators(FreeCAD, lambda _d: None), doc_name)
         assert result["success"] is False
-        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
-        assert result["rollback_succeeded"] is True
+        assert result["outcome"] == "compensated"
         assert doc_name not in FreeCAD.listDocuments()
     finally:
-        FreeCAD.newDocument = original_new
+        subject.verify_create_document = original_verify
         if doc_name in FreeCAD.listDocuments():
             FreeCAD.closeDocument(doc_name)
 
@@ -127,106 +60,61 @@ def check_create_document_already_exists() -> None:
         FreeCAD.closeDocument(existing.Name)
 
 
-def check_open_document_success(monkeypatch) -> None:
+def check_open_document_success(_monkeypatch) -> None:
     require_native_collaboration()
     import FreeCAD
 
-    subject, runner = load_runner("open_document")
+    _, runner = load_runner("open_document")
     fixture = FreeCAD.newDocument("MCPOpenDocumentFixture")
+    opened_name: str | None = None
     try:
         ctx = prepare_core_document(fixture, "saved")
         path = ctx["path"]
         FreeCAD.closeDocument(fixture.Name)
-
-        events: list[str] = []
-        probe_holder: dict[str, object] = {}
-        ensure_probe = _install_admitted_probe(events, probe_holder)
-
-        original_apply = getattr(subject, "apply_open_document")
-        original_read = getattr(subject, "read_open_document_result")
-
-        def tracked_apply(admitted_document, request):
-            events.append("apply")
-            receipt = original_apply(admitted_document, request)
-            for obj in getattr(admitted_document, "Objects", []) or []:
-                if getattr(obj, "TypeId", "") == "App::FeaturePython":
-                    continue
-                touch = getattr(obj, "touch", None)
-                if callable(touch):
-                    touch()
-                    break
-            else:
-                ensure_probe(admitted_document).touch()
-            return receipt
-
-        def tracked_read(admitted_document, receipt):
-            events.append("inspect")
-            return original_read(admitted_document, receipt)
-
-        monkeypatch.setattr(subject, "apply_open_document", tracked_apply)
-        monkeypatch.setattr(subject, "read_open_document_result", tracked_read)
-        opened_name: str | None = None
-        try:
-            result = runner(
-                collaborators(FreeCAD, lambda _d: events.append("validate")),
-                path,
-            )
-            assert result["success"] is True
-            assert result["committed"] is True
-            assert events == ["apply", "recompute", "inspect", "validate"]
-            candidate = result.get("document_name")
-            opened_name = candidate if isinstance(candidate, str) else None
-        finally:
-            if opened_name and opened_name in FreeCAD.listDocuments():
-                FreeCAD.closeDocument(opened_name)
+        result = runner(collaborators(FreeCAD, lambda _d: None), path)
+        assert result["success"] is True
+        assert result["outcome"] == "verified"
+        candidate = result.get("document_name")
+        opened_name = candidate if isinstance(candidate, str) else None
+        assert opened_name and opened_name in FreeCAD.listDocuments()
     finally:
-        for name in list(FreeCAD.listDocuments()):
-            if name in {fixture.Name, "MCPOpenDocumentFixture"}:
-                try:
-                    FreeCAD.closeDocument(name)
-                except Exception:
-                    pass
+        if opened_name and opened_name in FreeCAD.listDocuments():
+            FreeCAD.closeDocument(opened_name)
 
 
 def check_open_document_validation_failure() -> None:
     require_native_collaboration()
     import FreeCAD
 
-    _, runner = load_runner("open_document")
+    subject, runner = load_runner("open_document")
     fixture = FreeCAD.newDocument("MCPOpenDocumentRollbackFixture")
-    admitted_holder: dict[str, Any] = {}
     opened_name: str | None = None
-    original_open = FreeCAD.openDocument
+    original_verify = subject.verify_open_document
 
-    def capturing_open(path, *args, **kwargs):
-        document = original_open(path, *args, **kwargs)
-        admitted_holder["opened_name"] = str(document.Name)
-        admitted_holder["before_objects"] = tuple(obj.Name for obj in document.Objects)
-        return document
+    def fail_verify(_app: object, _request: object, _opened_name: str) -> None:
+        return None
 
+    subject.verify_open_document = fail_verify
     try:
         ctx = prepare_core_document(fixture, "saved")
         path = ctx["path"]
         FreeCAD.closeDocument(fixture.Name)
-        FreeCAD.openDocument = capturing_open
-        result = runner(
-            collaborators(
-                FreeCAD,
-                lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure")),
-            ),
-            path,
-        )
-        opened_name = admitted_holder.get("opened_name")
-        assert isinstance(opened_name, str) and opened_name
+        result = runner(collaborators(FreeCAD, lambda _d: None), path)
         assert result["success"] is False
-        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
-        assert result["rollback_succeeded"] is True
-        restored = FreeCAD.getDocument(opened_name)
-        assert tuple(obj.Name for obj in restored.Objects) == admitted_holder["before_objects"]
+        assert result["outcome"] == "compensated"
+        for name in FreeCAD.listDocuments():
+            if name not in {fixture.Name}:
+                opened_name = name
+                break
+        if opened_name:
+            assert opened_name not in FreeCAD.listDocuments()
     finally:
-        FreeCAD.openDocument = original_open
-        if opened_name and opened_name in FreeCAD.listDocuments():
-            FreeCAD.closeDocument(opened_name)
+        subject.verify_open_document = original_verify
+        for name in list(FreeCAD.listDocuments()):
+            try:
+                FreeCAD.closeDocument(name)
+            except Exception:
+                pass
 
 
 def check_open_document_missing_path() -> None:
@@ -240,3 +128,87 @@ def check_open_document_missing_path() -> None:
     )
     assert result["success"] is False
     assert result["error_code"] == "OPEN_DOCUMENT_FAILED"
+
+
+def check_close_document_success() -> None:
+    require_native_collaboration()
+    import FreeCAD
+
+    _, runner = load_runner("close_document")
+    document = FreeCAD.newDocument("MCPCloseDocumentNative")
+    doc_name = document.Name
+    result = runner(collaborators(FreeCAD, lambda _d: None), doc_name)
+    assert result["success"] is True
+    assert result["outcome"] == "verified"
+    assert doc_name not in FreeCAD.listDocuments()
+
+
+def check_close_document_missing() -> None:
+    require_native_collaboration()
+    import FreeCAD
+
+    _, runner = load_runner("close_document")
+    result = runner(collaborators(FreeCAD, lambda _d: None), "MissingNativeDoc")
+    assert result["success"] is False
+    assert result["error_code"] == "DOCUMENT_NOT_FOUND"
+
+
+def check_reload_document_success() -> None:
+    require_native_collaboration()
+    import FreeCAD
+
+    _, runner = load_runner("reload_document")
+    document = FreeCAD.newDocument("MCPReloadDocumentNative")
+    prepare_core_document(document, "saved")
+    doc_name = document.Name
+    reopened_name: str | None = None
+    try:
+        result = runner(collaborators(FreeCAD, lambda _d: None), doc_name)
+        assert result["success"] is True
+        assert result["outcome"] == "verified"
+        reopened_name = result["document_name"]
+        assert isinstance(reopened_name, str)
+        assert reopened_name in FreeCAD.listDocuments()
+    finally:
+        if reopened_name and reopened_name in FreeCAD.listDocuments():
+            FreeCAD.closeDocument(reopened_name)
+        if doc_name in FreeCAD.listDocuments():
+            FreeCAD.closeDocument(doc_name)
+
+
+def check_reload_document_missing() -> None:
+    require_native_collaboration()
+    import FreeCAD
+
+    _, runner = load_runner("reload_document")
+    result = runner(collaborators(FreeCAD, lambda _d: None), "MissingNativeDoc")
+    assert result["success"] is False
+    assert result["error_code"] == "DOCUMENT_NOT_FOUND"
+
+
+def check_activate_document_success() -> None:
+    require_native_collaboration()
+    import FreeCAD
+
+    _, runner = load_runner("activate_document")
+    first = FreeCAD.newDocument("MCPActivateFirst")
+    second = FreeCAD.newDocument("MCPActivateSecond")
+    try:
+        result = runner(collaborators(FreeCAD, lambda _d: None), second.Name)
+        assert result["success"] is True
+        assert result["outcome"] == "verified"
+        assert FreeCAD.ActiveDocument.Name == second.Name
+    finally:
+        for name in (first.Name, second.Name):
+            if name in FreeCAD.listDocuments():
+                FreeCAD.closeDocument(name)
+
+
+def check_activate_document_missing() -> None:
+    require_native_collaboration()
+    import FreeCAD
+
+    _, runner = load_runner("activate_document")
+    result = runner(collaborators(FreeCAD, lambda _d: None), "MissingNativeDoc")
+    assert result["success"] is False
+    assert result["error_code"] == "DOCUMENT_NOT_FOUND"

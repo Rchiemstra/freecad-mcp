@@ -1,9 +1,8 @@
-"""Typed ``export_stl`` mutation."""
+"""Typed ``export_stl`` external-effect handler."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.export_stl_contract import (
@@ -12,27 +11,26 @@ from ...._shared.protocol.export_stl_contract import (
     ExportStlFailure,
     ExportStlRequest,
     ExportStlResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
     make_export_stl_failure,
     make_export_stl_success,
     make_export_stl_uncertain,
 )
-from .typed_runtime import as_float, as_int, as_str
 from . import measure_io_actions
-from .export_stl_mutation import ExportStlError, run_export_stl_native_mutation
+from .policy_runtime import (
+    app_from,
+    atomic_publish,
+    lookup_document,
+    staged_path,
+    unlink_quiet,
+    verify_nonempty_file,
+)
+from .typed_runtime import as_int
 
 
-@dataclass(frozen=True, slots=True)
-class ExportStlReceipt:
-    payload: dict[str, object]
-    obj: MutationObject | None
-
-
-@dataclass(frozen=True, slots=True)
-class ExportStlInspection:
-    payload: dict[str, object]
+class ExportStlError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _failure(error: ExportStlError, *, retry_safe: bool = True) -> ExportStlFailure:
@@ -42,8 +40,6 @@ def _failure(error: ExportStlError, *, retry_safe: bool = True) -> ExportStlFail
 def build_export_stl_request(
     doc_name: object, file_path: object, obj_names: object, mesh_deviation: object
 ) -> ExportStlRequest | ExportStlFailure:
-    """Validate the untyped JSON arguments before constructing internal types."""
-
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(ExportStlError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
     if not isinstance(file_path, str) or not file_path.strip():
@@ -60,82 +56,57 @@ def build_export_stl_request(
         return _failure(ExportStlError("INVALID_ARGUMENT", "mesh_deviation must be a number"))
     else:
         mesh_deviation_value = float(mesh_deviation)
-    request = ExportStlRequest(
+    return ExportStlRequest(
         doc_name=DocumentName(doc_name),
         file_path=file_path,
         obj_names=obj_names_value,
-        mesh_deviation=mesh_deviation_value
+        mesh_deviation=mesh_deviation_value,
     )
-    return request
-
-
-@dataclass(slots=True)
-class _ExportStlExecution:
-    collaborators: ExportStlCollaborators
-    request: ExportStlRequest
-    created: ExportStlReceipt | None = None
-    inspected: ExportStlInspection | None = None
-
-    def apply(self, doc: MutationDocument) -> None:
-        self.created = apply_export_stl(doc, self.request)
-
-    def inspect(self, doc: MutationReadDocument) -> None:
-        if self.created is None:
-            raise ExportStlError(
-                "INVALID_EXPORT_STL_RESULT",
-                "export_stl did not return an identity receipt",
-            )
-        self.inspected = read_export_stl_result(doc, self.created, self.request)
-
-    def run(self) -> ExportStlResult:
-        result = run_export_stl_native_mutation(
-            self.collaborators,
-            self.request.doc_name,
-            self.apply,
-            self.inspect,
-        )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_export_stl_uncertain(
-                "EXPORT_STL_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected export_stl result",
-                committed=True,
-            )
-        payload = self.inspected.payload
-        return make_export_stl_success(
-            path=as_str(payload["path"]), exported=as_int(payload["exported"]), faces=as_int(payload["faces"])
-        )
-
-
-def apply_export_stl(doc: MutationDocument, request: ExportStlRequest) -> ExportStlReceipt:
-    """Apply export_stl without recomputing or managing a transaction."""
-
-    payload = measure_io_actions.export_stl(doc, request.file_path, request.obj_names, request.mesh_deviation)
-    return ExportStlReceipt(payload=payload, obj=None)
-
-
-
-def read_export_stl_result(
-    doc: MutationReadDocument, receipt: ExportStlReceipt, request: ExportStlRequest
-) -> ExportStlInspection:
-    path = receipt.payload.get("path")
-    if not isinstance(path, str) or not path.strip():
-        raise ExportStlError("INVALID_EXPORT_STL_RESULT", "missing export path")
-    return ExportStlInspection(payload=dict(receipt.payload))
-
 
 
 def run_export_stl(
     collaborators: ExportStlCollaborators,
-    doc_name: str, file_path: str, obj_names: list[str] | None = None, mesh_deviation: float = 0.1,
+    doc_name: str,
+    file_path: str,
+    obj_names: list[str] | None = None,
+    mesh_deviation: float = 0.1,
 ) -> ExportStlResult:
-    """Run export_stl through apply, recompute, inspection, and commit."""
-
     request = build_export_stl_request(doc_name, file_path, obj_names, mesh_deviation)
     if isinstance(request, dict):
         return request
-    return _ExportStlExecution(collaborators, request).run()
+    app = app_from(collaborators)
+    if app is None:
+        return _failure(ExportStlError("FREECAD_UNAVAILABLE", "FreeCAD collaborator is missing"))
+    document = lookup_document(app, str(request.doc_name))
+    if document is None:
+        return _failure(ExportStlError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
+    tmp_path = staged_path(str(request.file_path))
+    try:
+        payload = measure_io_actions.export_stl(
+            document, tmp_path, request.obj_names, request.mesh_deviation
+        )
+    except Exception as exc:
+        unlink_quiet(tmp_path)
+        return _failure(ExportStlError("EXPORT_STL_FAILED", str(exc) or type(exc).__name__))
+    if not verify_nonempty_file(tmp_path):
+        unlink_quiet(tmp_path)
+        return _failure(ExportStlError("EXPORT_STL_FAILED", "Staged export file is missing or empty"))
+    try:
+        atomic_publish(tmp_path, str(request.file_path))
+    except Exception as exc:
+        unlink_quiet(tmp_path)
+        if verify_nonempty_file(str(request.file_path)):
+            return make_export_stl_uncertain(
+                "EXPORT_STL_PUBLISH_UNCERTAIN",
+                str(exc) or type(exc).__name__,
+                committed=None,
+            )
+        return _failure(ExportStlError("EXPORT_STL_FAILED", str(exc) or type(exc).__name__))
+    return make_export_stl_success(
+        path=str(request.file_path),
+        exported=as_int(payload.get("exported", 0)),
+        faces=as_int(payload.get("faces", 0)),
+    )
 
 
 class _ExportStlRpcFacade(Protocol):
@@ -146,7 +117,10 @@ class _ExportStlRpcFacade(Protocol):
 
 def rpc_export_stl(
     self: _ExportStlRpcFacade,
-    doc_name: str, file_path: str, obj_names: list[str] | None = None, mesh_deviation: float = 0.1,
+    doc_name: str,
+    file_path: str,
+    obj_names: list[str] | None = None,
+    mesh_deviation: float = 0.1,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -161,11 +135,7 @@ TYPED_RPC_HANDLER = ("export_stl", rpc_export_stl)
 __all__ = [
     "ExportStlCollaborators",
     "ExportStlError",
-    "ExportStlInspection",
-    "ExportStlReceipt",
-    "apply_export_stl",
     "build_export_stl_request",
-    "read_export_stl_result",
     "rpc_export_stl",
     "run_export_stl",
     "TYPED_RPC_HANDLER",

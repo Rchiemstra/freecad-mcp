@@ -1,9 +1,8 @@
-"""Typed ``reload_document`` mutation."""
+"""Typed ``reload_document`` lifecycle handler."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.reload_document_contract import (
@@ -12,27 +11,20 @@ from ...._shared.protocol.reload_document_contract import (
     ReloadDocumentFailure,
     ReloadDocumentRequest,
     ReloadDocumentResult,
+    ReloadDocumentUncertain,
     make_reload_document_failure,
     make_reload_document_success,
     make_reload_document_uncertain,
 )
-from .reload_document_mutation import ReloadDocumentError, run_reload_document_native_mutation
+from .policy_runtime import app_from, lookup_document
 from .typed_rpc_document import document_name
 
 
-@dataclass(frozen=True, slots=True)
-class ReloadDocumentReceipt:
-    """Internal identity captured while applying the mutation."""
-
-    name: str
-    file_name: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class ReloadDocumentInspection:
-    """Read-only data captured after the native-owned recompute."""
-
-    name: DocumentName
+class ReloadDocumentError(RuntimeError):
+    def __init__(self, code: str, message: str, diagnostics: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.diagnostics = diagnostics
 
 
 def _failure(error: ReloadDocumentError, *, retry_safe: bool = True) -> ReloadDocumentFailure:
@@ -41,29 +33,9 @@ def _failure(error: ReloadDocumentError, *, retry_safe: bool = True) -> ReloadDo
     )
 
 
-def apply_reload_document(doc: object, request: ReloadDocumentRequest) -> ReloadDocumentReceipt:
-    """Capture identity before the post-commit reload."""
-
-    file_name = getattr(doc, "FileName", None)
-    return ReloadDocumentReceipt(
-        name=document_name(doc) or str(request.doc_name),
-        file_name=file_name if isinstance(file_name, str) and file_name.strip() else None,
-    )
-
-
-def read_reload_document_result(
-    doc: object, receipt: ReloadDocumentReceipt
-) -> ReloadDocumentInspection:
-    """Confirm the admitted document is present before the post-commit reload."""
-
-    return ReloadDocumentInspection(name=DocumentName(document_name(doc) or receipt.name))
-
-
 def build_reload_document_request(
     doc_name: object,
 ) -> ReloadDocumentRequest | ReloadDocumentFailure:
-    """Validate the untyped JSON arguments before constructing internal types."""
-
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(
             ReloadDocumentError("INVALID_ARGUMENT", "doc_name must be a nonempty string")
@@ -71,107 +43,106 @@ def build_reload_document_request(
     return ReloadDocumentRequest(doc_name=DocumentName(doc_name))
 
 
-@dataclass(slots=True)
-class _ReloadDocumentExecution:
-    collaborators: ReloadDocumentCollaborators
-    request: ReloadDocumentRequest
-    created: ReloadDocumentReceipt | None = None
-    inspected: ReloadDocumentInspection | None = None
+def prepare_reload_document(
+    app: object, request: ReloadDocumentRequest
+) -> tuple[ReloadDocumentFailure | None, str | None]:
+    document = lookup_document(app, str(request.doc_name))
+    if document is None:
+        return _failure(
+            ReloadDocumentError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}")
+        ), None
+    file_name = getattr(document, "FileName", None)
+    if not isinstance(file_name, str) or not file_name.strip():
+        return _failure(
+            ReloadDocumentError("RELOAD_DOCUMENT_FAILED", "Document has no file path to reload")
+        ), None
+    return None, file_name
 
-    def apply(self, doc: object) -> None:
-        self.created = apply_reload_document(doc, self.request)
 
-    def inspect(self, doc: object) -> None:
-        if self.created is None:
-            raise ReloadDocumentError(
-                "INVALID_RELOAD_DOCUMENT_RESULT",
-                "Document reload did not return an identity receipt",
-            )
-        self.inspected = read_reload_document_result(doc, self.created)
-
-    def run(self) -> ReloadDocumentResult:
-        result = run_reload_document_native_mutation(
-            self.collaborators,
-            str(self.request.doc_name),
-            self.apply,
-            self.inspect,
+def perform_reload_document(
+    app: object, request: ReloadDocumentRequest, file_name: str
+) -> tuple[ReloadDocumentFailure | ReloadDocumentUncertain | None, str | None]:
+    closer = getattr(app, "closeDocument", None)
+    opener = getattr(app, "openDocument", None)
+    if not callable(closer) or not callable(opener):
+        return _failure(ReloadDocumentError("FREECAD_UNAVAILABLE", "FreeCAD cannot reload documents")), None
+    try:
+        closer(str(request.doc_name))
+    except NameError:
+        pass
+    except Exception as exc:
+        return _failure(ReloadDocumentError("RELOAD_DOCUMENT_FAILED", str(exc) or type(exc).__name__)), None
+    try:
+        reopened = opener(file_name)
+    except Exception as exc:
+        return (
+            make_reload_document_uncertain(
+                "RELOAD_DOCUMENT_FAILED",
+                str(exc) or type(exc).__name__,
+                committed=None,
+            ),
+            None,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_reload_document_uncertain(
-                "RELOAD_DOCUMENT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected reload_document result",
-                committed=True,
-            )
-        return make_reload_document_success(self.inspected.name)
+    if reopened is None:
+        return (
+            make_reload_document_uncertain(
+                "RELOAD_DOCUMENT_FAILED",
+                f"FreeCAD did not reopen {file_name!r}",
+                committed=None,
+            ),
+            None,
+        )
+    reopened_name = document_name(reopened)
+    if not reopened_name:
+        return (
+            make_reload_document_uncertain(
+                "RELOAD_DOCUMENT_FAILED",
+                f"FreeCAD reopened {file_name!r} without a document name",
+                committed=None,
+            ),
+            None,
+        )
+    return None, reopened_name
+
+
+def verify_reload_document(app: object, reopened_name: str) -> ReloadDocumentResult | None:
+    document = lookup_document(app, reopened_name)
+    if document is None:
+        return None
+    name = document_name(document) or reopened_name
+    return make_reload_document_success(DocumentName(name))
 
 
 def run_reload_document(
     collaborators: ReloadDocumentCollaborators,
     doc_name: object,
 ) -> ReloadDocumentResult:
-    """Seal document health natively, then reload from disk."""
-
     request = build_reload_document_request(doc_name)
     if isinstance(request, dict):
         return request
-    execution = _ReloadDocumentExecution(collaborators, request)
-    result = execution.run()
-    if not (isinstance(result, dict) and result.get("success") is True):
-        return result
-    receipt = execution.created
-    app = getattr(collaborators, "freecad", None)
-    if receipt is None or receipt.file_name is None:
+    app = app_from(collaborators)
+    if app is None:
+        return _failure(ReloadDocumentError("FREECAD_UNAVAILABLE", "FreeCAD collaborator is missing"))
+    prep, file_name = prepare_reload_document(app, request)
+    if prep is not None or file_name is None:
+        return prep if prep is not None else _failure(ReloadDocumentError("RELOAD_DOCUMENT_FAILED", "Reload failed"))
+    perf, reopened_name = perform_reload_document(app, request, file_name)
+    if perf is not None:
+        return perf
+    if reopened_name is None:
         return make_reload_document_uncertain(
             "RELOAD_DOCUMENT_FAILED",
-            "Native commit succeeded but the document has no file path to reload",
-            committed=True,
+            "Reload completed without a reopened document name",
+            committed=None,
         )
-    closer = getattr(app, "closeDocument", None)
-    opener = getattr(app, "openDocument", None)
-    if not callable(closer) or not callable(opener):
-        return make_reload_document_uncertain(
-            "FREECAD_UNAVAILABLE",
-            "Native commit succeeded but FreeCAD cannot reload documents",
-            committed=True,
-        )
-    doc_name = str(request.doc_name)
-    try:
-        closer(doc_name)
-    except NameError:
-        pass
-    except Exception as exc:
-        return make_reload_document_uncertain(
-            "RELOAD_DOCUMENT_FAILED",
-            str(exc) or type(exc).__name__,
-            committed=True,
-        )
-    try:
-        reopened = opener(receipt.file_name)
-    except Exception as exc:
-        return make_reload_document_uncertain(
-            "RELOAD_DOCUMENT_FAILED",
-            str(exc) or type(exc).__name__,
-            committed=True,
-        )
-    if reopened is None:
-        return make_reload_document_uncertain(
-            "RELOAD_DOCUMENT_FAILED",
-            f"FreeCAD did not reopen {receipt.file_name!r}",
-            committed=True,
-        )
-    try:
-        reopened_name = document_name(reopened)
-    except NameError:
-        reopened_name = doc_name
-    if not reopened_name:
-        return make_reload_document_uncertain(
-            "RELOAD_DOCUMENT_FAILED",
-            f"FreeCAD reopened {receipt.file_name!r} without a document name",
-            committed=True,
-        )
-    return make_reload_document_success(DocumentName(reopened_name))
+    verified = verify_reload_document(app, reopened_name)
+    if verified is not None:
+        return verified
+    return make_reload_document_uncertain(
+        "RELOAD_DOCUMENT_FAILED",
+        f"Document {reopened_name!r} was not present after reload",
+        committed=None,
+    )
 
 
 class _ReloadDocumentRpcFacade(Protocol):
@@ -192,12 +163,10 @@ TYPED_RPC_HANDLER = ("reload_document", rpc_reload_document)
 __all__ = [
     "ReloadDocumentCollaborators",
     "ReloadDocumentError",
-    "ReloadDocumentInspection",
-    "ReloadDocumentReceipt",
-    "apply_reload_document",
     "build_reload_document_request",
-    "read_reload_document_result",
+    "perform_reload_document",
     "rpc_reload_document",
     "run_reload_document",
+    "verify_reload_document",
     "TYPED_RPC_HANDLER",
 ]

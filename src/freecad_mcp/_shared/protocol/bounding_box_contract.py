@@ -92,8 +92,7 @@ class BoundingBoxSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["observed"]
     retry_safe: Literal[False]
     object: str
     xmin: float
@@ -179,15 +178,14 @@ _CORE_KEYS = frozenset(
 
 
 def make_bounding_box_success(object: str, xmin: float, ymin: float, zmin: float, xmax: float, ymax: float, zmax: float, dx: float, dy: float, dz: float, diagonal: float, frame: str) -> BoundingBoxSuccess:
-    """Construct a complete committed result."""
+    """Construct a complete observed result."""
 
     return {
         "contract_version": BOUNDING_BOX_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
-        "retry_safe": False,
+        "outcome": "observed",
+                "retry_safe": False,
         "object": object,
         "xmin": xmin,
         "ymin": ymin,
@@ -334,12 +332,12 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "observed"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False

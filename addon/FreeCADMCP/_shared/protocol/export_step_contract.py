@@ -92,8 +92,7 @@ class ExportStepSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["published"]
     retry_safe: Literal[False]
     path: str
     exported: int
@@ -159,15 +158,14 @@ _CORE_KEYS = frozenset(
 
 
 def make_export_step_success(path: str, exported: int) -> ExportStepSuccess:
-    """Construct a complete committed result."""
+    """Construct a complete published result."""
 
     return {
         "contract_version": EXPORT_STEP_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
-        "retry_safe": False,
+        "outcome": "published",
+                "retry_safe": False,
         "path": path,
         "exported": exported,
     }
@@ -304,12 +302,12 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "published"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False

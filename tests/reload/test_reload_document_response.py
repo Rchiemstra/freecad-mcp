@@ -73,14 +73,14 @@ def test_valid_uncertain_round_trips(committed):
 
 
 @pytest.mark.parametrize(
-    ("success", "committed", "outcome", "retry_safe"),
-    list(product((True, False), (True, False, None), ("committed", "rejected", "uncertain"), (True, False))),
+    ("success", "outcome", "retry_safe"),
+    list(product((True, False), ("verified", "rejected", "uncertain", "compensated"), (True, False))),
 )
-def test_only_the_complete_success_discriminant_can_succeed(success, committed, outcome, retry_safe):
-    raw = dict(_success(), success=success, committed=committed, outcome=outcome, retry_safe=retry_safe)
+def test_only_the_complete_success_discriminant_can_succeed(success, outcome, retry_safe):
+    raw = dict(_success(), success=success, outcome=outcome, retry_safe=retry_safe)
     result = parse_reload_document_response(raw)
     assert result["success"] is (
-        success is True and committed is True and outcome == "committed" and retry_safe is False
+        success is True and outcome == "verified" and retry_safe is False
     )
 
 

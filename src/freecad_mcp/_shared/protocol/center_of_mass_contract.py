@@ -92,8 +92,7 @@ class CenterOfMassSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["observed"]
     retry_safe: Literal[False]
     object: str
     x: float
@@ -169,15 +168,14 @@ _CORE_KEYS = frozenset(
 
 
 def make_center_of_mass_success(object: str, x: float, y: float, z: float, unit: str, method: str, frame: str) -> CenterOfMassSuccess:
-    """Construct a complete committed result."""
+    """Construct a complete observed result."""
 
     return {
         "contract_version": CENTER_OF_MASS_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
-        "retry_safe": False,
+        "outcome": "observed",
+                "retry_safe": False,
         "object": object,
         "x": x,
         "y": y,
@@ -319,12 +317,12 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "observed"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False

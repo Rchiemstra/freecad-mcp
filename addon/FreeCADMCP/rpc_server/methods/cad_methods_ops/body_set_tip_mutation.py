@@ -67,7 +67,7 @@ _ROLLED_BACK_STATUSES = frozenset(
 )
 
 
-def _tip_native_result(
+def _body_set_tip_native_result(
     native_result: object, state: _NativeTipMutationState
 ) -> Literal[True] | BodySetTipFailure | BodySetTipUncertain:
     if not isinstance(native_result, dict):
@@ -214,4 +214,4 @@ def run_body_set_tip_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _tip_native_result(native_result, state)
+    return _body_set_tip_native_result(native_result, state)

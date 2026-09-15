@@ -1,37 +1,34 @@
-"""Typed ``redo`` mutation."""
+"""Typed ``redo`` history handler."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.redo_contract import (
+    DocumentName,
     RedoCollaborators,
     RedoFailure,
     RedoRequest,
     RedoResult,
-    DocumentName,
     make_redo_failure,
     make_redo_success,
     make_redo_uncertain,
 )
-from .redo_mutation import RedoError, run_redo_native_mutation
+from .history_runtime import (
+    admit_history_document,
+    perform_history_action,
+    verify_history_stack,
+)
+from .policy_runtime import app_from
 from .typed_rpc_document import document_name
 
 
-@dataclass(frozen=True, slots=True)
-class RedoReceipt:
-    """Internal identity captured while applying the mutation."""
-
-    name: str
-
-
-@dataclass(frozen=True, slots=True)
-class RedoInspection:
-    """Read-only data captured after the native-owned recompute."""
-
-    name: DocumentName
+class RedoError(RuntimeError):
+    def __init__(self, code: str, message: str, diagnostics: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.diagnostics = diagnostics
 
 
 def _failure(error: RedoError, *, retry_safe: bool = True) -> RedoFailure:
@@ -40,83 +37,51 @@ def _failure(error: RedoError, *, retry_safe: bool = True) -> RedoFailure:
     )
 
 
-def apply_redo(doc: object, request: RedoRequest) -> RedoReceipt:
-    """Apply redo without recomputing or managing a transaction."""
-
-    action = getattr(doc, "redo", None)
-    if not callable(action):
-        raise RedoError("INVALID_DOCUMENT", "document cannot redo")
-    action()
-    return RedoReceipt(name=document_name(doc))
-
-
-def read_redo_result(doc: object, receipt: RedoReceipt) -> RedoInspection:
-    """Build the public result after the shared mutation recompute."""
-
-    if document_name(doc) != receipt.name:
-        raise RedoError(
-            "DOCUMENT_IDENTITY_MISMATCH",
-            "Inspected document name does not match the apply receipt",
-        )
-    return RedoInspection(
-        name=DocumentName(receipt.name)
-    )
-
-
 def build_redo_request(doc_name: object) -> RedoRequest | RedoFailure:
-    """Validate the untyped JSON arguments before constructing internal types."""
-
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(RedoError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
     return RedoRequest(doc_name=DocumentName(doc_name))
-
-
-@dataclass(slots=True)
-class _RedoExecution:
-    collaborators: RedoCollaborators
-    request: RedoRequest
-    created: RedoReceipt | None = None
-    inspected: RedoInspection | None = None
-
-    def apply(self, doc: object) -> None:
-        self.created = apply_redo(doc, self.request)
-
-    def inspect(self, doc: object) -> None:
-        if self.created is None:
-            raise RedoError(
-                "INVALID_REDO_RESULT",
-                "redo did not return an identity receipt",
-            )
-        self.inspected = read_redo_result(doc, self.created)
-
-    def run(self) -> RedoResult:
-        result = run_redo_native_mutation(
-            self.collaborators,
-            str(getattr(self.request, "doc_name", getattr(self.request, "name", ""))),
-            self.apply,
-            self.inspect,
-        )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_redo_uncertain(
-                "REDO_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected redo result",
-                committed=True,
-            )
-        return make_redo_success(self.inspected.name)
 
 
 def run_redo(
     collaborators: RedoCollaborators,
     doc_name: object,
 ) -> RedoResult:
-    """Run redo through apply, recompute, inspection, and commit."""
-
     request = build_redo_request(doc_name)
     if isinstance(request, dict):
         return request
-    return _RedoExecution(collaborators, request).run()
+    app = app_from(collaborators)
+    if app is None:
+        return _failure(RedoError("FREECAD_UNAVAILABLE", "FreeCAD collaborator is missing"))
+    document = admit_history_document(app, str(request.doc_name))
+    if document is None:
+        return _failure(RedoError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
+    stack_issue = verify_history_stack(document, action_name="redo", count_attr="RedoCount")
+    if stack_issue == "INVALID_DOCUMENT":
+        return _failure(RedoError("INVALID_DOCUMENT", "document cannot redo"))
+    if stack_issue == "EMPTY_HISTORY_STACK":
+        return _failure(RedoError("EMPTY_HISTORY_STACK", "Nothing to redo"), retry_safe=True)
+    try:
+        perform_history_action(document, "redo")
+    except Exception as exc:
+        return make_redo_uncertain(
+            "REDO_FAILED",
+            str(exc) or type(exc).__name__,
+            committed=None,
+        )
+    if admit_history_document(app, str(request.doc_name)) is None:
+        return make_redo_uncertain(
+            "REDO_FAILED",
+            f"Document {request.doc_name!r} is not open after redo",
+            committed=None,
+        )
+    if document_name(document) != str(request.doc_name):
+        return make_redo_uncertain(
+            "DOCUMENT_IDENTITY_MISMATCH",
+            "Document identity changed during redo",
+            committed=None,
+        )
+    return make_redo_success(DocumentName(str(request.doc_name)))
 
 
 class _RedoRpcFacade(Protocol):
@@ -130,9 +95,7 @@ def rpc_redo(
     doc_name: str,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: run_redo(collaborators, doc_name)
-    )
+    res = self._dispatch_gui(lambda: run_redo(collaborators, doc_name))
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
@@ -142,11 +105,7 @@ TYPED_RPC_HANDLER = ("redo", rpc_redo)
 __all__ = [
     "RedoCollaborators",
     "RedoError",
-    "RedoInspection",
-    "RedoReceipt",
-    "apply_redo",
     "build_redo_request",
-    "read_redo_result",
     "rpc_redo",
     "run_redo",
     "TYPED_RPC_HANDLER",

@@ -1,9 +1,8 @@
-"""Typed ``activate_document`` mutation."""
+"""Typed ``activate_document`` lifecycle handler."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.activate_document_contract import (
@@ -12,28 +11,20 @@ from ...._shared.protocol.activate_document_contract import (
     ActivateDocumentRequest,
     ActivateDocumentResult,
     DocumentName,
+    make_activate_document_compensated,
     make_activate_document_failure,
     make_activate_document_success,
     make_activate_document_uncertain,
 )
-from .activate_document_mutation import ActivateDocumentError, run_activate_document_native_mutation
+from .policy_runtime import app_from, lookup_document
 from .typed_rpc_document import document_name
 
 
-@dataclass(frozen=True, slots=True)
-class ActivateDocumentReceipt:
-    """Internal identity captured while applying the mutation."""
-
-    name: str
-    label: str
-
-
-@dataclass(frozen=True, slots=True)
-class ActivateDocumentInspection:
-    """Read-only data captured after the native-owned recompute."""
-
-    name: DocumentName
-    label: str
+class ActivateDocumentError(RuntimeError):
+    def __init__(self, code: str, message: str, diagnostics: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.diagnostics = diagnostics
 
 
 def _failure(error: ActivateDocumentError, *, retry_safe: bool = True) -> ActivateDocumentFailure:
@@ -42,102 +33,105 @@ def _failure(error: ActivateDocumentError, *, retry_safe: bool = True) -> Activa
     )
 
 
-def apply_activate_document(doc: object, request: ActivateDocumentRequest) -> ActivateDocumentReceipt:
-    """Apply activate_document without recomputing or managing a transaction."""
-
-    return ActivateDocumentReceipt(
-        name=document_name(doc),
-        label=str(getattr(doc, "Label", document_name(doc))),
-    )
-
-
-def read_activate_document_result(doc: object, receipt: ActivateDocumentReceipt) -> ActivateDocumentInspection:
-    """Build the public result after the shared mutation recompute."""
-
-    if document_name(doc) != receipt.name:
-        raise ActivateDocumentError(
-            "DOCUMENT_IDENTITY_MISMATCH",
-            "Inspected document name does not match the apply receipt",
-        )
-    return ActivateDocumentInspection(
-        name=DocumentName(receipt.name),
-        label=receipt.label,
-    )
-
-
-def build_activate_document_request(doc_name: object) -> ActivateDocumentRequest | ActivateDocumentFailure:
-    """Validate the untyped JSON arguments before constructing internal types."""
-
+def build_activate_document_request(
+    doc_name: object,
+) -> ActivateDocumentRequest | ActivateDocumentFailure:
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(ActivateDocumentError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
     return ActivateDocumentRequest(doc_name=DocumentName(doc_name))
 
 
-@dataclass(slots=True)
-class _ActivateDocumentExecution:
-    collaborators: ActivateDocumentCollaborators
-    request: ActivateDocumentRequest
-    created: ActivateDocumentReceipt | None = None
-    inspected: ActivateDocumentInspection | None = None
+def prepare_activate_document(
+    app: object, request: ActivateDocumentRequest
+) -> tuple[ActivateDocumentFailure | None, str | None]:
+    document = lookup_document(app, str(request.doc_name))
+    if document is None:
+        return _failure(
+            ActivateDocumentError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}")
+        ), None
+    active = getattr(app, "ActiveDocument", None)
+    previous = None
+    if active is not None:
+        previous_name = document_name(active)
+        if previous_name and previous_name != str(request.doc_name):
+            previous = previous_name
+    return None, previous
 
-    def apply(self, doc: object) -> None:
-        self.created = apply_activate_document(doc, self.request)
 
-    def inspect(self, doc: object) -> None:
-        if self.created is None:
-            raise ActivateDocumentError(
-                "INVALID_ACTIVATE_DOCUMENT_RESULT",
-                "activate_document did not return an identity receipt",
-            )
-        self.inspected = read_activate_document_result(doc, self.created)
+def perform_activate_document(app: object, request: ActivateDocumentRequest) -> ActivateDocumentFailure | None:
+    setter = getattr(app, "setActiveDocument", None)
+    if not callable(setter):
+        return _failure(ActivateDocumentError("FREECAD_UNAVAILABLE", "FreeCAD cannot activate documents"))
+    try:
+        setter(str(request.doc_name))
+    except Exception as exc:
+        return _failure(ActivateDocumentError("ACTIVATE_DOCUMENT_FAILED", str(exc) or type(exc).__name__))
+    return None
 
-    def run(self) -> ActivateDocumentResult:
-        result = run_activate_document_native_mutation(
-            self.collaborators,
-            str(getattr(self.request, "doc_name", getattr(self.request, "name", ""))),
-            self.apply,
-            self.inspect,
+
+def verify_activate_document(
+    app: object, request: ActivateDocumentRequest
+) -> ActivateDocumentResult | None:
+    active = getattr(app, "ActiveDocument", None)
+    if active is None:
+        return None
+    active_name = document_name(active)
+    if active_name != str(request.doc_name):
+        return None
+    document = lookup_document(app, str(request.doc_name))
+    if document is None:
+        return None
+    label = str(getattr(document, "Label", active_name))
+    return make_activate_document_success(DocumentName(active_name), label)
+
+
+def compensate_activate_document(app: object, previous_active: str | None) -> ActivateDocumentResult:
+    if previous_active is None:
+        return make_activate_document_compensated(
+            "ACTIVATE_DOCUMENT_FAILED",
+            "Document activation failed",
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_activate_document_uncertain(
-                "ACTIVATE_DOCUMENT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected activate_document result",
-                committed=True,
-            )
-        return make_activate_document_success(self.inspected.name, self.inspected.label)
+    setter = getattr(app, "setActiveDocument", None)
+    if not callable(setter):
+        return make_activate_document_uncertain(
+            "ACTIVATE_DOCUMENT_ROLLBACK_UNCERTAIN",
+            "Previous active document could not be restored",
+            committed=None,
+        )
+    try:
+        setter(previous_active)
+    except Exception as exc:
+        return make_activate_document_uncertain(
+            "ACTIVATE_DOCUMENT_ROLLBACK_UNCERTAIN",
+            str(exc) or type(exc).__name__,
+            committed=None,
+        )
+    return make_activate_document_compensated(
+        "ACTIVATE_DOCUMENT_FAILED",
+        "Document activation failed and the previous active document was restored",
+    )
 
 
 def run_activate_document(
     collaborators: ActivateDocumentCollaborators,
     doc_name: object,
 ) -> ActivateDocumentResult:
-    """Run activate_document through apply, recompute, inspection, and commit."""
-
     request = build_activate_document_request(doc_name)
     if isinstance(request, dict):
         return request
-    result = _ActivateDocumentExecution(collaborators, request).run()
-    if not (isinstance(result, dict) and result.get("success") is True):
-        return result
-    app = getattr(collaborators, "freecad", None)
-    setter = getattr(app, "setActiveDocument", None)
-    if not callable(setter):
-        return make_activate_document_uncertain(
-            "ACTIVATE_DOCUMENT_FAILED",
-            "Native commit succeeded but FreeCAD cannot activate documents",
-            committed=True,
-        )
-    try:
-        setter(str(request.doc_name))
-    except Exception as exc:
-        return make_activate_document_uncertain(
-            "ACTIVATE_DOCUMENT_FAILED",
-            str(exc) or type(exc).__name__,
-            committed=True,
-        )
-    return result
+    app = app_from(collaborators)
+    if app is None:
+        return _failure(ActivateDocumentError("FREECAD_UNAVAILABLE", "FreeCAD collaborator is missing"))
+    prep, previous_active = prepare_activate_document(app, request)
+    if prep is not None:
+        return prep
+    perf = perform_activate_document(app, request)
+    if perf is not None:
+        return perf
+    verified = verify_activate_document(app, request)
+    if verified is not None:
+        return verified
+    return compensate_activate_document(app, previous_active)
 
 
 class _ActivateDocumentRpcFacade(Protocol):
@@ -151,9 +145,7 @@ def rpc_activate_document(
     doc_name: str,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: run_activate_document(collaborators, doc_name)
-    )
+    res = self._dispatch_gui(lambda: run_activate_document(collaborators, doc_name))
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 
@@ -163,11 +155,7 @@ TYPED_RPC_HANDLER = ("activate_document", rpc_activate_document)
 __all__ = [
     "ActivateDocumentCollaborators",
     "ActivateDocumentError",
-    "ActivateDocumentInspection",
-    "ActivateDocumentReceipt",
-    "apply_activate_document",
     "build_activate_document_request",
-    "read_activate_document_result",
     "rpc_activate_document",
     "run_activate_document",
     "TYPED_RPC_HANDLER",

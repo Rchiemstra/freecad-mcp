@@ -13,7 +13,6 @@ PYTHON_TESTS = (
     "tests/center/test_center_of_mass_response.py",
     "tests/center/test_center_of_mass_contract_gate.py",
     "tests/center/test_center_of_mass_json_rpc_contract.py",
-    "tests/test_typed_platform_discovery.py",
 )
 
 

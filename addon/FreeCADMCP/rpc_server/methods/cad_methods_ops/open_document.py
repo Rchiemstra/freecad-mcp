@@ -1,9 +1,8 @@
-"""Typed ``open_document`` mutation."""
+"""Typed ``open_document`` lifecycle handler."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.open_document_contract import (
@@ -13,28 +12,20 @@ from ...._shared.protocol.open_document_contract import (
     OpenDocumentRequest,
     OpenDocumentResult,
     PathName,
+    make_open_document_compensated,
     make_open_document_failure,
     make_open_document_success,
     make_open_document_uncertain,
 )
-from .open_document_mutation import OpenDocumentError, run_open_document_native_mutation
+from .policy_runtime import app_from, lookup_document
 from .typed_rpc_document import document_name
 
 
-@dataclass(frozen=True, slots=True)
-class OpenDocumentReceipt:
-    """Internal identity captured while applying the mutation."""
-
-    name: str
-    path: str
-
-
-@dataclass(frozen=True, slots=True)
-class OpenDocumentInspection:
-    """Read-only data captured after the native-owned recompute."""
-
-    name: DocumentName
-    path: str
+class OpenDocumentError(RuntimeError):
+    def __init__(self, code: str, message: str, diagnostics: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.diagnostics = diagnostics
 
 
 def _failure(error: OpenDocumentError, *, retry_safe: bool = True) -> OpenDocumentFailure:
@@ -43,104 +34,91 @@ def _failure(error: OpenDocumentError, *, retry_safe: bool = True) -> OpenDocume
     )
 
 
-def apply_open_document(doc: object, request: OpenDocumentRequest) -> OpenDocumentReceipt:
-    """Record the opened document identity without recomputing."""
-
-    return OpenDocumentReceipt(name=document_name(doc), path=str(request.path))
-
-
-def read_open_document_result(
-    doc: object, receipt: OpenDocumentReceipt
-) -> OpenDocumentInspection:
-    """Build the public result after the shared mutation recompute."""
-
-    return OpenDocumentInspection(name=DocumentName(document_name(doc)), path=receipt.path)
-
-
 def build_open_document_request(path: object) -> OpenDocumentRequest | OpenDocumentFailure:
-    """Validate the untyped JSON arguments before constructing internal types."""
-
     if not isinstance(path, str) or not path.strip():
         return _failure(OpenDocumentError("INVALID_ARGUMENT", "path must be a nonempty string"))
     return OpenDocumentRequest(path=PathName(path))
 
 
-@dataclass(slots=True)
-class _OpenDocumentExecution:
-    collaborators: OpenDocumentCollaborators
-    request: OpenDocumentRequest
-    created: OpenDocumentReceipt | None = None
-    inspected: OpenDocumentInspection | None = None
+def prepare_open_document(_app: object, request: OpenDocumentRequest) -> OpenDocumentFailure | None:
+    if not str(request.path).strip():
+        return _failure(OpenDocumentError("INVALID_ARGUMENT", "path must be a nonempty string"))
+    return None
 
-    def apply(self, doc: object) -> None:
-        self.created = apply_open_document(doc, self.request)
 
-    def inspect(self, doc: object) -> None:
-        if self.created is None:
-            raise OpenDocumentError(
-                "INVALID_OPEN_DOCUMENT_RESULT",
-                "Document open did not return an identity receipt",
-            )
-        self.inspected = read_open_document_result(doc, self.created)
+def perform_open_document(app: object, request: OpenDocumentRequest) -> tuple[OpenDocumentFailure | None, str | None]:
+    opener = getattr(app, "openDocument", None)
+    if not callable(opener):
+        return _failure(OpenDocumentError("FREECAD_UNAVAILABLE", "FreeCAD cannot open documents")), None
+    try:
+        opened = opener(str(request.path))
+    except Exception as exc:
+        return _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", str(exc) or type(exc).__name__)), None
+    if opened is None:
+        return _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", f"Failed to open: {request.path}")), None
+    opened_name = document_name(opened)
+    if not opened_name:
+        return _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", "Opened document has no name")), None
+    return None, opened_name
 
-    def run(self, document_name_value: str) -> OpenDocumentResult:
-        result = run_open_document_native_mutation(
-            self.collaborators,
-            document_name_value,
-            self.apply,
-            self.inspect,
+
+def verify_open_document(
+    app: object, request: OpenDocumentRequest, opened_name: str
+) -> OpenDocumentResult | None:
+    document = lookup_document(app, opened_name)
+    if document is None:
+        return None
+    return make_open_document_success(DocumentName(opened_name), str(request.path))
+
+
+def compensate_open_document(app: object, opened_name: str) -> OpenDocumentResult:
+    closer = getattr(app, "closeDocument", None)
+    if not callable(closer):
+        return make_open_document_uncertain(
+            "OPEN_DOCUMENT_ROLLBACK_UNCERTAIN",
+            "Opened document could not be closed after a failed open",
+            committed=None,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_open_document_uncertain(
-                "OPEN_DOCUMENT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected open_document result",
-                committed=True,
-            )
-        return make_open_document_success(self.inspected.name, self.inspected.path)
+    try:
+        closer(opened_name)
+    except Exception as exc:
+        return make_open_document_uncertain(
+            "OPEN_DOCUMENT_ROLLBACK_UNCERTAIN",
+            str(exc) or type(exc).__name__,
+            committed=None,
+        )
+    if lookup_document(app, opened_name) is not None:
+        return make_open_document_uncertain(
+            "OPEN_DOCUMENT_ROLLBACK_UNCERTAIN",
+            f"Document {opened_name!r} could not be closed after a failed open",
+            committed=None,
+        )
+    return make_open_document_compensated(
+        "OPEN_DOCUMENT_FAILED",
+        f"Open for {opened_name!r} failed and was rolled back",
+    )
 
 
 def run_open_document(
     collaborators: OpenDocumentCollaborators,
     path: object,
 ) -> OpenDocumentResult:
-    """Open the file, then seal the admitted document through native commit."""
-
     request = build_open_document_request(path)
     if isinstance(request, dict):
         return request
-    app = getattr(collaborators, "freecad", None)
-    opener = getattr(app, "openDocument", None)
-    if not callable(opener):
-        return _failure(OpenDocumentError("FREECAD_UNAVAILABLE", "FreeCAD cannot open documents"))
-    try:
-        opened = opener(str(request.path))
-    except Exception as exc:
-        return _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", str(exc) or type(exc).__name__))
-    if opened is None:
-        return _failure(
-            OpenDocumentError("OPEN_DOCUMENT_FAILED", f"Failed to open: {request.path}")
-        )
-    opened_name = getattr(opened, "Name", None)
-    if not isinstance(opened_name, str) or not opened_name.strip():
-        return _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", "Opened document has no name"))
-    result = _OpenDocumentExecution(collaborators, request).run(opened_name)
-    if isinstance(result, dict) and result.get("success") is not True:
-        if result.get("rollback_succeeded") is True:
-            return result
-        closer = getattr(app, "closeDocument", None)
-        if callable(closer):
-            try:
-                closer(opened_name)
-            except Exception:
-                return make_open_document_uncertain(
-                    "OPEN_DOCUMENT_ROLLBACK_UNCERTAIN",
-                    "Native open_document failed and the opened document could not be closed",
-                    committed=None,
-                    diagnostics={"response": result},
-                )
-    return result
+    app = app_from(collaborators)
+    if app is None:
+        return _failure(OpenDocumentError("FREECAD_UNAVAILABLE", "FreeCAD collaborator is missing"))
+    prep = prepare_open_document(app, request)
+    if prep is not None:
+        return prep
+    perf, opened_name = perform_open_document(app, request)
+    if perf is not None or opened_name is None:
+        return perf if perf is not None else _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", "Open failed"))
+    verified = verify_open_document(app, request, opened_name)
+    if verified is not None:
+        return verified
+    return compensate_open_document(app, opened_name)
 
 
 class _OpenDocumentRpcFacade(Protocol):
@@ -161,11 +139,7 @@ TYPED_RPC_HANDLER = ("open_document", rpc_open_document)
 __all__ = [
     "OpenDocumentCollaborators",
     "OpenDocumentError",
-    "OpenDocumentInspection",
-    "OpenDocumentReceipt",
-    "apply_open_document",
     "build_open_document_request",
-    "read_open_document_result",
     "rpc_open_document",
     "run_open_document",
     "TYPED_RPC_HANDLER",

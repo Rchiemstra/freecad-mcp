@@ -60,8 +60,7 @@ class ActivateDocumentSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["verified"]
     retry_safe: Literal[False]
     document_name: DocumentName
     label: str
@@ -85,6 +84,25 @@ class ActivateDocumentFailure(TypedDict):
     diagnostics: NotRequired[dict[str, object]]
 
 
+
+
+class ActivateDocumentCompensated(TypedDict):
+    """A failed operation whose side effects were compensated."""
+
+    contract_version: Literal[1]
+    success: Literal[False]
+    ok: Literal[False]
+    outcome: Literal["compensated"]
+    committed: Literal[False]
+    retry_safe: Literal[False]
+    error_code: str
+    error: str
+    native_status: NotRequired[str | None]
+    native_message: NotRequired[str]
+    rollback_succeeded: NotRequired[bool]
+    rollback_failed: NotRequired[bool]
+    diagnostics: NotRequired[dict[str, object]]
+
 class ActivateDocumentUncertain(TypedDict):
     """A non-success result whose model state makes automatic retry unsafe."""
 
@@ -103,7 +121,7 @@ class ActivateDocumentUncertain(TypedDict):
     diagnostics: NotRequired[dict[str, object]]
 
 
-ActivateDocumentResult = ActivateDocumentSuccess | ActivateDocumentFailure | ActivateDocumentUncertain
+ActivateDocumentResult = ActivateDocumentSuccess | ActivateDocumentFailure | ActivateDocumentCompensated | ActivateDocumentUncertain
 
 _CORE_KEYS = frozenset(
     {
@@ -127,15 +145,14 @@ _CORE_KEYS = frozenset(
 
 
 def make_activate_document_success(document_name: DocumentName, label: str) -> ActivateDocumentSuccess:
-    """Construct a complete committed result."""
+    """Construct a complete verified result."""
 
     return {
         "contract_version": ACTIVATE_DOCUMENT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
-        "retry_safe": False,
+        "outcome": "verified",
+                "retry_safe": False,
         "document_name": document_name,
         "label": label,
     }
@@ -177,6 +194,41 @@ def make_activate_document_failure(
     return result
 
 
+
+
+def make_activate_document_compensated(
+    error_code: str,
+    error: str,
+    *,
+    native_status: str | None = None,
+    native_message: str | None = None,
+    rollback_succeeded: bool | None = None,
+    rollback_failed: bool | None = None,
+    diagnostics: dict[str, object] | None = None,
+) -> ActivateDocumentCompensated:
+    """Construct a compensated non-success result."""
+
+    result: ActivateDocumentCompensated = {
+        "contract_version": ACTIVATE_DOCUMENT_CONTRACT_VERSION,
+        "success": False,
+        "ok": False,
+        "outcome": "compensated",
+        "committed": False,
+        "retry_safe": False,
+        "error_code": error_code,
+        "error": error,
+    }
+    if native_status is not None:
+        result["native_status"] = native_status
+    if native_message is not None:
+        result["native_message"] = native_message
+    if rollback_succeeded is not None:
+        result["rollback_succeeded"] = rollback_succeeded
+    if rollback_failed is not None:
+        result["rollback_failed"] = rollback_failed
+    if diagnostics:
+        result["diagnostics"] = diagnostics
+    return result
 def make_activate_document_uncertain(
     error_code: str,
     error: str,
@@ -272,16 +324,24 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "verified"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False
     )
+
+def _valid_compensated(response: dict[str, object]) -> bool:
+    return (
+        response.get("outcome") == "compensated"
+        and response.get("committed") is False
+        and response.get("retry_safe") is False
+    )
+
 
 
 def _valid_rejection(response: dict[str, object]) -> bool:
@@ -374,6 +434,8 @@ def parse_activate_document_response(raw_response: object) -> ActivateDocumentRe
                 retry_safe=response["retry_safe"] is True,
                 **details,
             )
+        if _valid_compensated(response):
+            return make_activate_document_compensated(error_code, error, **details)
         if _valid_uncertain(response):
             committed = response["committed"]
             assert committed is None or isinstance(committed, bool)
@@ -392,6 +454,7 @@ __all__ = [
     "ActivateDocumentSuccess",
     "ActivateDocumentUncertain",
     "DocumentName",
+    "make_activate_document_compensated",
     "make_activate_document_failure",
     "make_activate_document_success",
     "make_activate_document_uncertain",

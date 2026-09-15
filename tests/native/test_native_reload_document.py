@@ -4,28 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from tests.core_doc_native_matrix import (
-    check_missing_document,
-    check_success,
-    check_validation_failure,
+from tests.core_doc_lifecycle_native_matrix import (
+    check_reload_document_missing,
+    check_reload_document_success,
 )
 
 pytestmark = pytest.mark.core
 
-_KIND = "saved"
 
-
-_RUN_ARGS = lambda document, ctx: (document.Name,)
-_RUN_ARGS_MISSING = lambda _document, _ctx: ("MissingNativeDoc",)
-
-
-def test_reload_document_native_success_inspects_after_recompute(monkeypatch):
-    check_success("reload_document", _KIND, _RUN_ARGS, monkeypatch)
-
-
-def test_reload_document_native_validation_failure_restores():
-    check_validation_failure("reload_document", _KIND, _RUN_ARGS)
+def test_reload_document_native_success_verifies_reopened():
+    check_reload_document_success()
 
 
 def test_reload_document_native_missing_document_keeps_typed_error():
-    check_missing_document("reload_document", _RUN_ARGS_MISSING)
+    check_reload_document_missing()

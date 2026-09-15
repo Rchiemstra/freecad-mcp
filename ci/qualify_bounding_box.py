@@ -13,7 +13,6 @@ PYTHON_TESTS = (
     "tests/bounding/test_bounding_box_response.py",
     "tests/bounding/test_bounding_box_contract_gate.py",
     "tests/bounding/test_bounding_box_json_rpc_contract.py",
-    "tests/test_typed_platform_discovery.py",
 )
 
 

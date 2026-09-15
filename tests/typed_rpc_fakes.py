@@ -32,6 +32,8 @@ class FakeDocument:
         self.objects: dict[str, FakeObject] = {}
         self.recomputed = False
         self.add_calls = 0
+        self.UndoCount = 1
+        self.RedoCount = 1
 
     @property
     def Objects(self) -> list[FakeObject]:
@@ -174,12 +176,18 @@ def collaborators(
     final_result=None,
 ):
     api = CompatibilityAPI(document, final_result=final_result, events=events)
+
+    def set_active_document(name: str) -> None:
+        api.setActiveDocument(name)
+        app.ActiveDocument = api.getDocument(name)
+
     app = SimpleNamespace(
         getDocument=api.getDocument,
         newDocument=api.newDocument,
         openDocument=api.openDocument,
         closeDocument=api.closeDocument,
-        setActiveDocument=api.setActiveDocument,
+        setActiveDocument=set_active_document,
+        ActiveDocument=document,
     )
     collab = SimpleNamespace(
         freecad=app,

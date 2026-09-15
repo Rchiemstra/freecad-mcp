@@ -44,8 +44,7 @@ class _RecordingFreeCADTransport:
                 "contract_version": 1,
                 "success": True,
                 "ok": True,
-                "outcome": "committed",
-                "committed": True,
+                "outcome": "verified",
                 "retry_safe": False,
             }
             extra = {"document_name": envelope["params"]["name"]}
@@ -158,16 +157,15 @@ def test_public_route_marks_committed_but_invalid_response_non_retryable(monkeyp
         "contract_version": 1,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
+        "outcome": "verified",
         "retry_safe": False,
     }
     transport = _RecordingFreeCADTransport(payload)
     result = _invoke_registered(monkeypatch, transport, {'name': 'AgentDocument'})
     assert result.isError is True
-    assert result.structuredContent["error_code"] == 'CREATE_DOCUMENT_COMMITTED_RESPONSE_INVALID'
+    assert result.structuredContent["error_code"] == 'INVALID_CREATE_DOCUMENT_RESPONSE'
     assert result.structuredContent["data"]["outcome"] == "uncertain"
-    assert result.structuredContent["data"]["committed"] is True
+    assert result.structuredContent["data"].get("committed") is None
     assert result.structuredContent["data"]["retry_safe"] is False
 
 

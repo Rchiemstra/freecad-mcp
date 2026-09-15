@@ -19,14 +19,20 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_activate_document_architecture_gate_rejects_the_production_path_for_policy_reasons() -> None:
-    violations = scan_activate_document_architecture(ROOT)
-    assert violations != []
-    assert any(item.startswith("LIFE activate_document") for item in violations)
+def test_activate_document_architecture_gate_passes_the_production_path() -> None:
+    assert scan_activate_document_architecture(ROOT) == []
 
-    assert any("mutation pipeline as perform step" in item for item in violations)
-    assert any("committed" in item for item in violations)
 
+def test_gate_rejects_legacy_policy_sins_via_source_override() -> None:
+    source = _read(LEAF)
+    broken = source.replace(
+        "    request = build_activate_document_request(doc_name)",
+        '    _ = "setActiveDocument"\n    request = build_activate_document_request(doc_name)',
+        1,
+    )
+    assert any("lifecycle API (setActiveDocument)" in item for item in scan_activate_document_architecture(
+        ROOT, source_overrides={LEAF: broken},
+    ))
 
 
 def test_gate_rejects_adapter_bypass() -> None:

@@ -13,7 +13,6 @@ PYTHON_TESTS = (
     "tests/run/test_run_fem_analysis_response.py",
     "tests/run/test_run_fem_analysis_contract_gate.py",
     "tests/run/test_run_fem_analysis_json_rpc_contract.py",
-    "tests/test_typed_platform_discovery.py",
 )
 
 

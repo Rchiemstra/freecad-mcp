@@ -1,9 +1,8 @@
-"""Typed ``export_step`` mutation."""
+"""Typed ``export_step`` external-effect handler."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.export_step_contract import (
@@ -12,27 +11,26 @@ from ...._shared.protocol.export_step_contract import (
     ExportStepFailure,
     ExportStepRequest,
     ExportStepResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
     make_export_step_failure,
     make_export_step_success,
     make_export_step_uncertain,
 )
-from .typed_runtime import as_float, as_int, as_str
 from . import measure_io_actions
-from .export_step_mutation import ExportStepError, run_export_step_native_mutation
+from .policy_runtime import (
+    app_from,
+    atomic_publish,
+    lookup_document,
+    staged_path,
+    unlink_quiet,
+    verify_nonempty_file,
+)
+from .typed_runtime import as_int
 
 
-@dataclass(frozen=True, slots=True)
-class ExportStepReceipt:
-    payload: dict[str, object]
-    obj: MutationObject | None
-
-
-@dataclass(frozen=True, slots=True)
-class ExportStepInspection:
-    payload: dict[str, object]
+class ExportStepError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _failure(error: ExportStepError, *, retry_safe: bool = True) -> ExportStepFailure:
@@ -42,8 +40,6 @@ def _failure(error: ExportStepError, *, retry_safe: bool = True) -> ExportStepFa
 def build_export_step_request(
     doc_name: object, file_path: object, obj_names: object
 ) -> ExportStepRequest | ExportStepFailure:
-    """Validate the untyped JSON arguments before constructing internal types."""
-
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(ExportStepError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
     if not isinstance(file_path, str) or not file_path.strip():
@@ -54,81 +50,52 @@ def build_export_step_request(
         return _failure(ExportStepError("INVALID_ARGUMENT", "obj_names must be a list of strings"))
     else:
         obj_names_value = obj_names
-    request = ExportStepRequest(
+    return ExportStepRequest(
         doc_name=DocumentName(doc_name),
         file_path=file_path,
-        obj_names=obj_names_value
+        obj_names=obj_names_value,
     )
-    return request
-
-
-@dataclass(slots=True)
-class _ExportStepExecution:
-    collaborators: ExportStepCollaborators
-    request: ExportStepRequest
-    created: ExportStepReceipt | None = None
-    inspected: ExportStepInspection | None = None
-
-    def apply(self, doc: MutationDocument) -> None:
-        self.created = apply_export_step(doc, self.request)
-
-    def inspect(self, doc: MutationReadDocument) -> None:
-        if self.created is None:
-            raise ExportStepError(
-                "INVALID_EXPORT_STEP_RESULT",
-                "export_step did not return an identity receipt",
-            )
-        self.inspected = read_export_step_result(doc, self.created, self.request)
-
-    def run(self) -> ExportStepResult:
-        result = run_export_step_native_mutation(
-            self.collaborators,
-            self.request.doc_name,
-            self.apply,
-            self.inspect,
-        )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_export_step_uncertain(
-                "EXPORT_STEP_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected export_step result",
-                committed=True,
-            )
-        payload = self.inspected.payload
-        return make_export_step_success(
-            path=as_str(payload["path"]), exported=as_int(payload["exported"])
-        )
-
-
-def apply_export_step(doc: MutationDocument, request: ExportStepRequest) -> ExportStepReceipt:
-    """Apply export_step without recomputing or managing a transaction."""
-
-    payload = measure_io_actions.export_step(doc, request.file_path, request.obj_names)
-    return ExportStepReceipt(payload=payload, obj=None)
-
-
-
-def read_export_step_result(
-    doc: MutationReadDocument, receipt: ExportStepReceipt, request: ExportStepRequest
-) -> ExportStepInspection:
-    path = receipt.payload.get("path")
-    if not isinstance(path, str) or not path.strip():
-        raise ExportStepError("INVALID_EXPORT_STEP_RESULT", "missing export path")
-    return ExportStepInspection(payload=dict(receipt.payload))
-
 
 
 def run_export_step(
     collaborators: ExportStepCollaborators,
-    doc_name: str, file_path: str, obj_names: list[str] | None = None,
+    doc_name: str,
+    file_path: str,
+    obj_names: list[str] | None = None,
 ) -> ExportStepResult:
-    """Run export_step through apply, recompute, inspection, and commit."""
-
     request = build_export_step_request(doc_name, file_path, obj_names)
     if isinstance(request, dict):
         return request
-    return _ExportStepExecution(collaborators, request).run()
+    app = app_from(collaborators)
+    if app is None:
+        return _failure(ExportStepError("FREECAD_UNAVAILABLE", "FreeCAD collaborator is missing"))
+    document = lookup_document(app, str(request.doc_name))
+    if document is None:
+        return _failure(ExportStepError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
+    tmp_path = staged_path(str(request.file_path))
+    try:
+        payload = measure_io_actions.export_step(document, tmp_path, request.obj_names)
+    except Exception as exc:
+        unlink_quiet(tmp_path)
+        return _failure(ExportStepError("EXPORT_STEP_FAILED", str(exc) or type(exc).__name__))
+    if not verify_nonempty_file(tmp_path):
+        unlink_quiet(tmp_path)
+        return _failure(ExportStepError("EXPORT_STEP_FAILED", "Staged export file is missing or empty"))
+    try:
+        atomic_publish(tmp_path, str(request.file_path))
+    except Exception as exc:
+        unlink_quiet(tmp_path)
+        if verify_nonempty_file(str(request.file_path)):
+            return make_export_step_uncertain(
+                "EXPORT_STEP_PUBLISH_UNCERTAIN",
+                str(exc) or type(exc).__name__,
+                committed=None,
+            )
+        return _failure(ExportStepError("EXPORT_STEP_FAILED", str(exc) or type(exc).__name__))
+    return make_export_step_success(
+        path=str(request.file_path),
+        exported=as_int(payload.get("exported", 0)),
+    )
 
 
 class _ExportStepRpcFacade(Protocol):
@@ -139,7 +106,9 @@ class _ExportStepRpcFacade(Protocol):
 
 def rpc_export_step(
     self: _ExportStepRpcFacade,
-    doc_name: str, file_path: str, obj_names: list[str] | None = None,
+    doc_name: str,
+    file_path: str,
+    obj_names: list[str] | None = None,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -154,11 +123,7 @@ TYPED_RPC_HANDLER = ("export_step", rpc_export_step)
 __all__ = [
     "ExportStepCollaborators",
     "ExportStepError",
-    "ExportStepInspection",
-    "ExportStepReceipt",
-    "apply_export_step",
     "build_export_step_request",
-    "read_export_step_result",
     "rpc_export_step",
     "run_export_step",
     "TYPED_RPC_HANDLER",
