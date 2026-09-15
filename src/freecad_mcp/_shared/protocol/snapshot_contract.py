@@ -140,7 +140,7 @@ _CORE_KEYS = frozenset(
 
 
 def make_snapshot_success(snapshot_id: str, doc: str, count: int) -> SnapshotSuccess:
-    """Construct a complete committed result."""
+    """Construct a complete observed result."""
 
     return {
         "contract_version": SNAPSHOT_CONTRACT_VERSION,
@@ -285,12 +285,12 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "observed"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False

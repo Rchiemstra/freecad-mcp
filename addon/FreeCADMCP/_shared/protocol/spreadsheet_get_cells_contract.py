@@ -89,10 +89,10 @@ class SpreadsheetGetCellsSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["observed"]
     retry_safe: Literal[False]
     sheet: str
+    cells: list[object]
 
 
 class SpreadsheetGetCellsFailure(TypedDict):
@@ -135,22 +135,22 @@ SpreadsheetGetCellsResult = SpreadsheetGetCellsSuccess | SpreadsheetGetCellsFail
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'sheet', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", "sheet", "cells", "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_spreadsheet_get_cells_success(sheet: str) -> SpreadsheetGetCellsSuccess:
-    """Construct a complete committed result."""
+def make_spreadsheet_get_cells_success(sheet: str, cells: list[object]) -> SpreadsheetGetCellsSuccess:
+    """Construct a complete observed result."""
 
     return {
         "contract_version": SPREADSHEET_GET_CELLS_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
+        "outcome": "observed",
         "retry_safe": False,
         "sheet": sheet,
+        "cells": cells,
     }
 
 
@@ -285,12 +285,12 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "observed"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False
@@ -359,12 +359,15 @@ def parse_spreadsheet_get_cells_response(raw_response: object) -> SpreadsheetGet
     if type(version) is not int or version != SPREADSHEET_GET_CELLS_CONTRACT_VERSION or details is None:
         return _invalid_response(response)
 
-    sheet = response.get('sheet')
+    sheet = response.get("sheet")
+    cells = response.get("cells")
     if (
         _valid_success(response)
-        and isinstance(sheet, str) and sheet.strip()
+        and isinstance(sheet, str)
+        and sheet.strip()
+        and isinstance(cells, list)
     ):
-        return make_spreadsheet_get_cells_success(str(sheet))
+        return make_spreadsheet_get_cells_success(str(sheet), cells)
 
     error_code = response.get("error_code")
     error = response.get("error")
@@ -375,7 +378,8 @@ def parse_spreadsheet_get_cells_response(raw_response: object) -> SpreadsheetGet
         and error_code.strip()
         and isinstance(error, str)
         and error.strip()
-        and 'sheet' not in response
+        and "sheet" not in response
+        and "cells" not in response
     ):
         if _valid_rejection(response):
             return make_spreadsheet_get_cells_failure(

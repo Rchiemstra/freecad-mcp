@@ -88,10 +88,10 @@ class SpreadsheetListAliasesSuccess(TypedDict):
     contract_version: Literal[1]
     success: Literal[True]
     ok: Literal[True]
-    outcome: Literal["committed"]
-    committed: Literal[True]
+    outcome: Literal["observed"]
     retry_safe: Literal[False]
     sheet: str
+    aliases: dict[str, str]
 
 
 class SpreadsheetListAliasesFailure(TypedDict):
@@ -134,22 +134,22 @@ SpreadsheetListAliasesResult = SpreadsheetListAliasesSuccess | SpreadsheetListAl
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'sheet', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", "sheet", "aliases", "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_spreadsheet_list_aliases_success(sheet: str) -> SpreadsheetListAliasesSuccess:
-    """Construct a complete committed result."""
+def make_spreadsheet_list_aliases_success(sheet: str, aliases: dict[str, str]) -> SpreadsheetListAliasesSuccess:
+    """Construct a complete observed result."""
 
     return {
         "contract_version": SPREADSHEET_LIST_ALIASES_CONTRACT_VERSION,
         "success": True,
         "ok": True,
-        "outcome": "committed",
-        "committed": True,
+        "outcome": "observed",
         "retry_safe": False,
         "sheet": sheet,
+        "aliases": aliases,
     }
 
 
@@ -284,12 +284,12 @@ def _valid_success(response: dict[str, object]) -> bool:
     return (
         response.get("success") is True
         and response.get("ok") is True
-        and response.get("outcome") == "committed"
-        and response.get("committed") is True
+        and response.get("outcome") == "observed"
         and response.get("retry_safe") is False
         and "error" not in response
         and "error_code" not in response
-        and response.get("native_status", "Committed") == "Committed"
+        and "committed" not in response
+        and "native_status" not in response
         and "rollback_succeeded" not in response
         and response.get("rollback_failed", False) is False
         and response.get("completion_uncertain", False) is False
@@ -358,12 +358,16 @@ def parse_spreadsheet_list_aliases_response(raw_response: object) -> Spreadsheet
     if type(version) is not int or version != SPREADSHEET_LIST_ALIASES_CONTRACT_VERSION or details is None:
         return _invalid_response(response)
 
-    sheet = response.get('sheet')
+    sheet = response.get("sheet")
+    aliases = response.get("aliases")
     if (
         _valid_success(response)
-        and isinstance(sheet, str) and sheet.strip()
+        and isinstance(sheet, str)
+        and sheet.strip()
+        and isinstance(aliases, dict)
+        and all(isinstance(key, str) and isinstance(value, str) for key, value in aliases.items())
     ):
-        return make_spreadsheet_list_aliases_success(str(sheet))
+        return make_spreadsheet_list_aliases_success(str(sheet), aliases)
 
     error_code = response.get("error_code")
     error = response.get("error")
@@ -374,7 +378,8 @@ def parse_spreadsheet_list_aliases_response(raw_response: object) -> Spreadsheet
         and error_code.strip()
         and isinstance(error, str)
         and error.strip()
-        and 'sheet' not in response
+        and "sheet" not in response
+        and "aliases" not in response
     ):
         if _valid_rejection(response):
             return make_spreadsheet_list_aliases_failure(

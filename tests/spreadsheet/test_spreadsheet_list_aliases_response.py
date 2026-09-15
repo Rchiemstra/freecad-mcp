@@ -17,7 +17,7 @@ from freecad_mcp.operations.parametric_ops.spreadsheet_list_aliases import sprea
 
 
 def _success():
-    return make_spreadsheet_list_aliases_success(sheet="Value")
+    return make_spreadsheet_list_aliases_success(sheet="Value", aliases={"width": "A1"})
 
 
 @pytest.mark.parametrize("raw", [None, [], 1, "timeout", {}, {1: "bad key"}])

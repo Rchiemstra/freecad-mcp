@@ -41,12 +41,15 @@ class _RecordingFreeCADTransport:
         envelope = request["params"][0]
         body_result = self.response_result
         if body_result is _DEFAULT_RESPONSE:
-            body_result = dict({"contract_version": 1, "success": True, "ok": True, "outcome": "committed", "committed": True, "retry_safe": False, "sheet": "Value"}, **{
-                key: envelope["params"][key]
-                for key in envelope["params"]
-                if key in ['sheet']
-            })
-            body_result = {"contract_version": 1, "success": True, "ok": True, "outcome": "committed", "committed": True, "retry_safe": False, "sheet": "Value"}
+            body_result = {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "observed",
+                "retry_safe": False,
+                "sheet": envelope["params"].get("sheet_name", "Value"),
+                "cells": [{"address": "A1", "value": "1"}],
+            }
         response = {
             "jsonrpc": "2.0",
             "id": request["id"],

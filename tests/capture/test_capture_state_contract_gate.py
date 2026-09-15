@@ -19,9 +19,20 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_capture_state_architecture_gate_accepts_the_production_path() -> None:
+def test_capture_state_architecture_gate_passes_the_production_path() -> None:
     assert scan_capture_state_architecture(ROOT) == []
 
+
+def test_gate_rejects_legacy_policy_sins_via_source_override() -> None:
+    source = _read(LEAF)
+    broken = source.replace(
+        "    request = build_capture_state_request(doc_name, object_names)",
+        "    run_capture_state_native_mutation(collaborators, \"\", lambda _d: None, lambda _d: None)\n    request = build_capture_state_request(doc_name, object_names)",
+        1,
+    )
+    assert any("fake mutation pipeline" in item for item in scan_capture_state_architecture(
+        ROOT, source_overrides={LEAF: broken},
+    ))
 
 
 def test_gate_rejects_adapter_bypass() -> None:

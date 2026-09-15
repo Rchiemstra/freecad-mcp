@@ -19,14 +19,20 @@ def _read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_common_volume_along_path_architecture_gate_rejects_the_production_path_for_policy_reasons() -> None:
-    violations = scan_common_volume_along_path_architecture(ROOT)
-    assert violations != []
-    assert any(item.startswith("QUERY common_volume_along_path") for item in violations)
+def test_common_volume_along_path_architecture_gate_passes_the_production_path() -> None:
+    assert scan_common_volume_along_path_architecture(ROOT) == []
 
-    assert any("fake mutation pipeline" in item for item in violations)
-    assert any("committed" in item for item in violations)
 
+def test_gate_rejects_legacy_policy_sins_via_source_override() -> None:
+    source = _read(LEAF)
+    broken = source.replace(
+        "    request = build_common_volume_along_path_request(",
+        "    run_common_volume_along_path_native_mutation(collaborators, \"\", lambda _d: None, lambda _d: None)\n    request = build_common_volume_along_path_request(",
+        1,
+    )
+    assert any("fake mutation pipeline" in item for item in scan_common_volume_along_path_architecture(
+        ROOT, source_overrides={LEAF: broken},
+    ))
 
 
 def test_gate_rejects_adapter_bypass() -> None:

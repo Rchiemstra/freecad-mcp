@@ -37,6 +37,14 @@ def spreadsheet_set_cells(
 def spreadsheet_get_cells(
         conn, doc_name: str, sheet_name: str, addresses: list
     ) -> dict[str, Any]:
+        routed = conn._invoke_mutation_v2(
+            "spreadsheet_get_cells",
+            {"doc_name": doc_name, "sheet_name": sheet_name, "addresses": addresses},
+            document_names=(doc_name,),
+            operation_name="Get spreadsheet cells",
+        )
+        if routed is not None:
+            return routed
         return conn.server.spreadsheet_get_cells(doc_name, sheet_name, addresses)
 
 
@@ -62,6 +70,14 @@ def spreadsheet_set_alias(
 def spreadsheet_list_aliases(
         conn, doc_name: str, sheet_name: str
     ) -> dict[str, Any]:
+        routed = conn._invoke_mutation_v2(
+            "spreadsheet_list_aliases",
+            {"doc_name": doc_name, "sheet_name": sheet_name},
+            document_names=(doc_name,),
+            operation_name="List spreadsheet aliases",
+        )
+        if routed is not None:
+            return routed
         return conn.server.spreadsheet_list_aliases(doc_name, sheet_name)
 
 
