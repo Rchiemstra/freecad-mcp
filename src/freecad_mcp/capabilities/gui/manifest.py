@@ -3,7 +3,7 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
-from ..schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry
+from ..schema import ExecutionMode, ExecutionPolicy, MutationClass, SubjectManifest, ToolEntry
 
 MANIFEST = SubjectManifest(
     subject="gui",
@@ -18,6 +18,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -29,6 +30,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -40,6 +42,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -51,6 +54,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -62,6 +66,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -73,6 +78,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_LIFECYCLE,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -84,6 +90,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_LIFECYCLE,
             register_module="tools_gui_document_a",
         ),
         ToolEntry(
@@ -95,6 +102,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_LIFECYCLE,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -106,17 +114,19 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
             name="get_report_view",
-            docstring='Read FreeCAD Report view (Console dock) text.\n\nUse after a failed mutation or Invalid object when Console output may not\nland on ``getStatusString()``. Returns the recent Report view lines;\noptionally clear the dock after capture to isolate the next failure.\n\nArgs:\n    max_lines: Tail of the report (default 200). Pass None/0 for all lines.\n    clear: If True, clear the Report view after capturing text.\n\nReturns:\n    JSON with ``text``, ``line_count``, ``total_lines``, ``truncated``.\n    On miss: ``REPORT_VIEW_UNAVAILABLE``.',
+            docstring='Read FreeCAD Report view (Console dock) text.\n\nUse after a failed mutation or Invalid object when Console output may not\nland on ``getStatusString()``. Returns the recent Report view lines;\noptionally clear the dock after capture to isolate the next failure.',
             signature="(ctx: 'Context', max_lines: 'int | None' = 200, clear: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.get_report_view_operation",
             rpc_method="get_report_view",
             execution_mode=ExecutionMode.TYPED_GATEWAY,
-            gui_thread=True,
+            gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -128,6 +138,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -139,6 +150,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=True,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -150,6 +162,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -161,6 +174,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -172,6 +186,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_document_b",
         ),
         ToolEntry(
@@ -183,6 +198,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_view_a",
         ),
         ToolEntry(
@@ -194,6 +210,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_view_a",
         ),
         ToolEntry(
@@ -205,6 +222,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_view_a",
         ),
         ToolEntry(
@@ -216,6 +234,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_view_b",
         ),
         ToolEntry(
@@ -227,6 +246,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_view_b",
         ),
         ToolEntry(
@@ -238,6 +258,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_gui_view_b",
         ),
     ),

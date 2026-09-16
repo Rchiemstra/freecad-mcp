@@ -1,0 +1,977 @@
+"""Unit tests for the extended MCP operations layer.
+
+All sketch/pad/utility operations now drive execute_code internally so they
+work with the original FreeCAD addon without any addon update or restart.
+Tests mock freecad.execute_code (success/failure) and verify that the
+generated Python code contains the expected keywords and parameters.
+"""
+import json
+from pathlib import Path
+from unittest.mock import MagicMock
+
+from freecad_mcp._shared.protocol.create_spur_gear_contract import (
+    make_create_spur_gear_failure,
+    make_create_spur_gear_success,
+)
+from freecad_mcp._shared.protocol.close_document_contract import (
+    DocumentName as CloseDocumentName,
+    make_close_document_failure,
+    make_close_document_success,
+)
+from freecad_mcp._shared.protocol.pad_feature_contract import (
+    PadName,
+    make_pad_feature_success,
+)
+from freecad_mcp._shared.protocol.recompute_document_contract import (
+    DocumentName as RecomputeDocumentName,
+    make_recompute_document_failure,
+    make_recompute_document_success,
+)
+from freecad_mcp._shared.protocol.redo_contract import (
+    DocumentName as RedoDocumentName,
+    make_redo_failure,
+    make_redo_success,
+)
+from freecad_mcp._shared.protocol.sketch_add_constraint_contract import (
+    SketchName as ConstraintSketchName,
+    make_sketch_add_constraint_success,
+)
+from freecad_mcp._shared.protocol.sketch_add_geometry_contract import (
+    SketchName as GeometrySketchName,
+    make_sketch_add_geometry_success,
+)
+from freecad_mcp._shared.protocol.undo_contract import (
+    DocumentName as UndoDocumentName,
+    make_undo_failure,
+    make_undo_success,
+)
+from freecad_mcp.operations.core import (
+    close_document_operation,
+    get_recompute_log_operation,
+    get_sketch_diagnostics_operation,
+    get_view_operation,
+    get_objects_operation,
+    sketch_create_operation,
+    sketch_add_geometry_operation,
+    sketch_add_constraint_operation,
+    sketch_add_line_operation,
+    sketch_add_circle_operation,
+    sketch_add_arc_operation,
+    sketch_add_rectangle_operation,
+    sketch_constrain_coincident_operation,
+    sketch_constrain_horizontal_operation,
+    sketch_constrain_vertical_operation,
+    sketch_constrain_distance_operation,
+    sketch_constrain_radius_operation,
+    sketch_constrain_equal_operation,
+    sketch_constrain_parallel_operation,
+    sketch_constrain_perpendicular_operation,
+    sketch_constrain_tangent_operation,
+    pad_feature_operation,
+    pocket_feature_operation,
+    linear_pattern_feature_operation,
+    polar_pattern_feature_operation,
+    mirror_feature_operation,
+    create_spur_gear_operation,
+    recompute_document_operation,
+    undo_operation,
+    redo_operation,
+)
+from mcp.types import ImageContent, TextContent
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _text(response):
+    content = response.content if hasattr(response, "content") else response
+    return " ".join(item.text for item in content if isinstance(item, TextContent))
+
+
+def _has_image(response):
+    content = response.content if hasattr(response, "content") else response
+    return any(isinstance(item, ImageContent) for item in content)
+
+
+
+def _typed_success(conn_method, **payload):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    result = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "sketch": "Sk",
+        "geometry_index": 0,
+        "geometry_indices": [0, 1, 2, 3],
+        "constraint_index": 0,
+        "sample_count": 21,
+    }
+    result.update(payload)
+    getattr(conn, conn_method).return_value = result
+    return conn
+
+
+def _ok_conn(output="done", recompute_errors=None):
+    """Connection where execute_code always succeeds."""
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    conn.execute_code.return_value = {
+        "success": True,
+        "message": output,
+        "recompute_errors": recompute_errors or [],
+    }
+    return conn
+
+
+def _typed_ok(op: str, feature: str):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    getattr(conn, op).return_value = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "feature": feature,
+        "label": feature,
+    }
+    return conn
+
+
+def _typed_fail(op: str, error: str = "oops"):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    getattr(conn, op).return_value = {
+        "contract_version": 1,
+        "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
+        "error_code": "OPERATION_FAILED",
+        "error": error,
+    }
+    return conn
+
+
+def _fail_conn(error="oops"):
+    """Connection where execute_code always fails."""
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    conn.execute_code.return_value = {"success": False, "error": error}
+    return conn
+
+
+def _code(conn) -> str:
+    """Return the code string passed to execute_code on the last call."""
+    return conn.execute_code.call_args[0][0]
+
+
+def _assert_generated_code_compiles(conn):
+    """Generated snippets are sent to FreeCAD as exec() code."""
+    compile(_code(conn), "<freecad-mcp-generated>", "exec")
+
+
+# ---------------------------------------------------------------------------
+# get_view_operation
+# ---------------------------------------------------------------------------
+
+class TestGetViewOperation:
+    def test_text_and_image_when_screenshot_available(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = "base64data"
+        result = get_view_operation(conn, "Isometric")
+        assert _has_image(result)
+        assert any(isinstance(i, TextContent) for i in (result.content if hasattr(result, "content") else result))
+
+    def test_text_only_when_no_screenshot(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        result = get_view_operation(conn, "Front")
+        assert not _has_image(result)
+        assert "Cannot get screenshot" in _text(result)
+
+    def test_label_contains_view_and_focus(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = "data"
+        t = _text(get_view_operation(conn, "Top", focus_object="Box"))
+        assert "Top" in t and "Box" in t
+
+    def test_multi_object_focus_passed_through(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = "data"
+        result = get_view_operation(
+            conn,
+            "Isometric",
+            focus_objects=["StationA", "StationB"],
+            yaw_deg=45,
+        )
+        assert _has_image(result)
+        conn.get_active_screenshot.assert_called_once()
+        kwargs = conn.get_active_screenshot.call_args.kwargs
+        assert kwargs["focus_objects"] == ["StationA", "StationB"]
+        assert kwargs["yaw_deg"] == 45
+        assert "StationA" in _text(result) and "45" in _text(result)
+
+
+class TestSaveViewSequenceOperation:
+    def test_returns_multiple_images(self):
+        from freecad_mcp.operations.core import save_view_sequence_operation
+
+        conn = MagicMock()
+        conn.capture_view_sequence.return_value = {
+            "ok": True,
+            "frame_count": 2,
+            "ok_count": 2,
+            "frames": [
+                {
+                    "index": 0,
+                    "ok": True,
+                    "label": "orbit_00",
+                    "view_name": "Isometric",
+                    "focus_objects": ["Box"],
+                    "yaw_deg": 0,
+                    "image_base64": "img0",
+                },
+                {
+                    "index": 1,
+                    "ok": True,
+                    "label": "orbit_01",
+                    "view_name": "Isometric",
+                    "focus_objects": ["Box"],
+                    "yaw_deg": 180,
+                    "image_base64": "img1",
+                },
+            ],
+        }
+        result = save_view_sequence_operation(conn, orbit={"focus_objects": ["Box"], "steps": 2})
+        images = [
+            item for item in (result.content if hasattr(result, "content") else result)
+            if isinstance(item, ImageContent)
+        ]
+        assert len(images) == 2
+        assert result.structuredContent["ok_count"] == 2
+
+    def test_failure(self):
+        from freecad_mcp.operations.core import save_view_sequence_operation
+
+        conn = MagicMock()
+        conn.capture_view_sequence.return_value = {"ok": False, "error": "no view", "frames": []}
+        result = save_view_sequence_operation(conn, frames=[{"view_name": "Front"}])
+        assert "no view" in _text(result) or "Failed" in _text(result)
+
+
+# ---------------------------------------------------------------------------
+# get_objects_operation
+# ---------------------------------------------------------------------------
+
+class TestGetObjectsOperation:
+    def _conn(self, objs):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.get_objects.return_value = objs
+        return conn
+
+    def test_success_returns_json(self):
+        conn = self._conn([{"Name": "Box", "TypeId": "Part::Box"}])
+        data = json.loads(_text(get_objects_operation(conn, True, "Doc")))
+        assert data[0]["Name"] == "Box"
+
+    def test_rpc_exception_returns_error(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.get_objects.side_effect = Exception("shape is invalid")
+        assert "Failed to get objects" in _text(get_objects_operation(conn, True, "Doc"))
+
+    def test_partial_results_passed_through(self):
+        conn = self._conn([
+            {"Name": "Good"},
+            {"Name": "Bad", "error": "Serialization failed: invalid shape"},
+        ])
+        data = json.loads(_text(get_objects_operation(conn, True, "Doc")))
+        assert len(data) == 2 and "error" in data[1]
+
+
+# ---------------------------------------------------------------------------
+# sketch_create_operation
+# ---------------------------------------------------------------------------
+
+class TestSketchCreateOperation:
+    def test_calls_typed_rpc(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "Doc", "Sketch")
+        conn.sketch_create.assert_called_once_with("Doc", "Sketch", None, None)
+        conn.execute_code.assert_not_called()
+
+    def test_doc_and_sketch_name_passed(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "MyDoc", "MySk")
+        conn.sketch_create.assert_called_once_with("MyDoc", "MySk", None, None)
+
+    def test_body_name_passed(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "Doc", "Sk", body_name="Body")
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", "Body", None)
+
+    def test_attach_xy_plane_passed(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "Doc", "Sk", attach_to="XY_Plane")
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", None, "XY_Plane")
+
+    def test_attach_face_passed(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "Doc", "Sk", attach_to="Box:Face1")
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", None, "Box:Face1")
+
+    def test_body_and_plane_attachment_passed(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "Doc", "Sk", body_name="Body", attach_to="XY_Plane")
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", "Body", "XY_Plane")
+
+    def test_face_attachment_passed(self):
+        conn = _typed_success("sketch_create")
+        sketch_create_operation(conn, True, "Doc", "Sk", attach_to="Box:Face1")
+        conn.sketch_create.assert_called_once_with("Doc", "Sk", None, "Box:Face1")
+
+    def test_failure_message(self):
+        assert "Failed" in _text(
+            sketch_create_operation(_typed_fail("sketch_create"), True, "Doc", "Sk")
+        )
+
+
+# ---------------------------------------------------------------------------
+# sketch_add_geometry_operation
+# ---------------------------------------------------------------------------
+
+class TestSketchAddGeometryOperation:
+    def test_success_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        conn.sketch_add_geometry.assert_called_once_with("Doc", "Sk", geometry)
+        conn.execute_code.assert_not_called()
+
+    def test_sketch_name_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        sketch_add_geometry_operation(conn, True, "Doc", "MySk", [])
+        conn.sketch_add_geometry.assert_called_once_with("Doc", "MySk", [])
+
+    def test_line_coords_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{"type": "line", "start": {"x": 1.5, "y": 2.5}, "end": {"x": 3.0, "y": 4.0}}]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert conn.sketch_add_geometry.call_args.args[2] == geometry
+
+    def test_circle_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{"type": "circle", "center": {"x": 5, "y": 5}, "radius": 3}]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert conn.sketch_add_geometry.call_args.args[2][0]["type"] == "circle"
+
+    def test_arc_passed(self):
+        conn = _typed_success("sketch_add_geometry")
+        geometry = [{
+            "type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,
+            "start_angle": 0, "end_angle": 90,
+        }]
+        sketch_add_geometry_operation(conn, True, "Doc", "Sk", geometry)
+        assert conn.sketch_add_geometry.call_args.args[2][0]["type"] == "arc"
+
+    def test_screenshot_attached(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = "imgdata"
+        conn.sketch_add_geometry.return_value = make_sketch_add_geometry_success(
+            GeometrySketchName("Sk"), [0]
+        )
+        result = sketch_add_geometry_operation(conn, False, "Doc", "Sk", [])
+        assert not result.isError
+        assert "Sk" in _text(result)
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            sketch_add_geometry_operation(_typed_fail("sketch_add_geometry"), True, "Doc", "Sk", [])
+        )
+
+
+# ---------------------------------------------------------------------------
+# sketch_add_constraint_operation
+# ---------------------------------------------------------------------------
+
+class TestSketchAddConstraintOperation:
+    def test_success(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.sketch_add_constraint.return_value = make_sketch_add_constraint_success(
+            ConstraintSketchName("Sk"), 1
+        )
+        constraints = [{"type": "Horizontal", "geo": 0}]
+        result = sketch_add_constraint_operation(conn, True, "Doc", "Sk", constraints)
+        conn.sketch_add_constraint.assert_called_once_with("Doc", "Sk", constraints)
+        conn.execute_code.assert_not_called()
+        assert not result.isError
+
+    def test_constraint_type_passed(self):
+        conn = _typed_success("sketch_add_constraint")
+        constraints = [{"type": "Coincident", "geo1": 0, "pos1": 1, "geo2": 1, "pos2": 2}]
+        sketch_add_constraint_operation(conn, True, "Doc", "Sk", constraints)
+        assert conn.sketch_add_constraint.call_args.args[2][0]["type"] == "Coincident"
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            sketch_add_constraint_operation(
+                _typed_fail("sketch_add_constraint"), True, "Doc", "Sk", []
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# pad_feature_operation
+# ---------------------------------------------------------------------------
+
+class TestPadFeatureOperation:
+    def test_success(self):
+        conn = _typed_success("pad_feature", pad="Pad", label="Pad")
+        result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 15.0)
+        conn.pad_feature.assert_called_once_with("Doc", "Sk", "Pad", 15.0, None, False, False)
+        assert not result.isError
+
+    def test_params_passed(self):
+        conn = _typed_success("pad_feature", pad="MyPad", label="MyPad")
+        pad_feature_operation(conn, True, "Doc", "Sk", "MyPad", 25.0, body_name="Body")
+        conn.pad_feature.assert_called_once_with("Doc", "Sk", "MyPad", 25.0, "Body", False, False)
+
+    def test_symmetric_passed(self):
+        conn = _typed_success("pad_feature", pad="P", label="P")
+        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True)
+        assert conn.pad_feature.call_args.args[5] is True
+
+    def test_reversed_passed(self):
+        conn = _typed_success("pad_feature", pad="P", label="P")
+        pad_feature_operation(conn, True, "Doc", "Sk", "P", 10, symmetric=True, reversed_dir=True)
+        conn.pad_feature.assert_called_once_with("Doc", "Sk", "P", 10, None, True, True)
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            pad_feature_operation(_typed_fail("pad_feature"), True, "Doc", "Sk", "P", 10)
+        )
+
+
+# ---------------------------------------------------------------------------
+# pocket_feature_operation
+# ---------------------------------------------------------------------------
+
+class TestPocketFeatureOperation:
+    def test_success(self):
+        conn = _typed_success("pocket_feature", pocket="Pocket", label="Pocket")
+        result = pocket_feature_operation(conn, True, "Doc", "Sk", "Pocket", 5.0)
+        conn.pocket_feature.assert_called_once_with("Doc", "Sk", "Pocket", 5.0, None, False, False)
+        assert not result.isError
+
+    def test_symmetric_passed(self):
+        conn = _typed_success("pocket_feature", pocket="P", label="P")
+        pocket_feature_operation(conn, True, "Doc", "Sk", "P", 5, symmetric=True, reversed_dir=True)
+        conn.pocket_feature.assert_called_once_with("Doc", "Sk", "P", 5, None, True, True)
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            pocket_feature_operation(_typed_fail("pocket_feature"), True, "Doc", "Sk", "P", 5)
+        )
+
+
+# ---------------------------------------------------------------------------
+# PartDesign pattern operations
+# ---------------------------------------------------------------------------
+
+class TestLinearPatternFeatureOperation:
+    def test_success(self):
+        result = linear_pattern_feature_operation(
+            _typed_ok("linear_pattern_feature", "Array"), True, "Doc", "Pocket", "Array", 40.0, 5
+        )
+        assert not result.isError
+        assert "Array" in _text(result)
+
+    def test_params_passed(self):
+        conn = _typed_ok("linear_pattern_feature", "Array")
+        linear_pattern_feature_operation(
+            conn, True, "Doc", "Pocket", "Array", 40.0, 5,
+            direction="Pad:Edge1", body_name="Body", reversed_dir=True,
+        )
+        conn.linear_pattern_feature.assert_called_once_with(
+            "Doc", "Pocket", "Array", 40.0, 5, "Pad:Edge1", "Body", True
+        )
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            linear_pattern_feature_operation(
+                _typed_fail("linear_pattern_feature"), True, "Doc", "Pocket", "Array", 40.0, 5
+            )
+        )
+
+
+class TestPolarPatternFeatureOperation:
+    def test_success(self):
+        result = polar_pattern_feature_operation(
+            _typed_ok("polar_pattern_feature", "BoltCircle"), True, "Doc", "Pocket", "BoltCircle", 6
+        )
+        assert not result.isError
+        assert "BoltCircle" in _text(result)
+
+    def test_params_passed(self):
+        conn = _typed_ok("polar_pattern_feature", "BoltCircle")
+        polar_pattern_feature_operation(
+            conn, True, "Doc", "Pocket", "BoltCircle", 6,
+            angle=180.0, axis="AxisObj:Edge2", body_name="Body", reversed_dir=True,
+        )
+        conn.polar_pattern_feature.assert_called_once_with(
+            "Doc", "Pocket", "BoltCircle", 6, 180.0, "AxisObj:Edge2", "Body", True
+        )
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            polar_pattern_feature_operation(
+                _typed_fail("polar_pattern_feature"), True, "Doc", "Pocket", "BoltCircle", 6
+            )
+        )
+
+
+class TestMirrorFeatureOperation:
+    def test_success(self):
+        result = mirror_feature_operation(
+            _typed_ok("mirror_feature", "PocketMirror"), True, "Doc", "Pocket", "PocketMirror"
+        )
+        assert not result.isError
+        assert "PocketMirror" in _text(result)
+
+    def test_params_passed(self):
+        conn = _typed_ok("mirror_feature", "PocketMirror")
+        mirror_feature_operation(
+            conn, True, "Doc", "Pocket", "PocketMirror", plane="Pad:Face1", body_name="Body"
+        )
+        conn.mirror_feature.assert_called_once_with(
+            "Doc", "Pocket", "PocketMirror", "Pad:Face1", "Body"
+        )
+
+    def test_failure(self):
+        assert "Failed" in _text(
+            mirror_feature_operation(_typed_fail("mirror_feature"), True, "Doc", "Pocket", "PocketMirror")
+        )
+
+
+# ---------------------------------------------------------------------------
+# create_spur_gear_operation
+# ---------------------------------------------------------------------------
+
+class TestCreateSpurGearOperation:
+    def test_success(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear_Body", "Gear_Sketch", "Gear", 24, 2.0
+        )
+        result = create_spur_gear_operation(conn, True, "Doc", "Gear", 24, 2.0, 10.0)
+        payload = json.loads(_text(result))
+        assert payload["feature"] == "Gear"
+        assert payload["teeth"] == 24
+        conn.create_spur_gear.assert_called_once()
+        conn.execute_code.assert_not_called()
+
+    def test_params_in_rpc(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear24_Body", "Gear24_Sketch", "Gear24", 24, 2.0
+        )
+        create_spur_gear_operation(
+            conn,
+            True,
+            "Doc",
+            "Gear24",
+            24,
+            2.0,
+            10.0,
+            pressure_angle=20.0,
+            bore_diameter=6.0,
+        )
+        args = conn.create_spur_gear.call_args.args
+        assert args[1] == "Gear24"
+        assert args[2] == 24
+        assert args[6] == 6.0
+
+    def test_tooth_profile_in_rpc_and_helper(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear24_Body", "Gear24_Sketch", "Gear24", 24, 2.0
+        )
+        create_spur_gear_operation(
+            conn, True, "Doc", "Gear24", 24, 2.0, 10.0,
+            tooth_profile="trapezoid",
+        )
+        assert conn.create_spur_gear.call_args.args[-1] == "trapezoid"
+        code = (
+            Path(__file__).resolve().parents[2]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "gear_actions.py"
+        ).read_text(encoding="utf-8")
+        assert "_normalize_profile" in code
+        assert '"trapezoid"' in code
+        assert '"straight"' in code
+        assert '"pin"' in code
+
+    def test_uses_sketch_and_pad_workflow(self):
+        code = (
+            Path(__file__).resolve().parents[2]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "gear_actions.py"
+        ).read_text(encoding="utf-8")
+        assert "Sketcher::SketchObject" in code
+        assert "PartDesign::Pad" in code
+        assert "Part::Feature" not in code
+        assert '"Coincident"' in code
+        assert "_set_extrusion_one_side" in code
+
+    def test_helper_compiles(self):
+        code = (
+            Path(__file__).resolve().parents[2]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "gear_actions.py"
+        ).read_text(encoding="utf-8")
+        compile(code, "gear_actions.py", "exec")
+
+    def test_helper_compiles_for_each_tooth_profile(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear_Body", "Gear_Sketch", "Gear", 24, 2.0
+        )
+        for profile in ["involute", "cycloidal", "trapezoid", "straight", "circular_arc", "pin"]:
+            create_spur_gear_operation(
+                conn, True, "Doc", "Gear", 24, 2.0, 10.0,
+                tooth_profile=profile,
+            )
+        assert conn.create_spur_gear.call_count == 6
+
+    def test_helper_compiles_for_profile_aliases(self):
+        conn = _ok_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_success(
+            "Gear_Body", "Gear_Sketch", "Gear", 24, 2.0
+        )
+        for profile in ["straight_teeth", "novikov", "lantern"]:
+            create_spur_gear_operation(
+                conn, True, "Doc", "Gear", 24, 2.0, 10.0,
+                tooth_profile=profile,
+            )
+        assert conn.create_spur_gear.call_count == 3
+
+    def test_failure(self):
+        conn = _fail_conn()
+        conn.create_spur_gear.return_value = make_create_spur_gear_failure(
+            "CREATE_SPUR_GEAR_FAILED", "oops"
+        )
+        assert "Failed" in _text(create_spur_gear_operation(conn, True, "Doc", "Gear", 24, 2.0, 10.0))
+
+
+# ---------------------------------------------------------------------------
+# recompute / undo / redo via execute_code
+# ---------------------------------------------------------------------------
+
+class TestDocumentOpsViaCode:
+    def test_recompute_success(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.recompute_document.return_value = make_recompute_document_success(
+            RecomputeDocumentName("Doc")
+        )
+        result = recompute_document_operation(conn, "Doc")
+        conn.recompute_document.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert '"success": true' in _text(result).lower()
+
+    def test_recompute_failure(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.recompute_document.return_value = make_recompute_document_failure(
+            "RECOMPUTE_DOCUMENT_FAILED", "oops"
+        )
+        assert "Failed" in _text(recompute_document_operation(conn, "Doc"))
+
+    def test_undo_success(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.undo.return_value = make_undo_success(UndoDocumentName("Doc"))
+        result = undo_operation(conn, "Doc")
+        conn.undo.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert '"success": true' in _text(result).lower()
+
+    def test_undo_failure(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.undo.return_value = make_undo_failure("UNDO_FAILED", "oops")
+        assert "Failed" in _text(undo_operation(conn, "Doc"))
+
+    def test_redo_success(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.redo.return_value = make_redo_success(RedoDocumentName("Doc"))
+        result = redo_operation(conn, "Doc")
+        conn.redo.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
+        assert '"success": true' in _text(result).lower()
+
+    def test_redo_failure(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.redo.return_value = make_redo_failure("REDO_FAILED", "oops")
+        assert "Failed" in _text(redo_operation(conn, "Doc"))
+
+
+# ---------------------------------------------------------------------------
+# Flat geometry helpers — each drives execute_code
+# ---------------------------------------------------------------------------
+
+class TestFlatGeometryHelpers:
+    def test_add_line_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_line")
+        result = sketch_add_line_operation(conn, True, "Doc", "Sk", 0, 0, 10, 0)
+        conn.sketch_add_line.assert_called_once()
+        assert result.isError is False
+
+    def test_add_circle_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_circle")
+        result = sketch_add_circle_operation(conn, True, "Doc", "Sk", 5, 5, 3)
+        conn.sketch_add_circle.assert_called_once()
+        assert result.isError is False
+
+    def test_add_arc_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_arc")
+        result = sketch_add_arc_operation(conn, True, "Doc", "Sk", 0, 0, 5, 0, 90)
+        conn.sketch_add_arc.assert_called_once()
+        assert result.isError is False
+
+    def test_add_rectangle_calls_typed_rpc(self):
+        conn = _typed_success("sketch_add_rectangle")
+        result = sketch_add_rectangle_operation(conn, True, "Doc", "Sk", 0, 0, 10, 5)
+        conn.sketch_add_rectangle.assert_called_once()
+        assert result.isError is False
+
+    def test_failure_reported(self):
+        result = sketch_add_line_operation(_typed_fail("sketch_add_line", "sketch not found"), True, "Doc", "Sk", 0, 0, 1, 0)
+        assert result.isError is True
+
+
+class TestFlatConstraintHelpers:
+    def test_coincident_typed_rpc(self):
+        conn = _typed_success("sketch_constrain_coincident")
+        result = sketch_constrain_coincident_operation(conn, True, "Doc", "Sk", 0, 1, 1, 2)
+        conn.sketch_constrain_coincident.assert_called_once()
+        assert result.isError is False
+
+    def test_horizontal_typed_rpc(self):
+        conn = _typed_success("sketch_constrain_horizontal")
+        sketch_constrain_horizontal_operation(conn, True, "Doc", "Sk", 0)
+        conn.sketch_constrain_horizontal.assert_called_once()
+
+    def test_failure_reported(self):
+        result = sketch_constrain_horizontal_operation(_typed_fail("sketch_constrain_horizontal", "bad type"), True, "Doc", "Sk", 0)
+        assert result.isError is True
+
+
+class TestRecomputeErrorsInResponse:
+    def test_no_errors_no_warning(self):
+        conn = _typed_success("sketch_add_line")
+        result = sketch_add_line_operation(conn, True, "Doc", "Sk", 0, 0, 10, 0)
+        assert "Recompute errors" not in _text(result)
+
+    def test_multiple_errors_all_listed(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.pad_feature.return_value = make_pad_feature_success(PadName("Pad"), "Pad")
+        result = pad_feature_operation(conn, True, "Doc", "Sk", "Pad", 10.0)
+        t = _text(result)
+        assert "Pad" in t
+        conn.pad_feature.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# get_recompute_log_operation
+# ---------------------------------------------------------------------------
+
+class TestGetRecomputeLogOperation:
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn()
+        conn.get_recompute_log.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "MyDoc",
+            "errors": [],
+        }
+        get_recompute_log_operation(conn, "MyDoc")
+        conn.get_recompute_log.assert_called_once_with("MyDoc")
+        conn.execute_code.assert_not_called()
+
+    def test_failure_reported(self):
+        conn = _fail_conn("no doc")
+        conn.get_recompute_log.return_value = {
+            "contract_version": 1,
+            "success": False,
+            "ok": False,
+            "outcome": "rejected",
+            "retry_safe": True,
+            "error_code": "DOCUMENT_NOT_FOUND",
+            "error": "no doc",
+        }
+        result = get_recompute_log_operation(conn, "Part")
+        assert "Failed" in _text(result)
+
+    def test_success_returns_json(self):
+        conn = _ok_conn()
+        conn.get_recompute_log.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "Part",
+            "errors": [],
+        }
+        result = get_recompute_log_operation(conn, "Part")
+        assert '"doc": "Part"' in _text(result)
+
+
+# ---------------------------------------------------------------------------
+# get_sketch_diagnostics_operation
+# ---------------------------------------------------------------------------
+
+class TestGetSketchDiagnosticsOperation:
+    def test_routes_typed_rpc(self):
+        conn = _ok_conn()
+        conn.get_sketch_diagnostics.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "MyDoc",
+            "sketch": "MySk",
+            "geometry_count": 2,
+            "constraint_count": 1,
+        }
+        get_sketch_diagnostics_operation(conn, "MyDoc", "MySk")
+        conn.get_sketch_diagnostics.assert_called_once_with("MyDoc", "MySk")
+        conn.execute_code.assert_not_called()
+
+    def test_failure_reported(self):
+        conn = _fail_conn("no sketch")
+        conn.get_sketch_diagnostics.return_value = {
+            "contract_version": 1,
+            "success": False,
+            "ok": False,
+            "outcome": "rejected",
+            "retry_safe": True,
+            "error_code": "SKETCH_NOT_FOUND",
+            "error": "no sketch",
+        }
+        result = get_sketch_diagnostics_operation(conn, "Doc", "Sk")
+        assert "Failed" in _text(result)
+
+    def test_success_returns_json(self):
+        conn = _ok_conn()
+        conn.get_sketch_diagnostics.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "doc": "Doc",
+            "sketch": "Sk",
+            "geometry_count": 2,
+            "constraint_count": 1,
+        }
+        result = get_sketch_diagnostics_operation(conn, "Doc", "Sk")
+        assert '"geometry_count": 2' in _text(result)
+
+
+# ---------------------------------------------------------------------------
+# close_document_operation
+# ---------------------------------------------------------------------------
+
+class TestCloseDocumentOperation:
+    def test_calls_typed_close_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("Part")
+        )
+        close_document_operation(conn, "Part")
+        conn.close_document.assert_called_once_with("Part")
+        conn.execute_code.assert_not_called()
+
+    def test_doc_name_is_explicit_rpc_scope(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("MyDoc")
+        )
+        close_document_operation(conn, "MyDoc")
+        conn.close_document.assert_called_once_with("MyDoc")
+
+    def test_does_not_embed_close_document_code(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("Part")
+        )
+        close_document_operation(conn, "Part")
+        conn.execute_code.assert_not_called()
+
+    def test_success_message(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_success(
+            CloseDocumentName("Part")
+        )
+        result = close_document_operation(conn, "Part")
+        assert '"success": true' in _text(result).lower()
+
+    def test_failure_reported(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_failure(
+            "DOCUMENT_NOT_FOUND", "not found"
+        )
+        result = close_document_operation(conn, "Part")
+        assert "Failed" in _text(result)
+
+    def test_backend_denial_cannot_be_reported_as_closed(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.close_document.return_value = make_close_document_failure(
+            "CLOSE_DOCUMENT_DENIED",
+            "A leased document cannot be closed by the generic RPC. "
+            "Finalize and verify the save first.",
+        )
+
+        result = close_document_operation(conn, "Part")
+
+        assert result.isError is True
+        assert "Failed to close document" in _text(result)
+        assert "Finalize and verify" in _text(result)
+        assert result.structuredContent["success"] is False

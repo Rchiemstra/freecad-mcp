@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["ruff>=0.9"]
+# dependencies = ["mypy==2.3.1", "ruff>=0.9"]
 # ///
 """Run Ruff and the FreeCAD MCP architectural boundary policy.
 
@@ -130,6 +130,7 @@ COMPOSITION_MODULE_PATHS = frozenset(
         "src/freecad_mcp/freecad_client_ops/connection_methods/connection_read_ops.py",
         "src/freecad_mcp/freecad_client_ops/connection_methods/connection_view_ops.py",
         "src/freecad_mcp/freecad_client_ops/facade_bindings.py",
+        "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
         "src/freecad_mcp/operations/__init__.py",
         "src/freecad_mcp/operations/core.py",
         "src/freecad_mcp/operations/diagnostics.py",
@@ -764,8 +765,15 @@ def _is_phase18_compatibility_surface(parsed: ParsedFile) -> bool:
     return _normalized_display(parsed) in PHASE18_COMPATIBILITY_SHIM_PATHS
 
 
+def _is_typed_protocol_contract(parsed: ParsedFile) -> bool:
+    display = _normalized_display(parsed).replace("\\", "/")
+    return display.endswith("_contract.py") and "/_shared/protocol/" in display
+
+
 def _is_arch106_107_exempt(parsed: ParsedFile, root: Path) -> bool:
     display = _normalized_display(parsed)
+    if _is_typed_protocol_contract(parsed):
+        return True
     if display in DISPATCH_COMPOSITION_PATHS:
         return True
     if _is_phase18_compatibility_surface(parsed):
@@ -2147,7 +2155,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ruff_result = 0
     if not args.architecture_only:
         ruff_result = run_ruff(files, args.fix)
-    if violations or ruff_result:
+    body_contract_result = subprocess.run(
+        [sys.executable, str(root / "ci" / "check_body_create_contract.py")],
+        cwd=root,
+        check=False,
+    ).returncode
+    if violations or ruff_result or body_contract_result:
         return 1 if ruff_result in {0, 1} else ruff_result
     print("lint: all checks passed")
     return 0

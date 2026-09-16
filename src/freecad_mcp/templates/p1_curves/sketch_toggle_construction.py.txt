@@ -1,9 +1,0 @@
-_indices = $geo_indices
-_construction = $construction
-for _gi in _indices:
-    _sk.toggleConstruction(_gi)
-    _g = _sk.Geometry[_gi]
-    if hasattr(_g, 'Construction') and _g.Construction != _construction:
-        _sk.toggleConstruction(_gi)
-# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
-print('toggled=' + str(_indices))

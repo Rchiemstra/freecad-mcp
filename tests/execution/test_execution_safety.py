@@ -1,0 +1,142 @@
+"""Regression tests for GUI-thread execute_code safety checks."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from addon.FreeCADMCP.rpc_server.execution_safety import (
+    RequestClass,
+    classify_execute_code,
+    find_gui_blocking_risk,
+    find_gui_geometry_loop_risk,
+)
+
+SWEEP45_1_CODE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "sweep45_1_payload.py.txt"
+).read_text(encoding="utf-8")
+
+
+HANGING_SYMMETRY_AUDIT = r'''
+sp = S("X90_SpoolWithRails")
+spm = sp.transformGeometry(matrix)
+dif = sp.cut(spm).Volume + spm.cut(sp).Volume
+gh = S("X90_CableGuideHalf")
+gm = S("X90_CableGuideMirror")
+ghm = gh.transformGeometry(matrix)
+dif2 = ghm.cut(gm).Volume + gm.cut(ghm).Volume
+'''
+
+ISINSIDE_GRID_AUDIT = r'''
+for radius in radii:
+    for index in range(720):
+        point = points[radius, index]
+        samples.append(shape.isInside(point, 1e-4, True))
+'''
+
+
+def test_blocks_repeated_booleans_on_transformed_shapes_in_read_only_code():
+    risk = find_gui_blocking_risk(HANGING_SYMMETRY_AUDIT, read_only=True)
+    assert risk is not None
+    assert risk.boolean_calls == 4
+    assert risk.transform_calls == 2
+
+
+def test_allows_lightweight_transformed_shape_distance_audit():
+    code = "mirrored = shape.transformGeometry(matrix)\nprint(shape.distToShape(mirrored)[0])"
+    assert find_gui_blocking_risk(code, read_only=True) is None
+
+
+def test_allows_single_boolean_in_read_only_code():
+    code = "mirrored = shape.transformGeometry(matrix)\nprint(shape.cut(mirrored).Volume)"
+    assert find_gui_blocking_risk(code, read_only=True) is None
+
+
+def test_modeling_payload_is_not_blocked_by_read_only_guard():
+    assert find_gui_blocking_risk(HANGING_SYMMETRY_AUDIT, read_only=False) is None
+
+
+def test_detects_expensive_geometry_inside_sweep_loop():
+    risk = find_gui_geometry_loop_risk(SWEEP45_1_CODE)
+    assert risk is not None
+    assert risk.expensive_calls == 4
+    assert risk.loops == 12
+
+
+def test_detects_isinside_sampling_loop_as_worker_only():
+    risk = find_gui_geometry_loop_risk(ISINSIDE_GRID_AUDIT)
+    assert risk is not None
+    assert risk.expensive_calls == 1
+    assert risk.worker_only_calls == 1
+    assert risk.loops == 2
+
+
+def test_does_not_flag_boundbox_loop_with_top_level_expensive_call():
+    code = (
+        "for obj in doc.Objects:\n"
+        "    print(obj.Shape.BoundBox)\n"
+        "print(shape.distToShape(other)[0])\n"
+    )
+    assert find_gui_geometry_loop_risk(code) is None
+
+
+def test_flags_expensive_geometry_inside_for_loop():
+    code = "for item in items:\n    print(item.cut(other).Volume)"
+    risk = find_gui_geometry_loop_risk(code)
+    assert risk is not None
+    assert risk.expensive_calls == 1
+    assert risk.loops == 1
+
+
+def test_does_not_flag_single_expensive_geometry_call_without_iteration():
+    assert find_gui_geometry_loop_risk("print(a.distToShape(b)[0])") is None
+
+
+def test_syntax_errors_are_left_for_execute_code_reporting():
+    assert find_gui_blocking_risk("if :", read_only=True) is None
+
+
+def test_mutating_declaration_stays_on_gui_thread():
+    assert classify_execute_code("doc.addObject('Part::Feature', 'Box')", read_only=False) == (
+        RequestClass.GUI_MUTATION
+    )
+
+
+def test_allowlisted_lightweight_read_stays_on_gui_thread():
+    code = "import FreeCAD\ndoc = FreeCAD.getDocument('Model')\nprint(len(doc.Objects))"
+    assert classify_execute_code(code, read_only=True) == RequestClass.GUI_LIGHTWEIGHT_READ
+
+
+def test_known_expensive_analysis_routes_to_worker():
+    assert classify_execute_code("print(shape.distToShape(other)[0])", read_only=True) == (
+        RequestClass.WORKER_ANALYSIS
+    )
+
+
+def test_isinside_analysis_routes_to_worker():
+    assert classify_execute_code(
+        "print(shape.isInside(point, 1e-4, True))", read_only=True
+    ) == RequestClass.WORKER_ANALYSIS
+
+
+def test_expensive_method_alias_routes_to_worker():
+    code = "operation = shape.cut\nprint(operation(other).Volume)"
+    assert classify_execute_code(code, read_only=True) == RequestClass.WORKER_ANALYSIS
+
+
+def test_dynamic_method_lookup_fails_safe_to_worker():
+    code = "operation = getattr(shape, method_name)\nprint(operation(other))"
+    assert classify_execute_code(code, read_only=True) == RequestClass.UNKNOWN
+
+
+def test_imported_helper_fails_safe_to_worker():
+    code = "from custom_analysis import inspect_shape\nprint(inspect_shape(shape))"
+    assert classify_execute_code(code, read_only=True) == RequestClass.UNKNOWN
+
+
+def test_unknown_import_and_syntax_fail_safe_to_worker():
+    assert classify_execute_code("import numpy", read_only=True) == RequestClass.UNKNOWN
+    assert classify_execute_code("if :", read_only=True) == RequestClass.UNKNOWN
+
+
+def test_attribute_write_declared_read_only_fails_safe_to_worker():
+    assert classify_execute_code("obj.Label = 'changed'", read_only=True) == RequestClass.UNKNOWN

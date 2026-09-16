@@ -225,12 +225,24 @@ def native_mutation_rejection(
         "error": error,
         "native_status": status,
     }
+    committed = (
+        native_result.get("committed") is True
+        if isinstance(native_result, dict)
+        else False
+    )
+    rollback_failed = _rollback_failed(native_result)
+    result["committed"] = committed
+    result["outcome"] = "uncertain" if committed or rollback_failed else "rejected"
+    result["retry_safe"] = not committed and not rollback_failed
     if isinstance(native_result, dict):
         if native_result.get("message") is not None:
             result["native_message"] = native_result.get("message")
         for key in ("rollback_succeeded", "rollback_failed"):
             if key in native_result:
                 result[key] = native_result[key]
+    if rollback_failed:
+        result["rollback_succeeded"] = False
+        result["rollback_failed"] = True
     if document is not None:
         result["document_name"] = document_name
         readiness = document_readiness(document)
@@ -307,25 +319,34 @@ def _validate_native_callback(collaborators, document) -> None:
     collaborators.validate_document_invariants(document)
 
 
+def _invoke_mutation_callback(
+    callback: Callable[..., Any], document: Any, *, bind_document: bool
+) -> Any:
+    return callback(document) if bind_document else callback()
+
+
 def run_cad_mutation(  # noqa: C901
     collaborators,
     document_name: str,
-    callback: Callable[[], Any],
+    callback: Callable[..., Any],
     *,
     structural: bool = False,
     inflight: Any = None,
     validate_after_callback: bool = True,
     native_recompute: bool = True,
     recovery_deferred: bool = False,
-    postcondition: Callable[[], Any] | None = None,
+    postcondition: Callable[..., Any] | None = None,
     method: str | None = None,
+    bind_document: bool = False,
+    require_native: bool = False,
 ):
     """Run one typed CAD callback through one native compatibility commit.
 
     The native result is an internal attribution result.  The RPC caller keeps
     receiving the historical CAD callback envelope.  Failure-shaped legacy
     values escape through a private exception so the native coordinator rolls
-    back before the original value is restored.
+    back before the original value is restored. ``bind_document`` passes the
+    exact document resolved here to the apply and inspection callbacks.
     """
 
     if postcondition is not None and not callable(postcondition):
@@ -344,7 +365,7 @@ def run_cad_mutation(  # noqa: C901
     if lookup_available and document is None:
         # No native document exists and therefore no model mutation can be
         # attributed. Let the leaf preserve its historical not-found envelope.
-        return callback()
+        return _invoke_mutation_callback(callback, None, bind_document=bind_document)
 
     inflight = inflight if inflight is not None else current_cad_mutation_inflight()
     admission_failure = admit_cad_mutation(
@@ -357,15 +378,33 @@ def run_cad_mutation(  # noqa: C901
 
     captured: dict[str, Any] = {}
 
-    def native_callback():
-        captured["result"] = callback()
+    def native_callback(*args: Any) -> Any:
+        admitted = args[0] if bind_document and args else document
+        if bind_document:
+            captured["document"] = admitted
+        captured["result"] = _invoke_mutation_callback(
+            callback, admitted, bind_document=bind_document
+        )
         if _result_failed(captured["result"]):
             raise _CadMutationRollback
         return captured["result"]
 
-    def native_postcondition():
+    def native_postcondition(*args: Any) -> bool:
         captured["postcondition_called"] = True
-        outcome = postcondition() if postcondition is not None else None
+        admitted = args[0] if bind_document and args else document
+        if bind_document and captured.get("document") is not admitted:
+            captured["result"] = {
+                "success": False,
+                "ok": False,
+                "error_code": "DOCUMENT_IDENTITY_MISMATCH",
+                "error": "Native mutation callbacks received different documents",
+            }
+            return False
+        outcome = (
+            _invoke_mutation_callback(postcondition, admitted, bind_document=bind_document)
+            if postcondition is not None
+            else None
+        )
         if outcome is not None and outcome is not True:
             # A typed postcondition may replace the provisional callback
             # envelope with its post-recompute result.
@@ -377,7 +416,7 @@ def run_cad_mutation(  # noqa: C901
                 # For eager mutations the native coordinator has already
                 # completed the sole authoritative recompute.  This callback
                 # is deliberately read-only.
-                _validate_native_callback(collaborators, document)
+                _validate_native_callback(collaborators, admitted)
             except Exception as exc:
                 captured["result"] = {
                     "success": False,
@@ -388,32 +427,27 @@ def run_cad_mutation(  # noqa: C901
                 return False
         return True
 
+    commit_kwargs: dict[str, Any] = {
+        "structural": structural,
+        "bind_document": bind_document,
+        "require_native": require_native,
+    }
+    if native_recompute or postcondition is not None:
+        # The postcondition keyword is an ordering contract.  An older
+        # runtime must reject it before invoking ``native_callback``;
+        # silently falling back would validate pre-recompute state.
+        commit_kwargs["postcondition"] = native_postcondition
+    if not native_recompute:
+        commit_kwargs["recompute"] = False
+
     try:
-        if native_recompute:
-            # The postcondition keyword is an ordering contract.  An older
-            # runtime must reject it before invoking ``native_callback``;
-            # silently falling back would validate pre-recompute state.
-            native_result = collaborators.commit_compatibility_mutation(
-                document_name,
-                native_callback,
-                structural=structural,
-                postcondition=native_postcondition,
-            )
-        elif postcondition is not None:
-            native_result = collaborators.commit_compatibility_mutation(
-                document_name,
-                native_callback,
-                structural=structural,
-                recompute=False,
-                postcondition=native_postcondition,
-            )
-        else:
-            native_result = collaborators.commit_compatibility_mutation(
-                document_name,
-                native_callback,
-                structural=structural,
-                recompute=False,
-            )
+        native_result = collaborators.commit_compatibility_mutation(
+            document_name,
+            native_callback,
+            **commit_kwargs,
+        )
+    except LookupError:
+        return _invoke_mutation_callback(callback, None, bind_document=bind_document)
     except _CadMutationRollback:
         return postflight_cad_mutation(
             document,

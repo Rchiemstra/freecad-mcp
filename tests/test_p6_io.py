@@ -6,10 +6,35 @@ Layer-B: Code-fragment and API-call checks
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from mcp.types import TextContent
 
+from freecad_mcp._shared.protocol.export_brep_contract import (
+    make_export_brep_failure,
+    make_export_brep_success,
+)
+from freecad_mcp._shared.protocol.export_step_contract import (
+    make_export_step_failure,
+    make_export_step_success,
+)
+from freecad_mcp._shared.protocol.export_stl_contract import (
+    make_export_stl_failure,
+    make_export_stl_success,
+)
+from freecad_mcp._shared.protocol.import_brep_contract import (
+    make_import_brep_failure,
+    make_import_brep_success,
+)
+from freecad_mcp._shared.protocol.import_step_contract import (
+    make_import_step_failure,
+    make_import_step_success,
+)
+from freecad_mcp._shared.protocol.set_color_contract import (
+    make_set_color_failure,
+    make_set_color_success,
+)
 from freecad_mcp.operations.p6_io import (
     export_brep_operation,
     export_step_operation,
@@ -21,10 +46,27 @@ from freecad_mcp.operations.p6_io import (
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
+_MEASURE_IO = (
+    Path(__file__).resolve().parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "measure_io_actions.py"
+).read_text(encoding="utf-8")
+
+
 def _ok_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": True, "message": "done", "recompute_errors": []}
+    conn.export_step.return_value = make_export_step_success("/tmp/out.step", 1)
+    conn.export_stl.return_value = make_export_stl_success("/tmp/out.stl", 1, 12)
+    conn.export_brep.return_value = make_export_brep_success("/tmp/out.brep", True, "Obj1")
+    conn.import_step.return_value = make_import_step_success("/tmp/in.step", True)
+    conn.import_brep.return_value = make_import_brep_success("/tmp/in.brep", "BRepImport", True)
+    conn.set_color.return_value = make_set_color_success("RedPart", 1.0, 0.0, 0.0, 0.0)
     return conn
 
 
@@ -32,6 +74,12 @@ def _fail_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": "oops"}
+    conn.export_step.return_value = make_export_step_failure("EXPORT_STEP_FAILED", "oops")
+    conn.export_stl.return_value = make_export_stl_failure("EXPORT_STL_FAILED", "oops")
+    conn.export_brep.return_value = make_export_brep_failure("EXPORT_BREP_FAILED", "oops")
+    conn.import_step.return_value = make_import_step_failure("IMPORT_STEP_FAILED", "oops")
+    conn.import_brep.return_value = make_import_brep_failure("IMPORT_BREP_FAILED", "oops")
+    conn.set_color.return_value = make_set_color_failure("SET_COLOR_FAILED", "oops")
     return conn
 
 
@@ -44,14 +92,10 @@ def _text(response) -> str:
     return " ".join(item.text for item in content if isinstance(item, TextContent))
 
 
-def _assert_snapshot_export(conn: MagicMock) -> None:
-    options = conn.execute_code.call_args.args[1]
-    assert options.document == "Doc"
-    assert options.affected_documents is None
-    assert options.read_only is True
-    assert options.recompute == "none"
-    assert options.capture_view is False
-    assert options.execution_mode == "worker"
+def _assert_native_export(conn: MagicMock, method: str) -> None:
+    getattr(conn, method).assert_called_once()
+    conn.execute_code.assert_not_called()
+    assert ".recompute(" not in _MEASURE_IO
 
 
 # ---------------------------------------------------------------------------
@@ -68,35 +112,28 @@ class TestExportStep:
         assert "oops" in _text(resp) or "Failed" in _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        export_step_operation(conn, "Doc", "/tmp/out.step")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_import_Import_called(self):
-        conn = _ok_conn()
-        export_step_operation(conn, "Doc", "/tmp/out.step")
-        assert_code_contains(_code(conn), "import Import")
+        assert_code_contains(_MEASURE_IO, 'load_module("Import")')
 
     def test_export_called(self):
-        conn = _ok_conn()
-        export_step_operation(conn, "Doc", "/tmp/out.step")
-        assert_code_contains(_code(conn), "Import.export")
+        assert_code_contains(_MEASURE_IO, '"export"')
 
-    def test_path_in_code(self):
+    def test_path_in_rpc(self):
         conn = _ok_conn()
         export_step_operation(conn, "Doc", "/my/path/gear.step")
-        assert_code_contains(_code(conn), "/my/path/gear.step")
+        conn.export_step.assert_called_once_with("Doc", "/my/path/gear.step", None)
 
     def test_obj_names_filter(self):
         conn = _ok_conn()
         export_step_operation(conn, "Doc", "/tmp/out.step", obj_names=["Pad", "Fillet"])
-        code = _code(conn)
-        assert_code_contains(code, "Pad", "Fillet")
+        conn.export_step.assert_called_once_with("Doc", "/tmp/out.step", ["Pad", "Fillet"])
 
-    def test_reads_snapshot_without_live_document_lease(self):
+    def test_native_txn_without_apply_recompute(self):
         conn = _ok_conn()
         export_step_operation(conn, "Doc", "/tmp/out.step")
-        _assert_snapshot_export(conn)
+        _assert_native_export(conn, "export_step")
 
 
 # ---------------------------------------------------------------------------
@@ -109,24 +146,25 @@ class TestImportStep:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        import_step_operation(conn, "Doc", "/tmp/in.step")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_insert_called(self):
-        conn = _ok_conn()
-        import_step_operation(conn, "Doc", "/tmp/in.step")
-        assert_code_contains(_code(conn), "Import.insert")
+        assert_code_contains(_MEASURE_IO, '"insert"')
 
-    def test_path_in_code(self):
+    def test_path_in_rpc(self):
         conn = _ok_conn()
         import_step_operation(conn, "Doc", "/data/part.step")
-        assert_code_contains(_code(conn), "/data/part.step")
+        conn.import_step.assert_called_once_with("Doc", "/data/part.step")
 
-    def test_recompute_is_deferred_to_native_postcondition(self):
+    def test_apply_does_not_recompute(self):
         conn = _ok_conn()
         import_step_operation(conn, "Doc", "/tmp/in.step")
-        assert_code_contains(_code(conn), "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
+        conn.import_step.assert_called_once()
+        conn.execute_code.assert_not_called()
+        assert ".recompute(" not in _MEASURE_IO
+
+    def test_recompute_is_deferred_to_native_postcondition(self):
+        assert "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__" in _MEASURE_IO
 
 
 # ---------------------------------------------------------------------------
@@ -139,34 +177,28 @@ class TestExportStl:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        export_stl_operation(conn, "Doc", "/tmp/out.stl")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_mesh_module_used(self):
-        conn = _ok_conn()
-        export_stl_operation(conn, "Doc", "/tmp/out.stl")
-        assert_code_contains(_code(conn), "import Mesh")
+        assert_code_contains(_MEASURE_IO, 'load_module("Mesh")')
 
     def test_tessellate_called(self):
-        conn = _ok_conn()
-        export_stl_operation(conn, "Doc", "/tmp/out.stl")
-        assert_code_contains(_code(conn), "tessellate")
+        assert_code_contains(_MEASURE_IO, "tessellate")
 
-    def test_deviation_in_code(self):
+    def test_deviation_in_rpc(self):
         conn = _ok_conn()
         export_stl_operation(conn, "Doc", "/tmp/out.stl", mesh_deviation=0.05)
-        assert_code_contains(_code(conn), "0.05")
+        conn.export_stl.assert_called_once_with("Doc", "/tmp/out.stl", None, 0.05)
 
     def test_obj_names_filter(self):
         conn = _ok_conn()
         export_stl_operation(conn, "Doc", "/tmp/out.stl", obj_names=["Pad1"])
-        assert_code_contains(_code(conn), "Pad1")
+        conn.export_stl.assert_called_once_with("Doc", "/tmp/out.stl", ["Pad1"], 0.1)
 
-    def test_reads_snapshot_without_live_document_lease(self):
+    def test_native_txn_without_apply_recompute(self):
         conn = _ok_conn()
         export_stl_operation(conn, "Doc", "/tmp/out.stl")
-        _assert_snapshot_export(conn)
+        _assert_native_export(conn, "export_stl")
 
 
 # ---------------------------------------------------------------------------
@@ -179,24 +211,20 @@ class TestExportBrep:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        export_brep_operation(conn, "Doc", "Obj1", "/tmp/out.brep")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_exportBrep_called(self):
-        conn = _ok_conn()
-        export_brep_operation(conn, "Doc", "Obj1", "/tmp/out.brep")
-        assert_code_contains(_code(conn), "exportBrep")
+        assert_code_contains(_MEASURE_IO, "exportBrep")
 
-    def test_path_in_code(self):
+    def test_path_in_rpc(self):
         conn = _ok_conn()
         export_brep_operation(conn, "Doc", "Obj1", "/data/shape.brep")
-        assert_code_contains(_code(conn), "/data/shape.brep")
+        conn.export_brep.assert_called_once_with("Doc", "Obj1", "/data/shape.brep")
 
-    def test_reads_snapshot_without_live_document_lease(self):
+    def test_native_txn_without_apply_recompute(self):
         conn = _ok_conn()
         export_brep_operation(conn, "Doc", "Obj1", "/tmp/out.brep")
-        _assert_snapshot_export(conn)
+        _assert_native_export(conn, "export_brep")
 
 
 # ---------------------------------------------------------------------------
@@ -209,29 +237,25 @@ class TestImportBrep:
         assert _text(resp)
 
     def test_compiles(self):
-        conn = _ok_conn()
-        import_brep_operation(conn, "Doc", "/tmp/in.brep")
-        assert_code_compiles(_code(conn))
+        assert_code_compiles(_MEASURE_IO)
 
     def test_importBrep_called(self):
-        conn = _ok_conn()
-        import_brep_operation(conn, "Doc", "/tmp/in.brep")
-        assert_code_contains(_code(conn), "importBrep")
+        assert_code_contains(_MEASURE_IO, "importBrep")
 
-    def test_path_in_code(self):
+    def test_path_in_rpc(self):
         conn = _ok_conn()
         import_brep_operation(conn, "Doc", "/data/body.brep")
-        assert_code_contains(_code(conn), "/data/body.brep")
+        conn.import_brep.assert_called_once_with("Doc", "/data/body.brep", "BRepImport")
 
     def test_obj_name_default(self):
         conn = _ok_conn()
         import_brep_operation(conn, "Doc", "/tmp/in.brep")
-        assert_code_contains(_code(conn), "BRepImport")
+        conn.import_brep.assert_called_once_with("Doc", "/tmp/in.brep", "BRepImport")
 
     def test_obj_name_custom(self):
         conn = _ok_conn()
         import_brep_operation(conn, "Doc", "/tmp/in.brep", obj_name="MyShape")
-        assert_code_contains(_code(conn), "MyShape")
+        conn.import_brep.assert_called_once_with("Doc", "/tmp/in.brep", "MyShape")
 
 
 # ---------------------------------------------------------------------------
@@ -243,28 +267,22 @@ class TestSetColor:
         resp = set_color_operation(_ok_conn(), True, "Doc", "Obj1", 1.0, 0.0, 0.0)
         assert _text(resp)
 
-    def test_compiles(self):
-        conn = _ok_conn()
-        set_color_operation(conn, True, "Doc", "Obj1", 0.5, 0.5, 0.5)
-        assert_code_compiles(_code(conn))
+    def test_failure(self):
+        resp = set_color_operation(_fail_conn(), True, "Doc", "Obj1", 1.0, 0.0, 0.0)
+        assert "Failed" in _text(resp) or "oops" in _text(resp)
 
-    def test_ShapeColor_set(self):
-        conn = _ok_conn()
-        set_color_operation(conn, True, "Doc", "Obj1", 1.0, 0.0, 0.0)
-        assert_code_contains(_code(conn), "ShapeColor")
-
-    def test_rgb_values_in_code(self):
+    def test_routes_typed_rpc(self):
         conn = _ok_conn()
         set_color_operation(conn, True, "Doc", "Obj1", 0.2, 0.6, 0.8)
-        code = _code(conn)
-        assert_code_contains(code, "0.2", "0.6", "0.8")
+        conn.set_color.assert_called_once_with("Doc", "Obj1", 0.2, 0.6, 0.8, 0.0)
+        conn.execute_code.assert_not_called()
 
-    def test_transparency_in_code(self):
+    def test_transparency_passed(self):
         conn = _ok_conn()
         set_color_operation(conn, True, "Doc", "Obj1", 1.0, 1.0, 1.0, transparency=0.5)
-        assert_code_contains(_code(conn), "Transparency")
+        conn.set_color.assert_called_once_with("Doc", "Obj1", 1.0, 1.0, 1.0, 0.5)
 
-    def test_object_name_in_code(self):
+    def test_object_name_in_rpc(self):
         conn = _ok_conn()
         set_color_operation(conn, True, "Doc", "RedPart", 1.0, 0.0, 0.0)
-        assert_code_contains(_code(conn), "RedPart")
+        assert conn.set_color.call_args.args[1] == "RedPart"

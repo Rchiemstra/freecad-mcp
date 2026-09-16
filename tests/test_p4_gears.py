@@ -10,11 +10,20 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from mcp.types import TextContent
 
+from freecad_mcp._shared.protocol.create_helical_gear_contract import (
+    make_create_helical_gear_failure,
+    make_create_helical_gear_success,
+)
+from freecad_mcp._shared.protocol.create_involute_gear_contract import (
+    make_create_involute_gear_failure,
+    make_create_involute_gear_success,
+)
 from freecad_mcp.operations.p4_gears import (
     check_gear_pair_operation,
     compute_gear_geometry_operation,
@@ -42,22 +51,40 @@ from tests.helpers.geometric import (
 # Test helpers (local — mirrors conftest for isolation)
 # ---------------------------------------------------------------------------
 
+_GEAR_ACTIONS = (
+    Path(__file__).resolve().parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "gear_actions.py"
+).read_text(encoding="utf-8")
+
+
 def _ok_conn(output="done"):
+    del output
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": True, "message": output, "recompute_errors": []}
+    conn.create_involute_gear.return_value = make_create_involute_gear_success(
+        body="Gear1_Body", sketch="Gear1_Sketch", feature="Gear1", teeth=20, module=2.0
+    )
+    conn.create_helical_gear.return_value = make_create_helical_gear_success(
+        body="HelGear_Body", sketch="HelGear_Sketch", feature="HelGear", teeth=20, module=2.0
+    )
     return conn
 
 
 def _fail_conn(error="oops"):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": False, "error": error}
+    conn.create_involute_gear.return_value = make_create_involute_gear_failure(
+        "CREATE_INVOLUTE_GEAR_FAILED", error
+    )
+    conn.create_helical_gear.return_value = make_create_helical_gear_failure(
+        "CREATE_HELICAL_GEAR_FAILED", error
+    )
     return conn
-
-
-def _code(conn) -> str:
-    return conn.execute_code.call_args[0][0]
 
 
 def _text(response) -> str:
@@ -80,10 +107,11 @@ class TestCreateInvoluteGearLayerA:
         resp = create_involute_gear_operation(conn, True, "Doc", "Gear1", 20, 2.0, 10.0)
         assert "execute failed" in _text(resp) or "Failed" in _text(resp)
 
-    def test_execute_code_called_once(self):
+    def test_typed_rpc_called_once(self):
         conn = _ok_conn()
         create_involute_gear_operation(conn, True, "Doc", "Gear1", 20, 2.0, 10.0)
-        conn.execute_code.assert_called_once()
+        conn.create_involute_gear.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_no_screenshot_when_text_only(self):
         conn = _ok_conn()
@@ -149,92 +177,82 @@ class TestCheckGearPairLayerA:
 # ---------------------------------------------------------------------------
 
 class TestCreateInvoluteGearLayerB:
-    def _gear_code(self, teeth=20, module=2.0, width=10.0, **kw):
-        conn = _ok_conn()
-        create_involute_gear_operation(conn, True, "Doc", "Gear1", teeth, module, width, **kw)
-        return _code(conn)
-
     def test_compiles(self):
-        assert_code_compiles(self._gear_code())
+        assert_code_compiles(_GEAR_ACTIONS)
 
     def test_involute_formula_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "math.cos(t)", "math.sin(t)", "_base_radius")
+        assert_code_contains(_GEAR_ACTIONS, "math.cos(t)", "math.sin(t)", "base * (math.cos(t)")
 
     def test_teeth_injected(self):
-        code = self._gear_code(teeth=17)
-        assert_code_contains(code, "17")
+        conn = _ok_conn()
+        create_involute_gear_operation(conn, True, "Doc", "Gear1", 17, 2.0, 10.0)
+        assert conn.create_involute_gear.call_args.args[2] == 17
 
     def test_module_injected(self):
-        code = self._gear_code(module=3.0)
-        assert_code_contains(code, "3.0")
+        conn = _ok_conn()
+        create_involute_gear_operation(conn, True, "Doc", "Gear1", 20, 3.0, 10.0)
+        assert conn.create_involute_gear.call_args.args[3] == 3.0
 
     def test_pressure_angle_converted_to_radians(self):
-        code = self._gear_code(pressure_angle=20.0)
-        assert_code_contains(code, "math.radians")
+        assert_code_contains(_GEAR_ACTIONS, "math.radians")
 
     def test_has_undercut_branch(self):
-        code = self._gear_code()
-        assert_code_contains(code, "_has_undercut")
+        assert_code_contains(_GEAR_ACTIONS, "has_undercut")
 
     def test_tip_arc_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "_tip_steps", "_r_tip_ang")
+        assert_code_contains(_GEAR_ACTIONS, "tip_steps")
 
     def test_root_arc_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "_root_steps", "_arc_start")
+        assert_code_contains(_GEAR_ACTIONS, "root_steps", "arc_start")
 
     def test_profile_to_sketch_code_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "Part.LineSegment", "Coincident")
+        assert_code_contains(_GEAR_ACTIONS, "LineSegment", "Coincident")
 
     def test_construction_circles_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "RootRadius", "PitchRadius", "OuterRadius", "BaseRadius")
+        assert_code_contains(_GEAR_ACTIONS, "_construction_circles", "pitch_radius", "add_constraint")
 
     def test_pad_feature_created(self):
-        code = self._gear_code()
-        assert_code_contains(code, "PartDesign::Pad")
+        assert_code_contains(_GEAR_ACTIONS, "PartDesign::Pad")
 
     def test_bore_code_present_when_specified(self):
-        code = self._gear_code(bore_diameter=5.0)
-        assert_code_contains(code, "5.0")
+        conn = _ok_conn()
+        create_involute_gear_operation(conn, True, "Doc", "Gear1", 20, 2.0, 10.0, bore_diameter=5.0)
+        assert conn.create_involute_gear.call_args.args[6] == 5.0
+        assert_code_contains(_GEAR_ACTIONS, "_maybe_bore")
 
     def test_body_creation_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "PartDesign::Body")
+        assert_code_contains(_GEAR_ACTIONS, "PartDesign::Body")
+
+    def test_apply_does_not_recompute(self):
+        assert ".recompute(" not in _GEAR_ACTIONS
 
     def test_recompute_is_deferred_to_native_postcondition(self):
-        code = self._gear_code()
-        assert_code_contains(code, "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__")
+        assert "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__" in _GEAR_ACTIONS
 
-    def test_doc_lookup_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "FreeCAD.getDocument")
+    def test_apply_uses_admitted_document(self):
+        assert "FreeCAD.getDocument" not in _GEAR_ACTIONS
 
 
 class TestCreateHelicalGearLayerB:
-    def _gear_code(self, teeth=20, module=2.0, width=15.0, helix_angle=15.0):
-        conn = _ok_conn()
-        create_helical_gear_operation(conn, True, "Doc", "HelGear", teeth, module, width,
-                                      helix_angle=helix_angle)
-        return _code(conn)
-
     def test_compiles(self):
-        assert_code_compiles(self._gear_code())
+        assert_code_compiles(_GEAR_ACTIONS)
 
     def test_helix_feature_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "PartDesign::AdditiveHelix")
+        assert_code_contains(_GEAR_ACTIONS, "PartDesign::AdditiveHelix")
 
     def test_pitch_computed(self):
-        code = self._gear_code()
-        assert_code_contains(code, "_helix_pitch")
+        assert_code_contains(_GEAR_ACTIONS, "pitch_len", '"Pitch"')
 
     def test_involute_formula_present(self):
-        code = self._gear_code()
-        assert_code_contains(code, "_ix", "_iy", "_polar")
+        assert_code_contains(_GEAR_ACTIONS, "def ix", "def iy", "def polar")
+
+    def test_typed_rpc_called(self):
+        conn = _ok_conn()
+        create_helical_gear_operation(
+            conn, True, "Doc", "HelGear", 20, 2.0, 15.0, helix_angle=15.0
+        )
+        conn.create_helical_gear.assert_called_once()
+        conn.execute_code.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

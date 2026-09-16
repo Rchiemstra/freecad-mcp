@@ -9,7 +9,7 @@ authors = [
 license = { text = "MIT" }
 requires-python = ">=3.12"
 dependencies = [
-    "mcp[cli]>=1.12.2,<2",
+    "mcp[cli]>=1.26.0,<2",
     "typing-extensions>=4.12",
     "validators>=0.34.0",
 ]
@@ -23,6 +23,7 @@ dev = [
     "pytest-xdist>=3.5",
     "pytest-cov>=5.0",
     "jsonschema>=4.20",
+    "mypy==2.3.1",
     "pyside6>=6.5",
     "ruff>=0.9",
 ]
@@ -51,6 +52,78 @@ markers = [
     "integration: real-subprocess tests against sibling monorepo tools (e.g. freecad-git CLI), no mocks",
 ]
 asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+namespace_packages = true
+follow_imports = "skip"
+warn_unused_ignores = true
+mypy_path = [".", "src", "typings"]
+# Typed slice entrypoints: contracts and typecheck protocols auto-include new ops.
+# Leaves and mutations are pulled via follow_imports=normal on cad_methods_ops.*.
+# Public MCP adapters keep follow_imports=silent so CallToolResult signatures
+# are visible to typecheck protocols without reporting adapter-internal errors.
+files = [
+    "addon/FreeCADMCP/_shared/protocol/*_contract.py",
+    "src/freecad_mcp/_shared/protocol/*_contract.py",
+    "addon/FreeCADMCP/collaboration_api.py",
+    "addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/cad_dependencies.py",
+    "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/collaboration_dependencies.py",
+    "src/freecad_mcp/freecad_client.py",
+    "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
+    "tests/typecheck/*_protocol.py",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "addon.FreeCADMCP._shared.protocol.*",
+    "freecad_mcp._shared.protocol.*",
+    "addon.FreeCADMCP.collaboration_api",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.*",
+    "addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.collaboration_dependencies",
+    "freecad_mcp.freecad_client",
+    "freecad_mcp.freecad_client_ops.freecad_connection",
+    "tests.typecheck.*",
+]
+follow_imports = "normal"
+disallow_any_unimported = true
+
+[[tool.mypy.overrides]]
+module = ["freecad_mcp.responses.tool_results", "freecad_mcp.responses.constants"]
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = ["mcp.types"]
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+module = ["freecad_mcp.operations.parametric_ops.*"]
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+module = [
+    "addon.FreeCADMCP._shared.protocol.*",
+    "freecad_mcp._shared.protocol.*",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.*",
+    "freecad_mcp.operations.parametric_ops.*",
+]
+disallow_any_explicit = true
+
+[[tool.mypy.overrides]]
+module = [
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies",
+    "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_mutation",
+]
+disallow_any_explicit = false
+
+[[tool.mypy.overrides]]
+module = [
+    "freecad_mcp.operations.parametric_ops.helpers",
+    "freecad_mcp.operations.parametric_ops.sketch_attach_helpers",
+]
+disallow_any_explicit = false
 
 [build-system]
 requires = ["hatchling"]

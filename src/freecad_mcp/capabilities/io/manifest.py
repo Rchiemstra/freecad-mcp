@@ -3,7 +3,7 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
-from ..schema import ExecutionMode, MutationClass, SubjectManifest, ToolEntry
+from ..schema import ExecutionMode, ExecutionPolicy, MutationClass, SubjectManifest, ToolEntry
 
 MANIFEST = SubjectManifest(
     subject="io",
@@ -18,6 +18,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.EXTERNAL_EFFECT,
             register_module="tools_io_export",
         ),
         ToolEntry(
@@ -29,6 +30,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.EXTERNAL_EFFECT,
             register_module="tools_io_export",
         ),
         ToolEntry(
@@ -40,6 +42,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.EXTERNAL_EFFECT,
             register_module="tools_io_export",
         ),
         ToolEntry(
@@ -51,6 +54,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_io_export",
         ),
         ToolEntry(
@@ -62,6 +66,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.GUI_GLOBAL,
             register_module="tools_io_export",
         ),
         ToolEntry(
@@ -73,6 +78,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_io_import",
         ),
         ToolEntry(
@@ -84,6 +90,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=False,
             mutation_class=MutationClass.MUTATION,
+            execution_policy=ExecutionPolicy.DOCUMENT_MUTATION,
             register_module="tools_io_import",
         ),
     ),

@@ -86,9 +86,9 @@ tests/e2e/test_rpc_lifecycle.py
 tests/e2e/test_worker_process.py
 tests/test_lease_protocol.py
 tests/test_reference_repair_tools.py
-tests/test_rpc_sync.py
-tests/test_worker_manager.py
-tests/test_worker_queue.py
+tests/rpc/test_rpc_sync.py
+tests/worker/test_worker_manager.py
+tests/worker/test_worker_queue.py
 ```
 
 Added files (42, including this report):
@@ -131,10 +131,10 @@ src/freecad_mcp/telemetry/redaction.py
 src/freecad_mcp/telemetry/schema.json
 src/freecad_mcp/telemetry/writer.py
 tests/benchmark/test_benchmark_tasks.py
-tests/test_benchmark_reporting.py
-tests/test_build_info.py
-tests/test_document_health.py
-tests/test_mcp_tasks.py
+tests/benchmark/test_benchmark_reporting.py
+tests/build/test_build_info.py
+tests/document/test_document_health.py
+tests/mcp/test_mcp_tasks.py
 tests/test_telemetry.py
 ```
 

@@ -43,6 +43,20 @@ def _make_proxy(conn, timeout: float) -> ProxyLane:
         # calls get an independent lane and cannot corrupt its transport.
         if timeout == conn._timeout:
             return conn.server
+        from freecad_mcp.freecad_client_ops.json_rpc_http_transport import (
+            JsonRpcHttpTransport,
+        )
+
+        live_transport = getattr(conn.server, "transport", None)
+        if live_transport is not None and not isinstance(
+            live_transport, JsonRpcHttpTransport
+        ):
+            return ProxyLane(
+                conn._uri,
+                timeout,
+                conn._request_headers_snapshot,
+                transport=live_transport,
+            )
         return ProxyLane(
             conn._uri,
             timeout,

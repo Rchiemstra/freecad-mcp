@@ -1,3 +1,0 @@
-_sk.extend($geo_index, $increment, $end_point)
-# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
-print($message)

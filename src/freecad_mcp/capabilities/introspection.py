@@ -224,9 +224,19 @@ def infer_mutation_class(module_name: str, tool_name: str) -> str:
     return "mutation"
 
 
+def infer_execution_policy(tool_name: str) -> str | None:
+    """Return the CAD execution policy value for a tool name, if any."""
+
+    from .execution_policies import EXECUTION_POLICIES
+
+    policy = EXECUTION_POLICIES.get(tool_name)
+    return None if policy is None else policy.value
+
+
 __all__ = [
     "import_operation_symbol",
     "infer_execution_mode",
+    "infer_execution_policy",
     "infer_gui_thread",
     "infer_mutation_class",
     "operation_path_for_tool",

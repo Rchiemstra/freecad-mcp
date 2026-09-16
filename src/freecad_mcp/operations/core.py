@@ -2,16 +2,6 @@
 
 from __future__ import annotations
 
-from .core_ops.code_gen import (
-    _build_assertion_code,
-    _constraint_line,
-    _constraint_stmt,
-    _geom_line,
-    _indented_build_assertion,
-    _partdesign_bool_property_helper_code,
-    _partdesign_extrusion_helper_code,
-    _partdesign_pattern_helper_code,
-)
 from .core_ops.document_ops import (
     close_document_operation,
     create_document_operation,
@@ -60,9 +50,7 @@ from .core_ops.reference_ops import (
     inspect_references_operation,
     repair_references_operation,
 )
-from .core_ops.run_code import _run_code
 from .core_ops.sketch_constraint_ops import (
-    _run_constraint,
     sketch_add_arc_operation,
     sketch_add_circle_operation,
     sketch_add_line_operation,
@@ -87,17 +75,7 @@ from .core_ops.sketch_ops import (
 
 __all__ = [
     "_RECOMPUTE_LOG_SENTINEL",
-    "_build_assertion_code",
-    "_constraint_line",
-    "_constraint_stmt",
     "_format_recompute_log",
-    "_geom_line",
-    "_indented_build_assertion",
-    "_partdesign_bool_property_helper_code",
-    "_partdesign_extrusion_helper_code",
-    "_partdesign_pattern_helper_code",
-    "_run_code",
-    "_run_constraint",
     "close_document_operation",
     "create_document_operation",
     "create_object_operation",

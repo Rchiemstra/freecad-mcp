@@ -1,4 +1,0 @@
-_idxs = []
-$segment_lines
-# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
-print('indices=' + str(_idxs))

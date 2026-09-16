@@ -1,9 +1,0 @@
-_indices = $geo_indices
-_offset = $offset
-_result = _sk.createSketchFillet if hasattr(_sk, 'createSketchFillet') else None
-try:
-    _sk.addSymmetric(_indices, $construction)
-except Exception:
-    pass
-# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
-print('offset applied')

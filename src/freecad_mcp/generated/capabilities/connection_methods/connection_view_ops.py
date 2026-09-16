@@ -383,3 +383,4 @@ def set_section_view(
     if routed is not None:
         return routed
     return conn.server.set_section_view(enabled, placement, base, normal, no_manip)
+

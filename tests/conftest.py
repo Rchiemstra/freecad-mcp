@@ -80,9 +80,12 @@ _LIVE_TYPED_RPC_METHODS = frozenset(
     {
         "body_create",
         "body_set_tip",
+        "create_assembly",
+        "create_assembly_grounded_joint",
         "delete_object",
         "diagnose_parametric",
         "set_expression",
+        "sketch_add_circle",
         "sketch_add_constraint",
         "sketch_add_geometry",
         "sketch_attach",
@@ -451,7 +454,7 @@ class LiveFreeCADConnection:
         body_name=None,
         symmetric=False,
         reversed_dir=False,
-        strict=False,
+        strict=False,  # client-only; RPC pad_feature has no strict parameter
     ):
         return self._dispatch(
             "pad_feature",
@@ -462,7 +465,6 @@ class LiveFreeCADConnection:
             body_name,
             symmetric,
             reversed_dir,
-            strict,
         )
 
     def pocket_feature(
@@ -474,7 +476,7 @@ class LiveFreeCADConnection:
         body_name=None,
         symmetric=False,
         reversed_dir=False,
-        strict=False,
+        strict=False,  # client-only; RPC pocket_feature has no strict parameter
     ):
         return self._dispatch(
             "pocket_feature",
@@ -485,7 +487,6 @@ class LiveFreeCADConnection:
             body_name,
             symmetric,
             reversed_dir,
-            strict,
         )
 
     def undo(self, doc_name):

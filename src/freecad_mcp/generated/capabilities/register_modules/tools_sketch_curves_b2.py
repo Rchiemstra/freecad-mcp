@@ -9,6 +9,7 @@ from mcp.types import CallToolResult
 from freecad_mcp.operations import (
     sketch_extend_operation,
     sketch_fillet_operation,
+    sketch_offset_operation,
     sketch_split_operation,
     sketch_symmetry_operation,
     sketch_trim_operation,
@@ -170,6 +171,47 @@ def _register_sketch_fillet(
         )
 
     exports['sketch_fillet'] = sketch_fillet
+def _register_sketch_offset(
+    mcp: InstrumentedFastMCP,
+    *,
+    dependencies: ToolDependencies,
+    exports: dict[str, object],
+) -> None:
+    @mcp.tool()
+    def sketch_offset(
+        ctx: Context,
+        doc_name: str,
+        sketch_name: str,
+        geo_indices: list[int],
+        offset: float,
+        copy: bool = True,
+        construction: bool = False,
+    ) -> CallToolResult:
+        """Offset sketch geometry inward or outward.
+
+        Args:
+            doc_name: Document containing the sketch.
+            sketch_name: Name of the target sketch.
+            geo_indices: Indices of the geometry elements to offset.
+            offset: Offset distance in mm (nonzero).
+            copy: If true, keep the original elements (default).
+            construction: If true, add offset curves as construction geometry.
+
+        Returns:
+            Success message and a screenshot.
+        """
+        return sketch_offset_operation(
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            sketch_name,
+            geo_indices,
+            offset,
+            copy,
+            construction,
+        )
+
+    exports['sketch_offset'] = sketch_offset
 def _register_sketch_symmetry(
     mcp: InstrumentedFastMCP,
     *,
@@ -232,6 +274,11 @@ def register(
         exports=exports,
     )
     _register_sketch_fillet(
+        mcp,
+        dependencies=dependencies,
+        exports=exports,
+    )
+    _register_sketch_offset(
         mcp,
         dependencies=dependencies,
         exports=exports,

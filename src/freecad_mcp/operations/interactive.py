@@ -9,9 +9,12 @@ from typing import Any
 from ..freecad_client import FreeCADConnection
 from ..responses.constants import ToolResponse
 from ..responses.tool_results import json_response, tool_fail
-from ..template_resources import render_template_text
-from .diagnostics import _diff_states, _response_text
-from .p7_assembly import _doc_preamble, _run_json_code
+from .diagnostics import _diff_states
+from .diagnostics_ops.helpers import _response_text
+from .parametric_ops.activate_document import activate_document_operation
+from .parametric_ops.capture_state import capture_state_operation
+from .parametric_ops.open_document import open_document_operation
+from .parametric_ops.recompute_and_wait import recompute_and_wait_operation
 
 logger = logging.getLogger("FreeCADMCPserver")
 
@@ -26,22 +29,6 @@ _VIEW_ALIASES = {
 def normalize_view_name(view_name: str) -> str:
     name = str(view_name or "").strip()
     return _VIEW_ALIASES.get(name, name)
-
-
-def open_document_operation(freecad: FreeCADConnection, path: str) -> ToolResponse:
-    result = freecad.open_document(path)
-    if result.get("ok") or result.get("success"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
-
-
-def activate_document_operation(
-    freecad: FreeCADConnection, doc_name: str
-) -> ToolResponse:
-    result = freecad.activate_document(doc_name)
-    if result.get("ok") or result.get("success"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
 
 
 def set_tree_expanded_operation(
@@ -90,16 +77,7 @@ def get_report_view_operation(
     result = freecad.get_report_view(max_lines=max_lines, clear=clear)
     if result.get("ok"):
         return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
-
-
-def recompute_and_wait_operation(
-    freecad: FreeCADConnection, doc_name: str
-) -> ToolResponse:
-    result = freecad.recompute_and_wait(doc_name)
-    if result.get("ok"):
-        return json_response(result)
-    return tool_fail(json.dumps(result), structured=result)
+        return tool_fail(json.dumps(result), structured=result)
 
 
 def set_section_view_operation(
@@ -124,21 +102,17 @@ def diagnose_pocket_operation(
     doc_name: str,
     pocket_name: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name),
-        render_template_text(
-            "diagnostics/diagnose_pocket.py.txt",
-            pocket_name=repr(pocket_name),
+    try:
+        raw = freecad.diagnose_pocket(doc_name, pocket_name)
+    except Exception as exc:
+        return tool_fail(f"Failed pocket diagnosis: {exc}")
+    if isinstance(raw, dict) and raw.get("success") is False:
+        return tool_fail(
+            "Failed pocket diagnosis: " + str(raw.get("error", "unknown")),
+            structured=raw,
+            error_code=str(raw.get("error_code", "DIAGNOSE_POCKET_FAILED")),
         )
-    ]
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(code),
-        "Failed pocket diagnosis",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    return json_response(raw if isinstance(raw, dict) else {"ok": True, "payload": raw})
 
 
 def diagnose_helix_operation(
@@ -147,21 +121,17 @@ def diagnose_helix_operation(
     doc_name: str,
     helix_name: str,
 ) -> ToolResponse:
-    code = [*_doc_preamble(doc_name),
-        render_template_text(
-            "diagnostics/diagnose_helix.py.txt",
-            helix_name=repr(helix_name),
+    try:
+        raw = freecad.diagnose_helix(doc_name, helix_name)
+    except Exception as exc:
+        return tool_fail(f"Failed helix diagnosis: {exc}")
+    if isinstance(raw, dict) and raw.get("success") is False:
+        return tool_fail(
+            "Failed helix diagnosis: " + str(raw.get("error", "unknown")),
+            structured=raw,
+            error_code=str(raw.get("error_code", "DIAGNOSE_HELIX_FAILED")),
         )
-    ]
-    return _run_json_code(
-        freecad,
-        only_text_feedback,
-        "\n".join(code),
-        "Failed helix diagnosis",
-        screenshot=False,
-        document=doc_name,
-        read_only=True,
-    )
+    return json_response(raw if isinstance(raw, dict) else {"ok": True, "payload": raw})
 
 
 def compare_documents_operation(
@@ -174,26 +144,16 @@ def compare_documents_operation(
     """Compare two open documents (e.g. V7 vs V8) via paired capture_state."""
 
     def _capture(doc_name: str, names: list[str] | None) -> dict:
-        code = [*_doc_preamble(doc_name),
-            render_template_text(
-                "diagnostics/capture_state.py.txt",
-                object_names=repr(names),
-            )
-        ]
-        resp = _run_json_code(
-            freecad,
-            True,
-            "\n".join(code),
-            f"Failed to capture state for {doc_name}",
-            screenshot=False,
-            document=doc_name,
-            read_only=True,
-        )
-        text = _response_text(resp)
-        try:
-            return json.loads(text)
-        except Exception:
+        resp = capture_state_operation(freecad, True, doc_name, names)
+        if resp.isError:
+            text = _response_text(resp)
             return {"ok": False, "error": text, "doc": doc_name, "objects": []}
+        structured = resp.structuredContent.get("data", {}) if resp.structuredContent else {}
+        if not isinstance(structured, dict):
+            return {"ok": False, "error": "invalid capture_state response", "doc": doc_name, "objects": []}
+        objects = structured.get("objects", {})
+        rows = list(objects.values()) if isinstance(objects, dict) else []
+        return {"ok": True, "doc": structured.get("doc", doc_name), "objects": rows}
 
     pairs: list[tuple[str, str]] = []
     for item in object_pairs or []:

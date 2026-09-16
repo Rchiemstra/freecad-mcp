@@ -7,9 +7,9 @@ from .lifecycle_methods_ops.control_status import (
     get_request_status,
     ping,
 )
-from .lifecycle_methods_ops.document_create import create_document
+from .cad_methods_ops.close_document import rpc_close_document as close_document
+from .cad_methods_ops.create_document import rpc_create_document as create_document
 from .lifecycle_methods_ops.document_gui import (
-    close_document,
     close_document_gui,
     create_document_gui,
     reload_document_gui,

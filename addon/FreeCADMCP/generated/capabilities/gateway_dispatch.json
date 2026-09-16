@@ -490,7 +490,7 @@
     },
     {
       "execution_mode": "typed_gateway",
-      "gui_thread": true,
+      "gui_thread": false,
       "mutation_class": "read",
       "operation_path": "freecad_mcp.operations.get_report_view_operation",
       "rpc_method": "get_report_view",
@@ -1292,6 +1292,14 @@
       "execution_mode": "typed_gateway",
       "gui_thread": false,
       "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.sketch_offset_operation",
+      "rpc_method": "sketch_offset",
+      "tool": "sketch_offset"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
       "operation_path": "freecad_mcp.operations.sketch_split_operation",
       "rpc_method": "sketch_split",
       "tool": "sketch_split"
@@ -1385,5 +1393,5 @@
       "tool": "get_worker_status"
     }
   ],
-  "tool_count": 173
+  "tool_count": 174
 }

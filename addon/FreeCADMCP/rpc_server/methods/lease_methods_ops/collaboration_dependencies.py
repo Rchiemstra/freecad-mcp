@@ -6,6 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
+from ...._shared.protocol.body_create_contract import (
+    BodyDocument,
+    BodyReadDocument,
+    DocumentName,
+)
+
 
 class CompatibilityMutationAPI(Protocol):
     """The narrow native compatibility-mutation bridge used by the add-on."""
@@ -13,12 +19,30 @@ class CompatibilityMutationAPI(Protocol):
     def commit_compatibility_mutation(
         self,
         document_name: str,
-        callback: Callable[[], Any],
+        callback: Callable[..., Any],
         *,
         structural: bool = False,
         recompute: bool = True,
-        postcondition: Callable[[], Any] | None = None,
+        postcondition: Callable[..., Any] | None = None,
+        bind_document: bool = False,
+        require_native: bool = False,
     ) -> Any: ...
+
+    def commit_body_create_mutation(
+        self,
+        document_name: DocumentName,
+        callback: Callable[[BodyDocument], object],
+        postcondition: Callable[[BodyReadDocument], object],
+    ) -> object: ...
+
+    def commit_native_mutation(
+        self,
+        document_name: str,
+        callback: Callable[[object], object],
+        postcondition: Callable[[object], object],
+        *,
+        structural: bool = True,
+    ) -> object: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,32 +74,31 @@ class CollaborationCollaborators:
         *,
         structural: bool = False,
         recompute: bool = True,
-        postcondition: Callable[[], Any] | None = None,
+        postcondition: Callable[..., Any] | None = None,
+        bind_document: bool = False,
+        require_native: bool = False,
     ) -> Any:
-        if postcondition is not None:
-            if recompute:
-                return self.compatibility_api.commit_compatibility_mutation(
-                    document_name,
-                    callback,
-                    structural=structural,
-                    postcondition=postcondition,
-                )
+        if (
+            postcondition is None
+            and not bind_document
+            and not require_native
+            and recompute
+        ):
             return self.compatibility_api.commit_compatibility_mutation(
-                document_name,
-                callback,
-                structural=structural,
-                recompute=False,
-                postcondition=postcondition,
+                document_name, callback, structural=structural
             )
+        kwargs: dict[str, Any] = {
+            "structural": structural,
+            "postcondition": postcondition,
+            "bind_document": bind_document,
+            "require_native": require_native,
+        }
         if not recompute:
-            return self.compatibility_api.commit_compatibility_mutation(
-                document_name,
-                callback,
-                structural=structural,
-                recompute=False,
-            )
+            kwargs["recompute"] = False
         return self.compatibility_api.commit_compatibility_mutation(
-            document_name, callback, structural=structural
+            document_name,
+            callback,
+            **kwargs,
         )
 
     def with_runtime_manifest(self, runtime_manifest: Any) -> CollaborationCollaborators:

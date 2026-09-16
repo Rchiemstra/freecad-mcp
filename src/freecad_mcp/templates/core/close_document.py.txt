@@ -1,3 +1,0 @@
-import FreeCAD
-FreeCAD.closeDocument($doc_name)
-print('Document closed')

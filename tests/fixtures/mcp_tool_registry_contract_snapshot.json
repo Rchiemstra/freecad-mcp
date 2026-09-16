@@ -48,7 +48,7 @@
     "tools_advanced_b",
     "tools_advanced_b2"
   ],
-  "tool_count": 173,
+  "tool_count": 174,
   "tool_order": [
     "get_runtime_info",
     "check_rpc_sync",
@@ -157,6 +157,7 @@
     "sketch_extend",
     "sketch_split",
     "sketch_fillet",
+    "sketch_offset",
     "sketch_symmetry",
     "revolve_feature",
     "loft_feature",
@@ -844,6 +845,10 @@
     "sketch_import_points": {
       "docstring": "Import a list of 2-D points as individual point geometry elements.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{\"x\": \u2026, \"y\": \u2026}`` dicts.\n    construction: If true, add as construction points.\n\nReturns:\n    Success message with the assigned geometry indices.",
       "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', construction: 'bool' = False) -> 'CallToolResult'"
+    },
+    "sketch_offset": {
+      "docstring": "Offset sketch geometry inward or outward.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the geometry elements to offset.\n    offset: Offset distance in mm (nonzero).\n    copy: If true, keep the original elements (default).\n    construction: If true, add offset curves as construction geometry.\n\nReturns:\n    Success message and a screenshot.",
+      "signature": "(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', offset: 'float', copy: 'bool' = True, construction: 'bool' = False) -> 'CallToolResult'"
     },
     "sketch_split": {
       "docstring": "Split a sketch curve into two pieces at the given point.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to split.\n    point_x: X coordinate of the split point.\n    point_y: Y coordinate of the split point.\n\nReturns:\n    Success message and a screenshot.",

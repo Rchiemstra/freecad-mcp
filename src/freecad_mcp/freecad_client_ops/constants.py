@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
-from ..template_resources import read_template_text
+SCREENSHOT_SUPPORT_CHECK = '''import FreeCAD
+import FreeCADGui
 
-SCREENSHOT_SUPPORT_CHECK = read_template_text(
-    "freecad_client/screenshot_support_check.py.txt"
-)
+if FreeCAD.Gui.ActiveDocument and FreeCAD.Gui.ActiveDocument.ActiveView:
+    view_type = type(FreeCAD.Gui.ActiveDocument.ActiveView).__name__
+
+    # These view types don't support screenshots
+    unsupported_views = ['SpreadsheetGui::SheetView', 'DrawingGui::DrawingView', 'TechDrawGui::MDIViewPage']
+
+    if view_type in unsupported_views or not hasattr(FreeCAD.Gui.ActiveDocument.ActiveView, 'saveImage'):
+        print("Current view does not support screenshots")
+        False
+    else:
+        print(f"Current view supports screenshots: {view_type}")
+        True
+else:
+    print("No active view")
+    False
+'''
 
 DIRECT_READ_METHODS = frozenset(
     {

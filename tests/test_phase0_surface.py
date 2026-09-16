@@ -211,6 +211,7 @@ EXPECTED_OPERATIONS_ALL = frozenset(
         "spreadsheet_list_aliases_operation",
         "spreadsheet_set_alias_operation",
         "spreadsheet_set_cells_operation",
+        "subshape_pose_operation",
         "sweep_feature_operation",
         "sweep_pipe_operation",
         "translate_operation",

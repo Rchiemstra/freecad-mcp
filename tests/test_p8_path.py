@@ -7,33 +7,34 @@ from unittest.mock import MagicMock
 
 from mcp.types import TextContent
 
+from freecad_mcp._shared.protocol.build_path_wire_contract import (
+    make_build_path_wire_failure,
+    make_build_path_wire_success,
+)
+from freecad_mcp._shared.protocol.sweep_pipe_contract import (
+    make_sweep_pipe_failure,
+    make_sweep_pipe_success,
+)
 from freecad_mcp.operations.p7_assembly import (
     build_path_wire_operation,
     sweep_pipe_operation,
 )
-from tests.helpers.geometric import assert_code_compiles, assert_code_contains
 
 
-def _ok_conn(output: str = '{"ok": true}'):
+def _ok_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {
-        "success": True,
-        "message": "Python code execution scheduled. \nOutput: " + output,
-        "recompute_errors": [],
-    }
+    conn.build_path_wire.return_value = make_build_path_wire_success("CablePathWireLower")
+    conn.sweep_pipe.return_value = make_sweep_pipe_success("CableLower_1p75mm")
     return conn
 
 
-def _fail_conn():
+def _fail_conn(error: str = "oops"):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
-    conn.execute_code.return_value = {"success": False, "error": "oops"}
+    conn.build_path_wire.return_value = make_build_path_wire_failure("FAILED", error)
+    conn.sweep_pipe.return_value = make_sweep_pipe_failure("FAILED", error)
     return conn
-
-
-def _code(conn) -> str:
-    return conn.execute_code.call_args[0][0]
 
 
 def _text(response) -> str:
@@ -44,50 +45,51 @@ def _text(response) -> str:
 class TestBuildPathWire:
     def test_compiles_and_builds_sorted_wire(self):
         conn = _ok_conn()
-        build_path_wire_operation(
+        segments = [
+            {"sketch": "Part2", "geo_index": 0, "reverse": False},
+            {
+                "type": "bridge",
+                "from": "prev_end",
+                "to": {"sketch": "Route", "geo_index": 0, "end": "start"},
+            },
+            {"sketch": "Route", "geo_index": 0, "reverse": True},
+        ]
+        resp = build_path_wire_operation(
             conn,
             True,
             "Doc",
             "CablePathWireLower",
-            [
-                {"sketch": "Part2", "geo_index": 0, "reverse": False},
-                {
-                    "type": "bridge",
-                    "from": "prev_end",
-                    "to": {"sketch": "Route", "geo_index": 0, "end": "start"},
-                },
-                {"sketch": "Route", "geo_index": 0, "reverse": True},
-            ],
+            segments,
             tolerance_mm=0.5,
             container="CableVisualization",
             if_exists="replace",
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "toShape()",
-            "getGlobalPlacement",
-            "bridge gap",
-            "Part.sortEdges",
-            "Part.Wire",
-            "length_mm",
-            "check_ok",
+        assert not resp.isError
+        conn.build_path_wire.assert_called_once_with(
+            "Doc",
+            "CablePathWireLower",
+            segments,
+            0.5,
+            "CableVisualization",
+            "replace",
         )
+        conn.execute_code.assert_not_called()
 
     def test_invalid_if_exists(self):
         resp = build_path_wire_operation(_ok_conn(), True, "Doc", "Wire", [], if_exists="bad")
         assert "if_exists" in _text(resp)
 
     def test_failure_propagates(self):
-        resp = build_path_wire_operation(_fail_conn(), True, "Doc", "Wire", [])
+        resp = build_path_wire_operation(
+            _fail_conn(), True, "Doc", "Wire", [{"sketch": "Seed", "geo_index": 0}]
+        )
         assert "oops" in _text(resp)
 
 
 class TestSweepPipe:
     def test_compiles_and_uses_pipe_shell(self):
         conn = _ok_conn()
-        sweep_pipe_operation(
+        resp = sweep_pipe_operation(
             conn,
             True,
             "Doc",
@@ -99,17 +101,18 @@ class TestSweepPipe:
             container="CableVisualization",
             if_exists="replace",
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "Part.makeCircle",
-            "makePipeShell",
-            "profile_mode",
-            "min_bend_radius_mm",
-            "volume_mm3",
-            "check_ok",
+        assert not resp.isError
+        conn.sweep_pipe.assert_called_once_with(
+            "Doc",
+            "CablePathWireLower",
+            1.75,
+            "CableLower_1p75mm",
+            "frenet",
+            [0.85, 0.15, 0.15],
+            "CableVisualization",
+            "replace",
         )
+        conn.execute_code.assert_not_called()
 
     def test_rejects_bad_if_exists(self):
         resp = sweep_pipe_operation(_ok_conn(), True, "Doc", "Wire", 1.75, "Cable", if_exists="bad")

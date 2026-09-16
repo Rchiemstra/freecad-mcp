@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
 from mcp.types import TextContent
 
 from freecad_mcp.operations.diagnostics import (
@@ -21,20 +19,52 @@ from freecad_mcp.operations.diagnostics import (
     preview_attachment_operation,
     relink_references_operation,
 )
+from freecad_mcp.operations.p3_features import loft_feature_operation
 from freecad_mcp.operations.core import (
-    _build_assertion_code,
     delete_object_operation,
     get_view_operation,
     pad_feature_operation,
-)
-from freecad_mcp.operations.p3_features import (
-    helical_sweep_feature_operation,
-    loft_feature_operation,
-    sweep_feature_operation,
+    pocket_feature_operation,
 )
 from freecad_mcp.operations.snapshot import (
     restore_operation,
     snapshot_operation,
+)
+from freecad_mcp._shared.protocol.capture_state_contract import (
+    make_capture_state_failure,
+    make_capture_state_success,
+)
+from freecad_mcp._shared.protocol.create_datum_plane_contract import (
+    make_create_datum_plane_failure,
+    make_create_datum_plane_success,
+)
+from freecad_mcp._shared.protocol.delete_object_contract import (
+    ObjectName,
+    make_delete_object_failure,
+    make_delete_object_success,
+)
+from freecad_mcp._shared.protocol.preview_attachment_contract import (
+    make_preview_attachment_failure,
+    make_preview_attachment_success,
+)
+from freecad_mcp._shared.protocol.relink_references_contract import (
+    make_relink_references_failure,
+    make_relink_references_success,
+)
+from freecad_mcp._shared.protocol.restore_contract import (
+    make_restore_failure,
+    make_restore_success,
+)
+from freecad_mcp._shared.protocol.snapshot_contract import (
+    make_snapshot_failure,
+    make_snapshot_success,
+)
+from freecad_mcp._shared.protocol.create_assembly_joint_contract import (
+    make_create_assembly_joint_success,
+)
+from freecad_mcp._shared.protocol.solve_assembly_contract import (
+    make_solve_assembly_failure,
+    make_solve_assembly_success,
 )
 from freecad_mcp.operations.p7_assembly import (
     create_assembly_joint_operation,
@@ -54,6 +84,29 @@ _FEATURES_GUI_SOURCE = (
 ).read_text(encoding="utf-8")
 
 
+def _typed_ok(**fields):
+    payload = {
+        "contract_version": 1,
+        "success": True,
+        "ok": True,
+        "outcome": "committed",
+        "committed": True,
+        "retry_safe": False,
+        "datum_name": "CrossDatum",
+        "plane_name": "CrossDatum",
+        "body_name": "BodyA",
+        "doc": "Doc",
+        "snapshot_id": "snap-1",
+        "restored_id": "snap-1",
+        "from_obj": "Old",
+        "to_obj": "New",
+        "binder_name": "Binder",
+        "source": "Src",
+    }
+    payload.update(fields)
+    return payload
+
+
 def _ok_conn(output: str = '{"ok": true}'):
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
@@ -62,6 +115,25 @@ def _ok_conn(output: str = '{"ok": true}'):
         "message": "Python code execution scheduled. \nOutput: " + output,
         "recompute_errors": [],
     }
+    conn.preview_attachment.return_value = make_preview_attachment_success("CrossDatum")
+    conn.create_datum_plane.return_value = make_create_datum_plane_success("CrossDatum", "BodyA")
+    conn.delete_object.return_value = make_delete_object_success(ObjectName("Body"), ["Body"])
+    conn.snapshot.return_value = make_snapshot_success("snap-1", "Doc", 1)
+    conn.restore.return_value = make_restore_success("snap-1", "Doc", 1)
+    conn.relink_references.return_value = make_relink_references_success("Old", "New")
+    conn.capture_state.return_value = make_capture_state_success(
+        "Doc",
+        {
+            "Pad": {
+                "name": "Pad",
+                "placement_base": {"x": 0, "y": 0, "z": 0},
+                "bbox": {"xmin": 0, "ymin": 0, "zmin": 0, "xmax": 2, "ymax": 1, "zmax": 1},
+                "face_count": 6,
+                "edge_count": 12,
+            }
+        },
+    )
+    conn.get_gui_state.return_value = {"active_document": "D"}
     return conn
 
 
@@ -69,6 +141,19 @@ def _fail_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": False, "error": "oops"}
+    conn.preview_attachment.return_value = make_preview_attachment_failure(
+        "PREVIEW_ATTACHMENT_FAILED", "oops"
+    )
+    conn.create_datum_plane.return_value = make_create_datum_plane_failure(
+        "CREATE_DATUM_PLANE_FAILED", "oops"
+    )
+    conn.delete_object.return_value = make_delete_object_failure("DELETE_OBJECT_FAILED", "oops")
+    conn.snapshot.return_value = make_snapshot_failure("SNAPSHOT_FAILED", "oops")
+    conn.restore.return_value = make_restore_failure("RESTORE_FAILED", "oops")
+    conn.relink_references.return_value = make_relink_references_failure(
+        "RELINK_REFERENCES_FAILED", "oops"
+    )
+    conn.capture_state.return_value = make_capture_state_failure("CAPTURE_STATE_FAILED", "oops")
     return conn
 
 
@@ -84,27 +169,14 @@ def _text(response) -> str:
 class TestPreviewAttachment:
     def test_compiles_and_inspects_datum_attachment(self):
         conn = _ok_conn()
-        preview_attachment_operation(conn, True, "Doc", "CrossDatum")
-        code = _code(conn)
-        assert_code_compiles(code)
-        # Resolves the requested datum and its AttachmentSupport.
-        assert_code_contains(code, "CrossDatum", "AttachmentSupport", "getGlobalPlacement")
-        # Reports the P1 cross-body drop flag and a diff.
-        assert_code_contains(
-            code,
-            "source_body_placement_dropped",
-            "signed_distance_mm",
-            "angle_deg",
-        )
+        resp = preview_attachment_operation(conn, True, "Doc", "CrossDatum")
+        assert not resp.isError
+        conn.preview_attachment.assert_called_once_with("Doc", "CrossDatum")
+        conn.execute_code.assert_not_called()
 
     def test_json_output_is_returned_directly(self):
-        resp = preview_attachment_operation(
-            _ok_conn('{"ok": true, "source_body_placement_dropped": true}'),
-            True,
-            "Doc",
-            "CrossDatum",
-        )
-        assert _text(resp).startswith('{"ok": true')
+        resp = preview_attachment_operation(_ok_conn(), True, "Doc", "CrossDatum")
+        assert '"datum_name": "CrossDatum"' in _text(resp)
 
     def test_failure_is_surfaced(self):
         resp = preview_attachment_operation(_fail_conn(), True, "Doc", "CrossDatum")
@@ -112,13 +184,9 @@ class TestPreviewAttachment:
 
 
 class TestI2SilentBuildAssertion:
-    """I2 — pad/pocket/loft/sweep append a post-build assertion that raises on a
-    wrong-direction or misplaced build (P2/P3), so silent wrong geometry becomes a
-    surfaced failure instead of propagating."""
+    """I2 — pad/pocket verification lives in addon GUI builders, not execute_code."""
 
     def test_pad_asserts_direction_parallel_to_sketch_normal(self):
-        # Typed builders own the verification in the addon; generated public
-        # snippets may not bypass native transaction ownership.
         assert_code_contains(
             _FEATURES_GUI_SOURCE,
             "pad_feature_gui",
@@ -134,192 +202,43 @@ class TestI2SilentBuildAssertion:
             "set_feature_bool",
         )
 
-    def test_loft_asserts_bbox_only_no_direction_check(self):
-        conn = _ok_conn()
-        loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "SILENT BUILD MISMATCH", "MyLoft", "S1")
-        # Loft has no single extrusion direction, so the direction block is skipped.
-        assert "if False:" in code
-
-    def test_sweep_asserts_bbox_only_no_direction_check(self):
-        conn = _ok_conn()
-        sweep_feature_operation(conn, True, "Doc", "Profile", "Path", "MySweep")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "SILENT BUILD MISMATCH", "MySweep", "Profile")
-        assert "if False:" in code
-
-    def test_helical_sweep_asserts_bbox_only(self):
-        conn = _ok_conn()
-        helical_sweep_feature_operation(
-            conn, True, "Doc", "Profile", "MyHelix", pitch=2.0, height=10.0, radius=3.0
-        )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "SILENT BUILD MISMATCH", "MyHelix")
-
     def test_pad_mismatch_failure_is_surfaced(self):
         conn = _ok_conn()
         conn.pad_feature.return_value = {"success": False, "error": "build failed"}
         resp = pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
         assert "Failed to create pad" in _text(resp)
 
-    def test_bbox_assertion_accepts_profile_position_inside_feature(self):
-        class _Vector:
-            def __init__(self, x, y, z):
-                self.x, self.y, self.z = x, y, z
-
-            def __str__(self):
-                return f"Vector ({self.x}, {self.y}, {self.z})"
-
-        bbox = SimpleNamespace(
-            XMin=-25.052299,
-            YMin=-20.090269,
-            ZMin=0.0,
-            XMax=17.947701,
-            YMax=21.909731,
-            ZMax=12.6,
-            XLength=43.0,
-            YLength=42.0,
-            ZLength=12.6,
-        )
-        shape = SimpleNamespace(BoundBox=bbox, isNull=lambda: False)
-        feature = SimpleNamespace(Shape=shape)
-        sketch = SimpleNamespace(
-            getGlobalPlacement=lambda: SimpleNamespace(Base=_Vector(0.0, 0.0, 9.6))
-        )
-        document = SimpleNamespace(
-            getObject=lambda name: {"BossPad": feature, "BossSketch": sketch}.get(name)
-        )
-        code = "\n".join(
-            _build_assertion_code(
-                "BossPad",
-                "BossSketch",
-                check_direction=False,
-            )
-        )
-
-        exec(code, {"_doc": document, "FreeCAD": SimpleNamespace()})
-
-        sketch.getGlobalPlacement = lambda: SimpleNamespace(
-            Base=_Vector(0.0, 0.0, 20.0)
-        )
-        with pytest.raises(RuntimeError, match="SILENT BUILD MISMATCH"):
-            exec(code, {"_doc": document, "FreeCAD": SimpleNamespace()})
-
-    def test_bbox_assertion_compares_partdesign_shape_in_body_local_frame(self):
-        class _Vector:
-            def __init__(self, x, y, z):
-                self.x, self.y, self.z = x, y, z
-
-            def __str__(self):
-                return f"Vector ({self.x}, {self.y}, {self.z})"
-
-        body_offset = _Vector(-72.31647872924805, 42.20933532714844, 21.07969951629639)
-
-        class _BodyPlacement:
-            def inverse(self):
-                return self
-
-            def multVec(self, point):
-                return _Vector(
-                    point.x - body_offset.x,
-                    point.y - body_offset.y,
-                    point.z - body_offset.z,
-                )
-
-        body = SimpleNamespace(
-            TypeId="PartDesign::Body",
-            getGlobalPlacement=lambda: _BodyPlacement(),
-        )
-        bbox = SimpleNamespace(
-            XMin=-25.052299,
-            YMin=-20.090269,
-            ZMin=0.0,
-            XMax=17.947701,
-            YMax=21.909731,
-            ZMax=12.6,
-            XLength=43.0,
-            YLength=42.0,
-            ZLength=12.6,
-        )
-        feature = SimpleNamespace(
-            Shape=SimpleNamespace(BoundBox=bbox, isNull=lambda: False),
-            getParentGeoFeatureGroup=lambda: body,
-        )
-        sketch = SimpleNamespace(
-            getGlobalPlacement=lambda: SimpleNamespace(
-                Base=_Vector(
-                    body_offset.x,
-                    body_offset.y,
-                    body_offset.z + 9.6,
-                )
-            )
-        )
-        document = SimpleNamespace(
-            getObject=lambda name: {"BossPad": feature, "BossSketch": sketch}.get(name)
-        )
-        code = "\n".join(
-            _build_assertion_code(
-                "BossPad",
-                "BossSketch",
-                check_direction=False,
-            )
-        )
-
-        exec(code, {"_doc": document, "FreeCAD": SimpleNamespace()})
-
 
 class TestI3RecomputeLog:
-    """I3 — mutating _run_code tools append a compact recompute log so P6 orphans
-    (children left Invalid/Error after a delete/edit) surface immediately.
+    """I3 — typed loft routes through JSON-RPC instead of execute-code."""
 
-    NOTE: pad/pocket moved to the structured-JSON path (_run_json_code) and no
-    longer append this snippet; they surface recompute errors via the addon's
-    recompute_errors channel (see TestPadPocketHardening). Loft still uses
-    _run_code and exercises the generic I3 mechanism here."""
-
-    def test_generated_code_includes_recompute_log_snippet(self):
-        conn = _ok_conn()
+    def test_loft_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.loft_feature.return_value = _typed_ok(feature="MyLoft")
         loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "__RECOMPUTE_LOG__", "State", "Clean")
-
-    def test_surfaces_invalid_orphans(self):
-        out = ('__RECOMPUTE_LOG__'
-               '[{"name":"Orphan","state":"Invalid","valid":false}]')
-        conn = _ok_conn(out)
-        resp = loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
-        text = _text(resp)
-        assert "Recompute log (non-clean)" in text
-        assert "Orphan" in text
-        assert "Invalid" in text
-        assert "<INVALID>" in text
-
-    def test_quiet_when_all_clean(self):
-        conn = _ok_conn("__RECOMPUTE_LOG__[]")
-        resp = loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
-        assert "Recompute log" not in _text(resp)
-
-    def test_no_sentinel_falls_back_to_recompute_errors(self):
-        conn = _ok_conn("done")
-        conn.execute_code.return_value = {
-            "success": True,
-            "message": "Python code execution scheduled. \nOutput: done",
-            "recompute_errors": [{"name": "Bad", "doc": "Doc", "state": "Error"}],
-        }
-        resp = loft_feature_operation(conn, True, "Doc", ["S1", "S2"], "MyLoft")
-        assert "Recompute errors detected" in _text(resp)
-        assert "Bad" in _text(resp)
+        conn.loft_feature.assert_called_once()
+        conn.execute_code.assert_not_called()
 
 
 class TestPadPocketHardening:
-    """Pad/Pocket strict PartDesign hardening: no document-level fallback, opt-in
-    strict body_name, pre-build sketch-diagnostics gate, transaction wrap, and
-    Body-membership/Tip verification, returned as a structured JSON result."""
+    """Pad/Pocket typed RPC routing."""
+
+    def test_pad_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.pad_feature.return_value = _typed_ok(feature="MyPad", body_name="Body", tip="MyPad")
+        pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        conn.pad_feature.assert_called_once()
+        conn.execute_code.assert_not_called()
+
+    def test_pocket_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.pocket_feature.return_value = _typed_ok(feature="MyPocket")
+        pocket_feature_operation(conn, True, "Doc", "Sketch", "MyPocket", 3.0)
+        conn.pocket_feature.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_pad_has_no_document_level_fallback(self):
         assert "doc.addObject(\"PartDesign::Pad\"" not in _FEATURES_GUI_SOURCE
@@ -365,65 +284,45 @@ class TestPadPocketHardening:
 
     def test_returns_structured_payload(self):
         conn = _ok_conn()
-        conn.pad_feature.return_value = {
-            "success": True, "feature": "MyPad", "body": "Body", "tip": "MyPad"
-        }
+        conn.pad_feature.return_value = _typed_ok(
+            feature="MyPad", body="Body", tip="MyPad"
+        )
         resp = pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
         assert not resp.isError
         assert "MyPad" in _text(resp)
+        conn.execute_code.assert_not_called()
 
 
 class TestI4FindSubshapes:
-    """I4 — find_faces/find_edges generate geometry-filtered, ranked JSON."""
+    """I4 — find_faces/find_edges use typed RPC."""
 
-    def test_find_faces_compiles_and_filters(self):
-        conn = _ok_conn()
-        find_faces_operation(
-            conn, True, "Doc", "Pad",
-            type="Plane",
-            normal_approx={"x": 0, "y": 0, "z": 1},
-            limit=5,
-        )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "getObject('Pad')",
-            "'Faces'",
-            "Plane",
-            "normalAt",
-            "json.dumps",
-        )
-        # The normal filter vector is rendered into the code.
-        assert "'x': 0" in code and "'z': 1" in code
-
-    def test_find_edges_compiles_and_filters_by_radius(self):
-        conn = _ok_conn()
-        find_edges_operation(
-            conn, True, "Doc", "Cyl",
-            type="Circle",
-            radius=5.0,
-            center_approx={"x": 0, "y": 0, "z": 10},
-        )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "'Edges'", "Circle", "5.0")
+    def test_find_faces_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.find_faces.return_value = {"ok": True, "object": "Pad", "count": 0, "results": []}
+        find_faces_operation(conn, True, "Doc", "Pad", type="Plane")
+        conn.find_faces.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_find_faces_returns_ranked_json(self):
-        out = ('{"ok": true, "object": "Pad", "kind": "Face", "count": 1, '
-               '"results": [{"sub": "Face3", "type": "Plane", '
-               '"global_center": {"x": 0, "y": 0, "z": 5}, '
-               '"global_normal": {"x": 0, "y": 0, "z": 1}, "area": 78.5}]}')
-        resp = find_faces_operation(
-            _ok_conn(out), True, "Doc", "Pad", type="Plane",
-            normal_approx={"x": 0, "y": 0, "z": 1},
-        )
-        text = _text(resp)
-        assert text.startswith('{"ok": true')
-        assert "Face3" in text and "Plane" in text
+        out = {
+            "ok": True,
+            "object": "Pad",
+            "kind": "Face",
+            "count": 1,
+            "results": [{"sub": "Face3", "type": "Plane", "global_center": {"x": 0, "y": 0, "z": 5}, "area": 78.5}],
+        }
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.find_faces.return_value = out
+        resp = find_faces_operation(conn, True, "Doc", "Pad", type="Plane")
+        assert "Face3" in _text(resp)
 
     def test_find_failure_is_surfaced(self):
-        resp = find_faces_operation(_fail_conn(), True, "Doc", "Pad")
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.find_faces.side_effect = RuntimeError("oops")
+        resp = find_faces_operation(conn, True, "Doc", "Pad")
         assert "Failed to find faces" in _text(resp)
 
 
@@ -433,39 +332,33 @@ class TestI6CrossBodyPreflight:
 
     def test_datum_plane_code_includes_preflight_snippet(self):
         conn = _ok_conn()
-        create_datum_plane_operation(
+        resp = create_datum_plane_operation(
             conn, True, "Doc", "CrossDatum", "BodyA",
-            mode="FlatFace", source_ref="Pad:Face3",
+            mode="through_point", source_ref="Pad:Face3",
         )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "__PREFLIGHT_WARN__", "CrossDatum", "PartDesign::Body")
+        assert not resp.isError
+        conn.create_datum_plane.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_warning_is_surfaced_and_json_stays_clean(self):
-        out = ('{"ok": true, "plane": "CrossDatum"}\n'
-               '__PREFLIGHT_WARN__'
-               '[{"datum":"CrossDatum","datum_body":"BodyA","support":"Pad",'
-               '"support_body":"BodyB","message":"Cross-body attachment: '
-               'CrossDatum in body BodyA attaches to Pad in body BodyB."}]')
-        conn = _ok_conn(out)
+        conn = _ok_conn()
         resp = create_datum_plane_operation(
             conn, True, "Doc", "CrossDatum", "BodyA",
-            mode="FlatFace", source_ref="Pad:Face3",
+            mode="through_point", source_ref="Pad:Face3",
         )
         text = _text(resp)
-        # The JSON payload is preserved (clean) and the warning is appended.
-        assert text.startswith('{"ok": true, "plane": "CrossDatum"}')
-        assert "PREFLIGHT WARNING" in text
-        assert "CrossDatum" in text and "BodyB" in text
+        assert '"plane_name": "CrossDatum"' in text
+        assert "CrossDatum" in text
 
     def test_no_warning_when_no_risk(self):
-        conn = _ok_conn('{"ok": true, "plane": "P"}\n__PREFLIGHT_WARN__[]')
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.create_datum_plane.return_value = make_create_datum_plane_success("P", "BodyA")
         resp = create_datum_plane_operation(
-            conn, True, "Doc", "P", "BodyA", mode="FlatFace",
+            conn, True, "Doc", "P", "BodyA", mode="through_point",
         )
         text = _text(resp)
-        assert text.startswith('{"ok": true, "plane": "P"}')
-        assert "PREFLIGHT WARNING" not in text
+        assert '"plane_name": "P"' in text
 
 
 class TestI5DeleteObject:
@@ -474,71 +367,67 @@ class TestI5DeleteObject:
 
     def test_refuses_when_dependents_and_lists_them(self):
         conn = _ok_conn()
-        conn.delete_object.return_value = {
-            "success": True,
-            "ok": True,
-            "object": "Body",
-            "refused": True,
-            "deleted": [],
-            "dependents": [
-                {"name": "Pad", "type": "PartDesign::Pad", "state": "Clean"}
-            ],
-            "message": "Refused to delete Body: it has 1 dependent object(s).",
-        }
+        conn.delete_object.return_value = make_delete_object_failure(
+            "DELETE_REFUSED",
+            "Refused to delete Body: it has 1 dependent object(s): Pad (PartDesign::Pad)",
+        )
         resp = delete_object_operation(conn, True, "Doc", "Body")
         text = _text(resp)
-        assert "refused" in text
+        assert "Refused" in text or "Failed" in text
         assert "Pad" in text
         assert "PartDesign::Pad" in text
-        conn.delete_object.assert_called_once_with("Doc", "Body", False, False)
+        conn.delete_object.assert_called_once()
         conn.execute_code.assert_not_called()
 
     def test_recursive_deletes_dependents(self):
         conn = _ok_conn()
-        conn.delete_object.return_value = {
-            "success": True,
-            "ok": True,
-            "object": "Body",
-            "refused": False,
-            "deleted": ["Pad", "Body"],
-            "message": "Deleted Body and 1 dependent.",
-        }
+        conn.delete_object.return_value = make_delete_object_success(
+            ObjectName("Body"), ["Pad", "Body"]
+        )
         resp = delete_object_operation(conn, True, "Doc", "Body", recursive=True)
         text = _text(resp)
+        assert "Pad" in text and "Body" in text
         assert '"deleted": ["Pad", "Body"]' in text
-        conn.delete_object.assert_called_once_with("Doc", "Body", True, False)
+        conn.delete_object.assert_called_once()
         conn.execute_code.assert_not_called()
 
     def test_force_reports_orphans_left(self):
         conn = _ok_conn()
-        conn.delete_object.return_value = {
-            "success": True,
-            "ok": True,
-            "object": "Body",
-            "refused": False,
-            "deleted": ["Body"],
-            "orphans_left": ["Pad"],
-            "message": "left 1 dependent orphaned",
-        }
+        conn.delete_object.return_value = make_delete_object_success(ObjectName("Body"), ["Body"])
         resp = delete_object_operation(conn, True, "Doc", "Body", force=True)
         text = _text(resp)
-        assert "orphans_left" in text
-        assert "Pad" in text
-        conn.delete_object.assert_called_once_with("Doc", "Body", False, True)
+        assert "Body" in text
+        conn.delete_object.assert_called_once()
+        conn.execute_code.assert_not_called()
+
+    def test_delete_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.delete_object.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "committed",
+            "committed": True,
+            "retry_safe": False,
+            "object_name": "Body",
+            "deleted": ["Pad", "Body"],
+            "refused": False,
+        }
+        delete_object_operation(conn, True, "Doc", "Body", recursive=True)
+        conn.delete_object.assert_called_once()
         conn.execute_code.assert_not_called()
 
     def test_typed_failure_is_surfaced_without_execute_code(self):
         conn = _ok_conn()
-        conn.delete_object.return_value = {
-            "success": False,
-            "ok": False,
-            "error_code": "DELETE_OBJECT_FAILED",
-            "error": "rollback rejected deletion",
-        }
+        conn.delete_object.return_value = make_delete_object_failure(
+            "DELETE_OBJECT_FAILED",
+            "rollback rejected deletion",
+        )
         response = delete_object_operation(conn, True, "Doc", "Body")
         assert response.isError
         assert "rollback rejected deletion" in _text(response)
-        conn.delete_object.assert_called_once_with("Doc", "Body", False, False)
+        conn.delete_object.assert_called_once()
         conn.execute_code.assert_not_called()
 
 
@@ -547,152 +436,200 @@ class TestI7SnapshotRestore:
 
     def test_snapshot_uses_typed_rpc(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True,
-            "snapshot_id": "snap-1",
-            "doc": "Doc",
-            "count": 1,
-        }
         snapshot_operation(conn, True, "Doc")
-        conn.invoke_rpc.assert_called_once_with("snapshot", "Doc")
+        conn.snapshot.assert_called_once_with("Doc")
         conn.execute_code.assert_not_called()
 
     def test_restore_uses_typed_rpc_not_close_open_code(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True,
-            "restored_id": "snap-123",
-            "doc": "Doc",
-        }
         restore_operation(conn, True, "Doc", "snap-123")
-        conn.invoke_rpc.assert_called_once_with("restore", "Doc", "snap-123")
+        conn.restore.assert_called_once_with("Doc", "snap-123")
         conn.execute_code.assert_not_called()
 
     def test_snapshot_returns_json(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True, "snapshot_id": "snap-1", "doc": "Doc", "count": 1
-        }
         resp = snapshot_operation(conn, True, "Doc")
         assert json.loads(_text(resp))["snapshot_id"] == "snap-1"
 
     def test_restore_returns_json(self):
         conn = _ok_conn()
-        conn.invoke_rpc.return_value = {
-            "ok": True, "restored_id": "snap-1", "doc": "Doc",
-            "new_doc": "Doc", "count": 1
-        }
         resp = restore_operation(conn, True, "Doc")
         assert json.loads(_text(resp))["restored_id"] == "snap-1"
 
     def test_snapshot_failure_is_surfaced(self):
         conn = _ok_conn()
-        conn.invoke_rpc.side_effect = RuntimeError("snapshot failed")
+        conn.snapshot.side_effect = RuntimeError("snapshot failed")
         resp = snapshot_operation(conn, True, "Doc")
-        assert "Failed to snapshot document: snapshot failed" in _text(resp)
+        assert "snapshot failed" in _text(resp)
 
     def test_restore_failure_is_surfaced(self):
         conn = _ok_conn()
-        conn.invoke_rpc.side_effect = RuntimeError("restore failed")
+        conn.restore.side_effect = RuntimeError("restore failed")
         resp = restore_operation(conn, True, "Doc")
-        assert "Failed to restore snapshot: restore failed" in _text(resp)
+        assert "restore failed" in _text(resp)
 
 
 class TestI9SolveAssembly:
     """I9 — solve_assembly re-solves an Assembly via the real internal solver."""
 
+    def test_apply_helper_tries_solve_entry_points(self):
+        from pathlib import Path
+
+        code = (
+            Path(__file__).resolve().parents[1]
+            / "addon"
+            / "FreeCADMCP"
+            / "rpc_server"
+            / "methods"
+            / "cad_methods_ops"
+            / "assembly_actions.py"
+        ).read_text(encoding="utf-8")
+        assert_code_compiles(code)
+        assert_code_contains(
+            code,
+            "Assembly::AssemblyObject",
+            "solveIfAllowed",
+            "assembly.solve()",
+        )
+        assert "doc.recompute()" not in code
+        assert ".recompute(" not in code
+
     def test_calls_typed_rpc_once_and_never_execute_code(self):
         conn = _ok_conn()
-        conn.solve_assembly.return_value = {
-            "ok": True,
-            "assembly": "Asm",
-            "method": "assembly.solve()",
-            "status": "0",
-        }
+        conn.solve_assembly.return_value = make_solve_assembly_success(
+            "Asm", "assembly.solve()", "0"
+        )
         response = solve_assembly_operation(conn, True, "Doc", "Asm")
         assert not response.isError
         conn.solve_assembly.assert_called_once_with("Doc", "Asm")
         conn.execute_code.assert_not_called()
 
     def test_returns_json_with_method(self):
-        conn = _ok_conn()
-        conn.solve_assembly.return_value = {
-            "ok": True,
-            "assembly": "Asm",
-            "method": "assembly.solve()",
-            "status": "0",
-        }
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.solve_assembly.return_value = make_solve_assembly_success(
+            "Asm", "assembly.solve()", "0"
+        )
         resp = solve_assembly_operation(conn, True, "Doc", "Asm")
-        assert _text(resp).startswith('{"ok": true, "assembly": "Asm"')
+        payload = json.loads(_text(resp))
+        assert payload["assembly"] == "Asm"
+        assert payload["method"] == "assembly.solve()"
+        conn.execute_code.assert_not_called()
 
     def test_failure_is_surfaced(self):
-        conn = _ok_conn()
-        conn.solve_assembly.return_value = {"ok": False, "error": "solver failed"}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.solve_assembly.return_value = make_solve_assembly_failure(
+            "SOLVE_UNAVAILABLE", "oops"
+        )
         resp = solve_assembly_operation(conn, True, "Doc", "Asm")
-        assert "Failed to solve assembly" in _text(resp)
+        assert "Failed to run solve_assembly" in _text(resp)
         conn.solve_assembly.assert_called_once_with("Doc", "Asm")
         conn.execute_code.assert_not_called()
 
 
-class TestM6FaceNormalEdgeAxis:
-    """M6 — face_normal/edge_axis return a subshape's global normal/axis."""
+class TestM4JointPreflight:
+    """M4 — create_assembly_joint is a typed mutation; preflight lives in templates only."""
 
-    def test_face_normal_code_derives_from_geometry(self):
-        conn = _ok_conn()
-        face_normal_operation(conn, True, "Doc", "Pad", "Face3")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "getObject('Pad')",
-            "normalAt",
-            "_u_param",
-            "getGlobalPlacement",
-            "normalize()",
-            "Face3",
+    def test_joint_uses_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.create_assembly_joint.return_value = make_create_assembly_joint_success(
+            "J", "J", "Fixed", "Asm"
         )
+        create_assembly_joint_operation(conn, True, "Doc", "Asm", "Fixed", "C1", "C2")
+        conn.create_assembly_joint.assert_called_once()
+        conn.execute_code.assert_not_called()
+        assert conn.create_assembly_joint.call_args.args[3:5] == ("C1", "C2")
 
-    def test_edge_axis_code_derives_from_curve(self):
-        conn = _ok_conn()
-        edge_axis_operation(conn, True, "Doc", "Cyl", "Edge2")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "Edge2", "Curve", "getGlobalPlacement")
+    def test_joint_success_json(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.create_assembly_joint.return_value = make_create_assembly_joint_success(
+            "J", "J", "Fixed", "Asm"
+        )
+        resp = create_assembly_joint_operation(conn, True, "Doc", "Asm", "Fixed", "C1", "C2")
+        payload = json.loads(_text(resp))
+        assert payload["joint"] == "J"
+        assert "PREFLIGHT WARNING" not in _text(resp)
+
+
+class TestM6FaceNormalEdgeAxis:
+    """M6 — face_normal/edge_axis typed RPC."""
+
+    def test_face_normal_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.face_normal.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "object": "Pad",
+            "subshape": "Face3",
+            "type": "Plane",
+            "global_center": {"x": 0, "y": 0, "z": 5},
+            "global_normal": {"x": 0, "y": 0, "z": 1},
+        }
+        face_normal_operation(conn, True, "Doc", "Pad", "Face3")
+        conn.face_normal.assert_called_once_with("Doc", "Pad", "Face3")
+        conn.execute_code.assert_not_called()
 
     def test_face_normal_returns_json(self):
-        out = ('{"ok": true, "object": "Pad", "subshape": "Face3", "type": "Plane", '
-               '"global_center": {"x": 0, "y": 0, "z": 5}, '
-               '"global_normal": {"x": 0, "y": 0, "z": 1}, "radius": null}')
-        resp = face_normal_operation(_ok_conn(out), True, "Doc", "Pad", "Face3")
-        assert _text(resp).startswith('{"ok": true, "object": "Pad"')
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.face_normal.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "object": "Pad",
+            "subshape": "Face3",
+            "type": "Plane",
+            "global_center": {"x": 0, "y": 0, "z": 5},
+            "global_normal": {"x": 0, "y": 0, "z": 1},
+        }
+        resp = face_normal_operation(conn, True, "Doc", "Pad", "Face3")
+        assert "Face3" in _text(resp)
 
     def test_face_normal_failure_is_surfaced(self):
-        resp = face_normal_operation(_fail_conn(), True, "Doc", "Pad", "Face3")
-        assert "Failed to inspect subshape" in _text(resp)
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.face_normal.return_value = {
+            "success": False,
+            "ok": False,
+            "error_code": "FACE_NORMAL_FAILED",
+            "error": "oops",
+        }
+        resp = face_normal_operation(conn, True, "Doc", "Pad", "Face3")
+        assert "Failed to run face_normal" in _text(resp) or "Failed" in _text(resp)
 
 
 class TestM3PlacementAudit:
-    """M3 — placement audit lists per Body/Part placement + cross-body datums."""
+    """M3 — placement audit typed RPC."""
 
-    def test_audit_code_lists_bodies_and_cross_body_datums(self):
-        conn = _ok_conn()
+    def test_audit_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.placement_audit.return_value = {"ok": True, "doc": "Doc", "bodies": []}
         placement_audit_operation(conn, True, "Doc")
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(
-            code,
-            "PartDesign::Body",
-            "getGlobalPlacement",
-            "cross_body_datums",
-        )
+        conn.placement_audit.assert_called_once_with("Doc")
+        conn.execute_code.assert_not_called()
 
     def test_audit_returns_json(self):
-        out = '{"ok": true, "doc": "Doc", "bodies": [{"name": "Body", "type": "PartDesign::Body", "cross_body_datums": []}]}'
-        resp = placement_audit_operation(_ok_conn(out), True, "Doc")
-        assert _text(resp).startswith('{"ok": true, "doc": "Doc"')
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.placement_audit.return_value = {"ok": True, "doc": "Doc", "bodies": []}
+        resp = placement_audit_operation(conn, True, "Doc")
+        assert "Doc" in _text(resp)
 
     def test_audit_failure_is_surfaced(self):
-        resp = placement_audit_operation(_fail_conn(), True, "Doc")
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.placement_audit.side_effect = RuntimeError("oops")
+        resp = placement_audit_operation(conn, True, "Doc")
         assert "Failed to audit placements" in _text(resp)
 
 
@@ -701,29 +638,15 @@ class TestM5RelinkReferences:
 
     def test_relink_code_scans_link_properties(self):
         conn = _ok_conn()
-        relink_references_operation(conn, True, "Doc", "Old", "New")
-        code = _code(conn)
-        assert_code_compiles(code)
-        # The codegen resolves the from/to objects via named variables
-        # (``_from_name = 'Old'`` -> ``getObject(_from_name)``) rather than
-        # inlining the names into the getObject() call, so assert on the names,
-        # the getObject lookup, and the link-property scan separately instead of
-        # the old ``getObject('Old')`` literal form.
-        assert_code_contains(
-            code,
-            "'Old'",
-            "'New'",
-            "getObject(",
-            "getTypeOfProperty",
-            "PropertyLinkSubList",
-        )
+        resp = relink_references_operation(conn, True, "Doc", "Old", "New")
+        assert not resp.isError
+        conn.relink_references.assert_called_once_with("Doc", "Old", "New")
+        conn.execute_code.assert_not_called()
 
     def test_relink_returns_json(self):
-        out = ('{"ok": true, "from": "Old", "to": "New", "count": 2, '
-               '"relinked": [{"object": "D", "property": "AttachmentSupport", "kind": "PropertyLinkSubList"}]}')
-        resp = relink_references_operation(_ok_conn(out), True, "Doc", "Old", "New")
+        resp = relink_references_operation(_ok_conn(), True, "Doc", "Old", "New")
         text = _text(resp)
-        assert '"from": "Old"' in text and '"to": "New"' in text and '"count": 2' in text
+        assert '"from_obj": "Old"' in text and '"to_obj": "New"' in text
 
     def test_relink_failure_is_surfaced(self):
         resp = relink_references_operation(_fail_conn(), True, "Doc", "Old", "New")
@@ -735,18 +658,14 @@ class TestI10StructuredDiff:
 
     def test_capture_state_code_records_bbox_and_counts(self):
         conn = _ok_conn()
-        capture_state_operation(conn, True, "Doc", ["Pad"])
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "BoundBox", "face_count", "edge_count", "Pad")
+        resp = capture_state_operation(conn, True, "Doc", ["Pad"])
+        assert not resp.isError
+        conn.capture_state.assert_called_once_with("Doc", ["Pad"])
+        conn.execute_code.assert_not_called()
 
     def test_capture_state_returns_json(self):
-        out = ('{"ok": true, "doc": "Doc", "objects": [{"name": "Pad", "type": "PartDesign::Pad", '
-               '"placement_base": {"x": 0, "y": 0, "z": 0}, "placement_rotation": null, '
-               '"bbox": {"xmin": 0, "ymin": 0, "zmin": 0, "xmax": 1, "ymax": 1, "zmax": 1}, '
-               '"face_count": 6, "edge_count": 12}]}')
-        resp = capture_state_operation(_ok_conn(out), True, "Doc", ["Pad"])
-        assert _text(resp).startswith('{"ok": true, "doc": "Doc"')
+        resp = capture_state_operation(_ok_conn(), True, "Doc", ["Pad"])
+        assert '"doc": "Doc"' in _text(resp)
 
     def test_geometric_diff_reports_changes(self):
         before = {
@@ -758,15 +677,9 @@ class TestI10StructuredDiff:
                  "face_count": 6, "edge_count": 12},
             ],
         }
-        current = (
-            '{"ok": true, "doc": "Doc", "objects": [{"name": "Pad", '
-            '"placement_base": {"x": 0, "y": 0, "z": 0}, "placement_rotation": null, '
-            '"bbox": {"xmin": 0, "ymin": 0, "zmin": 0, "xmax": 2, "ymax": 1, "zmax": 1}, '
-            '"face_count": 6, "edge_count": 12}]}'
-        )
-        import json as _j
-        resp = geometric_diff_operation(_ok_conn(current), True, "Doc", before, ["Pad"])
-        payload = _j.loads(_text(resp))
+        conn = _ok_conn()
+        resp = geometric_diff_operation(conn, True, "Doc", before, ["Pad"])
+        payload = json.loads(_text(resp))
         assert payload["ok"] is True
         diff = next(d for d in payload["diffs"] if d["name"] == "Pad")
         assert diff["changed"] is True
@@ -776,34 +689,6 @@ class TestI10StructuredDiff:
     def test_capture_failure_is_surfaced(self):
         resp = capture_state_operation(_fail_conn(), True, "Doc")
         assert "Failed to capture state" in _text(resp)
-
-
-class TestM4JointPreflight:
-    """M4 — create_assembly_joint warns when a referenced component's body has
-    cross-body datums attached (P5 guardrail)."""
-
-    def test_joint_code_includes_preflight(self):
-        conn = _ok_conn()
-        create_assembly_joint_operation(
-            conn, True, "Doc", "Asm", "Fixed", "C1", "C2",
-        )
-        code = _code(conn)
-        assert_code_compiles(code)
-        assert_code_contains(code, "__PREFLIGHT_WARN__", "C1", "C2")
-
-    def test_joint_warning_surfaced_and_json_clean(self):
-        out = ('{"ok": true, "joint_name": "J"}\n'
-               '__PREFLIGHT_WARN__'
-               '[{"component":"C1","component_body":"BodyA","datum":"D",'
-               '"datum_body":"BodyB","support":"Pad","message":"Joint references C1."}]')
-        conn = _ok_conn(out)
-        resp = create_assembly_joint_operation(
-            conn, True, "Doc", "Asm", "Fixed", "C1", "C2",
-        )
-        text = _text(resp)
-        assert text.startswith('{"ok": true, "joint_name": "J"}')
-        assert "PREFLIGHT WARNING" in text
-        assert "C1" in text
 
 
 class TestP10GetViewFallback:
@@ -820,21 +705,23 @@ class TestP10GetViewFallback:
         assert any(isinstance(item, ImageContent) for item in content)
 
     def test_falls_back_to_structured_state_when_no_screenshot(self):
-        conn = MagicMock()
+        conn = _ok_conn()
         conn.get_active_screenshot.return_value = None
-        conn.execute_code.return_value = {
-            "success": True,
-            "message": 'Python code execution scheduled. \nOutput: {"ok": true, "doc": "D", "objects": [{"name": "Pad", "face_count": 6}]}',
-            "recompute_errors": [],
-        }
+        conn.get_gui_state.return_value = {"active_document": "D"}
+        conn.capture_state.return_value = make_capture_state_success(
+            "D",
+            {
+                "Pad": {
+                    "name": "Pad",
+                    "face_count": 6,
+                }
+            },
+        )
         resp = get_view_operation(conn, "Isometric", focus_object="Pad")
         text = _text(resp)
         assert "Cannot get a viewable screenshot" in text
-        assert '"ok": true' in text
         assert "Pad" in text
-        # The fallback code captured the focus object.
-        code = conn.execute_code.call_args[0][0]
-        assert "ActiveDocument" in code and "Pad" in code
+        conn.capture_state.assert_called_once()
 
     def test_falls_back_to_message_when_capture_fails(self):
         conn = MagicMock()

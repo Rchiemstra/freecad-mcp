@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from .p5_measure_ops.measure_ops import (
-    _doc_sk_preamble,
-    _run_read_analysis,
     bounding_box_operation,
     center_of_mass_operation,
     common_volume_along_path_operation,
@@ -20,8 +18,6 @@ from .p5_measure_ops.measure_ops import (
 )
 
 __all__ = [
-    "_doc_sk_preamble",
-    "_run_read_analysis",
     "bounding_box_operation",
     "center_of_mass_operation",
     "common_volume_along_path_operation",

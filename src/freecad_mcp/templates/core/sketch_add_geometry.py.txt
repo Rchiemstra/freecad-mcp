@@ -1,8 +1,0 @@
-import FreeCAD, Part, math
-_doc = FreeCAD.getDocument($doc_name)
-_sk = _doc.getObject($sketch_name)
-if not _sk: raise RuntimeError('Sketch not found')
-_idxs = []
-$geometry_lines
-# __FREECAD_MCP_NATIVE_POST_RECOMPUTE__
-print('indices=' + str(_idxs))

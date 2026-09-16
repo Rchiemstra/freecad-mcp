@@ -1,0 +1,652 @@
+"""Unit tests for isolated MCP port plumbing and interactive GUI tools."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+from mcp.types import TextContent
+
+from freecad_mcp._shared.protocol.activate_document_contract import (
+    DocumentName as ActivateDocumentName,
+    make_activate_document_success,
+)
+from freecad_mcp._shared.protocol.open_document_contract import (
+    DocumentName as OpenDocumentName,
+    make_open_document_success,
+)
+from freecad_mcp._shared.protocol.recompute_and_wait_contract import (
+    DocumentName as RecomputeDocumentName,
+    make_recompute_and_wait_failure,
+    make_recompute_and_wait_success,
+)
+from freecad_mcp.operations.core import get_view_operation
+from freecad_mcp.operations.diagnostics import inspect_geometry_operation
+from freecad_mcp.operations.interactive import (
+    activate_document_operation,
+    compare_documents_operation,
+    diagnose_helix_operation,
+    diagnose_pocket_operation,
+    get_gui_state_operation,
+    get_selection_operation,
+    normalize_view_name,
+    open_document_operation,
+    recompute_and_wait_operation,
+    select_subshapes_operation,
+    set_section_view_operation,
+    set_tree_expanded_operation,
+)
+from freecad_mcp.server_state import ServerState
+from tests.helpers.geometric import assert_code_compiles, assert_code_contains
+
+
+def _ok_conn(output: str = '{"ok": true}'):
+    conn = MagicMock()
+    conn.get_active_screenshot.return_value = None
+    conn.execute_code.return_value = {
+        "success": True,
+        "message": "Python code execution scheduled. \nOutput: " + output,
+        "recompute_errors": [],
+    }
+    return conn
+
+
+def _code(conn) -> str:
+    return conn.execute_code.call_args[0][0]
+
+
+def _text(response) -> str:
+    content = response.content if hasattr(response, "content") else response
+    return " ".join(item.text for item in content if isinstance(item, TextContent))
+
+
+def _load_script(name: str):
+    script = Path(__file__).resolve().parents[2] / "scripts" / name
+    spec = importlib.util.spec_from_file_location(name.replace(".py", ""), script)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# ---------------------------------------------------------------------------
+# Port / isolation plumbing
+# ---------------------------------------------------------------------------
+
+
+class TestPortPlumbing:
+    def test_server_state_default_port_is_9875(self):
+        state = ServerState()
+        assert state.rpc_port == 9875
+        assert state.rpc_host == "127.0.0.1"
+
+    def test_get_freecad_connection_uses_state_port(self, monkeypatch):
+        import freecad_mcp.server as server
+
+        monkeypatch.setattr(server.state, "freecad_connection", None)
+        monkeypatch.setattr(server.state, "rpc_host", "127.0.0.1")
+        monkeypatch.setattr(server.state, "rpc_port", 9876)
+
+        monkeypatch.setattr(server.state, "instance_id", None)
+        created = {}
+
+        class FakeConn:
+            def __init__(
+                self,
+                host,
+                port,
+                expected_instance_id=None,
+                **identity,
+            ):
+                created["host"] = host
+                created["port"] = port
+                created["expected_instance_id"] = expected_instance_id
+                created.update(identity)
+
+            def ping(self):
+                return True
+
+        monkeypatch.setattr(server, "FreeCADConnection", FakeConn)
+        conn = server.get_freecad_connection()
+        assert created["host"] == "127.0.0.1"
+        assert created["port"] == 9876
+        assert created["expected_instance_id"] is None
+        assert created["mcp_instance_id"] == server.state.mcp_instance_id
+        assert conn is server.state.freecad_connection
+        # cleanup
+        server.state.freecad_connection = None
+
+    def test_get_freecad_connection_verifies_instance_when_pinned(self, monkeypatch):
+        import freecad_mcp.server as server
+
+        monkeypatch.setattr(server.state, "freecad_connection", None)
+        monkeypatch.setattr(server.state, "rpc_host", "127.0.0.1")
+        monkeypatch.setattr(server.state, "rpc_port", 9876)
+        monkeypatch.setattr(server.state, "instance_id", "freecad-isolated-9876")
+
+        calls = {"verify": 0}
+
+        class FakeConn:
+            def __init__(
+                self,
+                host,
+                port,
+                expected_instance_id=None,
+                **identity,
+            ):
+                self.expected_instance_id = expected_instance_id
+
+            def ping(self):
+                return True
+
+            def verify_instance(self):
+                calls["verify"] += 1
+                return {"ok": True, "instance_id": self.expected_instance_id}
+
+        monkeypatch.setattr(server, "FreeCADConnection", FakeConn)
+        server.get_freecad_connection()
+        assert calls["verify"] == 1
+        server.state.freecad_connection = None
+
+    def test_verify_instance_raises_on_mismatch(self):
+        from freecad_mcp.freecad_client import (
+            FreeCADConnection,
+            InstanceMismatchError,
+        )
+
+        conn = object.__new__(FreeCADConnection)
+        conn._expected_instance_id = "freecad-isolated-9876"
+        conn.server = MagicMock()
+        conn.server.get_instance_info.return_value = {
+            "ok": True,
+            "instance_id": "some-other-instance",
+        }
+        conn._uri = "http://127.0.0.1:9876"
+        with pytest.raises(InstanceMismatchError):
+            conn.verify_instance()
+
+    def test_verify_instance_noop_without_expected_id(self):
+        from freecad_mcp.freecad_client import FreeCADConnection
+
+        conn = object.__new__(FreeCADConnection)
+        conn._expected_instance_id = None
+        conn.server = MagicMock()
+        conn.server.get_instance_info.return_value = {"ok": True, "instance_id": "x"}
+        # No expected id -> returns info without raising.
+        assert conn.verify_instance()["instance_id"] == "x"
+
+    def test_run_freecad_mcp_forwards_port(self, monkeypatch):
+        runner = _load_script("run_freecad_mcp.py")
+        captured = {}
+
+        def fake_inprocess(extra):
+            captured["extra"] = extra
+            return 0
+
+        monkeypatch.setattr(runner, "_run_inprocess", fake_inprocess)
+        monkeypatch.setattr(runner, "_run_instrumented", fake_inprocess)
+        monkeypatch.delenv("FREECAD_MCP_DEBUG", raising=False)
+        monkeypatch.setattr(
+            "sys.argv",
+            ["run_freecad_mcp.py", "--host", "127.0.0.1", "--port", "9876"],
+        )
+        assert runner.main() == 0
+        assert "--rpc-host" in captured["extra"]
+        assert "--rpc-port" in captured["extra"]
+        assert "9876" in captured["extra"]
+        assert "-m" not in runner._instrumented_command([])
+
+    def test_setup_cursor_mcp_isolated_preserves_freecad(self, tmp_path, monkeypatch):
+        setup = _load_script("setup_cursor_mcp_isolated.py")
+        config = tmp_path / ".cursor" / "mcp.json"
+        config.parent.mkdir(parents=True)
+        original = {
+            "mcpServers": {
+                "freecad": {"command": "keep-me", "args": ["a"]},
+            }
+        }
+        config.write_text(json.dumps(original), encoding="utf-8")
+
+        monkeypatch.setattr(setup, "_repo_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            setup, "_freecad_mcp_root", lambda: Path(__file__).resolve().parents[2]
+        )
+
+        profile = tmp_path / ".freecad-mcp-isolated"
+        profile.mkdir()
+        secret = profile / "freecad_mcp_auth.secret"
+        secret.write_bytes(b"x" * 32)
+        manifest_path = profile / "instance-manifest.json"
+        manifest = {
+            "schema_version": 1,
+            "rpc_host": "127.0.0.1",
+            "rpc_port": 9876,
+            "profile_instance_id": "freecad-isolated-random-id",
+            "profile_path": str(profile),
+            "auth_secret_file": str(secret),
+            "expected_freecad_pid": None,
+            "expected_freecad_process_started_at": None,
+            "expected_addon_runtime_id": None,
+            "expected_boot_id": None,
+            "expected_protocol_version": None,
+            "expected_protocol_features": None,
+            "expected_addon_version": None,
+            "expected_addon_build_id": None,
+            "expected_freecad_version": None,
+            "expected_freecad_revision": None,
+            "expected_profile_path_fingerprint": None,
+            "created_at": "2026-01-01T00:00:00Z",
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        runner = Path(__file__).resolve().parents[2] / "scripts" / "run_freecad_mcp.py"
+        src = Path(__file__).resolve().parents[2] / "src"
+        entry = setup._isolated_entry(
+            "python", runner, src, manifest_path, setup.load_instance_manifest(manifest_path)
+        )
+        setup.merge_isolated(config, entry)
+
+        data = json.loads(config.read_text(encoding="utf-8"))
+        iso = data["mcpServers"]["freecad-isolated"]
+        assert data["mcpServers"]["freecad"] == original["mcpServers"]["freecad"]
+        assert "freecad-isolated" in data["mcpServers"]
+        assert "9876" in iso["args"]
+        assert iso["env"]["FREECAD_MCP_PORT"] == "9876"
+        # Identity, manifest and secret path are plumbed without secret bytes.
+        assert "--instance-id" in iso["args"]
+        assert manifest["profile_instance_id"] in iso["args"]
+        assert iso["env"]["FREECAD_MCP_INSTANCE_ID"] == manifest["profile_instance_id"]
+        assert "--instance-manifest" in iso["args"]
+        assert "--auth-file" in iso["args"]
+        assert (b"x" * 32).decode() not in json.dumps(iso)
+
+    def test_isolated_scripts_share_manifest_instead_of_port_identity(self, tmp_path):
+        cursor = _load_script("setup_cursor_mcp_isolated.py")
+        profile = _load_script("setup_isolated_profile.py")
+        profile_dir = tmp_path / ".freecad-mcp-isolated"
+        profile_dir.mkdir()
+        secret = profile_dir / profile.SECRET_FILENAME
+        secret.write_bytes(b"s" * 32)
+        manifest = profile._build_manifest(
+            profile=profile_dir,
+            profile_id="freecad-isolated-12345678",
+            secret_path=secret,
+            rpc_port=9880,
+            existing=None,
+        )
+        manifest_path = profile_dir / profile.MANIFEST_FILENAME
+        profile._atomic_write_json(manifest_path, manifest)
+        loaded = cursor.load_instance_manifest(manifest_path)
+        assert loaded["profile_instance_id"] == "freecad-isolated-12345678"
+        assert loaded["rpc_port"] == 9880
+
+    def test_setup_isolated_profile_refuses_appdata(self, tmp_path, monkeypatch):
+        setup = _load_script("setup_isolated_profile.py")
+        fake_appdata = tmp_path / "AppData" / "FreeCAD"
+        fake_appdata.mkdir(parents=True)
+        monkeypatch.setenv("APPDATA", str(tmp_path / "AppData"))
+        with pytest.raises(SystemExit):
+            setup._ensure_not_appdata(fake_appdata / "evil")
+
+
+# ---------------------------------------------------------------------------
+# View aliases (no new tool — document via get_view path)
+# ---------------------------------------------------------------------------
+
+
+class TestViewAliases:
+    def test_normalize_view_aliases(self):
+        assert normalize_view_name("Rear") == "Back"
+        assert normalize_view_name("Side") == "Right"
+        assert normalize_view_name("SideRight") == "Right"
+        assert normalize_view_name("SideLeft") == "Left"
+        assert normalize_view_name("Top") == "Top"
+
+    def test_get_view_normalizes_rear_alias(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.execute_code.return_value = {
+            "success": True,
+            "message": "Output: " + json.dumps({"ok": True, "fallback": True}),
+            "recompute_errors": [],
+        }
+        # Headless fallback path still receives normalized view name in label attempt
+        get_view_operation(conn, "Rear")
+        conn.get_active_screenshot.assert_called()
+        assert conn.get_active_screenshot.call_args[0][0] == "Back"
+
+
+# ---------------------------------------------------------------------------
+# Interactive RPC-backed operations
+# ---------------------------------------------------------------------------
+
+
+class TestInteractiveRpcOps:
+    def test_open_document_calls_rpc(self):
+        conn = MagicMock()
+        conn.open_document.return_value = make_open_document_success(
+            OpenDocumentName("V7"), r"C:\models\v7.FCStd"
+        )
+        text = _text(open_document_operation(conn, r"C:\models\v7.FCStd"))
+        assert json.loads(text)["document_name"] == "V7"
+        conn.open_document.assert_called_once_with(r"C:\models\v7.FCStd")
+
+    def test_activate_document_calls_rpc(self):
+        conn = MagicMock()
+        conn.activate_document.return_value = make_activate_document_success(
+            ActivateDocumentName("V8"), "V8"
+        )
+        text = _text(activate_document_operation(conn, "V8"))
+        assert json.loads(text)["document_name"] == "V8"
+
+    def test_set_tree_expanded_calls_rpc(self):
+        conn = MagicMock()
+        conn.set_tree_expanded.return_value = {
+            "ok": True,
+            "mode": "expand",
+            "selected": ["Body"],
+        }
+        text = _text(
+            set_tree_expanded_operation(conn, "Doc", ["Body"], "expand")
+        )
+        assert json.loads(text)["selected"] == ["Body"]
+        conn.set_tree_expanded.assert_called_once_with("Doc", ["Body"], "expand")
+
+    def test_select_subshapes_calls_rpc(self):
+        conn = MagicMock()
+        conn.select_subshapes.return_value = {
+            "ok": True,
+            "selected": [{"object": "Box", "sub": "Face1"}],
+            "count": 1,
+            "errors": [],
+        }
+        text = _text(
+            select_subshapes_operation(conn, "Doc", ["Box:Face1"], clear=True)
+        )
+        payload = json.loads(text)
+        assert payload["count"] == 1
+        conn.select_subshapes.assert_called_once_with("Doc", ["Box:Face1"], True)
+
+    def test_get_selection_calls_rpc(self):
+        conn = MagicMock()
+        conn.get_selection.return_value = {"ok": True, "selection": [], "count": 0}
+        assert json.loads(_text(get_selection_operation(conn)))["count"] == 0
+
+    def test_get_gui_state_calls_rpc(self):
+        conn = MagicMock()
+        conn.get_gui_state.return_value = {
+            "ok": True,
+            "active_document": "Part",
+            "active_body": "Body",
+            "active_workbench": "PartDesignWorkbench",
+            "edit_mode_object": None,
+            "selection": [],
+            "selection_count": 0,
+        }
+        payload = json.loads(_text(get_gui_state_operation(conn)))
+        assert payload["active_body"] == "Body"
+        assert payload["active_workbench"] == "PartDesignWorkbench"
+        conn.get_gui_state.assert_called_once_with()
+
+    def test_recompute_and_wait_calls_rpc(self):
+        conn = MagicMock()
+        conn.recompute_and_wait.return_value = make_recompute_and_wait_success(
+            RecomputeDocumentName("Part"), True
+        )
+        payload = json.loads(_text(recompute_and_wait_operation(conn, "Part")))
+        assert payload["settled"] is True and payload["document_name"] == "Part"
+        conn.recompute_and_wait.assert_called_once_with("Part")
+
+    def test_recompute_and_wait_failure_surfaces(self):
+        conn = MagicMock()
+        conn.recompute_and_wait.return_value = make_recompute_and_wait_failure(
+            "DOCUMENT_NOT_FOUND", "Document not found: Nope"
+        )
+        resp = recompute_and_wait_operation(conn, "Nope")
+        assert resp.isError and "Document not found" in _text(resp)
+
+    def test_set_section_view_calls_rpc(self):
+        conn = MagicMock()
+        conn.set_section_view.return_value = {"ok": True, "enabled": True}
+        text = _text(
+            set_section_view_operation(
+                conn, enabled=True, base=[0, 0, 1], normal=[0, 0, 1]
+            )
+        )
+        assert json.loads(text)["enabled"] is True
+        conn.set_section_view.assert_called_once()
+
+    def test_rpc_failure_surfaces(self):
+        conn = MagicMock()
+        conn.set_tree_expanded.return_value = {"ok": False, "error": "no objects"}
+        resp = set_tree_expanded_operation(conn, "Doc", [], "expand")
+        assert "no objects" in _text(resp)
+
+
+# ---------------------------------------------------------------------------
+# diagnose_pocket / diagnose_helix templates
+# ---------------------------------------------------------------------------
+
+
+class TestDiagnosePocket:
+    def test_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_pocket.return_value = {
+            "ok": True,
+            "pocket": "Pocket",
+            "reversed": True,
+            "length": 2.0,
+            "direction": {"x": 0, "y": 0, "z": -1},
+        }
+        diagnose_pocket_operation(conn, True, "Doc", "Pocket")
+        conn.diagnose_pocket.assert_called_once_with("Doc", "Pocket")
+        conn.execute_code.assert_not_called()
+
+    def test_returns_json_payload(self):
+        payload = {"ok": True, "pocket": "P1", "reversed": False, "length": 3.0}
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_pocket.return_value = payload
+        text = _text(diagnose_pocket_operation(conn, True, "Doc", "P1"))
+        assert '"pocket": "P1"' in text or '"pocket":"P1"' in text.replace(" ", "")
+
+
+class TestDiagnoseHelix:
+    def test_routes_typed_rpc(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_helix.return_value = {"ok": True, "helix": "Helix", "pitch": 1.0}
+        diagnose_helix_operation(conn, True, "Doc", "Helix")
+        conn.diagnose_helix.assert_called_once_with("Doc", "Helix")
+        conn.execute_code.assert_not_called()
+
+    def test_returns_json_payload(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.diagnose_helix.return_value = {"ok": True, "helix": "H1", "pitch": 2.5}
+        text = _text(diagnose_helix_operation(conn, True, "Doc", "H1"))
+        assert "H1" in text
+
+
+# ---------------------------------------------------------------------------
+# compare_documents + inspect_geometry activate wiring
+# ---------------------------------------------------------------------------
+
+
+class TestCompareDocuments:
+    def test_compare_documents_pairs(self, monkeypatch):
+        freecad = MagicMock()
+        states = {
+            "V7": {
+                "ok": True,
+                "doc": "V7",
+                "objects": [
+                    {
+                        "name": "Body",
+                        "bbox": {
+                            "xmin": 0,
+                            "ymin": 0,
+                            "zmin": 0,
+                            "xmax": 1,
+                            "ymax": 1,
+                            "zmax": 1,
+                        },
+                        "placement_base": {"x": 0, "y": 0, "z": 0},
+                        "placement_rotation": None,
+                        "face_count": 6,
+                    }
+                ],
+            },
+            "V8": {
+                "ok": True,
+                "doc": "V8",
+                "objects": [
+                    {
+                        "name": "Body",
+                        "bbox": {
+                            "xmin": 0,
+                            "ymin": 0,
+                            "zmin": 0,
+                            "xmax": 2,
+                            "ymax": 1,
+                            "zmax": 1,
+                        },
+                        "placement_base": {"x": 0, "y": 0, "z": 0},
+                        "placement_rotation": None,
+                        "face_count": 6,
+                    }
+                ],
+            },
+        }
+
+        def fake_capture(freecad, only_text, doc_name, names=None):
+            from freecad_mcp.responses.tool_results import tool_ok
+
+            state = states[doc_name]
+            objects = {row["name"]: row for row in state["objects"]}
+            payload = {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "committed",
+                "committed": True,
+                "retry_safe": False,
+                "doc": state["doc"],
+                "objects": objects,
+            }
+            return tool_ok(json.dumps(payload), structured=payload)
+
+        monkeypatch.setattr(
+            "freecad_mcp.operations.interactive.capture_state_operation",
+            fake_capture,
+        )
+        resp = compare_documents_operation(
+            freecad, True, "V7", "V8", object_pairs=[{"a": "Body", "b": "Body"}]
+        )
+        payload = json.loads(_text(resp))
+        assert payload["ok"] is True
+        assert payload["doc_a"] == "V7"
+        assert payload["diff"]["diffs"][0]["changed"] is True
+
+
+class TestInspectGeometryActivate:
+    def test_activate_selects_subshape(self):
+        conn = MagicMock()
+        conn.get_active_screenshot.return_value = None
+        conn.inspect_geometry.return_value = {
+            "contract_version": 1,
+            "success": True,
+            "ok": True,
+            "outcome": "observed",
+            "retry_safe": False,
+            "object": "Box",
+            "subshape": "Face1",
+        }
+        conn.activate_document.return_value = {"ok": True}
+        conn.select_subshapes.return_value = {"ok": True}
+        inspect_geometry_operation(
+            conn, True, "Doc", "Box", subshape="Face1", activate=True
+        )
+        conn.inspect_geometry.assert_called_once_with("Doc", "Box", "Face1")
+        conn.activate_document.assert_called_once_with("Doc")
+        conn.select_subshapes.assert_called_once_with(
+            "Doc", ["Box:Face1"], clear=True
+        )
+        conn.execute_code.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# gui_tools pure helpers (no FreeCAD import — selection parsing via mock)
+# ---------------------------------------------------------------------------
+
+
+class TestGuiToolsSelectionParsing:
+    def test_select_subshapes_string_and_dict_forms(self, monkeypatch):
+        """Exercise select_subshapes parsing with stub FreeCAD modules."""
+        import sys
+        import types
+
+        selected = []
+
+        class FakeSel:
+            @staticmethod
+            def clearSelection():
+                selected.clear()
+
+            @staticmethod
+            def addSelection(*args):
+                if len(args) == 1:
+                    selected.append((args[0].Name, ""))
+                else:
+                    selected.append((args[1], args[2] if len(args) > 2 else ""))
+
+            @staticmethod
+            def getSelection():
+                return []
+
+            @staticmethod
+            def getSelectionEx():
+                return []
+
+        class FakeObj:
+            def __init__(self, name):
+                self.Name = name
+
+        class FakeDoc:
+            Name = "Doc"
+
+            def getObject(self, name):
+                return FakeObj(name) if name in ("Box", "Body") else None
+
+        fake_fc = types.SimpleNamespace(
+            getDocument=lambda name: FakeDoc(),
+            Placement=object,
+            Vector=lambda *a: a,
+            Rotation=object,
+        )
+        fake_gui = types.SimpleNamespace(Selection=FakeSel)
+
+        monkeypatch.setitem(sys.modules, "FreeCAD", fake_fc)
+        monkeypatch.setitem(sys.modules, "FreeCADGui", fake_gui)
+
+        from addon.FreeCADMCP.rpc_server.gui_tools_ops import selection_ops
+
+        monkeypatch.setattr(selection_ops, "FreeCAD", fake_fc)
+        monkeypatch.setattr(selection_ops, "FreeCADGui", fake_gui)
+        monkeypatch.setattr(
+            selection_ops, "_flush_gui_events", lambda delay_ms=20: None
+        )
+
+        result = selection_ops.select_subshapes(
+            "Doc",
+            ["Box:Face1", {"object": "Body", "sub": "Edge2"}],
+            clear=True,
+        )
+        assert result["ok"] is True
+        assert result["count"] == 2
+        assert {"object": "Box", "sub": "Face1"} in result["selected"]
+        assert {"object": "Body", "sub": "Edge2"} in result["selected"]

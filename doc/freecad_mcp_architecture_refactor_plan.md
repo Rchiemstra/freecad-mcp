@@ -658,7 +658,7 @@ never relax them.
 ### 5.3 Shared files (integrator-only)
 
 - `doc/freecad_mcp_architecture_refactor_plan.md`
-- `ci/lint_python.py`, `tests/test_architecture_policy.py`
+- `ci/lint_python.py`, `tests/architecture/test_architecture_policy.py`
 - `tests/fixtures/freecad_rpc_contract_snapshot.json`
 - `tests/fixtures/mcp_tool_registry_contract_snapshot.json`
 - `tests/fixtures/post_collaboration_compatibility_surface.json`
@@ -790,7 +790,7 @@ code moves; the protocol exists once.
 | # | Phase commit | Change and main paths | Focused tests and validation |
 |---:|---|---|---|
 | 1 | `test(mcp): freeze the native collaboration baseline` | All six items in §4.1: revisions, planned compatibility manifest, removal inventory, locator census, compose-lane decision, and semantic contract snapshot. Refresh the MCP registry snapshot and record every temporary authority allowance without changing runtime behavior. | Import/deprecation, collaboration-boundary, semantic RPC, MCP registry, restart, legacy-authority census, and native-API availability contracts; **integration gate**. |
-| 2 | `build(mcp): replace module size rules with boundary policy` | Retire ARCH001/ARCH002 from `ci/lint_python.py`; add capability ownership, layer direction, locator ban, barrel-import ban, shim purity, public-surface budget, and the mixed-responsibility backstop, each with named structural allowances recorded exactly. Phase 1 separately owns temporary authority allowances. Retain Ruff `C901`. | `tests/test_architecture_policy.py`; accept cohesive multi-class value modules; reject giant façades and grab-bags; architecture-only lint. |
+| 2 | `build(mcp): replace module size rules with boundary policy` | Retire ARCH001/ARCH002 from `ci/lint_python.py`; add capability ownership, layer direction, locator ban, barrel-import ban, shim purity, public-surface budget, and the mixed-responsibility backstop, each with named structural allowances recorded exactly. Phase 1 separately owns temporary authority allowances. Retain Ruff `C901`. | `tests/architecture/test_architecture_policy.py`; accept cohesive multi-class value modules; reject giant façades and grab-bags; architecture-only lint. |
 | 3 | `refactor(mcp): extract the shared protocol module` | Create `_shared/protocol/` with canonicalization, signing, nonce, replay, and bounds checking; vendor identically into both processes; add the byte-equality CI check. `lease_protocol*` and `rpc_auth*` become import shims. Framing is still XML-RPC. | Existing protocol and auth suites become tests of the one module; byte-equality gate; both façades unchanged; **integration gate**. |
 
 Phase 2 lands before any code moves, deliberately. Keeping a 300-line rule through
@@ -1133,15 +1133,15 @@ added `capabilities/subject_manifest_index.py` and removed `importlib` discovery
 `capabilities/load.py`; `scripts/rewrite_barrel_imports.py` plus barrel-import rewrites
 across 45 production files (ARCH104 129→3); leaf import fixes for responses and
 `assembly_api_bootstrap/install_runtime.py`; Phase 23 gate tests in
-`tests/test_architecture_policy.py`; compatibility manifest locator census refresh
+`tests/architecture/test_architecture_policy.py`; compatibility manifest locator census refresh
 (removed `load.py` dynamic import); regenerated production capability artifacts and
 `capability_relocated_body_digests.json`. Raw violations **311→186**
 (ARCH101 94, ARCH103 8, ARCH104 3, ARCH105 16, ARCH106 32, ARCH107 33).
 
 **§5.7 MCP evidence (focused, not integration gate):** image `freecad-mcp-tests`
 `sha256:72b1ad157da64e9606b8befeac9bcc2c3a9ca7c502666d209cd29cf60c325481`;
-`docker compose run --rm unit tests/test_architecture_policy.py
-tests/test_capability_manifest_generator.py tests/test_generated_registration_cutover.py`
+`docker compose run --rm unit tests/architecture/test_architecture_policy.py
+tests/capability/test_capability_manifest_generator.py tests/test_generated_registration_cutover.py`
 — **123 passed**, **1 failed** (`test_phase23_production_architecture_lint_is_clean`,
 expected until remaining 186 findings are cleared).
 
@@ -1165,7 +1165,7 @@ same delivery.
 info, `client_stubs.py`, `gateway_dispatch.json`); vendored add-on generated
 capabilities tree; `capabilities/inline/` package; migration scripts
 `migrate_register_modules_to_generated.py` and
-`migrate_connection_methods_to_generated.py`; `tests/test_capability_mirror_shims.py`
+`migrate_connection_methods_to_generated.py`; `tests/capability/test_capability_mirror_shims.py`
 and cutover/manifest/introspection test updates; architecture allowance refresh
 (307 records); manifest `# ruff: noqa: E501` headers for bootstrapped tool
 descriptions. Registry snapshot remains byte-equal to fixture.
@@ -1188,15 +1188,15 @@ emitters (`write_connection_method_outputs`, import rewriting), production
 `freecad_client_ops/connection_methods/*` modules converted to declarative import
 shims; migration script
 `scripts/migrate_connection_methods_to_generated.py`; extended
-`tests/test_capability_mirror_shims.py` and related cutover/manifest tests.
+`tests/capability/test_capability_mirror_shims.py` and related cutover/manifest tests.
 Registry snapshot remains byte-equal to fixture. **No Phase 22 commit** — awaiting
 Grok review.
 
 **§5.7 MCP evidence (focused, not integration gate):** Docker `unit` —
-`tests/test_capability_mirror_shims.py` +
+`tests/capability/test_capability_mirror_shims.py` +
 `tests/test_generated_registration_cutover.py` +
-`tests/test_capability_manifest_generator.py` +
-`tests/test_capability_introspection.py` — focused Phase 22 package including
+`tests/capability/test_capability_manifest_generator.py` +
+`tests/capability/test_capability_introspection.py` — focused Phase 22 package including
 introspection and `connection_methods` package import coverage.
 
 **Remaining before integration gate:** Grok CLEAR on full Phase 22 package; full
@@ -1223,14 +1223,14 @@ deletion remains on the same stream (not spawned).
 `get_runtime_info` under `generated/capabilities/inline/`; all 47 `tools_*.py`
 converted to declarative shims; `capabilities/inline/` package with
 `tools_runtime_info` shim; `introspection.import_operation_symbol` resolves inline
-paths; extended `tests/test_capability_mirror_shims.py` and
+paths; extended `tests/capability/test_capability_mirror_shims.py` and
 `tests/test_generated_registration_cutover.py`. Registry snapshot remains byte-equal
 to fixture. **No Phase 22 commit** — awaiting Grok review.
 
 **§5.7 MCP evidence (focused, not integration gate):** Docker `unit` —
-`tests/test_capability_mirror_shims.py` +
+`tests/capability/test_capability_mirror_shims.py` +
 `tests/test_generated_registration_cutover.py` +
-`tests/test_capability_manifest_generator.py` — **71 passed**.
+`tests/capability/test_capability_manifest_generator.py` — **71 passed**.
 
 **Remaining before integration gate:** duplicated
 `freecad_client_ops/connection_methods/*` and addon gateway dispatch mirrors;
@@ -1253,11 +1253,11 @@ shared files (`capabilities/generator.py`, `registration_runtime.py`,
 mechanically split modules (`_*_a.py`, `_b.py`, `_1.py`, `_2.py`) plus duplicated
 client/gateway surfaces must land atomically with generator output and registry
 snapshot proof; frozen W2 subject map recorded in
-`tests/test_capability_mirror_shims.py` for coordinator reference but **not**
+`tests/capability/test_capability_mirror_shims.py` for coordinator reference but **not**
 spawned (generator/schema races).
 
 **Delivered this pass:** focused import-path scaffold in
-`tests/test_capability_mirror_shims.py` (47 register modules, 31 split mirrors,
+`tests/capability/test_capability_mirror_shims.py` (47 register modules, 31 split mirrors,
 subject ownership map). **No Phase 22 commit** — awaiting Grok review after
 mirror→shim conversion.
 
@@ -1304,7 +1304,7 @@ focused tests in `tests/test_generated_registration_cutover.py`.
 
 **§5.7 MCP evidence:** Docker `unit` image `freecad-mcp-tests`
 `sha256:0a54cb64e208b1448aa2299277988959fd01123fe51db978d8e913f0a86242f4` —
-`tests/test_generated_registration_cutover.py` + `tests/test_capability_manifest_generator.py`
+`tests/test_generated_registration_cutover.py` + `tests/capability/test_capability_manifest_generator.py`
 **20 passed** (not an integration gate).
 
 **Next:** Grok review; integrator does **not** self-claim CLEAR.
@@ -1326,8 +1326,8 @@ registration_runtime; 17 bootstrapped manifests under
 `generated/capabilities/` (registration, inert client stubs, gateway dispatch,
 registry snapshot byte-equal to contract fixture); scripts
 `bootstrap_capability_manifests.py` and `generate_capability_shadow.py`; focused
-tests in `tests/test_capability_manifest_generator.py` and
-`tests/test_capability_introspection.py`.
+tests in `tests/capability/test_capability_manifest_generator.py` and
+`tests/capability/test_capability_introspection.py`.
 
 **§5.7 MCP evidence:** see §11.4 (not an integration gate).
 
@@ -1348,10 +1348,10 @@ registration_runtime; 17 bootstrapped subject manifests under
 `generated/capabilities/` (registration, client stubs, gateway dispatch, registry snapshot
 byte-equal to `mcp_tool_registry_contract_snapshot.json`); scripts
 `bootstrap_capability_manifests.py` and `generate_capability_shadow.py`; focused unit
-tests in `tests/test_capability_manifest_generator.py` (awkward-subject schema coverage,
+tests in `tests/capability/test_capability_manifest_generator.py` (awkward-subject schema coverage,
 escape hatch, no hand-edit markers).
 
-**§5.7 MCP evidence:** Docker `unit` — `tests/test_capability_manifest_generator.py`
+**§5.7 MCP evidence:** Docker `unit` — `tests/capability/test_capability_manifest_generator.py`
 10 passed (not an integration gate).
 
 **Remaining Phase 20:** Grok re-review after fix integrator pass (operation_path
@@ -1375,7 +1375,7 @@ relative-import modules; escape-hatch test uses real `tests.fixtures` impl;
 
 **§5.7 MCP evidence:** Docker `unit` image `freecad-mcp-tests` digest
 `sha256:570650fce4e8ecc4ca8ede581024696a4266e2921d1fc147a5d106e109e99d89` —
-`tests/test_capability_manifest_generator.py` + `tests/test_capability_introspection.py`
+`tests/capability/test_capability_manifest_generator.py` + `tests/capability/test_capability_introspection.py`
 16 passed (not an integration gate).
 
 #### 2026-08-06 — Phase 19 cross-track gate closed (integrator; pending Grok re-review)
@@ -2581,7 +2581,7 @@ repository digest; host-side build or test output is never evidence.
   `sha256:f87945672054ac98360f4a650fcea119932067340687dcbeffd9533d440e0ade`.
 - **Focused Docker gate (not integration):** `docker compose build unit` then
   `docker compose run --rm unit tests/test_generated_registration_cutover.py
-  tests/test_capability_manifest_generator.py` — **20 passed**.
+  tests/capability/test_capability_manifest_generator.py` — **20 passed**.
 - **Key artifacts:** production emitters in `capabilities/generator.py`
   (`render_register_order`, `render_production_registration`,
   `render_tool_export_bind_part`, `write_production_outputs`); generated files
@@ -2600,7 +2600,7 @@ repository digest; host-side build or test output is never evidence.
 - **Images and source identity:** Compose `freecad-mcp-tests` is
   `sha256:570650fce4e8ecc4ca8ede581024696a4266e2921d1fc147a5d106e109e99d89`.
 - **Focused Docker gate (not integration):** `docker compose run --rm unit
-  tests/test_capability_manifest_generator.py tests/test_capability_introspection.py`
+  tests/capability/test_capability_manifest_generator.py tests/capability/test_capability_introspection.py`
   — **16 passed**.
 - **Key artifacts:** `capabilities/schema.py`, `introspection.py`, `bootstrap.py`,
   `load.py`, `generator.py`, `registration_runtime.py`; 17 subject manifests under
@@ -3238,7 +3238,7 @@ repository digest; host-side build or test output is never evidence.
 - **Ruff and focused contracts:** the corresponding full production lint/Ruff
   command passed with final-image Ruff 0.16.1. A separate Docker compatibility run
   pinned Ruff 0.12.12 and passed all touched Python paths. The focused
-  `tests/test_architecture_policy.py` suite passed 85/85, including an isolated source
+  `tests/architecture/test_architecture_policy.py` suite passed 85/85, including an isolated source
   assertion for exactly one C901 diagnostic; architecture policy did not duplicate it.
 - **Compose phase gate:** after `docker compose build`, `docker compose run --rm
   unit` selected 1,810 tests: 1,806 passed, three Windows-DACL tests skipped, and one

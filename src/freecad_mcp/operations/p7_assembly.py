@@ -15,15 +15,6 @@ from .p7_assembly_ops.document_tree_ops import (
     get_document_tree_operation,
     move_object_operation,
 )
-from .p7_assembly_ops.helpers import (
-    _PREFLIGHT_SENTINEL,
-    _doc_preamble,
-    _extract_execute_output,
-    _extract_preflight,
-    _run_json_code,
-    _shared_helpers,
-    _validate_if_exists,
-)
 from .p7_assembly_ops.path_ops import (
     build_path_wire_operation,
     sweep_pipe_operation,
@@ -34,13 +25,6 @@ from .p7_assembly_ops.sketch_projection_ops import (
 )
 
 __all__ = [
-    "_PREFLIGHT_SENTINEL",
-    "_doc_preamble",
-    "_extract_execute_output",
-    "_extract_preflight",
-    "_run_json_code",
-    "_shared_helpers",
-    "_validate_if_exists",
     "build_path_wire_operation",
     "create_assembly_grounded_joint_operation",
     "create_assembly_joint_operation",

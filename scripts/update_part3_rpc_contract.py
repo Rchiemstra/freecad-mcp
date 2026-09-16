@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from tests.helpers.runtime_bootstrap import bootstrap_unit_test_runtime
-from tests.test_freecad_rpc_contract_snapshot import capture_parameter_contract
+from tests.freecad.test_freecad_rpc_contract_snapshot import capture_parameter_contract
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "freecad_rpc_contract_snapshot.json"
@@ -210,7 +210,7 @@ def _result_schema(method: str) -> dict[str, Any]:
 def main() -> None:
     bootstrap_unit_test_runtime()
     from addon.FreeCADMCP.rpc_server.rpc_server import FreeCADRPC
-    from tests.test_freecad_rpc_contract_snapshot import capture_parameter_contract
+    from tests.freecad.test_freecad_rpc_contract_snapshot import capture_parameter_contract
 
     snapshot = json.loads(FIXTURE.read_text(encoding="utf-8"))
     methods = snapshot.setdefault("methods", {})

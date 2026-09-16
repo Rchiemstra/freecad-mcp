@@ -26,7 +26,6 @@ from .cad_methods_ops.recompute_helpers import (
 )
 from .cad_methods_ops.references import inspect_references, repair_references
 from .cad_methods_ops.sketch_public import (
-    body_create,
     body_set_tip,
     pad_feature,
     pocket_feature,
@@ -46,9 +45,9 @@ from .cad_methods_ops.spreadsheet import (
     spreadsheet_set_alias,
     spreadsheet_set_cells,
 )
+from .cad_methods_ops.typed_rpc_discovery import bind_typed_rpc_handlers
 
 __all__ = [
-    "body_create",
     "body_set_tip",
     "clear_expression",
     "create_object",
@@ -90,3 +89,6 @@ __all__ = [
     "spreadsheet_set_cells",
     "undo",
 ]
+
+_TYPED_RPC_EXPORTS = bind_typed_rpc_handlers(globals())
+__all__ = sorted({*__all__, *_TYPED_RPC_EXPORTS})

@@ -6,6 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ...._shared.protocol.body_create_contract import (
+    BodyDocument,
+    BodyReadDocument,
+    DocumentName,
+)
 from ..lease_methods_ops.collaboration_dependencies import CompatibilityMutationAPI
 
 
@@ -46,6 +51,9 @@ class CadCollaborators:
             "compatibility_api.commit_compatibility_mutation": getattr(
                 self.compatibility_api, "commit_compatibility_mutation", None
             ),
+            "compatibility_api.commit_native_mutation": getattr(
+                self.compatibility_api, "commit_native_mutation", None
+            ),
             "create_object_gui": self.create_object_gui,
             "insert_part_from_library": self.insert_part_from_library,
             "set_object_property": self.set_object_property,
@@ -67,38 +75,68 @@ class CadCollaborators:
     def commit_compatibility_mutation(
         self,
         document_name: str,
-        callback: Callable[[], Any],
+        callback: Callable[..., Any],
         *,
         structural: bool = False,
         recompute: bool = True,
-        postcondition: Callable[[], Any] | None = None,
+        postcondition: Callable[..., Any] | None = None,
+        bind_document: bool = False,
+        require_native: bool = False,
     ) -> Any:
         """Delegate exactly once through the injected native boundary."""
 
-        if postcondition is not None:
-            if recompute:
-                return self.compatibility_api.commit_compatibility_mutation(
-                    document_name,
-                    callback,
-                    structural=structural,
-                    postcondition=postcondition,
-                )
+        if (
+            postcondition is None
+            and not bind_document
+            and not require_native
+            and recompute
+        ):
             return self.compatibility_api.commit_compatibility_mutation(
-                document_name,
-                callback,
-                structural=structural,
-                recompute=recompute,
-                postcondition=postcondition,
+                document_name, callback, structural=structural
             )
+        kwargs: dict[str, Any] = {
+            "structural": structural,
+            "postcondition": postcondition,
+            "bind_document": bind_document,
+            "require_native": require_native,
+        }
         if not recompute:
-            return self.compatibility_api.commit_compatibility_mutation(
-                document_name,
-                callback,
-                structural=structural,
-                recompute=False,
-            )
+            kwargs["recompute"] = False
         return self.compatibility_api.commit_compatibility_mutation(
-            document_name, callback, structural=structural
+            document_name,
+            callback,
+            **kwargs,
+        )
+
+    def commit_body_create_mutation(
+        self,
+        document_name: DocumentName,
+        callback: Callable[[BodyDocument], object],
+        postcondition: Callable[[BodyReadDocument], object],
+    ) -> object:
+        """Delegate the Body-only contract without widening it to ``Any``."""
+
+        return self.compatibility_api.commit_body_create_mutation(
+            document_name,
+            callback,
+            postcondition,
+        )
+
+    def commit_native_mutation(
+        self,
+        document_name: str,
+        callback: Callable[[object], object],
+        postcondition: Callable[[object], object],
+        *,
+        structural: bool = True,
+    ) -> object:
+        """Delegate generic typed native commits without per-op bridge methods."""
+
+        return self.compatibility_api.commit_native_mutation(
+            document_name,
+            callback,
+            postcondition,
+            structural=structural,
         )
 
 

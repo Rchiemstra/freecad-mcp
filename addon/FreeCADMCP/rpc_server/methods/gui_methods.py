@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from .gui_methods_ops.document_ops import list_documents, open_document, reload_document
+from .cad_methods_ops.activate_document import rpc_activate_document as activate_document
+from .cad_methods_ops.open_document import rpc_open_document as open_document
+from .cad_methods_ops.reload_document import rpc_reload_document as reload_document
+from .gui_methods_ops.document_ops import list_documents
 from .gui_methods_ops.gui_interaction import (
-    activate_document,
     get_gui_state,
     get_report_view,
     get_selection,

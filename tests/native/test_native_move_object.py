@@ -1,0 +1,249 @@
+"""Native qualification matrix for ``move_object``."""
+
+from __future__ import annotations
+
+import os
+from types import SimpleNamespace
+
+import pytest
+
+pytestmark = pytest.mark.core
+
+
+def _require_native_collaboration() -> None:
+    if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") != "1":
+        pytest.skip("Compose FreeCAD is adapter-only; use the branch-built lane")
+
+
+from tests.native_model_state import model_state as _model_state
+
+def _collaborators(FreeCAD, validator):
+    from addon.FreeCADMCP.collaboration_api import CollaborationAPI
+
+    bridge = CollaborationAPI(document_lookup=FreeCAD.getDocument)
+    return SimpleNamespace(
+        validate_document_invariants=validator,
+        commit_native_mutation=bridge.commit_native_mutation,
+    )
+
+
+def _prepare(document):
+    if document.getObject('Seed') is None:
+        document.addObject('App::FeaturePython', 'Seed')
+    if document.getObject('Target') is None:
+        document.addObject('App::FeaturePython', 'Target')
+    body = document.getObject('Body')
+    if body is None:
+        try:
+            body = document.addObject('PartDesign::Body', 'Body')
+        except Exception:
+            body = document.addObject('App::FeaturePython', 'Body')
+    document.recompute()
+    return body
+
+
+def test_move_object_native_success_inspects_after_recompute(monkeypatch):
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import move_object as subject
+
+    document = FreeCAD.newDocument("MCPMoveObjectNativeSuccess")
+    events = []
+
+    class RecomputeProbe:
+        def execute(self, _object):
+            events.append("recompute")
+
+    probe = document.addObject("App::FeaturePython", "RecomputeProbe")
+    probe.Proxy = RecomputeProbe()
+    _prepare(document)
+    events.clear()
+    original_apply = subject.apply_move_object
+    original_read = subject.read_move_object_result
+
+    def tracked_apply(admitted, request):
+        events.append("apply")
+        probe.touch()
+        return original_apply(admitted, request)
+
+    def tracked_read(admitted, receipt):
+        events.append("inspect")
+        return original_read(admitted, receipt)
+
+    monkeypatch.setattr(subject, "apply_move_object", tracked_apply)
+    monkeypatch.setattr(subject, "read_move_object_result", tracked_read)
+    try:
+        result = subject.run_move_object(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "Seed", "Body", True)
+        assert result["success"] is True
+        assert events == ["apply", "recompute", "inspect", "validate"]
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
+def test_move_object_native_validation_failure_restores_complete_state():
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.move_object import run_move_object
+
+    document = FreeCAD.newDocument("MCPMoveObjectNativeRollback")
+    _prepare(document)
+    state_before = _model_state(document)
+    try:
+        result = run_move_object(
+            _collaborators(FreeCAD, lambda _d: (_ for _ in ()).throw(RuntimeError("forced validation failure"))),
+            document.Name, "Seed", "Body", True,
+        )
+        assert result["success"] is False
+        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
+        assert result["rollback_succeeded"] is True
+        assert _model_state(document) == state_before
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
+def test_move_object_native_apply_failure_restores(monkeypatch):
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import move_object as subject
+
+    document = FreeCAD.newDocument("MCPMoveObjectNativeApplyFailure")
+    _prepare(document)
+    state_before = _model_state(document)
+    original = subject.apply_move_object
+
+    def mutates_then_raises(admitted, request):
+        original(admitted, request)
+        admitted.addObject("App::FeaturePython", "TransientSupport")
+        raise RuntimeError("forced failure after structural effects")
+
+    monkeypatch.setattr(subject, "apply_move_object", mutates_then_raises)
+    try:
+        result = subject.run_move_object(_collaborators(FreeCAD, lambda _d: None), document.Name, "Seed", "Body", True)
+        assert result["success"] is False
+        assert result["native_status"] == "ApplyFailed"
+        assert document.getObject("TransientSupport") is None
+        assert _model_state(document) == state_before
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
+def test_move_object_native_recompute_failure_rolls_back(monkeypatch):
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import move_object as subject
+
+    document = FreeCAD.newDocument("MCPMoveObjectNativeRecomputeFailure")
+
+    class FailingRecomputeProbe:
+        armed = False
+
+        def execute(self, _object):
+            if self.armed:
+                self.armed = False
+                raise RuntimeError("forced native recompute failure")
+
+    proxy = FailingRecomputeProbe()
+    probe = document.addObject("App::FeaturePython", "FailingRecomputeProbe")
+    probe.Proxy = proxy
+    _prepare(document)
+    state_before = _model_state(document)
+    original = subject.apply_move_object
+
+    def arm(admitted, request):
+        receipt = original(admitted, request)
+        proxy.armed = True
+        probe.touch()
+        return receipt
+
+    monkeypatch.setattr(subject, "apply_move_object", arm)
+    try:
+        result = subject.run_move_object(_collaborators(FreeCAD, lambda _d: None), document.Name, "Seed", "Body", True)
+        assert result["success"] is False
+        assert result["native_status"] == "RecomputeFailed"
+        assert _model_state(document) == state_before
+    finally:
+        proxy.armed = False
+        FreeCAD.closeDocument(document.Name)
+
+
+def test_move_object_native_rollback_failure_is_uncertain_and_fences(monkeypatch):
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import move_object as subject
+
+    document = FreeCAD.newDocument("MCPMoveObjectNativeRollbackFailure")
+
+    class PersistentFailureProbe:
+        armed = False
+
+        def execute(self, _object):
+            if self.armed:
+                raise RuntimeError("persistent recompute failure blocks restoration")
+
+    proxy = PersistentFailureProbe()
+    probe = document.addObject("App::FeaturePython", "PersistentFailureProbe")
+    probe.Proxy = proxy
+    _prepare(document)
+    original = subject.apply_move_object
+
+    def arm(admitted, request):
+        receipt = original(admitted, request)
+        proxy.armed = True
+        probe.touch()
+        return receipt
+
+    monkeypatch.setattr(subject, "apply_move_object", arm)
+    collaborators = _collaborators(FreeCAD, lambda _d: None)
+    try:
+        result = subject.run_move_object(collaborators, document.Name, "Seed", "Body", True)
+        proxy.armed = False
+        fenced = subject.run_move_object(collaborators, document.Name, "Seed", "Body", True)
+        assert result["outcome"] == "uncertain" or result["success"] is False
+        assert fenced["success"] is False
+    finally:
+        proxy.armed = False
+        FreeCAD.closeDocument(document.Name)
+
+
+def test_move_object_native_inspection_failure_rolls_back(monkeypatch):
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import move_object as subject
+
+    document = FreeCAD.newDocument("MCPMoveObjectNativeInspectionFailure")
+    _prepare(document)
+    state_before = _model_state(document)
+
+    def reject(_document, _receipt):
+        raise subject.MoveObjectError("CREATED_OBJECT_WRONG_TYPE", "forced inspection failure")
+
+    monkeypatch.setattr(subject, "read_move_object_result", reject)
+    try:
+        result = subject.run_move_object(_collaborators(FreeCAD, lambda _d: None), document.Name, "Seed", "Body", True)
+        assert result["success"] is False
+        assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
+        assert _model_state(document) == state_before
+    finally:
+        FreeCAD.closeDocument(document.Name)
+
+
+def test_move_object_native_postcondition_cannot_write():
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.move_object import run_move_object
+
+    document = FreeCAD.newDocument("MCPMoveObjectReadOnlyPostcondition")
+    anchor = document.addObject("App::FeaturePython", "Anchor")
+    _prepare(document)
+    state_before = _model_state(document)
+
+    def validate(_admitted):
+        anchor.Label = "Unvalidated change"
+
+    try:
+        result = run_move_object(_collaborators(FreeCAD, validate), document.Name, "Seed", "Body", True)
+        assert result["outcome"] == "rejected"
+        assert result["native_status"] == "PostconditionFailed"
+        assert _model_state(document) == state_before
+    finally:
+        FreeCAD.closeDocument(document.Name)
