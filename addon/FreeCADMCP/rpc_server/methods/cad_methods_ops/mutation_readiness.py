@@ -12,9 +12,9 @@ except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP.automation_pause import status as automation_pause_status
 
 try:
-    from ....part3_collaboration.history_head import capture_redo_head, capture_undo_head
-    from ....part3_collaboration.identity import bootstrap_identity_selector
-except ImportError:  # pragma: no cover - flat addon import path
+    from part3_collaboration.history_head import capture_redo_head, capture_undo_head
+    from part3_collaboration.identity import bootstrap_identity_selector
+except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP.part3_collaboration.history_head import (
         capture_redo_head,
         capture_undo_head,
