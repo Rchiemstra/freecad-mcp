@@ -126,7 +126,7 @@ def capture_committed_screenshot(
     except Exception as exc:
         structured["presentation_warning"] = f"Screenshot capture failed: {exc}"
         return None
-    if screenshot:
+    if isinstance(screenshot, str) and screenshot:
         return screenshot
     structured.setdefault(
         "presentation_warning",

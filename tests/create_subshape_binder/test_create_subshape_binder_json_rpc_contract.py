@@ -67,7 +67,7 @@ class _RecordingFreeCADTransport:
 
 
 def _invoke_registered(monkeypatch, transport, params):
-    connection = FreeCADConnection(host="127.0.0.1", port=9875, mcp_instance_id="agent-mcp-contract")
+    connection = FreeCADConnection(host="127.0.0.1", port=9875, mcp_instance_id="c0deface-1111-4111-8111-000000000001")
     session = RpcAuthenticationSession()
     session.mark_connected("test-session-token", session_id="test-session", expires_at="2099-01-01T00:00:00Z")
     configure_rpc_session(connection, session)
@@ -107,7 +107,7 @@ def test_create_subshape_binder_sends_authenticated_json_rpc_to_freecad(monkeypa
     uuid.UUID(envelope["request_id"])
     assert envelope["method"] == "create_subshape_binder"
     assert envelope["params"]["doc_name"] == "AgentDocument"
-    assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
+    assert headers["X-MCP-Instance-Id"] == "c0deface-1111-4111-8111-000000000001"
     assert headers[JSON_RPC_PROTOCOL_HEADER] == JSON_RPC_PROTOCOL_VALUE
     assert transport.closed is True
 
