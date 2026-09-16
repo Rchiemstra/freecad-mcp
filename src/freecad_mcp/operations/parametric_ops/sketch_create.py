@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-
-from typing import Any
+from collections.abc import Mapping
 
 from mcp.types import CallToolResult
 
@@ -23,7 +22,7 @@ def sketch_create_operation(
     sketch_name: str,
     body_name: str | None = None,
     attach_to: str | None = None,
-    attachment_offset: dict[str, Any] | None = None,
+    attachment_offset: Mapping[str, object] | None = None,
 ) -> CallToolResult:
     try:
         if attachment_offset is None:
