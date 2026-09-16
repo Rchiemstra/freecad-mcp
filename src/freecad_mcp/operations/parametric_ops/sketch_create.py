@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from typing import Any
+
 from mcp.types import CallToolResult
 
 from ..._shared.protocol.sketch_create_contract import (
@@ -21,9 +23,17 @@ def sketch_create_operation(
     sketch_name: str,
     body_name: str | None = None,
     attach_to: str | None = None,
+    attachment_offset: dict[str, Any] | None = None,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad.sketch_create(doc_name, sketch_name, body_name, attach_to)
+        if attachment_offset is None:
+            raw_result: object = freecad.sketch_create(
+                doc_name, sketch_name, body_name, attach_to
+            )
+        else:
+            raw_result = freecad.sketch_create(
+                doc_name, sketch_name, body_name, attach_to, attachment_offset
+            )
     except Exception as exc:
         raw_result = make_sketch_create_uncertain(
             "SKETCH_CREATE_TRANSPORT_UNCERTAIN",

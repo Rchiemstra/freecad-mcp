@@ -22,7 +22,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="check_rpc_sync",
-            docstring="Verify that the next FreeCAD GUI response belongs to this exact call.\n\nA unique nonce is round-tripped through FreeCAD's GUI task queue. Use this\nafter an execute timeout or before relying on model inspection results. A\ntimeout or nonce mismatch means the queue is not safe for further work.",
+            docstring="Verify transport correlation for the next FreeCAD GUI response.\n\nA unique nonce is round-tripped through FreeCAD's GUI task queue. This proves\nonly that the transport and queue are correlated; it does not prove document\nmutation readiness. Use get_mutation_readiness for transaction, recompute,\nbarrier, poison, quarantine, and local-pause state.",
             signature="(ctx: 'Context') -> 'CallToolResult'",
             operation_path="freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
             rpc_method="check_rpc_sync",

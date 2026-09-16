@@ -9,6 +9,10 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import sketch_public
+from tests.helpers.native_readiness import (
+    attach_native_readiness,
+    freecad_with_native_readiness,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -18,10 +22,12 @@ class _CompatibilityAPI:
         self.calls = []
 
     def commit_compatibility_mutation(
-        self, document_name, callback, *, structural=False
+        self, document_name, callback, *, structural=False, postcondition=None
     ):
         self.calls.append((document_name, structural))
         callback()
+        if postcondition is not None and postcondition() is False:
+            return {"status": "PostconditionFailed", "committed": False}
         return {"status": "Committed", "committed": True}
 
     def commit_native_mutation(
@@ -40,8 +46,9 @@ class _Facade:
         self._cad_collaborators = collaborators
 
     @staticmethod
-    def _dispatch_gui(callback):
-        return callback()
+    def _dispatch_gui(callback, *, late_result_transform=None):
+        result = callback()
+        return late_result_transform(result) if late_result_transform else result
 
     @staticmethod
     def _adapt_gui_mutation_result(result, **_kwargs):
@@ -51,13 +58,14 @@ class _Facade:
 def _collaborators(api):
     return SimpleNamespace(
         compatibility_api=api,
-        freecad=object(),
+        freecad=freecad_with_native_readiness(),
         part=object(),
         sketcher=object(),
         dict_to_placement=object(),
         placement_to_dict=object(),
         set_extrusion_symmetric=object(),
         set_feature_bool=object(),
+        validate_document_invariants=lambda _document: None,
         commit_compatibility_mutation=api.commit_compatibility_mutation,
     )
 
@@ -65,7 +73,12 @@ def _collaborators(api):
 @pytest.mark.parametrize(
     ("method", "args", "leaf", "expected_dependencies"),
     [
-        ("sketch_create", ("Doc", "Sketch"), "sketch_create_gui", ("freecad",)),
+        (
+            "sketch_create",
+            ("Doc", "Sketch"),
+            "sketch_create_gui",
+            ("freecad", "dict_to_placement"),
+        ),
         (
             "sketch_add_geometry",
             ("Doc", "Sketch", []),
@@ -139,11 +152,19 @@ def test_mutations_use_one_commit_and_exact_injected_dependencies(
 
     assert result == {"success": True}
     expected_structural = method in {
-        "sketch_create", "pad_feature", "pocket_feature", "body_create"
+        "sketch_create",
+        "sketch_attach",
+        "pad_feature",
+        "pocket_feature",
+        "body_create",
     }
     assert api.calls == [("Doc", expected_structural)]
     assert len(seen) == 1
-    assert tuple(seen[0]) == expected_dependencies
+    expected_kwargs = set(expected_dependencies)
+    if method not in {"pad_feature", "pocket_feature"}:
+        expected_kwargs.add("recompute")
+        assert seen[0]["recompute"] is False
+    assert set(seen[0]) == expected_kwargs
     for name in expected_dependencies:
         assert seen[0][name] is getattr(collaborators, name)
 
@@ -208,8 +229,8 @@ def test_mutation_wrapper_preserves_historical_failure_result(monkeypatch):
     [
         "committed",
         "callback_failure",
-        "leaf_recompute_failure",
-        "validation_recompute_failure",
+        "native_recompute_failure",
+        "feature_validation_failure",
         "health_failure",
         "publication_failure",
     ],
@@ -221,8 +242,18 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
     stage = {"value": "setup"}
 
     class Sketch:
+        Name = "Sketch"
+        ConflictingConstraints = ()
+        RedundantConstraints = ()
+        MalformedConstraints = ()
+        SolverMessage = None
+
         def __init__(self):
             self._visibility = True
+            self.Shape = SimpleNamespace(
+                isNull=lambda: False,
+                isClosed=lambda: True,
+            )
 
         @property
         def Visibility(self):
@@ -234,23 +265,50 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
             self._visibility = value
 
     sketch = Sketch()
+    base = SimpleNamespace(
+        Name="BaseFeature",
+        Shape=SimpleNamespace(
+            isNull=lambda: False,
+            Solids=[object()],
+            Volume=100.0,
+        ),
+    )
 
     class Body:
         TypeId = "PartDesign::Body"
+        Name = "Body"
 
         def __init__(self):
-            self.Group = [sketch]
+            self.Group = [base, sketch]
             self.Tip = None
 
         def newObject(self, actual_type, actual_name):
             events.append(("new_feature", actual_type, actual_name))
             if outcome == "callback_failure":
                 raise RuntimeError("feature callback failed")
-            return SimpleNamespace(TypeId=actual_type, Name=actual_name)
+            feature = SimpleNamespace(
+                TypeId=actual_type,
+                Name=actual_name,
+                State=[],
+                Shape=SimpleNamespace(
+                    isNull=lambda: False,
+                    Solids=(
+                        [] if outcome == "feature_validation_failure" else [object()]
+                    ),
+                    BoundBox=SimpleNamespace(
+                        XMin=0, YMin=0, ZMin=0, XMax=1, YMax=1, ZMax=1
+                    ),
+                    Volume=(125.0 if method_name == "pad_feature" else 75.0),
+                ),
+            )
+            self.Group.append(feature)
+            return feature
 
     body = Body()
 
     class Document:
+        Name = "Doc"
+
         def __init__(self):
             self.Objects = [body]
             self.recompute_count = 0
@@ -262,19 +320,19 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
         def recompute(self):
             self.recompute_count += 1
             events.append(("recompute", self.recompute_count))
-            if outcome == "leaf_recompute_failure" and self.recompute_count == 1:
-                raise RuntimeError("leaf recompute failed")
-            if (
-                outcome == "validation_recompute_failure"
-                and self.recompute_count == 2
-            ):
-                raise RuntimeError("validation recompute failed")
+            if outcome == "native_recompute_failure":
+                raise RuntimeError("native recompute failed")
 
-    document = Document()
+    document = attach_native_readiness(Document())
 
     class CompatibilityAPI:
         def commit_compatibility_mutation(
-            self, document_name, callback, *, structural=False
+            self,
+            document_name,
+            callback,
+            *,
+            structural=False,
+            postcondition=None,
         ):
             assert document_name == "Doc"
             assert structural is True
@@ -286,6 +344,12 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
                 raise
             assert sketch.Visibility is True
             assert not [event for event in events if event[0] == "visibility"]
+            try:
+                document.recompute()
+            except Exception:
+                return {"status": "RecomputeFailed", "committed": False}
+            if postcondition is not None and postcondition() is False:
+                return {"status": "PostconditionFailed", "committed": False}
             events.append(("publication", outcome))
             if outcome == "publication_failure":
                 return {"status": "Rejected", "committed": False}
@@ -332,11 +396,12 @@ def test_pad_and_pocket_hide_sketch_once_only_after_native_commit(  # noqa: C901
 
     visibility_events = [event for event in events if event[0] == "visibility"]
     if outcome == "committed":
-        assert result is True
+        assert result["success"] is True
         assert visibility_events == [("visibility", "postcommit", False)]
         assert events.index(("publication", outcome)) < events.index(
             visibility_events[0]
         )
+        assert events.index(("recompute", 1)) < events.index(("health", outcome))
         assert sketch.Visibility is False
     else:
         assert result is not True

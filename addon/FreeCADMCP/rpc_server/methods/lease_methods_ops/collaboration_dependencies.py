@@ -22,6 +22,7 @@ class CompatibilityMutationAPI(Protocol):
         callback: Callable[..., Any],
         *,
         structural: bool = False,
+        recompute: bool = True,
         postcondition: Callable[..., Any] | None = None,
         bind_document: bool = False,
         require_native: bool = False,
@@ -72,9 +73,32 @@ class CollaborationCollaborators:
         callback: Callable[[], Any],
         *,
         structural: bool = False,
+        recompute: bool = True,
+        postcondition: Callable[..., Any] | None = None,
+        bind_document: bool = False,
+        require_native: bool = False,
     ) -> Any:
+        if (
+            postcondition is None
+            and not bind_document
+            and not require_native
+            and recompute
+        ):
+            return self.compatibility_api.commit_compatibility_mutation(
+                document_name, callback, structural=structural
+            )
+        kwargs: dict[str, Any] = {
+            "structural": structural,
+            "postcondition": postcondition,
+            "bind_document": bind_document,
+            "require_native": require_native,
+        }
+        if not recompute:
+            kwargs["recompute"] = False
         return self.compatibility_api.commit_compatibility_mutation(
-            document_name, callback, structural=structural
+            document_name,
+            callback,
+            **kwargs,
         )
 
     def with_runtime_manifest(self, runtime_manifest: Any) -> CollaborationCollaborators:

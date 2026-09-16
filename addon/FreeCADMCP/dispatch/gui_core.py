@@ -21,7 +21,18 @@ from .gui_errors import (
     GuiTaskError,
 )
 from .gui_outcome import GuiOutcome
-from .gui_request import GuiRequest, TelemetryCallback
+from .gui_request import (
+    DeferProbe as _DeferProbe,
+)
+from .gui_request import (
+    GuiDeferDecision as _GuiDeferDecision,
+)
+from .gui_request import (
+    GuiRequest,
+)
+from .gui_request import (
+    TelemetryCallback as _TelemetryCallback,
+)
 
 
 class GuiDispatchCore:
@@ -34,7 +45,7 @@ class GuiDispatchCore:
         wake_gui: Callable[[], None],
         schedule_wake: Callable[[int, Callable[[], None]], None],
         gui_busy: Callable[[], bool],
-        emit_telemetry: TelemetryCallback,
+        emit_telemetry: _TelemetryCallback,
     ) -> None:
         self._is_gui_thread = is_gui_thread
         self._wake_gui = wake_gui
@@ -42,6 +53,7 @@ class GuiDispatchCore:
         self._gui_busy = gui_busy
         self._emit_telemetry = emit_telemetry
         self._requests: deque[GuiRequest] = deque()
+        self._deferred_requests: deque[GuiRequest] = deque()
         # Cancellation and completion callbacks can synchronously re-enter the
         # dispatcher; an RLock keeps cleanup atomic without deadlocking them.
         self._queue_lock = threading.RLock()
@@ -85,12 +97,16 @@ class GuiDispatchCore:
         request_id: str | None,
         session_id: str | None,
         on_complete: Callable[[str, GuiOutcome], None] | None,
+        defer_probe: _DeferProbe | None,
+        document_keys: tuple[str, ...],
     ) -> GuiRequest:
         request = GuiRequest(
             callable_,
             request_id=request_id or str(uuid.uuid4()),
             session_id=session_id,
             on_complete=on_complete,
+            defer_probe=defer_probe,
+            document_keys=document_keys,
         )
         request._emit_telemetry = self._emit_telemetry
         return request
@@ -103,13 +119,30 @@ class GuiDispatchCore:
         request_id: str | None = None,
         session_id: str | None = None,
         on_complete: Callable[[str, GuiOutcome], None] | None = None,
+        defer_probe: _DeferProbe | None = None,
+        document_keys: tuple[str, ...] = (),
     ) -> Any:
+        normalized_document_keys = tuple(
+            dict.fromkeys(str(key) for key in document_keys if str(key))
+        )
         request = self._new_request(
             callable_,
             request_id=request_id,
             session_id=session_id,
             on_complete=on_complete,
+            defer_probe=defer_probe,
+            document_keys=normalized_document_keys,
         )
+        request.deadline_at = (
+            None
+            if timeout is None
+            else request.submitted_at + max(0.0, float(timeout))
+        )
+        if defer_probe is not None and request.deadline_at is None:
+            raise GuiDispatchError(
+                "A deferred GUI request requires a finite timeout",
+                request_id=request.request_id,
+            )
         self._emit(
             "gui_execution_queued",
             request_id=request.request_id,
@@ -132,6 +165,13 @@ class GuiDispatchCore:
                         "RPC GUI dispatcher is stopping",
                         request_id=request.request_id,
                     )
+            decision = self._evaluate_defer_probe(request)
+            if decision is not None:
+                raise GuiDispatchError(
+                    "A GUI-owner call cannot synchronously wait for native "
+                    "mutation readiness",
+                    request_id=request.request_id,
+                )
             request.complete(self._execute_request(request))
             return self._unwrap(request)
 
@@ -146,6 +186,8 @@ class GuiDispatchCore:
             request.completion.wait()
         elif not request.completion.wait(timeout):
             return self._handle_timeout(request, float(timeout))
+        if timeout is not None and request.state_snapshot == "timed_out_pending":
+            self._raise_timeout(request, float(timeout), before_execution=True)
         return self._unwrap(request)
 
     def _enqueue(self, request: GuiRequest) -> bool:
@@ -198,10 +240,14 @@ class GuiDispatchCore:
         for request in requests:
             request.cancel_if_pending()
 
+    def _all_waiting_locked(self) -> list[GuiRequest]:
+        return list(self._requests) + list(self._deferred_requests)
+
     def _fail_pending_wakes(self) -> None:
         with self._queue_lock:
-            pending = list(self._requests)
+            pending = self._all_waiting_locked()
             self._requests.clear()
+            self._deferred_requests.clear()
             self._signal_pending = False
             for request in pending:
                 self._forget_locked(request)
@@ -227,18 +273,27 @@ class GuiDispatchCore:
             return False
 
     def _remove_pending(self, request: GuiRequest) -> None:
+        should_wake = False
         with self._queue_lock:
             with contextlib.suppress(ValueError):
                 self._requests.remove(request)
+            with contextlib.suppress(ValueError):
+                self._deferred_requests.remove(request)
             self._forget_locked(request)
-            if not self._requests:
+            if self._has_runnable_request_locked():
+                should_wake = not self._signal_pending
+                self._signal_pending = True
+            elif not self._requests:
                 self._signal_pending = False
+        if should_wake:
+            self._request_wake()
 
     def _quarantine_running(self, request: GuiRequest) -> None:
         with self._queue_lock:
             self._timed_out_request = request
-            pending = list(self._requests)
+            pending = self._all_waiting_locked()
             self._requests.clear()
+            self._deferred_requests.clear()
             for item in pending:
                 self._forget_locked(item)
         self._cancel_requests(pending)
@@ -291,6 +346,8 @@ class GuiDispatchCore:
     def _handle_timeout(self, request: GuiRequest, timeout: float) -> Any:
         if request.cancel_if_pending(lambda: self._remove_pending(request)):
             self._raise_timeout(request, timeout, before_execution=True)
+        if request.state_snapshot == "timed_out_pending":
+            self._raise_timeout(request, timeout, before_execution=True)
         if request.mark_timed_out_if_running():
             self._quarantine_running(request)
             self._raise_timeout(request, timeout, before_execution=False)
@@ -324,18 +381,211 @@ class GuiDispatchCore:
                 "GUI dispatch queue may only be drained by its owner thread"
             )
 
+    def _blocked_document_keys_locked(self) -> set[str]:
+        return {
+            key
+            for request in self._deferred_requests
+            for key in request.document_keys
+            if request.state_snapshot == "deferred"
+        }
+
+    def _has_runnable_request_locked(self) -> bool:
+        blocked = self._blocked_document_keys_locked()
+        return any(
+            not request.document_keys
+            or not blocked.intersection(request.document_keys)
+            for request in self._requests
+        )
+
     def _take_next_request(self) -> GuiRequest | None:
         with self._queue_lock:
             if not self._requests:
                 self._signal_pending = False
                 return None
-            return self._requests.popleft()
+            blocked = self._blocked_document_keys_locked()
+            for _ in range(len(self._requests)):
+                request = self._requests.popleft()
+                if not request.document_keys or not blocked.intersection(
+                    request.document_keys
+                ):
+                    self._signal_pending = False
+                    return request
+                self._requests.append(request)
+            # Queued requests overlap an earlier deferred document mutation.
+            # They remain ordered and dormant until that document signals a
+            # readiness transition or the earlier request is cancelled.
+            self._signal_pending = False
+            return None
 
     def _gui_is_busy(self) -> bool:
         try:
             return bool(self._gui_busy())
         except Exception:
             return False
+
+    @staticmethod
+    def _evaluate_defer_probe(request: GuiRequest) -> _GuiDeferDecision | None:
+        probe = request.defer_probe
+        if probe is None:
+            return None
+        decision = probe()
+        if decision is not None and not isinstance(decision, _GuiDeferDecision):
+            raise TypeError("GUI defer probe returned an invalid decision")
+        return decision
+
+    def _finish_probe_failure(self, request: GuiRequest, exc: Exception) -> None:
+        request.complete(
+            GuiOutcome(
+                False,
+                error=(
+                    "GUI readiness probe raised "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            ),
+            before_wake=lambda: self._forget_after_execution(request),
+        )
+        with self._queue_lock:
+            has_more = self._has_runnable_request_locked()
+            if has_more:
+                self._signal_pending = True
+            elif not self._requests:
+                self._signal_pending = False
+        if has_more:
+            self._request_wake()
+
+    def _defer_for_readiness(
+        self,
+        request: GuiRequest,
+        decision: _GuiDeferDecision,
+    ) -> bool:
+        keys = tuple(
+            dict.fromkeys(
+                str(key)
+                for key in (decision.document_keys or request.document_keys)
+                if str(key)
+            )
+        )
+        if not keys:
+            self._finish_probe_failure(
+                request,
+                ValueError("a readiness deferral requires a document scope"),
+            )
+            return True
+        request.document_keys = keys
+        should_wake = False
+        deferred = False
+        with self._queue_lock:
+            if not self._accepting or not request._mark_deferred():
+                self._forget_locked(request)
+            else:
+                deferred = True
+                self._deferred_requests.append(request)
+            if self._has_runnable_request_locked():
+                should_wake = True
+                self._signal_pending = True
+            else:
+                self._signal_pending = False
+        if not deferred or request.state_snapshot != "deferred":
+            request.cancel_if_pending()
+            if should_wake:
+                self._request_wake()
+            return True
+        self._emit(
+            "gui_execution_deferred",
+            request_id=request.request_id,
+            execution_id=request.request_id,
+            session_id=request.session_id,
+            payload={
+                "reason": decision.reason,
+                "document_keys": list(keys),
+            },
+        )
+        if should_wake:
+            self._request_wake()
+        return True
+
+    def _probe_or_defer_request(self, request: GuiRequest) -> bool:
+        try:
+            decision = self._evaluate_defer_probe(request)
+        except Exception as exc:
+            self._finish_probe_failure(request, exc)
+            return True
+        if decision is None:
+            return False
+        return self._defer_for_readiness(request, decision)
+
+    def notify_document_readiness_changed(self, document_key: str) -> None:
+        """Requeue matching continuations after one authoritative native event."""
+
+        key = str(document_key or "")
+        if not key:
+            return
+        promoted: list[GuiRequest] = []
+        should_wake = False
+        with self._queue_lock:
+            retained: deque[GuiRequest] = deque()
+            while self._deferred_requests:
+                request = self._deferred_requests.popleft()
+                if key in request.document_keys and request._requeue_if_deferred():
+                    promoted.append(request)
+                else:
+                    retained.append(request)
+            self._deferred_requests = retained
+            # A promoted request must precede later same-document requests.
+            for request in reversed(promoted):
+                self._requests.appendleft(request)
+            if promoted and self._accepting:
+                should_wake = not self._signal_pending
+                self._signal_pending = True
+        if promoted:
+            for request in promoted:
+                self._emit(
+                    "gui_execution_requeued",
+                    request_id=request.request_id,
+                    execution_id=request.request_id,
+                    session_id=request.session_id,
+                    payload={"document_key": key},
+                )
+        if should_wake:
+            self._request_wake()
+
+    def notify_document_deleted(self, document_key: str) -> None:
+        """Cancel queued/deferred work whose document was authoritatively deleted."""
+
+        key = str(document_key or "")
+        if not key:
+            return
+        cancelled: list[GuiRequest] = []
+        should_wake = False
+        with self._queue_lock:
+            retained_pending: deque[GuiRequest] = deque()
+            while self._requests:
+                request = self._requests.popleft()
+                if key in request.document_keys:
+                    cancelled.append(request)
+                    self._forget_locked(request)
+                else:
+                    retained_pending.append(request)
+            self._requests = retained_pending
+
+            retained_deferred: deque[GuiRequest] = deque()
+            while self._deferred_requests:
+                request = self._deferred_requests.popleft()
+                if key in request.document_keys:
+                    cancelled.append(request)
+                    self._forget_locked(request)
+                else:
+                    retained_deferred.append(request)
+            self._deferred_requests = retained_deferred
+
+            if self._has_runnable_request_locked():
+                should_wake = not self._signal_pending
+                self._signal_pending = True
+            elif not self._requests:
+                self._signal_pending = False
+        self._cancel_requests(cancelled)
+        if should_wake:
+            self._request_wake()
 
     def _defer_busy_request(self, request: GuiRequest) -> None:
         should_requeue = False
@@ -390,8 +640,7 @@ class GuiDispatchCore:
                     self._timed_out_request = None
                 self._forget_locked(request)
                 has_more = bool(self._requests)
-                if not has_more:
-                    self._signal_pending = False
+                self._signal_pending = has_more
             if has_more:
                 self._request_wake()
 
@@ -400,8 +649,14 @@ class GuiDispatchCore:
         request = self._take_next_request()
         if request is None:
             return
+        if request._deadline_expired and request._expire_if_waiting(
+            lambda: self._remove_pending(request)
+        ):
+            return
         if self._gui_is_busy():
             self._defer_busy_request(request)
+            return
+        if self._probe_or_defer_request(request):
             return
         if self._start_request(request):
             self._run_request(request)
@@ -413,8 +668,9 @@ class GuiDispatchCore:
     def stop_accepting(self) -> None:
         with self._queue_lock:
             self._accepting = False
-            pending = list(self._requests)
+            pending = self._all_waiting_locked()
             self._requests.clear()
+            self._deferred_requests.clear()
             self._signal_pending = False
             for request in pending:
                 self._forget_locked(request)
@@ -423,4 +679,15 @@ class GuiDispatchCore:
     @property
     def pending_count(self) -> int:
         with self._queue_lock:
-            return len(self._requests)
+            return len(self._requests) + len(self._deferred_requests)
+
+    @property
+    def deferred_count(self) -> int:
+        with self._queue_lock:
+            return len(self._deferred_requests)
+
+    @property
+    def supports_readiness_continuations(self) -> bool:
+        """The core can be resumed by an injected document event source."""
+
+        return True

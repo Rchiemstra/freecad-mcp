@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # ruff: noqa: F403, F405
 from ._support import *
+from .late_result_transform import apply_late_result_transform
 
 """GUI dispatch callback builders."""
 
@@ -27,11 +28,10 @@ def build_replay_on_complete(
     def replay_on_complete(completed_request_id, outcome, cancellation=None):
         result = outcome.value if outcome.ok else None
         transform_error = None
-        if outcome.ok and result_transform is not None:
-            try:
-                result = result_transform(result)
-            except Exception as exc:
-                transform_error = exc
+        if outcome.ok:
+            result, transform_error = apply_late_result_transform(
+                result, result_transform
+            )
         result_failed = isinstance(result, dict) and (
             result.get("success") is False or result.get("ok") is False
         )

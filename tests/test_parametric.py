@@ -87,6 +87,8 @@ def _ok_conn():
     }
     conn.body_create.return_value = make_body_create_success("Body", "Body")
     conn.body_set_tip.return_value = make_body_set_tip_success("Body", "Pad", "Pad")
+    conn.sketch_edit_constraint.return_value = {"success": True, "sketch": "Sk"}
+    conn.sketch_add_constraint.return_value = {"success": True}
     return conn
 
 
@@ -99,6 +101,14 @@ def _fail_conn(error="oops"):
     conn.list_expressions.return_value = {"success": False, "error_code": "FAILED", "error": error}
     conn.body_create.return_value = make_body_create_failure("BODY_CREATE_FAILED", error)
     conn.body_set_tip.return_value = make_body_set_tip_failure("BODY_SET_TIP_FAILED", error)
+    conn.execute_code.return_value = {"success": False, "error": error}
+    for method_name in (
+        "spreadsheet_set_cells",
+        "spreadsheet_set_alias",
+        "sketch_edit_constraint",
+        "sketch_add_constraint",
+    ):
+        getattr(conn, method_name).return_value = {"success": False, "error": error}
     return conn
 
 
@@ -107,6 +117,7 @@ def test_spreadsheet_create_code():
     resp = spreadsheet_create_operation(conn, True, "Doc", "Dims")
     assert not resp.isError
     conn.spreadsheet_create.assert_called_once_with("Doc", "Dims")
+    conn.execute_code.assert_not_called()
 
 
 def test_spreadsheet_set_cells_and_alias():
@@ -114,6 +125,7 @@ def test_spreadsheet_set_cells_and_alias():
     cells = [{"address": "A1", "value": 2.5, "alias": "Wall"}]
     spreadsheet_set_cells_operation(conn, True, "Doc", "Dims", cells)
     spreadsheet_set_alias_operation(conn, True, "Doc", "Dims", "B1", "Bore")
+    conn.execute_code.assert_not_called()
     spreadsheet_list_aliases_operation(conn, True, "Doc", "Dims")
     spreadsheet_get_cells_operation(conn, True, "Doc", "Dims", ["A1", {"alias": "Wall"}])
     conn.spreadsheet_set_cells.assert_called_once_with("Doc", "Dims", cells)
@@ -131,6 +143,7 @@ def test_set_clear_list_expression():
     conn = _ok_conn()
     set_expression_operation(conn, True, "Doc", "Pad", "Length", "<<Dims>>.PadH")
     clear_expression_operation(conn, True, "Doc", "Pad", "Length")
+    conn.execute_code.assert_not_called()
     list_expressions_operation(conn, True, "Doc", "Pad")
     conn.set_expression.assert_called_once_with("Doc", "Pad", "Length", "<<Dims>>.PadH")
     conn.clear_expression.assert_called_once_with("Doc", "Pad", "Length")
@@ -141,6 +154,7 @@ def test_set_expression_constraints_path():
     conn = _ok_conn()
     set_expression_operation(conn, True, "Doc", "Sketch", "Constraints[0]", "<<Dims>>.Wall")
     conn.set_expression.assert_called_once_with("Doc", "Sketch", "Constraints[0]", "<<Dims>>.Wall")
+    conn.execute_code.assert_not_called()
 
 
 def test_body_and_attach():
@@ -149,6 +163,7 @@ def test_body_and_attach():
     conn.body_create.assert_called_once_with("Doc", "Body")
     body_set_tip_operation(conn, True, "Doc", "Body", "Pad")
     conn.body_set_tip.assert_called_once_with("Doc", "Body", "Pad")
+    conn.execute_code.assert_not_called()
 
     conn.sketch_attach.return_value = make_sketch_attach_success("Sketch", "origin_plane", "XY_Plane", "")
     resp = sketch_attach_operation(conn, True, "Doc", "Sketch", "XY_Plane")
@@ -250,6 +265,7 @@ def test_named_constraints_in_code():
     assert resp.isError is False
     conn.sketch_add_constraint.assert_called_once()
     assert conn.sketch_add_constraint.call_args.args[2][0]["name"] == "R1"
+    conn.execute_code.assert_not_called()
 
 
 def test_sketch_edit_constraint_requires_identity():
@@ -270,6 +286,7 @@ def test_sketch_edit_constraint_requires_identity():
     resp = sketch_edit_constraint_operation(conn, True, "Doc", "Sk", value=4.0, name="WallThick")
     assert resp.isError is False
     conn.sketch_edit_constraint.assert_called_once_with("Doc", "Sk", 4.0, "WallThick", None)
+    conn.execute_code.assert_not_called()
 
 
 def test_diagnose_parametric_routes_typed_rpc():

@@ -248,7 +248,14 @@ def open_document(conn, path: str) -> dict[str, Any]:
     )
     if routed is not None:
         return routed
-    return conn.server.open_document(path)
+    return {
+        "success": False,
+        "error_code": "LEASE_PROTOCOL_REQUIRED",
+        "error": (
+            "This operation requires a handshake_v2 session and an "
+            "immutable authenticated request envelope"
+        ),
+    }
 
 
 def activate_document(conn, doc_name: str) -> dict[str, Any]:

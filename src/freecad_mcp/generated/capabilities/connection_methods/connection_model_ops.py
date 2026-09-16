@@ -2,10 +2,70 @@
 
 from __future__ import annotations
 import logging
+import uuid
 from typing import Any
 
 logger = logging.getLogger("FreeCADMCPserver")
 
+
+def _history_operation_id(conn, method: str, doc_name: str) -> str:
+    try:
+        from mcp.server.lowlevel.server import request_ctx
+
+        mcp_request_id = str(request_ctx.get().request_id)
+    except (ImportError, LookupError, AttributeError):
+        mcp_request_id = ""
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            (
+                f"freecad-mcp:{getattr(conn, '_mcp_instance_id', '')}:"
+                f"{mcp_request_id}:{method}:{doc_name}"
+            ),
+        )
+    )
+
+
+def _prepare_history_mutation(conn, doc_name: str, *, undo: bool) -> dict[str, Any]:
+    readiness = get_mutation_readiness(conn, doc_name)
+    if not readiness.get("success"):
+        return readiness
+    if not readiness.get("ready"):
+        failure: dict[str, Any] = {
+            "success": False,
+            "error_code": "MUTATION_NOT_READY",
+            "error": f"Document '{doc_name}' is not ready for mutation",
+        }
+        for key in ("documents", "reasons", "automation_pause", "mutation_readiness"):
+            if key in readiness:
+                failure[key] = readiness[key]
+        return failure
+    documents = readiness.get("documents") or []
+    if not documents:
+        return {
+            "success": False,
+            "error_code": "DOCUMENT_NOT_FOUND",
+            "error": f"Document '{doc_name}' not found",
+        }
+    entry = documents[0]
+    doc_selector = {
+        "document_uid": entry["document_uid"],
+        "document_instance_id": entry["document_instance_id"],
+        "lifecycle_epoch": entry["lifecycle_epoch"],
+        "document_name": entry.get("document_name") or doc_name,
+    }
+    method = "undo" if undo else "redo"
+    prepared: dict[str, Any] = {
+        "doc_selector": doc_selector,
+        "operation_id": _history_operation_id(conn, method, doc_name),
+    }
+    if undo:
+        prepared["expected_count"] = entry["undo_count"]
+        prepared["expected_head"] = entry["undo_head"]
+    else:
+        prepared["expected_count"] = entry["redo_count"]
+        prepared["expected_head"] = entry["redo_head"]
+    return prepared
 
 
 def sketch_attach(
@@ -85,27 +145,55 @@ def recompute_document(conn, doc_name: str) -> dict[str, Any]:
 
 
 def undo(conn, doc_name: str) -> dict[str, Any]:
+        prepared = _prepare_history_mutation(conn, doc_name, undo=True)
+        if "doc_selector" not in prepared:
+            return prepared
+        params = {
+            "doc_selector": prepared["doc_selector"],
+            "operation_id": prepared["operation_id"],
+            "expected_undo_count": prepared["expected_count"],
+            "expected_undo_head": prepared["expected_head"],
+        }
         routed = conn._invoke_mutation_v2(
             "undo",
-            {"doc_name": doc_name},
+            params,
             document_names=(doc_name,),
             operation_name="Undo",
         )
         if routed is not None:
             return routed
-        return conn.server.undo(doc_name)
+        return conn.server.undo(
+            prepared["doc_selector"],
+            prepared["operation_id"],
+            prepared["expected_count"],
+            prepared["expected_head"],
+        )
 
 
 def redo(conn, doc_name: str) -> dict[str, Any]:
+        prepared = _prepare_history_mutation(conn, doc_name, undo=False)
+        if "doc_selector" not in prepared:
+            return prepared
+        params = {
+            "doc_selector": prepared["doc_selector"],
+            "operation_id": prepared["operation_id"],
+            "expected_redo_count": prepared["expected_count"],
+            "expected_redo_head": prepared["expected_head"],
+        }
         routed = conn._invoke_mutation_v2(
             "redo",
-            {"doc_name": doc_name},
+            params,
             document_names=(doc_name,),
             operation_name="Redo",
         )
         if routed is not None:
             return routed
-        return conn.server.redo(doc_name)
+        return conn.server.redo(
+            prepared["doc_selector"],
+            prepared["operation_id"],
+            prepared["expected_count"],
+            prepared["expected_head"],
+        )
 
 
 def run_fem_analysis(
@@ -135,4 +223,7 @@ def run_fem_analysis(
         finally:
             if proxy is not conn.server:
                 proxy.close()
+
+def get_mutation_readiness(conn, doc_name: str | None = None) -> dict[str, Any]:
+        return conn.server.get_mutation_readiness(doc_name)
 

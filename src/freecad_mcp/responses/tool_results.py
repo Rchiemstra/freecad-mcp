@@ -109,3 +109,27 @@ def add_screenshot_if_available(
         structuredContent=response.structuredContent,
         isError=response.isError,
     )
+
+
+def capture_committed_screenshot(
+    freecad: Any,
+    structured: dict[str, Any],
+    *,
+    only_text_feedback: bool,
+) -> str | None:
+    """Best-effort view capture after a mutation has already committed."""
+
+    if only_text_feedback:
+        return None
+    try:
+        screenshot = freecad.get_active_screenshot()
+    except Exception as exc:
+        structured["presentation_warning"] = f"Screenshot capture failed: {exc}"
+        return None
+    if screenshot:
+        return screenshot
+    structured.setdefault(
+        "presentation_warning",
+        "Screenshot capture returned no image after the feature committed.",
+    )
+    return None

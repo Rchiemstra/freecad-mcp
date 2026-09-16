@@ -18,6 +18,10 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.execute_code_gui_exec import (
     run_python_on_gui_thread,
 )
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.execute_code_gui_task import (
+    NATIVE_POST_RECOMPUTE_MARKER,
+    run_execute_code_gui_task,
+)
 from addon.FreeCADMCP.rpc_server.methods.lifecycle_methods_ops import worker_ops
 
 pytestmark = pytest.mark.unit
@@ -44,7 +48,13 @@ WORKER_OPS = (
 
 
 class _CompatibilityAPI:
-    def __init__(self, *, invoke_callback: bool = True, native_result=None) -> None:
+    def __init__(
+        self,
+        *,
+        invoke_callback: bool = True,
+        native_result=None,
+        native_recompute=None,
+    ) -> None:
         self.invoke_callback = invoke_callback
         self.native_result = native_result or {
             "status": "Committed",
@@ -55,12 +65,23 @@ class _CompatibilityAPI:
         self.structural_scopes = []
         self.callback_results = []
         self.callback_failures = 0
+        self.recompute_policies = []
+        self.postcondition_scopes = []
+        self.native_recompute = native_recompute
 
     def commit_compatibility_mutation(
-        self, document_name, callback, *, structural=False
+        self,
+        document_name,
+        callback,
+        *,
+        structural=False,
+        recompute=True,
+        postcondition=None,
     ):
         self.calls.append((document_name, callback))
         self.structural_scopes.append(structural)
+        self.recompute_policies.append(recompute)
+        self.postcondition_scopes.append(postcondition is not None)
         if not self.invoke_callback:
             return {"status": "Rejected", "committed": False}
         try:
@@ -69,6 +90,10 @@ class _CompatibilityAPI:
             self.callback_failures += 1
             raise
         self.callback_results.append(result)
+        if recompute and callable(self.native_recompute):
+            self.native_recompute()
+        if postcondition is not None and postcondition() is False:
+            return {"status": "PostconditionFailed", "committed": False}
         return self.native_result
 
     def commit_native_mutation(
@@ -80,6 +105,62 @@ class _CompatibilityAPI:
         if callable(postcondition):
             postcondition(object())
         return result
+
+
+class _ReadinessDocument:
+    Name = "Model"
+
+    def __init__(self) -> None:
+        self._readiness = {
+            "ready": True,
+            "stable_event_supported": True,
+            "pending_transaction": False,
+            "booked_transaction": 0,
+            "transaction_locked": False,
+            "recomputing": False,
+            "must_execute": False,
+            "pending_removal": False,
+            "commit_barrier": False,
+            "notification_replay": False,
+            "poisoned": False,
+            "quarantined": False,
+            "diagnostic": "",
+        }
+
+    def getMutationReadiness(self):
+        return dict(self._readiness)
+
+    def recompute(self):
+        return None
+
+
+def _freecad_with_document(document):
+    return SimpleNamespace(
+        ActiveDocument=document,
+        getDocument=lambda name: document if name == document.Name else None,
+    )
+
+
+def _real_gui_freecad(*documents, active_document=None):
+    by_name = {document.Name: document for document in documents}
+
+    class FreeCAD:
+        ActiveDocument = active_document
+        Console = SimpleNamespace(
+            PrintMessage=lambda _message: None,
+            PrintError=lambda _message: None,
+        )
+
+        def getDocument(self, name):
+            return by_name.get(name)
+
+        def listDocuments(self):
+            return dict(by_name)
+
+        def setActiveDocument(self, name):
+            self.ActiveDocument = by_name.get(name) if name else None
+
+    return FreeCAD()
 
 
 def _rpc_with_execution(**overrides):
@@ -112,7 +193,7 @@ def _rpc_with_execution(**overrides):
 
 
 def test_execute_and_worker_modules_have_no_runtime_locator_or_safety_import():
-    paths = sorted(EXECUTE_DIR.glob("execute_code*.py")) + [WORKER_OPS]
+    paths = [*sorted(EXECUTE_DIR.glob("execute_code*.py")), WORKER_OPS]
     assert len(paths) == 11
     for path in paths:
         source = path.read_text(encoding="utf-8")
@@ -168,7 +249,7 @@ def test_mutating_gui_execute_uses_native_boundary_exactly_once_and_keeps_result
     )
     dispatches = []
 
-    def dispatch(task, timeout):
+    def dispatch(task, timeout, **_kwargs):
         dispatches.append(timeout)
         return task()
 
@@ -181,13 +262,19 @@ def test_mutating_gui_execute_uses_native_boundary_exactly_once_and_keeps_result
 
     assert [item[0] for item in api.calls] == ["Model"]
     assert api.structural_scopes == [True]
+    assert api.recompute_policies == [False]
+    assert api.postcondition_scopes == [False]
     assert api.callback_results == [
-        {"ok": True, "session": {"saved": False}, "stdout": "kept"}
+        {
+            "ok": True,
+            "session": {"saved": False, "active_document_after": None},
+            "stdout": "kept",
+        }
     ]
     assert dispatches == [17.0]
     assert result["success"] is True
     assert result["message"] == "Python code execution completed.\nOutput: kept"
-    assert result["session"] == {"saved": False}
+    assert result["session"] == {"saved": False, "active_document_after": None}
     assert [item[0] for item in safety_calls] == [
         "analyze",
         "warning",
@@ -216,9 +303,13 @@ def test_native_rejection_without_callback_fails_closed_in_execute_envelope(
     monkeypatch,
 ):
     api = _CompatibilityAPI(invoke_callback=False)
-    rpc = _rpc_with_execution(compatibility_api=api)
+    document = _ReadinessDocument()
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     gui_calls = []
     monkeypatch.setattr(
         execute_code_module,
@@ -235,7 +326,13 @@ def test_native_rejection_without_callback_fails_closed_in_execute_envelope(
     assert gui_calls == []
     assert result["success"] is False
     assert result["is_error"] is True
-    assert result["error"] == "Native compatibility mutation rejected execution (Rejected)"
+    assert result["error"] == (
+        "Native compatibility mutation rejected execution in document 'Model' (Rejected)"
+    )
+    assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+    assert result["native_status"] == "Rejected"
+    assert result["mutation_readiness"][0]["ready"] is True
+    assert result["retryable"] is True
 
 
 def test_native_rejection_after_callback_fails_closed_in_execute_envelope(
@@ -244,9 +341,13 @@ def test_native_rejection_after_callback_fails_closed_in_execute_envelope(
     api = _CompatibilityAPI(
         native_result={"status": "PostconditionFailed", "committed": False}
     )
-    rpc = _rpc_with_execution(compatibility_api=api)
+    document = _ReadinessDocument()
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     gui_calls = []
     monkeypatch.setattr(
         execute_code_module,
@@ -264,15 +365,59 @@ def test_native_rejection_after_callback_fails_closed_in_execute_envelope(
     assert result["success"] is False
     assert result["is_error"] is True
     assert result["error"] == (
-        "Native compatibility mutation rejected execution (PostconditionFailed)"
+        "Native compatibility mutation rejected execution in document 'Model' "
+        "(PostconditionFailed)"
     )
+    assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+    assert result["native_status"] == "PostconditionFailed"
+    assert result["mutation_readiness"][0]["ready"] is True
+    assert result["retryable"] is True
+
+
+def test_late_native_busy_reports_healthy_retryable_readiness(monkeypatch):
+    document = _ReadinessDocument()
+    api = _CompatibilityAPI(
+        native_result={
+            "status": "Busy",
+            "committed": False,
+            "message": "commit admission changed before the transaction opened",
+        }
+    )
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: {"ok": True, "session": {}, "stdout": "hidden"},
+    )
+
+    result = rpc.execute_code(
+        "print('hidden')",
+        {"document": document.Name, "execution_mode": "gui"},
+    )
+
+    assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+    assert result["native_status"] == "Busy"
+    assert result["native_message"] == (
+        "commit admission changed before the transaction opened"
+    )
+    assert result["mutation_readiness"][0]["ready"] is True
+    assert result["retryable"] is True
 
 
 def test_gui_error_requests_native_rollback_and_preserves_error_envelope(monkeypatch):
     api = _CompatibilityAPI()
-    rpc = _rpc_with_execution(compatibility_api=api)
+    document = _ReadinessDocument()
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -293,10 +438,98 @@ def test_gui_error_requests_native_rollback_and_preserves_error_envelope(monkeyp
     assert api.callback_failures == 1
     assert api.callback_results == []
     assert result["success"] is False
-    assert result["error"] == "historical execute failure"
+    assert result["error"] == (
+        "execute_code failed in document 'Model': historical execute failure"
+    )
+    assert result["document_name"] == "Model"
     assert result["traceback"] == "traceback-contract"
-    assert result["session"] == {"saved": False}
+    assert result["session"] == {"saved": False, "active_document_after": "Model"}
     assert result["message"] == "partial output"
+    assert result["mutation_readiness"][0]["ready"] is True
+    assert result["retryable"] is True
+
+
+def test_native_rollback_rejection_quarantines_execute_document(monkeypatch):
+    document = _ReadinessDocument()
+    api = _CompatibilityAPI(
+        native_result={
+            "status": "RollbackFailed",
+            "committed": False,
+            "rollback_succeeded": False,
+            "message": "rollback could not restore the transaction",
+        },
+    )
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: {"ok": True, "session": {}, "stdout": "hidden"},
+    )
+
+    result = rpc.execute_code(
+        "print('must not run')",
+        {"document": document.Name, "execution_mode": "gui"},
+    )
+
+    assert result["error_code"] == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+    assert result["native_status"] == "RollbackFailed"
+    assert result["rollback_succeeded"] is False
+    assert result["native_message"] == "rollback could not restore the transaction"
+    assert result["mutation_readiness"][0]["quarantined"] is True
+    assert result["retryable"] is False
+
+
+def test_native_rollback_exception_is_structured_and_quarantined(monkeypatch):
+    document = _ReadinessDocument()
+
+    class RollbackFailureAPI:
+        def commit_compatibility_mutation(
+            self,
+            _document_name,
+            callback,
+            *,
+            structural=False,
+            recompute=True,
+            postcondition=None,
+        ):
+            assert structural is True
+            assert recompute is False
+            assert postcondition is None
+            callback()
+            document._readiness.update(
+                ready=False,
+                poisoned=True,
+                diagnostic="rollback restore failed",
+            )
+            raise RuntimeError("rollback restore failed")
+
+    rpc = _rpc_with_execution(
+        compatibility_api=RollbackFailureAPI(),
+        freecad=_freecad_with_document(document),
+    )
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: {"ok": True, "session": {}, "stdout": "hidden"},
+    )
+
+    result = rpc.execute_code(
+        "print('hidden')",
+        {"document": document.Name, "execution_mode": "gui"},
+    )
+
+    assert result["error_code"] == "TRANSACTION_ROLLBACK_FAILED"
+    assert result["diagnostic"] == "rollback restore failed"
+    assert result["mutation_readiness"][0]["quarantined"] is True
+    assert result["mutation_readiness"][0]["collaboration_poisoned"] is True
+    assert result["retryable"] is False
 
 
 def test_gui_execute_preserves_the_historical_persistent_namespace() -> None:
@@ -422,7 +655,7 @@ def test_gui_execute_resolves_active_document_when_option_omitted(monkeypatch):
     api = _CompatibilityAPI()
     recomputes = []
 
-    class Document:
+    class Document(_ReadinessDocument):
         Name = "ActiveModel"
 
         def recompute(self):
@@ -435,7 +668,7 @@ def test_gui_execute_resolves_active_document_when_option_omitted(monkeypatch):
     )
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",
@@ -450,8 +683,529 @@ def test_gui_execute_resolves_active_document_when_option_omitted(monkeypatch):
 
     assert [item[0] for item in api.calls] == ["ActiveModel"]
     assert api.structural_scopes == [True]
-    assert recomputes == ["ActiveModel"]
+    assert api.recompute_policies == [False]
+    assert api.postcondition_scopes == [False]
+    assert recomputes == []
     assert result["success"] is True
+
+
+def test_gui_execute_settles_pending_recompute_before_native_boundary(monkeypatch):
+    """Generated mutations retry a healthy pending-recompute admission state."""
+
+    api = _CompatibilityAPI()
+    events = []
+
+    class Document:
+        Name = "PendingModel"
+
+        def __init__(self):
+            self.pending = True
+
+        def getMutationReadiness(self):
+            return {
+                "ready": not self.pending,
+                "stable_event_supported": True,
+                "pending_transaction": False,
+                "booked_transaction": 0,
+                "transaction_locked": False,
+                "recomputing": False,
+                "must_execute": self.pending,
+                "pending_removal": False,
+                "commit_barrier": False,
+                "notification_replay": False,
+                "poisoned": False,
+                "quarantined": False,
+                "diagnostic": "Pending recompute" if self.pending else "",
+            }
+
+        def recompute(self):
+            events.append("recompute")
+            self.pending = False
+
+    document = Document()
+    freecad = SimpleNamespace(
+        ActiveDocument=document,
+        getDocument=lambda name: document if name == document.Name else None,
+    )
+    rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: (
+            events.append("callback")
+            or {"ok": True, "session": {}, "stdout": "settled"}
+        ),
+    )
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+
+    result = rpc.execute_code(
+        "print('settled')",
+        {"document": document.Name, "execution_mode": "gui"},
+    )
+
+    assert events == ["recompute", "callback"]
+    assert [item[0] for item in api.calls] == [document.Name]
+    assert api.recompute_policies == [False]
+    assert result["success"] is True
+    assert "settled" in result["message"]
+
+
+def test_gui_execute_target_recompute_is_owned_once_by_native_coordinator(
+    monkeypatch,
+):
+    events = []
+
+    class Document(_ReadinessDocument):
+        def recompute(self):
+            events.append("native-recompute")
+
+    document = Document()
+    api = _CompatibilityAPI(native_recompute=document.recompute)
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: (
+            events.append("apply")
+            or {"ok": True, "session": {}, "stdout": "native-owned"}
+        ),
+    )
+    monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+
+    result = rpc.execute_code(
+        "print('native-owned')",
+        {
+            "document": document.Name,
+            "execution_mode": "gui",
+            "recompute": "target",
+        },
+    )
+
+    assert events == ["apply", "native-recompute"]
+    assert api.recompute_policies == [True]
+    assert api.postcondition_scopes == [True]
+    assert result["success"] is True
+
+
+@pytest.mark.parametrize(
+    "restore_active, expected_active", [(True, "Original"), (False, "Target")]
+)
+def test_gui_execute_activates_before_native_commit_and_restores_afterward(
+    monkeypatch, restore_active, expected_active
+):
+    events = []
+
+    class Document(_ReadinessDocument):
+        def __init__(self, name):
+            super().__init__()
+            self.Name = name
+
+    original = Document("Original")
+    target = Document("Target")
+
+    class FreeCAD:
+        ActiveDocument = original
+
+        def getDocument(self, name):
+            return {"Original": original, "Target": target}.get(name)
+
+        def setActiveDocument(self, name):
+            events.append(f"activate:{name}")
+            self.ActiveDocument = self.getDocument(name)
+
+    class RecordingAPI(_CompatibilityAPI):
+        def commit_compatibility_mutation(self, *args, **kwargs):
+            events.append("commit")
+            return super().commit_compatibility_mutation(*args, **kwargs)
+
+    freecad = FreeCAD()
+    rpc = _rpc_with_execution(compatibility_api=RecordingAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **kwargs: (
+            events.append("callback")
+            or (
+                {
+                    "ok": False,
+                    "error": "wrong active document",
+                    "session": {},
+                    "stdout": "",
+                }
+                if freecad.ActiveDocument is not target
+                else {"ok": True, "session": {}, "stdout": "ok"}
+            )
+        ),
+    )
+
+    result = rpc.execute_code(
+        "print('capture')",
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": restore_active,
+        },
+    )
+
+    assert events == ["activate:Target", "commit", "callback"] + (
+        ["activate:Original"] if restore_active else []
+    )
+    assert freecad.ActiveDocument.Name == expected_active
+    assert result["success"] is True
+
+
+def test_gui_execute_rejects_multiple_distinct_documents_before_gui_dispatch(
+    monkeypatch,
+):
+    rpc = _rpc_with_execution(freecad=_freecad_with_document(_ReadinessDocument()))
+    monkeypatch.setattr(
+        rpc,
+        "_dispatch_gui",
+        lambda *_args, **_kwargs: pytest.fail("multi-document mutation dispatched"),
+    )
+
+    result = rpc.execute_code(
+        "print('must not run')",
+        {
+            "document": "Model",
+            "affected_documents": ["Model", "Other", "Other"],
+            "execution_mode": "gui",
+        },
+    )
+
+    assert result["error_code"] == "UNSUPPORTED_MULTI_DOCUMENT_MUTATION_SCOPE"
+    assert result["documents"] == ["Model", "Other"]
+
+
+def test_gui_execute_normalizes_duplicate_affected_document_declarations():
+    assert (
+        execute_code_module._single_document_mutation_scope_failure(
+            {"affected_documents": ["Model", "Model"]}, "Model"
+        )
+        is None
+    )
+
+
+def test_gui_execute_restores_original_document_when_activation_fails(monkeypatch):
+    events = []
+
+    class Document(_ReadinessDocument):
+        def __init__(self, name):
+            super().__init__()
+            self.Name = name
+
+    original = Document("Original")
+    target = Document("Target")
+
+    class FreeCAD:
+        ActiveDocument = original
+
+        def getDocument(self, name):
+            return {"Original": original, "Target": target}.get(name)
+
+        def setActiveDocument(self, name):
+            events.append(f"activate:{name}")
+            if name == "Target":
+                raise RuntimeError("GUI target activation failed")
+            self.ActiveDocument = self.getDocument(name)
+
+    class RecordingAPI(_CompatibilityAPI):
+        def commit_compatibility_mutation(self, *args, **kwargs):
+            events.append("commit")
+            return super().commit_compatibility_mutation(*args, **kwargs)
+
+    freecad = FreeCAD()
+    rpc = _rpc_with_execution(compatibility_api=RecordingAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+
+    result = rpc.execute_code(
+        "print('capture')",
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": True,
+        },
+    )
+
+    assert events == ["activate:Target", "activate:Original"]
+    assert freecad.ActiveDocument is original
+    assert result["success"] is False
+    assert "Failed to activate document 'Target'" in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("code", "succeeds"),
+    [("pass", True), ("raise RuntimeError('callback failure')", False)],
+)
+def test_real_gui_task_session_matches_restored_active_document(
+    monkeypatch, code, succeeds
+):
+    class Document(_ReadinessDocument):
+        Modified = False
+        FileName = ""
+
+        def __init__(self, name):
+            super().__init__()
+            self.Name = name
+
+    original = Document("Original")
+    target = Document("Target")
+    freecad = _real_gui_freecad(original, target, active_document=original)
+    rpc = _rpc_with_execution(compatibility_api=_CompatibilityAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+
+    result = rpc.execute_code(
+        code,
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": True,
+        },
+    )
+
+    assert result["success"] is succeeds
+    assert freecad.ActiveDocument is original
+    assert result["session"]["active_document_before"] == "Original"
+    assert result["session"]["active_document_after"] == "Original"
+
+
+def test_real_gui_task_preserves_null_active_document_snapshot(monkeypatch):
+    class Document(_ReadinessDocument):
+        Modified = False
+        FileName = ""
+        Name = "Target"
+
+    target = Document()
+    freecad = _real_gui_freecad(target, active_document=None)
+    rpc = _rpc_with_execution(compatibility_api=_CompatibilityAPI(), freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+
+    result = rpc.execute_code(
+        "pass",
+        {
+            "document": "Target",
+            "execution_mode": "gui",
+            "activate_document": True,
+            "restore_active_document": True,
+        },
+    )
+
+    assert result["success"] is True
+    assert freecad.ActiveDocument is None
+    assert result["session"]["active_document_before"] is None
+    assert result["session"]["active_document_after"] is None
+
+
+def test_signed_generated_continuation_runs_after_the_one_native_recompute(
+    monkeypatch,
+):
+    events = []
+
+    class Document(_ReadinessDocument):
+        Modified = False
+        FileName = ""
+
+        def recompute(self):
+            events.append("native-recompute")
+
+    document = Document()
+    freecad = SimpleNamespace(
+        ActiveDocument=document,
+        Console=SimpleNamespace(PrintMessage=lambda _message: None, PrintError=lambda _message: None),
+        events=events,
+        getDocument=lambda name: document if name == document.Name else None,
+        listDocuments=lambda: {document.Name: document},
+    )
+    api = _CompatibilityAPI(native_recompute=document.recompute)
+    rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(execute_code_module, "_flush_gui_events", lambda: None)
+
+    result = rpc.execute_code(
+        "FreeCAD.events.append('apply')\n"
+        + NATIVE_POST_RECOMPUTE_MARKER
+        + "\nFreeCAD.events.append('postcondition')\nprint('settled')",
+        {
+            "document": document.Name,
+            "execution_mode": "gui",
+            "recompute": "target",
+            "generated_operation": True,
+            "operation_id": "marker-order-test",
+        },
+    )
+
+    assert events == ["apply", "native-recompute", "postcondition"]
+    assert api.recompute_policies == [True]
+    assert api.postcondition_scopes == [True]
+    assert result["success"] is True
+    assert "settled" in result["message"]
+
+
+def test_generated_post_recompute_failure_preserves_precise_error_after_rollback(
+    monkeypatch,
+):
+    events = []
+
+    class Document(_ReadinessDocument):
+        Modified = False
+        FileName = ""
+
+        def recompute(self):
+            events.append("native-recompute")
+
+    document = Document()
+    freecad = SimpleNamespace(
+        ActiveDocument=document,
+        Console=SimpleNamespace(PrintMessage=lambda _message: None, PrintError=lambda _message: None),
+        events=events,
+        getDocument=lambda name: document if name == document.Name else None,
+        listDocuments=lambda: {document.Name: document},
+    )
+    api = _CompatibilityAPI(native_recompute=document.recompute)
+    rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+
+    result = rpc.execute_code(
+        "FreeCAD.events.append('apply')\n"
+        + NATIVE_POST_RECOMPUTE_MARKER
+        + "\nraise RuntimeError('postcondition rejected')",
+        {
+            "document": document.Name,
+            "execution_mode": "gui",
+            "recompute": "target",
+            "generated_operation": True,
+            "operation_id": "marker-failure-test",
+        },
+    )
+
+    assert events == ["apply", "native-recompute"]
+    assert result["success"] is False
+    assert result["error"] == (
+        "execute_code failed in document 'Model': postcondition rejected"
+    )
+    assert result["mutation_readiness"][0]["ready"] is True
+    assert result["retryable"] is True
+
+
+def test_public_execute_cannot_inject_native_post_recompute_continuation():
+    result = run_execute_code_gui_task(
+        "print('apply')\n"
+        + NATIVE_POST_RECOMPUTE_MARKER
+        + "\nprint('postcondition')",
+        {"document": "Model", "recompute": "target"},
+        freecad=SimpleNamespace(),
+        native_boundary=True,
+        postcondition_sink={},
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == (
+        "native postcondition markers require a signed generated operation"
+    )
+
+
+def test_gui_execute_rejects_multi_document_recompute_before_callback(monkeypatch):
+    document = _ReadinessDocument()
+    api = _CompatibilityAPI()
+    rpc = _rpc_with_execution(
+        compatibility_api=api,
+        freecad=_freecad_with_document(document),
+    )
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: pytest.fail("unsupported recompute callback ran"),
+    )
+
+    result = rpc.execute_code(
+        "print('must not run')",
+        {
+            "document": document.Name,
+            "execution_mode": "gui",
+            "recompute": "all",
+        },
+    )
+
+    assert api.calls == []
+    assert result["success"] is False
+    assert result["error_code"] == "UNSUPPORTED_NATIVE_RECOMPUTE_SCOPE"
+    assert result["retryable"] is False
+
+
+def test_gui_execute_rejects_non_transient_readiness_without_native_callback(
+    monkeypatch,
+):
+    api = _CompatibilityAPI()
+
+    class Document:
+        Name = "BusyModel"
+
+        def getMutationReadiness(self):
+            return {
+                "ready": False,
+                "stable_event_supported": True,
+                "pending_transaction": True,
+                "booked_transaction": 7,
+                "transaction_locked": False,
+                "recomputing": False,
+                "must_execute": False,
+                "pending_removal": False,
+                "commit_barrier": False,
+                "notification_replay": False,
+                "poisoned": False,
+                "quarantined": False,
+                "diagnostic": "A document transaction is active",
+            }
+
+        def recompute(self):
+            raise AssertionError("an active transaction must not be waited through")
+
+    document = Document()
+    freecad = SimpleNamespace(
+        ActiveDocument=document,
+        getDocument=lambda name: document if name == document.Name else None,
+    )
+    rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
+    monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
+    monkeypatch.setattr(
+        execute_code_module,
+        "run_execute_code_gui_task",
+        lambda *_args, **_kwargs: pytest.fail("blocked mutation callback ran"),
+    )
+
+    result = rpc.execute_code(
+        "print('must not run')",
+        {"document": document.Name, "execution_mode": "gui"},
+    )
+
+    assert api.calls == []
+    assert result["success"] is False
+    assert result["error_code"] == "MUTATION_NOT_READY"
+    assert result["waited_for_readiness"] is False
+    assert result["mutation_readiness"][0]["reasons"] == [
+        "native_transaction_in_progress",
+        "native_not_ready",
+    ]
 
 
 def test_gui_execute_without_document_or_active_still_runs_without_boundary(
@@ -461,7 +1215,7 @@ def test_gui_execute_without_document_or_active_still_runs_without_boundary(
     freecad = SimpleNamespace(ActiveDocument=None, getDocument=lambda _name: None)
     rpc = _rpc_with_execution(compatibility_api=api, freecad=freecad)
     monkeypatch.setattr(rpc, "_collect_invalid_objects", dict)
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
     monkeypatch.setattr(
         execute_code_module,
         "run_execute_code_gui_task",

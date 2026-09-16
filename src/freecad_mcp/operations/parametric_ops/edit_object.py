@@ -14,7 +14,7 @@ from ..._shared.protocol.edit_object_contract import (
     parse_edit_object_response,
 )
 from ...freecad_client import FreeCADConnection
-from ...responses.tool_results import add_screenshot_if_available, tool_fail, tool_ok
+from ...responses.tool_results import add_screenshot_if_available, capture_committed_screenshot, tool_fail, tool_ok
 
 
 def edit_object_operation(
@@ -31,18 +31,18 @@ def edit_object_operation(
     result = parse_edit_object_response(raw_result)
     structured = dict(result)
     if result["success"] is False:
-        failed = tool_fail(
+        return tool_fail(
             f"Failed to edit object: {result['error']}",
             structured=structured,
             error_code=result["error_code"],
         )
-        screenshot = None if only_text_feedback else freecad.get_active_screenshot()
-        return add_screenshot_if_available(failed, screenshot, only_text_feedback)
+    screenshot = capture_committed_screenshot(
+        freecad, structured, only_text_feedback=only_text_feedback
+    )
     ok = tool_ok(
         json.dumps(result, ensure_ascii=False, default=str),
         structured=structured,
         only_text_feedback=only_text_feedback,
     )
-    screenshot = None if only_text_feedback else freecad.get_active_screenshot()
     return add_screenshot_if_available(ok, screenshot, only_text_feedback)
 

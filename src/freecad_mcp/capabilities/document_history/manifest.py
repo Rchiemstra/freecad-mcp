@@ -10,6 +10,17 @@ MANIFEST = SubjectManifest(
     register_modules=('tools_document_history',),
     tools=(
         ToolEntry(
+            name="get_mutation_readiness",
+            docstring="Inspect whether one document, or all open documents, is safe for the next typed mutation. Reports pending native transactions, recompute work, collaboration barriers, and document-local rollback quarantine.",
+            signature="(ctx: 'Context', doc_name: 'str | None' = None) -> 'CallToolResult'",
+            operation_path="freecad_mcp.operations.get_mutation_readiness_operation",
+            rpc_method="get_mutation_readiness",
+            execution_mode=ExecutionMode.TYPED_GATEWAY,
+            gui_thread=True,
+            mutation_class=MutationClass.READ,
+            register_module="tools_document_history",
+        ),
+        ToolEntry(
             name="close_document",
             docstring='Close an open FreeCAD document and free its memory.\n\nUse this for session hygiene when a document is no longer needed.\nUnsaved changes will be lost. Under a document lease, use\n``finalize_document_edit`` for verified save and release before closing.\n\nArgs:\n    doc_name: The document to close.\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    ```json\n    {"doc_name": "Part"}\n    ```',
             signature="(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",

@@ -11,10 +11,12 @@ defensively):
 * ``session_e2e``  - opt-in throwaway-profile session recovery / soak; not
                      selected by ``MARKER=e2e`` (avoids skip → verdict=1).
 
-The live layers use the in-process ``exec`` pattern: the test interpreter is
-expected to be FreeCAD's own Python (e.g. running pytest inside the
-freecad-mcp-tests Docker image, or under FreeCADCmd). When FreeCAD is not
-importable the live fixtures skip automatically.
+The live layers run inside FreeCAD's own Python (for example under
+``FreeCADCmd``).  Document mutations use the add-on's production ``FreeCADRPC``
+facade and native collaboration coordinator.  Read-only generated-code probes
+remain in-process because this fixture deliberately does not emulate the
+production worker subprocess.  When FreeCAD is not importable the live
+fixtures skip automatically.
 """
 from __future__ import annotations
 
@@ -22,12 +24,16 @@ import contextlib
 import io
 import json
 import math
+import os
 import sys
+import uuid
 from unittest.mock import MagicMock
 
 import pytest
 from mcp.types import ImageContent, TextContent
 
+from addon.FreeCADMCP import automation_pause
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import mutation_readiness
 from tests.helpers import (
     runtime_bootstrap,  # noqa: F401  - install PySide/FreeCADGui stubs
 )
@@ -51,6 +57,66 @@ _RPC_RUNTIME_COMPATIBILITY_NAMES = frozenset(
     }
 )
 
+_BRANCH_NATIVE_DOCUMENT_APIS = (
+    "commitCompatibilityMutation",
+    "getMutationReadiness",
+    "getFileChangeState",
+    "hasPendingFileChanges",
+    "saveWithOutcome",
+    "forceSave",
+    "saveAsWithOutcome",
+    "saveCopyWithOutcome",
+    "collaborationIdentity",
+    "captureSemanticRevisions",
+    "beginEditSession",
+    "snapshotForEdit",
+    "prepareEditWithExpectedRevisions",
+    "commitEdit",
+    "cancelEdit",
+    "editSessionStatus",
+)
+
+_LIVE_TYPED_RPC_METHODS = frozenset(
+    {
+        "body_create",
+        "body_set_tip",
+        "delete_object",
+        "diagnose_parametric",
+        "set_expression",
+        "sketch_add_constraint",
+        "sketch_add_geometry",
+        "sketch_attach",
+        "sketch_create",
+        "sketch_edit_constraint",
+        "solve_assembly",
+        "spreadsheet_create",
+        "spreadsheet_set_cells",
+    }
+)
+
+
+def _missing_branch_native_document_apis(document) -> tuple[str, ...]:
+    return tuple(
+        name
+        for name in _BRANCH_NATIVE_DOCUMENT_APIS
+        if not callable(getattr(document, name, None))
+    )
+
+
+def _reject_missing_branch_native_document_apis(
+    missing_apis: tuple[str, ...],
+) -> None:
+    message = (
+        "This E2E fixture requires the branch-native App::Document mutation, "
+        "collaboration, file-state, and save-outcome APIs; missing: "
+        + ", ".join(missing_apis)
+        + ". Stock FreeCAD compatibility images intentionally skip this "
+        "production coverage."
+    )
+    if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") == "1":
+        pytest.fail(message)
+    pytest.skip(message)
+
 
 @pytest.fixture(autouse=True)
 def _clear_legacy_rpc_runtime_test_overrides():
@@ -68,6 +134,35 @@ def _clear_legacy_rpc_runtime_test_overrides():
         for name in _RPC_RUNTIME_COMPATIBILITY_NAMES:
             if name in namespace:
                 delattr(module, name)
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_mutation_gate_state():
+    """Reset process-wide quarantine/pause state before and after every test.
+
+    ``mutation_readiness._QUARANTINED`` keys on ``(Name, id(document), Uid)``
+    (see its ``_lifecycle_key``); test doubles rarely set ``Uid``, so the key
+    collapses to ``(Name, id(document))``. CPython recycles a freed object's
+    id, and many test files reuse the document name "Model" -- so a test that
+    quarantines a document and does not clear it (directly, or indirectly via
+    a production rollback path it exercises) can leak a stale block into an
+    unrelated *later* test whose fresh document happens to land at the same
+    address, silently rejecting its mutation before any code runs. This
+    previously lived as a local fixture in test_mutation_readiness.py, which
+    only protected that one file; centralizing it here covers the whole
+    suite, including test_phase13_lifecycle_save_injection.py's quarantine
+    test that was leaking into test_phase14_execute_worker_injection.py.
+    """
+
+    mutation_readiness._QUARANTINED.clear()
+    automation_pause._paused = False
+    automation_pause._active.clear()
+    automation_pause._last_finished = None
+    yield
+    mutation_readiness._QUARANTINED.clear()
+    automation_pause._paused = False
+    automation_pause._active.clear()
+    automation_pause._last_finished = None
 
 
 # ---------------------------------------------------------------------------
@@ -183,14 +278,89 @@ except Exception:  # FreeCAD not available in this interpreter
     FreeCAD = None
 
 
-class LiveFreeCADConnection:
-    """In-process connection that ``exec``s generated MCP code against the
-    real FreeCAD modules, mirroring the contract of
-    ``freecad_mcp.freecad_client.FreeCADConnection.execute_code``.
+class _InlineGuiDispatcher:
+    """Execute a production RPC GUI task in the current FreeCADCmd thread.
 
-    This is the same strategy used by
-    ``tests/integration/test_assembly_path_live.py``'s ``DirectFreeCADConnection``,
-    generalised here so every e2e/core repro test can share it.
+    The ordinary live fixture has no authenticated request/session context. If
+    production code unexpectedly tries to use one, fail closed instead of
+    pretending that this small dispatcher implements transport semantics.
+    """
+
+    def submit(
+        self,
+        callback,
+        timeout,
+        *,
+        request_id=None,
+        session_id=None,
+        on_complete=None,
+    ):
+        del timeout
+        if request_id is not None or session_id is not None or on_complete is not None:
+            from addon.FreeCADMCP.dispatch.gui_errors import GuiDispatchError
+
+            raise GuiDispatchError(
+                "Live fixture cannot emulate authenticated or asynchronous GUI dispatch"
+            )
+        return callback()
+
+
+def _build_live_freecad_rpc():
+    """Compose an isolated production ``FreeCADRPC`` for in-process E2E use."""
+
+    import threading
+    import uuid
+
+    import FreeCADGui
+
+    if not hasattr(FreeCADGui, "addCommand"):
+        FreeCADGui.addCommand = lambda *_args, **_kwargs: None
+
+    from addon.FreeCADMCP.dispatch.inflight_request_registry import (
+        InflightRequestRegistry,
+    )
+    from addon.FreeCADMCP.rpc_server import rpc_server as rpc_module
+    from addon.FreeCADMCP.transport.replay import RequestReplayCache
+
+    replay_cache = RequestReplayCache()
+    inflight_requests = InflightRequestRegistry()
+    runtime_id = str(uuid.uuid4())
+    collaboration = rpc_module._build_collaboration_collaborators(
+        runtime_manifest=None,
+        inflight_request_registry=inflight_requests,
+        request_replay_cache=replay_cache,
+        runtime_id=runtime_id,
+    )
+    execution = rpc_module._build_execution_collaborators(
+        compatibility_api=collaboration.compatibility_api,
+        gui_dispatcher_value=_InlineGuiDispatcher(),
+        worker_manager_value=None,
+        shutdown_requested_value=threading.Event(),
+        request_replay_cache=replay_cache,
+        inflight_request_registry=inflight_requests,
+        session_manager_value=None,
+        runtime_manifest_value=None,
+        actual_endpoint_value=None,
+        runtime_id_value=runtime_id,
+        server_started_at_value="",
+    )
+    return rpc_module.FreeCADRPC(
+        allow_execute_code=True,
+        collaboration_collaborators=collaboration,
+        execution_collaborators=execution,
+    )
+
+
+class LiveFreeCADConnection:
+    """Production-faithful in-process connection for FreeCADCmd E2E tests.
+
+    Typed methods and mutating generated code traverse the real add-on RPC
+    facade, local write admission, readiness gates, and native compatibility-
+    mutation coordinator. The fixture intentionally bypasses only transport/
+    authentication. Read-only
+    generated code is executed directly; without a real ``WorkerManager`` the
+    alternative would be a fake worker implementation or a fail-closed
+    ``worker_unavailable`` response that invalidates existing geometry probes.
     """
 
     def __init__(self, doc_name: str):
@@ -201,6 +371,8 @@ class LiveFreeCADConnection:
 
         install(module_registry=sys.modules)
         self.doc = FreeCAD.newDocument(doc_name)
+        self._typed_rpc = None
+        self._use_native_history_leaf = True
         self._globals = {
             "FreeCAD": FreeCAD,
             "Part": _Part,
@@ -211,6 +383,24 @@ class LiveFreeCADConnection:
     # -- FreeCADConnection-compatible API ----------------------------------
 
     def execute_code(self, code: str, options=None):
+        if options is None:
+            normalized_options = {}
+        elif isinstance(options, dict):
+            normalized_options = dict(options)
+        else:
+            to_dict = getattr(options, "to_dict", None)
+            if not callable(to_dict):
+                raise TypeError("execute_code options must be a mapping or ExecuteOptions")
+            normalized_options = dict(to_dict())
+
+        if not normalized_options.get("read_only", False):
+            if not normalized_options.get("document"):
+                normalized_options["document"] = self.doc.Name
+            return self._dispatch("execute_code", code, normalized_options)
+
+        # Deliberately retain a direct, in-process read harness. The production
+        # RPC would correctly require a WorkerManager for this request; the live
+        # fixture neither starts one nor pretends to provide worker isolation.
         buffer = io.StringIO()
         try:
             with contextlib.redirect_stdout(buffer):
@@ -223,6 +413,149 @@ class LiveFreeCADConnection:
         except Exception as err:  # surface the failure to the test
             return {"success": False, "error": f"{type(err).__name__}: {err}"}
 
+    @property
+    def _rpc(self):
+        if self._typed_rpc is None:
+            self._typed_rpc = _build_live_freecad_rpc()
+        return self._typed_rpc
+
+    def _dispatch(self, method: str, *params):
+        """Use the production local dispatcher without inventing RPC auth."""
+
+        return self._rpc._dispatch(method, list(params))
+
+    def __getattr__(self, name: str):
+        """Expose the typed methods used by live operation-level tests.
+
+        Production ``FreeCADConnection`` receives these methods from generated
+        facade bindings.  This intentionally small test facade dispatches the
+        same RPC method names while continuing to bypass transport only.
+        """
+
+        if name not in _LIVE_TYPED_RPC_METHODS:
+            # A bare AttributeError(name) renders as just the method name, which
+            # callers interpolate into domain-shaped errors ("Failed to solve
+            # assembly: solve_assembly"). Say what is actually wrong.
+            raise AttributeError(
+                f"{type(self).__name__} has no typed RPC method {name!r}; add it "
+                "to _LIVE_TYPED_RPC_METHODS if the live fixture should dispatch it"
+            )
+        return lambda *params: self._dispatch(name, *params)
+
+    def pad_feature(
+        self,
+        doc_name,
+        sketch_name,
+        pad_name,
+        length,
+        body_name=None,
+        symmetric=False,
+        reversed_dir=False,
+        strict=False,
+    ):
+        return self._dispatch(
+            "pad_feature",
+            doc_name,
+            sketch_name,
+            pad_name,
+            length,
+            body_name,
+            symmetric,
+            reversed_dir,
+            strict,
+        )
+
+    def pocket_feature(
+        self,
+        doc_name,
+        sketch_name,
+        pocket_name,
+        length,
+        body_name=None,
+        symmetric=False,
+        reversed_dir=False,
+        strict=False,
+    ):
+        return self._dispatch(
+            "pocket_feature",
+            doc_name,
+            sketch_name,
+            pocket_name,
+            length,
+            body_name,
+            symmetric,
+            reversed_dir,
+            strict,
+        )
+
+    def undo(self, doc_name):
+        if not getattr(self, "_use_native_history_leaf", False):
+            return self._dispatch("undo", doc_name)
+        return self._history_mutation("undo", doc_name)
+
+    def redo(self, doc_name):
+        if not getattr(self, "_use_native_history_leaf", False):
+            return self._dispatch("redo", doc_name)
+        return self._history_mutation("redo", doc_name)
+
+    def _history_mutation(self, action: str, doc_name: str):
+        """Exercise the production history leaf while bypassing test transport auth."""
+
+        from addon.FreeCADMCP.part3_collaboration.history_head import (
+            capture_redo_head,
+            capture_undo_head,
+        )
+        from addon.FreeCADMCP.part3_collaboration.identity import (
+            bootstrap_identity_selector,
+        )
+        from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.recompute_helpers import (
+            redo_gui,
+            undo_gui,
+        )
+
+        document = FreeCAD.getDocument(doc_name)
+        if document is None:
+            return {
+                "success": False,
+                "ok": False,
+                "error_code": "DOCUMENT_NOT_FOUND",
+                "error": f"Document {doc_name!r} not found",
+            }
+        identity = bootstrap_identity_selector(document)
+        selector = {
+            "document_uid": identity.document_uid,
+            "document_instance_id": identity.document_instance_id,
+            "lifecycle_epoch": identity.lifecycle_epoch,
+            "document_name": identity.document_name,
+        }
+        operation_id = f"live-fixture-{action}-{uuid.uuid4()}"
+        if action == "undo":
+            head = capture_undo_head(document)
+            result = undo_gui(
+                selector,
+                operation_id=operation_id,
+                expected_undo_count=head["undo_count"],
+                expected_undo_head=head["undo_head"],
+                actor_id="live-freecad-e2e",
+                freecad=FreeCAD,
+                rpc=self._rpc,
+            )
+        else:
+            head = capture_redo_head(document)
+            result = redo_gui(
+                selector,
+                operation_id=operation_id,
+                expected_redo_count=head["redo_count"],
+                expected_redo_head=head["redo_head"],
+                actor_id="live-freecad-e2e",
+                freecad=FreeCAD,
+                rpc=self._rpc,
+            )
+        return self._rpc._adapt_gui_mutation_result(result)
+
+    def get_mutation_readiness(self, doc_name=None):
+        return self._dispatch("get_mutation_readiness", doc_name)
+
     def invoke_rpc(self, method: str, *args, **kwargs):
         """Route typed lifecycle calls through the addon's real GUI helpers.
 
@@ -234,21 +567,10 @@ class LiveFreeCADConnection:
             raise TypeError(
                 "LiveFreeCADConnection.invoke_rpc accepts positional RPC args"
             )
-        import FreeCADGui
-
-        if not hasattr(FreeCADGui, "addCommand"):
-            FreeCADGui.addCommand = lambda *_args, **_kwargs: None
-        from addon.FreeCADMCP.rpc_server.rpc_server import FreeCADRPC
-
-        handlers = {
-            "snapshot": FreeCADRPC._snapshot_gui,
-            "restore": FreeCADRPC._restore_gui,
-        }
-        try:
-            handler = handlers[method]
-        except KeyError as exc:
-            raise AttributeError(f"Unsupported live fixture RPC method: {method}") from exc
-        result = handler(self, *args)
+        supported = {"snapshot", "restore", "close_document"}
+        if method not in supported:
+            raise AttributeError(f"Unsupported live fixture RPC method: {method}")
+        result = self._dispatch(method, *args)
         if method == "restore" and isinstance(result, dict) and result.get("ok"):
             rebound = FreeCAD.getDocument(str(result.get("new_doc") or self.doc.Name))
             if rebound is not None:
@@ -273,7 +595,9 @@ class LiveFreeCADConnection:
 
 
 def _freecad_available() -> bool:
-    return FreeCAD is not None
+    return FreeCAD is not None and not bool(
+        getattr(FreeCAD, "__mcp_test_stub__", False)
+    )
 
 
 @pytest.fixture
@@ -300,6 +624,10 @@ def freecad_session(request):
         pytest.skip("FreeCAD not importable; run under FreeCADCmd or the Docker image")
     doc_name = f"MCP_{request.node.name.replace('[', '_').replace(']', '')}"
     session = LiveFreeCADConnection(doc_name)
+    missing_apis = _missing_branch_native_document_apis(session.doc)
+    if missing_apis:
+        session.close()
+        _reject_missing_branch_native_document_apis(missing_apis)
     yield session
     session.close()
 

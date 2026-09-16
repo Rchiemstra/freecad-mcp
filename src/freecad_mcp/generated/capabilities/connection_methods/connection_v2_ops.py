@@ -47,11 +47,14 @@ def _build_v2_context(
         session = conn._v2_auth_session()
         if session is None:
             return None
+        with conn._identity_lock:
+            mcp_runtime_id = str(conn._mcp_instance_id or "")
         effective_task_id = task_id or get_context().task_id
         return session.build_request_context(
             operation_name=operation_name,
             task_id=effective_task_id,
             request_id=request_id,
+            mcp_runtime_id=mcp_runtime_id,
         )
 
 

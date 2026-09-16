@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+try:
+    from ...._shared.protocol.protocol_error import ProtocolError
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.protocol_error import ProtocolError
+
 
 def _member(container: Any, name: str) -> Any:
     if isinstance(container, Mapping):
@@ -32,18 +37,21 @@ def request_actor(facade: Any) -> str:
         else getattr(identity, "instance_id", None)
     )
     if not session_id and not runtime_id:
-        raise PermissionError(
-            "an authenticated MCP runtime identity is required for GUI views"
+        raise ProtocolError(
+            "LEASE_PROTOCOL_REQUIRED",
+            "an authenticated MCP runtime identity is required for GUI views",
         )
     if not session_id:
-        raise PermissionError(
+        raise ProtocolError(
+            "LEASE_PROTOCOL_REQUIRED",
             "authenticated_session_id is required for GUI views; establish a "
-            "handshake_v2 session before calling actor-scoped GUI methods"
+            "handshake_v2 session before calling actor-scoped GUI methods",
         )
     if not runtime_id:
-        raise PermissionError(
+        raise ProtocolError(
+            "LEASE_PROTOCOL_REQUIRED",
             "instance_id is required for GUI views; use the immutable MCP "
-            "runtime identity from handshake_v2"
+            "runtime identity from handshake_v2",
         )
     return str(runtime_id)
 

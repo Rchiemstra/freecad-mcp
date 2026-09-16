@@ -76,6 +76,8 @@ def _read_bounded_response(
     try:
         body = response.read(maximum + 1)
     except http.client.IncompleteRead as exc:
+        if deadline_expired.is_set():
+            raise TimeoutError("FreeCAD JSON-RPC response deadline exceeded") from exc
         raise _JsonRpcHttpResponseError(
             "JSON-RPC response body was shorter than Content-Length"
         ) from exc

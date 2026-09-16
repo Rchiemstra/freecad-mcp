@@ -11,7 +11,7 @@ from .gui_errors import (
     GuiTaskError,
 )
 from .gui_outcome import GuiOutcome
-from .gui_request import GuiRequest
+from .gui_request import GuiDeferDecision, GuiRequest
 from .inflight_request import InflightRequest
 from .inflight_request_registry import InflightRequestRegistry
 from .inflight_snapshot import InflightSnapshot
@@ -23,6 +23,7 @@ __all__ = [
     "CancellationToken",
     "ContinuationCapacityError",
     "GuiBusyAfterTimeout",
+    "GuiDeferDecision",
     "GuiDispatchCore",
     "GuiDispatchError",
     "GuiDispatchTimeout",

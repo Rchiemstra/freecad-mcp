@@ -19,6 +19,7 @@ from freecad_mcp._shared.protocol.sketch_add_external_projection_contract import
 from freecad_mcp.operations.p7_assembly import (
     sketch_add_external_projection_operation,
 )
+from tests.helpers.native_readiness import attach_native_readiness
 
 
 HANGING_SYMMETRY_CODE = r'''
@@ -91,6 +92,25 @@ def test_external_projection_default_is_blocked_by_actual_loop_guard():
     assert envelope["status"] == "failed"
     assert envelope["error_code"] == "gui_geometry_loop_opt_in_required"
     assert "allow_gui_geometry_loop=true" in envelope["error"]
+
+
+def test_external_projection_explicit_override_reaches_gui_dispatch():
+    code, options = _external_projection_payload(allow_gui_geometry_loop=True)
+    rpc = rpc_server.FreeCADRPC()
+    dispatched = {}
+
+    def fake_dispatch_gui(task, timeout, **_kwargs):
+        dispatched["called"] = True
+        dispatched["timeout"] = timeout
+        return {"ok": True, "session": {}, "stdout": ""}
+
+    rpc._dispatch_gui = fake_dispatch_gui
+    result = rpc.execute_code(code, options)
+
+    assert options["execution_mode"] == "gui"
+    assert options["allow_gui_geometry_loop"] is True
+    assert result["success"] is True
+    assert dispatched["called"] is True
 
 
 def test_transformed_symmetric_difference_forced_gui_routes_to_worker(monkeypatch):
@@ -258,7 +278,7 @@ def test_forced_gui_geometry_mutation_optin_reaches_gui(monkeypatch):
     rpc = rpc_server.FreeCADRPC()
     dispatched = {}
 
-    def fake_dispatch_gui(task, timeout):
+    def fake_dispatch_gui(task, timeout, **_kwargs):
         dispatched["called"] = True
         dispatched["timeout"] = timeout
         return {"ok": True, "session": {}, "stdout": ""}
@@ -288,8 +308,17 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
             os.utime(model, ns=(before_mtime + 1_000_000, before_mtime + 1_000_000))
             self.Modified = False
 
-        def commitCompatibilityMutation(self, callback, *, structural=False):
+        def commitCompatibilityMutation(
+            self,
+            callback,
+            *,
+            structural=False,
+            recompute=True,
+            postcondition=None,
+        ):
             assert structural is True
+            assert recompute is False
+            assert postcondition is None
             callback()
             return {
                 "status": "Committed",
@@ -297,7 +326,7 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
                 "revisions": {"UnknownModel": 1},
             }
 
-    document = _Document()
+    document = attach_native_readiness(_Document())
     monkeypatch.setattr(
         rpc_server.FreeCAD, "listDocuments", lambda: {document.Name: document}
     )
@@ -309,7 +338,7 @@ def test_execute_code_saved_flag_matches_disk(tmp_path, monkeypatch):
     monkeypatch.setattr(rpc_server.FreeCAD, "ActiveDocument", document)
     rpc = rpc_server.FreeCADRPC()
     monkeypatch.setattr(rpc, "_collect_invalid_objects", lambda: {})
-    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout: task())
+    monkeypatch.setattr(rpc, "_dispatch_gui", lambda task, _timeout, **_kwargs: task())
 
     result = rpc.execute_code(
         "FreeCAD.getDocument('Model').save()",

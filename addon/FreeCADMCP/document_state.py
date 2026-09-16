@@ -1,17 +1,19 @@
-"""Version-tolerant access to FreeCAD's authoritative modified flag.
+"""Version-tolerant access to FreeCAD's authoritative file-change state.
 
-``App::Document`` does not expose ``Modified`` in current FreeCAD builds; the
-flag belongs to ``Gui::Document``.  Tests and some older bindings expose it on
-the App proxy, so callers use these helpers instead of assuming either shape.
+Current FreeCAD builds expose that state on ``App::Document`` through
+``getFileChangeState()``/``hasPendingFileChanges()``.  Older builds expose only
+the compatibility ``Gui::Document.Modified`` flag, so callers use these
+helpers instead of assuming either runtime shape.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
 class DocumentDirtyStateUnavailable(RuntimeError):
-    """FreeCAD's authoritative GUI modified flag cannot be read or written."""
+    """FreeCAD's authoritative file-change state cannot be read or written."""
 
     code = "DOCUMENT_DIRTY_STATE_UNAVAILABLE"
 
@@ -23,6 +25,49 @@ def _modified_attribute(target: Any) -> bool | None:
         return bool(target.Modified)
     except (AttributeError, RuntimeError, TypeError):
         return None
+
+
+def _app_document_modified_state(document: Any) -> tuple[bool, bool | None]:
+    """Return ``(native App API available, modified state)``.
+
+    The structured getter is preferred because its save-failure overlay is
+    part of the compatibility modified state.  Once either native App getter
+    is advertised, a malformed/raising result is an unavailable authoritative
+    state, not permission to fall back to a potentially stale GUI proxy.
+    """
+
+    state_getter = getattr(document, "getFileChangeState", None)
+    if callable(state_getter):
+        try:
+            state = state_getter()
+        except Exception:
+            return True, None
+        if not isinstance(state, Mapping):
+            return True, None
+
+        pending = state.get("has_pending_file_changes")
+        failed = state.get("last_canonical_save_failed", False)
+        if not isinstance(failed, bool):
+            return True, None
+        if isinstance(pending, bool):
+            return True, pending or failed
+
+        base_state = state.get("state")
+        if isinstance(base_state, str):
+            normalized = base_state.strip().lower()
+            if normalized in {"not_saved", "clean", "modified"}:
+                return True, normalized == "modified" or failed
+        return True, None
+
+    pending_getter = getattr(document, "hasPendingFileChanges", None)
+    if callable(pending_getter):
+        try:
+            pending = pending_getter()
+        except Exception:
+            return True, None
+        return (True, pending) if isinstance(pending, bool) else (True, None)
+
+    return False, None
 
 
 def _gui_document_lookup(document: Any) -> tuple[bool, Any | None]:
@@ -54,15 +99,20 @@ def gui_document_for(document: Any) -> Any | None:
 def document_modified_state(document: Any) -> bool | None:
     """Return the authoritative dirty flag, or ``None`` when unavailable.
 
-    ``isTouched()`` is only a conservative positive fallback in headless
-    FreeCADCmd: recompute can clear it even when an unsaved edit remains, so a
-    false value must never be interpreted as authoritative cleanliness.
+    Native ``App::Document`` state works in both GUI FreeCAD and headless
+    FreeCADCmd.  ``isTouched()`` is only a conservative positive fallback for
+    older headless builds: recompute can clear it even when an unsaved edit
+    remains, so a false value must never imply authoritative cleanliness.
     """
+
+    app_available, app_state = _app_document_modified_state(document)
+    if app_available:
+        return app_state
 
     gui_available, gui_document = _gui_document_lookup(document)
     if gui_available:
-        # A running GUI is authoritative.  Never let a compatibility-only App
-        # attribute conceal a missing, stale, or unreadable GUI proxy.
+        # Legacy GUI builds own the compatibility flag.  Never let an App test
+        # double conceal a missing, stale, or unreadable GUI proxy there.
         return _modified_attribute(gui_document)
     app_state = _modified_attribute(document)
     if app_state is not None:
@@ -81,7 +131,7 @@ def require_document_modified(document: Any) -> bool:
     state = document_modified_state(document)
     if state is None:
         raise DocumentDirtyStateUnavailable(
-            "FreeCAD did not expose authoritative Gui::Document.Modified state"
+            "FreeCAD did not expose authoritative App::Document file-change state"
         )
     return state
 
@@ -94,6 +144,21 @@ def document_modified_or_dirty(document: Any) -> bool:
 
 def set_document_modified(document: Any, modified: bool) -> None:
     """Set and read back the authoritative modified flag."""
+
+    app_available, app_state = _app_document_modified_state(document)
+    if app_available:
+        if app_state is None:
+            raise DocumentDirtyStateUnavailable(
+                "FreeCAD exposed unreadable App::Document file-change state"
+            )
+        if app_state is bool(modified):
+            return
+        if not modified:
+            # A native save owns its savepoint.  Clearing through the legacy
+            # GUI compatibility setter could hide a re-entrant post-save edit.
+            raise DocumentDirtyStateUnavailable(
+                "FreeCAD's authoritative App::Document remains modified"
+            )
 
     gui_available, gui_document = _gui_document_lookup(document)
     if not gui_available:
@@ -116,7 +181,11 @@ def set_document_modified(document: Any, modified: bool) -> None:
         raise DocumentDirtyStateUnavailable(
             "FreeCAD rejected the GUI document modified-state update"
         ) from exc
-    observed = _modified_attribute(target)
+    observed = (
+        document_modified_state(document)
+        if app_available
+        else _modified_attribute(target)
+    )
     if observed != bool(modified):
         raise DocumentDirtyStateUnavailable(
             "FreeCAD did not retain the requested GUI document modified state"
@@ -126,12 +195,13 @@ def set_document_modified(document: Any, modified: bool) -> None:
 def mark_document_modified(document: Any) -> bool:
     """Mark a restored live document dirty and prove the mark when possible."""
 
+    app_available, _app_state = _app_document_modified_state(document)
     gui_available, _gui_document = _gui_document_lookup(document)
     try:
         set_document_modified(document, True)
         return True
     except DocumentDirtyStateUnavailable:
-        if gui_available:
+        if gui_available and not app_available:
             raise
 
     app_state = _modified_attribute(document)
@@ -151,10 +221,11 @@ def mark_document_modified(document: Any) -> bool:
         touch = getattr(obj, "touch", None)
         if callable(touch):
             touch()
-            try:
-                if bool(document.isTouched()):
-                    return True
-            except (AttributeError, RuntimeError, TypeError):
-                pass
+            if not app_available:
+                try:
+                    if bool(document.isTouched()):
+                        return True
+                except (AttributeError, RuntimeError, TypeError):
+                    pass
             break
     return document_modified_state(document) is True

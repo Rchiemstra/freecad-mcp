@@ -226,6 +226,9 @@ class TestCreateInvoluteGearLayerB:
     def test_apply_does_not_recompute(self):
         assert ".recompute(" not in _GEAR_ACTIONS
 
+    def test_recompute_is_deferred_to_native_postcondition(self):
+        assert "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__" in _GEAR_ACTIONS
+
     def test_apply_uses_admitted_document(self):
         assert "FreeCAD.getDocument" not in _GEAR_ACTIONS
 

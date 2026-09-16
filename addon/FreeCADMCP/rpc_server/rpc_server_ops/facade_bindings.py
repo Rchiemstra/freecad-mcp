@@ -9,8 +9,10 @@ from ..methods import (
     lease_methods,
     lifecycle_methods,
     native_lifecycle_methods,
+    part3_collaboration_methods,
     v2_methods,
 )
+from ..methods.cad_methods_ops.mutation_readiness import get_mutation_readiness
 from ..methods.cad_methods_ops.recompute_helpers import collect_invalid_objects
 from ..methods.cad_methods_ops.sketch_gui_constraints import (
     sketch_delete_constraint_gui,
@@ -93,9 +95,16 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.update_document_lock = lease_methods.update_document_lock
     FreeCADRPC.save_document = native_lifecycle_methods.save_document
     FreeCADRPC.save_document_as = native_lifecycle_methods.save_document_as
+    FreeCADRPC.save_document_copy = native_lifecycle_methods.save_document_copy
     FreeCADRPC.finalize_document_edit = native_lifecycle_methods.finalize_document_edit
     FreeCADRPC.release_document_lock = lease_methods.release_document_lock
     FreeCADRPC.force_release_stale_lock = lease_methods.force_release_stale_lock
+
+    # Part 3 identity-bound checked-edit surface
+    FreeCADRPC.get_semantic_revisions = part3_collaboration_methods.get_semantic_revisions
+    FreeCADRPC.begin_checked_edit = part3_collaboration_methods.begin_checked_edit
+    FreeCADRPC.commit_checked_property = part3_collaboration_methods.commit_checked_property
+    FreeCADRPC.cancel_checked_edit = part3_collaboration_methods.cancel_checked_edit
 
     # Phase 4 slice 4F — CAD methods
     FreeCADRPC.create_object = cad_methods.create_object
@@ -121,6 +130,7 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.undo = cad_methods.undo
     FreeCADRPC.redo = cad_methods.redo
     FreeCADRPC.get_recompute_log = cad_methods.get_recompute_log
+    FreeCADRPC.get_mutation_readiness = get_mutation_readiness
     FreeCADRPC.spreadsheet_create = cad_methods.spreadsheet_create
     FreeCADRPC.spreadsheet_set_cells = cad_methods.spreadsheet_set_cells
     FreeCADRPC.spreadsheet_get_cells = cad_methods.spreadsheet_get_cells

@@ -1,4 +1,5 @@
 """Options and helpers for scoped execute_code sessions (M1/M11)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,9 +13,9 @@ LinkPolicy = Literal["strict", "warn"]
 @dataclass
 class ExecuteOptions:
     document: str | None = None
-    # Complete write scope for mutating code.  ``document`` remains the
-    # primary/active document for compatibility; all other touched documents
-    # must be declared here and independently leased.
+    # Live mutations accept one distinct document.  Duplicate declarations of
+    # ``document`` are harmless; use dependency-ordered separate calls for
+    # cross-document changes.
     affected_documents: list[str] | None = None
     recompute: RecomputeMode = "none"
     recompute_documents: list[str] | None = None

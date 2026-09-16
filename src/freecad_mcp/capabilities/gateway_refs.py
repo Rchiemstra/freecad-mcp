@@ -7,6 +7,7 @@ GATEWAY_METHODS = frozenset(
         "finalize_document_edit",
         "save_document",
         "save_document_as",
+        "save_document_copy",
     }
 )
 

@@ -27,14 +27,34 @@ def finalize_gui_execute_response(
             }
         )
     tb = res.get("traceback")
-    return annotate(
-        {
-            "success": False,
-            "error": res.get("error", "Unknown error"),
-            "traceback": tb,
-            "structured": tb,
-            "session": res.get("session", {}),
-            "message": res.get("stdout", ""),
-            "is_error": True,
-        }
-    )
+    document_name = str(options.get("document") or "")
+    error = str(res.get("error", "Unknown error"))
+    if document_name and f"document {document_name!r}" not in error:
+        error = f"execute_code failed in document {document_name!r}: {error}"
+    failure = {
+        "success": False,
+        "error": error,
+        "traceback": tb,
+        "structured": tb,
+        "session": res.get("session", {}),
+        "message": res.get("stdout", ""),
+        "is_error": True,
+    }
+    for key in (
+        "error_code",
+        "mutation_readiness",
+        "waited_for_readiness",
+        "retryable",
+        "committed_result",
+        "native_status",
+        "native_message",
+        "rollback_succeeded",
+        "rollback_failed",
+        "diagnostic",
+        "document_name",
+    ):
+        if key in res:
+            failure[key] = res[key]
+    if document_name:
+        failure.setdefault("document_name", document_name)
+    return annotate(failure)

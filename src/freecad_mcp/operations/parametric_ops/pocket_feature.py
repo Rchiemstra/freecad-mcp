@@ -12,7 +12,7 @@ from ..._shared.protocol.pocket_feature_contract import (
     parse_pocket_feature_response,
 )
 from ...freecad_client import FreeCADConnection
-from ...responses.tool_results import tool_fail, tool_ok
+from ...responses.tool_results import add_screenshot_if_available, capture_committed_screenshot, tool_fail, tool_ok
 
 
 def pocket_feature_operation(
@@ -55,8 +55,12 @@ def pocket_feature_operation(
             structured=structured,
             error_code=result["error_code"],
         )
-    return tool_ok(
+    screenshot = capture_committed_screenshot(
+        freecad, structured, only_text_feedback=only_text_feedback
+    )
+    ok = tool_ok(
         json.dumps(result, ensure_ascii=False, default=str),
         structured=structured,
         only_text_feedback=only_text_feedback,
     )
+    return add_screenshot_if_available(ok, screenshot, only_text_feedback)

@@ -3,10 +3,38 @@
 from __future__ import annotations
 
 import contextlib
+import io
+import socket
 from typing import Any
 from xmlrpc.server import SimpleXMLRPCRequestHandler
 
 __all__ = ["JsonRpcRequestHandler"]
+
+
+class _NoSigPipeSocketWriter(io.BufferedIOBase):
+    """Write one listener response without changing process-wide SIGPIPE policy."""
+
+    def __init__(self, connection: socket.socket) -> None:
+        super().__init__()
+        self._connection = connection
+
+    def writable(self) -> bool:
+        return True
+
+    def fileno(self) -> int:
+        return self._connection.fileno()
+
+    def write(self, data: Any) -> int:
+        payload = memoryview(data)
+        flags = getattr(socket, "MSG_NOSIGNAL", 0)
+        if flags:
+            self._connection.sendall(payload, flags)
+        else:
+            self._connection.sendall(payload)
+        return payload.nbytes
+
+    def flush(self) -> None:
+        return None
 
 
 def _optional_callback(server: Any, name: str) -> Any:
@@ -14,7 +42,17 @@ def _optional_callback(server: Any, name: str) -> Any:
     return callback if callable(callback) else None
 
 
-class JsonRpcRequestHandler(SimpleXMLRPCRequestHandler):
+class _NoSigPipeRequestHandler(SimpleXMLRPCRequestHandler):
+    """Install a response writer that cannot raise process-wide SIGPIPE."""
+
+    def setup(self) -> None:
+        super().setup()
+        if hasattr(socket, "SO_NOSIGPIPE"):
+            self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_NOSIGPIPE, 1)
+        self.wfile = _NoSigPipeSocketWriter(self.connection)
+
+
+class JsonRpcRequestHandler(_NoSigPipeRequestHandler):
     """Route JSON-RPC HTTP requests without locating application state."""
 
     def send_response(self, code: int, message: str | None = None) -> None:

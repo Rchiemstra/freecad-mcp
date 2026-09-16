@@ -163,6 +163,9 @@ class TestImportStep:
         conn.execute_code.assert_not_called()
         assert ".recompute(" not in _MEASURE_IO
 
+    def test_recompute_is_deferred_to_native_postcondition(self):
+        assert "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__" in _MEASURE_IO
+
 
 # ---------------------------------------------------------------------------
 # P6-3  export_stl

@@ -20,9 +20,11 @@ except ImportError:
 
 try:
     from ....dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout
+    from ....dispatch.gui_request import GuiDeferDecision
     from ....dispatch.request_cancellation_error import RequestCancellationError
 except ImportError:
     from dispatch.gui_errors import GuiDispatchError, GuiDispatchTimeout
+    from dispatch.gui_request import GuiDeferDecision
     from dispatch.request_cancellation_error import RequestCancellationError
 from ...mutation_guard import (
     DocumentHealthVerdict,
@@ -39,6 +41,7 @@ from ...telemetry import emit as emit_telemetry
 
 __all__ = [
     "DocumentHealthVerdict",
+    "GuiDeferDecision",
     "GuiDispatchError",
     "GuiDispatchTimeout",
     "GuiMutationTransaction",

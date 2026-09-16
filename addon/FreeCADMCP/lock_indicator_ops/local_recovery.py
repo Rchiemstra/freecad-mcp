@@ -3,6 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+try:
+    from document_state import document_modified_state
+except ImportError:  # pragma: no cover - package test layout
+    from addon.FreeCADMCP.document_state import document_modified_state
+
 from .constants import _AGENT_OWNED_STATES
 from .lease_view import _is_eligible_exact_owner_stale_timeout, _lease_view
 from .runtime_bindings import current_runtime_bindings
@@ -72,7 +77,7 @@ def _local_recovery_capabilities(
             v2_local
             and state == "USER_INTERVENED"
             and document is not None
-            and getattr(document, "Modified", None) is True
+            and document_modified_state(document) is True
         ),
         "save_and_clear": bool(
             v2_local

@@ -180,6 +180,7 @@ class CollaborationAPI:
         callback: Callable[..., Any],
         *,
         structural: bool = False,
+        recompute: bool = True,
         postcondition: Callable[..., Any] | None = None,
         bind_document: bool = False,
         require_native: bool = False,
@@ -211,7 +212,15 @@ class CollaborationAPI:
                 require_native=require_native,
             )
         options: dict[str, Any] = {"structural": structural}
+        if not recompute:
+            # Deferred recompute is an ordering contract: only pass the keyword
+            # when the caller explicitly opts out of the native coordinator.
+            options["recompute"] = False
         if postcondition is not None:
+            # A postcondition is an ordering contract, not an optional
+            # convenience. Passing the keyword deliberately fails before the
+            # callback on an older native runtime instead of silently moving
+            # validation back in front of the native recompute.
             options["postcondition"] = invoke_postcondition
         native_callback = (
             invoke_callback

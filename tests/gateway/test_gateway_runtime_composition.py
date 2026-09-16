@@ -988,6 +988,35 @@ def test_construction_cleanup_failure_retains_exact_resource_and_blocks_restart(
     )
 
 
+def test_construction_cleanup_resource_retries_through_shutdown(monkeypatch) -> None:
+    primary = RuntimeError("capability bridge construction failed")
+    context = _prepare_live_start(monkeypatch, bridge_failure=primary)
+    fail = {"value": True}
+
+    def stop_worker(timeout=4.0):
+        assert timeout == 4.0
+        context.worker_manager.cleanup_calls += 1
+        context.timeline.append("cleanup:worker_manager")
+        if fail["value"]:
+            raise RuntimeError("worker stop failed")
+        return True
+
+    context.worker_manager.stop = stop_worker
+
+    result = context.rpc_server.start_rpc_server()
+    retained = context.rpc_server._runtime_shutdown_claim
+    assert retained is not None
+    assert retained.runtime.disposal_retryable is True
+    fail["value"] = False
+    retried = context.rpc_server.stop_rpc_server(wait_for_completion=True)
+
+    assert "could not construct its runtime" in result.lower()
+    assert retained.runtime.disposal_retryable is False
+    assert retried == "RPC Server stopped."
+    assert context.worker_manager.cleanup_calls == 2
+    assert context.rpc_server._runtime_shutdown_claim is None
+
+
 def test_fatal_construction_cleanup_failure_retains_resource_before_propagating(
     monkeypatch,
 ) -> None:

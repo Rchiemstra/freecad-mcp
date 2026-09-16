@@ -13,6 +13,17 @@ def _call_named(target: object, name: str, *args: object) -> object:
     return method(*args)
 
 
+def _json_cell_value(value: object) -> object:
+    """Return a JSON-safe evaluated Spreadsheet value without dropping units."""
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    # FreeCAD.Quantity is deliberately represented by its display string, e.g.
+    # ``"440.00 mm"``.  Numeric coercion would lose the unit and a direct
+    # return makes the surrounding RPC response fail JSON serialization.
+    return str(value)
+
+
 def apply_spreadsheet_cell(
     sheet: object, cell: Mapping[str, object]
 ) -> tuple[dict[str, object] | None, str | None]:
@@ -56,7 +67,7 @@ def read_spreadsheet_cell(sheet: object, item: object) -> dict[str, object]:
     except Exception as exc:
         row["contents_error"] = str(exc)
     try:
-        row["value"] = _call_named(sheet, "get", str(addr))
+        row["value"] = _json_cell_value(_call_named(sheet, "get", str(addr)))
     except Exception as exc:
         row["value_error"] = str(exc)
     return row

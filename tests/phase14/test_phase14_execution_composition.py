@@ -48,6 +48,7 @@ def test_execution_dependency_shape_is_explicit_and_policy_free() -> None:
         "typed_tool_warning",
         "find_gui_geometry_loop_risk",
         "find_gui_blocking_risk",
+        "find_modal_command_risk",
         "process_started_at",
         "boot_id",
         "profile_fingerprint",

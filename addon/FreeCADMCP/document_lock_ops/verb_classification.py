@@ -92,6 +92,7 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "select_subshapes": (VerbKind.READ_ONLY, _params0_doc),
     "set_section_view": (VerbKind.READ_ONLY, _none_doc),
     "get_recompute_log": (VerbKind.READ_ONLY, _params0_doc),
+    "get_mutation_readiness": (VerbKind.READ_ONLY, _params0_doc),
     "spreadsheet_get_cells": (VerbKind.READ_ONLY, _params0_doc),
     "spreadsheet_list_aliases": (VerbKind.READ_ONLY, _params0_doc),
     "list_expressions": (VerbKind.READ_ONLY, _params0_doc),

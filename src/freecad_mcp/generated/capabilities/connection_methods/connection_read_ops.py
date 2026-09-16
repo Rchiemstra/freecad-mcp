@@ -184,7 +184,7 @@ def delete_object(
         )
         if routed is not None:
             return routed
-        return conn.server.delete_object(doc_name, obj_name)
+        return conn.server.delete_object(doc_name, obj_name, recursive, force)
 
 
 def reload_document(conn, doc_name: str) -> dict[str, Any]:

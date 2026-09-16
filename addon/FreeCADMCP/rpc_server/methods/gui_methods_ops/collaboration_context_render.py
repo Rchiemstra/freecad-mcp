@@ -6,6 +6,8 @@ import base64
 from collections.abc import Mapping
 from typing import Any
 
+from ...view_manager_ops.screenshot import capture_active_view_png_bytes
+from ...view_manager_ops.screenshot_blank import is_near_blank_png
 from .collaboration_context_core import (
     _document_name,
     _member,
@@ -15,8 +17,6 @@ from .collaboration_context_core import (
 )
 from .collaboration_context_dispatch import dispatch_gui
 from .collaboration_context_view import build_view_context
-from ...view_manager_ops.screenshot import capture_active_view_png_bytes
-from ...view_manager_ops.screenshot_blank import is_near_blank_png
 
 
 def render_temporary_context_gui(

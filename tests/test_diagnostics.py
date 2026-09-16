@@ -3,10 +3,9 @@ later I4/I10/M5/M6 helpers added in the same module)."""
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 from mcp.types import TextContent
 
 from freecad_mcp.operations.diagnostics import (
@@ -73,6 +72,16 @@ from freecad_mcp.operations.p7_assembly import (
     solve_assembly_operation,
 )
 from tests.helpers.geometric import assert_code_compiles, assert_code_contains
+
+_FEATURES_GUI_SOURCE = (
+    Path(__file__).parents[1]
+    / "addon"
+    / "FreeCADMCP"
+    / "rpc_server"
+    / "methods"
+    / "cad_methods_ops"
+    / "features_gui.py"
+).read_text(encoding="utf-8")
 
 
 def _typed_ok(**fields):
@@ -174,6 +183,32 @@ class TestPreviewAttachment:
         assert "Failed to preview attachment" in _text(resp)
 
 
+class TestI2SilentBuildAssertion:
+    """I2 — pad/pocket verification lives in addon GUI builders, not execute_code."""
+
+    def test_pad_asserts_direction_parallel_to_sketch_normal(self):
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE,
+            "pad_feature_gui",
+            "_build_feature_result",
+            "set_feature_bool",
+        )
+
+    def test_pocket_asserts_direction_parallel_to_sketch_normal(self):
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE,
+            "pocket_feature_gui",
+            "_build_feature_result",
+            "set_feature_bool",
+        )
+
+    def test_pad_mismatch_failure_is_surfaced(self):
+        conn = _ok_conn()
+        conn.pad_feature.return_value = {"success": False, "error": "build failed"}
+        resp = pad_feature_operation(conn, True, "Doc", "Profile", "MyPad", 5.0)
+        assert "Failed to create pad" in _text(resp)
+
+
 class TestI3RecomputeLog:
     """I3 — typed loft routes through JSON-RPC instead of execute-code."""
 
@@ -203,6 +238,59 @@ class TestPadPocketHardening:
         conn.pocket_feature.return_value = _typed_ok(feature="MyPocket")
         pocket_feature_operation(conn, True, "Doc", "Sketch", "MyPocket", 3.0)
         conn.pocket_feature.assert_called_once()
+        conn.execute_code.assert_not_called()
+
+    def test_pad_has_no_document_level_fallback(self):
+        assert "doc.addObject(\"PartDesign::Pad\"" not in _FEATURES_GUI_SOURCE
+        assert "No PartDesign::Body found" in _FEATURES_GUI_SOURCE
+
+    def test_pocket_has_no_document_level_fallback(self):
+        assert "doc.addObject(\"PartDesign::Pocket\"" not in _FEATURES_GUI_SOURCE
+        assert "No PartDesign::Body found" in _FEATURES_GUI_SOURCE
+
+    def test_build_has_no_inner_transaction_control(self):
+        assert "openTransaction" not in _FEATURES_GUI_SOURCE
+        assert "commitTransaction" not in _FEATURES_GUI_SOURCE
+        assert "abortTransaction" not in _FEATURES_GUI_SOURCE
+
+    def test_runs_sketch_diagnostics_gate(self):
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE,
+            "ConflictingConstraints",
+            "MalformedConstraints",
+            "isClosed",
+        )
+
+    def test_verifies_body_membership_and_tip(self):
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE, "body.Group", "body.Tip", "is not a Body member"
+        )
+
+    def test_verifies_signed_material_delta(self):
+        assert_code_contains(
+            _FEATURES_GUI_SOURCE,
+            "volume_before_mm3",
+            "volume_after_mm3",
+            "material_delta_mm3",
+            "ZERO_MATERIAL_DELTA",
+            "MATERIAL_DELTA_DIRECTION_MISMATCH",
+        )
+
+    def test_strict_requires_explicit_body_name(self):
+        assert "strict PartDesign mode requires an explicit body_name" in _FEATURES_GUI_SOURCE
+
+    def test_non_strict_autodetects_owning_body(self):
+        assert "obj.TypeId == \"PartDesign::Body\" and sketch in obj.Group" in _FEATURES_GUI_SOURCE
+
+    def test_returns_structured_payload(self):
+        conn = _ok_conn()
+        conn.pad_feature.return_value = _typed_ok(
+            feature="MyPad", body="Body", tip="MyPad"
+        )
+        resp = pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
+        assert not resp.isError
+        assert "MyPad" in _text(resp)
+        conn.execute_code.assert_not_called()
 
 
 class TestI4FindSubshapes:
@@ -287,6 +375,9 @@ class TestI5DeleteObject:
         text = _text(resp)
         assert "Refused" in text or "Failed" in text
         assert "Pad" in text
+        assert "PartDesign::Pad" in text
+        conn.delete_object.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_recursive_deletes_dependents(self):
         conn = _ok_conn()
@@ -296,6 +387,9 @@ class TestI5DeleteObject:
         resp = delete_object_operation(conn, True, "Doc", "Body", recursive=True)
         text = _text(resp)
         assert "Pad" in text and "Body" in text
+        assert '"deleted": ["Pad", "Body"]' in text
+        conn.delete_object.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_force_reports_orphans_left(self):
         conn = _ok_conn()
@@ -303,6 +397,8 @@ class TestI5DeleteObject:
         resp = delete_object_operation(conn, True, "Doc", "Body", force=True)
         text = _text(resp)
         assert "Body" in text
+        conn.delete_object.assert_called_once()
+        conn.execute_code.assert_not_called()
 
     def test_delete_routes_typed_rpc(self):
         conn = MagicMock()
@@ -314,11 +410,23 @@ class TestI5DeleteObject:
             "outcome": "committed",
             "committed": True,
             "retry_safe": False,
-            "object": "Body",
+            "object_name": "Body",
             "deleted": ["Pad", "Body"],
             "refused": False,
         }
         delete_object_operation(conn, True, "Doc", "Body", recursive=True)
+        conn.delete_object.assert_called_once()
+        conn.execute_code.assert_not_called()
+
+    def test_typed_failure_is_surfaced_without_execute_code(self):
+        conn = _ok_conn()
+        conn.delete_object.return_value = make_delete_object_failure(
+            "DELETE_OBJECT_FAILED",
+            "rollback rejected deletion",
+        )
+        response = delete_object_operation(conn, True, "Doc", "Body")
+        assert response.isError
+        assert "rollback rejected deletion" in _text(response)
         conn.delete_object.assert_called_once()
         conn.execute_code.assert_not_called()
 
@@ -386,6 +494,16 @@ class TestI9SolveAssembly:
         assert "doc.recompute()" not in code
         assert ".recompute(" not in code
 
+    def test_calls_typed_rpc_once_and_never_execute_code(self):
+        conn = _ok_conn()
+        conn.solve_assembly.return_value = make_solve_assembly_success(
+            "Asm", "assembly.solve()", "0"
+        )
+        response = solve_assembly_operation(conn, True, "Doc", "Asm")
+        assert not response.isError
+        conn.solve_assembly.assert_called_once_with("Doc", "Asm")
+        conn.execute_code.assert_not_called()
+
     def test_returns_json_with_method(self):
         conn = MagicMock()
         conn.get_active_screenshot.return_value = None
@@ -406,6 +524,8 @@ class TestI9SolveAssembly:
         )
         resp = solve_assembly_operation(conn, True, "Doc", "Asm")
         assert "Failed to run solve_assembly" in _text(resp)
+        conn.solve_assembly.assert_called_once_with("Doc", "Asm")
+        conn.execute_code.assert_not_called()
 
 
 class TestM4JointPreflight:

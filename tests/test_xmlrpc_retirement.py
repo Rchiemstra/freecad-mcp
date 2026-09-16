@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import socket
 import threading
 import time
@@ -294,7 +295,15 @@ def test_jsonrpc_request_wall_clock_deadline_rejects_slow_drip(live_server):
             except OSError:
                 break
             time.sleep(0.02)
-        response = connection.recv(4096)
+        try:
+            response = connection.recv(4096)
+        except ConnectionAbortedError:
+            # Winsock can report an expired slow-drip request as WSAECONNABORTED
+            # instead of delivering the server's 408 bytes.  It is the same
+            # timeout outcome, but only normalize this platform-specific form.
+            if os.name != "nt":
+                raise
+            response = b""
     finally:
         connection.close()
 

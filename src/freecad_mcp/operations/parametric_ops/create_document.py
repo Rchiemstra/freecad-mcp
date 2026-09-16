@@ -28,6 +28,13 @@ def create_document_operation(
         )
     result = parse_create_document_response(raw_result)
     structured = dict(result)
+    # Historic add-ons could still return an acquisition credential.
+    # It is a deprecated wire artifact: MCP neither stores nor
+    # acknowledges it, and it must never cross the public tool result.
+    if "credential" in structured:
+        structured.pop("credential", None)
+        structured["credential_stored"] = False
+        structured["token_exported"] = False
     if result["success"] is False:
         return tool_fail(
             f"Failed to create document: {result['error']}",

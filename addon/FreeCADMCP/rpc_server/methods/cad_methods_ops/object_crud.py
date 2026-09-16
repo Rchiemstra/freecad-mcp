@@ -3,7 +3,7 @@
 from typing import Any
 
 from ...property_mapper import Object
-from .cad_mutation import run_cad_mutation
+from .cad_mutation import run_cad_mutation, unsupported_native_phase_boundary
 
 
 def _split_presentation_properties(properties):
@@ -14,6 +14,27 @@ def _split_presentation_properties(properties):
         if name in model_properties
     }
     return model_properties, presentation_properties
+
+
+def _committed_success(result):
+    return result is True or (
+        isinstance(result, dict)
+        and result.get("success") is not False
+        and result.get("ok") is not False
+    )
+
+
+def _presentation_warning(result, warning):
+    payload = dict(result) if isinstance(result, dict) else {}
+    payload.update(
+        {
+            "success": True,
+            "ok": True,
+            "retryable": False,
+            "presentation_warning": warning,
+        }
+    )
+    return payload
 
 
 def create_object(self, doc_name, obj_data: dict[str, Any]):
@@ -29,11 +50,20 @@ def create_object(self, doc_name, obj_data: dict[str, Any]):
     collaborators = self._cad_collaborators
 
     def create_task():
+        if obj.type == "Fem::FemMeshGmsh":
+            return unsupported_native_phase_boundary(
+                "create_object:Fem::FemMeshGmsh",
+                "Gmsh requires a document recompute before create_mesh()",
+            )
         deferred_presentation = None
 
         def create_model():
             nonlocal deferred_presentation
-            result = collaborators.create_object_gui(doc_name, obj)
+            result = collaborators.create_object_gui(
+                doc_name,
+                obj,
+                recompute=False,
+            )
             apply_after_commit = getattr(result, "apply_after_commit", None)
             if callable(apply_after_commit):
                 deferred_presentation = apply_after_commit
@@ -41,29 +71,43 @@ def create_object(self, doc_name, obj_data: dict[str, Any]):
             return result
 
         result = run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             create_model,
             structural=True,
         )
-        if result is True and deferred_presentation is not None:
+        if _committed_success(result) and deferred_presentation is not None:
             try:
                 deferred_presentation()
             except Exception as exc:
-                return str(exc)
-        if result is True and presentation_properties:
+                return _presentation_warning(
+                    result, f"Post-commit presentation failed: {exc}"
+                )
+        if _committed_success(result) and presentation_properties:
             document = collaborators.freecad.getDocument(doc_name)
             created = document.getObject(obj.name) if document else None
             if created is None:
-                return f"Object '{obj.name}' was not visible after native commit."
+                return _presentation_warning(
+                    result,
+                    "Post-commit presentation skipped: "
+                    f"object '{obj.name}' was not visible after native commit.",
+                )
             try:
                 collaborators.set_object_property(
                     document, created, presentation_properties
                 )
             except Exception as exc:
-                return str(exc)
+                return _presentation_warning(
+                    result, f"Post-commit presentation failed: {exc}"
+                )
         return result
 
-    res = self._dispatch_gui(create_task)
+    res = self._dispatch_gui(
+        create_task,
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"object_name": obj.name}
+        ),
+    )
     return self._adapt_gui_mutation_result(
         res, success_fields={"object_name": obj.name}
     )
@@ -82,50 +126,96 @@ def edit_object(
     collaborators = self._cad_collaborators
 
     def edit_task():
-        # Property edits can trigger Assembly solve / dynamic-property work
-        # during the in-callback recompute; declare structural so the grant
-        # covers that window (same as create/delete).
+        # Property edits can synthesize Assembly/dynamic-property structure
+        # during the coordinator-owned recompute; declare that scope up front.
         result = run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: edit_object_gui(
-                doc_name, obj, freecad=collaborators.freecad,
+                doc_name,
+                obj,
+                freecad=collaborators.freecad,
                 set_object_property=collaborators.set_object_property,
+                recompute=False,
             ),
             structural=True,
         )
-        if result is True and presentation_properties:
+        if _committed_success(result) and presentation_properties:
             document = collaborators.freecad.getDocument(doc_name)
             edited = document.getObject(obj.name) if document else None
             if edited is None:
-                return f"Object '{obj.name}' was not visible after native commit."
+                return _presentation_warning(
+                    result,
+                    "Post-commit presentation skipped: "
+                    f"object '{obj.name}' was not visible after native commit.",
+                )
             try:
                 collaborators.set_object_property(
                     document, edited, presentation_properties
                 )
             except Exception as exc:
-                return str(exc)
+                return _presentation_warning(
+                    result, f"Post-commit presentation failed: {exc}"
+                )
         return result
 
-    res = self._dispatch_gui(edit_task)
+    res = self._dispatch_gui(
+        edit_task,
+        late_result_transform=lambda value: self._adapt_gui_mutation_result(
+            value, success_fields={"object_name": obj.name}
+        ),
+    )
     return self._adapt_gui_mutation_result(
         res, success_fields={"object_name": obj.name}
     )
 
 
-def delete_object(self, doc_name: str, obj_name: str):
+def delete_object(
+    self,
+    doc_name: str,
+    obj_name: str,
+    recursive: bool = False,
+    force: bool = False,
+):
     collaborators = self._cad_collaborators
+
+    def finalize_delete(value):
+        result = self._adapt_gui_mutation_result(
+            value, success_fields={"object_name": obj_name}
+        )
+        if force and isinstance(result, dict) and result.get("success") is not False:
+            result = dict(result)
+            result["recompute"] = {
+                "policy": "deferred_recovery",
+                "required": True,
+                "message": "Run recompute_document after force deletion to settle the document.",
+            }
+        return result
+
     res = self._dispatch_gui(
         lambda: run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: delete_object_gui(
-                doc_name, obj_name, freecad=collaborators.freecad
+                doc_name,
+                obj_name,
+                freecad=collaborators.freecad,
+                recompute=False,
+                recursive=bool(recursive),
+                force=bool(force),
             ),
             structural=True,
-        )
+            # ``force`` intentionally permits reported invalid dependents.
+            validate_after_callback=not bool(force),
+            # A recovery delete may remove the object that leaves an existing
+            # document pending recompute. Enter with the explicitly declared
+            # deferred policy; callers must recompute after this cleanup.
+            native_recompute=not bool(force),
+            recovery_deferred=bool(force),
+        ),
+        late_result_transform=finalize_delete,
     )
-    return self._adapt_gui_mutation_result(
-        res, success_fields={"object_name": obj_name}
-    )
+    return finalize_delete(res)
 
 
 def get_objects(self, doc_name):
@@ -149,7 +239,8 @@ def get_object(self, doc_name, obj_name):
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
         lambda: get_object_gui(
-            doc_name, obj_name,
+            doc_name,
+            obj_name,
             freecad=collaborators.freecad,
             serialize_object=collaborators.serialize_object,
         )
@@ -165,7 +256,8 @@ def insert_part_from_library(self, doc_name, relative_path):
 
     def insert_part_task():
         return run_cad_mutation(
-            collaborators, doc_name,
+            collaborators,
+            doc_name,
             lambda: insert_part_from_library_gui(
                 doc_name,
                 relative_path,
@@ -181,7 +273,14 @@ def insert_part_from_library(self, doc_name, relative_path):
     )
 
 
-def edit_object_gui(doc_name: str, obj: Object, *, freecad, set_object_property):
+def edit_object_gui(
+    doc_name: str,
+    obj: Object,
+    *,
+    freecad,
+    set_object_property,
+    recompute: bool = True,
+):
     doc = freecad.getDocument(doc_name)
     if not doc:
         freecad.Console.PrintError(f"Document '{doc_name}' not found.\n")
@@ -211,24 +310,248 @@ def edit_object_gui(doc_name: str, obj: Object, *, freecad, set_object_property)
             # delete References from properties
             del obj.properties["References"]
         set_object_property(doc, obj_ins, obj.properties)
-        doc.recompute()
+        if recompute:
+            doc.recompute()
         freecad.Console.PrintMessage(f"Object '{obj.name}' updated via RPC.\n")
         return True
     except Exception as e:
         return str(e)
 
 
-def delete_object_gui(doc_name: str, obj_name: str, *, freecad):
+def _object_dependents(root) -> list[Any]:
+    def links(item, attribute: str) -> tuple[Any, ...]:
+        return tuple(getattr(item, attribute, ()) or ())
+
+    def is_derived(item, type_id: str) -> bool:
+        try:
+            return bool(item.isDerivedFrom(type_id))
+        except Exception:
+            return str(getattr(item, "TypeId", "")) == type_id
+
+    def owns(container, item) -> bool:
+        return any(member is item for member in links(container, "Group"))
+
+    def owning_container(item):
+        getter = getattr(item, "getParentGeoFeatureGroup", None)
+        if callable(getter):
+            try:
+                owner = getter()
+            except Exception:
+                owner = None
+            if owner is not None and owns(owner, item):
+                return owner
+        for candidate in links(item, "InList"):
+            if owns(candidate, item):
+                return candidate
+        return None
+
+    def ownership_exclusions(container) -> set[int]:
+        # A PartDesign Body's Origin and its axes/planes are implementation-
+        # owned. The Body removes that closure itself; deleting any member as
+        # an ordinary dependent tears attachment state down prematurely.
+        excluded: set[int] = set()
+
+        def mark(item) -> None:
+            identity = id(item)
+            if identity in excluded:
+                return
+            excluded.add(identity)
+            for child in links(item, "OutList"):
+                mark(child)
+
+        origin = getattr(container, "Origin", None) if container is not None else None
+        if origin is not None:
+            mark(origin)
+        return excluded
+
+    owner = owning_container(root)
+    root_is_container = (
+        is_derived(root, "PartDesign::Body")
+        or is_derived(root, "App::DocumentObjectGroup")
+        or is_derived(root, "App::Part")
+    )
+    excluded = ownership_exclusions(root if root_is_container else owner)
+    if owner is not None:
+        excluded.add(id(owner))
+
+    seen = {id(root), *excluded}
+    ordered: list[Any] = []
+
+    def visit_downstream(item, allowed: set[int] | None = None) -> None:
+        identity = id(item)
+        if identity in seen:
+            return
+        seen.add(identity)
+        for dependent in links(item, "InList"):
+            identity = id(dependent)
+            if identity in seen or (allowed is not None and identity not in allowed):
+                continue
+            # Containers own their members and are not downstream feature
+            # consumers. In particular, deleting a Body member must never
+            # recursively delete the Body merely because Group/Tip links point
+            # back to it.
+            if owns(dependent, item):
+                seen.add(identity)
+                continue
+            visit_downstream(dependent, allowed)
+        if item is not root:
+            ordered.append(item)
+
+    if root_is_container:
+        payload = links(root, "Group") or links(root, "OutList")
+        payload = tuple(item for item in payload if id(item) not in excluded)
+        allowed = {id(item) for item in payload}
+        for item in payload:
+            visit_downstream(item, allowed)
+    else:
+        # InList is the downstream graph: later PartDesign features and other
+        # consumers point back to the feature they require. Postorder gives a
+        # safe deletion sequence with deepest consumers first.
+        seen.remove(id(root))
+        visit_downstream(root)
+    return ordered
+
+
+def _dependent_summary(dependent) -> dict[str, Any]:
+    return {
+        "name": str(getattr(dependent, "Name", "")),
+        "type": str(getattr(dependent, "TypeId", "?")),
+        "state": str(getattr(dependent, "State", "")),
+    }
+
+
+def _delete_refusal_result(
+    result: dict[str, Any],
+    root_name: str,
+    dependents: list[Any],
+) -> dict[str, Any]:
+    count = len(dependents)
+    return {
+        **result,
+        "refused": True,
+        "deleted": [],
+        "dependents": [_dependent_summary(item) for item in dependents],
+        "message": (
+            f"Refused to delete {root_name}: it has {count} dependent "
+            "object(s) that would be orphaned. Re-issue with "
+            "recursive=True or force=True."
+        ),
+    }
+
+
+def _remove_object_names(
+    doc,
+    names: list[str],
+) -> tuple[list[str], list[dict[str, str]]]:
+    deleted: list[str] = []
+    errors: list[dict[str, str]] = []
+    for name in names:
+        try:
+            if doc.getObject(name) is not None:
+                doc.removeObject(name)
+            if doc.getObject(name) is not None:
+                raise RuntimeError("object remained in the document")
+            deleted.append(name)
+        except Exception as exc:
+            errors.append({"object": name, "error": str(exc)})
+    return deleted, errors
+
+
+def _delete_failure_result(
+    result: dict[str, Any],
+    deleted: list[str],
+    errors: list[dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        **result,
+        "ok": False,
+        "success": False,
+        "error_code": "DELETE_OBJECT_FAILED",
+        "error": "One or more objects could not be deleted",
+        "refused": False,
+        "deleted": [],
+        "attempted_deleted": deleted,
+        "errors": errors,
+    }
+
+
+def _delete_success_result(
+    result: dict[str, Any],
+    root_name: str,
+    dependent_names: list[str],
+    deleted: list[str],
+    *,
+    recursive: bool,
+    force: bool,
+) -> dict[str, Any]:
+    result.update({"refused": False, "deleted": deleted})
+    if force and not recursive and dependent_names:
+        result["orphans_left"] = dependent_names
+        result["message"] = (
+            f"Deleted {root_name} and left {len(dependent_names)} "
+            "dependent object(s) orphaned (force=True)."
+        )
+    elif recursive and dependent_names:
+        result["message"] = (
+            f"Deleted {root_name} and {len(dependent_names)} dependent "
+            "object(s) (recursive=True)."
+        )
+    else:
+        result["message"] = f"Deleted {root_name}."
+    return result
+
+
+def delete_object_gui(
+    doc_name: str,
+    obj_name: str,
+    *,
+    freecad,
+    recompute: bool = True,
+    recursive: bool = False,
+    force: bool = False,
+):
     doc = freecad.getDocument(doc_name)
     if not doc:
         freecad.Console.PrintError(f"Document '{doc_name}' not found.\n")
         return f"Document '{doc_name}' not found.\n"
 
+    obj = doc.getObject(obj_name)
+    if obj is None:
+        return f"Object '{obj_name}' not found in document '{doc_name}'.\n"
+
     try:
-        doc.removeObject(obj_name)
-        doc.recompute()
-        freecad.Console.PrintMessage(f"Object '{obj_name}' deleted via RPC.\n")
-        return True
+        root_name = str(getattr(obj, "Name", obj_name))
+        dependents = _object_dependents(obj)
+        dependent_names = [str(getattr(item, "Name", "")) for item in dependents]
+        result: dict[str, Any] = {
+            "ok": True,
+            "object": root_name,
+            "recursive": bool(recursive),
+            "force": bool(force),
+        }
+        if dependent_names and not recursive and not force:
+            return _delete_refusal_result(result, root_name, dependents)
+
+        # Dependents are returned in downstream postorder. Remove the deepest
+        # consumers first, then the requested target; owning containers and
+        # Body Origin implementation objects are deliberately not included.
+        delete_order = [*dependent_names, root_name] if recursive else [root_name]
+        deleted, errors = _remove_object_names(doc, delete_order)
+        if errors:
+            return _delete_failure_result(result, deleted, errors)
+
+        if recompute:
+            doc.recompute()
+        result = _delete_success_result(
+            result,
+            root_name,
+            dependent_names,
+            deleted,
+            recursive=recursive,
+            force=force,
+        )
+        freecad.Console.PrintMessage(f"Object '{root_name}' deleted via RPC.\n")
+        return result
     except Exception as e:
         return str(e)
 

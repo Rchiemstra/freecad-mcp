@@ -172,3 +172,26 @@ def test_set_object_property_surfaces_assignment_failures(_freecad_semantic_type
     with pytest.raises(ValueError, match="Failed to set property: Length"):
         set_object_property(MagicMock(), _BoomObj(), {"Length": {"bad": True}})
     assert _freecad_semantic_types.PrintError.called
+
+
+def test_set_object_property_resolves_app_link_target_from_name():
+    target = SimpleNamespace(Name="Source")
+    doc = MagicMock()
+    doc.getObject.return_value = target
+    link = SimpleNamespace(PropertiesList=["LinkedObject"], LinkedObject=None)
+    link.getTypeIdOfProperty = MagicMock(return_value="App::PropertyXLink")
+
+    set_object_property(doc, link, {"LinkedObject": "Source"})
+
+    assert link.LinkedObject is target
+    doc.getObject.assert_called_once_with("Source")
+
+
+def test_set_object_property_rejects_missing_app_link_target():
+    doc = MagicMock()
+    doc.getObject.return_value = None
+    link = SimpleNamespace(PropertiesList=["LinkedObject"], LinkedObject=None)
+    link.getTypeIdOfProperty = MagicMock(return_value="App::PropertyLink")
+
+    with pytest.raises(ValueError, match="Referenced object 'Missing' not found"):
+        set_object_property(doc, link, {"LinkedObject": "Missing"})

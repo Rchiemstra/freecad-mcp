@@ -65,7 +65,11 @@ def _auto_start_mcp():
         msg = rpc_server.start_rpc_server()
         FreeCAD.Console.PrintMessage(f"[MCP] Auto-start: {msg}\n")  # noqa: F821
     except Exception as e:
-        FreeCAD.Console.PrintWarning(f"[MCP] Auto-start failed: {e}\n")  # noqa: F821
+        import traceback as _traceback
+
+        FreeCAD.Console.PrintWarning(  # noqa: F821
+            f"[MCP] Auto-start failed: {e}\n{_traceback.format_exc()}"
+        )
 
 
 QtCore.QTimer.singleShot(0, _auto_start_mcp)
@@ -113,8 +117,10 @@ def _initialize_rpc_runtime_shutdown(
 
         _connect_shutdown(rpc_server)
     except Exception as e:
+        import traceback as _traceback
+
         FreeCAD.Console.PrintWarning(  # noqa: F821
-            f"[MCP] RPC shutdown hook not initialized: {e}\n"
+            f"[MCP] RPC shutdown hook not initialized: {e}\n{_traceback.format_exc()}"
         )
 
 

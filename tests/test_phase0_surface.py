@@ -114,6 +114,7 @@ EXPECTED_OPERATIONS_ALL = frozenset(
         "get_objects_operation",
         "get_parts_list_operation",
         "get_recompute_log_operation",
+        "get_mutation_readiness_operation",
         "get_report_view_operation",
         "get_selection_operation",
         "get_sketch_diagnostics_operation",

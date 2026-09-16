@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..cad_methods_ops.mutation_readiness_wait import settle_pending_mutation_readiness
+
 # ruff: noqa: F403, F405
 from ._support import *
 from .mutation_execute_body import (
@@ -53,6 +55,41 @@ def execute_mutation_with_health(
     declared_names = {
         str(getattr(document, "Name", "") or "") for document in documents
     }
+    readiness, waited_for_readiness = settle_pending_mutation_readiness(
+        documents, inflight=inflight
+    )
+    blocked = [
+        item
+        for item in readiness
+        if not item["ready"]
+        and not (
+            item["reasons"] == ["automation_paused"]
+            and item.get("active_write_count", 0) > 0
+        )
+    ]
+    if blocked:
+        blocked_details = []
+        for item in blocked:
+            name = str(item.get("document") or "<unnamed>")
+            reasons = ", ".join(
+                str(reason) for reason in item.get("reasons") or ()
+            )
+            diagnostic = str(item.get("diagnostic") or "")
+            detail = reasons or "native readiness rejected the mutation"
+            if diagnostic:
+                detail += f" ({diagnostic})"
+            blocked_details.append(f"document {name!r}: {detail}")
+        return (
+            {
+                "success": False,
+                "ok": False,
+                "error_code": "MUTATION_NOT_READY",
+                "error": "Mutation refused because " + "; ".join(blocked_details),
+                "readiness": blocked,
+                "waited_for_readiness": waited_for_readiness,
+            },
+            True,
+        )
     all_before, before = _capture_mutation_baselines(
         freecad, documents, spec, expected
     )

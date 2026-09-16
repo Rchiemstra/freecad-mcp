@@ -18,6 +18,7 @@ class RpcAuthenticationContext:
     session_token: str = field(repr=False)
     operation_name: str = ""
     task_id: str = ""
+    mcp_runtime_id: str = ""
     protocol_version: int = 2
 
     def __post_init__(self) -> None:
@@ -28,6 +29,12 @@ class RpcAuthenticationContext:
             raise ValueError("session_token must not be empty")
         if self.task_id:
             object.__setattr__(self, "task_id", _validated_uuid(self.task_id, "task_id"))
+        if self.mcp_runtime_id:
+            object.__setattr__(
+                self,
+                "mcp_runtime_id",
+                _validated_uuid(self.mcp_runtime_id, "mcp_runtime_id"),
+            )
 
     def to_envelope(
         self,
@@ -46,6 +53,8 @@ class RpcAuthenticationContext:
             "params": copy.deepcopy(dict(params or {})),
             "lease_credentials": [],
         }
+        if self.mcp_runtime_id:
+            envelope["mcp_runtime_id"] = self.mcp_runtime_id
         if self.operation_name:
             operation = {"name": self.operation_name}
             if self.task_id:
@@ -117,6 +126,7 @@ class RpcAuthenticationSession:
         operation_name: str = "",
         task_id: str = "",
         request_id: str | None = None,
+        mcp_runtime_id: str = "",
     ) -> RpcAuthenticationContext:
         with self._lock:
             token = self._session_token
@@ -127,6 +137,7 @@ class RpcAuthenticationSession:
             session_token=token,
             operation_name=operation_name,
             task_id=task_id,
+            mcp_runtime_id=mcp_runtime_id,
         )
 
     def redact_text(

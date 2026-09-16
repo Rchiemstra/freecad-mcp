@@ -17773,15 +17773,16 @@
           "code": "DOCUMENT_CONFLICT",
           "data": {
             "changed_semantic_keys": [
-              "model"
+              "ObjectModel:Target"
             ],
             "current_revisions": {
-              "model": 4
+              "ObjectModel:Target": 4
             },
             "expected_revisions": {
-              "model": 3
+              "ObjectModel:Target": 3
             },
-            "request_id": "phase1-example"
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
           },
           "message": "document revision conflict"
         },
@@ -17789,7 +17790,8 @@
           "code": "DOCUMENT_LIFECYCLE_REJECTED",
           "data": {
             "current_lifecycle_epoch": 3,
-            "expected_lifecycle_epoch": 2
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
           },
           "message": "document lifecycle changed"
         }
@@ -17863,15 +17865,6 @@
           }
         }
       ],
-      "result_examples": [
-        {
-          "success": true
-        },
-        {
-          "error": "example-error",
-          "success": false
-        }
-      ],
       "result_schema": {
         "additionalProperties": true,
         "oneOf": [
@@ -17892,24 +17885,82 @@
               }
             },
             "required": [
-              "success",
-              "error"
+              "success"
             ]
           }
         ],
         "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
           },
           "error_code": {
             "type": "string"
           },
-          "success": {
+          "committed": {
             "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
-      }
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "HISTORY_HEAD_REJECTED",
+          "error": "document undo history head does not match the client expectation"
+        }
+      ]
     },
     "refresh_view": {
       "normalized_error_examples": [
@@ -29831,15 +29882,16 @@
           "code": "DOCUMENT_CONFLICT",
           "data": {
             "changed_semantic_keys": [
-              "model"
+              "ObjectModel:Target"
             ],
             "current_revisions": {
-              "model": 4
+              "ObjectModel:Target": 4
             },
             "expected_revisions": {
-              "model": 3
+              "ObjectModel:Target": 3
             },
-            "request_id": "phase1-example"
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
           },
           "message": "document revision conflict"
         },
@@ -29847,7 +29899,8 @@
           "code": "DOCUMENT_LIFECYCLE_REJECTED",
           "data": {
             "current_lifecycle_epoch": 3,
-            "expected_lifecycle_epoch": 2
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
           },
           "message": "document lifecycle changed"
         }
@@ -29921,15 +29974,6 @@
           }
         }
       ],
-      "result_examples": [
-        {
-          "success": true
-        },
-        {
-          "error": "example-error",
-          "success": false
-        }
-      ],
       "result_schema": {
         "additionalProperties": true,
         "oneOf": [
@@ -29950,24 +29994,82 @@
               }
             },
             "required": [
-              "success",
-              "error"
+              "success"
             ]
           }
         ],
         "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
           "error": {
             "type": "string"
           },
           "error_code": {
             "type": "string"
           },
-          "success": {
+          "committed": {
             "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"
-      }
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "HISTORY_HEAD_REJECTED",
+          "error": "document undo history head does not match the client expectation"
+        }
+      ]
     },
     "update_document_lock": {
       "normalized_error_examples": [
@@ -30492,6 +30594,1293 @@
           },
           "success": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "get_mutation_readiness": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_name",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
+        }
+      ],
+      "result_examples": [
+        {
+          "success": true
+        },
+        {
+          "error": "example-error",
+          "success": false
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success",
+              "error"
+            ]
+          }
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "get_semantic_revisions": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "revision_keys",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "array"
+          }
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "document_uid": "uid-example",
+          "document_instance_id": 1,
+          "lifecycle_epoch": 1,
+          "document_name": "Model",
+          "revisions": [
+            {
+              "kind": "ObjectModel",
+              "subject": "Target",
+              "revision": 2
+            }
+          ]
+        },
+        {
+          "success": false,
+          "error": "example-error",
+          "error_code": "DOCUMENT_NOT_FOUND"
+        }
+      ]
+    },
+    "begin_checked_edit": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "revision_keys",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "array"
+          }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "session_id": "session-example",
+          "operation_id": "op-example",
+          "document_uid": "uid-example",
+          "document_instance_id": 1,
+          "lifecycle_epoch": 1,
+          "document_name": "Model",
+          "revisions": []
+        },
+        {
+          "success": false,
+          "error": "example-error",
+          "error_code": "LEASE_PROTOCOL_REQUIRED"
+        }
+      ]
+    },
+    "commit_checked_property": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "session_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "object"
+          }
+        },
+        {
+          "name": "object_name",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        {
+          "name": "property_name",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "value_type",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "value",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "integer",
+              "number",
+              "string"
+            ]
+          }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "ok": true,
+          "committed": true,
+          "operation_id": "op-example",
+          "status": "Committed",
+          "published_revisions": [],
+          "published_semantic_keys": []
+        },
+        {
+          "success": false,
+          "error_code": "DOCUMENT_CONFLICT",
+          "error": "document revision conflict",
+          "changed_semantic_keys": [
+            "ObjectModel:Target"
+          ],
+          "expected_revisions": {
+            "ObjectModel:Target": 2
+          },
+          "current_revisions": {
+            "ObjectModel:Target": 3
+          }
+        }
+      ]
+    },
+    "cancel_checked_edit": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "ObjectModel:Target"
+            ],
+            "current_revisions": {
+              "ObjectModel:Target": 4
+            },
+            "expected_revisions": {
+              "ObjectModel:Target": 3
+            },
+            "request_id": "part3-example",
+            "error_code": "DOCUMENT_CONFLICT"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2,
+            "error_code": "DOCUMENT_LIFECYCLE_REJECTED"
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "session_id",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "reason",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": "cancelled by caller"
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "result_examples": [
+        {
+          "success": true,
+          "cancelled": true,
+          "session_id": "session-example",
+          "operation_id": "op-example"
+        },
+        {
+          "success": false,
+          "error_code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "error": "stale"
+        }
+      ]
+    },
+    "save_document_copy": {
+      "normalized_error_examples": [
+        {
+          "code": "DOCUMENT_CONFLICT",
+          "data": {
+            "changed_semantic_keys": [
+              "model"
+            ],
+            "current_revisions": {
+              "model": 4
+            },
+            "expected_revisions": {
+              "model": 3
+            },
+            "request_id": "phase1-example"
+          },
+          "message": "document revision conflict"
+        },
+        {
+          "code": "DOCUMENT_LIFECYCLE_REJECTED",
+          "data": {
+            "current_lifecycle_epoch": 3,
+            "expected_lifecycle_epoch": 2
+          },
+          "message": "document lifecycle changed"
+        }
+      ],
+      "normalized_error_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "data": {
+            "additionalProperties": true,
+            "properties": {
+              "changed_semantic_keys": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "current_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "current_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "expected_lifecycle_epoch": {
+                "type": "integer"
+              },
+              "expected_revisions": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              "request_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "data",
+          "message"
+        ],
+        "type": "object"
+      },
+      "parameters": [
+        {
+          "name": "selector",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "kind": "positional_or_keyword",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "overwrite",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        },
+        {
+          "name": "validation_profile",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": "default"
+        }
+      ],
+      "result_examples": [
+        {
+          "success": true,
+          "saved": true,
+          "save_disposition": "copy_written",
+          "file_written": true,
+          "unchanged": false,
+          "canonical_path": "/tmp/Model.FCStd",
+          "target_path": "/tmp/Model-copy.FCStd",
+          "resulting_clean": false,
+          "document_name": "Model",
+          "authority": "native_freecad"
+        },
+        {
+          "success": false,
+          "error_code": "CANONICAL_SAVEPOINT_MOVED",
+          "error": "Save Copy must not move the canonical savepoint"
+        }
+      ],
+      "result_schema": {
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success"
+            ]
+          }
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          },
+          "document_uid": {
+            "type": "string"
+          },
+          "document_instance_id": {
+            "type": "integer"
+          },
+          "lifecycle_epoch": {
+            "type": "integer"
+          },
+          "document_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "revisions": {
+            "type": "array"
+          },
+          "published_revisions": {
+            "type": "array"
+          },
+          "published_semantic_keys": {
+            "type": "array"
+          },
+          "changed_semantic_keys": {
+            "type": "array"
+          },
+          "expected_revisions": {
+            "type": "object"
+          },
+          "current_revisions": {
+            "type": "object"
           }
         },
         "type": "object"

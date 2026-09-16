@@ -34,15 +34,14 @@ def reload_document_gui(self, doc_name: str):
 
 def close_document_gui(self, doc_name: str):
     try:
-        doc = FreeCAD.getDocument(doc_name)
-        if not doc:
+        if doc_name not in FreeCAD.listDocuments():
             return {
                 "success": False,
                 "error_code": "DOCUMENT_NOT_FOUND",
                 "error": f"Document '{doc_name}' not found.",
             }
         FreeCAD.closeDocument(doc_name)
-        if FreeCAD.getDocument(doc_name):
+        if doc_name in FreeCAD.listDocuments():
             return {
                 "success": False,
                 "error_code": "DOCUMENT_CLOSE_REJECTED",
