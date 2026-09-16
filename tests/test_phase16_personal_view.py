@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from addon.FreeCADMCP._shared.protocol.protocol_error import ProtocolError
 from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context import (
     GuiDispatchFailure,
     render_temporary_context_gui,
@@ -272,8 +273,9 @@ def test_authenticated_runtime_id_is_stable_actor_and_unauthenticated_is_rejecte
     facade._gui_collaborators.get_request_identity = lambda: {
         "instance_id": "caller-controlled"
     }
-    with pytest.raises(PermissionError, match="authenticated_session_id"):
+    with pytest.raises(ProtocolError, match="authenticated_session_id") as caught:
         request_actor(facade)
+    assert caught.value.code == "LEASE_PROTOCOL_REQUIRED"
 
 
 def test_get_active_screenshot_uses_freecad_active_document_in_multi_doc_sessions():
