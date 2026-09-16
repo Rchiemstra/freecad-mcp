@@ -502,7 +502,7 @@ assert RequestReplayCache is CanonicalReplay
 def test_listener_response_write_preserves_sigpipe_default_without_terminating_process(
     handler_kind: str,
 ) -> None:
-    source_root = Path(__file__).resolve().parents[1]
+    source_root = Path(__file__).resolve().parents[2]
     script = f"""
 import http.client
 import json

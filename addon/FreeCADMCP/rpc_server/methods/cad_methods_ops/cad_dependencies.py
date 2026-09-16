@@ -11,7 +11,10 @@ from ...._shared.protocol.body_create_contract import (
     BodyReadDocument,
     DocumentName,
 )
-from ..lease_methods_ops.collaboration_dependencies import CompatibilityMutationAPI
+from ..lease_methods_ops.collaboration_dependencies import (
+    CompatibilityMutationAPI,
+    compatibility_mutation_kwargs,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,9 +54,6 @@ class CadCollaborators:
             "compatibility_api.commit_compatibility_mutation": getattr(
                 self.compatibility_api, "commit_compatibility_mutation", None
             ),
-            "compatibility_api.commit_native_mutation": getattr(
-                self.compatibility_api, "commit_native_mutation", None
-            ),
             "create_object_gui": self.create_object_gui,
             "insert_part_from_library": self.insert_part_from_library,
             "set_object_property": self.set_object_property,
@@ -68,6 +68,10 @@ class CadCollaborators:
             "set_feature_bool": self.set_feature_bool,
             "validate_document_invariants": self.validate_document_invariants,
         }
+        if hasattr(self.compatibility_api, "commit_native_mutation"):
+            callables["compatibility_api.commit_native_mutation"] = (
+                self.compatibility_api.commit_native_mutation
+            )
         invalid = [name for name, value in callables.items() if not callable(value)]
         if invalid:
             raise TypeError("CAD collaborators must be callable: " + ", ".join(invalid))
@@ -85,27 +89,16 @@ class CadCollaborators:
     ) -> Any:
         """Delegate exactly once through the injected native boundary."""
 
-        if (
-            postcondition is None
-            and not bind_document
-            and not require_native
-            and recompute
-        ):
-            return self.compatibility_api.commit_compatibility_mutation(
-                document_name, callback, structural=structural
-            )
-        kwargs: dict[str, Any] = {
-            "structural": structural,
-            "postcondition": postcondition,
-            "bind_document": bind_document,
-            "require_native": require_native,
-        }
-        if not recompute:
-            kwargs["recompute"] = False
         return self.compatibility_api.commit_compatibility_mutation(
             document_name,
             callback,
-            **kwargs,
+            **compatibility_mutation_kwargs(
+                structural=structural,
+                recompute=recompute,
+                postcondition=postcondition,
+                bind_document=bind_document,
+                require_native=require_native,
+            ),
         )
 
     def commit_body_create_mutation(
@@ -130,13 +123,31 @@ class CadCollaborators:
         *,
         structural: bool = True,
     ) -> object:
-        """Delegate generic typed native commits without per-op bridge methods."""
+        """Delegate generic typed native commits without per-op bridge methods.
 
-        return self.compatibility_api.commit_native_mutation(
+        KEEP BOTH: typed RPC always goes through this method, while main-side
+        doubles may only implement ``commit_compatibility_mutation``. Adapt the
+        document-binding callbacks onto that lane without forwarding
+        ``bind_document`` (those doubles reject the keyword).
+        """
+
+        native = getattr(self.compatibility_api, "commit_native_mutation", None)
+        if callable(native):
+            return native(
+                document_name,
+                callback,
+                postcondition,
+                structural=structural,
+            )
+        lookup = getattr(self.freecad, "getDocument", None)
+        document = lookup(document_name) if callable(lookup) else None
+        if document is None:
+            raise LookupError(f"document {document_name!r} was not found")
+        return self.commit_compatibility_mutation(
             document_name,
-            callback,
-            postcondition,
+            lambda: callback(document),
             structural=structural,
+            postcondition=lambda: postcondition(document),
         )
 
 

@@ -402,7 +402,8 @@ class TestTranslate:
         assert ".recompute(" not in _MEASURE_IO
 
     def test_recompute_is_deferred_to_native_postcondition(self):
-        assert "__FREECAD_MCP_NATIVE_POST_RECOMPUTE__" in _MEASURE_IO
+        assert "Apply never recomputes" in _MEASURE_IO
+        assert ".recompute(" not in _MEASURE_IO
 
 
 class TestRotate:

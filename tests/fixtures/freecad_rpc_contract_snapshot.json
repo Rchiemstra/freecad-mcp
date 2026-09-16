@@ -31951,6 +31951,11 @@
       "protocol_version": 2,
       "protocol_features": [],
       "rpc_method_capabilities": {
+        "sketch_create": {
+          "parameters": [
+            "attachment_offset"
+          ]
+        },
         "sketch_attach": {
           "parameters": [
             "attachment_offset"

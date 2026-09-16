@@ -223,11 +223,11 @@ EXPECTED_OPERATIONS_ALL = frozenset(
 )
 
 
-def test_operations_all_phase0_surface_is_167_symbols() -> None:
+def test_operations_all_phase0_surface_is_168_symbols() -> None:
     import freecad_mcp.operations as ops
 
     assert frozenset(ops.__all__) == EXPECTED_OPERATIONS_ALL
-    assert len(ops.__all__) == 167
+    assert len(ops.__all__) == 168
     assert "solve_assembly_operation" not in ops.__all__
     # Import remains available for server.py and direct callers (I9).
     assert hasattr(ops, "solve_assembly_operation")

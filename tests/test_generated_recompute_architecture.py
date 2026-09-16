@@ -38,10 +38,16 @@ POSTCONDITION_MUTATION = re.compile(
 
 
 def _template_sources() -> list[tuple[Path, str]]:
+    if not TEMPLATES.is_dir():
+        return []
     return [
         (path, path.read_text(encoding="utf-8"))
         for path in sorted(TEMPLATES.rglob("*.txt"))
     ]
+
+
+def test_generated_templates_are_tombstoned() -> None:
+    assert not TEMPLATES.exists()
 
 
 def test_generated_templates_never_recompute_inside_the_apply_callback():
@@ -66,9 +72,9 @@ def test_native_post_recompute_continuations_are_single_and_read_only():
         assert postcondition_code.strip(), path
         assert not POSTCONDITION_MUTATION.search(postcondition_code), path
 
-    # An exact count makes template additions choose deliberately between a
-    # pure apply-only payload and a reviewed read-only continuation.
-    assert marked == 59
+    # Templates are tombstoned; typed mutations use native postconditions
+    # instead of signed execute_code continuations.
+    assert marked == 0
 
 
 def test_only_guarded_leaf_compatibility_helpers_retain_recompute_calls():
@@ -99,9 +105,8 @@ def test_only_guarded_leaf_compatibility_helpers_retain_recompute_calls():
     ),
 )
 def test_signed_assembly_templates_suppress_leaf_local_recompute(template_name):
-    source = (TEMPLATES / template_name).read_text(encoding="utf-8")
-    assert "recompute=False" in source
-    assert "recompute=_recompute" not in source
+    assert not TEMPLATES.exists()
+    del template_name
 
 
 def test_two_phase_movement_probe_is_fail_closed_before_generated_execution():

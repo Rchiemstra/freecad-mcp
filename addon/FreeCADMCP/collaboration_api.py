@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -65,7 +64,6 @@ def _validate_callbacks(
 
 
 def _commit_without_native(
-    callback: Callable[[], Any],
     *,
     has_postcondition: bool,
     require_native: bool,
@@ -74,10 +72,10 @@ def _commit_without_native(
         return _unsupported("native postcondition callback is not supported")
     if require_native:
         return _unsupported("document must provide commitCompatibilityMutation()")
-    if os.environ.get("FREECAD_MCP_REQUIRE_NATIVE_COLLABORATION") == "1":
-        raise TypeError("document must provide commitCompatibilityMutation()")
-    callback()
-    return {"status": "Committed", "committed": True}
+    # Main fail-closed: never run the callback on a document that cannot
+    # attribute the mutation. Typed-rpc still returns Unsupported when the
+    # caller explicitly required a native postcondition or native-only lane.
+    raise TypeError("document must provide commitCompatibilityMutation()")
 
 
 class CollaborationAPI:
@@ -207,7 +205,6 @@ class CollaborationAPI:
         commit = getattr(document, "commitCompatibilityMutation", None)
         if not callable(commit):
             return _commit_without_native(
-                invoke_callback,
                 has_postcondition=postcondition is not None,
                 require_native=require_native,
             )
@@ -221,12 +218,17 @@ class CollaborationAPI:
             # convenience. Passing the keyword deliberately fails before the
             # callback on an older native runtime instead of silently moving
             # validation back in front of the native recompute.
-            options["postcondition"] = invoke_postcondition
-        native_callback = (
-            invoke_callback
-            if bind_document or (require_native and postcondition is not None)
-            else callback
-        )
+            # KEEP BOTH: main forwards the original postcondition identity
+            # unless bind_document requires a wrapper that injects the admitted
+            # document.
+            options["postcondition"] = (
+                invoke_postcondition if bind_document else postcondition
+            )
+        native_callback = invoke_callback if bind_document else callback
+        if require_native and postcondition is not None:
+            # Track whether the native binding invoked the callback before
+            # rejecting an unknown postcondition keyword.
+            native_callback = invoke_callback
         try:
             return commit(native_callback, **options)
         except TypeError:

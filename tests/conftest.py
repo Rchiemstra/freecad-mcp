@@ -454,7 +454,7 @@ class LiveFreeCADConnection:
         body_name=None,
         symmetric=False,
         reversed_dir=False,
-        strict=False,  # client-only; RPC pad_feature has no strict parameter
+        strict=False,
     ):
         return self._dispatch(
             "pad_feature",
@@ -465,6 +465,7 @@ class LiveFreeCADConnection:
             body_name,
             symmetric,
             reversed_dir,
+            strict,
         )
 
     def pocket_feature(
@@ -476,7 +477,7 @@ class LiveFreeCADConnection:
         body_name=None,
         symmetric=False,
         reversed_dir=False,
-        strict=False,  # client-only; RPC pocket_feature has no strict parameter
+        strict=False,
     ):
         return self._dispatch(
             "pocket_feature",
@@ -487,6 +488,7 @@ class LiveFreeCADConnection:
             body_name,
             symmetric,
             reversed_dir,
+            strict,
         )
 
     def undo(self, doc_name):

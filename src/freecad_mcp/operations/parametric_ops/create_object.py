@@ -42,6 +42,24 @@ def create_object_operation(
             f"create_object response unavailable: {exc}",
             committed=None,
         )
+    # KEEP BOTH: GUI-dispatch timeout envelopes are not create_object contract
+    # variants. Preserve request_id / completion_uncertain for late replay.
+    if (
+        isinstance(raw_result, Mapping)
+        and raw_result.get("completion_uncertain") is True
+        and isinstance(raw_result.get("error_code"), str)
+        and raw_result.get("error_code")
+    ):
+        structured = dict(raw_result)
+        error = raw_result.get("error")
+        message = error if isinstance(error, str) and error.strip() else str(
+            raw_result["error_code"]
+        )
+        return tool_fail(
+            f"Failed to create object: {message}",
+            structured=structured,
+            error_code=str(raw_result["error_code"]),
+        )
     result = parse_create_object_response(raw_result)
     structured = dict(result)
     if result["success"] is False:
