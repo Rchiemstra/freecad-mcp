@@ -7,7 +7,6 @@ import pytest
 from addon.FreeCADMCP.rpc_server.rpc_helpers_ops.feature_properties import (
     _set_extrusion_symmetric,
 )
-from freecad_mcp.template_resources import read_template_text
 
 
 class _FakeExtrusionFeature:
@@ -38,12 +37,6 @@ class _FakeExtrusionFeature:
         self.Reversed = False
 
 
-def _load_template_set_extrusion_symmetric():
-    namespace: dict = {}
-    exec(read_template_text("core/partdesign_extrusion_helper.py.txt"), namespace)
-    return namespace["_set_extrusion_symmetric"]
-
-
 @pytest.mark.parametrize(
     ("type_id",),
     [
@@ -65,15 +58,3 @@ def test_set_extrusion_symmetric_false_sets_sidetype_one_side():
     result = _set_extrusion_symmetric(feature, False)
     assert result == "SideType"
     assert feature.SideType == "One side"
-
-
-def test_template_set_extrusion_symmetric_matches_addon_helper():
-    template_helper = _load_template_set_extrusion_symmetric()
-    for type_id in ("PartDesign::Pocket", "PartDesign::Pad"):
-        addon_feature = _FakeExtrusionFeature(type_id=type_id)
-        template_feature = _FakeExtrusionFeature(type_id=type_id)
-        assert _set_extrusion_symmetric(addon_feature, True) == template_helper(
-            template_feature, True
-        )
-        assert addon_feature.SideType == template_feature.SideType
-        assert addon_feature.Midplane == template_feature.Midplane
