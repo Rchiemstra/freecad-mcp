@@ -18,6 +18,7 @@ MANIFEST = SubjectManifest(
             execution_mode=ExecutionMode.TYPED_GATEWAY,
             gui_thread=True,
             mutation_class=MutationClass.READ,
+            execution_policy=ExecutionPolicy.DOCUMENT_QUERY,
             register_module="tools_document_history",
         ),
         ToolEntry(

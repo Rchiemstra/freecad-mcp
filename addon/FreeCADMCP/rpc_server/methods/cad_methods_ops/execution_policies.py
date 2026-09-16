@@ -74,6 +74,7 @@ _DOCUMENT_QUERY = (
     "get_dependency_graph",
     "get_document_tree",
     "get_global_shape",
+    "get_mutation_readiness",
     "get_object",
     "get_objects",
     "get_parts_list",

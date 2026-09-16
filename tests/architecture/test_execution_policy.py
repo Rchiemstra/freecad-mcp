@@ -29,6 +29,7 @@ def manifests():
 def test_execution_policy_golden_mappings() -> None:
     assert policy_for("body_create") is ExecutionPolicy.DOCUMENT_MUTATION
     assert policy_for("bounding_box") is ExecutionPolicy.DOCUMENT_QUERY
+    assert policy_for("get_mutation_readiness") is ExecutionPolicy.DOCUMENT_QUERY
     assert policy_for("open_document") is ExecutionPolicy.DOCUMENT_LIFECYCLE
     assert policy_for("undo") is ExecutionPolicy.HISTORY_OPERATION
     assert policy_for("redo") is ExecutionPolicy.HISTORY_OPERATION
@@ -51,9 +52,9 @@ def test_execution_policy_is_not_mutation_class() -> None:
 
 def test_registry_counts() -> None:
     counts = Counter(EXECUTION_POLICIES.values())
-    assert len(EXECUTION_POLICIES) == 153
+    assert len(EXECUTION_POLICIES) == 154
     assert counts[ExecutionPolicy.DOCUMENT_MUTATION] == 90
-    assert counts[ExecutionPolicy.DOCUMENT_QUERY] == 39
+    assert counts[ExecutionPolicy.DOCUMENT_QUERY] == 40
     assert counts[ExecutionPolicy.DOCUMENT_LIFECYCLE] == 5
     assert counts[ExecutionPolicy.HISTORY_OPERATION] == 2
     assert counts[ExecutionPolicy.EXTERNAL_EFFECT] == 4
