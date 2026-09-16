@@ -73,7 +73,7 @@ def _invoke_registered(monkeypatch, transport, arguments):
     connection = FreeCADConnection(
         host="127.0.0.1",
         port=9875,
-        mcp_instance_id="agent-mcp-contract",
+        mcp_instance_id="c0deface-1111-4111-8111-000000000001",
     )
     session = RpcAuthenticationSession()
     session.mark_connected(
@@ -126,7 +126,7 @@ def test_delete_object_sends_exact_authenticated_json_rpc_values_to_freecad(monk
     assert envelope["method"] == "delete_object"
     assert envelope["params"] == {'doc_name': 'AgentDocument', 'obj_name': 'Box', 'recursive': False, 'force': False}
     assert envelope["operation"] == {"name": 'Delete object'}
-    assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
+    assert headers["X-MCP-Instance-Id"] == "c0deface-1111-4111-8111-000000000001"
     assert headers[JSON_RPC_PROTOCOL_HEADER] == JSON_RPC_PROTOCOL_VALUE
     assert transport.closed is True
 

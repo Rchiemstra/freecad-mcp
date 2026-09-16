@@ -23,9 +23,34 @@ from freecad_mcp.generated.capabilities.register_modules import tools_document_h
 from freecad_mcp.instrumented_server import InstrumentedFastMCP
 from freecad_mcp.instrumented_server_ops.facade_bindings import bind_instrumented_fast_mcp
 from freecad_mcp.rpc_session import RpcAuthenticationSession
+from freecad_mcp._shared.protocol.undo_contract import make_undo_success
 
 pytestmark = pytest.mark.unit
 _DEFAULT_RESPONSE = object()
+_MCP_INSTANCE_ID = "c0deface-1111-4111-8111-000000000001"
+
+
+def _readiness(doc_name: str = "AgentDocument") -> dict:
+    name = doc_name or "AgentDocument"
+    return {
+        "success": True,
+        "ready": True,
+        "documents": [
+            {
+                "document": name,
+                "ready": True,
+                "document_uid": "uid-doc-1",
+                "document_instance_id": 7,
+                "lifecycle_epoch": 2,
+                "document_name": name,
+                "undo_count": 3,
+                "undo_head": "EditSketch",
+                "redo_count": 1,
+                "redo_head": "Pad",
+            }
+        ],
+        "reasons": [],
+    }
 
 
 class _RecordingFreeCADTransport:
@@ -40,15 +65,13 @@ class _RecordingFreeCADTransport:
         envelope = request["params"][0]
         body_result = self.response_result
         if body_result is _DEFAULT_RESPONSE:
-            body_result = {
-                "contract_version": 1,
-                "success": True,
-                "ok": True,
-                "outcome": "verified",
-                "retry_safe": False,
-            }
-            extra = {"document_name": envelope["params"]["doc_name"]}
-            body_result.update(extra)
+            params = envelope["params"]
+            document_name = (
+                params.get("doc_selector", {}).get("document_name")
+                or params.get("doc_name")
+                or "AgentDocument"
+            )
+            body_result = make_undo_success(document_name)
         response = {
             "jsonrpc": "2.0",
             "id": request["id"],
@@ -72,7 +95,7 @@ def _invoke_registered(monkeypatch, transport, arguments):
     connection = FreeCADConnection(
         host="127.0.0.1",
         port=9875,
-        mcp_instance_id="agent-mcp-contract",
+        mcp_instance_id=_MCP_INSTANCE_ID,
     )
     session = RpcAuthenticationSession()
     session.mark_connected(
@@ -83,6 +106,9 @@ def _invoke_registered(monkeypatch, transport, arguments):
     configure_rpc_session(connection, session)
     connection.server.transport.close()
     connection.server.transport = transport
+    connection.server.get_mutation_readiness = lambda doc_name=None: _readiness(
+        doc_name or "AgentDocument"
+    )
     monkeypatch.setattr(tools_document_history, "server_connection", lambda: connection)
     if hasattr(tools_document_history, "server_state"):
         monkeypatch.setattr(
@@ -123,9 +149,18 @@ def test_undo_sends_exact_authenticated_json_rpc_values_to_freecad(monkeypatch):
     assert envelope["protocol_version"] == 2
     assert envelope["session_token"] == "test-session-token"
     assert envelope["method"] == "undo"
-    assert envelope["params"] == {'doc_name': 'AgentDocument'}
+    assert "doc_name" not in envelope["params"]
+    assert envelope["params"]["doc_selector"] == {
+        "document_uid": "uid-doc-1",
+        "document_instance_id": 7,
+        "lifecycle_epoch": 2,
+        "document_name": "AgentDocument",
+    }
+    uuid.UUID(envelope["params"]["operation_id"])
+    assert envelope["params"]["expected_undo_count"] == 3
+    assert envelope["params"]["expected_undo_head"] == "EditSketch"
     assert envelope["operation"] == {"name": 'Undo'}
-    assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
+    assert headers["X-MCP-Instance-Id"] == _MCP_INSTANCE_ID
     assert headers[JSON_RPC_PROTOCOL_HEADER] == JSON_RPC_PROTOCOL_VALUE
     assert transport.closed is True
 

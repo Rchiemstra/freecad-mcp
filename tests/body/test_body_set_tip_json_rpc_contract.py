@@ -77,7 +77,7 @@ def _invoke_registered_tip(monkeypatch, transport, doc_name, body_name, feature_
     connection = FreeCADConnection(
         host="127.0.0.1",
         port=9875,
-        mcp_instance_id="agent-mcp-contract",
+        mcp_instance_id="c0deface-1111-4111-8111-000000000001",
     )
     session = RpcAuthenticationSession()
     session.mark_connected(
@@ -153,6 +153,7 @@ def test_body_set_tip_sends_exact_authenticated_json_rpc_values_to_freecad(
         "protocol_version": 2,
         "request_id": envelope["request_id"],
         "session_token": "test-session-token",
+        "mcp_runtime_id": "c0deface-1111-4111-8111-000000000001",
         "method": "body_set_tip",
         "params": {
             "doc_name": "AgentDocument",
@@ -162,7 +163,7 @@ def test_body_set_tip_sends_exact_authenticated_json_rpc_values_to_freecad(
         "lease_credentials": [],
         "operation": {"name": "Set Body Tip"},
     }
-    assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
+    assert headers["X-MCP-Instance-Id"] == "c0deface-1111-4111-8111-000000000001"
     assert headers[JSON_RPC_PROTOCOL_HEADER] == JSON_RPC_PROTOCOL_VALUE
     assert transport.closed is True
 

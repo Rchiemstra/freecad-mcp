@@ -69,7 +69,7 @@ def _invoke(monkeypatch, transport, arguments):
     connection = FreeCADConnection(
         host="127.0.0.1",
         port=9875,
-        mcp_instance_id="agent-mcp-contract",
+        mcp_instance_id="c0deface-1111-4111-8111-000000000001",
     )
     session = RpcAuthenticationSession()
     session.mark_connected(
@@ -115,5 +115,5 @@ def test_measure_volume_sends_authenticated_json_rpc_to_freecad(monkeypatch):
     assert envelope["params"]["obj_name"] == "Box"
     assert envelope["session_token"] == "test-session-token"
     assert isinstance(envelope["operation"]["name"], str) and envelope["operation"]["name"]
-    assert headers["X-MCP-Instance-Id"] == "agent-mcp-contract"
+    assert headers["X-MCP-Instance-Id"] == "c0deface-1111-4111-8111-000000000001"
     assert transport.closed is True
