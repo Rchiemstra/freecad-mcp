@@ -133,7 +133,7 @@ def solve_assembly_operation(
     try:
         result = freecad.solve_assembly(doc_name, assembly_name)
     except Exception as exc:
-        return tool_fail(f"Failed to solve assembly: {exc}")
+        return tool_fail(f"Failed to solve assembly: {type(exc).__name__}: {exc}")
     if not isinstance(result, dict):
         return tool_fail(
             "Failed to solve assembly: invalid RPC response",

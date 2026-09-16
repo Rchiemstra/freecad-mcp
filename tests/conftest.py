@@ -88,6 +88,7 @@ _LIVE_TYPED_RPC_METHODS = frozenset(
         "sketch_attach",
         "sketch_create",
         "sketch_edit_constraint",
+        "solve_assembly",
         "spreadsheet_create",
         "spreadsheet_set_cells",
     }
@@ -432,7 +433,13 @@ class LiveFreeCADConnection:
         """
 
         if name not in _LIVE_TYPED_RPC_METHODS:
-            raise AttributeError(name)
+            # A bare AttributeError(name) renders as just the method name, which
+            # callers interpolate into domain-shaped errors ("Failed to solve
+            # assembly: solve_assembly"). Say what is actually wrong.
+            raise AttributeError(
+                f"{type(self).__name__} has no typed RPC method {name!r}; add it "
+                "to _LIVE_TYPED_RPC_METHODS if the live fixture should dispatch it"
+            )
         return lambda *params: self._dispatch(name, *params)
 
     def pad_feature(
