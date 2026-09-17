@@ -267,7 +267,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'"
     },
     "bounding_box": {
-      "docstring": "Return the world-frame axis-aligned bounding box of a shape.\n\nLink-safe: follows ``App::Link`` to the linked solid when needed and applies\n``getGlobalPlacement()`` once (no Placement double-counting).\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object or Link.\n\nReturns:\n    JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, and shape-source metadata.",
+      "docstring": "Return the world-frame axis-aligned bounding box of a shape.\n\nLink-safe: follows ``App::Link`` to the linked solid when the proxy Shape is\nunusable and applies the link world transform exactly once using\n``Placement``/``LinkPlacement`` plus ``Scale``/``ScaleVector`` properties.\nHealthy Link proxy shapes that already include the link placement are not\ndouble-transformed; enclosing ``App::Part``/group placements still apply.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object or Link.\n\nReturns:\n    JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, frame=world, and\n    ``used_linked_object`` (True only when geometry came from LinkedObject).",
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'"
     },
     "build_path_wire": {
@@ -475,7 +475,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str | None' = None) -> 'CallToolResult'"
     },
     "get_object": {
-      "docstring": "Get an object from a document.\nYou can use this tool to get the properties of an object to see what you can check or edit.\n\nArgs:\n    doc_name: The name of the document to get the object from.\n    obj_name: The name of the object to get.\n\nReturns:\n    The object and a screenshot of the object.",
+      "docstring": "Get an object from a document.\nYou can use this tool to get the properties of an object to see what you can check or edit.\n\n``obj_name`` is the internal FreeCAD object ``Name`` (stable identifier), not the\nuser-visible ``Label``. Duplicate Labels are allowed; resolve objects by Name.\n\nArgs:\n    doc_name: The name of the document to get the object from.\n    obj_name: Internal object Name (not Label).\n\nReturns:\n    Serialized object properties on success, or a structured error with\n    ``error_code`` (for example ``OBJECT_NOT_FOUND`` or ``DOCUMENT_NOT_FOUND``).",
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'"
     },
     "get_objects": {
@@ -583,7 +583,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str', shape1_ref: 'str', shape2_ref: 'str') -> 'CallToolResult'"
     },
     "measure_volume": {
-      "docstring": "Measure the volume of a solid shape.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``volume_mm3`` and ``volume_cm3``.",
+      "docstring": "Measure the volume of a solid shape.\n\nLink-safe world-frame resolution mirrors ``bounding_box`` (Placement/LinkPlacement\nplus Scale/ScaleVector; no Python ``getTransform``). Returns\n``used_linked_object`` (True only when geometry came from LinkedObject because\nthe proxy Shape was unusable).\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``volume_mm3``, frame=world, and ``used_linked_object``.",
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'"
     },
     "mirror_feature": {

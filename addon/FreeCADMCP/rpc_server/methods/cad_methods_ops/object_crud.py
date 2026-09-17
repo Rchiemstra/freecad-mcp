@@ -1,5 +1,6 @@
 """CAD RPC helpers extracted from ``FreeCADRPC`` (Phase 4 slice 4F)."""
 
+from types import SimpleNamespace
 from typing import Any
 
 from ...property_mapper import Object
@@ -236,19 +237,9 @@ def get_objects(self, doc_name):
 
 
 def get_object(self, doc_name, obj_name):
-    collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: get_object_gui(
-            doc_name,
-            obj_name,
-            freecad=collaborators.freecad,
-            serialize_object=collaborators.serialize_object,
-        )
-    )
-    # False sentinel means "not found"; timeout string → None
-    if res is False or isinstance(res, str):
-        return None
-    return res
+    from .get_object import rpc_get_object
+
+    return rpc_get_object(self, doc_name, obj_name)
 
 
 def insert_part_from_library(self, doc_name, relative_path):
@@ -577,15 +568,10 @@ def get_objects_gui(doc_name, *, freecad, serialize_object):
 
 
 def get_object_gui(doc_name, obj_name, *, freecad, serialize_object):
-    doc = freecad.getDocument(doc_name)
-    if doc:
-        obj = doc.getObject(obj_name)
-        if obj:
-            try:
-                return serialize_object(obj)
-            except Exception as e:
-                return {"Name": obj_name, "error": str(e)}
-    return False
+    from .get_object import run_get_object
+
+    collaborators = SimpleNamespace(freecad=freecad, serialize_object=serialize_object)
+    return run_get_object(collaborators, doc_name, obj_name)
 
 
 def insert_part_from_library_gui(doc_name, relative_path, *, insert_part_from_library):

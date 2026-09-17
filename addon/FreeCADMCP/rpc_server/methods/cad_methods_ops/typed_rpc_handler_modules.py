@@ -46,6 +46,7 @@ from . import find_faces as _mod_find_faces
 from . import get_dependency_graph as _mod_get_dependency_graph
 from . import get_document_tree as _mod_get_document_tree
 from . import get_global_shape as _mod_get_global_shape
+from . import get_object as _mod_get_object
 from . import get_recompute_log as _mod_get_recompute_log
 from . import get_sketch_diagnostics as _mod_get_sketch_diagnostics
 from . import get_sketch_geometry as _mod_get_sketch_geometry
@@ -181,6 +182,7 @@ _HANDLER_MODULES = (
     _mod_get_dependency_graph,
     _mod_get_document_tree,
     _mod_get_global_shape,
+    _mod_get_object,
     _mod_get_recompute_log,
     _mod_get_sketch_diagnostics,
     _mod_get_sketch_geometry,

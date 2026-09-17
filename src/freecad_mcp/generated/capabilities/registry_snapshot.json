@@ -475,7 +475,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str | None' = None) -> 'CallToolResult'"
     },
     "get_object": {
-      "docstring": "Get an object from a document.\nYou can use this tool to get the properties of an object to see what you can check or edit.\n\nArgs:\n    doc_name: The name of the document to get the object from.\n    obj_name: The name of the object to get.\n\nReturns:\n    The object and a screenshot of the object.",
+      "docstring": "Get an object from a document.\nYou can use this tool to get the properties of an object to see what you can check or edit.\n\n``obj_name`` is the internal FreeCAD object ``Name`` (stable identifier), not the\nuser-visible ``Label``. Duplicate Labels are allowed; resolve objects by Name.\n\nArgs:\n    doc_name: The name of the document to get the object from.\n    obj_name: Internal object Name (not Label).\n\nReturns:\n    Serialized object properties on success, or a structured error with\n    ``error_code`` (for example ``OBJECT_NOT_FOUND`` or ``DOCUMENT_NOT_FOUND``).",
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'"
     },
     "get_objects": {

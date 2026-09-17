@@ -30,12 +30,13 @@ def _register_insert_part_from_library(
     def insert_part_from_library(
         ctx: Context, doc_name: str, relative_path: str
     ) -> CallToolResult:
-        """Insert a part from the parts library into an explicit leased document.
-
+        """
+        Insert a part from the parts library into an explicit leased document.
+        
         Args:
             doc_name: Target FreeCAD document name.
             relative_path: The relative path of the part to insert.
-
+        
         Returns:
             A message indicating the success or failure of the part insertion and a
             screenshot of the object.
@@ -56,12 +57,13 @@ def _register_get_objects(
 ) -> None:
     @mcp.tool()
     def get_objects(ctx: Context, doc_name: str) -> CallToolResult:
-        """Get all objects in a document.
+        """
+        Get all objects in a document.
         You can use this tool to get the objects in a document to see what you can check or edit.
-
+        
         Args:
             doc_name: The name of the document to get the objects from.
-
+        
         Returns:
             A list of objects in the document and a screenshot of the document.
         """
@@ -78,15 +80,20 @@ def _register_get_object(
 ) -> None:
     @mcp.tool()
     def get_object(ctx: Context, doc_name: str, obj_name: str) -> CallToolResult:
-        """Get an object from a document.
+        """
+        Get an object from a document.
         You can use this tool to get the properties of an object to see what you can check or edit.
-
+        
+        ``obj_name`` is the internal FreeCAD object ``Name`` (stable identifier), not the
+        user-visible ``Label``. Duplicate Labels are allowed; resolve objects by Name.
+        
         Args:
             doc_name: The name of the document to get the object from.
-            obj_name: The name of the object to get.
-
+            obj_name: Internal object Name (not Label).
+        
         Returns:
-            The object and a screenshot of the object.
+            Serialized object properties on success, or a structured error with
+            ``error_code`` (for example ``OBJECT_NOT_FOUND`` or ``DOCUMENT_NOT_FOUND``).
         """
         return get_object_operation(
             server_connection(),
@@ -116,23 +123,24 @@ def _register_reload_document(
 ) -> None:
     @mcp.tool()
     def reload_document(ctx: Context, doc_name: str) -> CallToolResult:
-        """Close and re-open a document to pick up external file changes.
-
+        """
+        Close and re-open a document to pick up external file changes.
+        
         Use this AFTER the document's .FCStd file has been modified by
         something outside of FreeCAD's GUI process — for example, a
         headless `freecadcmd` script that edited and saved the file. The
         open GUI document is otherwise unaware of on-disk changes; this
         tool closes the stale in-memory copy and reopens the file from
         disk so the GUI shows current geometry.
-
+        
         Args:
             doc_name: The name of the open document to reload. Must match
                 the name shown by ``list_documents``.
-
+        
         Returns:
             A message confirming the document was reloaded, or describing
             the failure (document not loaded, no associated file, etc).
-
+        
         Examples:
             ```json
             {
@@ -151,8 +159,9 @@ def _register_list_documents(
 ) -> None:
     @mcp.tool()
     def list_documents(ctx: Context) -> CallToolResult:
-        """Get the list of open documents in FreeCAD.
-
+        """
+        Get the list of open documents in FreeCAD.
+        
         Returns:
             A list of document names.
         """
@@ -167,8 +176,9 @@ def _register_open_document(
 ) -> None:
     @mcp.tool()
     def open_document(ctx: Context, path: str) -> CallToolResult:
-        """Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.
-
+        """
+        Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.
+        
         Use this to load V7 and V8 into the same FreeCAD session for comparison.
         """
         return open_document_operation(server_connection(), path)
