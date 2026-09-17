@@ -78,6 +78,7 @@ def tool_fail(
     structured: dict[str, Any] | None = None,
     error_code: str | None = None,
     status: OutcomeStatus | str | None = None,
+    transport_status: str | None = None,
 ) -> CallToolResult:
     code = error_code or extract_error_code(structured)
     chosen = status or status_from_error_code(code)
@@ -88,6 +89,8 @@ def tool_fail(
         error=message,
         error_code=code,
     )
+    if transport_status is not None:
+        envelope.setdefault("layers", {})["transport_status"] = transport_status
     return CallToolResult(
         content=[_text_item(message)],
         structuredContent=envelope,

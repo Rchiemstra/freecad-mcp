@@ -56,6 +56,12 @@ def status_from_error_code(error_code: str | None) -> OutcomeStatus:
     code = str(error_code or "").upper()
     if "TIMEOUT" in code:
         return OutcomeStatus.TIMED_OUT
+    if (
+        "UNCERTAIN" in code
+        or "TRANSPORT" in code
+        or "COMPLETION_UNCERTAIN" in code
+    ):
+        return OutcomeStatus.UNKNOWN
     if "CANCEL" in code:
         return OutcomeStatus.CANCELLED
     if any(

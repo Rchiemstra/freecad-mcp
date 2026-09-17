@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from itertools import product
 from types import SimpleNamespace
 
 import pytest
 
 from freecad_mcp._shared.protocol.spreadsheet_set_cells_contract import (
-    make_spreadsheet_set_cells_failure,
     make_spreadsheet_set_cells_success,
-    make_spreadsheet_set_cells_uncertain,
     parse_spreadsheet_set_cells_response,
 )
-from freecad_mcp.operations.parametric_ops.spreadsheet_set_cells import spreadsheet_set_cells_operation
+from freecad_mcp.operations.parametric_ops.spreadsheet_set_cells import (
+    spreadsheet_set_cells_operation,
+)
 
 
 def _success():
@@ -59,9 +58,36 @@ def test_valid_success_round_trips():
     assert parse_spreadsheet_set_cells_response(raw) == raw
 
 
+_REQUEST_ID = "11111111-2222-4333-8444-555555555555"
+
+
+def test_gui_timeout_during_execution_reports_timed_out_not_failed():
+    raw = {
+        "success": False,
+        "request_id": _REQUEST_ID,
+        "error_code": "GUI_TIMEOUT_DURING_EXECUTION",
+        "timeout_stage": "during_execution",
+        "error": "Timed out during execution",
+        "completion_uncertain": True,
+        "mutation_started": True,
+    }
+    response = spreadsheet_set_cells_operation(
+        SimpleNamespace(spreadsheet_set_cells=lambda *_a, **_k: raw),
+        True,
+        "Doc",
+        "Value",
+        [{"address": "A1", "value": 1}],
+    )
+    envelope = response.structuredContent
+    assert envelope["status"] in {"timed_out", "unknown"}
+    assert envelope["status"] != "failed"
+    assert envelope["correlation"]["request_id"] == _REQUEST_ID
+    assert envelope["data"]["error_code"] == "GUI_TIMEOUT_DURING_EXECUTION"
+
+
 def test_transport_failure_preserves_unknown_model_state():
     class _Conn:
-        def _invoke_mutation_v2(self, *args, **kwargs):
+        def spreadsheet_set_cells(self, *args, **kwargs):
             raise TimeoutError("response lost after request was sent")
 
     response = spreadsheet_set_cells_operation(_Conn(), True, "Doc", "Value", [{"address": "A1", "value": 1}])

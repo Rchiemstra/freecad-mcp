@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from itertools import product
-from types import SimpleNamespace
-
 import pytest
 
 from freecad_mcp._shared.protocol.set_expression_contract import (
-    make_set_expression_failure,
     make_set_expression_success,
-    make_set_expression_uncertain,
     parse_set_expression_response,
 )
-from freecad_mcp.operations.parametric_ops.set_expression import set_expression_operation
+from freecad_mcp.operations.parametric_ops.set_expression import (
+    set_expression_operation,
+)
 
 
 def _success():
@@ -61,12 +58,15 @@ def test_valid_success_round_trips():
 
 def test_transport_failure_preserves_unknown_model_state():
     class _Conn:
-        def _invoke_mutation_v2(self, *args, **kwargs):
+        def set_expression(self, *_args, **_kwargs):
             raise TimeoutError("response lost after request was sent")
 
     response = set_expression_operation(_Conn(), True, "Doc", "Value", "Value", "Value")
     assert response.isError is True
-    data = response.structuredContent["data"]
+    envelope = response.structuredContent
+    assert envelope["status"] == "unknown"
+    data = envelope["data"]
     assert data["error_code"] == "SET_EXPRESSION_TRANSPORT_UNCERTAIN"
     assert data["outcome"] == "uncertain"
     assert data["retry_safe"] is False
+    assert envelope["layers"]["transport_status"] != "succeeded"

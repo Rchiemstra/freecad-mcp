@@ -10,6 +10,12 @@ from ..._shared.protocol.spreadsheet_set_cells_contract import (
     parse_spreadsheet_set_cells_response,
 )
 from ...freecad_client import FreeCADConnection
+from ...responses.gui_dispatch_outcome import (
+    is_gui_dispatch_timeout_envelope,
+    is_transport_failure_exception,
+    tool_fail_gui_dispatch_timeout,
+    tool_fail_transport_uncertain,
+)
 from ...responses.tool_results import tool_fail, tool_ok
 
 
@@ -22,10 +28,22 @@ def spreadsheet_set_cells_operation(
     try:
         raw_result: object = freecad.spreadsheet_set_cells(doc_name, sheet_name, cells)
     except Exception as exc:
-        raw_result = make_spreadsheet_set_cells_uncertain(
+        uncertain = make_spreadsheet_set_cells_uncertain(
             "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN",
             f"SpreadsheetSetCells response unavailable: {exc}",
             committed=None,
+        )
+        if is_transport_failure_exception(exc):
+            return tool_fail_transport_uncertain(
+                uncertain,
+                message=f"SpreadsheetSetCells response unavailable: {exc}",
+                error_code="SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN",
+            )
+        raw_result = uncertain
+    if is_gui_dispatch_timeout_envelope(raw_result):
+        return tool_fail_gui_dispatch_timeout(
+            raw_result,
+            message_prefix="Failed to set spreadsheet cells",
         )
     result = parse_spreadsheet_set_cells_response(raw_result)
     structured = dict(result)

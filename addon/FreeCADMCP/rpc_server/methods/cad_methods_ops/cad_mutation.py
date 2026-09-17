@@ -379,6 +379,8 @@ def run_cad_mutation(  # noqa: C901
     captured: dict[str, Any] = {}
 
     def native_callback(*args: Any) -> Any:
+        if inflight is not None:
+            inflight.token.begin_mutation(rpc_method or "cad_mutation")
         admitted = args[0] if bind_document and args else document
         if bind_document:
             captured["document"] = admitted
