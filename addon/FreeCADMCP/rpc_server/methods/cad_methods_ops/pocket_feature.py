@@ -46,6 +46,7 @@ class _PocketFeatureRequest:
     body_name: str | None
     symmetric: bool
     reversed_dir: bool
+    strict: bool
 
 
 def _failure(error: PocketFeatureError, *, retry_safe: bool = True) -> PocketFeatureFailure:
@@ -234,6 +235,7 @@ def build_pocket_feature_request(
     body_name: object,
     symmetric: object,
     reversed_dir: object,
+    strict: object = False,
 ) -> _PocketFeatureRequest | PocketFeatureFailure:
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
@@ -251,6 +253,15 @@ def build_pocket_feature_request(
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "symmetric must be a boolean"))
     if not isinstance(reversed_dir, bool):
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "reversed_dir must be a boolean"))
+    if not isinstance(strict, bool):
+        return _failure(PocketFeatureError("INVALID_ARGUMENT", "strict must be a boolean"))
+    if strict and not body_name:
+        return _failure(
+            PocketFeatureError(
+                "INVALID_ARGUMENT",
+                f"strict PartDesign mode requires an explicit body_name for pocket {pocket_name!r}",
+            )
+        )
     return _PocketFeatureRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=sketch_name,
@@ -259,6 +270,7 @@ def build_pocket_feature_request(
         body_name=body_name,
         symmetric=symmetric,
         reversed_dir=reversed_dir,
+        strict=strict,
     )
 
 
@@ -316,9 +328,10 @@ def run_pocket_feature(
     body_name: object = None,
     symmetric: object = False,
     reversed_dir: object = False,
+    strict: object = False,
 ) -> PocketFeatureResult:
     request = build_pocket_feature_request(
-        doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir
+        doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir, strict
     )
     if isinstance(request, dict):
         return request
@@ -340,6 +353,7 @@ def rpc_pocket_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -352,6 +366,7 @@ def rpc_pocket_feature(
             body_name,
             symmetric,
             reversed_dir,
+            strict,
         )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}

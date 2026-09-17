@@ -46,6 +46,7 @@ class _PadFeatureRequest:
     body_name: str | None
     symmetric: bool
     reversed_dir: bool
+    strict: bool
 
 
 def _failure(error: PadFeatureError, *, retry_safe: bool = True) -> PadFeatureFailure:
@@ -231,6 +232,7 @@ def build_pad_feature_request(
     body_name: object,
     symmetric: object,
     reversed_dir: object,
+    strict: object = False,
 ) -> _PadFeatureRequest | PadFeatureFailure:
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(PadFeatureError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
@@ -248,6 +250,15 @@ def build_pad_feature_request(
         return _failure(PadFeatureError("INVALID_ARGUMENT", "symmetric must be a boolean"))
     if not isinstance(reversed_dir, bool):
         return _failure(PadFeatureError("INVALID_ARGUMENT", "reversed_dir must be a boolean"))
+    if not isinstance(strict, bool):
+        return _failure(PadFeatureError("INVALID_ARGUMENT", "strict must be a boolean"))
+    if strict and not body_name:
+        return _failure(
+            PadFeatureError(
+                "INVALID_ARGUMENT",
+                f"strict PartDesign mode requires an explicit body_name for pad {pad_name!r}",
+            )
+        )
     return _PadFeatureRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=sketch_name,
@@ -256,6 +267,7 @@ def build_pad_feature_request(
         body_name=body_name,
         symmetric=symmetric,
         reversed_dir=reversed_dir,
+        strict=strict,
     )
 
 
@@ -313,9 +325,10 @@ def run_pad_feature(
     body_name: object = None,
     symmetric: object = False,
     reversed_dir: object = False,
+    strict: object = False,
 ) -> PadFeatureResult:
     request = build_pad_feature_request(
-        doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir
+        doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir, strict
     )
     if isinstance(request, dict):
         return request
@@ -337,6 +350,7 @@ def rpc_pad_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -349,6 +363,7 @@ def rpc_pad_feature(
             body_name,
             symmetric,
             reversed_dir,
+            strict,
         )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}

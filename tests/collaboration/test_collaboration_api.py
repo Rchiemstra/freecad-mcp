@@ -264,6 +264,60 @@ def test_bridge_propagates_lookup_and_native_failures_without_translation() -> N
     assert native_info.value is native_failure
 
 
+def test_typed_native_commit_maps_restored_callback_errors_to_status() -> None:
+    api_type = _load_package_module().CollaborationAPI
+
+    class RestoringDocument:
+        Name = "Model"
+
+        def commitCompatibilityMutation(
+            self, callback, *, structural=True, postcondition=None
+        ):
+            del structural
+            callback()
+            if postcondition is not None:
+                postcondition()
+            raise AssertionError("callback should have raised")
+
+    def failing_apply(_document):
+        raise RuntimeError("FEATURE_NOT_FOUND")
+
+    apply_result = api_type(
+        document_lookup=lambda _name: RestoringDocument()
+    ).commit_native_mutation("Model", failing_apply, lambda _document: True)
+
+    assert apply_result == {
+        "status": "ApplyFailed",
+        "committed": False,
+        "message": "FEATURE_NOT_FOUND",
+        "rollback_succeeded": True,
+    }
+
+    class RestoringPostconditionDocument:
+        Name = "Model"
+
+        def commitCompatibilityMutation(
+            self, callback, *, structural=True, postcondition=None
+        ):
+            del structural
+            callback()
+            postcondition()
+            raise AssertionError("postcondition should have raised")
+
+    inspect_result = api_type(
+        document_lookup=lambda _name: RestoringPostconditionDocument()
+    ).commit_native_mutation(
+        "Model",
+        lambda _document: None,
+        lambda _document: (_ for _ in ()).throw(RuntimeError("TIP_NOT_UPDATED")),
+    )
+
+    assert inspect_result["status"] == "PostconditionFailed"
+    assert inspect_result["committed"] is False
+    assert inspect_result["rollback_succeeded"] is True
+    assert inspect_result["message"] == "TIP_NOT_UPDATED"
+
+
 @pytest.mark.parametrize("document_lookup", [None, object(), "getDocument"])
 def test_constructor_rejects_a_non_callable_lookup(document_lookup: object) -> None:
     api_type = _load_package_module().CollaborationAPI

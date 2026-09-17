@@ -63,6 +63,37 @@ def _validate_callbacks(
         raise TypeError("postcondition must be callable or None")
 
 
+def _restored_callback_native_result(
+    exc: BaseException, *, postcondition_started: bool
+) -> dict[str, object]:
+    """Map a restored Python callback error to a native coordinator status.
+
+    FreeCAD restores the original callback exception after a classified
+    rollback unless the status is RollbackFailed. Typed mutations already
+    captured FEATURE_NOT_FOUND / apply failures in leaf state; they need
+    ApplyFailed or PostconditionFailed instead of a generic exception.
+    """
+
+    message = str(exc) or type(exc).__name__
+    return {
+        "status": "PostconditionFailed" if postcondition_started else "ApplyFailed",
+        "committed": False,
+        "message": message,
+        "rollback_succeeded": True,
+    }
+
+
+def _settle_pending_recompute(document: object) -> None:
+    """Clear leftover mustExecute so the next native commit is not Busy."""
+
+    must_execute = getattr(document, "mustExecute", None)
+    if not callable(must_execute) or not must_execute():
+        return
+    recompute = getattr(document, "recompute", None)
+    if callable(recompute):
+        recompute()
+
+
 def _commit_without_native(
     *,
     has_postcondition: bool,
@@ -112,13 +143,16 @@ class CollaborationAPI:
                 "document must provide the native Body mutation contract"
             )
 
+        _settle_pending_recompute(document)
         callback_started: list[bool] = []
+        postcondition_started: list[bool] = []
 
         def invoke_callback() -> object:
             callback_started.append(True)
             return callback(document)
 
         def invoke_postcondition() -> object:
+            postcondition_started.append(True)
             return postcondition(document)
 
         try:
@@ -127,10 +161,18 @@ class CollaborationAPI:
                 structural=True,
                 postcondition=invoke_postcondition,
             )
-        except TypeError:
+        except TypeError as exc:
             if not callback_started:
                 return _unsupported(
                     "native postcondition callback is not supported"
+                )
+            return _restored_callback_native_result(
+                exc, postcondition_started=bool(postcondition_started)
+            )
+        except Exception as exc:
+            if callback_started:
+                return _restored_callback_native_result(
+                    exc, postcondition_started=bool(postcondition_started)
                 )
             raise
 
@@ -150,13 +192,16 @@ class CollaborationAPI:
                 "document must provide the native typed mutation contract"
             )
 
+        _settle_pending_recompute(document)
         callback_started: list[bool] = []
+        postcondition_started: list[bool] = []
 
         def invoke_callback() -> object:
             callback_started.append(True)
             return callback(document)
 
         def invoke_postcondition() -> object:
+            postcondition_started.append(True)
             return postcondition(document)
 
         try:
@@ -165,10 +210,18 @@ class CollaborationAPI:
                 structural=structural,
                 postcondition=invoke_postcondition,
             )
-        except TypeError:
+        except TypeError as exc:
             if not callback_started:
                 return _unsupported(
                     "native postcondition callback is not supported"
+                )
+            return _restored_callback_native_result(
+                exc, postcondition_started=bool(postcondition_started)
+            )
+        except Exception as exc:
+            if callback_started:
+                return _restored_callback_native_result(
+                    exc, postcondition_started=bool(postcondition_started)
                 )
             raise
 

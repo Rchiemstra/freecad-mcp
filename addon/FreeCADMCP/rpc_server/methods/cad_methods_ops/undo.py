@@ -92,8 +92,21 @@ class _UndoRpcFacade(Protocol):
 
 def rpc_undo(
     self: _UndoRpcFacade,
-    doc_name: str,
+    doc_name: object,
+    operation_id: object = None,
+    expected_undo_count: object = None,
+    expected_undo_head: object = None,
 ) -> dict[str, object]:
+    if operation_id is not None or not isinstance(doc_name, str):
+        from .recompute_helpers import undo as history_undo
+
+        return history_undo(
+            self,
+            doc_name,
+            operation_id,
+            expected_undo_count,
+            expected_undo_head,
+        )
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(lambda: run_undo(collaborators, doc_name))
     return res if isinstance(res, dict) else {"success": False, "error": res}
