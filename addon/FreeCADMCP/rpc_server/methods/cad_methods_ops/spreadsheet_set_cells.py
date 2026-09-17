@@ -2,34 +2,12 @@
 """Typed ``spreadsheet_set_cells`` mutation."""
 from __future__ import annotations
 
-from .typed_rpc_support import (
-    as_bool,
-    as_float,
-    as_int,
-    assign_attr,
-    call_named,
-    invoke,
-    nonempty_string,
-    object_label,
-    object_name,
-    object_type_id,
-    optional_string,
-    parse_ref,
-    require_object,
-    resolve_if_exists,
-)
-from .typed_rpc_container_support import (
-    add_named_object,
-    add_to_container,
-    remove_from_container,
-    snapshot_ring,
-)
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
 from ...._shared.protocol.spreadsheet_set_cells_contract import (
+    DocumentName,
     SpreadsheetSetCellsCollaborators,
     SpreadsheetSetCellsDocument,
     SpreadsheetSetCellsFailure,
@@ -37,13 +15,22 @@ from ...._shared.protocol.spreadsheet_set_cells_contract import (
     SpreadsheetSetCellsReadDocument,
     SpreadsheetSetCellsRequest,
     SpreadsheetSetCellsResult,
-    DocumentName,
     make_spreadsheet_set_cells_failure,
     make_spreadsheet_set_cells_success,
     make_spreadsheet_set_cells_uncertain,
 )
-from .spreadsheet_set_cells_mutation import SpreadsheetSetCellsError, run_spreadsheet_set_cells_native_mutation
-
+from .feature_mutate_support import is_read_only_property
+from .spreadsheet_cell_ops import read_spreadsheet_cell
+from .spreadsheet_set_cells_mutation import (
+    SpreadsheetSetCellsError,
+    run_spreadsheet_set_cells_native_mutation,
+)
+from .typed_rpc_support import (
+    nonempty_string,
+    object_label,
+    object_name,
+    require_object,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,13 +56,25 @@ def _failure(error: SpreadsheetSetCellsError, *, retry_safe: bool = True) -> Spr
     return make_spreadsheet_set_cells_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _resolve_address_from_alias(sheet: object, alias: str) -> str | None:
+    resolver = getattr(sheet, "getCellFromAlias", None)
+    if not callable(resolver):
+        return None
+    try:
+        resolved = resolver(alias)
+    except Exception:
+        return None
+    return str(resolved) if resolved else None
+
+
 def apply_spreadsheet_set_cells(doc: SpreadsheetSetCellsDocument, request: SpreadsheetSetCellsRequest) -> SpreadsheetSetCellsReceipt:
     """Write spreadsheet cells without recomputing."""
 
     sheet = require_object(doc, request.sheet_name, missing_code="OBJECT_NOT_FOUND", error=SpreadsheetSetCellsError)
-    updated: list[object] = []
+    touched: list[dict[str, object]] = []
     if not isinstance(request.cells, list):
         raise SpreadsheetSetCellsError("INVALID_ARGUMENT", "cells must be a list")
+    batch_aliases: dict[str, str] = {}
     for raw_cell in request.cells:
         if not isinstance(raw_cell, dict):
             raise SpreadsheetSetCellsError("INVALID_ARGUMENT", "each cell must be an object")
@@ -86,10 +85,8 @@ def apply_spreadsheet_set_cells(doc: SpreadsheetSetCellsDocument, request: Sprea
             cell[key] = value
         address = cell.get("address") or cell.get("addr")
         alias = cell.get("alias")
-        if not isinstance(address, str) or not address:
-            if isinstance(alias, str) and alias:
-                resolver = getattr(sheet, "getCellFromAlias", None)
-                address = resolver(alias) if callable(resolver) else None
+        if (not isinstance(address, str) or not address) and isinstance(alias, str) and alias:
+            address = _resolve_address_from_alias(sheet, alias)
         if not isinstance(address, str) or not address:
             raise SpreadsheetSetCellsError("INVALID_ARGUMENT", "cell requires address or resolvable alias")
         if "value" in cell:
@@ -97,13 +94,41 @@ def apply_spreadsheet_set_cells(doc: SpreadsheetSetCellsDocument, request: Sprea
             if not callable(setter):
                 raise SpreadsheetSetCellsError("INVALID_SHEET", "spreadsheet cannot set cells")
             setter(address, str(cell["value"]))
-        alias_to_set = alias if isinstance(alias, str) and cell.get("address") else cell.get("set_alias")
+        alias_to_set = alias if isinstance(alias, str) and alias and cell.get("address") else cell.get("set_alias")
         if isinstance(alias_to_set, str) and alias_to_set:
             alias_setter = getattr(sheet, "setAlias", None)
-            if callable(alias_setter):
+            if not callable(alias_setter):
+                raise SpreadsheetSetCellsError("INVALID_SHEET", "spreadsheet cannot set aliases")
+            if alias_to_set in batch_aliases and batch_aliases[alias_to_set] != address:
+                raise SpreadsheetSetCellsError(
+                    "INVALID_ARGUMENT",
+                    f"Duplicate alias in batch: {alias_to_set!r}",
+                )
+            existing_address = _resolve_address_from_alias(sheet, alias_to_set)
+            if existing_address and existing_address != address:
+                raise SpreadsheetSetCellsError(
+                    "INVALID_ARGUMENT",
+                    f"Alias already bound: {alias_to_set!r}",
+                )
+            if is_read_only_property(sheet, address):
+                raise SpreadsheetSetCellsError("EXPRESSION_ERROR", f"{address!r} is read-only")
+            try:
                 alias_setter(address, alias_to_set)
-        updated.append({"address": address, "alias": alias})
-    return SpreadsheetSetCellsReceipt(name=object_name(sheet) or request.sheet_name, item=sheet, skipped=False, extra=updated)
+            except Exception as exc:
+                raise SpreadsheetSetCellsError("EXPRESSION_ERROR", str(exc) or type(exc).__name__) from exc
+            batch_aliases[alias_to_set] = address
+        touched.append(
+            {
+                "address": address,
+                "requested_alias": alias_to_set if isinstance(alias_to_set, str) and alias_to_set else None,
+            }
+        )
+    return SpreadsheetSetCellsReceipt(
+        name=object_name(sheet) or request.sheet_name,
+        item=sheet,
+        skipped=False,
+        extra=touched,
+    )
 
 
 def read_spreadsheet_set_cells_result(doc: SpreadsheetSetCellsReadDocument, receipt: SpreadsheetSetCellsReceipt) -> SpreadsheetSetCellsInspection:
@@ -121,12 +146,41 @@ def read_spreadsheet_set_cells_result(doc: SpreadsheetSetCellsReadDocument, rece
     ):
         raise SpreadsheetSetCellsError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
 
-    extra = receipt.extra
+    touched = receipt.extra
+    if not isinstance(touched, list):
+        raise SpreadsheetSetCellsError(
+            "INVALID_SPREADSHEET_SET_CELLS_RESULT",
+            "spreadsheet_set_cells receipt is missing touched addresses",
+        )
+
+    updated: list[dict[str, object]] = []
+    for item in touched:
+        if not isinstance(item, dict):
+            raise SpreadsheetSetCellsError(
+                "INVALID_SPREADSHEET_SET_CELLS_RESULT",
+                "spreadsheet_set_cells receipt entry must be an object",
+            )
+        address = item.get("address")
+        requested_alias = item.get("requested_alias")
+        if not isinstance(address, str) or not address:
+            raise SpreadsheetSetCellsError(
+                "INVALID_SPREADSHEET_SET_CELLS_RESULT",
+                "spreadsheet_set_cells receipt entry requires address",
+            )
+        row = read_spreadsheet_cell(located, {"address": address})
+        if isinstance(requested_alias, str) and requested_alias:
+            bound = row.get("alias")
+            if str(bound or "") != requested_alias:
+                raise SpreadsheetSetCellsError(
+                    "EXPRESSION_ERROR",
+                    f"Alias on {address!r} does not match the requested value",
+                )
+        updated.append(row)
 
     return SpreadsheetSetCellsInspection(
         name=SpreadsheetSetCellsName(receipt.name),
         label=object_label(located),
-        extra=extra,
+        extra=updated,
     )
 
 
@@ -179,7 +233,14 @@ class _SpreadsheetSetCellsExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_spreadsheet_set_cells_success(sheet=self.inspected.name)
+        updated = self.inspected.extra
+        if not isinstance(updated, list):
+            return make_spreadsheet_set_cells_uncertain(
+                "SPREADSHEET_SET_CELLS_COMMITTED_RESPONSE_INVALID",
+                "Native commit completed without inspected updated cells",
+                committed=True,
+            )
+        return make_spreadsheet_set_cells_success(sheet=self.inspected.name, updated=updated)
 
 
 def run_spreadsheet_set_cells(
@@ -214,6 +275,7 @@ TYPED_RPC_HANDLER = ("spreadsheet_set_cells", rpc_spreadsheet_set_cells)
 
 
 __all__ = [
+    "TYPED_RPC_HANDLER",
     "SpreadsheetSetCellsCollaborators",
     "SpreadsheetSetCellsError",
     "SpreadsheetSetCellsInspection",
@@ -223,5 +285,4 @@ __all__ = [
     "read_spreadsheet_set_cells_result",
     "rpc_spreadsheet_set_cells",
     "run_spreadsheet_set_cells",
-    "TYPED_RPC_HANDLER",
 ]

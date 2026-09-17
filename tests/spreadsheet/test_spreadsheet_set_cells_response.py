@@ -2,22 +2,36 @@
 
 from __future__ import annotations
 
-from itertools import product
-from types import SimpleNamespace
-
 import pytest
 
 from freecad_mcp._shared.protocol.spreadsheet_set_cells_contract import (
-    make_spreadsheet_set_cells_failure,
     make_spreadsheet_set_cells_success,
-    make_spreadsheet_set_cells_uncertain,
     parse_spreadsheet_set_cells_response,
 )
-from freecad_mcp.operations.parametric_ops.spreadsheet_set_cells import spreadsheet_set_cells_operation
+from freecad_mcp.operations.parametric_ops.spreadsheet_set_cells import (
+    spreadsheet_set_cells_operation,
+)
 
 
 def _success():
-    return make_spreadsheet_set_cells_success(sheet="Value")
+    return make_spreadsheet_set_cells_success(
+        sheet="Value",
+        updated=[{"address": "A1", "alias": None, "value": "1"}],
+    )
+
+
+def test_success_without_updated_is_invalid():
+    result = parse_spreadsheet_set_cells_response(make_spreadsheet_set_cells_success("Value", []))
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+
+
+def test_success_missing_updated_field_is_invalid():
+    raw = dict(_success())
+    raw.pop("updated")
+    result = parse_spreadsheet_set_cells_response(raw)
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
 
 
 @pytest.mark.parametrize("raw", [None, [], 1, "timeout", {}, {1: "bad key"}])
