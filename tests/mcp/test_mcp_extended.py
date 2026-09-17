@@ -9,14 +9,18 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from mcp.types import ImageContent, TextContent
+
+from freecad_mcp._shared.protocol.close_document_contract import (
+    DocumentName as CloseDocumentName,
+)
+from freecad_mcp._shared.protocol.close_document_contract import (
+    make_close_document_failure,
+    make_close_document_success,
+)
 from freecad_mcp._shared.protocol.create_spur_gear_contract import (
     make_create_spur_gear_failure,
     make_create_spur_gear_success,
-)
-from freecad_mcp._shared.protocol.close_document_contract import (
-    DocumentName as CloseDocumentName,
-    make_close_document_failure,
-    make_close_document_success,
 )
 from freecad_mcp._shared.protocol.pad_feature_contract import (
     PadName,
@@ -24,61 +28,62 @@ from freecad_mcp._shared.protocol.pad_feature_contract import (
 )
 from freecad_mcp._shared.protocol.recompute_document_contract import (
     DocumentName as RecomputeDocumentName,
+)
+from freecad_mcp._shared.protocol.recompute_document_contract import (
     make_recompute_document_failure,
     make_recompute_document_success,
 )
 from freecad_mcp._shared.protocol.redo_contract import (
     DocumentName as RedoDocumentName,
+)
+from freecad_mcp._shared.protocol.redo_contract import (
     make_redo_failure,
     make_redo_success,
 )
 from freecad_mcp._shared.protocol.sketch_add_constraint_contract import (
     SketchName as ConstraintSketchName,
+)
+from freecad_mcp._shared.protocol.sketch_add_constraint_contract import (
     make_sketch_add_constraint_success,
 )
 from freecad_mcp._shared.protocol.sketch_add_geometry_contract import (
     SketchName as GeometrySketchName,
+)
+from freecad_mcp._shared.protocol.sketch_add_geometry_contract import (
     make_sketch_add_geometry_success,
 )
 from freecad_mcp._shared.protocol.undo_contract import (
     DocumentName as UndoDocumentName,
+)
+from freecad_mcp._shared.protocol.undo_contract import (
     make_undo_failure,
     make_undo_success,
 )
 from freecad_mcp.operations.core import (
     close_document_operation,
+    create_spur_gear_operation,
+    get_objects_operation,
     get_recompute_log_operation,
     get_sketch_diagnostics_operation,
     get_view_operation,
-    get_objects_operation,
-    sketch_create_operation,
-    sketch_add_geometry_operation,
-    sketch_add_constraint_operation,
-    sketch_add_line_operation,
-    sketch_add_circle_operation,
+    linear_pattern_feature_operation,
+    mirror_feature_operation,
+    pad_feature_operation,
+    pocket_feature_operation,
+    polar_pattern_feature_operation,
+    recompute_document_operation,
+    redo_operation,
     sketch_add_arc_operation,
+    sketch_add_circle_operation,
+    sketch_add_constraint_operation,
+    sketch_add_geometry_operation,
+    sketch_add_line_operation,
     sketch_add_rectangle_operation,
     sketch_constrain_coincident_operation,
     sketch_constrain_horizontal_operation,
-    sketch_constrain_vertical_operation,
-    sketch_constrain_distance_operation,
-    sketch_constrain_radius_operation,
-    sketch_constrain_equal_operation,
-    sketch_constrain_parallel_operation,
-    sketch_constrain_perpendicular_operation,
-    sketch_constrain_tangent_operation,
-    pad_feature_operation,
-    pocket_feature_operation,
-    linear_pattern_feature_operation,
-    polar_pattern_feature_operation,
-    mirror_feature_operation,
-    create_spur_gear_operation,
-    recompute_document_operation,
+    sketch_create_operation,
     undo_operation,
-    redo_operation,
 )
-from mcp.types import ImageContent, TextContent
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -272,30 +277,70 @@ class TestSaveViewSequenceOperation:
 # ---------------------------------------------------------------------------
 
 class TestGetObjectsOperation:
-    def _conn(self, objs):
+    def _conn(self, envelope):
         conn = MagicMock()
         conn.get_active_screenshot.return_value = None
-        conn.get_objects.return_value = objs
+        conn.get_objects.return_value = envelope
         return conn
 
-    def test_success_returns_json(self):
-        conn = self._conn([{"Name": "Box", "TypeId": "Part::Box"}])
+    def test_success_returns_envelope(self):
+        conn = self._conn(
+            {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "observed",
+                "retry_safe": False,
+                "doc_name": "Doc",
+                "objects": [{"Name": "Box", "Label": "Box", "TypeId": "Part::Box"}],
+                "total_count": 1,
+                "returned_count": 1,
+                "page_size": 50,
+                "complete": True,
+                "next_cursor": None,
+                "snapshot_id": "abc",
+            }
+        )
         data = json.loads(_text(get_objects_operation(conn, True, "Doc")))
-        assert data[0]["Name"] == "Box"
+        assert data["objects"][0]["Name"] == "Box"
+        assert data["complete"] is True
 
     def test_rpc_exception_returns_error(self):
         conn = MagicMock()
         conn.get_active_screenshot.return_value = None
         conn.get_objects.side_effect = Exception("shape is invalid")
-        assert "Failed to get objects" in _text(get_objects_operation(conn, True, "Doc"))
+        response = get_objects_operation(conn, True, "Doc")
+        assert "Failed to get objects" in _text(response)
+        assert response.structuredContent["data"]["error_code"] == "GET_OBJECTS_TRANSPORT_UNCERTAIN"
 
     def test_partial_results_passed_through(self):
-        conn = self._conn([
-            {"Name": "Good"},
-            {"Name": "Bad", "error": "Serialization failed: invalid shape"},
-        ])
+        conn = self._conn(
+            {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "observed",
+                "retry_safe": False,
+                "doc_name": "Doc",
+                "objects": [
+                    {"Name": "Good", "Label": "Good", "TypeId": "Part::Feature"},
+                    {
+                        "Name": "Bad",
+                        "Label": "Bad",
+                        "TypeId": "Part::Feature",
+                        "error": "Serialization failed: invalid shape",
+                    },
+                ],
+                "total_count": 2,
+                "returned_count": 2,
+                "page_size": 50,
+                "complete": True,
+                "next_cursor": None,
+                "snapshot_id": "abc",
+            }
+        )
         data = json.loads(_text(get_objects_operation(conn, True, "Doc")))
-        assert len(data) == 2 and "error" in data[1]
+        assert len(data["objects"]) == 2 and "error" in data["objects"][1]
 
 
 # ---------------------------------------------------------------------------

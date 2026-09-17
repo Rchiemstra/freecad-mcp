@@ -56,19 +56,44 @@ def _register_get_objects(
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
-    def get_objects(ctx: Context, doc_name: str) -> CallToolResult:
+    def get_objects(
+        ctx: Context,
+        doc_name: str,
+        fields: list[str] | None = None,
+        include_properties: list[str] | None = None,
+        include_shape: bool = False,
+        include_view: bool = False,
+        page_size: int = 50,
+        cursor: str | None = None,
+    ) -> CallToolResult:
         """
-        Get all objects in a document.
-        You can use this tool to get the objects in a document to see what you can check or edit.
+        List document objects with bounded projection and pagination.
+        
+        Start with ``get_document_tree`` for lightweight structure. Use ``get_objects`` for a
+        paginated Name/Label/TypeId listing and ``get_object`` for a detailed single-object dump.
         
         Args:
             doc_name: The name of the document to get the objects from.
+            fields: Object fields to include (default Name, Label, TypeId).
+            include_properties: Optional property names to include in each row.
+            include_shape: Include compact Shape metrics when true.
+            include_view: Include compact ViewObject attributes when true.
+            page_size: Page size from 1 to 250 (default 50).
+            cursor: Opaque cursor from a prior page.
         
         Returns:
-            A list of objects in the document and a screenshot of the document.
+            Versioned envelope with ``objects``, ``total_count``, pagination metadata, and optional screenshot.
         """
         return get_objects_operation(
-            server_connection(), server_state().only_text_feedback, doc_name
+            server_connection(),
+            server_state().only_text_feedback,
+            doc_name,
+            fields,
+            include_properties,
+            include_shape,
+            include_view,
+            page_size,
+            cursor,
         )
 
     exports['get_objects'] = get_objects

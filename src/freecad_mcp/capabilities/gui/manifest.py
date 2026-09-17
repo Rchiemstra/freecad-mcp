@@ -29,8 +29,8 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="get_objects",
-            docstring='Get all objects in a document.\nYou can use this tool to get the objects in a document to see what you can check or edit.\n\nArgs:\n    doc_name: The name of the document to get the objects from.\n\nReturns:\n    A list of objects in the document and a screenshot of the document.',
-            signature="(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
+            docstring='List document objects with bounded projection and pagination.\n\nStart with ``get_document_tree`` for lightweight structure. Use ``get_objects`` for a\npaginated Name/Label/TypeId listing and ``get_object`` for a detailed single-object dump.\n\nArgs:\n    doc_name: The name of the document to get the objects from.\n    fields: Object fields to include (default Name, Label, TypeId).\n    include_properties: Optional property names to include in each row.\n    include_shape: Include compact Shape metrics when true.\n    include_view: Include compact ViewObject attributes when true.\n    page_size: Page size from 1 to 250 (default 50).\n    cursor: Opaque cursor from a prior page.\n\nReturns:\n    Versioned envelope with ``objects``, ``total_count``, pagination metadata, and optional screenshot.',
+            signature="(ctx: 'Context', doc_name: 'str', fields: 'list[str] | None' = None, include_properties: 'list[str] | None' = None, include_shape: 'bool' = False, include_view: 'bool' = False, page_size: 'int' = 50, cursor: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.get_objects_operation",
             rpc_method="get_objects",
             execution_mode=ExecutionMode.TYPED_GATEWAY,

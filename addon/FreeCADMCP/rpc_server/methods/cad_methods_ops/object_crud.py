@@ -219,21 +219,28 @@ def delete_object(
     return finalize_delete(res)
 
 
-def get_objects(self, doc_name):
-    # Must run in the GUI thread: serialize_object accesses ViewObject
-    # and other GUI-backed properties that FreeCAD guards against
-    # access from background threads.
-    collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: get_objects_gui(
-            doc_name,
-            freecad=collaborators.freecad,
-            serialize_object=collaborators.serialize_object,
-        )
+def get_objects(
+    self,
+    doc_name,
+    fields=None,
+    include_properties=None,
+    include_shape=False,
+    include_view=False,
+    page_size=50,
+    cursor=None,
+):
+    from .get_objects import rpc_get_objects
+
+    return rpc_get_objects(
+        self,
+        doc_name,
+        fields,
+        include_properties,
+        include_shape,
+        include_view,
+        page_size,
+        cursor,
     )
-    if isinstance(res, list):
-        return res
-    return []
 
 
 def get_object(self, doc_name, obj_name):
@@ -545,26 +552,6 @@ def delete_object_gui(
         return result
     except Exception as e:
         return str(e)
-
-
-def get_objects_gui(doc_name, *, freecad, serialize_object):
-    doc = freecad.getDocument(doc_name)
-    if not doc:
-        return []
-    results = []
-    for obj in doc.Objects:
-        try:
-            results.append(serialize_object(obj))
-        except Exception as e:
-            results.append(
-                {
-                    "Name": getattr(obj, "Name", "<unknown>"),
-                    "Label": getattr(obj, "Label", "<unknown>"),
-                    "TypeId": getattr(obj, "TypeId", "<unknown>"),
-                    "error": f"Serialization failed: {e}",
-                }
-            )
-    return results if results else []
 
 
 def get_object_gui(doc_name, obj_name, *, freecad, serialize_object):
