@@ -8,14 +8,8 @@ from typing import TYPE_CHECKING, Any
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
-from freecad_mcp.build_info import (
-    build_id,
-    event_schema_version,
-    git_commit,
-    git_dirty,
-    package_version,
-    protocol_version,
-)
+from freecad_mcp.build_info import as_dict as mcp_build_info
+from freecad_mcp.build_info import event_schema_version, protocol_version
 from freecad_mcp.responses import json_response
 from freecad_mcp.server_ops.compatibility import (
     compatibility_for_manifest as _compatibility_for_manifest,
@@ -23,6 +17,11 @@ from freecad_mcp.server_ops.compatibility import (
 from freecad_mcp.server_ops.compatibility import (
     normalize_protocol_versions,
     runtime_compatibility,
+)
+from freecad_mcp.server_ops.runtime_identity import (
+    identity_compatibility,
+    merge_compatibility,
+    sanitize_git_commit,
 )
 from freecad_mcp.server_ops.tool_dependencies import ToolDependencies
 from freecad_mcp.tools_server_surfaces import server_connection, server_state
@@ -92,10 +91,8 @@ def _tool_availability(*, authenticated_rpc_v2: bool) -> dict[str, Any]:
     }
 
 
-def _freecad_identity_fields(
-    manifest: Any | None, info: dict[str, Any]
-) -> tuple[dict[str, str], str, str, list[str], int | None, list[int], bool]:
-    addon = {
+def _addon_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any]:
+    compiled = {
         "version": (
             getattr(manifest, "addon_version", None)
             if manifest is not None
@@ -108,13 +105,23 @@ def _freecad_identity_fields(
             else info.get("addon_build_id")
         )
         or "unknown",
+        "git_commit": sanitize_git_commit(info.get("git_commit")),
+        "git_dirty": info.get("git_dirty"),
+        "build_timestamp": str(info.get("build_timestamp") or "unknown"),
+        "source": str(info.get("addon_metadata_source") or "missing"),
+    }
+    return {
         "runtime_id": (
             getattr(manifest, "addon_runtime_id", None)
             if manifest is not None
             else info.get("addon_runtime_id")
         )
         or "unknown",
+        "compiled": compiled,
     }
+
+
+def _freecad_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any]:
     raw_version = (
         getattr(manifest, "freecad_version", None)
         if manifest is not None
@@ -130,6 +137,21 @@ def _freecad_identity_fields(
             if manifest is not None
             else info.get("freecad_revision") or "unknown"
         )
+    return {
+        "compiled": {
+            "version": freecad_version,
+            "revision": freecad_revision,
+            "git_commit": sanitize_git_commit(info.get("freecad_git_commit") or "unknown"),
+        },
+        "pid": (
+            getattr(manifest, "freecad_pid", None)
+            if manifest is not None
+            else info.get("pid")
+        ),
+    }
+
+
+def _rpc_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any]:
     features = list(
         getattr(manifest, "features", ())
         if manifest is not None
@@ -153,36 +175,28 @@ def _freecad_identity_fields(
         if manifest is not None
         else bool(info.get("rpc_v2_session_ready"))
     )
-    return (
-        addon,
-        freecad_version,
-        freecad_revision,
-        features,
-        addon_protocol,
-        protocol_versions,
-        rpc_v2_session_ready,
-    )
+    return {
+        "protocol_version": addon_protocol,
+        "protocol_versions": protocol_versions,
+        "features": sorted(str(item) for item in features),
+        "rpc_v2_session_ready": rpc_v2_session_ready,
+        "authenticated_session": manifest is not None,
+    }
 
 
 def _runtime_info_payload() -> dict[str, Any]:
     manifest = server_state().authenticated_manifest
     info: dict[str, Any] = {}
-    if manifest is None:
-        try:
-            reported = server_connection().get_instance_info()
-            info = dict(reported) if isinstance(reported, dict) else {}
-        except Exception:
-            info = {}
+    try:
+        reported = server_connection().get_instance_info()
+        info = dict(reported) if isinstance(reported, dict) else {}
+    except Exception:
+        info = {}
 
-    (
-        addon,
-        freecad_version,
-        freecad_revision,
-        features,
-        addon_protocol,
-        protocol_versions,
-        rpc_v2_session_ready,
-    ) = _freecad_identity_fields(manifest, info)
+    mcp_build = mcp_build_info()
+    addon = _addon_identity(manifest, info)
+    freecad = _freecad_identity(manifest, info)
+    rpc = _rpc_identity(manifest, info)
     profile_fingerprint = (
         getattr(manifest, "profile_path_fingerprint", None)
         if manifest is not None
@@ -193,36 +207,26 @@ def _runtime_info_payload() -> dict[str, Any]:
         if manifest is not None
         else info.get("profile_instance_id") or info.get("instance_id")
     )
-    compatibility = runtime_compatibility(manifest, info)
+    protocol = runtime_compatibility(manifest, info)
+    identity = identity_compatibility(
+        mcp_compiled=mcp_build["compiled"],
+        addon_compiled=addon["compiled"],
+        mcp_checkout=mcp_build["checkout"],
+    )
+    compatibility = merge_compatibility(protocol, identity)
     server_state().compatibility_warnings = list(compatibility["warnings"])
     authenticated_rpc_v2 = manifest is not None and compatibility["compatible"]
     return {
         "mcp": {
-            "version": package_version,
-            "build_id": build_id,
-            "git_commit": git_commit,
-            "git_dirty": git_dirty,
+            "compiled": mcp_build["compiled"],
+            "checkout": mcp_build["checkout"],
             "pid": server_state().mcp_pid or os.getpid(),
             "runtime_id": server_state().mcp_instance_id,
             "event_schema_version": event_schema_version,
         },
         "addon": addon,
-        "freecad": {
-            "version": freecad_version,
-            "revision": freecad_revision,
-            "pid": (
-                getattr(manifest, "freecad_pid", None)
-                if manifest is not None
-                else info.get("pid")
-            ),
-        },
-        "rpc": {
-            "protocol_version": addon_protocol,
-            "protocol_versions": protocol_versions,
-            "features": sorted(str(item) for item in features),
-            "rpc_v2_session_ready": rpc_v2_session_ready,
-            "authenticated_session": manifest is not None,
-        },
+        "freecad": freecad,
+        "rpc": rpc,
         "profile": {
             "instance_id": profile_instance or server_state().instance_id or "unknown",
             "path_fingerprint": profile_fingerprint or "unknown",

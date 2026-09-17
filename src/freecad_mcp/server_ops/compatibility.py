@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .._shared.protocol.constants import REQUIRED_PROTOCOL_FEATURES
-from ..build_info import build_id, package_version, protocol_version
+from ..build_info import package_version, protocol_version
 
 _UNAUTHENTICATED_WARNING = "Authenticated runtime identity is not available"
 
@@ -34,12 +34,6 @@ def compatibility_for_manifest(manifest: Any | None) -> dict[str, Any]:
     features = set(getattr(manifest, "features", ()) or ())
     missing = sorted(set(REQUIRED_PROTOCOL_FEATURES).difference(features))
     compatible = addon_protocol == protocol_version and not missing
-    addon_build = str(getattr(manifest, "addon_build_id", "") or "")
-    if addon_build and addon_build != build_id:
-        warnings.append(
-            "MCP package and FreeCAD addon build IDs differ; protocol compatibility "
-            "permits this connection"
-        )
     addon_version = str(getattr(manifest, "addon_version", "") or "")
     if addon_version and addon_version != package_version:
         warnings.append(
