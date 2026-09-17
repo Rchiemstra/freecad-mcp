@@ -2,6 +2,11 @@
 
 from typing import Any
 
+try:
+    from ....dispatch.gui_stage_clock import record_presentation
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_stage_clock import record_presentation
+
 from ...property_mapper import Object
 from .cad_mutation import run_cad_mutation, unsupported_native_phase_boundary
 
@@ -78,7 +83,8 @@ def create_object(self, doc_name, obj_data: dict[str, Any]):
         )
         if _committed_success(result) and deferred_presentation is not None:
             try:
-                deferred_presentation()
+                with record_presentation():
+                    deferred_presentation()
             except Exception as exc:
                 return _presentation_warning(
                     result, f"Post-commit presentation failed: {exc}"

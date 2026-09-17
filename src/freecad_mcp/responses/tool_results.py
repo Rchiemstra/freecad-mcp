@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -124,11 +125,14 @@ def capture_committed_screenshot(
 
     if only_text_feedback:
         return None
+    started = time.monotonic()
     try:
         screenshot = freecad.get_active_screenshot()
     except Exception as exc:
+        structured["screenshot_ms"] = round((time.monotonic() - started) * 1000.0, 3)
         structured["presentation_warning"] = f"Screenshot capture failed: {exc}"
         return None
+    structured["screenshot_ms"] = round((time.monotonic() - started) * 1000.0, 3)
     if isinstance(screenshot, str) and screenshot:
         return screenshot
     structured.setdefault(

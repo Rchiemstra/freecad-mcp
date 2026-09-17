@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from .gui_errors import (
@@ -33,6 +34,7 @@ from .gui_request import (
 from .gui_request import (
     TelemetryCallback as _TelemetryCallback,
 )
+from .gui_stage_clock import stage_clock_scope
 
 
 class GuiDispatchCore:
@@ -61,10 +63,49 @@ class GuiDispatchCore:
         self._accepting = True
         self._timed_out_request: GuiRequest | None = None
         self._requests_by_owner: dict[tuple[str, str], GuiRequest] = {}
+        self._outstanding_requests = 0
+
+    def _release_outstanding(self, request: GuiRequest) -> None:
+        if request._outstanding_released:
+            return
+        with self._queue_lock:
+            if self._outstanding_requests > 0:
+                self._outstanding_requests -= 1
+            request._outstanding_released = True
 
     def _emit(self, event: str, **fields: Any) -> None:
         with contextlib.suppress(Exception):
             self._emit_telemetry("gui_dispatcher", event, **fields)
+
+    def _emit_terminal(
+        self,
+        request: GuiRequest,
+        event: str,
+        *,
+        status: str,
+        error_code: str | None = None,
+        timeout_stage: str | None = None,
+        completion_uncertain: bool | None = None,
+        extra_payload: Mapping[str, Any] | None = None,
+    ) -> None:
+        request.stage_clock.finalize(
+            timeout_stage=timeout_stage,
+            completion_uncertain=completion_uncertain,
+            error_code=error_code,
+        )
+        payload = request.stage_clock.to_payload()
+        if extra_payload:
+            payload.update(extra_payload)
+        self._emit(
+            event,
+            status=status,
+            error_code=error_code,
+            duration_ms=request.stage_clock.response_total_ms,
+            request_id=request.request_id,
+            execution_id=request.request_id,
+            session_id=request.session_id,
+            payload=payload,
+        )
 
     @staticmethod
     def _execute_request(request: GuiRequest) -> GuiOutcome:
@@ -109,6 +150,8 @@ class GuiDispatchCore:
             document_keys=document_keys,
         )
         request._emit_telemetry = self._emit_telemetry
+        request.stage_clock.submitted_at = request.submitted_at
+        request.stage_clock.mark_queued()
         return request
 
     def submit(
@@ -143,52 +186,77 @@ class GuiDispatchCore:
                 "A deferred GUI request requires a finite timeout",
                 request_id=request.request_id,
             )
+        with self._queue_lock:
+            request.stage_clock.outstanding_at_submit = self._outstanding_requests
+            self._outstanding_requests += 1
         self._emit(
             "gui_execution_queued",
             request_id=request.request_id,
             execution_id=request.request_id,
             session_id=request.session_id,
-            payload={"timeout_seconds": timeout},
+            payload={
+                "timeout_seconds": timeout,
+                "outstanding_at_submit": request.stage_clock.outstanding_at_submit,
+                **request.stage_clock.to_payload(),
+            },
         )
 
         try:
-            on_owner = bool(self._is_gui_thread())
-        except Exception as exc:
-            raise GuiDispatchError(
-                f"Could not determine GUI thread ownership: {exc}",
-                request_id=request.request_id,
-            ) from exc
-        if on_owner:
-            with self._queue_lock:
-                if not self._accepting:
+            try:
+                on_owner = bool(self._is_gui_thread())
+            except Exception as exc:
+                raise GuiDispatchError(
+                    f"Could not determine GUI thread ownership: {exc}",
+                    request_id=request.request_id,
+                ) from exc
+            if on_owner:
+                with self._queue_lock:
+                    if not self._accepting:
+                        raise GuiDispatchError(
+                            "RPC GUI dispatcher is stopping",
+                            request_id=request.request_id,
+                        )
+                decision = self._evaluate_defer_probe(request)
+                if decision is not None:
                     raise GuiDispatchError(
-                        "RPC GUI dispatcher is stopping",
+                        "A GUI-owner call cannot synchronously wait for native "
+                        "mutation readiness",
                         request_id=request.request_id,
                     )
-            decision = self._evaluate_defer_probe(request)
-            if decision is not None:
+                with stage_clock_scope(request.stage_clock):
+                    started = time.monotonic()
+                    outcome = self._execute_request(request)
+                    if (
+                        request.stage_clock.mutation_callback_ms is None
+                        and not request.stage_clock.mutation_started
+                    ):
+                        request.stage_clock.mutation_callback_ms = (
+                            (time.monotonic() - started) * 1000.0
+                        )
+                request.complete(outcome)
+                self._release_outstanding(request)
+                return self._unwrap(request)
+
+            should_wake = self._enqueue(request)
+            if should_wake and not self._request_wake():
                 raise GuiDispatchError(
-                    "A GUI-owner call cannot synchronously wait for native "
-                    "mutation readiness",
+                    "Could not wake the GUI dispatcher",
                     request_id=request.request_id,
                 )
-            request.complete(self._execute_request(request))
-            return self._unwrap(request)
 
-        should_wake = self._enqueue(request)
-        if should_wake and not self._request_wake():
-            raise GuiDispatchError(
-                "Could not wake the GUI dispatcher",
-                request_id=request.request_id,
-            )
-
-        if timeout is None:
-            request.completion.wait()
-        elif not request.completion.wait(timeout):
-            return self._handle_timeout(request, float(timeout))
-        if timeout is not None and request.state_snapshot == "timed_out_pending":
-            self._raise_timeout(request, float(timeout), before_execution=True)
-        return self._unwrap(request)
+            if timeout is None:
+                request.completion.wait()
+            elif not request.completion.wait(timeout):
+                return self._handle_timeout(request, float(timeout))
+            if timeout is not None and request.state_snapshot == "timed_out_pending":
+                self._raise_timeout(request, float(timeout), before_execution=True)
+            result = self._unwrap(request)
+            self._release_outstanding(request)
+            return result
+        except BaseException:
+            if request.state_snapshot not in {"running", "timed_out_running"}:
+                self._release_outstanding(request)
+            raise
 
     def _enqueue(self, request: GuiRequest) -> bool:
         with self._queue_lock:
@@ -202,6 +270,9 @@ class GuiDispatchCore:
                 self._timed_out_request = None
                 timed_out = None
             if timed_out is not None:
+                request.stage_clock.queue_wait_ms = (
+                    (time.monotonic() - request.submitted_at) * 1000.0
+                )
                 raise GuiBusyAfterTimeout(
                     "FreeCAD GUI is still executing a request that timed out; "
                     "new GUI work is rejected until it finishes",
@@ -328,19 +399,19 @@ class GuiDispatchCore:
             if before_execution
             else "GUI_TIMEOUT_DURING_EXECUTION"
         )
-        self._emit(
+        self._emit_terminal(
+            request,
             "gui_execution_timeout",
             status="timed_out",
             error_code=error.error_code,
-            request_id=request.request_id,
-            execution_id=request.request_id,
-            session_id=request.session_id,
-            payload={
-                "timeout_stage": error.timeout_stage,
+            timeout_stage=error.timeout_stage,
+            completion_uncertain=error.completion_uncertain,
+            extra_payload={
                 "execution_started": error.execution_started,
-                "completion_uncertain": error.completion_uncertain,
             },
         )
+        if before_execution:
+            self._release_outstanding(request)
         raise error
 
     def _handle_timeout(self, request: GuiRequest, timeout: float) -> Any:
@@ -617,10 +688,19 @@ class GuiDispatchCore:
                 request_id=request.request_id,
                 execution_id=request.request_id,
                 session_id=request.session_id,
-                payload={},
+                payload=request.stage_clock.to_payload(),
             )
             try:
-                outcome = self._execute_request(request)
+                with stage_clock_scope(request.stage_clock):
+                    started = time.monotonic()
+                    outcome = self._execute_request(request)
+                    if (
+                        request.stage_clock.mutation_callback_ms is None
+                        and not request.stage_clock.mutation_started
+                    ):
+                        request.stage_clock.mutation_callback_ms = (
+                            (time.monotonic() - started) * 1000.0
+                        )
             except BaseException as exc:
                 request.complete(
                     GuiOutcome(
@@ -635,6 +715,7 @@ class GuiDispatchCore:
                 before_wake=lambda: self._forget_after_execution(request),
             )
         finally:
+            self._release_outstanding(request)
             with self._queue_lock:
                 if self._timed_out_request is request:
                     self._timed_out_request = None
@@ -649,6 +730,7 @@ class GuiDispatchCore:
         request = self._take_next_request()
         if request is None:
             return
+        request.stage_clock.mark_drain_started()
         if request._deadline_expired and request._expire_if_waiting(
             lambda: self._remove_pending(request)
         ):
