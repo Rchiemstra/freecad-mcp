@@ -262,14 +262,22 @@ def render_inline_tools_runtime_info_shim() -> str:
     return (
         '"""Declarative shim — inline runtime info lives in generated/capabilities."""\n\n'
         "from freecad_mcp.generated.capabilities.inline.tools_runtime_info import (\n"
-        "    get_runtime_info,\n"
-        "    _compatibility_for_manifest,\n"
         "    _runtime_info_payload,\n"
+        "    get_runtime_info,\n"
+        ")\n"
+        "from freecad_mcp.server_ops.compatibility import (\n"
+        "    compatibility_for_manifest as _compatibility_for_manifest,\n"
+        ")\n"
+        "from freecad_mcp.server_ops.compatibility import (\n"
+        "    normalize_protocol_versions,\n"
+        "    runtime_compatibility,\n"
         ")\n\n"
         "__all__ = [\n"
-        "    'get_runtime_info',\n"
         "    '_compatibility_for_manifest',\n"
         "    '_runtime_info_payload',\n"
+        "    'get_runtime_info',\n"
+        "    'normalize_protocol_versions',\n"
+        "    'runtime_compatibility',\n"
         "]\n"
     )
 

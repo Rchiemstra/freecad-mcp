@@ -128,6 +128,7 @@ def get_instance_info(self):
         "profile_path": profile_path,
         "protocol_versions": [1, 2],
         "protocol_version": 2 if collaborators.session_manager is not None else 1,
+        "rpc_v2_session_ready": collaborators.session_manager is not None,
         "protocol_features": (
             list(collaborators.runtime_manifest.features)
             if collaborators.runtime_manifest is not None

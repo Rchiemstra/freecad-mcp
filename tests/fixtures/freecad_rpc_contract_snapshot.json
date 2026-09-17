@@ -31949,6 +31949,7 @@
         2
       ],
       "protocol_version": 2,
+      "rpc_v2_session_ready": true,
       "protocol_features": [],
       "rpc_method_capabilities": {
         "sketch_create": {
