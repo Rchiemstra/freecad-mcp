@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ...._shared.protocol.undo_contract import (
     DocumentName,
@@ -98,7 +98,19 @@ def rpc_undo(
     expected_undo_head: object = None,
 ) -> dict[str, object]:
     if operation_id is not None or not isinstance(doc_name, str):
-        from .recompute_helpers import undo as history_undo
+        # Lazy native history-head undo. Keep this out of the typed mypy graph:
+        # follow_imports=normal on cad_methods_ops would otherwise typecheck the
+        # untyped recompute_helpers -> cad_mutation -> mutation_readiness chain.
+        if TYPE_CHECKING:
+            def history_undo(
+                rpc: object,
+                doc_selector: object,
+                operation_id: object = None,
+                expected_undo_count: object = None,
+                expected_undo_head: object = None,
+            ) -> dict[str, object]: ...
+        else:
+            from .recompute_helpers import undo as history_undo
 
         return history_undo(
             self,
