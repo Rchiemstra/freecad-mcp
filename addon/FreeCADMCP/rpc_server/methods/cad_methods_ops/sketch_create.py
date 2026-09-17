@@ -168,7 +168,7 @@ def apply_sketch_create(
                 "INVALID_ARGUMENT",
                 f"Sketch {sketch_name!r} has no AttachmentOffset property",
             )
-        sketch.AttachmentOffset = dict_to_placement(attachment_offset)  # type: ignore[attr-defined]
+        sketch.AttachmentOffset = dict_to_placement(attachment_offset)
     return SketchCreateReceipt(name=sketch.Name, sketch=sketch)
 
 
