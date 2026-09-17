@@ -24,9 +24,17 @@ from ...._shared.protocol.pocket_feature_contract import (
 class PocketFeatureError(RuntimeError):
     """An operation failure whose code survives a confirmed native rollback."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        diagnostics: dict[str, object] | None = None,
+        fields: dict[str, object] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.diagnostics = diagnostics
+        self.fields = fields or {}
 
 
 class _AbortPocketFeatureMutation(RuntimeError):
@@ -122,14 +130,18 @@ def _pocket_feature_native_result(
         )
     failure = state.failure if status in {"ApplyFailed", "PostconditionFailed"} else None
     rolled_back = status in _ROLLED_BACK_STATUSES
-    return make_pocket_feature_failure(
+    result = make_pocket_feature_failure(
         failure.code if failure else "NATIVE_COMPATIBILITY_MUTATION_REJECTED",
         str(failure) if failure else message,
         native_status=status,
         native_message=message,
         rollback_succeeded=True if rolled_back else None,
         rollback_failed=False if rolled_back else None,
+        diagnostics=failure.diagnostics if failure is not None else None,
     )
+    if failure is not None:
+        result.update(failure.fields)  # type: ignore[typeddict-item]
+    return result
 
 
 def run_pocket_feature_native_mutation(

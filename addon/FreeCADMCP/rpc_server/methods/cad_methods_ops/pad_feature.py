@@ -50,7 +50,12 @@ class _PadFeatureRequest:
 
 
 def _failure(error: PadFeatureError, *, retry_safe: bool = True) -> PadFeatureFailure:
-    return make_pad_feature_failure(error.code, str(error), retry_safe=retry_safe)
+    return make_pad_feature_failure(
+        error.code,
+        str(error),
+        retry_safe=retry_safe,
+        diagnostics=error.diagnostics,
+    )
 
 
 def _is_type(obj: object, type_id: str) -> bool:
@@ -83,34 +88,36 @@ def _resolve_body(doc: PadFeatureDocument, sketch: object, body_name: str | None
     )
 
 
+def _profile_diagnostics(sketch: object) -> dict[str, object]:
+    diagnostics: dict[str, object] = {
+        "conflicting": list(getattr(sketch, "ConflictingConstraints", []) or []),
+        "redundant": list(getattr(sketch, "RedundantConstraints", []) or []),
+        "malformed": list(getattr(sketch, "MalformedConstraints", []) or []),
+        "solver_message": getattr(sketch, "SolverMessage", None),
+        "is_closed": None,
+    }
+    try:
+        shape = getattr(sketch, "Shape", None)
+        is_null = getattr(shape, "isNull", None) if shape is not None else None
+        if shape is not None and not (callable(is_null) and is_null()):
+            diagnostics["is_closed"] = bool(shape.isClosed())
+    except Exception:
+        pass
+    return diagnostics
+
+
 def _require_closed_profile(sketch: object, sketch_name: str) -> None:
-    conflicting = list(getattr(sketch, "ConflictingConstraints", []) or [])
-    malformed = list(getattr(sketch, "MalformedConstraints", []) or [])
-    if conflicting:
+    diagnostics = _profile_diagnostics(sketch)
+    if (
+        diagnostics["conflicting"]
+        or diagnostics["malformed"]
+        or diagnostics["is_closed"] is not True
+    ):
         raise PadFeatureError(
-            "SKETCH_CONFLICTING_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has conflicting constraints",
+            "SKETCH_PROFILE_NOT_CLOSED",
+            "Sketch profile is not pad-ready",
+            diagnostics=diagnostics,
         )
-    if malformed:
-        raise PadFeatureError(
-            "SKETCH_MALFORMED_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has malformed constraints",
-        )
-    shape = getattr(sketch, "Shape", None)
-    is_closed = getattr(shape, "isClosed", None) if shape is not None else None
-    if callable(is_closed):
-        try:
-            closed = bool(is_closed())
-        except (AttributeError, TypeError, RuntimeError) as exc:
-            raise PadFeatureError(
-                "SKETCH_SHAPE_INVALID",
-                f"Sketch {sketch_name!r} profile shape is invalid: {exc}",
-            ) from exc
-        if not closed:
-            raise PadFeatureError(
-                "SKETCH_PROFILE_NOT_CLOSED",
-                f"Sketch {sketch_name!r} profile is not a closed wire",
-            )
 
 
 def _extrusion_length(feature: object, feature_name: str) -> float:

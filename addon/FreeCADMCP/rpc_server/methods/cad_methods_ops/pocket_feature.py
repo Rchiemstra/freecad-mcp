@@ -29,6 +29,8 @@ class PocketFeatureReceipt:
     body_name: str
     sketch_name: str
     expected_length: float
+    source_feature: str | None
+    volume_before: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +52,14 @@ class _PocketFeatureRequest:
 
 
 def _failure(error: PocketFeatureError, *, retry_safe: bool = True) -> PocketFeatureFailure:
-    return make_pocket_feature_failure(error.code, str(error), retry_safe=retry_safe)
+    result = make_pocket_feature_failure(
+        error.code,
+        str(error),
+        retry_safe=retry_safe,
+        diagnostics=error.diagnostics,
+    )
+    result.update(error.fields)  # type: ignore[typeddict-item]
+    return result
 
 
 def _is_type(obj: object, type_id: str) -> bool:
@@ -83,34 +92,60 @@ def _resolve_body(doc: PocketFeatureDocument, sketch: object, body_name: str | N
     )
 
 
+def _profile_diagnostics(sketch: object) -> dict[str, object]:
+    diagnostics: dict[str, object] = {
+        "conflicting": list(getattr(sketch, "ConflictingConstraints", []) or []),
+        "redundant": list(getattr(sketch, "RedundantConstraints", []) or []),
+        "malformed": list(getattr(sketch, "MalformedConstraints", []) or []),
+        "solver_message": getattr(sketch, "SolverMessage", None),
+        "is_closed": None,
+    }
+    try:
+        shape = getattr(sketch, "Shape", None)
+        is_null = getattr(shape, "isNull", None) if shape is not None else None
+        if shape is not None and not (callable(is_null) and is_null()):
+            diagnostics["is_closed"] = bool(shape.isClosed())
+    except Exception:
+        pass
+    return diagnostics
+
+
 def _require_closed_profile(sketch: object, sketch_name: str) -> None:
-    conflicting = list(getattr(sketch, "ConflictingConstraints", []) or [])
-    malformed = list(getattr(sketch, "MalformedConstraints", []) or [])
-    if conflicting:
+    diagnostics = _profile_diagnostics(sketch)
+    if (
+        diagnostics["conflicting"]
+        or diagnostics["malformed"]
+        or diagnostics["is_closed"] is not True
+    ):
         raise PocketFeatureError(
-            "SKETCH_CONFLICTING_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has conflicting constraints",
+            "SKETCH_PROFILE_NOT_CLOSED",
+            "Sketch profile is not pocket-ready",
+            diagnostics=diagnostics,
         )
-    if malformed:
-        raise PocketFeatureError(
-            "SKETCH_MALFORMED_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has malformed constraints",
-        )
-    shape = getattr(sketch, "Shape", None)
-    is_closed = getattr(shape, "isClosed", None) if shape is not None else None
-    if callable(is_closed):
-        try:
-            closed = bool(is_closed())
-        except (AttributeError, TypeError, RuntimeError) as exc:
-            raise PocketFeatureError(
-                "SKETCH_SHAPE_INVALID",
-                f"Sketch {sketch_name!r} profile shape is invalid: {exc}",
-            ) from exc
-        if not closed:
-            raise PocketFeatureError(
-                "SKETCH_PROFILE_NOT_CLOSED",
-                f"Sketch {sketch_name!r} profile is not a closed wire",
-            )
+
+
+def _solid_volume(candidate: object) -> float | None:
+    shape = getattr(candidate, "Shape", None)
+    if shape is None:
+        return None
+    is_null = getattr(shape, "isNull", None)
+    if callable(is_null) and is_null():
+        return None
+    solids = getattr(shape, "Solids", [])
+    if not solids:
+        return None
+    return float(shape.Volume)
+
+
+def _material_baseline(body: object, sketch: object) -> tuple[str | None, float]:
+    for candidate in reversed(list(getattr(body, "Group", []) or [])):
+        if candidate is sketch:
+            continue
+        volume = _solid_volume(candidate)
+        if volume is not None:
+            name = getattr(candidate, "Name", None)
+            return (str(name) if isinstance(name, str) and name else None), volume
+    return None, 0.0
 
 
 def _extrusion_length(feature: object, feature_name: str) -> float:
@@ -157,6 +192,7 @@ def apply_pocket_feature(
         raise PocketFeatureError("NOT_A_SKETCH", f"Object {sketch_name!r} is not a sketch")
     _require_closed_profile(sketch, sketch_name)
     body = _resolve_body(doc, sketch, body_name)
+    source_feature, volume_before = _material_baseline(body, sketch)
     new_object = getattr(body, "newObject", None)
     if not callable(new_object):
         raise PocketFeatureError("BODY_WRONG_TYPE", "Body cannot create a Pocket")
@@ -172,6 +208,8 @@ def apply_pocket_feature(
         body_name=str(getattr(body, "Name", "")),
         sketch_name=sketch.Name,
         expected_length=length,
+        source_feature=source_feature,
+        volume_before=volume_before,
     )
 
 
@@ -223,6 +261,38 @@ def read_pocket_feature_result(
         raise PocketFeatureError(
             "POCKET_SHAPE_EMPTY",
             f"Pocket {receipt.name!r} has no solid after recompute",
+        )
+    volume_after_raw = getattr(shape, "Volume", None)
+    if not isinstance(volume_after_raw, (int, float)) or isinstance(volume_after_raw, bool):
+        return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
+    volume_after = float(volume_after_raw)
+    material_delta = volume_after - receipt.volume_before
+    delta_tolerance = max(
+        1.0e-9, max(abs(receipt.volume_before), abs(volume_after)) * 1.0e-12
+    )
+    material_fields: dict[str, object] = {
+        "source_feature": receipt.source_feature,
+        "volume_before_mm3": receipt.volume_before,
+        "volume_after_mm3": volume_after,
+        "material_delta_mm3": material_delta,
+        "material_delta_tolerance_mm3": delta_tolerance,
+    }
+    if receipt.source_feature is None:
+        return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
+    if abs(material_delta) <= delta_tolerance:
+        raise PocketFeatureError(
+            "ZERO_MATERIAL_DELTA",
+            f"{receipt.name} did not change the body's material volume",
+            fields=material_fields,
+        )
+    if material_delta >= 0.0:
+        raise PocketFeatureError(
+            "MATERIAL_DELTA_DIRECTION_MISMATCH",
+            (
+                f"{receipt.name} changed material in the wrong direction for "
+                "a subtractive feature"
+            ),
+            fields=material_fields,
         )
     return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
 

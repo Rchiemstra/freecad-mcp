@@ -101,6 +101,7 @@ class CreateDatumPlaneSuccess(TypedDict):
     retry_safe: Literal[False]
     plane_name: str
     body_name: str
+    preflight_warning: NotRequired[str]
 
 
 class CreateDatumPlaneFailure(TypedDict):
@@ -143,15 +144,17 @@ CreateDatumPlaneResult = CreateDatumPlaneSuccess | CreateDatumPlaneFailure | Cre
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'plane_name', 'body_name', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'plane_name', 'body_name', "preflight_warning", "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_create_datum_plane_success(plane_name: str, body_name: str) -> CreateDatumPlaneSuccess:
+def make_create_datum_plane_success(
+    plane_name: str, body_name: str, preflight_warning: str | None = None
+) -> CreateDatumPlaneSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: CreateDatumPlaneSuccess = {
         "contract_version": CREATE_DATUM_PLANE_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -161,6 +164,9 @@ def make_create_datum_plane_success(plane_name: str, body_name: str) -> CreateDa
         "plane_name": plane_name,
         "body_name": body_name,
     }
+    if preflight_warning:
+        result["preflight_warning"] = preflight_warning
+    return result
 
 
 def make_create_datum_plane_failure(
@@ -375,7 +381,13 @@ def parse_create_datum_plane_response(raw_response: object) -> CreateDatumPlaneR
         and isinstance(plane_name, str) and plane_name.strip()
         and isinstance(body_name, str) and body_name.strip()
     ):
-        return make_create_datum_plane_success(str(plane_name), str(body_name))
+        return make_create_datum_plane_success(
+            str(plane_name),
+            str(body_name),
+            preflight_warning=str(response["preflight_warning"])
+            if isinstance(response.get("preflight_warning"), str)
+            else None,
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")
