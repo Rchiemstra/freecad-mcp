@@ -208,8 +208,7 @@ def make_preview_attachment_success(
         result["datum"] = datum
     if datum_body is not None:
         result["datum_body"] = datum_body
-    if support_body is not None:
-        result["support_body"] = support_body
+    result["support_body"] = support_body
     if diff is not None:
         result["diff"] = diff
     return result

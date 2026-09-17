@@ -85,7 +85,14 @@ def _expression_matches(bound: object, requested: str) -> bool:
     return _normalize_expression(bound_text) == _normalize_expression(requested)
 
 
+def _is_expression_engine_path(prop_path: str) -> bool:
+    stripped = prop_path.strip()
+    return stripped.startswith("Constraints[") and stripped.endswith("]")
+
+
 def _has_expression_property(item: object, prop_path: str) -> bool:
+    if _is_expression_engine_path(prop_path):
+        return True
     properties = getattr(item, "PropertiesList", None)
     if isinstance(properties, (list, tuple)) and prop_path in properties:
         return True

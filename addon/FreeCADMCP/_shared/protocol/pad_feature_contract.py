@@ -118,6 +118,7 @@ class PadFeatureSuccess(TypedDict):
     committed: Literal[True]
     retry_safe: Literal[False]
     pad: PadName
+    feature: PadName
     label: str
 
 
@@ -168,6 +169,7 @@ _CORE_KEYS = frozenset(
         "committed",
         "retry_safe",
         "pad",
+        "feature",
         "label",
         "error_code",
         "error",
@@ -191,6 +193,7 @@ def make_pad_feature_success(pad: PadName, label: str) -> PadFeatureSuccess:
         "committed": True,
         "retry_safe": False,
         "pad": pad,
+        "feature": pad,
         "label": label,
     }
 

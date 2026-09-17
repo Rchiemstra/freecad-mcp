@@ -118,6 +118,7 @@ class PocketFeatureSuccess(TypedDict):
     committed: Literal[True]
     retry_safe: Literal[False]
     pocket: PocketName
+    feature: PocketName
     label: str
 
 
@@ -168,6 +169,7 @@ _CORE_KEYS = frozenset(
         "committed",
         "retry_safe",
         "pocket",
+        "feature",
         "label",
         "error_code",
         "error",
@@ -191,6 +193,7 @@ def make_pocket_feature_success(pocket: PocketName, label: str) -> PocketFeature
         "committed": True,
         "retry_safe": False,
         "pocket": pocket,
+        "feature": pocket,
         "label": label,
     }
 

@@ -11,6 +11,7 @@ from ..._shared.protocol.create_subshape_binder_contract import (
 )
 from ...freecad_client import FreeCADConnection
 from ...responses.tool_results import tool_fail, tool_ok
+from ..diagnostics_ops.helpers import keep_historical_extras
 
 
 def create_subshape_binder_operation(
@@ -28,6 +29,11 @@ def create_subshape_binder_operation(
             committed=None,
         )
     result = parse_create_subshape_binder_response(raw_result)
+    result = keep_historical_extras(
+        dict(result),
+        raw_result,
+        ("bbox_delta_mm", "source_bbox", "binder_bbox", "warning", "source_object", "sub_elements"),
+    )
     structured = dict(result)
     if result["success"] is False:
         return tool_fail(

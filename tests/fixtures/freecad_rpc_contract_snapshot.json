@@ -9454,6 +9454,96 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "type",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "normal_approx",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "null",
+              "object"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "direction_approx",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "null",
+              "object"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "center_approx",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "null",
+              "object"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "radius",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "tol",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "number"
+          },
+          "default": 0.001
+        },
+        {
+          "name": "center_tol",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "number"
+          },
+          "default": 1.0
+        },
+        {
+          "name": "limit",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": 10
         }
       ],
       "result_examples": [
@@ -9603,6 +9693,83 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "type",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "normal_approx",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "null",
+              "object"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "center_approx",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "null",
+              "object"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "radius",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "default": null
+        },
+        {
+          "name": "tol",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "number"
+          },
+          "default": 0.001
+        },
+        {
+          "name": "center_tol",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "number"
+          },
+          "default": 1.0
+        },
+        {
+          "name": "limit",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": 10
         }
       ],
       "result_examples": [

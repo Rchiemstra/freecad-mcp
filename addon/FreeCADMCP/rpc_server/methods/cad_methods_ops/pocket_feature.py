@@ -371,6 +371,31 @@ class _PocketFeatureExecution:
             )
         self.inspected = read_pocket_feature_result(doc, self.created)
 
+    def _leave_pending_recompute(self) -> None:
+        """Historical ZERO_MATERIAL_DELTA rollback leaves a pending recompute.
+
+        Native restore-first clears the failed pocket, but callers still settle
+        with an explicit recompute_document. Touch live objects so native
+        readiness reports pending_recompute/native_not_ready without poisoning.
+        """
+        app = getattr(self.collaborators, "freecad", None)
+        getter = getattr(app, "getDocument", None) if app is not None else None
+        document = getter(str(self.request.doc_name)) if callable(getter) else None
+        if document is None:
+            return
+        targets = list(getattr(document, "Objects", []) or [])
+        touch_doc = getattr(document, "touch", None)
+        if callable(touch_doc):
+            targets = [document, *targets]
+        for item in targets:
+            touch = getattr(item, "touch", None)
+            if not callable(touch):
+                continue
+            try:
+                touch()
+            except Exception:
+                continue
+
     def run(self) -> PocketFeatureResult:
         result = run_pocket_feature_native_mutation(
             self.collaborators,
@@ -379,6 +404,11 @@ class _PocketFeatureExecution:
             self.inspect,
         )
         if result is not True:
+            if (
+                isinstance(result, dict)
+                and result.get("error_code") == "ZERO_MATERIAL_DELTA"
+            ):
+                self._leave_pending_recompute()
             return result
         if self.inspected is None:
             return make_pocket_feature_uncertain(

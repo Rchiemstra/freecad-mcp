@@ -295,11 +295,17 @@ def read_sweep_pipe_result(doc: SweepPipeReadDocument, receipt: SweepPipeReceipt
     shape = getattr(located, "Shape", None)
     if shape is not None and not _solid_has_volume(shape):
         raise SweepPipeError("CREATED_OBJECT_INVALID", f"Created solid has no volume: {receipt.name!r}")
+    extra = dict(receipt.extra) if isinstance(receipt.extra, dict) else {}
+    if shape is not None:
+        try:
+            extra["volume_mm3"] = float(getattr(shape, "Volume", 0.0) or 0.0)
+        except Exception:
+            extra["volume_mm3"] = 0.0
 
     return SweepPipeInspection(
         name=SweepPipeName(receipt.name),
         label=object_label(located),
-        extra=receipt.extra,
+        extra=extra,
     )
 
 
@@ -388,7 +394,13 @@ class _SweepPipeExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_sweep_pipe_success(solid_name=self.inspected.name)
+        success = dict(make_sweep_pipe_success(solid_name=self.inspected.name))
+        extra = self.inspected.extra
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                if isinstance(key, str) and key not in success:
+                    success[key] = value
+        return success  # type: ignore[return-value]
 
 
 def run_sweep_pipe(

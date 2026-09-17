@@ -54,6 +54,15 @@ def _failure(error: PreviewAttachmentError, *, retry_safe: bool = True) -> Previ
     return make_preview_attachment_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _support_object_name(item: object) -> str:
+    name = object_name(item)
+    if name:
+        return name
+    if isinstance(item, str) and item.strip():
+        return item
+    return ""
+
+
 def _support_entries(datum: object) -> list[dict[str, object]]:
     support = getattr(datum, "AttachmentSupport", None)
     if support is None:
@@ -71,9 +80,9 @@ def _support_entries(datum: object) -> list[dict[str, object]]:
         if isinstance(item, (list, tuple)) and item:
             obj = item[0]
             sub = item[1] if len(item) > 1 else ""
-            entries.append({"object": object_name(obj), "sub": str(sub)})
+            entries.append({"object": _support_object_name(obj), "sub": str(sub)})
         else:
-            entries.append({"object": object_name(item), "sub": ""})
+            entries.append({"object": _support_object_name(item), "sub": ""})
     return entries
 
 
