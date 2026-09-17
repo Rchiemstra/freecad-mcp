@@ -72,7 +72,7 @@ def apply_create_object(
             f"Object already exists: {request.object_name!r}",
         )
     created = add_object(doc, str(request.object_type), str(request.object_name))
-    properties = dict(request.properties)
+    properties = _resolve_link_properties(doc, dict(request.properties))
     if properties:
         if set_object_property is not None:
             set_object_property(doc, created, properties)
@@ -118,6 +118,26 @@ def _scalar_property(value: object) -> object:
     return raw
 
 
+def _resolve_link_properties(doc: object, properties: dict[str, object]) -> dict[str, object]:
+    resolved: dict[str, object] = {}
+    for key, value in properties.items():
+        if (
+            isinstance(value, str)
+            and value.strip()
+            and (
+                key in {"LinkedObject", "Base", "Tool", "Source", "Profile", "Support", "Tip"}
+                or key.endswith("Object")
+                or key.endswith("Link")
+            )
+        ):
+            target = get_object(doc, value)
+            if target is not None:
+                resolved[key] = target
+                continue
+        resolved[key] = value
+    return resolved
+
+
 def _property_matches(expected: object, actual: object) -> bool:
     left = _scalar_property(expected)
     right = _scalar_property(actual)
@@ -125,7 +145,14 @@ def _property_matches(expected: object, actual: object) -> bool:
         return left is right
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         return abs(float(left) - float(right)) <= 1e-6
-    return left == right
+    if left == right:
+        return True
+    actual_name = getattr(actual, "Name", None)
+    if isinstance(expected, str) and isinstance(actual_name, str) and expected == actual_name:
+        return True
+    if isinstance(expected, str) and isinstance(actual, (list, tuple)) and actual:
+        return _property_matches(expected, actual[0])
+    return False
 
 
 def read_create_object_result(

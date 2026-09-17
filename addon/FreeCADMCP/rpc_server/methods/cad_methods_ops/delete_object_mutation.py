@@ -134,6 +134,9 @@ def run_delete_object_native_mutation(
     document_name: str,
     apply: Callable[[object], None],
     postcondition: Callable[[object], None],
+    *,
+    validate: bool = True,
+    recompute: bool = True,
 ) -> Literal[True] | DeleteObjectFailure | DeleteObjectUncertain:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
@@ -167,14 +170,15 @@ def run_delete_object_native_mutation(
                 else DeleteObjectError("DELETE_OBJECT_RESULT_FAILED", str(exc) or type(exc).__name__)
             )
             return False
-        try:
-            collaborators.validate_document_invariants(cast(DeleteObjectReadDocument, document))
-        except Exception as exc:
-            state.failure = DeleteObjectError(
-                "DOCUMENT_HEALTH_DEGRADED",
-                str(exc) or type(exc).__name__,
-            )
-            return False
+        if validate:
+            try:
+                collaborators.validate_document_invariants(cast(DeleteObjectReadDocument, document))
+            except Exception as exc:
+                state.failure = DeleteObjectError(
+                    "DOCUMENT_HEALTH_DEGRADED",
+                    str(exc) or type(exc).__name__,
+                )
+                return False
         state.postcondition_passed = True
         return True
 
@@ -184,6 +188,7 @@ def run_delete_object_native_mutation(
             native_apply,
             native_postcondition,
             structural=True,
+            recompute=recompute,
         )
     except LookupError as exc:
         if state.document is None:

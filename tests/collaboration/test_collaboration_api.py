@@ -271,9 +271,9 @@ def test_typed_native_commit_maps_restored_callback_errors_to_status() -> None:
         Name = "Model"
 
         def commitCompatibilityMutation(
-            self, callback, *, structural=True, postcondition=None
+            self, callback, *, structural=True, postcondition=None, recompute=True
         ):
-            del structural
+            del structural, recompute
             callback()
             if postcondition is not None:
                 postcondition()
@@ -297,9 +297,9 @@ def test_typed_native_commit_maps_restored_callback_errors_to_status() -> None:
         Name = "Model"
 
         def commitCompatibilityMutation(
-            self, callback, *, structural=True, postcondition=None
+            self, callback, *, structural=True, postcondition=None, recompute=True
         ):
-            del structural
+            del structural, recompute
             callback()
             postcondition()
             raise AssertionError("postcondition should have raised")

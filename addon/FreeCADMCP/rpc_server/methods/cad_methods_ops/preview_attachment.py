@@ -106,6 +106,47 @@ def _placement_dict(placement: object) -> dict[str, object] | None:
     return {"base": base, "axis": axis, "angle_deg": angle_deg}
 
 
+def _owning_body(obj: object) -> object | None:
+    getter = getattr(obj, "getParentGeoFeatureGroup", None)
+    if callable(getter):
+        try:
+            owner: object | None = getter()
+        except Exception:
+            owner = None
+        if owner is not None:
+            located: object = owner
+            return located
+    for candidate in getattr(obj, "InList", ()) or ():
+        if getattr(candidate, "TypeId", "") == "PartDesign::Body":
+            if obj in getattr(candidate, "Group", ()):
+                located_candidate: object = candidate
+                return located_candidate
+    return None
+
+
+def _placement_is_identity(placement: object) -> bool:
+    base = getattr(placement, "Base", None)
+    if base is None:
+        return True
+    try:
+        length = float(getattr(base, "Length", 0.0))
+    except Exception:
+        try:
+            length = (
+                abs(float(base.x)) + abs(float(base.y)) + abs(float(base.z))
+            )
+        except Exception:
+            return True
+    if length > 1.0e-9:
+        return False
+    rotation = getattr(placement, "Rotation", None)
+    angle = getattr(rotation, "Angle", 0.0) if rotation is not None else 0.0
+    try:
+        return abs(float(angle)) <= 1.0e-9
+    except Exception:
+        return True
+
+
 def _attachment_diagnostics(datum: object) -> dict[str, object]:
     support = _support_entries(datum)
     placement = _placement_dict(getattr(datum, "Placement", None))
@@ -156,14 +197,53 @@ def _attachment_diagnostics(datum: object) -> dict[str, object]:
                                     normal_angle_deg = None
                 except Exception:
                     pass
-            if getattr(support_obj, "TypeId", "") in {"PartDesign::Body", "App::Part"}:
-                source_body_placement_dropped = datum_placement is None
+            datum_body = _owning_body(datum)
+            support_body = _owning_body(support_obj)
+            datum_body_name = object_name(datum_body) if datum_body is not None else None
+            support_body_name = object_name(support_body) if support_body is not None else None
+            if (
+                datum_body is not None
+                and support_body is not None
+                and datum_body is not support_body
+                and not _placement_is_identity(getattr(support_body, "Placement", None))
+            ):
+                source_body_placement_dropped = True
+            extras = {
+                "datum": object_name(datum),
+                "datum_body": datum_body_name,
+                "support_body": support_body_name,
+                "diff": {
+                    "signed_distance_mm": distance,
+                    "angle_deg": normal_angle_deg,
+                },
+            }
+        else:
+            extras = {
+                "datum": object_name(datum),
+                "datum_body": object_name(_owning_body(datum)),
+                "support_body": None,
+                "diff": {
+                    "signed_distance_mm": distance,
+                    "angle_deg": normal_angle_deg,
+                },
+            }
+    else:
+        extras = {
+            "datum": object_name(datum),
+            "datum_body": object_name(_owning_body(datum)),
+            "support_body": None,
+            "diff": {
+                "signed_distance_mm": distance,
+                "angle_deg": normal_angle_deg,
+            },
+        }
     return {
         "support": support,
         "placement": placement,
         "distance": distance,
         "normal_angle_deg": normal_angle_deg,
         "source_body_placement_dropped": source_body_placement_dropped,
+        **extras,
     }
 
 
@@ -245,6 +325,10 @@ class _PreviewAttachmentExecution:
             distance=extra.get("distance"),
             normal_angle_deg=extra.get("normal_angle_deg"),
             source_body_placement_dropped=extra.get("source_body_placement_dropped"),
+            datum=extra.get("datum"),
+            datum_body=extra.get("datum_body"),
+            support_body=extra.get("support_body"),
+            diff=extra.get("diff"),
         )
 
 

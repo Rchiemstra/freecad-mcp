@@ -45,6 +45,7 @@ class _NativeMutationDocument(Protocol):
         *,
         structural: bool = False,
         postcondition: Callable[[], object] | None = None,
+        recompute: bool = True,
     ) -> object: ...
 
 __all__ = ["CollaborationAPI"]
@@ -183,6 +184,7 @@ class CollaborationAPI:
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Run a typed native mutation with apply and inspect on one document."""
 
@@ -192,7 +194,8 @@ class CollaborationAPI:
                 "document must provide the native typed mutation contract"
             )
 
-        _settle_pending_recompute(document)
+        if recompute:
+            _settle_pending_recompute(document)
         callback_started: list[bool] = []
         postcondition_started: list[bool] = []
 
@@ -209,6 +212,7 @@ class CollaborationAPI:
                 invoke_callback,
                 structural=structural,
                 postcondition=invoke_postcondition,
+                recompute=recompute,
             )
         except TypeError as exc:
             if not callback_started:

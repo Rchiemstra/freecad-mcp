@@ -27,7 +27,7 @@ def test_delete_object_runs_apply_recompute_validate_then_commits():
     document.events.clear()
     collab, _api = collaborators(document, events)
 
-    result = run_delete_object(collab, "Doc", "Box", False, True)
+    result = run_delete_object(collab, "Doc", "Box", False, False)
 
     assert result["success"] is True
     assert result['object_name'] == 'Box'
@@ -54,7 +54,7 @@ def test_missing_document_fails_without_entering_apply():
     if "delete_object" in {"create_document", "open_document"}:
         pytest.skip("lifecycle create/open allocate a document before native commit")
 
-    result = run_delete_object(collab, "Doc", "Box", False, True)
+    result = run_delete_object(collab, "Doc", "Box", False, False)
 
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
@@ -106,7 +106,7 @@ def test_native_capability_is_required_before_apply():
         ],
     )
 
-    result = run_delete_object(collab, "Doc", "Box", False, True)
+    result = run_delete_object(collab, "Doc", "Box", False, False)
 
     assert result["success"] is False
     assert result["native_status"] == "Unsupported"
@@ -123,7 +123,7 @@ def test_native_rejection_never_returns_cached_success():
         final_result={"status": "PublicationFailed", "committed": False},
     )
 
-    result = run_delete_object(collab, "Doc", "Box", False, True)
+    result = run_delete_object(collab, "Doc", "Box", False, False)
 
     assert result["success"] is False
     assert result["error_code"] in {

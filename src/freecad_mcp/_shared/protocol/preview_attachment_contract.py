@@ -97,6 +97,10 @@ class PreviewAttachmentSuccess(TypedDict):
     distance: NotRequired[object]
     normal_angle_deg: NotRequired[object]
     source_body_placement_dropped: NotRequired[bool]
+    datum: NotRequired[object]
+    datum_body: NotRequired[object]
+    support_body: NotRequired[object]
+    diff: NotRequired[object]
 
 
 class PreviewAttachmentFailure(TypedDict):
@@ -151,6 +155,10 @@ _CORE_KEYS = frozenset(
         "distance",
         "normal_angle_deg",
         "source_body_placement_dropped",
+        "datum",
+        "datum_body",
+        "support_body",
+        "diff",
         "error_code",
         "error",
         "native_status",
@@ -170,6 +178,10 @@ def make_preview_attachment_success(
     distance: object = None,
     normal_angle_deg: object = None,
     source_body_placement_dropped: object = None,
+    datum: object = None,
+    datum_body: object = None,
+    support_body: object = None,
+    diff: object = None,
 ) -> PreviewAttachmentSuccess:
     """Construct a complete committed result."""
 
@@ -192,6 +204,14 @@ def make_preview_attachment_success(
         result["normal_angle_deg"] = normal_angle_deg
     if source_body_placement_dropped is not None:
         result["source_body_placement_dropped"] = bool(source_body_placement_dropped)
+    if datum is not None:
+        result["datum"] = datum
+    if datum_body is not None:
+        result["datum_body"] = datum_body
+    if support_body is not None:
+        result["support_body"] = support_body
+    if diff is not None:
+        result["diff"] = diff
     return result
 
 
@@ -412,6 +432,10 @@ def parse_preview_attachment_response(raw_response: object) -> PreviewAttachment
             distance=response.get("distance"),
             normal_angle_deg=response.get("normal_angle_deg"),
             source_body_placement_dropped=response.get("source_body_placement_dropped"),
+            datum=response.get("datum"),
+            datum_body=response.get("datum_body"),
+            support_body=response.get("support_body"),
+            diff=response.get("diff"),
         )
 
     error_code = response.get("error_code")

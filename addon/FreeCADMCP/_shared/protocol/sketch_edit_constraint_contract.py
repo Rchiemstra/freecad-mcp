@@ -419,7 +419,18 @@ def parse_sketch_edit_constraint_response(raw_response: object) -> SketchEditCon
         and isinstance(index, int) and not isinstance(index, bool) and index >= 0
         and isinstance(name, str)
     ):
-        return make_sketch_edit_constraint_success(SketchName(sketch), index, name)
+        after_raw = response.get("after")
+        after_value = (
+            float(after_raw)
+            if isinstance(after_raw, (int, float)) and not isinstance(after_raw, bool)
+            else None
+        )
+        return make_sketch_edit_constraint_success(
+            SketchName(sketch),
+            index,
+            name,
+            after=after_value,
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")
