@@ -34,9 +34,31 @@ def placement_audit_operation(
 
 
 
+def _as_object_rows(objects: object) -> dict[str, dict]:
+    if isinstance(objects, dict):
+        rows: dict[str, dict] = {}
+        for name, row in objects.items():
+            if not isinstance(name, str):
+                continue
+            if isinstance(row, dict):
+                item = dict(row)
+                item.setdefault("name", name)
+                rows[str(item.get("name") or name)] = item
+            else:
+                rows[name] = {"name": name}
+        return rows
+    if isinstance(objects, list):
+        rows = {}
+        for row in objects:
+            if isinstance(row, dict) and isinstance(row.get("name"), str):
+                rows[row["name"]] = row
+        return rows
+    return {}
+
+
 def _diff_states(before: dict, current: dict) -> dict:
-    before_objs = {o["name"]: o for o in before.get("objects", [])}
-    current_objs = {o["name"]: o for o in current.get("objects", [])}
+    before_objs = _as_object_rows(before.get("objects", []))
+    current_objs = _as_object_rows(current.get("objects", []))
     diffs = []
     for name in sorted(set(before_objs) | set(current_objs)):
         b = before_objs.get(name)
@@ -96,8 +118,14 @@ def geometric_diff_operation(
             "Failed to capture current state for diff: " + _response_text(resp),
             error_code="MALFORMED_RESPONSE",
         )
-    structured = resp.structuredContent.get("data", {}) if resp.structuredContent else {}
-    objects = structured.get("objects", {}) if isinstance(structured, dict) else {}
-    rows = list(objects.values()) if isinstance(objects, dict) else []
-    current = {"ok": True, "doc": structured.get("doc", doc_name), "objects": rows}
+    envelope = resp.structuredContent if isinstance(resp.structuredContent, dict) else {}
+    nested = envelope.get("data")
+    structured = nested if isinstance(nested, dict) else envelope
+    objects = structured.get("objects", envelope.get("objects", {}))
+    rows = list(_as_object_rows(objects).values())
+    current = {
+        "ok": True,
+        "doc": structured.get("doc", envelope.get("doc", doc_name)),
+        "objects": rows,
+    }
     return json_response(_diff_states(before, current))

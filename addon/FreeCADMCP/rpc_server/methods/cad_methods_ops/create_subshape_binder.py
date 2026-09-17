@@ -93,6 +93,63 @@ def _resolve_owner(doc: CreateSubshapeBinderDocument, request: CreateSubshapeBin
     return None
 
 
+def _boundbox_values(obj: object) -> tuple[float, float, float, float, float, float] | None:
+    shape = getattr(obj, "Shape", None)
+    box = getattr(shape, "BoundBox", None) if shape is not None else None
+    if box is None:
+        return None
+    try:
+        return (
+            float(getattr(box, "XMin", 0.0)),
+            float(getattr(box, "YMin", 0.0)),
+            float(getattr(box, "ZMin", 0.0)),
+            float(getattr(box, "XMax", 0.0)),
+            float(getattr(box, "YMax", 0.0)),
+            float(getattr(box, "ZMax", 0.0)),
+        )
+    except Exception:
+        return None
+
+
+def _binder_bbox_extras(doc: CreateSubshapeBinderReadDocument, binder: object) -> dict[str, object]:
+    source = None
+    support = getattr(binder, "Support", None)
+    try:
+        values = list(getattr(support, "getValues", lambda: support)() or [])
+    except Exception:
+        values = list(support) if isinstance(support, (list, tuple)) else []
+    if values:
+        first = values[0]
+        candidate = first[0] if isinstance(first, (list, tuple)) and first else first
+        source = candidate if candidate is not None and hasattr(candidate, "Shape") else None
+        if source is None and isinstance(candidate, str):
+            source = doc.getObject(candidate)
+    source_bb = _boundbox_values(source) if source is not None else None
+    binder_bb = _boundbox_values(binder)
+    delta = None
+    if source_bb is not None and binder_bb is not None:
+        delta = max(abs(left - right) for left, right in zip(source_bb, binder_bb))
+    return {
+        "bbox_delta_mm": None if delta is None else round(delta, 6),
+        "source_bbox": None if source_bb is None else {
+            "xmin": source_bb[0],
+            "ymin": source_bb[1],
+            "zmin": source_bb[2],
+            "xmax": source_bb[3],
+            "ymax": source_bb[4],
+            "zmax": source_bb[5],
+        },
+        "binder_bbox": None if binder_bb is None else {
+            "xmin": binder_bb[0],
+            "ymin": binder_bb[1],
+            "zmin": binder_bb[2],
+            "xmax": binder_bb[3],
+            "ymax": binder_bb[4],
+            "zmax": binder_bb[5],
+        },
+    }
+
+
 def _object_in_owner(located: object, owner: object) -> bool:
     group = list(getattr(owner, "Group", None) or [])
     if located in group:
@@ -162,8 +219,9 @@ def read_create_subshape_binder_result(doc: CreateSubshapeBinderReadDocument, re
         )
 
     owner_name = None
-    if isinstance(receipt.extra, dict):
-        owner_name = receipt.extra.get("owner_name")
+    extra = dict(receipt.extra) if isinstance(receipt.extra, dict) else {}
+    if extra:
+        owner_name = extra.get("owner_name")
     if owner_name:
         owner = doc.getObject(str(owner_name))
         if owner is not None and not _object_in_owner(located, owner):
@@ -171,11 +229,11 @@ def read_create_subshape_binder_result(doc: CreateSubshapeBinderReadDocument, re
                 "POSTCONDITION_FAILED",
                 f"Binder is not grouped under owner: {owner_name!r}",
             )
-
+    extra.update(_binder_bbox_extras(doc, located))
     return CreateSubshapeBinderInspection(
         name=CreateSubshapeBinderName(receipt.name),
         label=object_label(located),
-        extra=receipt.extra,
+        extra=extra,
     )
 
 
@@ -262,7 +320,13 @@ class _CreateSubshapeBinderExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_create_subshape_binder_success(binder_name=self.inspected.name)
+        success = dict(make_create_subshape_binder_success(binder_name=self.inspected.name))
+        extra = self.inspected.extra
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                if isinstance(key, str) and key not in success:
+                    success[key] = value
+        return success  # type: ignore[return-value]
 
 
 def run_create_subshape_binder(

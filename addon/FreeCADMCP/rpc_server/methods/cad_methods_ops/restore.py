@@ -6,7 +6,7 @@ from .typed_rpc_support import (
     nonempty_string,
     optional_string,
 )
-from .typed_rpc_container_support import snapshot_ring
+from .typed_rpc_container_support import snapshot_ring, snapshot_rings
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -57,26 +57,31 @@ def _failure(error: RestoreError, *, retry_safe: bool = True) -> RestoreFailure:
 def apply_restore(doc: RestoreDocument, request: RestoreRequest) -> RestoreReceipt:
     """Resolve a snapshot identity without apply-time recompute or document reload."""
 
-    store = snapshot_ring(doc)
     restored_id = ""
     snapshot_path: str | None = None
     doc_name = str(getattr(doc, "Name", "") or request.doc_name)
-    rows = list(store)
-    if request.snapshot_id is None:
-        rows = list(reversed(rows))
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        candidate = row.get("id")
-        if not isinstance(candidate, str):
-            continue
-        row_doc = row.get("doc")
-        if isinstance(row_doc, str) and row_doc.strip() and row_doc not in {doc_name, str(request.doc_name)}:
-            continue
-        if request.snapshot_id is None or candidate == request.snapshot_id:
-            restored_id = candidate
-            path_value = row.get("path")
-            snapshot_path = path_value if isinstance(path_value, str) and path_value.strip() else None
+    seen: set[int] = set()
+    for store in snapshot_rings(doc):
+        rows = list(reversed(store)) if request.snapshot_id is None else list(store)
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            marker = id(row)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            candidate = row.get("id")
+            if not isinstance(candidate, str):
+                continue
+            row_doc = row.get("doc")
+            if isinstance(row_doc, str) and row_doc.strip() and row_doc not in {doc_name, str(request.doc_name)}:
+                continue
+            if request.snapshot_id is None or candidate == request.snapshot_id:
+                restored_id = candidate
+                path_value = row.get("path")
+                snapshot_path = path_value if isinstance(path_value, str) and path_value.strip() else None
+                break
+        if restored_id:
             break
     if not restored_id:
         raise RestoreError("SNAPSHOT_NOT_FOUND", "snapshot not found")

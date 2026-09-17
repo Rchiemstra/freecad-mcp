@@ -36,6 +36,9 @@ from freecad_mcp.operations.p7_assembly import (
 
 
 class DirectFreeCADConnection:
+    def __init__(self):
+        self._rpc = None
+
     def execute_code(self, code: str, options=None):
         buffer = io.StringIO()
         try:
@@ -51,6 +54,24 @@ class DirectFreeCADConnection:
 
     def get_active_screenshot(self, *args, **kwargs):
         return None
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        from tests.conftest import _build_live_freecad_rpc
+
+        if self._rpc is None:
+            self._rpc = _build_live_freecad_rpc()
+        handler = getattr(self._rpc, name, None)
+        if not callable(handler):
+            raise AttributeError(name)
+
+        def _call(*args, **kwargs):
+            if kwargs:
+                return handler(*args, **kwargs)
+            return self._rpc._dispatch(name, list(args))
+
+        return _call
 
 
 def _text(response) -> str:

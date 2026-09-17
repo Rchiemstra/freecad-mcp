@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
-import math
+import os
+import tempfile
+import time
 import uuid
+from contextlib import suppress
 
 from .typed_runtime import TypedMutationError, require_object
+from .typed_rpc_container_support import snapshot_rings
 
 
 def _vec(value: object) -> dict[str, float] | None:
@@ -127,7 +131,7 @@ def diagnose_parametric(document: object, object_name: str | None) -> dict[str, 
                 "redundant": list(getattr(obj, "RedundantConstraints", []) or []),
                 "malformed": list(getattr(obj, "MalformedConstraints", []) or []),
             })
-    return {"invalid": invalid, "expression_issues": expression_issues, "sketches": sketches, "object_filter": object_name}
+    return {"invalid": invalid, "invalid_objects": invalid, "expression_issues": expression_issues, "sketches": sketches, "object_filter": object_name}
 
 
 def get_recompute_log_full(document: object) -> dict[str, object]:
@@ -162,10 +166,70 @@ _SNAPSHOT_STORE: dict[str, dict[str, object]] = {}
 
 def snapshot_document(document: object) -> dict[str, object]:
     payload = capture_state(document, None)
-    snapshot_id = str(uuid.uuid4())
+    rings = snapshot_rings(document)
+    fd, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
+    os.close(fd)
+    try:
+        save_copy_with_outcome = getattr(document, "saveCopyWithOutcome", None)
+        if callable(save_copy_with_outcome):
+            save_outcome = save_copy_with_outcome(path)
+            if not isinstance(save_outcome, dict) or not save_outcome.get("success"):
+                raise RuntimeError(
+                    str(
+                        save_outcome.get("message")
+                        or save_outcome.get("error_code")
+                        or "FreeCAD rejected the snapshot copy"
+                    )
+                    if isinstance(save_outcome, dict)
+                    else "FreeCAD returned an invalid snapshot outcome"
+                )
+        else:
+            save_copy = getattr(document, "saveCopy", None)
+            if not callable(save_copy):
+                raise RuntimeError("document cannot save a snapshot copy")
+            save_copy(path)
+    except Exception:
+        with suppress(Exception):
+            os.remove(path)
+        raise
+    known_ids = {
+        row.get("id")
+        for ring in rings
+        for row in ring
+        if isinstance(row, dict)
+    }
+    snapshot_id = "snap-" + str(int(time.time() * 1000))
+    if snapshot_id in known_ids:
+        snapshot_id = str(uuid.uuid4())
+    row = {
+        "id": snapshot_id,
+        "path": path,
+        "doc": str(getattr(document, "Name", "") or payload.get("doc", "")),
+        "t": time.time(),
+    }
+    for ring in rings:
+        ring.append(row)
+        while len(ring) > 5:
+            old = ring.pop(0)
+            if not isinstance(old, dict):
+                continue
+            old_path = old.get("path")
+            if not isinstance(old_path, str) or not old_path:
+                continue
+            still_referenced = any(
+                isinstance(item, dict) and item.get("path") == old_path
+                for other in rings
+                for item in other
+            )
+            if not still_referenced:
+                with suppress(Exception):
+                    os.remove(old_path)
     _SNAPSHOT_STORE[snapshot_id] = payload
-    count = len(payload.get("objects", {}))
-    return {"snapshot_id": snapshot_id, "doc": str(payload.get("doc", "")), "count": count}
+    return {
+        "snapshot_id": snapshot_id,
+        "doc": str(payload.get("doc", "")),
+        "count": max(len(ring) for ring in rings),
+    }
 
 
 def run_transaction(document: object, label: str, code: str, dry_run: bool, commit_on_success: bool) -> dict[str, object]:

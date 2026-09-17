@@ -56,34 +56,54 @@ def remove_from_container(container: object | None, item: object) -> None:
 _SNAPSHOTS: list[object] = []
 
 
-def snapshot_ring(document: object) -> list[object]:
-    store = getattr(document, "_mcp_snapshots", None)
-    if isinstance(store, list):
-        return store
-    freecad: object | None = None
+def _module_snapshot_ring() -> list[object] | None:
+    """Historical live store shared with snapshot_gui / execute_code."""
+
     try:
         freecad = load_module("FreeCAD")
     except (TypedMutationError, ImportError):
-        pass
-    if freecad is not None:
+        return None
+    current = getattr(freecad, "_mcp_snapshots", None)
+    if isinstance(current, list):
+        return current
+    try:
+        setattr(freecad, "_mcp_snapshots", [])
         current = getattr(freecad, "_mcp_snapshots", None)
         if isinstance(current, list):
             return current
-        try:
-            setattr(freecad, "_mcp_snapshots", [])
-            current = getattr(freecad, "_mcp_snapshots", None)
-            if isinstance(current, list):
-                return current
-        except Exception:
-            pass
+    except Exception:
+        return None
+    return None
+
+
+def snapshot_rings(document: object) -> tuple[list[object], ...]:
+    """Every live snapshot ring that restore must search.
+
+    Unit tests seed ``document._mcp_snapshots``. Live FreeCAD keeps the same
+    identities on ``FreeCAD._mcp_snapshots``. Searching both keeps both.
+    """
+
+    rings: list[list[object]] = []
+    document_store = getattr(document, "_mcp_snapshots", None)
+    if isinstance(document_store, list):
+        rings.append(document_store)
+    module_ring = _module_snapshot_ring()
+    if module_ring is not None and module_ring not in rings:
+        rings.append(module_ring)
+    if rings:
+        return tuple(rings)
     try:
         setattr(document, "_mcp_snapshots", [])
         store = getattr(document, "_mcp_snapshots", None)
         if isinstance(store, list):
-            return store
+            return (store,)
     except Exception:
         pass
-    return _SNAPSHOTS
+    return (_SNAPSHOTS,)
+
+
+def snapshot_ring(document: object) -> list[object]:
+    return snapshot_rings(document)[0]
 
 
 __all__ = [
@@ -91,4 +111,5 @@ __all__ = [
     "add_to_container",
     "remove_from_container",
     "snapshot_ring",
+    "snapshot_rings",
 ]

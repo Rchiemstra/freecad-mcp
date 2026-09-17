@@ -11,6 +11,7 @@ from ..._shared.protocol.sweep_pipe_contract import (
 )
 from ...freecad_client import FreeCADConnection
 from ...responses.tool_results import tool_fail, tool_ok
+from ..diagnostics_ops.helpers import keep_historical_extras
 
 
 def sweep_pipe_operation(
@@ -28,6 +29,7 @@ def sweep_pipe_operation(
             committed=None,
         )
     result = parse_sweep_pipe_response(raw_result)
+    result = keep_historical_extras(dict(result), raw_result, ("volume_mm3",))
     structured = dict(result)
     if result["success"] is False:
         return tool_fail(
