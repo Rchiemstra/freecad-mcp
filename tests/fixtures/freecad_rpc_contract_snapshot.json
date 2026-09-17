@@ -16636,6 +16636,15 @@
             "type": "boolean"
           },
           "default": false
+        },
+        {
+          "name": "strict",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
         }
       ],
       "result_examples": [
@@ -17068,6 +17077,15 @@
         },
         {
           "name": "reversed_dir",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        },
+        {
+          "name": "strict",
           "kind": "positional_or_keyword",
           "required": false,
           "schema": {
@@ -17863,6 +17881,33 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_redo_count",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_redo_head",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
@@ -26284,6 +26329,18 @@
             ]
           },
           "default": null
+        },
+        {
+          "name": "attachment_offset",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -29972,6 +30029,33 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "operation_id",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_undo_count",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        {
+          "name": "expected_undo_head",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": null
         }
       ],
       "result_schema": {
