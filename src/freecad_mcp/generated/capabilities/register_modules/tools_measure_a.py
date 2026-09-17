@@ -2,187 +2,112 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-
 from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
-
-from freecad_mcp.operations import (
-    bounding_box_operation,
-    measure_angle_operation,
-    measure_area_operation,
-    measure_distance_operation,
-    measure_volume_operation,
-)
+from freecad_mcp.operations import bounding_box_operation, measure_angle_operation, measure_area_operation, measure_distance_operation, measure_volume_operation
 from freecad_mcp.server_ops.tool_dependencies import ToolDependencies
 from freecad_mcp.tools_server_surfaces import server_connection
-
 if TYPE_CHECKING:
     from freecad_mcp.instrumented_server import InstrumentedFastMCP
-def _register_measure_distance(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-    exports: dict[str, object],
-) -> None:
+
+def _register_measure_distance(mcp: InstrumentedFastMCP, *, dependencies: ToolDependencies, exports: dict[str, object]) -> None:
+
     @mcp.tool()
-    def measure_distance(
-        ctx: Context,
-        doc_name: str,
-        shape1_ref: str,
-        shape2_ref: str,
-    ) -> CallToolResult:
+    def measure_distance(ctx: Context, doc_name: str, shape1_ref: str, shape2_ref: str) -> CallToolResult:
         """Measure the minimum distance between two shapes.
 
-        Args:
-            doc_name: Document containing both shapes.
-            shape1_ref: Name of the first shape object.
-            shape2_ref: Name of the second shape object.
+Args:
+    doc_name: Document containing both shapes.
+    shape1_ref: Name of the first shape object.
+    shape2_ref: Name of the second shape object.
 
-        Returns:
-            JSON with ``distance`` in mm.
-        """
-        return measure_distance_operation(
-            server_connection(), doc_name, shape1_ref, shape2_ref
-        )
-
+Returns:
+    JSON with ``distance`` in mm."""
+        return measure_distance_operation(server_connection(), doc_name, shape1_ref, shape2_ref)
     exports['measure_distance'] = measure_distance
-def _register_measure_angle(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-    exports: dict[str, object],
-) -> None:
+
+def _register_measure_angle(mcp: InstrumentedFastMCP, *, dependencies: ToolDependencies, exports: dict[str, object]) -> None:
+
     @mcp.tool()
-    def measure_angle(
-        ctx: Context,
-        doc_name: str,
-        edge1_ref: str,
-        edge2_ref: str,
-    ) -> CallToolResult:
+    def measure_angle(ctx: Context, doc_name: str, edge1_ref: str, edge2_ref: str) -> CallToolResult:
         """Measure the angle between two edges or objects.
 
-        Refs can be ``"ObjectName"`` or ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``).
+Refs can be ``"ObjectName"`` or ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``).
 
-        Args:
-            doc_name: Document containing the objects.
-            edge1_ref: First edge reference.
-            edge2_ref: Second edge reference.
+Args:
+    doc_name: Document containing the objects.
+    edge1_ref: First edge reference.
+    edge2_ref: Second edge reference.
 
-        Returns:
-            JSON with ``angle_deg`` in degrees.
-        """
-        return measure_angle_operation(
-            server_connection(), doc_name, edge1_ref, edge2_ref
-        )
-
+Returns:
+    JSON with ``angle_deg`` in degrees."""
+        return measure_angle_operation(server_connection(), doc_name, edge1_ref, edge2_ref)
     exports['measure_angle'] = measure_angle
-def _register_measure_area(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-    exports: dict[str, object],
-) -> None:
+
+def _register_measure_area(mcp: InstrumentedFastMCP, *, dependencies: ToolDependencies, exports: dict[str, object]) -> None:
+
     @mcp.tool()
-    def measure_area(
-        ctx: Context,
-        doc_name: str,
-        obj_name: str,
-    ) -> CallToolResult:
+    def measure_area(ctx: Context, doc_name: str, obj_name: str) -> CallToolResult:
         """Measure the total surface area of a shape.
 
-        Args:
-            doc_name: Document containing the object.
-            obj_name: Name of the shape object.
+Args:
+    doc_name: Document containing the object.
+    obj_name: Name of the shape object.
 
-        Returns:
-            JSON with ``area_mm2`` and ``area_cm2``.
-        """
+Returns:
+    JSON with ``area_mm2`` and ``area_cm2``."""
         return measure_area_operation(server_connection(), doc_name, obj_name)
-
     exports['measure_area'] = measure_area
-def _register_measure_volume(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-    exports: dict[str, object],
-) -> None:
+
+def _register_measure_volume(mcp: InstrumentedFastMCP, *, dependencies: ToolDependencies, exports: dict[str, object]) -> None:
+
     @mcp.tool()
-    def measure_volume(
-        ctx: Context,
-        doc_name: str,
-        obj_name: str,
-    ) -> CallToolResult:
+    def measure_volume(ctx: Context, doc_name: str, obj_name: str) -> CallToolResult:
         """Measure the volume of a solid shape.
 
-        Args:
-            doc_name: Document containing the object.
-            obj_name: Name of the shape object.
+Link-safe world-frame resolution mirrors ``bounding_box`` (Placement/LinkPlacement
+plus Scale/ScaleVector; no Python ``getTransform``). Returns
+``used_linked_object`` (True only when geometry came from LinkedObject because
+the proxy Shape was unusable).
 
-        Returns:
-            JSON with ``volume_mm3`` and ``volume_cm3``.
-        """
+Args:
+    doc_name: Document containing the object.
+    obj_name: Name of the shape object.
+
+Returns:
+    JSON with ``volume_mm3``, frame=world, and ``used_linked_object``."""
         return measure_volume_operation(server_connection(), doc_name, obj_name)
-
     exports['measure_volume'] = measure_volume
-def _register_bounding_box(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-    exports: dict[str, object],
-) -> None:
+
+def _register_bounding_box(mcp: InstrumentedFastMCP, *, dependencies: ToolDependencies, exports: dict[str, object]) -> None:
+
     @mcp.tool()
-    def bounding_box(
-        ctx: Context,
-        doc_name: str,
-        obj_name: str,
-    ) -> CallToolResult:
+    def bounding_box(ctx: Context, doc_name: str, obj_name: str) -> CallToolResult:
         """Return the world-frame axis-aligned bounding box of a shape.
 
-        Link-safe: follows ``App::Link`` to the linked solid when needed and applies
-        ``getGlobalPlacement()`` once (no Placement double-counting).
+Link-safe: follows ``App::Link`` to the linked solid when the proxy Shape is
+unusable and applies the link world transform exactly once using
+``Placement``/``LinkPlacement`` plus ``Scale``/``ScaleVector`` properties.
+Healthy Link proxy shapes that already include the link placement are not
+double-transformed; enclosing ``App::Part``/group placements still apply.
 
-        Args:
-            doc_name: Document containing the object.
-            obj_name: Name of the shape object or Link.
+Args:
+    doc_name: Document containing the object.
+    obj_name: Name of the shape object or Link.
 
-        Returns:
-            JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, and shape-source metadata.
-        """
+Returns:
+    JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, frame=world, and
+    ``used_linked_object`` (True only when geometry came from LinkedObject)."""
         return bounding_box_operation(server_connection(), doc_name, obj_name)
-
     exports['bounding_box'] = bounding_box
 
-def register(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-) -> dict[str, object]:
+def register(mcp: InstrumentedFastMCP, *, dependencies: ToolDependencies) -> dict[str, object]:
     """Register measure_a MCP tools; return exports for §3.3 façade shims."""
     exports: dict[str, object] = {}
-    _register_measure_distance(
-        mcp,
-        dependencies=dependencies,
-        exports=exports,
-    )
-    _register_measure_angle(
-        mcp,
-        dependencies=dependencies,
-        exports=exports,
-    )
-    _register_measure_area(
-        mcp,
-        dependencies=dependencies,
-        exports=exports,
-    )
-    _register_measure_volume(
-        mcp,
-        dependencies=dependencies,
-        exports=exports,
-    )
-    _register_bounding_box(
-        mcp,
-        dependencies=dependencies,
-        exports=exports,
-    )
+    _register_measure_distance(mcp, dependencies=dependencies, exports=exports)
+    _register_measure_angle(mcp, dependencies=dependencies, exports=exports)
+    _register_measure_area(mcp, dependencies=dependencies, exports=exports)
+    _register_measure_volume(mcp, dependencies=dependencies, exports=exports)
+    _register_bounding_box(mcp, dependencies=dependencies, exports=exports)
     return exports
 

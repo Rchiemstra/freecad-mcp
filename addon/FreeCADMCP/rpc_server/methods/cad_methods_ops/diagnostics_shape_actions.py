@@ -11,6 +11,7 @@ from .typed_runtime import (
     module_callable,
     require_object,
 )
+from .world_shape_actions import read_global_placement, resolve_global_shape
 
 
 def _vector(x: float, y: float, z: float = 0.0) -> object:
@@ -84,7 +85,7 @@ def find_subshapes(
     shape = getattr(obj, "Shape", None)
     if shape is None or getattr(shape, "isNull", lambda: True)():
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no shape: {object_name}")
-    gp = _global_placement(obj)
+    gp = read_global_placement(obj)
     kind_singular = "Face" if kind == "Faces" else "Edge"
 
     def to_vec(point: object) -> object | None:
@@ -187,13 +188,6 @@ def _bb(box: object) -> dict[str, float] | None:
     }
 
 
-def _global_placement(obj: object) -> object:
-    getter = getattr(obj, "getGlobalPlacement", None)
-    if callable(getter):
-        return getter()
-    return getattr(obj, "Placement", None)
-
-
 def _parent_of(document: object, obj: object) -> object | None:
     for candidate in getattr(document, "Objects", []) or []:
         group = getattr(candidate, "Group", None) or []
@@ -229,7 +223,7 @@ def subshape_pose(document: object, object_name: str, subshape: str) -> dict[str
     sub_obj = _subshape_object(obj, subshape)
     if sub_obj is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Subshape not found: {subshape}")
-    gp = _global_placement(obj)
+    gp = read_global_placement(obj)
     center = None
     try:
         center = _transform_point(gp, getattr(sub_obj, "CenterOfMass"))
@@ -328,22 +322,19 @@ def inspect_geometry(document: object, object_name: str, subshape: str | None = 
         )
         cursor = _parent_of(document, cursor)
     try:
-        global_pl = _global_placement(obj)
-    except Exception:
+        global_pl = read_global_placement(obj)
+    except TypedMutationError:
         global_pl = getattr(obj, "Placement", _placement())
     local_bb = None
     global_bb = None
     shape = getattr(obj, "Shape", None)
     if shape is not None and not getattr(shape, "isNull", lambda: True)():
         local_bb = _bb(getattr(shape, "BoundBox", None))
-        try:
-            copy_fn = getattr(shape, "copy", None)
-            copy = copy_fn() if callable(copy_fn) else None
-            if copy is not None:
-                setattr(copy, "Placement", global_pl)
-                global_bb = _bb(getattr(copy, "BoundBox", None))
-        except Exception:
-            global_bb = None
+    try:
+        world_shape, _meta = resolve_global_shape(obj)
+        global_bb = _bb(getattr(world_shape, "BoundBox", None))
+    except TypedMutationError:
+        global_bb = None
     placement = getattr(obj, "Placement", None)
     result: dict[str, object] = {
         "ok": True,
@@ -490,7 +481,7 @@ def match_subshape(
             if face is not None:
                 param_range = getattr(face, "ParameterRange", None)
                 normal_at = getattr(face, "normalAt", None)
-                global_pl = _global_placement(src)
+                global_pl = read_global_placement(src)
                 rotation = getattr(global_pl, "Rotation", None)
                 mult_vec = getattr(rotation, "multVec", None) if rotation is not None else None
                 if (
