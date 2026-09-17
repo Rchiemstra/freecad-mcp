@@ -101,8 +101,6 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
         "error": "Document authority is owned by native FreeCAD collaboration.",
     }
 
-    create_module = inspect.getmodule(freecad_rpc_class.create_document)
-    assert create_module is not None
     created_documents = {}
 
     def get_created_document(name):
@@ -111,15 +109,21 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
         except KeyError:
             return _missing_document(name)
 
-    def create_document(name):
+    def new_document(name):
         created_documents[name] = SimpleNamespace(Name=name)
-        return True
+        return created_documents[name]
 
-    monkeypatch.setattr(create_module.FreeCAD, "getDocument", get_created_document)
+    instance._cad_collaborators = replace(
+        instance._cad_collaborators,
+        freecad=SimpleNamespace(
+            getDocument=get_created_document,
+            newDocument=new_document,
+            closeDocument=lambda name: created_documents.pop(name, None),
+        ),
+    )
     instance._request_checkpoint = lambda *_args, **_kwargs: None
     instance._current_inflight = lambda: None
-    instance._create_document_gui = create_document
-    instance._dispatch_gui = lambda callback: callback()
+    instance._dispatch_gui = lambda callback, **_kwargs: callback()
     instance._unknown_mutation_evidence = lambda *_args, **_kwargs: {
         "document_health": {},
         "mutation_scope": {"declared_documents": ["Phase1ContractDocument"]},

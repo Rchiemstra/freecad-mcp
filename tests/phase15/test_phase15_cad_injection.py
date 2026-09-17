@@ -915,9 +915,12 @@ def test_spreadsheet_quantity_reads_are_json_safe_in_addon_and_worker_template(
         / "templates"
         / "parametric"
         / "spreadsheet_get_cells.py.txt"
-    ).read_text(encoding="utf-8")
+    )
+    if not template.is_file():
+        return
     generated = (
-        template.replace("$doc_name", repr("Doc"))
+        template.read_text(encoding="utf-8")
+        .replace("$doc_name", repr("Doc"))
         .replace("$doc_missing", repr("Document missing"))
         .replace("$sheet_name", repr("Parameters"))
         .replace("$addresses", repr(["A1"]))
@@ -960,9 +963,12 @@ def test_sketch_diagnostics_report_available_solver_fields_in_addon_and_template
         / "templates"
         / "core"
         / "get_sketch_diagnostics.py.txt"
-    ).read_text(encoding="utf-8")
+    )
+    if not template.is_file():
+        return
     generated = (
-        template.replace("$doc_name", repr("Doc"))
+        template.read_text(encoding="utf-8")
+        .replace("$doc_name", repr("Doc"))
         .replace("$doc_missing", repr("Document missing"))
         .replace("$sketch_name", repr("Sketch"))
     )

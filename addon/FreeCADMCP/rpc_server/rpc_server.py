@@ -481,6 +481,13 @@ class FreeCADRPC:
     def _cad_collaborators(self) -> _CadCollaborators:
         return self.__cad_collaborators
 
+    @_cad_collaborators.setter
+    def _cad_collaborators(self, value: _CadCollaborators) -> None:
+        # Tests and e2e fixtures replace the frozen CAD graph after construction
+        # (create_document mocks, readiness doubles). Keep the typed-rpc
+        # property surface while restoring main's assignable collaborator slot.
+        self.__cad_collaborators = value
+
     @property
     def _gui_collaborators(self) -> _GuiCollaborators:
         return self.__gui_collaborators

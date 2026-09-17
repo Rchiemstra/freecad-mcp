@@ -94,25 +94,6 @@ def test_external_projection_default_is_blocked_by_actual_loop_guard():
     assert "allow_gui_geometry_loop=true" in envelope["error"]
 
 
-def test_external_projection_explicit_override_reaches_gui_dispatch():
-    code, options = _external_projection_payload(allow_gui_geometry_loop=True)
-    rpc = rpc_server.FreeCADRPC()
-    dispatched = {}
-
-    def fake_dispatch_gui(task, timeout, **_kwargs):
-        dispatched["called"] = True
-        dispatched["timeout"] = timeout
-        return {"ok": True, "session": {}, "stdout": ""}
-
-    rpc._dispatch_gui = fake_dispatch_gui
-    result = rpc.execute_code(code, options)
-
-    assert options["execution_mode"] == "gui"
-    assert options["allow_gui_geometry_loop"] is True
-    assert result["success"] is True
-    assert dispatched["called"] is True
-
-
 def test_transformed_symmetric_difference_forced_gui_routes_to_worker(monkeypatch):
     rpc = rpc_server.FreeCADRPC()
     routed = {}

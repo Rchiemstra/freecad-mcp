@@ -13,6 +13,33 @@ from ...._shared.protocol.body_create_contract import (
 )
 
 
+def compatibility_mutation_kwargs(
+    *,
+    structural: bool = False,
+    recompute: bool = True,
+    postcondition: Callable[..., Any] | None = None,
+    bind_document: bool = False,
+    require_native: bool = False,
+) -> dict[str, Any]:
+    """Forward only the native keywords that this call actually opts into.
+
+    Main's test doubles accept ``postcondition`` / ``recompute=False`` but not
+    ``bind_document``. Typed-rpc still passes those keywords when they are
+    explicitly requested.
+    """
+
+    kwargs: dict[str, Any] = {"structural": structural}
+    if not recompute:
+        kwargs["recompute"] = False
+    if postcondition is not None:
+        kwargs["postcondition"] = postcondition
+    if bind_document:
+        kwargs["bind_document"] = True
+    if require_native:
+        kwargs["require_native"] = True
+    return kwargs
+
+
 class CompatibilityMutationAPI(Protocol):
     """The narrow native compatibility-mutation bridge used by the add-on."""
 
@@ -78,27 +105,16 @@ class CollaborationCollaborators:
         bind_document: bool = False,
         require_native: bool = False,
     ) -> Any:
-        if (
-            postcondition is None
-            and not bind_document
-            and not require_native
-            and recompute
-        ):
-            return self.compatibility_api.commit_compatibility_mutation(
-                document_name, callback, structural=structural
-            )
-        kwargs: dict[str, Any] = {
-            "structural": structural,
-            "postcondition": postcondition,
-            "bind_document": bind_document,
-            "require_native": require_native,
-        }
-        if not recompute:
-            kwargs["recompute"] = False
         return self.compatibility_api.commit_compatibility_mutation(
             document_name,
             callback,
-            **kwargs,
+            **compatibility_mutation_kwargs(
+                structural=structural,
+                recompute=recompute,
+                postcondition=postcondition,
+                bind_document=bind_document,
+                require_native=require_native,
+            ),
         )
 
     def with_runtime_manifest(self, runtime_manifest: Any) -> CollaborationCollaborators:
@@ -119,4 +135,8 @@ class CollaborationCollaborators:
         return replace(self, runtime_manifest=None)
 
 
-__all__ = ["CollaborationCollaborators", "CompatibilityMutationAPI"]
+__all__ = [
+    "CollaborationCollaborators",
+    "CompatibilityMutationAPI",
+    "compatibility_mutation_kwargs",
+]

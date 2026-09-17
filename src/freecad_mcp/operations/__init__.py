@@ -43,6 +43,8 @@ for _module in _SUBMODULES:
     for _name in _module.__all__:
         if _name.startswith("_") or _name in _BARREL_EXCLUDE:
             continue
+        if _name in __all__:
+            continue
         globals()[_name] = getattr(_module, _name)
         __all__.append(_name)
 

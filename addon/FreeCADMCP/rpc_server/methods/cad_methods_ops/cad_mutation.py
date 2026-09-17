@@ -429,9 +429,11 @@ def run_cad_mutation(  # noqa: C901
 
     commit_kwargs: dict[str, Any] = {
         "structural": structural,
-        "bind_document": bind_document,
-        "require_native": require_native,
     }
+    if bind_document:
+        commit_kwargs["bind_document"] = True
+    if require_native:
+        commit_kwargs["require_native"] = True
     if native_recompute or postcondition is not None:
         # The postcondition keyword is an ordering contract.  An older
         # runtime must reject it before invoking ``native_callback``;

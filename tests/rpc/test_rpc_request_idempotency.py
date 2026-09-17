@@ -325,6 +325,7 @@ def test_authenticated_typed_timeout_replays_late_result_once_and_reports_status
     release = threading.Event()
 
     created = []
+    objects: dict[str, SimpleNamespace] = {}
 
     def create_leaf(document_name, obj, *, recompute):
         assert document_name == "Model"
@@ -334,17 +335,36 @@ def test_authenticated_typed_timeout_replays_late_result_once_and_reports_status
         created.append(obj.name)
         return True  # The production public adapter must type this late sentinel.
 
+    def add_object(object_type, name):
+        created_object = SimpleNamespace(
+            Name=name,
+            TypeId=object_type,
+            Label=name,
+            isDerivedFrom=lambda type_id, expected=object_type: type_id == expected,
+        )
+        objects[name] = created_object
+        created.append(name)
+        return created_object
+
     class NativeCommit:
         def commit_compatibility_mutation(
             self, document_name, callback, *, structural, recompute=True, postcondition
         ):
             assert document_name == "Model" and structural and recompute
+            entered.set()
+            assert release.wait(5.0), "test did not release the native callback"
             callback()
             assert postcondition() is True
             return {"status": "Committed", "committed": True}
 
     native = NativeCommit()
-    document = attach_native_readiness(SimpleNamespace(Name="Model"))
+    document = attach_native_readiness(
+        SimpleNamespace(
+            Name="Model",
+            getObject=lambda name: objects.get(name),
+            addObject=add_object,
+        )
+    )
     freecad = SimpleNamespace(getDocument=lambda name: document if name == "Model" else None)
     base = addon_rpc.FreeCADRPC()
     rpc = addon_rpc.FreeCADRPC(

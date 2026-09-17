@@ -59,6 +59,10 @@ from freecad_mcp._shared.protocol.snapshot_contract import (
     make_snapshot_failure,
     make_snapshot_success,
 )
+from freecad_mcp._shared.protocol.pad_feature_contract import (
+    PadName,
+    make_pad_feature_success,
+)
 from freecad_mcp._shared.protocol.create_assembly_joint_contract import (
     make_create_assembly_joint_success,
 )
@@ -284,8 +288,8 @@ class TestPadPocketHardening:
 
     def test_returns_structured_payload(self):
         conn = _ok_conn()
-        conn.pad_feature.return_value = _typed_ok(
-            feature="MyPad", body="Body", tip="MyPad"
+        conn.pad_feature.return_value = make_pad_feature_success(
+            PadName("MyPad"), "MyPad"
         )
         resp = pad_feature_operation(conn, True, "Doc", "Sketch", "MyPad", 5.0)
         assert not resp.isError
