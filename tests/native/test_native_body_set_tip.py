@@ -42,29 +42,7 @@ def _isolate_native_documents():
 
 
 from tests.native_model_state import model_state as _model_state
-
-
-
-def _revision_state(document):
-    keys = [{"kind": "UnknownModelMutation"}, {"kind": "DocumentStructure"}]
-    for name in sorted(
-        {item.Name for item in document.Objects} | {"RejectedBody", "TransientSupport"}
-    ):
-        keys.extend(
-            {"kind": kind, "subject": name} for kind in ("ObjectExistence", "ObjectStructure")
-        )
-        item = document.getObject(name)
-        if item is not None:
-            keys.extend(
-                {"kind": "ObjectProperty", "subject": name, "property_name": prop}
-                for prop in sorted(item.PropertiesList)
-            )
-    session = document.beginEditSession("body-set-tip-native-state-probe")
-    try:
-        snapshot = document.snapshotForEdit(session["session_id"], keys)
-        return snapshot["revisions"]
-    finally:
-        document.cancelEdit(session["session_id"])
+from tests.native_model_state import revision_state as _revision_state
 
 
 def _tip_collaborators(FreeCAD, validator):

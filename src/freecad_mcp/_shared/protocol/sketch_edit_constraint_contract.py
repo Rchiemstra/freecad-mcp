@@ -118,6 +118,7 @@ class SketchEditConstraintSuccess(TypedDict):
     sketch: SketchName
     index: int
     name: str
+    after: NotRequired[float]
 
 
 class SketchEditConstraintFailure(TypedDict):
@@ -169,6 +170,7 @@ _CORE_KEYS = frozenset(
         "sketch",
         "index",
         "name",
+        "after",
         "error_code",
         "error",
         "native_status",
@@ -180,10 +182,12 @@ _CORE_KEYS = frozenset(
 )
 
 
-def make_sketch_edit_constraint_success(sketch: SketchName, index: int, name: str) -> SketchEditConstraintSuccess:
+def make_sketch_edit_constraint_success(
+    sketch: SketchName, index: int, name: str, after: float | None = None
+) -> SketchEditConstraintSuccess:
     """Construct a complete committed result using the actual assigned identity."""
 
-    return {
+    result: SketchEditConstraintSuccess = {
         "contract_version": SKETCH_EDIT_CONSTRAINT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -194,6 +198,9 @@ def make_sketch_edit_constraint_success(sketch: SketchName, index: int, name: st
         "index": index,
         "name": name,
     }
+    if after is not None:
+        result["after"] = after
+    return result
 
 
 def make_sketch_edit_constraint_failure(

@@ -76,27 +76,6 @@ _BRANCH_NATIVE_DOCUMENT_APIS = (
     "editSessionStatus",
 )
 
-_LIVE_TYPED_RPC_METHODS = frozenset(
-    {
-        "body_create",
-        "body_set_tip",
-        "create_assembly",
-        "create_assembly_grounded_joint",
-        "delete_object",
-        "diagnose_parametric",
-        "set_expression",
-        "sketch_add_circle",
-        "sketch_add_constraint",
-        "sketch_add_geometry",
-        "sketch_attach",
-        "sketch_create",
-        "sketch_edit_constraint",
-        "solve_assembly",
-        "spreadsheet_create",
-        "spreadsheet_set_cells",
-    }
-)
-
 
 def _missing_branch_native_document_apis(document) -> tuple[str, ...]:
     return tuple(
@@ -435,15 +414,20 @@ class LiveFreeCADConnection:
         same RPC method names while continuing to bypass transport only.
         """
 
-        if name not in _LIVE_TYPED_RPC_METHODS:
-            # A bare AttributeError(name) renders as just the method name, which
-            # callers interpolate into domain-shaped errors ("Failed to solve
-            # assembly: solve_assembly"). Say what is actually wrong.
+        if name.startswith("_"):
+            raise AttributeError(name)
+        handler = getattr(self._rpc, name, None)
+        if not callable(handler):
             raise AttributeError(
-                f"{type(self).__name__} has no typed RPC method {name!r}; add it "
-                "to _LIVE_TYPED_RPC_METHODS if the live fixture should dispatch it"
+                f"{type(self).__name__} has no typed RPC method {name!r}"
             )
-        return lambda *params: self._dispatch(name, *params)
+
+        def _call(*params, **kwargs):
+            if kwargs:
+                return handler(*params, **kwargs)
+            return self._dispatch(name, *params)
+
+        return _call
 
     def pad_feature(
         self,

@@ -92,8 +92,21 @@ class _RedoRpcFacade(Protocol):
 
 def rpc_redo(
     self: _RedoRpcFacade,
-    doc_name: str,
+    doc_name: object,
+    operation_id: object = None,
+    expected_redo_count: object = None,
+    expected_redo_head: object = None,
 ) -> dict[str, object]:
+    if operation_id is not None or not isinstance(doc_name, str):
+        from .recompute_helpers import redo as history_redo
+
+        return history_redo(
+            self,
+            doc_name,
+            operation_id,
+            expected_redo_count,
+            expected_redo_head,
+        )
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(lambda: run_redo(collaborators, doc_name))
     return res if isinstance(res, dict) else {"success": False, "error": res}

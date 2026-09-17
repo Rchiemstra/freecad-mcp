@@ -39,6 +39,7 @@ class SketchEditConstraintInspection:
     name: SketchName
     index: int
     constraint_name: str
+    after: float
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -152,6 +153,7 @@ def read_sketch_edit_constraint_result(
         name=SketchName(receipt.name),
         index=receipt.index,
         constraint_name=receipt.constraint_name,
+        after=float(actual),
     )
 
 
@@ -235,7 +237,10 @@ class _SketchEditConstraintExecution:
                 committed=True,
             )
         return make_sketch_edit_constraint_success(
-            self.inspected.name, self.inspected.index, self.inspected.constraint_name
+            self.inspected.name,
+            self.inspected.index,
+            self.inspected.constraint_name,
+            after=self.inspected.after,
         )
 
 
