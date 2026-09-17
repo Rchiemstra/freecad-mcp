@@ -1,0 +1,32 @@
+{
+  "description": "Intended repository bases for the MCP limits regression harness. Does not claim a loaded GUI runtime identity.",
+  "campaign_run_id": "run-20260916-mcp-limits",
+  "bases": {
+    "freecad_start": {
+      "branch": "FreeCAD-start",
+      "origin_commit": "17b1c686b1fe41f96d0804128344ec81c5ea82f0",
+      "pin": "8f3bef65dafd3e414781c3f6e416c2e9aca907ed"
+    },
+    "integration_typed_rpc": {
+      "branch": "origin/feature/typed-rpc",
+      "origin_commit": "ec69c80306b42c70891826bd71ee5084dd3d6b34",
+      "pin": "ce8ac37fa9d99b6304312d9be36315acf78e2d6c"
+    },
+    "mcp": {
+      "branch": "origin/main",
+      "pin": "ce8ac37fa9d99b6304312d9be36315acf78e2d6c"
+    }
+  },
+  "source_run_historical_only": {
+    "freecad_commit": "962f18d5ed1acfbbb91bab33582a176a36f3d2ca",
+    "mcp_commit": "bcce4abc78073ccbe0f81116ec72540a4c8a37a1",
+    "note": "Historical source-run checkout only; not the intended integration pin."
+  },
+  "loaded_runtime": {
+    "status": "unknown",
+    "freecad_binary": null,
+    "freecad_commit": null,
+    "mcp_commit": null,
+    "note": "unknown / not found — do not invent a compiled commit or binary path"
+  }
+}
