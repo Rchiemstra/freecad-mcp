@@ -36,7 +36,12 @@ _SUBMODULES = (
     video_anim,
 )
 
-_BARREL_EXCLUDE = frozenset({"solve_assembly_operation"})
+_BARREL_EXCLUDE = frozenset(
+    {
+        "solve_assembly_operation",
+        "validate_movement_follow_operation",
+    }
+)
 
 __all__: list[str] = []
 for _module in _SUBMODULES:
@@ -49,3 +54,11 @@ for _module in _SUBMODULES:
         __all__.append(_name)
 
 from .p7_assembly import solve_assembly_operation  # noqa: E402, F401 - §3.3 shim
+from .parametric_ops.validate_movement_follow import (  # noqa: E402
+    validate_movement_follow_operation,
+)
+
+# Public MCP/JSON-RPC route keeps main's movement-follow contract. The
+# diagnostics.mutation_ops helper stays fail-closed for generated two-recompute
+# probes that cannot run atomically through the native coordinator.
+__all__.append("validate_movement_follow_operation")
