@@ -21,6 +21,84 @@ GUI_TIMEOUT_ERROR_CODES = frozenset(
 )
 
 
+def _resolve_gui_timeout_error_code(*candidates: object) -> str | None:
+    for candidate in candidates:
+        code = str(candidate or "").upper()
+        if code in GUI_TIMEOUT_ERROR_CODES:
+            return code
+    return None
+
+
+def is_gui_dispatch_timeout_exception(exc: BaseException) -> bool:
+    from .._shared.protocol.json_rpc_client import JsonRpcRemoteError
+
+    if not isinstance(exc, JsonRpcRemoteError):
+        return False
+    data = exc.data if isinstance(exc.data, Mapping) else {}
+    nested = data.get("result")
+    nested_mapping = nested if isinstance(nested, Mapping) else {}
+    return (
+        _resolve_gui_timeout_error_code(
+            exc.semantic_code,
+            data.get("error_code"),
+            nested_mapping.get("error_code"),
+        )
+        is not None
+    )
+
+
+def gui_dispatch_timeout_envelope_from_exception(
+    exc: BaseException,
+) -> dict[str, Any] | None:
+    from .._shared.protocol.json_rpc_client import JsonRpcRemoteError
+
+    if not isinstance(exc, JsonRpcRemoteError):
+        return None
+    data = exc.data if isinstance(exc.data, Mapping) else {}
+    nested = data.get("result")
+    nested_mapping = nested if isinstance(nested, Mapping) else {}
+    code = _resolve_gui_timeout_error_code(
+        data.get("error_code"),
+        exc.semantic_code,
+        nested_mapping.get("error_code"),
+    )
+    if code is None:
+        return None
+
+    sources: list[Mapping[str, Any]] = (
+        [nested_mapping, data] if nested_mapping else [data]
+    )
+    envelope: dict[str, Any] = {"success": False, "error_code": code}
+    request_id = exc.request_id
+    for source in sources:
+        if request_id is None and source.get("request_id") is not None:
+            request_id = source.get("request_id")
+    if request_id is not None:
+        envelope["request_id"] = request_id
+
+    message = str(exc.message or "").strip()
+    if not message:
+        for source in sources:
+            candidate = source.get("error")
+            if isinstance(candidate, str) and candidate.strip():
+                message = candidate.strip()
+                break
+    if message:
+        envelope["error"] = message
+
+    for key in (
+        "timeout_stage",
+        "completion_uncertain",
+        "mutation_started",
+        "execution_started",
+    ):
+        for source in sources:
+            if key in source:
+                envelope[key] = source[key]
+                break
+    return envelope
+
+
 def is_gui_dispatch_timeout_envelope(raw: object) -> bool:
     if not isinstance(raw, Mapping):
         return False

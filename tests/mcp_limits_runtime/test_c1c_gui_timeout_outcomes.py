@@ -6,11 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
+from freecad_mcp._shared.protocol.json_rpc_client import JsonRpcRemoteError
 from freecad_mcp.generated.capabilities.register_modules import tools_runtime_control
 from freecad_mcp.operations.parametric_ops import (
     set_expression,
     sketch_add_constraint,
     sketch_create,
+)
+from freecad_mcp.operations.parametric_ops.spreadsheet_set_cells import (
+    spreadsheet_set_cells_operation,
 )
 from freecad_mcp.outcomes import status_from_error_code
 from freecad_mcp.outcomes_types.outcome_status import OutcomeStatus
@@ -279,6 +283,55 @@ def test_get_request_status_unknown_uuid_reports_not_found() -> None:
     )
     envelope = result.structuredContent
     assert envelope["error_code"] == "REQUEST_NOT_FOUND"
+
+
+_GUI_TIMEOUT_MESSAGE = (
+    "Timed out after 30.0s waiting for FreeCAD GUI response while executing; "
+    "execution continues in FreeCAD and may keep the GUI unresponsive. "
+    "New GUI work is rejected until the request finishes"
+)
+
+
+def _lifted_gui_timeout_remote_error() -> JsonRpcRemoteError:
+    return JsonRpcRemoteError(
+        -32000,
+        _GUI_TIMEOUT_MESSAGE,
+        data={
+            "request_id": _REQUEST_ID,
+            "error_code": "GUI_TIMEOUT_DURING_EXECUTION",
+            "timeout_stage": "during_execution",
+            "completion_uncertain": True,
+            "execution_started": True,
+            "mutation_started": True,
+        },
+        request_id=_REQUEST_ID,
+    )
+
+
+def test_lifted_json_rpc_gui_timeout_reports_timed_out_not_transport_uncertain() -> None:
+    remote_error = _lifted_gui_timeout_remote_error()
+
+    class _Conn:
+        def spreadsheet_set_cells(self, *_args, **_kwargs):
+            raise remote_error
+
+    response = spreadsheet_set_cells_operation(
+        _Conn(),
+        True,
+        "Doc",
+        "Value",
+        [{"address": "A1", "value": 1}],
+    )
+    envelope = response.structuredContent
+    assert envelope["status"] == "timed_out"
+    assert envelope["status"] != "failed"
+    assert envelope["correlation"]["request_id"] == _REQUEST_ID
+    data = envelope["data"]
+    assert data["error_code"] == "GUI_TIMEOUT_DURING_EXECUTION"
+    assert data["error_code"] != "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN"
+    assert envelope["layers"]["transport_status"] == "succeeded"
+    assert data["completion_uncertain"] is True
+    assert data.get("retry_safe") is False
 
 
 def test_dispatcher_timeout_not_parsed_as_invalid_contract() -> None:

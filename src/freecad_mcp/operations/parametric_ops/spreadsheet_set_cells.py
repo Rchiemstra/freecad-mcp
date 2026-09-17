@@ -11,6 +11,7 @@ from ..._shared.protocol.spreadsheet_set_cells_contract import (
 )
 from ...freecad_client import FreeCADConnection
 from ...responses.gui_dispatch_outcome import (
+    gui_dispatch_timeout_envelope_from_exception,
     is_gui_dispatch_timeout_envelope,
     is_transport_failure_exception,
     tool_fail_gui_dispatch_timeout,
@@ -28,6 +29,12 @@ def spreadsheet_set_cells_operation(
     try:
         raw_result: object = freecad.spreadsheet_set_cells(doc_name, sheet_name, cells)
     except Exception as exc:
+        timeout_envelope = gui_dispatch_timeout_envelope_from_exception(exc)
+        if timeout_envelope is not None:
+            return tool_fail_gui_dispatch_timeout(
+                timeout_envelope,
+                message_prefix="Failed to set spreadsheet cells",
+            )
         uncertain = make_spreadsheet_set_cells_uncertain(
             "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN",
             f"SpreadsheetSetCells response unavailable: {exc}",

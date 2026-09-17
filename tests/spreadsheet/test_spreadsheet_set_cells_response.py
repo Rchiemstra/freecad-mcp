@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from freecad_mcp._shared.protocol.json_rpc_client import JsonRpcRemoteError
 from freecad_mcp._shared.protocol.spreadsheet_set_cells_contract import (
     make_spreadsheet_set_cells_success,
     parse_spreadsheet_set_cells_response,
@@ -96,3 +97,49 @@ def test_transport_failure_preserves_unknown_model_state():
     assert data["error_code"] == "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN"
     assert data["outcome"] == "uncertain"
     assert data["retry_safe"] is False
+
+
+_GUI_TIMEOUT_MESSAGE = (
+    "Timed out after 30.0s waiting for FreeCAD GUI response while executing; "
+    "execution continues in FreeCAD and may keep the GUI unresponsive. "
+    "New GUI work is rejected until the request finishes"
+)
+
+
+def _lifted_gui_timeout_remote_error() -> JsonRpcRemoteError:
+    return JsonRpcRemoteError(
+        -32000,
+        _GUI_TIMEOUT_MESSAGE,
+        data={
+            "request_id": _REQUEST_ID,
+            "error_code": "GUI_TIMEOUT_DURING_EXECUTION",
+            "timeout_stage": "during_execution",
+            "completion_uncertain": True,
+            "execution_started": True,
+            "mutation_started": True,
+        },
+        request_id=_REQUEST_ID,
+    )
+
+
+def test_lifted_json_rpc_gui_timeout_reports_timed_out_not_transport_uncertain():
+    remote_error = _lifted_gui_timeout_remote_error()
+
+    class _Conn:
+        def spreadsheet_set_cells(self, *_args, **_kwargs):
+            raise remote_error
+
+    response = spreadsheet_set_cells_operation(
+        _Conn(),
+        True,
+        "Doc",
+        "Value",
+        [{"address": "A1", "value": 1}],
+    )
+    envelope = response.structuredContent
+    assert envelope["status"] == "timed_out"
+    assert envelope["status"] != "failed"
+    assert envelope["correlation"]["request_id"] == _REQUEST_ID
+    assert envelope["data"]["error_code"] == "GUI_TIMEOUT_DURING_EXECUTION"
+    assert envelope["layers"]["transport_status"] == "succeeded"
+    assert envelope["data"]["error_code"] != "SPREADSHEET_SET_CELLS_TRANSPORT_UNCERTAIN"
