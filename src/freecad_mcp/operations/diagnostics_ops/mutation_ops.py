@@ -26,7 +26,7 @@ def validate_movement_follow_operation(
     restore: bool = True,
     tolerance: float = 1e-7,
 ) -> ToolResponse:
-    """Reject a two-recompute probe before it can alter the live document."""
+    """Reject generated two-recompute probes; the public MCP tool uses typed JSON-RPC."""
 
     del (
         freecad,
