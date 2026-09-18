@@ -5,6 +5,7 @@ from __future__ import annotations
 from .typed_rpc_support import (
     as_bool,
     assign_attr,
+    invoke,
     nonempty_string,
     object_label,
     object_name,
@@ -120,7 +121,7 @@ def _sub_element_shape(source: object, sub_elements: object) -> object | None:
     getter = getattr(source, "getSubObject", None)
     if callable(getter) and names:
         try:
-            sub = getter(names[0])
+            sub = invoke(getter, names[0])
             if sub is not None:
                 return sub
         except Exception:

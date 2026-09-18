@@ -63,6 +63,7 @@ class RedoSuccess(TypedDict):
     outcome: Literal["verified"]
     retry_safe: Literal[False]
     document_name: DocumentName
+    operation_id: NotRequired[str]
 
 
 class RedoFailure(TypedDict):
@@ -375,13 +376,13 @@ def parse_redo_response(raw_response: object, *, document_name: str | None = Non
     if type(version) is not int or version != REDO_CONTRACT_VERSION or details is None:
         return _invalid_response(response)
 
-    document_name = response.get('document_name')
+    response_document_name = response.get("document_name")
     if (
         _valid_success(response)
-        and isinstance(document_name, str)
-        and document_name.strip()
+        and isinstance(response_document_name, str)
+        and response_document_name.strip()
     ):
-        return make_redo_success(DocumentName(document_name))
+        return make_redo_success(DocumentName(response_document_name))
 
     error_code = response.get("error_code")
     error = response.get("error")

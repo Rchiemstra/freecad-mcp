@@ -211,7 +211,7 @@ def _ensure_pocket_into_solid(pocket: object, source_feature: object | None, ske
     if source_feature is None or not _sketch_is_unmapped(sketch):
         return
     try:
-        pocket.Reversed = True
+        setattr(pocket, "Reversed", True)
     except Exception:
         return
 
