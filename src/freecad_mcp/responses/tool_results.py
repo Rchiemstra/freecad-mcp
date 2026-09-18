@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -78,6 +79,7 @@ def tool_fail(
     structured: dict[str, Any] | None = None,
     error_code: str | None = None,
     status: OutcomeStatus | str | None = None,
+    transport_status: str | None = None,
 ) -> CallToolResult:
     code = error_code or extract_error_code(structured)
     chosen = status or status_from_error_code(code)
@@ -88,6 +90,8 @@ def tool_fail(
         error=message,
         error_code=code,
     )
+    if transport_status is not None:
+        envelope.setdefault("layers", {})["transport_status"] = transport_status
     return CallToolResult(
         content=[_text_item(message)],
         structuredContent=envelope,
@@ -121,11 +125,14 @@ def capture_committed_screenshot(
 
     if only_text_feedback:
         return None
+    started = time.monotonic()
     try:
         screenshot = freecad.get_active_screenshot()
     except Exception as exc:
+        structured["screenshot_ms"] = round((time.monotonic() - started) * 1000.0, 3)
         structured["presentation_warning"] = f"Screenshot capture failed: {exc}"
         return None
+    structured["screenshot_ms"] = round((time.monotonic() - started) * 1000.0, 3)
     if isinstance(screenshot, str) and screenshot:
         return screenshot
     structured.setdefault(

@@ -1,0 +1,8 @@
+# MCP limits baseline harness: preserve bitwise LF on Windows checkouts.
+tests/mcp_limits_baseline/fixtures/REPORT.md text eol=lf
+tests/mcp_limits_baseline/fixtures/findings-log.md text eol=lf
+tests/mcp_limits_baseline/fixtures/coverage-matrix.md text eol=lf
+tests/mcp_limits_baseline/fixtures/reproductions.md text eol=lf
+tests/mcp_limits_baseline/fixtures/results.json text eol=lf
+tests/mcp_limits_baseline/fixtures/mcp_debug_2026-09-16_317891_0a5ddd947d58.jsonl text eol=lf
+tests/mcp_limits_baseline/** text eol=lf

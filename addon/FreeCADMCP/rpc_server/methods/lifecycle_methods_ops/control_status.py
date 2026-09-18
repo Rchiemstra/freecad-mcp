@@ -5,9 +5,13 @@ import os
 from .control_status_state import inflight_state
 
 try:
-    from build_info import addon_build_id, addon_version
+    from build_info import addon_build_id, addon_version, as_dict as addon_build_info
 except ImportError:
-    from addon.FreeCADMCP.build_info import addon_build_id, addon_version
+    from addon.FreeCADMCP.build_info import (
+        addon_build_id,
+        addon_version,
+        as_dict as addon_build_info,
+    )
 
 
 def get_request_status(self, request_id):
@@ -97,6 +101,15 @@ def get_instance_info(self):
         freecad_version = list(collaborators.freecad_version_parts())
     except Exception:
         freecad_version = []
+    try:
+        freecad_git_commit = str(
+            collaborators.freecad.ConfigGet("BuildRevisionHash") or ""
+        ).strip()
+    except Exception:
+        freecad_git_commit = ""
+    if not freecad_git_commit:
+        freecad_git_commit = "unknown"
+    build = addon_build_info()
     profile_id = (
         settings.get("profile_instance_id") or settings.get("instance_id", "") or ""
     )
@@ -128,6 +141,7 @@ def get_instance_info(self):
         "profile_path": profile_path,
         "protocol_versions": [1, 2],
         "protocol_version": 2 if collaborators.session_manager is not None else 1,
+        "rpc_v2_session_ready": collaborators.session_manager is not None,
         "protocol_features": (
             list(collaborators.runtime_manifest.features)
             if collaborators.runtime_manifest is not None
@@ -139,7 +153,12 @@ def get_instance_info(self):
         },
         "addon_version": addon_version,
         "addon_build_id": addon_build_id,
+        "git_commit": build["compiled"]["git_commit"],
+        "git_dirty": build["compiled"]["git_dirty"],
+        "build_timestamp": build["compiled"]["build_timestamp"],
+        "addon_metadata_source": build["compiled"]["source"],
         "freecad_version": freecad_version,
+        "freecad_git_commit": freecad_git_commit,
         "profile_path_fingerprint": collaborators.profile_fingerprint,
         "document_lease_mode": settings.get("document_lease_mode", "off"),
     }

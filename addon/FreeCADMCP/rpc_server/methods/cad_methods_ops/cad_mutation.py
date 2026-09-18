@@ -7,6 +7,11 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
+try:
+    from ....dispatch.gui_stage_clock import current_stage_clock
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_stage_clock import current_stage_clock
+
 from ...recompute_policy import assert_recompute_policy
 from .mutation_readiness import document_readiness, mark_quarantined
 from .mutation_readiness_wait import (
@@ -368,17 +373,26 @@ def run_cad_mutation(  # noqa: C901
         return _invoke_mutation_callback(callback, None, bind_document=bind_document)
 
     inflight = inflight if inflight is not None else current_cad_mutation_inflight()
+    clock = current_stage_clock()
+    if clock is not None:
+        clock.begin_admission()
     admission_failure = admit_cad_mutation(
         document,
         inflight=inflight,
         allow_pending_recompute=not native_recompute,
     )
+    if clock is not None:
+        clock.end_admission()
     if admission_failure is not None:
         return admission_failure
 
     captured: dict[str, Any] = {}
 
     def native_callback(*args: Any) -> Any:
+        if inflight is not None:
+            inflight.token.begin_mutation(rpc_method or "cad_mutation")
+        if clock is not None:
+            clock.begin_mutation_callback()
         admitted = args[0] if bind_document and args else document
         if bind_document:
             captured["document"] = admitted
@@ -386,7 +400,11 @@ def run_cad_mutation(  # noqa: C901
             callback, admitted, bind_document=bind_document
         )
         if _result_failed(captured["result"]):
+            if clock is not None:
+                clock.end_mutation_callback()
             raise _CadMutationRollback
+        if clock is not None:
+            clock.end_mutation_callback()
         return captured["result"]
 
     def native_postcondition(*args: Any) -> bool:
@@ -416,7 +434,13 @@ def run_cad_mutation(  # noqa: C901
                 # For eager mutations the native coordinator has already
                 # completed the sole authoritative recompute.  This callback
                 # is deliberately read-only.
-                _validate_native_callback(collaborators, admitted)
+                if clock is not None:
+                    clock.begin_postcondition()
+                try:
+                    _validate_native_callback(collaborators, admitted)
+                finally:
+                    if clock is not None:
+                        clock.end_postcondition()
             except Exception as exc:
                 captured["result"] = {
                     "success": False,
@@ -442,6 +466,8 @@ def run_cad_mutation(  # noqa: C901
     if not native_recompute:
         commit_kwargs["recompute"] = False
 
+    if clock is not None:
+        clock.begin_native_commit()
     try:
         native_result = collaborators.commit_compatibility_mutation(
             document_name,
@@ -465,6 +491,9 @@ def run_cad_mutation(  # noqa: C901
         if rollback_failure is None:
             raise
         return rollback_failure
+    finally:
+        if clock is not None:
+            clock.end_native_commit()
 
     if (
         isinstance(native_result, dict)

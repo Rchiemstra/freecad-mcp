@@ -1,5 +1,10 @@
 """CAD RPC helpers extracted from ``FreeCADRPC`` (Phase 4 slice 4F)."""
 
+try:
+    from ....dispatch.gui_stage_clock import record_presentation
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_stage_clock import record_presentation
+
 from .cad_mutation import run_cad_mutation
 from .features_gui import (
     body_set_tip_gui,
@@ -236,7 +241,8 @@ def _run_structural_feature(collaborators, doc_name, create_feature):
         and deferred_presentation is not None
     ):
         try:
-            deferred_presentation()
+            with record_presentation():
+                deferred_presentation()
         except Exception as exc:
             result = dict(result)
             result["presentation_warning"] = str(exc)

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -776,6 +776,14 @@ def _launch_manifest(profile: Path) -> dict:
         "expected_profile_path_fingerprint": None,
         "created_at": "2026-07-22T09:00:00Z",
     }
+
+
+def test_freecad_build_identity_returns_version_revision_pair(tmp_path):
+    launcher = _load_script("start_freecad_isolated.py")
+    info = _runtime_info(tmp_path)
+    result = launcher._freecad_build_identity(info["freecad_version"])
+    assert len(result) == 2
+    assert result == ("1.1.0", "revision-test")
 
 
 def test_launcher_validates_and_records_exact_runtime_identity(tmp_path):

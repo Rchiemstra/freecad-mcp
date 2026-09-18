@@ -231,11 +231,41 @@ def render_register_module(module_name: str, source: str) -> str:
     return _GENERATED_HEADER.rstrip() + "\n" + body + "\n"
 
 
+def _strip_inline_runtime_info_imports(body: str) -> str:
+    """Drop register-only imports from the inline runtime-info body."""
+
+    body = re.sub(
+        r"\nfrom freecad_mcp\.server_ops\.compatibility import \(\n"
+        r"    compatibility_for_manifest as _compatibility_for_manifest,\n"
+        r"\)\n",
+        "\n",
+        body,
+    )
+    body = body.replace(
+        "from typing import TYPE_CHECKING, Any\n",
+        "from typing import Any\n",
+    )
+    body = re.sub(
+        r"\nfrom freecad_mcp\.server_ops\.tool_dependencies import ToolDependencies\n",
+        "\n",
+        body,
+    )
+    body = re.sub(
+        r"\nif TYPE_CHECKING:\n"
+        r"    from freecad_mcp\.instrumented_server import InstrumentedFastMCP\n",
+        "\n",
+        body,
+    )
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    return body
+
+
 def render_inline_tools_runtime_info(source: str) -> str:
     body = _rewrite_package_imports(_strip_hand_written_prologue(source))
     register_index = body.rfind("\ndef register(")
     if register_index != -1:
         body = body[:register_index].rstrip() + "\n"
+    body = _strip_inline_runtime_info_imports(body)
     body += (
         "\n\n"
         "def get_runtime_info(ctx: Context) -> CallToolResult:\n"
@@ -246,7 +276,7 @@ def render_inline_tools_runtime_info(source: str) -> str:
         "        message='Connected FreeCAD MCP runtime identity',\n"
         "    )\n"
     )
-    return _GENERATED_HEADER.rstrip() + "\n" + body + "\n"
+    return _GENERATED_HEADER + body
 
 
 def render_register_module_shim(module_name: str) -> str:
@@ -262,14 +292,22 @@ def render_inline_tools_runtime_info_shim() -> str:
     return (
         '"""Declarative shim — inline runtime info lives in generated/capabilities."""\n\n'
         "from freecad_mcp.generated.capabilities.inline.tools_runtime_info import (\n"
-        "    get_runtime_info,\n"
-        "    _compatibility_for_manifest,\n"
         "    _runtime_info_payload,\n"
+        "    get_runtime_info,\n"
+        ")\n"
+        "from freecad_mcp.server_ops.compatibility import (\n"
+        "    compatibility_for_manifest as _compatibility_for_manifest,\n"
+        ")\n"
+        "from freecad_mcp.server_ops.compatibility import (\n"
+        "    normalize_protocol_versions,\n"
+        "    runtime_compatibility,\n"
         ")\n\n"
         "__all__ = [\n"
-        "    'get_runtime_info',\n"
         "    '_compatibility_for_manifest',\n"
         "    '_runtime_info_payload',\n"
+        "    'get_runtime_info',\n"
+        "    'normalize_protocol_versions',\n"
+        "    'runtime_compatibility',\n"
         "]\n"
     )
 
