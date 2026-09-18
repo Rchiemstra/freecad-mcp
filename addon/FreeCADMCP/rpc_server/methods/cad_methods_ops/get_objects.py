@@ -6,25 +6,46 @@ import json
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.get_objects_contract import (
-    ALLOWED_FIELDS,
-    DEFAULT_FIELDS,
-    DEFAULT_PAGE_SIZE,
-    MAX_PAGE_PAYLOAD_BYTES,
-    MAX_PAGE_SIZE,
-    MIN_PAGE_SIZE,
-    DocumentName,
-    GetObjectsCollaborators,
-    GetObjectsFailure,
-    GetObjectsRequest,
-    GetObjectsResult,
-    compute_snapshot_id,
-    decode_cursor,
-    encode_cursor,
-    make_get_objects_failure,
-    make_get_objects_success,
-    parse_get_objects_response,
-)
+try:
+    from ...._shared.protocol.get_objects_contract import (
+        ALLOWED_FIELDS,
+        DEFAULT_FIELDS,
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_PAYLOAD_BYTES,
+        MAX_PAGE_SIZE,
+        MIN_PAGE_SIZE,
+        DocumentName,
+        GetObjectsCollaborators,
+        GetObjectsFailure,
+        GetObjectsRequest,
+        GetObjectsResult,
+        compute_snapshot_id,
+        decode_cursor,
+        encode_cursor,
+        make_get_objects_failure,
+        make_get_objects_success,
+        parse_get_objects_response,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.get_objects_contract import (
+        ALLOWED_FIELDS,
+        DEFAULT_FIELDS,
+        DEFAULT_PAGE_SIZE,
+        MAX_PAGE_PAYLOAD_BYTES,
+        MAX_PAGE_SIZE,
+        MIN_PAGE_SIZE,
+        DocumentName,
+        GetObjectsCollaborators,
+        GetObjectsFailure,
+        GetObjectsRequest,
+        GetObjectsResult,
+        compute_snapshot_id,
+        decode_cursor,
+        encode_cursor,
+        make_get_objects_failure,
+        make_get_objects_success,
+        parse_get_objects_response,
+    )
 from ...serialize import project_listing_object
 from .policy_runtime import app_from, lookup_document
 

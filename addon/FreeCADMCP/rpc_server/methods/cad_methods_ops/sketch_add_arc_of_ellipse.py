@@ -7,20 +7,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_arc_of_ellipse_contract import (
-    SketchAddArcOfEllipseCollaborators,
-    SketchAddArcOfEllipseFailure,
-    SketchAddArcOfEllipseRequest,
-    SketchAddArcOfEllipseResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_arc_of_ellipse_failure,
-    make_sketch_add_arc_of_ellipse_success,
-    make_sketch_add_arc_of_ellipse_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_arc_of_ellipse_contract import (
+        SketchAddArcOfEllipseCollaborators,
+        SketchAddArcOfEllipseFailure,
+        SketchAddArcOfEllipseRequest,
+        SketchAddArcOfEllipseResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_arc_of_ellipse_failure,
+        make_sketch_add_arc_of_ellipse_success,
+        make_sketch_add_arc_of_ellipse_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_arc_of_ellipse_contract import (
+        SketchAddArcOfEllipseCollaborators,
+        SketchAddArcOfEllipseFailure,
+        SketchAddArcOfEllipseRequest,
+        SketchAddArcOfEllipseResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_arc_of_ellipse_failure,
+        make_sketch_add_arc_of_ellipse_success,
+        make_sketch_add_arc_of_ellipse_uncertain,
+    )
 from .sketch_add_arc_of_ellipse_mutation import SketchAddArcOfEllipseError, run_sketch_add_arc_of_ellipse_native_mutation
 
 

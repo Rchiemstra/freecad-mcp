@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_rectangle_contract import (
-    SketchAddRectangleCollaborators,
-    SketchAddRectangleFailure,
-    SketchAddRectangleRequest,
-    SketchAddRectangleResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_rectangle_failure,
-    make_sketch_add_rectangle_success,
-    make_sketch_add_rectangle_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_rectangle_contract import (
+        SketchAddRectangleCollaborators,
+        SketchAddRectangleFailure,
+        SketchAddRectangleRequest,
+        SketchAddRectangleResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_rectangle_failure,
+        make_sketch_add_rectangle_success,
+        make_sketch_add_rectangle_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_rectangle_contract import (
+        SketchAddRectangleCollaborators,
+        SketchAddRectangleFailure,
+        SketchAddRectangleRequest,
+        SketchAddRectangleResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_rectangle_failure,
+        make_sketch_add_rectangle_success,
+        make_sketch_add_rectangle_uncertain,
+    )
 from .sketch_add_rectangle_mutation import SketchAddRectangleError, run_sketch_add_rectangle_native_mutation
 
 

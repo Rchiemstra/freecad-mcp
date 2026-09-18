@@ -29,19 +29,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.set_expression_contract import (
-    SetExpressionCollaborators,
-    SetExpressionDocument,
-    SetExpressionFailure,
-    SetExpressionName,
-    SetExpressionReadDocument,
-    SetExpressionRequest,
-    SetExpressionResult,
-    DocumentName,
-    make_set_expression_failure,
-    make_set_expression_success,
-    make_set_expression_uncertain,
-)
+try:
+    from ...._shared.protocol.set_expression_contract import (
+        SetExpressionCollaborators,
+        SetExpressionDocument,
+        SetExpressionFailure,
+        SetExpressionName,
+        SetExpressionReadDocument,
+        SetExpressionRequest,
+        SetExpressionResult,
+        DocumentName,
+        make_set_expression_failure,
+        make_set_expression_success,
+        make_set_expression_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.set_expression_contract import (
+        SetExpressionCollaborators,
+        SetExpressionDocument,
+        SetExpressionFailure,
+        SetExpressionName,
+        SetExpressionReadDocument,
+        SetExpressionRequest,
+        SetExpressionResult,
+        DocumentName,
+        make_set_expression_failure,
+        make_set_expression_success,
+        make_set_expression_uncertain,
+    )
 from .feature_mutate_support import is_read_only_property
 from .set_expression_mutation import SetExpressionError, run_set_expression_native_mutation
 

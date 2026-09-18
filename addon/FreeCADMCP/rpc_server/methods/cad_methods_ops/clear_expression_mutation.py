@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.clear_expression_contract import (
-    ClearExpressionCollaborators,
-    ClearExpressionDocument,
-    ClearExpressionFailure,
-    ClearExpressionReadDocument,
-    ClearExpressionUncertain,
-    DocumentName,
-    make_clear_expression_failure,
-    make_clear_expression_uncertain,
-)
+try:
+    from ...._shared.protocol.clear_expression_contract import (
+        ClearExpressionCollaborators,
+        ClearExpressionDocument,
+        ClearExpressionFailure,
+        ClearExpressionReadDocument,
+        ClearExpressionUncertain,
+        DocumentName,
+        make_clear_expression_failure,
+        make_clear_expression_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.clear_expression_contract import (
+        ClearExpressionCollaborators,
+        ClearExpressionDocument,
+        ClearExpressionFailure,
+        ClearExpressionReadDocument,
+        ClearExpressionUncertain,
+        DocumentName,
+        make_clear_expression_failure,
+        make_clear_expression_uncertain,
+    )
 
 
 class ClearExpressionError(RuntimeError):

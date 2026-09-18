@@ -6,19 +6,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.pad_feature_contract import (
-    DocumentName,
-    PadFeatureCollaborators,
-    PadFeatureDocument,
-    PadFeatureFailure,
-    PadFeatureObject,
-    PadFeatureReadDocument,
-    PadFeatureResult,
-    PadName,
-    make_pad_feature_failure,
-    make_pad_feature_success,
-    make_pad_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.pad_feature_contract import (
+        DocumentName,
+        PadFeatureCollaborators,
+        PadFeatureDocument,
+        PadFeatureFailure,
+        PadFeatureObject,
+        PadFeatureReadDocument,
+        PadFeatureResult,
+        PadName,
+        make_pad_feature_failure,
+        make_pad_feature_success,
+        make_pad_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.pad_feature_contract import (
+        DocumentName,
+        PadFeatureCollaborators,
+        PadFeatureDocument,
+        PadFeatureFailure,
+        PadFeatureObject,
+        PadFeatureReadDocument,
+        PadFeatureResult,
+        PadName,
+        make_pad_feature_failure,
+        make_pad_feature_success,
+        make_pad_feature_uncertain,
+    )
 from .pad_feature_mutation import PadFeatureError, run_pad_feature_native_mutation
 
 

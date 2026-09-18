@@ -5,17 +5,30 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.get_object_contract import (
-    DocumentName,
-    GetObjectCollaborators,
-    GetObjectFailure,
-    GetObjectRequest,
-    GetObjectResult,
-    ObjectName,
-    make_get_object_failure,
-    make_get_object_success,
-    parse_get_object_response,
-)
+try:
+    from ...._shared.protocol.get_object_contract import (
+        DocumentName,
+        GetObjectCollaborators,
+        GetObjectFailure,
+        GetObjectRequest,
+        GetObjectResult,
+        ObjectName,
+        make_get_object_failure,
+        make_get_object_success,
+        parse_get_object_response,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.get_object_contract import (
+        DocumentName,
+        GetObjectCollaborators,
+        GetObjectFailure,
+        GetObjectRequest,
+        GetObjectResult,
+        ObjectName,
+        make_get_object_failure,
+        make_get_object_success,
+        parse_get_object_response,
+    )
 from .policy_runtime import app_from, lookup_document, lookup_object
 
 

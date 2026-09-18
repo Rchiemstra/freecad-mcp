@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.edit_object_contract import (
-    EditObjectCollaborators,
-    EditObjectReadDocument,
-    EditObjectFailure,
-    EditObjectUncertain,
-    make_edit_object_failure,
-    make_edit_object_uncertain,
-)
+try:
+    from ...._shared.protocol.edit_object_contract import (
+        EditObjectCollaborators,
+        EditObjectReadDocument,
+        EditObjectFailure,
+        EditObjectUncertain,
+        make_edit_object_failure,
+        make_edit_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.edit_object_contract import (
+        EditObjectCollaborators,
+        EditObjectReadDocument,
+        EditObjectFailure,
+        EditObjectUncertain,
+        make_edit_object_failure,
+        make_edit_object_uncertain,
+    )
 
 
 class EditObjectError(RuntimeError):

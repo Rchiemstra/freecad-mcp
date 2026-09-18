@@ -24,19 +24,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.build_path_wire_contract import (
-    BuildPathWireCollaborators,
-    BuildPathWireDocument,
-    BuildPathWireFailure,
-    BuildPathWireName,
-    BuildPathWireReadDocument,
-    BuildPathWireRequest,
-    BuildPathWireResult,
-    DocumentName,
-    make_build_path_wire_failure,
-    make_build_path_wire_success,
-    make_build_path_wire_uncertain,
-)
+try:
+    from ...._shared.protocol.build_path_wire_contract import (
+        BuildPathWireCollaborators,
+        BuildPathWireDocument,
+        BuildPathWireFailure,
+        BuildPathWireName,
+        BuildPathWireReadDocument,
+        BuildPathWireRequest,
+        BuildPathWireResult,
+        DocumentName,
+        make_build_path_wire_failure,
+        make_build_path_wire_success,
+        make_build_path_wire_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.build_path_wire_contract import (
+        BuildPathWireCollaborators,
+        BuildPathWireDocument,
+        BuildPathWireFailure,
+        BuildPathWireName,
+        BuildPathWireReadDocument,
+        BuildPathWireRequest,
+        BuildPathWireResult,
+        DocumentName,
+        make_build_path_wire_failure,
+        make_build_path_wire_success,
+        make_build_path_wire_uncertain,
+    )
 from .build_path_wire_mutation import BuildPathWireError, run_build_path_wire_native_mutation
 from .typed_runtime import TypedMutationError, load_module, module_callable
 

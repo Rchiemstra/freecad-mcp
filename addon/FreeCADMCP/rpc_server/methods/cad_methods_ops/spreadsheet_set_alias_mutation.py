@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.spreadsheet_set_alias_contract import (
-    SpreadsheetSetAliasCollaborators,
-    SpreadsheetSetAliasDocument,
-    SpreadsheetSetAliasFailure,
-    SpreadsheetSetAliasReadDocument,
-    SpreadsheetSetAliasUncertain,
-    DocumentName,
-    make_spreadsheet_set_alias_failure,
-    make_spreadsheet_set_alias_uncertain,
-)
+try:
+    from ...._shared.protocol.spreadsheet_set_alias_contract import (
+        SpreadsheetSetAliasCollaborators,
+        SpreadsheetSetAliasDocument,
+        SpreadsheetSetAliasFailure,
+        SpreadsheetSetAliasReadDocument,
+        SpreadsheetSetAliasUncertain,
+        DocumentName,
+        make_spreadsheet_set_alias_failure,
+        make_spreadsheet_set_alias_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_set_alias_contract import (
+        SpreadsheetSetAliasCollaborators,
+        SpreadsheetSetAliasDocument,
+        SpreadsheetSetAliasFailure,
+        SpreadsheetSetAliasReadDocument,
+        SpreadsheetSetAliasUncertain,
+        DocumentName,
+        make_spreadsheet_set_alias_failure,
+        make_spreadsheet_set_alias_uncertain,
+    )
 
 
 class SpreadsheetSetAliasError(RuntimeError):

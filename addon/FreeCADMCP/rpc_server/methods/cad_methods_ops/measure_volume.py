@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.measure_volume_contract import (
-    MeasureVolumeCollaborators,
-    MeasureVolumeFailure,
-    MeasureVolumeRequest,
-    MeasureVolumeResult,
-    DocumentName,
-    ObjectName,
-    make_measure_volume_failure,
-    make_measure_volume_success,
-)
+try:
+    from ...._shared.protocol.measure_volume_contract import (
+        MeasureVolumeCollaborators,
+        MeasureVolumeFailure,
+        MeasureVolumeRequest,
+        MeasureVolumeResult,
+        DocumentName,
+        ObjectName,
+        make_measure_volume_failure,
+        make_measure_volume_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.measure_volume_contract import (
+        MeasureVolumeCollaborators,
+        MeasureVolumeFailure,
+        MeasureVolumeRequest,
+        MeasureVolumeResult,
+        DocumentName,
+        ObjectName,
+        make_measure_volume_failure,
+        make_measure_volume_success,
+    )
 from . import measure_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import TypedMutationError, as_float, as_str

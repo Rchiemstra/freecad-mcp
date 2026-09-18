@@ -17,19 +17,34 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_datum_plane_contract import (
-    CreateDatumPlaneCollaborators,
-    CreateDatumPlaneDocument,
-    CreateDatumPlaneFailure,
-    CreateDatumPlaneName,
-    CreateDatumPlaneReadDocument,
-    CreateDatumPlaneRequest,
-    CreateDatumPlaneResult,
-    DocumentName,
-    make_create_datum_plane_failure,
-    make_create_datum_plane_success,
-    make_create_datum_plane_uncertain,
-)
+try:
+    from ...._shared.protocol.create_datum_plane_contract import (
+        CreateDatumPlaneCollaborators,
+        CreateDatumPlaneDocument,
+        CreateDatumPlaneFailure,
+        CreateDatumPlaneName,
+        CreateDatumPlaneReadDocument,
+        CreateDatumPlaneRequest,
+        CreateDatumPlaneResult,
+        DocumentName,
+        make_create_datum_plane_failure,
+        make_create_datum_plane_success,
+        make_create_datum_plane_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_datum_plane_contract import (
+        CreateDatumPlaneCollaborators,
+        CreateDatumPlaneDocument,
+        CreateDatumPlaneFailure,
+        CreateDatumPlaneName,
+        CreateDatumPlaneReadDocument,
+        CreateDatumPlaneRequest,
+        CreateDatumPlaneResult,
+        DocumentName,
+        make_create_datum_plane_failure,
+        make_create_datum_plane_success,
+        make_create_datum_plane_uncertain,
+    )
 from .create_datum_plane_mutation import CreateDatumPlaneError, run_create_datum_plane_native_mutation
 from .typed_runtime import is_derived_from
 

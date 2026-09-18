@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_fillet_contract import (
-    SketchFilletCollaborators,
-    SketchFilletFailure,
-    SketchFilletUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_fillet_failure,
-    make_sketch_fillet_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_fillet_contract import (
+        SketchFilletCollaborators,
+        SketchFilletFailure,
+        SketchFilletUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_fillet_failure,
+        make_sketch_fillet_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_fillet_contract import (
+        SketchFilletCollaborators,
+        SketchFilletFailure,
+        SketchFilletUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_fillet_failure,
+        make_sketch_fillet_uncertain,
+    )
 
 
 class SketchFilletError(RuntimeError):

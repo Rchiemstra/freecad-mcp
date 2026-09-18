@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_trim_contract import (
-    SketchTrimCollaborators,
-    SketchTrimFailure,
-    SketchTrimRequest,
-    SketchTrimResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_trim_failure,
-    make_sketch_trim_success,
-    make_sketch_trim_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_trim_contract import (
+        SketchTrimCollaborators,
+        SketchTrimFailure,
+        SketchTrimRequest,
+        SketchTrimResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_trim_failure,
+        make_sketch_trim_success,
+        make_sketch_trim_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_trim_contract import (
+        SketchTrimCollaborators,
+        SketchTrimFailure,
+        SketchTrimRequest,
+        SketchTrimResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_trim_failure,
+        make_sketch_trim_success,
+        make_sketch_trim_uncertain,
+    )
 from .sketch_trim_mutation import SketchTrimError, run_sketch_trim_native_mutation
 
 

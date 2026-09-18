@@ -6,19 +6,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.spreadsheet_set_cells_contract import (
-    DocumentName,
-    SpreadsheetSetCellsCollaborators,
-    SpreadsheetSetCellsDocument,
-    SpreadsheetSetCellsFailure,
-    SpreadsheetSetCellsName,
-    SpreadsheetSetCellsReadDocument,
-    SpreadsheetSetCellsRequest,
-    SpreadsheetSetCellsResult,
-    make_spreadsheet_set_cells_failure,
-    make_spreadsheet_set_cells_success,
-    make_spreadsheet_set_cells_uncertain,
-)
+try:
+    from ...._shared.protocol.spreadsheet_set_cells_contract import (
+        DocumentName,
+        SpreadsheetSetCellsCollaborators,
+        SpreadsheetSetCellsDocument,
+        SpreadsheetSetCellsFailure,
+        SpreadsheetSetCellsName,
+        SpreadsheetSetCellsReadDocument,
+        SpreadsheetSetCellsRequest,
+        SpreadsheetSetCellsResult,
+        make_spreadsheet_set_cells_failure,
+        make_spreadsheet_set_cells_success,
+        make_spreadsheet_set_cells_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_set_cells_contract import (
+        DocumentName,
+        SpreadsheetSetCellsCollaborators,
+        SpreadsheetSetCellsDocument,
+        SpreadsheetSetCellsFailure,
+        SpreadsheetSetCellsName,
+        SpreadsheetSetCellsReadDocument,
+        SpreadsheetSetCellsRequest,
+        SpreadsheetSetCellsResult,
+        make_spreadsheet_set_cells_failure,
+        make_spreadsheet_set_cells_success,
+        make_spreadsheet_set_cells_uncertain,
+    )
 from .feature_mutate_support import is_read_only_property
 from .spreadsheet_cell_ops import read_spreadsheet_cell
 from .spreadsheet_set_cells_mutation import (

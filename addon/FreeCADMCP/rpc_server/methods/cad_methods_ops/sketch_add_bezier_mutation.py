@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_bezier_contract import (
-    SketchAddBezierCollaborators,
-    SketchAddBezierFailure,
-    SketchAddBezierUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_add_bezier_failure,
-    make_sketch_add_bezier_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_bezier_contract import (
+        SketchAddBezierCollaborators,
+        SketchAddBezierFailure,
+        SketchAddBezierUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_bezier_failure,
+        make_sketch_add_bezier_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_bezier_contract import (
+        SketchAddBezierCollaborators,
+        SketchAddBezierFailure,
+        SketchAddBezierUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_bezier_failure,
+        make_sketch_add_bezier_uncertain,
+    )
 
 
 class SketchAddBezierError(RuntimeError):

@@ -6,17 +6,30 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.edit_object_contract import (
-    DocumentName,
-    EditObjectCollaborators,
-    EditObjectFailure,
-    EditObjectRequest,
-    EditObjectResult,
-    ObjectName,
-    make_edit_object_failure,
-    make_edit_object_success,
-    make_edit_object_uncertain,
-)
+try:
+    from ...._shared.protocol.edit_object_contract import (
+        DocumentName,
+        EditObjectCollaborators,
+        EditObjectFailure,
+        EditObjectRequest,
+        EditObjectResult,
+        ObjectName,
+        make_edit_object_failure,
+        make_edit_object_success,
+        make_edit_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.edit_object_contract import (
+        DocumentName,
+        EditObjectCollaborators,
+        EditObjectFailure,
+        EditObjectRequest,
+        EditObjectResult,
+        ObjectName,
+        make_edit_object_failure,
+        make_edit_object_success,
+        make_edit_object_uncertain,
+    )
 from .edit_object_mutation import EditObjectError, run_edit_object_native_mutation
 from .typed_rpc_document import assign_properties, get_object
 

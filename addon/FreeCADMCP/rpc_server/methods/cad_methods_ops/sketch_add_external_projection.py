@@ -16,19 +16,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_external_projection_contract import (
-    SketchAddExternalProjectionCollaborators,
-    SketchAddExternalProjectionDocument,
-    SketchAddExternalProjectionFailure,
-    SketchAddExternalProjectionName,
-    SketchAddExternalProjectionReadDocument,
-    SketchAddExternalProjectionRequest,
-    SketchAddExternalProjectionResult,
-    DocumentName,
-    make_sketch_add_external_projection_failure,
-    make_sketch_add_external_projection_success,
-    make_sketch_add_external_projection_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_external_projection_contract import (
+        SketchAddExternalProjectionCollaborators,
+        SketchAddExternalProjectionDocument,
+        SketchAddExternalProjectionFailure,
+        SketchAddExternalProjectionName,
+        SketchAddExternalProjectionReadDocument,
+        SketchAddExternalProjectionRequest,
+        SketchAddExternalProjectionResult,
+        DocumentName,
+        make_sketch_add_external_projection_failure,
+        make_sketch_add_external_projection_success,
+        make_sketch_add_external_projection_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_external_projection_contract import (
+        SketchAddExternalProjectionCollaborators,
+        SketchAddExternalProjectionDocument,
+        SketchAddExternalProjectionFailure,
+        SketchAddExternalProjectionName,
+        SketchAddExternalProjectionReadDocument,
+        SketchAddExternalProjectionRequest,
+        SketchAddExternalProjectionResult,
+        DocumentName,
+        make_sketch_add_external_projection_failure,
+        make_sketch_add_external_projection_success,
+        make_sketch_add_external_projection_uncertain,
+    )
 from .sketch_add_external_projection_mutation import SketchAddExternalProjectionError, run_sketch_add_external_projection_native_mutation
 
 

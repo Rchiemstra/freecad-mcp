@@ -6,19 +6,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.repair_references_contract import (
-    DocumentName,
-    ObjectName,
-    RepairItem,
-    RepairRef,
-    RepairReferencesCollaborators,
-    RepairReferencesFailure,
-    RepairReferencesRequest,
-    RepairReferencesResult,
-    make_repair_references_failure,
-    make_repair_references_success,
-    make_repair_references_uncertain,
-)
+try:
+    from ...._shared.protocol.repair_references_contract import (
+        DocumentName,
+        ObjectName,
+        RepairItem,
+        RepairRef,
+        RepairReferencesCollaborators,
+        RepairReferencesFailure,
+        RepairReferencesRequest,
+        RepairReferencesResult,
+        make_repair_references_failure,
+        make_repair_references_success,
+        make_repair_references_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.repair_references_contract import (
+        DocumentName,
+        ObjectName,
+        RepairItem,
+        RepairRef,
+        RepairReferencesCollaborators,
+        RepairReferencesFailure,
+        RepairReferencesRequest,
+        RepairReferencesResult,
+        make_repair_references_failure,
+        make_repair_references_success,
+        make_repair_references_uncertain,
+    )
 from .repair_references_mutation import (
     RepairReferencesError,
     run_repair_references_native_mutation,

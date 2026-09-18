@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.recompute_document_contract import (
-    RecomputeDocumentCollaborators,
-    RecomputeDocumentReadDocument,
-    RecomputeDocumentFailure,
-    RecomputeDocumentUncertain,
-    make_recompute_document_failure,
-    make_recompute_document_uncertain,
-)
+try:
+    from ...._shared.protocol.recompute_document_contract import (
+        RecomputeDocumentCollaborators,
+        RecomputeDocumentReadDocument,
+        RecomputeDocumentFailure,
+        RecomputeDocumentUncertain,
+        make_recompute_document_failure,
+        make_recompute_document_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.recompute_document_contract import (
+        RecomputeDocumentCollaborators,
+        RecomputeDocumentReadDocument,
+        RecomputeDocumentFailure,
+        RecomputeDocumentUncertain,
+        make_recompute_document_failure,
+        make_recompute_document_uncertain,
+    )
 
 
 class RecomputeDocumentError(RuntimeError):

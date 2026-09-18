@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.loft_feature_contract import (
-    LoftFeatureCollaborators,
-    LoftFeatureFailure,
-    LoftFeatureUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_loft_feature_failure,
-    make_loft_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.loft_feature_contract import (
+        LoftFeatureCollaborators,
+        LoftFeatureFailure,
+        LoftFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_loft_feature_failure,
+        make_loft_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.loft_feature_contract import (
+        LoftFeatureCollaborators,
+        LoftFeatureFailure,
+        LoftFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_loft_feature_failure,
+        make_loft_feature_uncertain,
+    )
 
 
 class LoftFeatureError(RuntimeError):

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_coincident_contract import (
-    SketchConstrainCoincidentCollaborators,
-    SketchConstrainCoincidentFailure,
-    SketchConstrainCoincidentRequest,
-    SketchConstrainCoincidentResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_coincident_failure,
-    make_sketch_constrain_coincident_success,
-    make_sketch_constrain_coincident_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_coincident_contract import (
+        SketchConstrainCoincidentCollaborators,
+        SketchConstrainCoincidentFailure,
+        SketchConstrainCoincidentRequest,
+        SketchConstrainCoincidentResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_coincident_failure,
+        make_sketch_constrain_coincident_success,
+        make_sketch_constrain_coincident_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_coincident_contract import (
+        SketchConstrainCoincidentCollaborators,
+        SketchConstrainCoincidentFailure,
+        SketchConstrainCoincidentRequest,
+        SketchConstrainCoincidentResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_coincident_failure,
+        make_sketch_constrain_coincident_success,
+        make_sketch_constrain_coincident_uncertain,
+    )
 from .sketch_constrain_coincident_mutation import SketchConstrainCoincidentError, run_sketch_constrain_coincident_native_mutation
 
 

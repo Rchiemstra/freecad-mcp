@@ -6,21 +6,38 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_assembly_grounded_joint_contract import (
-    DocumentName,
-    ComponentName,
-    AssemblyName,
-    CreateAssemblyGroundedJointCollaborators,
-    CreateAssemblyGroundedJointFailure,
-    CreateAssemblyGroundedJointRequest,
-    CreateAssemblyGroundedJointResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_create_assembly_grounded_joint_failure,
-    make_create_assembly_grounded_joint_success,
-    make_create_assembly_grounded_joint_uncertain,
-)
+try:
+    from ...._shared.protocol.create_assembly_grounded_joint_contract import (
+        DocumentName,
+        ComponentName,
+        AssemblyName,
+        CreateAssemblyGroundedJointCollaborators,
+        CreateAssemblyGroundedJointFailure,
+        CreateAssemblyGroundedJointRequest,
+        CreateAssemblyGroundedJointResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_assembly_grounded_joint_failure,
+        make_create_assembly_grounded_joint_success,
+        make_create_assembly_grounded_joint_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_assembly_grounded_joint_contract import (
+        DocumentName,
+        ComponentName,
+        AssemblyName,
+        CreateAssemblyGroundedJointCollaborators,
+        CreateAssemblyGroundedJointFailure,
+        CreateAssemblyGroundedJointRequest,
+        CreateAssemblyGroundedJointResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_assembly_grounded_joint_failure,
+        make_create_assembly_grounded_joint_success,
+        make_create_assembly_grounded_joint_uncertain,
+    )
 from .typed_runtime import as_float, as_int, as_str
 from . import assembly_actions
 from .create_assembly_grounded_joint_mutation import CreateAssemblyGroundedJointError, run_create_assembly_grounded_joint_native_mutation

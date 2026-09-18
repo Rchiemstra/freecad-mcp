@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.close_document_contract import (
-    CloseDocumentCollaborators,
-    CloseDocumentFailure,
-    CloseDocumentRequest,
-    CloseDocumentResult,
-    DocumentName,
-    make_close_document_failure,
-    make_close_document_success,
-    make_close_document_uncertain,
-)
+try:
+    from ...._shared.protocol.close_document_contract import (
+        CloseDocumentCollaborators,
+        CloseDocumentFailure,
+        CloseDocumentRequest,
+        CloseDocumentResult,
+        DocumentName,
+        make_close_document_failure,
+        make_close_document_success,
+        make_close_document_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.close_document_contract import (
+        CloseDocumentCollaborators,
+        CloseDocumentFailure,
+        CloseDocumentRequest,
+        CloseDocumentResult,
+        DocumentName,
+        make_close_document_failure,
+        make_close_document_success,
+        make_close_document_uncertain,
+    )
 from .policy_runtime import app_from, lookup_document
 
 

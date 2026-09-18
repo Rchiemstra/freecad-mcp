@@ -6,19 +6,34 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_object_contract import (
-    CreateObjectCollaborators,
-    CreateObjectFailure,
-    CreateObjectPayload,
-    CreateObjectRequest,
-    CreateObjectResult,
-    DocumentName,
-    ObjectName,
-    ObjectType,
-    make_create_object_failure,
-    make_create_object_success,
-    make_create_object_uncertain,
-)
+try:
+    from ...._shared.protocol.create_object_contract import (
+        CreateObjectCollaborators,
+        CreateObjectFailure,
+        CreateObjectPayload,
+        CreateObjectRequest,
+        CreateObjectResult,
+        DocumentName,
+        ObjectName,
+        ObjectType,
+        make_create_object_failure,
+        make_create_object_success,
+        make_create_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_object_contract import (
+        CreateObjectCollaborators,
+        CreateObjectFailure,
+        CreateObjectPayload,
+        CreateObjectRequest,
+        CreateObjectResult,
+        DocumentName,
+        ObjectName,
+        ObjectType,
+        make_create_object_failure,
+        make_create_object_success,
+        make_create_object_uncertain,
+    )
 from .create_object_mutation import CreateObjectError, run_create_object_native_mutation
 from .typed_rpc_document import add_object, assign_properties, get_object
 

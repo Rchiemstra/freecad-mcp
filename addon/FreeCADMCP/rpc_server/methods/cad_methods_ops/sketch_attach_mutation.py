@@ -10,15 +10,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_attach_contract import (
-    SketchAttachCollaborators,
-    SketchAttachDocument,
-    SketchAttachFailure,
-    SketchAttachReadDocument,
-    SketchAttachUncertain,
-    make_sketch_attach_failure,
-    make_sketch_attach_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_attach_contract import (
+        SketchAttachCollaborators,
+        SketchAttachDocument,
+        SketchAttachFailure,
+        SketchAttachReadDocument,
+        SketchAttachUncertain,
+        make_sketch_attach_failure,
+        make_sketch_attach_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_attach_contract import (
+        SketchAttachCollaborators,
+        SketchAttachDocument,
+        SketchAttachFailure,
+        SketchAttachReadDocument,
+        SketchAttachUncertain,
+        make_sketch_attach_failure,
+        make_sketch_attach_uncertain,
+    )
 
 
 class SketchAttachError(RuntimeError):

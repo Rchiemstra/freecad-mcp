@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.bounding_box_contract import (
-    BoundingBoxCollaborators,
-    BoundingBoxFailure,
-    BoundingBoxRequest,
-    BoundingBoxResult,
-    DocumentName,
-    ObjectName,
-    make_bounding_box_failure,
-    make_bounding_box_success,
-)
+try:
+    from ...._shared.protocol.bounding_box_contract import (
+        BoundingBoxCollaborators,
+        BoundingBoxFailure,
+        BoundingBoxRequest,
+        BoundingBoxResult,
+        DocumentName,
+        ObjectName,
+        make_bounding_box_failure,
+        make_bounding_box_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.bounding_box_contract import (
+        BoundingBoxCollaborators,
+        BoundingBoxFailure,
+        BoundingBoxRequest,
+        BoundingBoxResult,
+        DocumentName,
+        ObjectName,
+        make_bounding_box_failure,
+        make_bounding_box_success,
+    )
 from . import measure_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import TypedMutationError, as_float, as_str

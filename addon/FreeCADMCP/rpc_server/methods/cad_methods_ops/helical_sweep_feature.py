@@ -24,20 +24,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.helical_sweep_feature_contract import (
-    HelicalSweepFeatureCollaborators,
-    HelicalSweepFeatureFailure,
-    HelicalSweepFeatureRequest,
-    HelicalSweepFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_helical_sweep_feature_failure,
-    make_helical_sweep_feature_success,
-    make_helical_sweep_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.helical_sweep_feature_contract import (
+        HelicalSweepFeatureCollaborators,
+        HelicalSweepFeatureFailure,
+        HelicalSweepFeatureRequest,
+        HelicalSweepFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_helical_sweep_feature_failure,
+        make_helical_sweep_feature_success,
+        make_helical_sweep_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.helical_sweep_feature_contract import (
+        HelicalSweepFeatureCollaborators,
+        HelicalSweepFeatureFailure,
+        HelicalSweepFeatureRequest,
+        HelicalSweepFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_helical_sweep_feature_failure,
+        make_helical_sweep_feature_success,
+        make_helical_sweep_feature_uncertain,
+    )
 from .helical_sweep_feature_mutation import HelicalSweepFeatureError, run_helical_sweep_feature_native_mutation
 
 

@@ -12,20 +12,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from ...._shared.protocol.restore_contract import (
-    RestoreCollaborators,
-    RestoreDocument,
-    RestoreFailure,
-    RestoreName,
-    RestoreReadDocument,
-    RestoreRequest,
-    RestoreResult,
-    RestoreUncertain,
-    DocumentName,
-    make_restore_failure,
-    make_restore_success,
-    make_restore_uncertain,
-)
+try:
+    from ...._shared.protocol.restore_contract import (
+        RestoreCollaborators,
+        RestoreDocument,
+        RestoreFailure,
+        RestoreName,
+        RestoreReadDocument,
+        RestoreRequest,
+        RestoreResult,
+        RestoreUncertain,
+        DocumentName,
+        make_restore_failure,
+        make_restore_success,
+        make_restore_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.restore_contract import (
+        RestoreCollaborators,
+        RestoreDocument,
+        RestoreFailure,
+        RestoreName,
+        RestoreReadDocument,
+        RestoreRequest,
+        RestoreResult,
+        RestoreUncertain,
+        DocumentName,
+        make_restore_failure,
+        make_restore_success,
+        make_restore_uncertain,
+    )
 from .restore_mutation import RestoreError, run_restore_native_mutation
 
 

@@ -13,19 +13,34 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.relink_references_contract import (
-    RelinkReferencesCollaborators,
-    RelinkReferencesDocument,
-    RelinkReferencesFailure,
-    RelinkReferencesName,
-    RelinkReferencesReadDocument,
-    RelinkReferencesRequest,
-    RelinkReferencesResult,
-    DocumentName,
-    make_relink_references_failure,
-    make_relink_references_success,
-    make_relink_references_uncertain,
-)
+try:
+    from ...._shared.protocol.relink_references_contract import (
+        RelinkReferencesCollaborators,
+        RelinkReferencesDocument,
+        RelinkReferencesFailure,
+        RelinkReferencesName,
+        RelinkReferencesReadDocument,
+        RelinkReferencesRequest,
+        RelinkReferencesResult,
+        DocumentName,
+        make_relink_references_failure,
+        make_relink_references_success,
+        make_relink_references_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.relink_references_contract import (
+        RelinkReferencesCollaborators,
+        RelinkReferencesDocument,
+        RelinkReferencesFailure,
+        RelinkReferencesName,
+        RelinkReferencesReadDocument,
+        RelinkReferencesRequest,
+        RelinkReferencesResult,
+        DocumentName,
+        make_relink_references_failure,
+        make_relink_references_success,
+        make_relink_references_uncertain,
+    )
 from .relink_references_mutation import RelinkReferencesError, run_relink_references_native_mutation
 
 

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_bspline_through_points_contract import (
-    SketchAddBsplineThroughPointsCollaborators,
-    SketchAddBsplineThroughPointsFailure,
-    SketchAddBsplineThroughPointsRequest,
-    SketchAddBsplineThroughPointsResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_bspline_through_points_failure,
-    make_sketch_add_bspline_through_points_success,
-    make_sketch_add_bspline_through_points_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_bspline_through_points_contract import (
+        SketchAddBsplineThroughPointsCollaborators,
+        SketchAddBsplineThroughPointsFailure,
+        SketchAddBsplineThroughPointsRequest,
+        SketchAddBsplineThroughPointsResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_bspline_through_points_failure,
+        make_sketch_add_bspline_through_points_success,
+        make_sketch_add_bspline_through_points_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_bspline_through_points_contract import (
+        SketchAddBsplineThroughPointsCollaborators,
+        SketchAddBsplineThroughPointsFailure,
+        SketchAddBsplineThroughPointsRequest,
+        SketchAddBsplineThroughPointsResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_bspline_through_points_failure,
+        make_sketch_add_bspline_through_points_success,
+        make_sketch_add_bspline_through_points_uncertain,
+    )
 from .sketch_add_bspline_through_points_mutation import SketchAddBsplineThroughPointsError, run_sketch_add_bspline_through_points_native_mutation
 
 

@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_regular_polygon_contract import (
-    SketchAddRegularPolygonCollaborators,
-    SketchAddRegularPolygonFailure,
-    SketchAddRegularPolygonUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_add_regular_polygon_failure,
-    make_sketch_add_regular_polygon_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_regular_polygon_contract import (
+        SketchAddRegularPolygonCollaborators,
+        SketchAddRegularPolygonFailure,
+        SketchAddRegularPolygonUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_regular_polygon_failure,
+        make_sketch_add_regular_polygon_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_regular_polygon_contract import (
+        SketchAddRegularPolygonCollaborators,
+        SketchAddRegularPolygonFailure,
+        SketchAddRegularPolygonUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_regular_polygon_failure,
+        make_sketch_add_regular_polygon_uncertain,
+    )
 
 
 class SketchAddRegularPolygonError(RuntimeError):

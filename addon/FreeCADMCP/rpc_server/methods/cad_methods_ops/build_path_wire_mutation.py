@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.build_path_wire_contract import (
-    BuildPathWireCollaborators,
-    BuildPathWireDocument,
-    BuildPathWireFailure,
-    BuildPathWireReadDocument,
-    BuildPathWireUncertain,
-    DocumentName,
-    make_build_path_wire_failure,
-    make_build_path_wire_uncertain,
-)
+try:
+    from ...._shared.protocol.build_path_wire_contract import (
+        BuildPathWireCollaborators,
+        BuildPathWireDocument,
+        BuildPathWireFailure,
+        BuildPathWireReadDocument,
+        BuildPathWireUncertain,
+        DocumentName,
+        make_build_path_wire_failure,
+        make_build_path_wire_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.build_path_wire_contract import (
+        BuildPathWireCollaborators,
+        BuildPathWireDocument,
+        BuildPathWireFailure,
+        BuildPathWireReadDocument,
+        BuildPathWireUncertain,
+        DocumentName,
+        make_build_path_wire_failure,
+        make_build_path_wire_uncertain,
+    )
 
 
 class BuildPathWireError(RuntimeError):

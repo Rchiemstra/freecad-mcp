@@ -6,19 +6,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.pocket_feature_contract import (
-    DocumentName,
-    PocketFeatureCollaborators,
-    PocketFeatureDocument,
-    PocketFeatureFailure,
-    PocketFeatureObject,
-    PocketFeatureReadDocument,
-    PocketFeatureResult,
-    PocketName,
-    make_pocket_feature_failure,
-    make_pocket_feature_success,
-    make_pocket_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.pocket_feature_contract import (
+        DocumentName,
+        PocketFeatureCollaborators,
+        PocketFeatureDocument,
+        PocketFeatureFailure,
+        PocketFeatureObject,
+        PocketFeatureReadDocument,
+        PocketFeatureResult,
+        PocketName,
+        make_pocket_feature_failure,
+        make_pocket_feature_success,
+        make_pocket_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.pocket_feature_contract import (
+        DocumentName,
+        PocketFeatureCollaborators,
+        PocketFeatureDocument,
+        PocketFeatureFailure,
+        PocketFeatureObject,
+        PocketFeatureReadDocument,
+        PocketFeatureResult,
+        PocketName,
+        make_pocket_feature_failure,
+        make_pocket_feature_success,
+        make_pocket_feature_uncertain,
+    )
 from .pocket_feature_mutation import PocketFeatureError, run_pocket_feature_native_mutation
 
 

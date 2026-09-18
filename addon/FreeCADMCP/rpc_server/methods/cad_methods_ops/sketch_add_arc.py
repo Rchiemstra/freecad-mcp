@@ -7,20 +7,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_arc_contract import (
-    SketchAddArcCollaborators,
-    SketchAddArcFailure,
-    SketchAddArcRequest,
-    SketchAddArcResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_arc_failure,
-    make_sketch_add_arc_success,
-    make_sketch_add_arc_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_arc_contract import (
+        SketchAddArcCollaborators,
+        SketchAddArcFailure,
+        SketchAddArcRequest,
+        SketchAddArcResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_arc_failure,
+        make_sketch_add_arc_success,
+        make_sketch_add_arc_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_arc_contract import (
+        SketchAddArcCollaborators,
+        SketchAddArcFailure,
+        SketchAddArcRequest,
+        SketchAddArcResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_arc_failure,
+        make_sketch_add_arc_success,
+        make_sketch_add_arc_uncertain,
+    )
 from .sketch_add_arc_mutation import SketchAddArcError, run_sketch_add_arc_native_mutation
 
 

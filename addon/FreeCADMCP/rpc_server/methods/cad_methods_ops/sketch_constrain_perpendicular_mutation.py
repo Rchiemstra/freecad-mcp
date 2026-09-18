@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_constrain_perpendicular_contract import (
-    SketchConstrainPerpendicularCollaborators,
-    SketchConstrainPerpendicularFailure,
-    SketchConstrainPerpendicularUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_constrain_perpendicular_failure,
-    make_sketch_constrain_perpendicular_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_perpendicular_contract import (
+        SketchConstrainPerpendicularCollaborators,
+        SketchConstrainPerpendicularFailure,
+        SketchConstrainPerpendicularUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_constrain_perpendicular_failure,
+        make_sketch_constrain_perpendicular_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_perpendicular_contract import (
+        SketchConstrainPerpendicularCollaborators,
+        SketchConstrainPerpendicularFailure,
+        SketchConstrainPerpendicularUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_constrain_perpendicular_failure,
+        make_sketch_constrain_perpendicular_uncertain,
+    )
 
 
 class SketchConstrainPerpendicularError(RuntimeError):

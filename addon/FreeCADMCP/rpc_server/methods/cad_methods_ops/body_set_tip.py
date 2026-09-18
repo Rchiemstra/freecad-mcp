@@ -6,22 +6,40 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.body_set_tip_contract import (
-    BodyName,
-    BodySetTipCollaborators,
-    BodySetTipFailure,
-    BodySetTipRequest,
-    BodySetTipResult,
-    DocumentName,
-    FeatureName,
-    TipBodyDocument,
-    TipBodyWriteObject,
-    TipNamedObject,
-    TipReadDocument,
-    make_body_set_tip_failure,
-    make_body_set_tip_success,
-    make_body_set_tip_uncertain,
-)
+try:
+    from ...._shared.protocol.body_set_tip_contract import (
+        BodyName,
+        BodySetTipCollaborators,
+        BodySetTipFailure,
+        BodySetTipRequest,
+        BodySetTipResult,
+        DocumentName,
+        FeatureName,
+        TipBodyDocument,
+        TipBodyWriteObject,
+        TipNamedObject,
+        TipReadDocument,
+        make_body_set_tip_failure,
+        make_body_set_tip_success,
+        make_body_set_tip_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.body_set_tip_contract import (
+        BodyName,
+        BodySetTipCollaborators,
+        BodySetTipFailure,
+        BodySetTipRequest,
+        BodySetTipResult,
+        DocumentName,
+        FeatureName,
+        TipBodyDocument,
+        TipBodyWriteObject,
+        TipNamedObject,
+        TipReadDocument,
+        make_body_set_tip_failure,
+        make_body_set_tip_success,
+        make_body_set_tip_uncertain,
+    )
 from .body_set_tip_mutation import BodySetTipError, run_body_set_tip_native_mutation
 
 

@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.get_dependency_graph_contract import (
-    GetDependencyGraphCollaborators,
-    GetDependencyGraphFailure,
-    GetDependencyGraphRequest,
-    GetDependencyGraphResult,
-    DocumentName,
-    ObjectName,
-    make_get_dependency_graph_failure,
-    make_get_dependency_graph_success,
-)
+try:
+    from ...._shared.protocol.get_dependency_graph_contract import (
+        GetDependencyGraphCollaborators,
+        GetDependencyGraphFailure,
+        GetDependencyGraphRequest,
+        GetDependencyGraphResult,
+        DocumentName,
+        ObjectName,
+        make_get_dependency_graph_failure,
+        make_get_dependency_graph_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.get_dependency_graph_contract import (
+        GetDependencyGraphCollaborators,
+        GetDependencyGraphFailure,
+        GetDependencyGraphRequest,
+        GetDependencyGraphResult,
+        DocumentName,
+        ObjectName,
+        make_get_dependency_graph_failure,
+        make_get_dependency_graph_success,
+    )
 from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_int, as_str

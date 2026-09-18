@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.solve_assembly_contract import (
-    SolveAssemblyCollaborators,
-    SolveAssemblyFailure,
-    SolveAssemblyUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_solve_assembly_failure,
-    make_solve_assembly_uncertain,
-)
+try:
+    from ...._shared.protocol.solve_assembly_contract import (
+        SolveAssemblyCollaborators,
+        SolveAssemblyFailure,
+        SolveAssemblyUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_solve_assembly_failure,
+        make_solve_assembly_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.solve_assembly_contract import (
+        SolveAssemblyCollaborators,
+        SolveAssemblyFailure,
+        SolveAssemblyUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_solve_assembly_failure,
+        make_solve_assembly_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 

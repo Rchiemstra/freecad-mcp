@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_helical_gear_contract import (
-    CreateHelicalGearCollaborators,
-    CreateHelicalGearFailure,
-    CreateHelicalGearUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_create_helical_gear_failure,
-    make_create_helical_gear_uncertain,
-)
+try:
+    from ...._shared.protocol.create_helical_gear_contract import (
+        CreateHelicalGearCollaborators,
+        CreateHelicalGearFailure,
+        CreateHelicalGearUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_create_helical_gear_failure,
+        make_create_helical_gear_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_helical_gear_contract import (
+        CreateHelicalGearCollaborators,
+        CreateHelicalGearFailure,
+        CreateHelicalGearUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_create_helical_gear_failure,
+        make_create_helical_gear_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 
