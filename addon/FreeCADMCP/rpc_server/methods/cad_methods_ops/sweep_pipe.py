@@ -356,9 +356,14 @@ def _make_pipe_solid(path_wire: object, diameter_mm: float) -> object | None:
         try:
             profile = _circle_profile_at_path_start(part, path_wire, radius)
             if profile is not None:
-                for args in (([profile],), ([profile], True, True), ([profile], True, False)):
+                pipe_shell_args: tuple[object, ...]
+                for pipe_shell_args in (
+                    ([profile],),
+                    ([profile], True, True),
+                    ([profile], True, False),
+                ):
                     try:
-                        solid = consider(invoke(make_pipe_shell, *args))
+                        solid = consider(invoke(make_pipe_shell, *pipe_shell_args))
                         if solid is not None:
                             return solid
                     except Exception as extra_exc:
