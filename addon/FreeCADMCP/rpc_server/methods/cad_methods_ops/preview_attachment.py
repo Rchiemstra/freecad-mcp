@@ -80,9 +80,9 @@ def _support_entries(datum: object) -> list[dict[str, object]]:
         if isinstance(item, (list, tuple)) and item:
             obj = item[0]
             sub = item[1] if len(item) > 1 else ""
-            entries.append({"object": _support_object_name(obj), "sub": str(sub)})
+            entries.append({"object": _support_object_name(obj), "sub": str(sub), "item": obj})
         else:
-            entries.append({"object": _support_object_name(item), "sub": ""})
+            entries.append({"object": _support_object_name(item), "sub": "", "item": item})
     return entries
 
 
@@ -115,6 +115,17 @@ def _placement_dict(placement: object) -> dict[str, object] | None:
     return {"base": base, "axis": axis, "angle_deg": angle_deg}
 
 
+def _is_body(candidate: object) -> bool:
+    derived = getattr(candidate, "isDerivedFrom", None)
+    if callable(derived):
+        try:
+            if bool(derived("PartDesign::Body")):
+                return True
+        except Exception:
+            pass
+    return str(getattr(candidate, "TypeId", "") or "") == "PartDesign::Body"
+
+
 def _owning_body(obj: object) -> object | None:
     getter = getattr(obj, "getParentGeoFeatureGroup", None)
     if callable(getter):
@@ -122,14 +133,18 @@ def _owning_body(obj: object) -> object | None:
             owner: object | None = getter()
         except Exception:
             owner = None
-        if owner is not None:
+        if owner is not None and _is_body(owner):
             located: object = owner
             return located
+        if owner is not None:
+            nested = _owning_body(owner)
+            if nested is not None:
+                return nested
     for candidate in getattr(obj, "InList", ()) or ():
-        if getattr(candidate, "TypeId", "") == "PartDesign::Body":
-            if obj in getattr(candidate, "Group", ()):
-                located_candidate: object = candidate
-                return located_candidate
+        if not _is_body(candidate):
+            continue
+        located_candidate: object = candidate
+        return located_candidate
     return None
 
 
@@ -167,7 +182,10 @@ def _attachment_diagnostics(datum: object) -> dict[str, object]:
         support_obj_name = str(first.get("object", ""))
         getter = getattr(datum, "getDocument", None)
         doc = getter() if callable(getter) else None
-        support_obj = doc.getObject(support_obj_name) if doc is not None and hasattr(doc, "getObject") else None
+        live_support = first.get("item")
+        support_obj = live_support if live_support is not None and not isinstance(live_support, str) else None
+        if support_obj is None and doc is not None and hasattr(doc, "getObject") and support_obj_name:
+            support_obj = doc.getObject(support_obj_name)
         if support_obj is not None:
             support_placement = getattr(support_obj, "Placement", None)
             datum_placement = getattr(datum, "Placement", None)

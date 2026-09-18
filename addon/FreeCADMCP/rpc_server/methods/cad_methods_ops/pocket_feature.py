@@ -171,6 +171,51 @@ def _profile_sketch(profile: object) -> object | None:
     return profile
 
 
+def _vector_components(value: object) -> tuple[float, float, float] | None:
+    if value is None:
+        return None
+    try:
+        return (
+            float(getattr(value, "x", 0.0) or 0.0),
+            float(getattr(value, "y", 0.0) or 0.0),
+            float(getattr(value, "z", 0.0) or 0.0),
+        )
+    except Exception:
+        return None
+
+
+def _sketch_is_unmapped(sketch: object) -> bool:
+    mode = str(getattr(sketch, "MapMode", "") or "").strip()
+    if mode and mode not in {"Deactivated", "Deactivated "}:
+        return False
+    support = getattr(sketch, "AttachmentSupport", None)
+    if support is None:
+        support = getattr(sketch, "Support", None)
+    if support is None:
+        return True
+    try:
+        values = list(getattr(support, "getValues", lambda: support)() or [])
+    except Exception:
+        values = list(support) if isinstance(support, (list, tuple)) else []
+    return not any(values)
+
+
+def _ensure_pocket_into_solid(pocket: object, source_feature: object | None, sketch: object) -> None:
+    """KEEP BOTH: unmapped sketches default Direction -Z, missing a +Z pad.
+
+    Historical Length pockets still subtract material. Current FeatureExtrude
+    may report a +Z Direction before recompute and then execute -Z, so inspect
+    reports ZERO_MATERIAL_DELTA. Unmapped profiles reverse into the previous
+    solid; mapped profiles keep the caller Reversed flag.
+    """
+    if source_feature is None or not _sketch_is_unmapped(sketch):
+        return
+    try:
+        pocket.Reversed = True
+    except Exception:
+        return
+
+
 def apply_pocket_feature(
     doc: PocketFeatureDocument,
     sketch_name: str,
@@ -201,6 +246,8 @@ def apply_pocket_feature(
     pocket.Length = length
     collaborators.set_extrusion_symmetric(pocket, symmetric)
     collaborators.set_feature_bool(pocket, ("Reversed",), reversed_dir)
+    if not reversed_dir:
+        _ensure_pocket_into_solid(pocket, source_feature, sketch)
     body.Tip = pocket  # type: ignore[attr-defined]
     return PocketFeatureReceipt(
         name=pocket.Name,
