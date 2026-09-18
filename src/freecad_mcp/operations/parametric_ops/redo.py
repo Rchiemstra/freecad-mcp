@@ -26,6 +26,9 @@ def redo_operation(
             f"redo response unavailable: {exc}",
             committed=None,
         )
+    if isinstance(raw_result, dict):
+        raw_result = dict(raw_result)
+        raw_result.setdefault("document_name", doc_name)
     result = parse_redo_response(raw_result)
     structured = dict(result)
     if result["success"] is False:

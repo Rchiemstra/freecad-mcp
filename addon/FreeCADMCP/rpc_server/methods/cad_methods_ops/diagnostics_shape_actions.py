@@ -127,14 +127,22 @@ def _sub_normal(sub: object) -> object | None:
 
 
 def _sub_type(sub: object) -> str:
+    geom = None
     try:
         if hasattr(sub, "Surface"):
-            return str(getattr(sub, "Surface")).split("(", 1)[0].strip()
-        if hasattr(sub, "Curve"):
-            return str(getattr(sub, "Curve")).split("(", 1)[0].strip()
+            geom = getattr(sub, "Surface")
+        elif hasattr(sub, "Curve"):
+            geom = getattr(sub, "Curve")
     except Exception:
         return ""
-    return ""
+    if geom is None:
+        return ""
+    for attr in ("TypeId", "Type"):
+        value = getattr(geom, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value.split("::")[-1].strip()
+    raw = str(geom).split("(", 1)[0].strip()
+    return _norm_type(raw) or raw
 
 
 def _sub_radius(sub: object) -> float | None:
@@ -218,8 +226,9 @@ def find_subshapes(
             except Exception:
                 normal = None
         surface_type = _sub_type(sub)
+        public_type = _norm_type(surface_type) or surface_type
         sub_radius = _sub_radius(sub)
-        if type_want and _norm_type(surface_type) != type_want:
+        if type_want and _norm_type(public_type) != type_want:
             continue
         if nv is not None and normal is not None:
             try:
@@ -237,7 +246,8 @@ def find_subshapes(
         results.append(
             {
                 "sub": f"{kind_singular}{index}",
-                "type": surface_type,
+                "type": public_type,
+                "geom_type": surface_type,
                 "global_center": _vec(center),
                 "global_normal": _vec(normal),
                 "radius": round(sub_radius, 6) if sub_radius is not None else None,

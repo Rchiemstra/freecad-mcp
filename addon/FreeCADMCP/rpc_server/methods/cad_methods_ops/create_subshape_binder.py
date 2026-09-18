@@ -97,6 +97,8 @@ def _boundbox_values(obj: object) -> tuple[float, float, float, float, float, fl
     shape = getattr(obj, "Shape", None)
     box = getattr(shape, "BoundBox", None) if shape is not None else None
     if box is None:
+        box = getattr(obj, "BoundBox", None)
+    if box is None:
         return None
     try:
         return (
@@ -111,8 +113,39 @@ def _boundbox_values(obj: object) -> tuple[float, float, float, float, float, fl
         return None
 
 
+def _sub_element_shape(source: object, sub_elements: object) -> object | None:
+    names: list[str] = []
+    if isinstance(sub_elements, (list, tuple)):
+        names = [str(item) for item in sub_elements if isinstance(item, str) and item]
+    getter = getattr(source, "getSubObject", None)
+    if callable(getter) and names:
+        try:
+            sub = getter(names[0])
+            if sub is not None:
+                return sub
+        except Exception:
+            pass
+    shape = getattr(source, "Shape", None)
+    if shape is None or not names:
+        return source
+    name = names[0]
+    try:
+        if name.startswith("Face"):
+            faces = list(getattr(shape, "Faces", ()) or ())
+            index = int(name[4:]) - 1
+            return faces[index] if 0 <= index < len(faces) else source
+        if name.startswith("Edge"):
+            edges = list(getattr(shape, "Edges", ()) or ())
+            index = int(name[4:]) - 1
+            return edges[index] if 0 <= index < len(edges) else source
+    except Exception:
+        return source
+    return source
+
+
 def _binder_bbox_extras(doc: CreateSubshapeBinderReadDocument, binder: object) -> dict[str, object]:
     source = None
+    sub_names: list[str] = []
     support = getattr(binder, "Support", None)
     try:
         values = list(getattr(support, "getValues", lambda: support)() or [])
@@ -121,10 +154,17 @@ def _binder_bbox_extras(doc: CreateSubshapeBinderReadDocument, binder: object) -
     if values:
         first = values[0]
         candidate = first[0] if isinstance(first, (list, tuple)) and first else first
-        source = candidate if candidate is not None and hasattr(candidate, "Shape") else None
+        if isinstance(first, (list, tuple)) and len(first) > 1:
+            raw_subs = first[1]
+            if isinstance(raw_subs, str) and raw_subs:
+                sub_names = [raw_subs]
+            elif isinstance(raw_subs, (list, tuple)):
+                sub_names = [str(item) for item in raw_subs if item]
+        source = candidate if candidate is not None and not isinstance(candidate, str) else None
         if source is None and isinstance(candidate, str):
             source = doc.getObject(candidate)
-    source_bb = _boundbox_values(source) if source is not None else None
+    compare = _sub_element_shape(source, sub_names) if source is not None else None
+    source_bb = _boundbox_values(compare) if compare is not None else None
     binder_bb = _boundbox_values(binder)
     delta = None
     if source_bb is not None and binder_bb is not None:
@@ -183,12 +223,39 @@ def apply_create_subshape_binder(doc: CreateSubshapeBinderDocument, request: Cre
             support = [(source_obj, tuple(sub_elements))]
         else:
             support = [(source_obj, ("",))]
-        assign_attr(created, "Support", support)
+        assigned = False
+        support_prop = getattr(created, "Support", None)
+        setter = getattr(support_prop, "setValues", None)
+        if callable(setter):
+            try:
+                setter([source_obj], [tuple(sub_elements) if sub_elements else ("",)])
+                assigned = True
+            except Exception:
+                assigned = False
+        if not assigned:
+            assign_attr(created, "Support", support)
         assign_attr(created, "Relative", request.relative)
         bind_mode = "Synchronized" if request.sync_placement else "Frozen"
-        assign_attr(created, "BindMode", bind_mode)
+        try:
+            assign_attr(created, "BindMode", bind_mode)
+        except Exception:
+            assign_attr(created, "BindMode", 0 if request.sync_placement else 1)
         if hasattr(created, "TraceSupport"):
             assign_attr(created, "TraceSupport", request.sync_placement)
+        if request.sync_placement:
+            placement = getattr(source_obj, "Placement", None)
+            if placement is not None:
+                try:
+                    assign_attr(created, "Placement", placement)
+                except Exception:
+                    placement = None
+            if placement is None:
+                getter = getattr(source_obj, "getGlobalPlacement", None)
+                if callable(getter):
+                    try:
+                        assign_attr(created, "Placement", getter())
+                    except Exception:
+                        pass
     except CreateSubshapeBinderError:
         raise
     except Exception as exc:

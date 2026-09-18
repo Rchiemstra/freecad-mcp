@@ -130,6 +130,18 @@ def _try_document_reload(method: object, snapshot_path: str) -> Literal[True] | 
     return True
 
 
+def _named_snapshot_path(snapshot_path: str, doc_name: str) -> str:
+    import os
+    import shutil
+
+    directory = os.path.dirname(os.path.abspath(snapshot_path)) or os.getcwd()
+    named_path = os.path.join(directory, f"{doc_name}.FCStd")
+    if os.path.normpath(named_path) == os.path.normpath(snapshot_path):
+        return snapshot_path
+    shutil.copy2(snapshot_path, named_path)
+    return named_path
+
+
 def _load_snapshot_after_commit(
     collaborators: RestoreCollaborators,
     doc_name: str,
@@ -145,10 +157,38 @@ def _load_snapshot_after_commit(
             committed=True,
         )
     app = getattr(collaborators, "freecad", None)
+    live_doc: object | None = None
+    if app is not None:
+        getter = getattr(app, "getDocument", None)
+        if callable(getter):
+            try:
+                live_doc = getter(doc_name)
+            except Exception:
+                live_doc = None
+    if live_doc is None:
+        live_doc = stub_doc
+    if live_doc is not None:
+        restorer = getattr(live_doc, "restore", None)
+        if callable(restorer):
+            try:
+                restorer(snapshot_path)
+                return True
+            except TypeError:
+                pass
+            except Exception:
+                pass
     if app is not None:
         closer = getattr(app, "closeDocument", None)
         opener = getattr(app, "openDocument", None)
         if callable(closer) and callable(opener):
+            try:
+                named_path = _named_snapshot_path(snapshot_path, doc_name)
+            except Exception as exc:
+                return make_restore_uncertain(
+                    "RESTORE_FAILED",
+                    str(exc) or type(exc).__name__,
+                    committed=True,
+                )
             try:
                 closer(doc_name)
             except NameError:
@@ -160,7 +200,7 @@ def _load_snapshot_after_commit(
                     committed=True,
                 )
             try:
-                reopened = opener(snapshot_path)
+                reopened = opener(named_path)
             except Exception as exc:
                 return make_restore_uncertain(
                     "RESTORE_FAILED",
@@ -170,20 +210,10 @@ def _load_snapshot_after_commit(
             if reopened is None:
                 return make_restore_uncertain(
                     "RESTORE_FAILED",
-                    f"FreeCAD did not reopen {snapshot_path!r}",
+                    f"FreeCAD did not reopen {named_path!r}",
                     committed=True,
                 )
             return True
-    live_doc: object | None = None
-    if app is not None:
-        getter = getattr(app, "getDocument", None)
-        if callable(getter):
-            try:
-                live_doc = getter(doc_name)
-            except Exception:
-                live_doc = None
-    if live_doc is None:
-        live_doc = stub_doc
     if live_doc is None:
         return True
     restorer = getattr(live_doc, "restore", None)

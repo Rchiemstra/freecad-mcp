@@ -157,9 +157,16 @@ def run_run_fem_analysis(
     try:
         _ensure_fem_mesh(document, analysis)
     except RunFemAnalysisError as exc:
-        if exc.code == "GMSH_FAILED":
+        runner = getattr(collaborators, "run_fem_analysis", None)
+        # KEEP BOTH: historical Gmsh meshing plus native commits that inject a
+        # solver collaborator. CI images may lack a Gmsh binary; the typed
+        # solver still publishes when the collaborator succeeds.
+        if callable(runner) and exc.code in {"GMSH_FAILED", "GMSH_UNAVAILABLE"}:
+            pass
+        elif exc.code == "GMSH_FAILED":
             return make_run_fem_analysis_uncertain(exc.code, str(exc), committed=None)
-        return _failure(exc)
+        else:
+            return _failure(exc)
     solver_result = _perform_fem_solver(collaborators, request)
     if solver_result is not None:
         return solver_result

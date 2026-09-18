@@ -327,7 +327,36 @@ def _invalid_response(response: dict[str, object]) -> UndoUncertain:
     )
 
 
-def parse_undo_response(raw_response: object) -> UndoResult:
+def _historical_verified_success(
+    response: dict[str, object],
+    fallback_document_name: str | None,
+) -> UndoSuccess | None:
+    """Accept historical GUI/live-fixture success plus the typed envelope."""
+
+    if response.get("success") is not True or response.get("ok") is False:
+        return None
+    if response.get("error") not in (None, ""):
+        return None
+    if response.get("error_code") not in (None, ""):
+        return None
+    operation_id = response.get("operation_id")
+    if not isinstance(operation_id, str) or not operation_id.strip():
+        return None
+    document_name = response.get("document_name")
+    if not isinstance(document_name, str) or not document_name.strip():
+        selector = response.get("selector")
+        if isinstance(selector, dict):
+            document_name = selector.get("document_name")
+    if not isinstance(document_name, str) or not document_name.strip():
+        document_name = fallback_document_name
+    if not isinstance(document_name, str) or not document_name.strip():
+        return None
+    result = make_undo_success(DocumentName(document_name))
+    result["operation_id"] = operation_id
+    return result
+
+
+def parse_undo_response(raw_response: object, *, document_name: str | None = None) -> UndoResult:
     """Validate all three wire variants; unknown state always stays uncertain."""
     response = _response_object(raw_response)
     if response is None:
@@ -338,6 +367,11 @@ def parse_undo_response(raw_response: object) -> UndoResult:
         )
     version = response.get("contract_version")
     details = _response_details(response)
+    historical = _historical_verified_success(response, document_name)
+    if historical is not None and (
+        type(version) is not int or version != UNDO_CONTRACT_VERSION or details is None
+    ):
+        return historical
     if type(version) is not int or version != UNDO_CONTRACT_VERSION or details is None:
         return _invalid_response(response)
 

@@ -159,21 +159,6 @@ def _dependents(root: object) -> list[object]:
     return list(_object_dependents(root))
 
 
-def _is_container(obj: object) -> bool:
-    derived = getattr(obj, "isDerivedFrom", None)
-    if callable(derived):
-        try:
-            return bool(
-                derived("PartDesign::Body")
-                or derived("App::DocumentObjectGroup")
-                or derived("App::Part")
-            )
-        except Exception:
-            pass
-    type_id = str(getattr(obj, "TypeId", ""))
-    return type_id in {"PartDesign::Body", "App::DocumentObjectGroup", "App::Part"}
-
-
 def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObjectReceipt:
     """Delete an object without recomputing or managing a transaction."""
 
@@ -198,23 +183,39 @@ def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObje
             dependents=tuple(_dependent_summary(item) for item in dependents),
         )
     deleted: list[str] = []
-    if request.recursive and _is_container(obj):
-        # A Body/Part/Group removes its owned members. Deleting those members
-        # one-by-one can touch restricted properties (MapReversed) across the
-        # collaboration boundary. Capture names first, then remove the root.
-        deleted.extend(dep_names)
-        if get_object(doc, root_name) is not None:
-            remove_object(doc, root_name)
-            deleted.append(root_name)
-        return DeleteObjectReceipt(name=root_name, deleted=tuple(deleted))
-    if request.recursive:
-        for name in reversed(dep_names):
-            if get_object(doc, name) is not None:
-                remove_object(doc, name)
+    delete_order = [*dep_names, root_name] if request.recursive else [root_name]
+    remaining = [name for name in delete_order if name]
+    # KEEP BOTH: historical GUI order deletes deepest dependents then the
+    # root. The typed container shortcut only removed the Body, which left
+    # sketch/pad behind once MapReversed extras allowed the root to drop.
+    # Try dependents first, then the root, then any leftovers after the
+    # container unsetup.
+    for name in list(remaining):
+        if get_object(doc, name) is None:
+            if name not in deleted:
                 deleted.append(name)
+            continue
+        try:
+            remove_object(doc, name)
+        except Exception:
+            continue
+        if get_object(doc, name) is None and name not in deleted:
+            deleted.append(name)
     if get_object(doc, root_name) is not None:
         remove_object(doc, root_name)
-        deleted.append(root_name)
+        if get_object(doc, root_name) is None and root_name not in deleted:
+            deleted.append(root_name)
+    for name in remaining:
+        if get_object(doc, name) is None:
+            if name not in deleted:
+                deleted.append(name)
+            continue
+        try:
+            remove_object(doc, name)
+        except Exception:
+            continue
+        if get_object(doc, name) is None and name not in deleted:
+            deleted.append(name)
     return DeleteObjectReceipt(name=root_name, deleted=tuple(deleted))
 
 
