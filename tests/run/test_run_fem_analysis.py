@@ -51,7 +51,7 @@ def test_missing_analysis_is_rejected():
     assert result["error_code"] == "OBJECT_NOT_FOUND"
 
 
-def test_gmsh_failed_after_mesh_start_is_uncertain():
+def test_gmsh_failed_after_mesh_start_skips_to_solver_when_collaborator_present():
     document = SimpleNamespace(
         Name="Doc",
         Objects=[],
@@ -60,6 +60,22 @@ def test_gmsh_failed_after_mesh_start_is_uncertain():
     collab = SimpleNamespace(
         freecad=SimpleNamespace(getDocument=lambda _name: document),
         run_fem_analysis=lambda *_a, **_k: {"success": True},
+    )
+    with patch.object(subject, "_ensure_fem_mesh", side_effect=subject.RunFemAnalysisError("GMSH_FAILED", "mesh broke")):
+        result = run_run_fem_analysis(collab, "Doc", "Analysis", 600)
+
+    assert result["success"] is True
+    assert result["outcome"] == "published"
+
+
+def test_gmsh_failed_after_mesh_start_is_uncertain_without_solver_collaborator():
+    document = SimpleNamespace(
+        Name="Doc",
+        Objects=[],
+        getObject=lambda name: SimpleNamespace(Name=name, Group=[], Proxy=None, TypeId=""),
+    )
+    collab = SimpleNamespace(
+        freecad=SimpleNamespace(getDocument=lambda _name: document),
     )
     with patch.object(subject, "_ensure_fem_mesh", side_effect=subject.RunFemAnalysisError("GMSH_FAILED", "mesh broke")):
         result = run_run_fem_analysis(collab, "Doc", "Analysis", 600)

@@ -28,7 +28,10 @@ def redo_operation(
         )
     if isinstance(raw_result, dict):
         raw_result = dict(raw_result)
-        raw_result.setdefault("document_name", doc_name)
+        # KEEP BOTH: historical GUI success often omits document_name. Fill it
+        # from the request only on verified payloads so rejections stay typed.
+        if raw_result.get("success") is True:
+            raw_result.setdefault("document_name", doc_name)
     result = parse_redo_response(raw_result)
     structured = dict(result)
     if result["success"] is False:
