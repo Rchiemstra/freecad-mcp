@@ -187,7 +187,7 @@ def test_public_route_never_turns_rejection_into_success(monkeypatch):
     assert result.structuredContent["data"]["committed"] is False
 
 
-def test_public_route_marks_committed_but_invalid_response_non_retryable(monkeypatch):
+def test_public_route_fills_document_name_for_historical_verified_success(monkeypatch):
     payload = {
         "contract_version": 1,
         "success": True,
@@ -197,11 +197,12 @@ def test_public_route_marks_committed_but_invalid_response_non_retryable(monkeyp
     }
     transport = _RecordingFreeCADTransport(payload)
     result = _invoke_registered(monkeypatch, transport, {'doc_name': 'AgentDocument'})
-    assert result.isError is True
-    assert result.structuredContent["error_code"] == 'INVALID_REDO_RESPONSE'
-    assert result.structuredContent["data"]["outcome"] == "uncertain"
-    assert result.structuredContent["data"].get("committed") is None
-    assert result.structuredContent["data"]["retry_safe"] is False
+    assert result.isError is False
+    data = result.structuredContent["data"]
+    assert data["success"] is True
+    assert data["outcome"] == "verified"
+    assert data["document_name"] == "AgentDocument"
+    assert data["retry_safe"] is False
 
 
 def test_mcp_schema_rejects_non_string_before_json_rpc(monkeypatch):
