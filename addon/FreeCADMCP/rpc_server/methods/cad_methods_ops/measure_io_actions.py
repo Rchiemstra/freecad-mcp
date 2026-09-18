@@ -16,6 +16,7 @@ from .typed_runtime import (
     object_name,
     require_object,
 )
+from .world_shape_actions import resolve_global_shape
 
 
 def _freecad() -> object:
@@ -41,99 +42,6 @@ def _shape_has_topology(shape: object) -> bool:
         or getattr(shape, "Edges", None)
         or getattr(shape, "Vertexes", None)
     )
-
-
-def _linked_target(obj: object) -> object | None:
-    linked = getattr(obj, "LinkedObject", None)
-    if isinstance(linked, tuple):
-        linked = linked[0] if linked else None
-    return linked
-
-
-def _raw_shape(obj: object) -> tuple[object | None, object | None]:
-    if obj is None:
-        return None, None
-    shape = getattr(obj, "Shape", None)
-    if _shape_has_topology(shape):
-        return shape, obj
-    linked = _linked_target(obj)
-    if linked is not None and linked is not obj:
-        return _raw_shape(linked)
-    return None, None
-
-
-def _is_document_child(obj: object) -> bool:
-    for parent in getattr(obj, "InList", None) or []:
-        if getattr(parent, "TypeId", "") == "App::Document":
-            return True
-    return False
-
-
-def _read_global_placement(obj: object) -> object:
-    if _is_document_child(obj):
-        placement = getattr(obj, "Placement", None)
-        if placement is None:
-            raise TypedMutationError("INVALID_OBJECT", "object must provide Placement")
-        return placement
-    geo_feature = getattr(_freecad(), "GeoFeature", None)
-    if geo_feature is not None:
-        getter = getattr(geo_feature, "getGlobalPlacementOf", None)
-        if callable(getter):
-            placement = getter(obj, obj, "")
-            if placement is not None:
-                return placement
-    placement = getattr(obj, "Placement", None)
-    if placement is None:
-        raise TypedMutationError("INVALID_OBJECT", "object must provide Placement")
-    return placement
-
-
-def resolve_global_shape(obj: object) -> tuple[object, dict[str, object]]:
-    shape, source = _raw_shape(obj)
-    if shape is None or source is None:
-        raise TypedMutationError(
-            "SHAPE_NOT_FOUND",
-            f"No usable Shape on {getattr(obj, 'Name', obj)!r}",
-        )
-    placement = _read_global_placement(obj)
-    part = load_module("Part")
-    shape_cls = module_callable(part, "Shape")
-    try:
-        out = shape_cls(shape)
-    except Exception:
-        copied = getattr(shape, "copy", None)
-        if not callable(copied):
-            raise TypedMutationError("INVALID_SHAPE", "shape must provide copy")
-        out = copied()
-    transform = getattr(out, "transformShape", None)
-    matrix = getattr(placement, "toMatrix", None)
-    if not callable(transform) or not callable(matrix):
-        raise TypedMutationError("INVALID_SHAPE", "shape must provide transformShape")
-    transform(matrix())
-    rotation = getattr(placement, "Rotation", None)
-    base = getattr(placement, "Base", None)
-    meta: dict[str, object] = {
-        "object": getattr(obj, "Name", None),
-        "type_id": getattr(obj, "TypeId", None),
-        "shape_source": getattr(source, "Name", None),
-        "used_linked_object": source is not obj,
-        "global_placement": {
-            "base": [
-                round(float(getattr(base, "x", 0.0)), 6),
-                round(float(getattr(base, "y", 0.0)), 6),
-                round(float(getattr(base, "z", 0.0)), 6),
-            ],
-            "rotation_axis": [
-                round(float(getattr(getattr(rotation, "Axis", None), "x", 0.0)), 6),
-                round(float(getattr(getattr(rotation, "Axis", None), "y", 0.0)), 6),
-                round(float(getattr(getattr(rotation, "Axis", None), "z", 0.0)), 6),
-            ],
-            "rotation_angle_deg": round(
-                float(getattr(rotation, "Angle", 0.0)) * 180.0 / math.pi, 6
-            ),
-        },
-    }
-    return out, meta
 
 
 def bounding_box(document: object, obj_name: str) -> dict[str, object]:
@@ -514,6 +422,7 @@ __all__ = [
     "measure_area",
     "measure_distance",
     "measure_volume",
+    "resolve_global_shape",
     "validate_geometry",
     "export_brep",
     "export_step",

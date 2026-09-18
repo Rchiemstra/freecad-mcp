@@ -11,7 +11,7 @@ MANIFEST = SubjectManifest(
     tools=(
         ToolEntry(
             name="bounding_box",
-            docstring='Return the world-frame axis-aligned bounding box of a shape.\n\nLink-safe: follows ``App::Link`` to the linked solid when needed and applies\n``getGlobalPlacement()`` once (no Placement double-counting).\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object or Link.\n\nReturns:\n    JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, and shape-source metadata.',
+            docstring='Return the world-frame axis-aligned bounding box of a shape.\n\nLink-safe: follows ``App::Link`` to the linked solid when the proxy Shape is\nunusable and applies the link world transform exactly once using\n``Placement``/``LinkPlacement`` plus ``Scale``/``ScaleVector`` properties.\nHealthy Link proxy shapes that already include the link placement are not\ndouble-transformed; enclosing ``App::Part``/group placements still apply.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object or Link.\n\nReturns:\n    JSON with xmin/ymin/zmin/xmax/ymax/zmax, dx/dy/dz, frame=world, and\n    ``used_linked_object`` (True only when geometry came from LinkedObject).',
             signature="(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.bounding_box_operation",
             rpc_method="bounding_box",
@@ -59,7 +59,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="measure_volume",
-            docstring='Measure the volume of a solid shape.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``volume_mm3`` and ``volume_cm3``.',
+            docstring='Measure the volume of a solid shape.\n\nLink-safe world-frame resolution mirrors ``bounding_box`` (Placement/LinkPlacement\nplus Scale/ScaleVector; no Python ``getTransform``). Returns\n``used_linked_object`` (True only when geometry came from LinkedObject because\nthe proxy Shape was unusable).\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with ``volume_mm3``, frame=world, and ``used_linked_object``.',
             signature="(ctx: 'Context', doc_name: 'str', obj_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.measure_volume_operation",
             rpc_method="measure_volume",

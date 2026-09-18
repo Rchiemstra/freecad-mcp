@@ -673,6 +673,18 @@ def _assert_no_session_refusal(payload: object) -> None:
         assert payload.get("success") is not False
 
 
+def _assert_get_object_not_found(payload: object) -> None:
+    assert isinstance(payload, dict), payload
+    assert payload.get("success") is False, payload
+    assert payload.get("error_code") == "OBJECT_NOT_FOUND", payload
+
+
+def _assert_get_object_found(payload: object) -> None:
+    assert isinstance(payload, dict), payload
+    assert payload.get("success") is True, payload
+    assert isinstance(payload.get("object_data"), dict), payload
+
+
 def _assert_v2_success(payload: object) -> dict:
     assert isinstance(payload, dict), payload
     assert payload.get("success") is True, payload
@@ -824,7 +836,7 @@ def test_failed_feature_does_not_poison_authenticated_write_lane(throwaway_profi
             isinstance(failed_pad.get("addon_runtime_id"), str)
             and failed_pad["addon_runtime_id"]
         )
-        assert conn.get_object(doc_a, "BadPad") is None
+        _assert_get_object_not_found(conn.get_object(doc_a, "BadPad"))
         _assert_clean_readiness(conn.get_mutation_readiness(doc_a), doc_a)
 
         requested_b = f"GoodProfile{uuid.uuid4().hex[:8]}"
@@ -878,15 +890,15 @@ def test_failed_feature_does_not_poison_authenticated_write_lane(throwaway_profi
                 strict=True,
             )
         )
-        assert conn.get_object(doc_b, "Pocket") is not None
+        _assert_get_object_found(conn.get_object(doc_b, "Pocket"))
 
         _assert_v2_success(conn.undo(doc_b))
-        assert conn.get_object(doc_b, "Pocket") is None
-        assert conn.get_object(doc_b, "Pad") is not None
+        _assert_get_object_not_found(conn.get_object(doc_b, "Pocket"))
+        _assert_get_object_found(conn.get_object(doc_b, "Pad"))
         _assert_clean_readiness(conn.get_mutation_readiness(doc_b), doc_b)
 
         _assert_v2_success(conn.redo(doc_b))
-        assert conn.get_object(doc_b, "Pocket") is not None
+        _assert_get_object_found(conn.get_object(doc_b, "Pocket"))
         _assert_clean_readiness(conn.get_mutation_readiness(doc_a), doc_a)
         _assert_clean_readiness(conn.get_mutation_readiness(doc_b), doc_b)
     finally:
