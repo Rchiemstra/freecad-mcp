@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_edit_object_uncertain,
     )
 from .edit_object_mutation import EditObjectError, run_edit_object_native_mutation
-from .property_postcondition import property_kept_value
+from .property_postcondition import kept_property, property_kept_value
 from .typed_rpc_document import assign_properties, get_object
 
 
@@ -120,7 +120,7 @@ def read_edit_object_result(doc: object, receipt: EditObjectReceipt) -> EditObje
                 "PROPERTY_NOT_UPDATED",
                 f"Edited object is missing property {key!r}",
             )
-        if not property_kept_value(doc, expected, getattr(edited, key)):
+        if not property_kept_value(doc, expected, kept_property(edited, key)):
             raise EditObjectError(
                 "PROPERTY_NOT_UPDATED",
                 f"Edited object property {key!r} did not keep the assigned value",

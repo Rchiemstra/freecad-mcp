@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_create_object_uncertain,
     )
 from .create_object_mutation import CreateObjectError, run_create_object_native_mutation
-from .property_postcondition import property_kept_value
+from .property_postcondition import kept_property, property_kept_value
 from .typed_rpc_document import add_object, assign_properties, get_object
 
 
@@ -159,7 +159,7 @@ def read_create_object_result(
                 "PROPERTY_NOT_UPDATED",
                 f"Created object is missing property {key!r}",
             )
-        if not property_kept_value(doc, expected, getattr(created, key)):
+        if not property_kept_value(doc, expected, kept_property(created, key)):
             raise CreateObjectError(
                 "PROPERTY_NOT_UPDATED",
                 f"Created object property {key!r} did not keep the assigned value",

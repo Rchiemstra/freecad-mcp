@@ -31,6 +31,28 @@ def assign_link_property(
     raise ValueError(f"Referenced object '{val}' not found.")
 
 
+def _property_type(obj: FreeCAD.DocumentObject, prop: str) -> str | None:
+    getter = getattr(obj, "getTypeIdOfProperty", None)
+    return getter(prop) if callable(getter) else None
+
+
+def refuse_shown_array_layout(obj: FreeCAD.DocumentObject, prop: str) -> None:
+    """Refuse a PlacementList that would not move an array's existing element objects.
+
+    FreeCAD lays an App::Link array out from PlacementList only while ShowElement is false,
+    or when the list is set before ElementCount creates the elements. Afterwards the list keeps
+    the new value but the elements, and so the geometry, stay where they were.
+    """
+    elements = list(getattr(obj, "ElementList", None) or [])
+    if prop != "PlacementList" or getattr(obj, "ShowElement", False) is not True or not elements:
+        return
+    raise ValueError(
+        f"PlacementList would not move the {len(elements)} existing elements of this Link "
+        "array while ShowElement is true; set ShowElement to false before PlacementList in "
+        "the same call, set PlacementList before ElementCount, or edit each element's Placement"
+    )
+
+
 def assign_document_property(
     doc: FreeCAD.Document,
     obj: FreeCAD.DocumentObject,
@@ -40,6 +62,10 @@ def assign_document_property(
 ) -> bool:
     if is_placement_value(current) and isinstance(val, dict):
         setattr(obj, prop, dict_to_placement(val))
+        return True
+    if isinstance(val, list) and _property_type(obj, prop) == "App::PropertyPlacementList":
+        refuse_shown_array_layout(obj, prop)
+        setattr(obj, prop, [dict_to_placement(v) if isinstance(v, dict) else v for v in val])
         return True
     if isinstance(current, FreeCAD.Vector) and isinstance(val, dict):
         setattr(obj, prop, _as_vector(val))

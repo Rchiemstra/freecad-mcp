@@ -38,7 +38,25 @@ def _converted_expected(doc: object, expected: object, actual: object) -> object
     return expected
 
 
+def kept_property(obj: object, key: str) -> object:
+    """The value ``obj.key`` holds after recompute, where FreeCAD keeps it elsewhere.
+
+    A Link array with ShowElement true moves a PlacementList set before ElementCount onto its
+    element objects and clears the list, so the layout is read back from the elements.
+    """
+    value = getattr(obj, key)
+    elements = list(getattr(obj, "ElementList", None) or []) if key == "PlacementList" else []
+    if elements and getattr(obj, "ShowElement", False) is True:
+        return [getattr(element, "Placement", None) for element in elements]
+    return value
+
+
 def property_kept_value(doc: object, expected: object, actual: object) -> bool:
+    if isinstance(expected, list) and isinstance(actual, (list, tuple)):
+        # List properties (e.g. PlacementList) are converted element by element.
+        return len(expected) == len(actual) and all(
+            property_kept_value(doc, item, kept) for item, kept in zip(expected, actual)
+        )
     expected = _converted_expected(doc, expected, actual)
     left, right = _scalar(expected), _scalar(actual)
     if isinstance(left, bool) or isinstance(right, bool):
@@ -54,4 +72,4 @@ def property_kept_value(doc: object, expected: object, actual: object) -> bool:
     return bool(left == right)
 
 
-__all__ = ["property_kept_value"]
+__all__ = ["kept_property", "property_kept_value"]
