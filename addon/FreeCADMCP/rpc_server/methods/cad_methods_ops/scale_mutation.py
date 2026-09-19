@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.scale_contract import (
-    ScaleCollaborators,
-    ScaleFailure,
-    ScaleUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_scale_failure,
-    make_scale_uncertain,
-)
+try:
+    from ...._shared.protocol.scale_contract import (
+        ScaleCollaborators,
+        ScaleFailure,
+        ScaleUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_scale_failure,
+        make_scale_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.scale_contract import (
+        ScaleCollaborators,
+        ScaleFailure,
+        ScaleUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_scale_failure,
+        make_scale_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 

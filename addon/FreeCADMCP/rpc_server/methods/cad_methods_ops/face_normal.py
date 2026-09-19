@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.face_normal_contract import (
-    FaceNormalCollaborators,
-    FaceNormalFailure,
-    FaceNormalRequest,
-    FaceNormalResult,
-    DocumentName,
-    ObjectName,
-    make_face_normal_failure,
-    make_face_normal_success,
-)
+try:
+    from ...._shared.protocol.face_normal_contract import (
+        FaceNormalCollaborators,
+        FaceNormalFailure,
+        FaceNormalRequest,
+        FaceNormalResult,
+        DocumentName,
+        ObjectName,
+        make_face_normal_failure,
+        make_face_normal_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.face_normal_contract import (
+        FaceNormalCollaborators,
+        FaceNormalFailure,
+        FaceNormalRequest,
+        FaceNormalResult,
+        DocumentName,
+        ObjectName,
+        make_face_normal_failure,
+        make_face_normal_success,
+    )
 from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str

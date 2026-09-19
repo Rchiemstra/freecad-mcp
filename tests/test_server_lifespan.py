@@ -272,4 +272,5 @@ class ServerLifespanTest(unittest.TestCase):
         prompt = server.asset_creation_strategy()
 
         self.assertIn("Asset Creation Strategy for FreeCAD MCP", prompt)
+        self.assertIn("get_document_tree()", prompt)
         self.assertIn("get_objects()", prompt)

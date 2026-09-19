@@ -23,20 +23,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sweep_feature_contract import (
-    SweepFeatureCollaborators,
-    SweepFeatureFailure,
-    SweepFeatureRequest,
-    SweepFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_sweep_feature_failure,
-    make_sweep_feature_success,
-    make_sweep_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.sweep_feature_contract import (
+        SweepFeatureCollaborators,
+        SweepFeatureFailure,
+        SweepFeatureRequest,
+        SweepFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_sweep_feature_failure,
+        make_sweep_feature_success,
+        make_sweep_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sweep_feature_contract import (
+        SweepFeatureCollaborators,
+        SweepFeatureFailure,
+        SweepFeatureRequest,
+        SweepFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_sweep_feature_failure,
+        make_sweep_feature_success,
+        make_sweep_feature_uncertain,
+    )
 from .sweep_feature_mutation import SweepFeatureError, run_sweep_feature_native_mutation
 
 

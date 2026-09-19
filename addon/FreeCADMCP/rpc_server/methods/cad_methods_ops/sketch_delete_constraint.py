@@ -6,19 +6,34 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_delete_constraint_contract import (
-    DocumentName,
-    SketchDeleteConstraintCollaborators,
-    SketchDeleteConstraintDocument,
-    SketchDeleteConstraintFailure,
-    SketchDeleteConstraintObject,
-    SketchDeleteConstraintReadDocument,
-    SketchDeleteConstraintResult,
-    SketchName,
-    make_sketch_delete_constraint_failure,
-    make_sketch_delete_constraint_success,
-    make_sketch_delete_constraint_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_delete_constraint_contract import (
+        DocumentName,
+        SketchDeleteConstraintCollaborators,
+        SketchDeleteConstraintDocument,
+        SketchDeleteConstraintFailure,
+        SketchDeleteConstraintObject,
+        SketchDeleteConstraintReadDocument,
+        SketchDeleteConstraintResult,
+        SketchName,
+        make_sketch_delete_constraint_failure,
+        make_sketch_delete_constraint_success,
+        make_sketch_delete_constraint_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_delete_constraint_contract import (
+        DocumentName,
+        SketchDeleteConstraintCollaborators,
+        SketchDeleteConstraintDocument,
+        SketchDeleteConstraintFailure,
+        SketchDeleteConstraintObject,
+        SketchDeleteConstraintReadDocument,
+        SketchDeleteConstraintResult,
+        SketchName,
+        make_sketch_delete_constraint_failure,
+        make_sketch_delete_constraint_success,
+        make_sketch_delete_constraint_uncertain,
+    )
 from .sketch_delete_constraint_mutation import (
     SketchDeleteConstraintError,
     run_sketch_delete_constraint_native_mutation,

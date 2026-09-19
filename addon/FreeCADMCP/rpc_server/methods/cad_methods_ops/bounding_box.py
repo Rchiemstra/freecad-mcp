@@ -5,19 +5,31 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.bounding_box_contract import (
-    BoundingBoxCollaborators,
-    BoundingBoxFailure,
-    BoundingBoxRequest,
-    BoundingBoxResult,
-    DocumentName,
-    ObjectName,
-    make_bounding_box_failure,
-    make_bounding_box_success,
-)
+try:
+    from ...._shared.protocol.bounding_box_contract import (
+        BoundingBoxCollaborators,
+        BoundingBoxFailure,
+        BoundingBoxRequest,
+        BoundingBoxResult,
+        DocumentName,
+        ObjectName,
+        make_bounding_box_failure,
+        make_bounding_box_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.bounding_box_contract import (
+        BoundingBoxCollaborators,
+        BoundingBoxFailure,
+        BoundingBoxRequest,
+        BoundingBoxResult,
+        DocumentName,
+        ObjectName,
+        make_bounding_box_failure,
+        make_bounding_box_success,
+    )
 from . import measure_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
-from .typed_runtime import as_float, as_str
+from .typed_runtime import TypedMutationError, as_float, as_str
 
 
 class BoundingBoxError(RuntimeError):
@@ -59,6 +71,8 @@ def run_bounding_box(
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.bounding_box(document, str(request.obj_name))
+    except TypedMutationError as exc:
+        return _failure(BoundingBoxError(exc.code, str(exc)))
     except Exception as exc:
         return _failure(BoundingBoxError("BOUNDING_BOX_FAILED", str(exc) or type(exc).__name__))
     return make_bounding_box_success(
@@ -74,6 +88,7 @@ def run_bounding_box(
         dz=as_float(payload["dz"]),
         diagonal=as_float(payload["diagonal"]),
         frame=as_str(payload["frame"]),
+        used_linked_object=bool(payload.get("used_linked_object", False)),
     )
 
 

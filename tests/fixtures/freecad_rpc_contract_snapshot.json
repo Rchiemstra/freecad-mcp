@@ -11317,67 +11317,81 @@
         }
       ],
       "result_examples": [
-        null,
         {
-          "Label": "Contract object",
-          "Name": "ContractObject",
-          "Placement": "identity",
-          "Properties": {},
-          "Shape": null,
-          "TypeId": "PartDesign::Feature",
-          "ViewObject": {}
+          "contract_version": 1,
+          "success": true,
+          "ok": true,
+          "outcome": "observed",
+          "retry_safe": false,
+          "object": "ContractObject",
+          "object_data": {
+            "Label": "Contract object",
+            "Name": "ContractObject",
+            "Placement": "identity",
+            "Properties": {},
+            "Shape": null,
+            "TypeId": "PartDesign::Feature",
+            "ViewObject": {}
+          }
         }
       ],
       "result_schema": {
+        "additionalProperties": true,
         "oneOf": [
           {
-            "type": "null"
-          },
-          {
-            "additionalProperties": true,
             "properties": {
-              "Label": {
-                "type": "string"
-              },
-              "Name": {
-                "type": "string"
-              },
-              "Placement": {
-                "type": [
-                  "array",
-                  "boolean",
-                  "integer",
-                  "null",
-                  "number",
-                  "object",
-                  "string"
-                ]
-              },
-              "Properties": {
-                "type": "object"
-              },
-              "Shape": {
-                "type": [
-                  "null",
-                  "object"
-                ]
-              },
-              "TypeId": {
-                "type": "string"
-              },
-              "ViewObject": {
-                "type": "object"
-              },
-              "error": {
-                "type": "string"
+              "success": {
+                "const": true
               }
             },
             "required": [
-              "Name"
-            ],
-            "type": "object"
+              "success",
+              "object",
+              "object_data"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success",
+              "error"
+            ]
           }
-        ]
+        ],
+        "properties": {
+          "contract_version": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string"
+          },
+          "object_data": {
+            "type": "object"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "retry_safe": {
+            "type": "boolean"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     },
     "get_objects": {
@@ -11468,19 +11482,193 @@
       },
       "parameters": [
         {
-          "name": "doc_name",
           "kind": "positional_or_keyword",
+          "name": "doc_name",
           "required": true,
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "fields",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "include_properties",
+          "required": false,
+          "schema": {
+            "type": [
+              "array",
+              "boolean"
+            ]
+          }
+        },
+        {
+          "default": false,
+          "kind": "positional_or_keyword",
+          "name": "include_shape",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
+          "default": false,
+          "kind": "positional_or_keyword",
+          "name": "include_view",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
+          "default": 50,
+          "kind": "positional_or_keyword",
+          "name": "page_size",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "cursor",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
         }
       ],
       "result_examples": [
-        []
+        {
+          "complete": true,
+          "contract_version": 1,
+          "doc_name": "Doc",
+          "next_cursor": null,
+          "objects": [
+            {
+              "Label": "Box",
+              "Name": "Box",
+              "TypeId": "Part::Feature"
+            }
+          ],
+          "ok": true,
+          "outcome": "observed",
+          "page_size": 50,
+          "returned_count": 1,
+          "retry_safe": false,
+          "snapshot_id": "contract-snapshot",
+          "success": true,
+          "total_count": 1
+        },
+        {
+          "committed": false,
+          "contract_version": 1,
+          "error": "Document not found: 'MissingDoc'",
+          "error_code": "DOCUMENT_NOT_FOUND",
+          "ok": false,
+          "outcome": "rejected",
+          "retry_safe": true,
+          "success": false
+        }
       ],
       "result_schema": {
-        "type": "array"
+        "additionalProperties": true,
+        "oneOf": [
+          {
+            "properties": {
+              "success": {
+                "const": true
+              }
+            },
+            "required": [
+              "success"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success",
+              "error"
+            ]
+          }
+        ],
+        "properties": {
+          "committed": {
+            "type": "boolean"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "contract_version": {
+            "type": "integer"
+          },
+          "doc_name": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "next_cursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "objects": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "page_size": {
+            "type": "integer"
+          },
+          "retry_safe": {
+            "type": "boolean"
+          },
+          "returned_count": {
+            "type": "integer"
+          },
+          "snapshot_id": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "total_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     },
     "get_parts_list": {
@@ -32161,76 +32349,95 @@
     },
     "create_document": {
       "contract_version": 1,
-      "success": true,
+      "document_name": "Phase1ContractDocument",
       "ok": true,
       "outcome": "verified",
       "retry_safe": false,
-      "document_name": "Phase1ContractDocument"
+      "success": true
     },
     "create_object": {
-      "contract_version": 1,
-      "success": true,
-      "ok": true,
-      "outcome": "committed",
       "committed": true,
-      "retry_safe": false,
+      "contract_version": 1,
+      "label": "ContractObject",
       "object_name": "ContractObject",
       "object_type": "Part::Feature",
-      "label": "ContractObject"
+      "ok": true,
+      "outcome": "committed",
+      "retry_safe": false,
+      "success": true
     },
     "get_instance_info": {
-      "ok": true,
-      "instance_id": "profile-contract",
-      "profile_instance_id": "profile-contract",
-      "addon_runtime_id": "addon-runtime-contract",
-      "pid": 4242,
-      "freecad_process_started_at": "process-contract",
-      "boot_id": "boot-contract",
-      "addon_loaded_at": "loaded-contract",
-      "rpc_started_at": "rpc-started-contract",
-      "host": "127.0.0.1",
-      "port": 9988,
       "actual_endpoint": {
         "host": "127.0.0.1",
         "port": 9988
       },
-      "profile_path": null,
-      "protocol_versions": [
-        1,
-        2
-      ],
-      "protocol_version": 2,
-      "protocol_features": [],
-      "rpc_method_capabilities": {
-        "sketch_create": {
-          "parameters": [
-            "attachment_offset"
-          ]
-        },
-        "sketch_attach": {
-          "parameters": [
-            "attachment_offset"
-          ]
-        }
-      },
-      "addon_version": "0.2.0",
       "addon_build_id": "freecad-mcp-0.2.0+unknown",
+      "addon_loaded_at": "loaded-contract",
+      "addon_runtime_id": "addon-runtime-contract",
+      "addon_version": "0.2.0",
+      "boot_id": "boot-contract",
+      "document_lease_mode": "enforce",
+      "freecad_process_started_at": "process-contract",
       "freecad_version": [
         "1",
         "2",
         "3"
       ],
+      "host": "127.0.0.1",
+      "instance_id": "profile-contract",
+      "ok": true,
+      "pid": 4242,
+      "port": 9988,
+      "profile_instance_id": "profile-contract",
+      "profile_path": null,
       "profile_path_fingerprint": "profile-fingerprint-contract",
-      "document_lease_mode": "enforce"
+      "protocol_features": [],
+      "protocol_version": 2,
+      "protocol_versions": [
+        1,
+        2
+      ],
+      "rpc_method_capabilities": {
+        "sketch_attach": {
+          "parameters": [
+            "attachment_offset"
+          ]
+        },
+        "sketch_create": {
+          "parameters": [
+            "attachment_offset"
+          ]
+        }
+      },
+      "rpc_started_at": "rpc-started-contract",
+      "rpc_v2_session_ready": true,
+      "git_commit": "unknown",
+      "git_dirty": null,
+      "build_timestamp": "unknown",
+      "addon_metadata_source": "generated_metadata",
+      "addon_checkout": {
+        "git_commit": "unknown",
+        "git_dirty": null,
+        "available": false
+      },
+      "freecad_git_commit": "unknown"
     },
     "get_object": {
-      "Label": "Contract object",
-      "Name": "ContractObject",
-      "Placement": "identity",
-      "Properties": {},
-      "Shape": null,
-      "TypeId": "PartDesign::Feature",
-      "ViewObject": {}
+      "contract_version": 1,
+      "success": true,
+      "ok": true,
+      "outcome": "observed",
+      "retry_safe": false,
+      "object": "ContractObject",
+      "object_data": {
+        "Label": "Contract object",
+        "Name": "ContractObject",
+        "Placement": "identity",
+        "Properties": {},
+        "Shape": null,
+        "TypeId": "PartDesign::Feature",
+        "ViewObject": {}
+      }
     },
     "ping": true
   },

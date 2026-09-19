@@ -46,6 +46,10 @@ class _ConstraintType:
 
 
 class _Shape:
+    # A recomputed feature result is a real solid (D-27 postcondition).
+    Solids = [object()]
+    Volume = 1000.0
+
     def isClosed(self):
         return True
 
@@ -105,8 +109,12 @@ class _Body:
         self.Name = name
         self.Label = name
         self.TypeId = "PartDesign::Body"
-        self.Group: list[Any] = []
-        self.Tip = None
+        # A pocket cuts into an existing solid; without one it is refused (D-26). The base
+        # is larger than the pocket result so the material delta is a real removal.
+        base = _target("BasePad", "PartDesign::Pad")
+        base.Shape = SimpleNamespace(Solids=[object()], Volume=2000.0, isNull=lambda: False)
+        self.Group: list[Any] = [base]
+        self.Tip = base
         self._document = document
 
     def newObject(self, object_type, name):
@@ -202,7 +210,7 @@ def _seed(document: _Document, mode: str) -> None:
     document.objects["Sketch"] = sketch
     if mode in {"pad", "pocket", "attach"}:
         body = _Body(document, "Body")
-        body.Group = [sketch]
+        body.Group = [*body.Group, sketch]
         document.objects["Body"] = body
     if mode == "attach":
         document.objects["Box"] = _target("Box", "Part::Box")

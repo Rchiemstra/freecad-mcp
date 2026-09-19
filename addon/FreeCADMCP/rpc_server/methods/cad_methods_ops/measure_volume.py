@@ -5,19 +5,31 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.measure_volume_contract import (
-    MeasureVolumeCollaborators,
-    MeasureVolumeFailure,
-    MeasureVolumeRequest,
-    MeasureVolumeResult,
-    DocumentName,
-    ObjectName,
-    make_measure_volume_failure,
-    make_measure_volume_success,
-)
+try:
+    from ...._shared.protocol.measure_volume_contract import (
+        MeasureVolumeCollaborators,
+        MeasureVolumeFailure,
+        MeasureVolumeRequest,
+        MeasureVolumeResult,
+        DocumentName,
+        ObjectName,
+        make_measure_volume_failure,
+        make_measure_volume_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.measure_volume_contract import (
+        MeasureVolumeCollaborators,
+        MeasureVolumeFailure,
+        MeasureVolumeRequest,
+        MeasureVolumeResult,
+        DocumentName,
+        ObjectName,
+        make_measure_volume_failure,
+        make_measure_volume_success,
+    )
 from . import measure_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
-from .typed_runtime import as_float, as_str
+from .typed_runtime import TypedMutationError, as_float, as_str
 
 
 class MeasureVolumeError(RuntimeError):
@@ -58,13 +70,16 @@ def run_measure_volume(
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.measure_volume(document, str(request.obj_name))
+    except TypedMutationError as exc:
+        return _failure(MeasureVolumeError(exc.code, str(exc)))
     except Exception as exc:
         return _failure(MeasureVolumeError("MEASURE_VOLUME_FAILED", str(exc) or type(exc).__name__))
     return make_measure_volume_success(
         object=as_str(payload["object"]),
         volume_mm3=as_float(payload["volume_mm3"]),
         unit=as_str(payload["unit"]),
-        frame=as_str(payload["frame"])
+        frame=as_str(payload["frame"]),
+        used_linked_object=bool(payload.get("used_linked_object", False)),
     )
 
 

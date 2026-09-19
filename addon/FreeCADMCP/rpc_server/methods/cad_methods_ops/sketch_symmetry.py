@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_symmetry_contract import (
-    SketchSymmetryCollaborators,
-    SketchSymmetryFailure,
-    SketchSymmetryRequest,
-    SketchSymmetryResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_symmetry_failure,
-    make_sketch_symmetry_success,
-    make_sketch_symmetry_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_symmetry_contract import (
+        SketchSymmetryCollaborators,
+        SketchSymmetryFailure,
+        SketchSymmetryRequest,
+        SketchSymmetryResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_symmetry_failure,
+        make_sketch_symmetry_success,
+        make_sketch_symmetry_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_symmetry_contract import (
+        SketchSymmetryCollaborators,
+        SketchSymmetryFailure,
+        SketchSymmetryRequest,
+        SketchSymmetryResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_symmetry_failure,
+        make_sketch_symmetry_success,
+        make_sketch_symmetry_uncertain,
+    )
 from .sketch_symmetry_mutation import SketchSymmetryError, run_sketch_symmetry_native_mutation
 
 

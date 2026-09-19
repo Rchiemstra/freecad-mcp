@@ -41,7 +41,7 @@ WORKDIR /workspace
 
 # Copy the package and install it in editable mode so test edits are picked up
 # without rebuilding the image.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md .gitattributes ./
 COPY src ./src
 COPY addon ./addon
 COPY scripts ./scripts

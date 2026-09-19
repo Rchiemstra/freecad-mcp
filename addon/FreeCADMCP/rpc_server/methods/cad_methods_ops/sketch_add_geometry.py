@@ -7,19 +7,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_geometry_contract import (
-    DocumentName,
-    SketchAddGeometryCollaborators,
-    SketchAddGeometryDocument,
-    SketchAddGeometryFailure,
-    SketchAddGeometryObject,
-    SketchAddGeometryReadDocument,
-    SketchAddGeometryResult,
-    SketchName,
-    make_sketch_add_geometry_failure,
-    make_sketch_add_geometry_success,
-    make_sketch_add_geometry_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_geometry_contract import (
+        DocumentName,
+        SketchAddGeometryCollaborators,
+        SketchAddGeometryDocument,
+        SketchAddGeometryFailure,
+        SketchAddGeometryObject,
+        SketchAddGeometryReadDocument,
+        SketchAddGeometryResult,
+        SketchName,
+        make_sketch_add_geometry_failure,
+        make_sketch_add_geometry_success,
+        make_sketch_add_geometry_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_geometry_contract import (
+        DocumentName,
+        SketchAddGeometryCollaborators,
+        SketchAddGeometryDocument,
+        SketchAddGeometryFailure,
+        SketchAddGeometryObject,
+        SketchAddGeometryReadDocument,
+        SketchAddGeometryResult,
+        SketchName,
+        make_sketch_add_geometry_failure,
+        make_sketch_add_geometry_success,
+        make_sketch_add_geometry_uncertain,
+    )
 from .sketch_add_geometry_mutation import (
     SketchAddGeometryError,
     run_sketch_add_geometry_native_mutation,

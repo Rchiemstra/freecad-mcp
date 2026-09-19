@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.move_object_contract import (
-    MoveObjectCollaborators,
-    MoveObjectDocument,
-    MoveObjectFailure,
-    MoveObjectReadDocument,
-    MoveObjectUncertain,
-    DocumentName,
-    make_move_object_failure,
-    make_move_object_uncertain,
-)
+try:
+    from ...._shared.protocol.move_object_contract import (
+        MoveObjectCollaborators,
+        MoveObjectDocument,
+        MoveObjectFailure,
+        MoveObjectReadDocument,
+        MoveObjectUncertain,
+        DocumentName,
+        make_move_object_failure,
+        make_move_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.move_object_contract import (
+        MoveObjectCollaborators,
+        MoveObjectDocument,
+        MoveObjectFailure,
+        MoveObjectReadDocument,
+        MoveObjectUncertain,
+        DocumentName,
+        make_move_object_failure,
+        make_move_object_uncertain,
+    )
 
 
 class MoveObjectError(RuntimeError):

@@ -7,20 +7,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_parametric_curve_contract import (
-    SketchAddParametricCurveCollaborators,
-    SketchAddParametricCurveFailure,
-    SketchAddParametricCurveRequest,
-    SketchAddParametricCurveResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_parametric_curve_failure,
-    make_sketch_add_parametric_curve_success,
-    make_sketch_add_parametric_curve_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_parametric_curve_contract import (
+        SketchAddParametricCurveCollaborators,
+        SketchAddParametricCurveFailure,
+        SketchAddParametricCurveRequest,
+        SketchAddParametricCurveResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_parametric_curve_failure,
+        make_sketch_add_parametric_curve_success,
+        make_sketch_add_parametric_curve_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_parametric_curve_contract import (
+        SketchAddParametricCurveCollaborators,
+        SketchAddParametricCurveFailure,
+        SketchAddParametricCurveRequest,
+        SketchAddParametricCurveResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_parametric_curve_failure,
+        make_sketch_add_parametric_curve_success,
+        make_sketch_add_parametric_curve_uncertain,
+    )
 from .sketch_add_parametric_curve_mutation import SketchAddParametricCurveError, run_sketch_add_parametric_curve_native_mutation
 
 

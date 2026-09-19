@@ -2,23 +2,41 @@
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.pocket_feature_contract import (
-    DocumentName,
-    PocketFeatureCollaborators,
-    PocketFeatureDocument,
-    PocketFeatureFailure,
-    PocketFeatureObject,
-    PocketFeatureReadDocument,
-    PocketFeatureResult,
-    PocketName,
-    make_pocket_feature_failure,
-    make_pocket_feature_success,
-    make_pocket_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.pocket_feature_contract import (
+        DocumentName,
+        PocketFeatureCollaborators,
+        PocketFeatureDocument,
+        PocketFeatureFailure,
+        PocketFeatureObject,
+        PocketFeatureReadDocument,
+        PocketFeatureResult,
+        PocketName,
+        make_pocket_feature_failure,
+        make_pocket_feature_success,
+        make_pocket_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.pocket_feature_contract import (
+        DocumentName,
+        PocketFeatureCollaborators,
+        PocketFeatureDocument,
+        PocketFeatureFailure,
+        PocketFeatureObject,
+        PocketFeatureReadDocument,
+        PocketFeatureResult,
+        PocketName,
+        make_pocket_feature_failure,
+        make_pocket_feature_success,
+        make_pocket_feature_uncertain,
+    )
+from .profile_checks import self_intersecting_wire_numbers, solid_result_issue
 from .pocket_feature_mutation import PocketFeatureError, run_pocket_feature_native_mutation
 
 
@@ -110,7 +128,7 @@ def _profile_diagnostics(sketch: object) -> dict[str, object]:
     return diagnostics
 
 
-def _require_closed_profile(sketch: object, sketch_name: str) -> None:
+def _require_closed_profile(sketch: object, sketch_name: str, *, part: object = None) -> None:
     diagnostics = _profile_diagnostics(sketch)
     if (
         diagnostics["conflicting"]
@@ -120,6 +138,13 @@ def _require_closed_profile(sketch: object, sketch_name: str) -> None:
         raise PocketFeatureError(
             "SKETCH_PROFILE_NOT_CLOSED",
             "Sketch profile is not pocket-ready",
+            diagnostics=diagnostics,
+        )
+    crossing = self_intersecting_wire_numbers(getattr(sketch, "Shape", None), part)
+    if crossing:
+        raise PocketFeatureError(
+            "SKETCH_PROFILE_SELF_INTERSECTING",
+            f"Sketch {sketch_name!r} profile wire(s) {crossing} intersect themselves",
             diagnostics=diagnostics,
         )
 
@@ -235,9 +260,17 @@ def apply_pocket_feature(
         raise PocketFeatureError("SKETCH_NOT_FOUND", f"Sketch {sketch_name!r} not found")
     if not _is_type(sketch, "Sketcher::SketchObject"):
         raise PocketFeatureError("NOT_A_SKETCH", f"Object {sketch_name!r} is not a sketch")
-    _require_closed_profile(sketch, sketch_name)
+    _require_closed_profile(sketch, sketch_name, part=getattr(collaborators, "part", None))
     body = _resolve_body(doc, sketch, body_name)
     source_feature, volume_before = _material_baseline(body, sketch)
+    if source_feature is None:
+        # With no base solid FreeCAD's subtractive features add their tool shape instead
+        # of removing it, so the "pocket" would commit new material (D-26).
+        raise PocketFeatureError(
+            "POCKET_NO_BASE_SOLID",
+            f"Body {getattr(body, 'Name', '')!r} has no solid to pocket into; pad a base "
+            "feature first, or FreeCAD would add the pocket's shape as material",
+        )
     new_object = getattr(body, "newObject", None)
     if not callable(new_object):
         raise PocketFeatureError("BODY_WRONG_TYPE", "Body cannot create a Pocket")
@@ -304,10 +337,11 @@ def read_pocket_feature_result(
             f"Pocket {receipt.name!r} Length {actual_length} does not match {receipt.expected_length}",
         )
     shape = getattr(pocket, "Shape", None)
-    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+    issue = solid_result_issue(shape)
+    if issue is not None:
         raise PocketFeatureError(
             "POCKET_SHAPE_EMPTY",
-            f"Pocket {receipt.name!r} has no solid after recompute",
+            f"Pocket {receipt.name!r} {issue} after recompute",
         )
     volume_after_raw = getattr(shape, "Volume", None)
     if not isinstance(volume_after_raw, (int, float)) or isinstance(volume_after_raw, bool):
@@ -362,8 +396,8 @@ def build_pocket_feature_request(
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "pocket_name must be a nonempty string"))
     if isinstance(length, bool) or not isinstance(length, (int, float)):
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "length must be a number"))
-    if float(length) <= 0:
-        return _failure(PocketFeatureError("INVALID_ARGUMENT", "length must be greater than zero"))
+    if not math.isfinite(float(length)) or float(length) <= 0:
+        return _failure(PocketFeatureError("INVALID_ARGUMENT", "length must be a finite number greater than zero"))
     if body_name is not None and (not isinstance(body_name, str) or not body_name.strip()):
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "body_name must be a nonempty string"))
     if not isinstance(symmetric, bool):

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_radius_contract import (
-    SketchConstrainRadiusCollaborators,
-    SketchConstrainRadiusFailure,
-    SketchConstrainRadiusRequest,
-    SketchConstrainRadiusResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_radius_failure,
-    make_sketch_constrain_radius_success,
-    make_sketch_constrain_radius_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_radius_contract import (
+        SketchConstrainRadiusCollaborators,
+        SketchConstrainRadiusFailure,
+        SketchConstrainRadiusRequest,
+        SketchConstrainRadiusResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_radius_failure,
+        make_sketch_constrain_radius_success,
+        make_sketch_constrain_radius_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_radius_contract import (
+        SketchConstrainRadiusCollaborators,
+        SketchConstrainRadiusFailure,
+        SketchConstrainRadiusRequest,
+        SketchConstrainRadiusResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_radius_failure,
+        make_sketch_constrain_radius_success,
+        make_sketch_constrain_radius_uncertain,
+    )
 from .sketch_constrain_radius_mutation import SketchConstrainRadiusError, run_sketch_constrain_radius_native_mutation
 
 

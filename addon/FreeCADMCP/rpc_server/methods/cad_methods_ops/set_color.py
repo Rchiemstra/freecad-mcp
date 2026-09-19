@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.set_color_contract import (
-    DocumentName,
-    ObjectName,
-    SetColorCollaborators,
-    SetColorFailure,
-    SetColorRequest,
-    SetColorResult,
-    make_set_color_failure,
-    make_set_color_success,
-)
+try:
+    from ...._shared.protocol.set_color_contract import (
+        DocumentName,
+        ObjectName,
+        SetColorCollaborators,
+        SetColorFailure,
+        SetColorRequest,
+        SetColorResult,
+        make_set_color_failure,
+        make_set_color_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.set_color_contract import (
+        DocumentName,
+        ObjectName,
+        SetColorCollaborators,
+        SetColorFailure,
+        SetColorRequest,
+        SetColorResult,
+        make_set_color_failure,
+        make_set_color_success,
+    )
 from .policy_runtime import app_from, lookup_document, lookup_object
 from .typed_runtime import as_float
 

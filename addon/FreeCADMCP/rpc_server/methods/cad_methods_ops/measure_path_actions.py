@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from .measure_io_actions import resolve_global_shape
+from .world_shape_actions import resolve_global_shape
 from .typed_runtime import (
     TypedMutationError,
     load_module,

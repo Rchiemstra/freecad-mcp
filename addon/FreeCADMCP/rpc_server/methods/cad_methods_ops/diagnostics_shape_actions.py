@@ -11,6 +11,7 @@ from .typed_runtime import (
     module_callable,
     require_object,
 )
+from .world_shape_actions import read_global_placement, resolve_global_shape
 
 
 def _vector(x: float, y: float, z: float = 0.0) -> object:
@@ -67,111 +68,77 @@ def _row_number(row: dict[str, object], field: str) -> float:
     return float(value)
 
 
-def _norm_type(type_name: object) -> str:
-    text = str(type_name or "").strip().lower()
-    aliases = {
-        "planar": "Plane",
-        "plane": "Plane",
-        "geomplane": "Plane",
-        "cylinder": "Cylinder",
-        "cylindrical": "Cylinder",
-        "cone": "Cone",
-        "sphere": "Sphere",
-        "toroidal": "Toroid",
-        "toroid": "Toroid",
-        "line": "Line",
-        "circle": "Circle",
-        "geomcircle": "Circle",
-        "arc": "Circle",
-        "ellipse": "Ellipse",
-        "bspline": "BSplineCurve",
-        "bezier": "BezierCurve",
-    }
-    if text in aliases:
-        return aliases[text]
-    for key, value in aliases.items():
-        if key in text:
-            return value
-    return text.capitalize() if text else text
+_SUBSHAPE_TYPE_ALIASES = {
+    "planar": "Plane", "plane": "Plane", "geomplane": "Plane",
+    "cylinder": "Cylinder", "cylindrical": "Cylinder",
+    "cone": "Cone", "sphere": "Sphere", "toroidal": "Toroid", "toroid": "Toroid",
+    "line": "Line", "circle": "Circle", "geomcircle": "Circle", "arc": "Circle", "ellipse": "Ellipse",
+    "bspline": "BSplineCurve", "bezier": "BezierCurve",
+}
 
 
-def _sub_normal(sub: object) -> object | None:
+def _normalized_subshape_type(value: object) -> str:
+    text = str(value or "").strip()
+    return _SUBSHAPE_TYPE_ALIASES.get(text.lower(), text[:1].upper() + text[1:])
+
+
+def _subshape_geometry(sub: object) -> object | None:
+    return getattr(sub, "Surface", None) if hasattr(sub, "Surface") else getattr(sub, "Curve", None)
+
+
+def _subshape_type(sub: object) -> str:
+    # type(...).__name__ is the bare geometry class ('Plane', 'Line'); str() renders '<Plane object>'.
+    geometry = _subshape_geometry(sub)
+    return type(geometry).__name__ if geometry is not None else ""
+
+
+def _subshape_geom_type(sub: object, fallback: str) -> str:
+    """FreeCAD geometry TypeId without its module prefix (e.g. ``GeomPlane``)."""
+    type_id = getattr(_subshape_geometry(sub), "TypeId", None)
+    if isinstance(type_id, str) and type_id.strip():
+        return type_id.split("::")[-1].strip()
+    return fallback
+
+
+def _subshape_direction(sub: object) -> object | None:
+    """Face: normal at the parametric start; edge: curve axis, else line direction."""
     try:
         if hasattr(sub, "Surface"):
             try:
-                param_range = getattr(sub, "ParameterRange", None)
-                normal_at = getattr(sub, "normalAt", None)
-                if callable(normal_at) and isinstance(param_range, (list, tuple)) and len(param_range) >= 3:
-                    located: object = normal_at(param_range[0], param_range[2])
-                    return located
+                u_range = getattr(sub, "ParameterRange")
+                return getattr(sub, "normalAt")(u_range[0], u_range[2])
             except Exception:
-                axis = getattr(getattr(sub, "Surface", None), "Axis", None)
-                if axis is not None:
-                    return _vector(float(getattr(axis, "x", 0.0)), float(getattr(axis, "y", 0.0)), float(getattr(axis, "z", 0.0)))
-                return None
-        if hasattr(sub, "Curve"):
-            curve = getattr(sub, "Curve", None)
-            axis = getattr(curve, "Axis", None) if curve is not None else None
-            if axis is not None:
-                return _vector(float(getattr(axis, "x", 0.0)), float(getattr(axis, "y", 0.0)), float(getattr(axis, "z", 0.0)))
-            direction = getattr(curve, "Direction", None) if curve is not None else None
-            if direction is not None:
-                return _vector(
-                    float(getattr(direction, "x", 0.0)),
-                    float(getattr(direction, "y", 0.0)),
-                    float(getattr(direction, "z", 0.0)),
-                )
+                axis = getattr(getattr(sub, "Surface"), "Axis", None)
+                return _vector(axis.x, axis.y, axis.z) if axis is not None else None
+        curve = getattr(sub, "Curve", None)
+        axis = getattr(curve, "Axis", None)
+        if axis is not None:
+            return _vector(axis.x, axis.y, axis.z)
+        direction = getattr(curve, "Direction", None)
+        return _vector(direction.x, direction.y, direction.z) if direction is not None else None
     except Exception:
         return None
-    return None
 
 
-def _sub_type(sub: object) -> str:
-    geom = None
+def _subshape_radius(sub: object) -> float | None:
+    geometry = _subshape_geometry(sub)
+    radius = getattr(geometry, "Radius", None)
+    if radius is None and hasattr(sub, "Surface"):
+        radius = getattr(geometry, "Radius1", None)
     try:
-        if hasattr(sub, "Surface"):
-            geom = getattr(sub, "Surface")
-        elif hasattr(sub, "Curve"):
-            geom = getattr(sub, "Curve")
-    except Exception:
-        return ""
-    if geom is None:
-        return ""
-    for attr in ("TypeId", "Type"):
-        value = getattr(geom, attr, None)
-        if isinstance(value, str) and value.strip():
-            return value.split("::")[-1].strip()
-    raw = str(geom).split("(", 1)[0].strip()
-    return _norm_type(raw) or raw
-
-
-def _sub_radius(sub: object) -> float | None:
-    try:
-        if hasattr(sub, "Surface"):
-            surface = getattr(sub, "Surface", None)
-            return float(getattr(surface, "Radius", getattr(surface, "Radius1", 0.0)))
-        if hasattr(sub, "Curve"):
-            curve = getattr(sub, "Curve", None)
-            return float(getattr(curve, "Radius", 0.0))
-    except Exception:
+        return float(radius) if radius is not None else None
+    except (TypeError, ValueError):
         return None
-    return None
 
 
-def _normalize_vector(value: object) -> object | None:
-    if value is None:
+def _global_direction(placement: object, direction: object | None) -> object | None:
+    if direction is None:
         return None
     try:
-        copy = _vector(float(getattr(value, "x", 0.0)), float(getattr(value, "y", 0.0)), float(getattr(value, "z", 0.0)))
+        rotated = getattr(placement, "Rotation") * direction
+        return rotated.normalize()
     except Exception:
-        return value
-    normalize = getattr(copy, "normalize", None)
-    if callable(normalize):
-        try:
-            normalize()
-        except Exception:
-            return copy
-    return copy
+        return None
 
 
 def find_subshapes(
@@ -191,7 +158,7 @@ def find_subshapes(
     shape = getattr(obj, "Shape", None)
     if shape is None or getattr(shape, "isNull", lambda: True)():
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no shape: {object_name}")
-    gp = _global_placement(obj)
+    gp = read_global_placement(obj)
     kind_singular = "Face" if kind == "Faces" else "Edge"
 
     def to_vec(point: object) -> object | None:
@@ -203,9 +170,11 @@ def find_subshapes(
             return _vector(float(point[0]), float(point[1]), float(point[2] if len(point) > 2 else 0.0))
         return None
 
-    nv = _normalize_vector(to_vec(normal_approx))
+    nv = to_vec(normal_approx)
+    if nv is not None and _vector_length(nv) > 0:
+        nv = nv.normalize()  # type: ignore[attr-defined]
     cv = to_vec(center_approx)
-    type_want = _norm_type(type_filter) if type_filter else None
+    type_want = _normalized_subshape_type(type_filter) if type_filter else None
     results: list[dict[str, object]] = []
     for index, sub in enumerate(getattr(shape, kind, []), start=1):
         try:
@@ -215,41 +184,30 @@ def find_subshapes(
                 center = _transform_point(gp, getattr(sub, "CenterOfBoundBox"))
             except Exception:
                 continue
-        normal = _sub_normal(sub)
-        if normal is not None:
-            try:
-                rotation = getattr(gp, "Rotation", None)
-                rot_mul = getattr(rotation, "__mul__", None) if rotation is not None else None
-                if callable(rot_mul):
-                    normal = rot_mul(normal)
-                normal = _normalize_vector(normal)
-            except Exception:
-                normal = None
-        surface_type = _sub_type(sub)
-        public_type = _norm_type(surface_type) or surface_type
-        sub_radius = _sub_radius(sub)
-        if type_want and _norm_type(public_type) != type_want:
+        sub_type = _subshape_type(sub)
+        if type_want and _normalized_subshape_type(sub_type) != type_want:
             continue
-        if nv is not None and normal is not None:
+        direction = _global_direction(gp, _subshape_direction(sub))
+        if nv is not None and direction is not None:
             try:
-                dot_fn = getattr(normal, "dot", None)
-                dot = abs(float(dot_fn(nv))) if callable(dot_fn) else 0.0
+                dot = abs(float(direction.dot(nv)))  # type: ignore[attr-defined]
             except Exception:
                 dot = 0.0
             if dot < 1.0 - float(tol):
                 continue
         if cv is not None and _vector_length(_vector_sub(center, cv)) > center_tol:
             continue
-        if radius is not None and sub_radius is not None and abs(sub_radius - float(radius)) > float(tol):
+        sub_radius = _subshape_radius(sub)
+        if radius is not None and (sub_radius is None or abs(sub_radius - float(radius)) > float(tol)):
             continue
         measure = float(getattr(sub, "Area", 0.0)) if kind == "Faces" else float(getattr(sub, "Length", 0.0))
         results.append(
             {
                 "sub": f"{kind_singular}{index}",
-                "type": public_type,
-                "geom_type": surface_type,
+                "type": sub_type,
+                "geom_type": _subshape_geom_type(sub, sub_type),
                 "global_center": _vec(center),
-                "global_normal": _vec(normal),
+                "global_normal": _vec(direction),
                 "radius": round(sub_radius, 6) if sub_radius is not None else None,
                 "area" if kind == "Faces" else "length": round(measure, 6),
             }
@@ -351,13 +309,6 @@ def _bb(box: object) -> dict[str, float] | None:
     }
 
 
-def _global_placement(obj: object) -> object:
-    getter = getattr(obj, "getGlobalPlacement", None)
-    if callable(getter):
-        return getter()
-    return getattr(obj, "Placement", None)
-
-
 def _parent_of(document: object, obj: object) -> object | None:
     for candidate in getattr(document, "Objects", []) or []:
         group = getattr(candidate, "Group", None) or []
@@ -393,7 +344,7 @@ def subshape_pose(document: object, object_name: str, subshape: str) -> dict[str
     sub_obj = _subshape_object(obj, subshape)
     if sub_obj is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Subshape not found: {subshape}")
-    gp = _global_placement(obj)
+    gp = read_global_placement(obj)
     center = None
     try:
         center = _transform_point(gp, getattr(sub_obj, "CenterOfMass"))
@@ -492,22 +443,19 @@ def inspect_geometry(document: object, object_name: str, subshape: str | None = 
         )
         cursor = _parent_of(document, cursor)
     try:
-        global_pl = _global_placement(obj)
-    except Exception:
+        global_pl = read_global_placement(obj)
+    except TypedMutationError:
         global_pl = getattr(obj, "Placement", _placement())
     local_bb = None
     global_bb = None
     shape = getattr(obj, "Shape", None)
     if shape is not None and not getattr(shape, "isNull", lambda: True)():
         local_bb = _bb(getattr(shape, "BoundBox", None))
-        try:
-            copy_fn = getattr(shape, "copy", None)
-            copy = copy_fn() if callable(copy_fn) else None
-            if copy is not None:
-                setattr(copy, "Placement", global_pl)
-                global_bb = _bb(getattr(copy, "BoundBox", None))
-        except Exception:
-            global_bb = None
+    try:
+        world_shape, _meta = resolve_global_shape(obj)
+        global_bb = _bb(getattr(world_shape, "BoundBox", None))
+    except TypedMutationError:
+        global_bb = None
     placement = getattr(obj, "Placement", None)
     result: dict[str, object] = {
         "ok": True,
@@ -654,7 +602,7 @@ def match_subshape(
             if face is not None:
                 param_range = getattr(face, "ParameterRange", None)
                 normal_at = getattr(face, "normalAt", None)
-                global_pl = _global_placement(src)
+                global_pl = read_global_placement(src)
                 rotation = getattr(global_pl, "Rotation", None)
                 mult_vec = getattr(rotation, "multVec", None) if rotation is not None else None
                 if (
@@ -775,7 +723,7 @@ def placement_audit(document: object) -> dict[str, object]:
         placement = getattr(obj, "Placement", None)
         global_base = None
         try:
-            global_placement = _global_placement(obj)
+            global_placement = read_global_placement(obj)
             global_base = getattr(global_placement, "Base", None) if global_placement is not None else None
         except Exception:
             global_base = None

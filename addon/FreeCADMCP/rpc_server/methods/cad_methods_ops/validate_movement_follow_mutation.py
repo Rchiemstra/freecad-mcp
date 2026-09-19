@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.validate_movement_follow_contract import (
-    ValidateMovementFollowCollaborators,
-    ValidateMovementFollowDocument,
-    ValidateMovementFollowFailure,
-    ValidateMovementFollowReadDocument,
-    ValidateMovementFollowUncertain,
-    DocumentName,
-    make_validate_movement_follow_failure,
-    make_validate_movement_follow_uncertain,
-)
+try:
+    from ...._shared.protocol.validate_movement_follow_contract import (
+        ValidateMovementFollowCollaborators,
+        ValidateMovementFollowDocument,
+        ValidateMovementFollowFailure,
+        ValidateMovementFollowReadDocument,
+        ValidateMovementFollowUncertain,
+        DocumentName,
+        make_validate_movement_follow_failure,
+        make_validate_movement_follow_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.validate_movement_follow_contract import (
+        ValidateMovementFollowCollaborators,
+        ValidateMovementFollowDocument,
+        ValidateMovementFollowFailure,
+        ValidateMovementFollowReadDocument,
+        ValidateMovementFollowUncertain,
+        DocumentName,
+        make_validate_movement_follow_failure,
+        make_validate_movement_follow_uncertain,
+    )
 
 
 class ValidateMovementFollowError(RuntimeError):

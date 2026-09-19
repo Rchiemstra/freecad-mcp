@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_involute_gear_contract import (
-    GearName,
-    DocumentName,
-    CreateInvoluteGearCollaborators,
-    CreateInvoluteGearFailure,
-    CreateInvoluteGearRequest,
-    CreateInvoluteGearResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_create_involute_gear_failure,
-    make_create_involute_gear_success,
-    make_create_involute_gear_uncertain,
-)
+try:
+    from ...._shared.protocol.create_involute_gear_contract import (
+        GearName,
+        DocumentName,
+        CreateInvoluteGearCollaborators,
+        CreateInvoluteGearFailure,
+        CreateInvoluteGearRequest,
+        CreateInvoluteGearResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_involute_gear_failure,
+        make_create_involute_gear_success,
+        make_create_involute_gear_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_involute_gear_contract import (
+        GearName,
+        DocumentName,
+        CreateInvoluteGearCollaborators,
+        CreateInvoluteGearFailure,
+        CreateInvoluteGearRequest,
+        CreateInvoluteGearResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_involute_gear_failure,
+        make_create_involute_gear_success,
+        make_create_involute_gear_uncertain,
+    )
 from .typed_runtime import TypedMutationError, as_float, as_int, as_str
 from . import gear_actions
 from .create_involute_gear_mutation import CreateInvoluteGearError, run_create_involute_gear_native_mutation

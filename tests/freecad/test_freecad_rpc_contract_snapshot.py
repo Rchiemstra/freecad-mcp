@@ -50,6 +50,9 @@ _PARAMETER_SCHEMAS: dict[str, dict] = {
     "destination": {"type": "string"},
     "doc_name": {"type": "string"},
     "expected_destination_sha256": {"type": "string"},
+    "fields": {"type": ["array", "null"]},
+    "cursor": {"type": ["null", "string"]},
+    "page_size": {"type": "integer"},
     "index": {"type": ["integer", "null"]},
     "leases": {"type": "array"},
     "name": {"type": ["null", "string"]},
@@ -375,7 +378,31 @@ def test_phase4_json_listener_round_trips_every_semantic_outcome():
             assert decoded["error"] == mapped
         assert contract["result_examples"], method_name
 
-    assert converted_failures == 175
+    assert converted_failures == 176
+
+
+def test_get_objects_result_schema_uses_v1_object_envelope():
+    contract = _load_snapshot()["methods"]["get_objects"]
+    schema = contract["result_schema"]
+    assert schema["type"] == "object"
+    assert schema.get("oneOf") or schema.get("anyOf")
+    assert contract["result_examples"]
+    assert not any(isinstance(example, list) for example in contract["result_examples"])
+    success_examples = [
+        example
+        for example in contract["result_examples"]
+        if isinstance(example, dict) and example.get("success") is True
+    ]
+    rejection_examples = [
+        example
+        for example in contract["result_examples"]
+        if isinstance(example, dict) and example.get("success") is False
+    ]
+    assert success_examples
+    assert rejection_examples
+    assert success_examples[0]["contract_version"] == 1
+    assert "objects" in success_examples[0]
+    assert rejection_examples[0]["error_code"] == "DOCUMENT_NOT_FOUND"
 
 
 def test_phase5_json_client_converts_every_documented_failure_to_native_error():
@@ -419,7 +446,7 @@ def test_phase5_json_client_converts_every_documented_failure_to_native_error():
             assert error.data == mapped["data"], method_name
             assert error.semantic_code == mapped["data"]["error_code"], method_name
 
-    assert converted_failures == 175
+    assert converted_failures == 176
 
 
 def test_freecad_rpc_instance_exposes_same_public_names(freecad_rpc_class):

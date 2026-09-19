@@ -6,19 +6,34 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-from ...._shared.protocol.sketch_create_contract import (
-    DocumentName,
-    SketchCreateCollaborators,
-    SketchCreateDocument,
-    SketchCreateFailure,
-    SketchCreateObject,
-    SketchCreateReadDocument,
-    SketchCreateResult,
-    SketchName,
-    make_sketch_create_failure,
-    make_sketch_create_success,
-    make_sketch_create_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_create_contract import (
+        DocumentName,
+        SketchCreateCollaborators,
+        SketchCreateDocument,
+        SketchCreateFailure,
+        SketchCreateObject,
+        SketchCreateReadDocument,
+        SketchCreateResult,
+        SketchName,
+        make_sketch_create_failure,
+        make_sketch_create_success,
+        make_sketch_create_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_create_contract import (
+        DocumentName,
+        SketchCreateCollaborators,
+        SketchCreateDocument,
+        SketchCreateFailure,
+        SketchCreateObject,
+        SketchCreateReadDocument,
+        SketchCreateResult,
+        SketchName,
+        make_sketch_create_failure,
+        make_sketch_create_success,
+        make_sketch_create_uncertain,
+    )
 from .sketch_create_mutation import SketchCreateError, run_sketch_create_native_mutation
 
 
@@ -112,6 +127,16 @@ def _apply_attach_to(
     ref_obj = cast(SketchCreateDocument, doc).getObject(obj_name)
     if ref_obj is None:
         raise SketchCreateError("SUPPORT_NOT_FOUND", f"Object {obj_name!r} not found for attach_to")
+    if _is_body(ref_obj):
+        # Body.Shape is its Tip's shape, so FaceN indices match. Supporting the sketch on the
+        # Body itself makes it depend on the container that owns it (a recompute cycle).
+        tip = getattr(ref_obj, "Tip", None)
+        if tip is None or tip is sketch:
+            raise SketchCreateError(
+                "SUPPORT_NOT_FOUND",
+                f"Body {obj_name!r} has no Tip feature to attach {face!r} to",
+            )
+        ref_obj = tip
     sketch.AttachmentSupport = [(ref_obj, face)]  # type: ignore[attr-defined]
     sketch.MapMode = "FlatFace"  # type: ignore[attr-defined]
 
@@ -126,6 +151,12 @@ def apply_sketch_create(
     dict_to_placement: Callable[[object], object],
 ) -> SketchCreateReceipt:
     """Create a Sketch without recomputing or managing a transaction."""
+
+    if attachment_offset is not None and not callable(dict_to_placement):
+        raise SketchCreateError(
+            "PLACEMENT_CODEC_UNAVAILABLE",
+            "attachment_offset cannot be applied without a placement codec",
+        )
 
     if not isinstance(sketch_name, str):
         raise SketchCreateError("INVALID_ARGUMENT", "sketch_name must be a string")
@@ -229,6 +260,13 @@ def build_sketch_create_request(
     else:
         return _failure(
             SketchCreateError("INVALID_ARGUMENT", "attachment_offset must be an object")
+        )
+    if offset is not None and attach_to is None:
+        # Refuse before any object exists, not after the Sketch was added.
+        return _failure(
+            SketchCreateError(
+                "INVALID_ARGUMENT", "attachment_offset requires attach_to during sketch creation"
+            )
         )
     return _SketchCreateRequest(
         doc_name=DocumentName(doc_name),

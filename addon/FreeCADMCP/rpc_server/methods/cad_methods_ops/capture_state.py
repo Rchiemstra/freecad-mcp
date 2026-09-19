@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.capture_state_contract import (
-    CaptureStateCollaborators,
-    CaptureStateFailure,
-    CaptureStateRequest,
-    CaptureStateResult,
-    DocumentName,
-    make_capture_state_failure,
-    make_capture_state_success,
-)
+try:
+    from ...._shared.protocol.capture_state_contract import (
+        CaptureStateCollaborators,
+        CaptureStateFailure,
+        CaptureStateRequest,
+        CaptureStateResult,
+        DocumentName,
+        make_capture_state_failure,
+        make_capture_state_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.capture_state_contract import (
+        CaptureStateCollaborators,
+        CaptureStateFailure,
+        CaptureStateRequest,
+        CaptureStateResult,
+        DocumentName,
+        make_capture_state_failure,
+        make_capture_state_success,
+    )
 from . import diagnostics_io_actions
 from .policy_runtime import app_from, lookup_document, optional_recompute
 

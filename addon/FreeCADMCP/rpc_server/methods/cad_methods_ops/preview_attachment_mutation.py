@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.preview_attachment_contract import (
-    PreviewAttachmentCollaborators,
-    PreviewAttachmentDocument,
-    PreviewAttachmentFailure,
-    PreviewAttachmentReadDocument,
-    PreviewAttachmentUncertain,
-    DocumentName,
-    make_preview_attachment_failure,
-    make_preview_attachment_uncertain,
-)
+try:
+    from ...._shared.protocol.preview_attachment_contract import (
+        PreviewAttachmentCollaborators,
+        PreviewAttachmentDocument,
+        PreviewAttachmentFailure,
+        PreviewAttachmentReadDocument,
+        PreviewAttachmentUncertain,
+        DocumentName,
+        make_preview_attachment_failure,
+        make_preview_attachment_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.preview_attachment_contract import (
+        PreviewAttachmentCollaborators,
+        PreviewAttachmentDocument,
+        PreviewAttachmentFailure,
+        PreviewAttachmentReadDocument,
+        PreviewAttachmentUncertain,
+        DocumentName,
+        make_preview_attachment_failure,
+        make_preview_attachment_uncertain,
+    )
 
 
 class PreviewAttachmentError(RuntimeError):

@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_circle_contract import (
-    SketchAddCircleCollaborators,
-    SketchAddCircleFailure,
-    SketchAddCircleUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_add_circle_failure,
-    make_sketch_add_circle_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_circle_contract import (
+        SketchAddCircleCollaborators,
+        SketchAddCircleFailure,
+        SketchAddCircleUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_circle_failure,
+        make_sketch_add_circle_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_circle_contract import (
+        SketchAddCircleCollaborators,
+        SketchAddCircleFailure,
+        SketchAddCircleUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_circle_failure,
+        make_sketch_add_circle_uncertain,
+    )
 
 
 class SketchAddCircleError(RuntimeError):

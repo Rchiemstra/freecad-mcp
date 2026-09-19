@@ -106,6 +106,7 @@ class BoundingBoxSuccess(TypedDict):
     dz: float
     diagonal: float
     frame: str
+    used_linked_object: bool
 
 
 class BoundingBoxFailure(TypedDict):
@@ -173,11 +174,12 @@ _CORE_KEYS = frozenset(
         "dz",
         "diagonal",
         "frame",
+        "used_linked_object",
     }
 )
 
 
-def make_bounding_box_success(object: str, xmin: float, ymin: float, zmin: float, xmax: float, ymax: float, zmax: float, dx: float, dy: float, dz: float, diagonal: float, frame: str) -> BoundingBoxSuccess:
+def make_bounding_box_success(object: str, xmin: float, ymin: float, zmin: float, xmax: float, ymax: float, zmax: float, dx: float, dy: float, dz: float, diagonal: float, frame: str, used_linked_object: bool = False) -> BoundingBoxSuccess:
     """Construct a complete observed result."""
 
     return {
@@ -198,6 +200,7 @@ def make_bounding_box_success(object: str, xmin: float, ymin: float, zmin: float
         "dz": dz,
         "diagonal": diagonal,
         "frame": frame,
+        "used_linked_object": used_linked_object,
     }
 
 
@@ -418,15 +421,16 @@ def parse_bounding_box_response(raw_response: object) -> BoundingBoxResult:
     dz = response.get("dz")
     diagonal = response.get("diagonal")
     frame = response.get("frame")
+    used_linked_object = response.get("used_linked_object")
     if (
         _valid_success(response)
-        and isinstance(object, str) and object.strip() and isinstance(xmin, (int, float)) and not isinstance(xmin, bool) and isinstance(ymin, (int, float)) and not isinstance(ymin, bool) and isinstance(zmin, (int, float)) and not isinstance(zmin, bool) and isinstance(xmax, (int, float)) and not isinstance(xmax, bool) and isinstance(ymax, (int, float)) and not isinstance(ymax, bool) and isinstance(zmax, (int, float)) and not isinstance(zmax, bool) and isinstance(dx, (int, float)) and not isinstance(dx, bool) and isinstance(dy, (int, float)) and not isinstance(dy, bool) and isinstance(dz, (int, float)) and not isinstance(dz, bool) and isinstance(diagonal, (int, float)) and not isinstance(diagonal, bool) and isinstance(frame, str)
+        and isinstance(object, str) and object.strip() and isinstance(xmin, (int, float)) and not isinstance(xmin, bool) and isinstance(ymin, (int, float)) and not isinstance(ymin, bool) and isinstance(zmin, (int, float)) and not isinstance(zmin, bool) and isinstance(xmax, (int, float)) and not isinstance(xmax, bool) and isinstance(ymax, (int, float)) and not isinstance(ymax, bool) and isinstance(zmax, (int, float)) and not isinstance(zmax, bool) and isinstance(dx, (int, float)) and not isinstance(dx, bool) and isinstance(dy, (int, float)) and not isinstance(dy, bool) and isinstance(dz, (int, float)) and not isinstance(dz, bool) and isinstance(diagonal, (int, float)) and not isinstance(diagonal, bool) and isinstance(frame, str) and isinstance(used_linked_object, bool)
     ):
-        return make_bounding_box_success(object, float(xmin), float(ymin), float(zmin), float(xmax), float(ymax), float(zmax), float(dx), float(dy), float(dz), float(diagonal), frame)
+        return make_bounding_box_success(object, float(xmin), float(ymin), float(zmin), float(xmax), float(ymax), float(zmax), float(dx), float(dy), float(dz), float(diagonal), frame, used_linked_object)
 
     error_code = response.get("error_code")
     error = response.get("error")
-    success_keys = {'object', 'xmin', 'ymin', 'zmin', 'xmax', 'ymax', 'zmax', 'dx', 'dy', 'dz', 'diagonal', 'frame'}
+    success_keys = {'object', 'xmin', 'ymin', 'zmin', 'xmax', 'ymax', 'zmax', 'dx', 'dy', 'dz', 'diagonal', 'frame', 'used_linked_object'}
     if (
         response.get("success") is False
         and response.get("ok") is False

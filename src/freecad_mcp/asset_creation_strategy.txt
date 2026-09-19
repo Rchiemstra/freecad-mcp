@@ -8,8 +8,9 @@ the parts library or generic primitives first -- those are exceptions (see the e
 
 Follow these steps in order:
 
-0. Confirm the current state. Always call get_objects() before starting so you know which
-   documents, bodies, sketches, and features already exist.
+0. Confirm the current state. Start with get_document_tree() for lightweight structure,
+   then use get_objects() for a paginated Name/Label/TypeId listing when you need object
+   inventory. Use get_object() only when you need a detailed single-object dump.
 
 1. Create or select the document (create_document, or an already-open document).
 

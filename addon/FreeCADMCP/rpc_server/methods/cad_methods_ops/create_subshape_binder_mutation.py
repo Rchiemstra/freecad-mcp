@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_subshape_binder_contract import (
-    CreateSubshapeBinderCollaborators,
-    CreateSubshapeBinderDocument,
-    CreateSubshapeBinderFailure,
-    CreateSubshapeBinderReadDocument,
-    CreateSubshapeBinderUncertain,
-    DocumentName,
-    make_create_subshape_binder_failure,
-    make_create_subshape_binder_uncertain,
-)
+try:
+    from ...._shared.protocol.create_subshape_binder_contract import (
+        CreateSubshapeBinderCollaborators,
+        CreateSubshapeBinderDocument,
+        CreateSubshapeBinderFailure,
+        CreateSubshapeBinderReadDocument,
+        CreateSubshapeBinderUncertain,
+        DocumentName,
+        make_create_subshape_binder_failure,
+        make_create_subshape_binder_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_subshape_binder_contract import (
+        CreateSubshapeBinderCollaborators,
+        CreateSubshapeBinderDocument,
+        CreateSubshapeBinderFailure,
+        CreateSubshapeBinderReadDocument,
+        CreateSubshapeBinderUncertain,
+        DocumentName,
+        make_create_subshape_binder_failure,
+        make_create_subshape_binder_uncertain,
+    )
 
 
 class CreateSubshapeBinderError(RuntimeError):

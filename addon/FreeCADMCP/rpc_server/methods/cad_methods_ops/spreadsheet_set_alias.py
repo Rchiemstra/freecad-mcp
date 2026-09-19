@@ -29,19 +29,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.spreadsheet_set_alias_contract import (
-    SpreadsheetSetAliasCollaborators,
-    SpreadsheetSetAliasDocument,
-    SpreadsheetSetAliasFailure,
-    SpreadsheetSetAliasName,
-    SpreadsheetSetAliasReadDocument,
-    SpreadsheetSetAliasRequest,
-    SpreadsheetSetAliasResult,
-    DocumentName,
-    make_spreadsheet_set_alias_failure,
-    make_spreadsheet_set_alias_success,
-    make_spreadsheet_set_alias_uncertain,
-)
+try:
+    from ...._shared.protocol.spreadsheet_set_alias_contract import (
+        SpreadsheetSetAliasCollaborators,
+        SpreadsheetSetAliasDocument,
+        SpreadsheetSetAliasFailure,
+        SpreadsheetSetAliasName,
+        SpreadsheetSetAliasReadDocument,
+        SpreadsheetSetAliasRequest,
+        SpreadsheetSetAliasResult,
+        DocumentName,
+        make_spreadsheet_set_alias_failure,
+        make_spreadsheet_set_alias_success,
+        make_spreadsheet_set_alias_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_set_alias_contract import (
+        SpreadsheetSetAliasCollaborators,
+        SpreadsheetSetAliasDocument,
+        SpreadsheetSetAliasFailure,
+        SpreadsheetSetAliasName,
+        SpreadsheetSetAliasReadDocument,
+        SpreadsheetSetAliasRequest,
+        SpreadsheetSetAliasResult,
+        DocumentName,
+        make_spreadsheet_set_alias_failure,
+        make_spreadsheet_set_alias_success,
+        make_spreadsheet_set_alias_uncertain,
+    )
 from .feature_mutate_support import is_read_only_property
 from .spreadsheet_set_alias_mutation import SpreadsheetSetAliasError, run_spreadsheet_set_alias_native_mutation
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .gui_outcome import GuiOutcome
+from .gui_stage_clock import GuiStageClock
 
 TelemetryCallback = Callable[..., object]
 
@@ -47,6 +48,10 @@ class GuiRequest:
     state: str = "pending"
     submitted_at: float = field(default_factory=time.monotonic)
     deadline_at: float | None = None
+    running_at: float | None = None
+    deferred_at: float | None = None
+    stage_clock: GuiStageClock = field(default_factory=GuiStageClock)
+    _outstanding_released: bool = field(default=False, repr=False)
     _state_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _emit_telemetry: TelemetryCallback | None = field(
         default=None,
@@ -60,6 +65,9 @@ class GuiRequest:
             if self.state != "pending":
                 return False
             self.state = "running"
+            now = time.monotonic()
+            self.running_at = now
+            self.stage_clock.mark_running()
             return True
 
     def _mark_deferred(self) -> bool:
@@ -67,6 +75,9 @@ class GuiRequest:
             if self.state != "pending":
                 return False
             self.state = "deferred"
+            now = time.monotonic()
+            self.deferred_at = now
+            self.stage_clock.mark_deferred()
             return True
 
     def _requeue_if_deferred(self) -> bool:
@@ -74,6 +85,8 @@ class GuiRequest:
             if self.state != "deferred":
                 return False
             self.state = "pending"
+            self.deferred_at = None
+            self.stage_clock.mark_requeued()
             return True
 
     def cancel_if_pending(
@@ -174,6 +187,9 @@ class GuiRequest:
             self.outcome = outcome
             self.state = "completed"
             callback = self.on_complete
+        self.stage_clock.finalize(
+            error_code=None if outcome.ok else "GUI_TASK_FAILED",
+        )
         emitter = self._emit_telemetry
         if emitter is not None:
             with contextlib.suppress(Exception):
@@ -186,9 +202,13 @@ class GuiRequest:
                     ),
                     status="succeeded" if outcome.ok else "failed",
                     error_code=None if outcome.ok else "GUI_TASK_FAILED",
+                    duration_ms=self.stage_clock.response_total_ms,
                     request_id=self.request_id,
                     execution_id=self.request_id,
-                    payload={"previous_state": previous_state},
+                    payload={
+                        "previous_state": previous_state,
+                        **self.stage_clock.to_payload(),
+                    },
                 )
         if callback is not None:
             with contextlib.suppress(Exception):

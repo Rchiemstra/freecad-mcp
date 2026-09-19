@@ -85,6 +85,28 @@ def emit_validation_events(
         )
 
 
+def unknown_argument_error(server, name: str, arguments: Mapping[str, Any]) -> str | None:
+    """Name the arguments a tool does not declare, or return None when all are known.
+
+    FastMCP's argument models ignore extra keys, so a misspelled optional argument was
+    silently dropped and the tool ran with its default (D-22).
+    """
+    registered = server._tool_manager.get_tool(name)
+    arg_model = getattr(getattr(registered, "fn_metadata", None), "arg_model", None)
+    fields = getattr(arg_model, "model_fields", None)
+    if not isinstance(fields, Mapping):
+        return None
+    accepted = set(fields)
+    accepted.update(field.alias for field in fields.values() if getattr(field, "alias", None))
+    unknown = sorted(key for key in arguments if key not in accepted)
+    if not unknown:
+        return None
+    return (
+        f"Unknown argument(s) for {name}: {', '.join(unknown)}. "
+        f"Accepted arguments: {', '.join(sorted(fields))}"
+    )
+
+
 async def invoke_registered_tool(server, context, name: str, arguments: dict[str, Any]):
     experimental = getattr(
         getattr(context, "request_context", None),

@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.spreadsheet_create_contract import (
-    SpreadsheetCreateCollaborators,
-    SpreadsheetCreateDocument,
-    SpreadsheetCreateFailure,
-    SpreadsheetCreateReadDocument,
-    SpreadsheetCreateUncertain,
-    DocumentName,
-    make_spreadsheet_create_failure,
-    make_spreadsheet_create_uncertain,
-)
+try:
+    from ...._shared.protocol.spreadsheet_create_contract import (
+        SpreadsheetCreateCollaborators,
+        SpreadsheetCreateDocument,
+        SpreadsheetCreateFailure,
+        SpreadsheetCreateReadDocument,
+        SpreadsheetCreateUncertain,
+        DocumentName,
+        make_spreadsheet_create_failure,
+        make_spreadsheet_create_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_create_contract import (
+        SpreadsheetCreateCollaborators,
+        SpreadsheetCreateDocument,
+        SpreadsheetCreateFailure,
+        SpreadsheetCreateReadDocument,
+        SpreadsheetCreateUncertain,
+        DocumentName,
+        make_spreadsheet_create_failure,
+        make_spreadsheet_create_uncertain,
+    )
 
 
 class SpreadsheetCreateError(RuntimeError):

@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_placement_binder_contract import (
-    CreatePlacementBinderCollaborators,
-    CreatePlacementBinderDocument,
-    CreatePlacementBinderFailure,
-    CreatePlacementBinderReadDocument,
-    CreatePlacementBinderUncertain,
-    DocumentName,
-    make_create_placement_binder_failure,
-    make_create_placement_binder_uncertain,
-)
+try:
+    from ...._shared.protocol.create_placement_binder_contract import (
+        CreatePlacementBinderCollaborators,
+        CreatePlacementBinderDocument,
+        CreatePlacementBinderFailure,
+        CreatePlacementBinderReadDocument,
+        CreatePlacementBinderUncertain,
+        DocumentName,
+        make_create_placement_binder_failure,
+        make_create_placement_binder_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_placement_binder_contract import (
+        CreatePlacementBinderCollaborators,
+        CreatePlacementBinderDocument,
+        CreatePlacementBinderFailure,
+        CreatePlacementBinderReadDocument,
+        CreatePlacementBinderUncertain,
+        DocumentName,
+        make_create_placement_binder_failure,
+        make_create_placement_binder_uncertain,
+    )
 
 
 class CreatePlacementBinderError(RuntimeError):

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_helical_gear_contract import (
-    GearName,
-    DocumentName,
-    CreateHelicalGearCollaborators,
-    CreateHelicalGearFailure,
-    CreateHelicalGearRequest,
-    CreateHelicalGearResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_create_helical_gear_failure,
-    make_create_helical_gear_success,
-    make_create_helical_gear_uncertain,
-)
+try:
+    from ...._shared.protocol.create_helical_gear_contract import (
+        GearName,
+        DocumentName,
+        CreateHelicalGearCollaborators,
+        CreateHelicalGearFailure,
+        CreateHelicalGearRequest,
+        CreateHelicalGearResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_helical_gear_failure,
+        make_create_helical_gear_success,
+        make_create_helical_gear_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_helical_gear_contract import (
+        GearName,
+        DocumentName,
+        CreateHelicalGearCollaborators,
+        CreateHelicalGearFailure,
+        CreateHelicalGearRequest,
+        CreateHelicalGearResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_helical_gear_failure,
+        make_create_helical_gear_success,
+        make_create_helical_gear_uncertain,
+    )
 from .typed_runtime import TypedMutationError, as_float, as_int, as_str
 from . import gear_actions
 from .create_helical_gear_mutation import CreateHelicalGearError, run_create_helical_gear_native_mutation

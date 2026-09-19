@@ -63,7 +63,7 @@ def test_registry_counts() -> None:
 
 def test_typed_rpc_handlers_are_registered() -> None:
     typed_names = scan_typed_rpc_handler_names(REPOSITORY_ROOT)
-    assert len(typed_names) == 133
+    assert len(typed_names) == 135
     missing = sorted(
         typed_names - EXECUTION_POLICIES.keys() - FORBIDDEN_REGISTRY_NAMES
     )

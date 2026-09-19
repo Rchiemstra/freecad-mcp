@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.set_expression_contract import (
-    SetExpressionCollaborators,
-    SetExpressionDocument,
-    SetExpressionFailure,
-    SetExpressionReadDocument,
-    SetExpressionUncertain,
-    DocumentName,
-    make_set_expression_failure,
-    make_set_expression_uncertain,
-)
+try:
+    from ...._shared.protocol.set_expression_contract import (
+        SetExpressionCollaborators,
+        SetExpressionDocument,
+        SetExpressionFailure,
+        SetExpressionReadDocument,
+        SetExpressionUncertain,
+        DocumentName,
+        make_set_expression_failure,
+        make_set_expression_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.set_expression_contract import (
+        SetExpressionCollaborators,
+        SetExpressionDocument,
+        SetExpressionFailure,
+        SetExpressionReadDocument,
+        SetExpressionUncertain,
+        DocumentName,
+        make_set_expression_failure,
+        make_set_expression_uncertain,
+    )
 
 
 class SetExpressionError(RuntimeError):

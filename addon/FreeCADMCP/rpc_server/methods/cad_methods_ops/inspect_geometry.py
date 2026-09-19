@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.inspect_geometry_contract import (
-    InspectGeometryCollaborators,
-    InspectGeometryFailure,
-    InspectGeometryRequest,
-    InspectGeometryResult,
-    DocumentName,
-    ObjectName,
-    make_inspect_geometry_failure,
-    make_inspect_geometry_success,
-)
+try:
+    from ...._shared.protocol.inspect_geometry_contract import (
+        InspectGeometryCollaborators,
+        InspectGeometryFailure,
+        InspectGeometryRequest,
+        InspectGeometryResult,
+        DocumentName,
+        ObjectName,
+        make_inspect_geometry_failure,
+        make_inspect_geometry_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.inspect_geometry_contract import (
+        InspectGeometryCollaborators,
+        InspectGeometryFailure,
+        InspectGeometryRequest,
+        InspectGeometryResult,
+        DocumentName,
+        ObjectName,
+        make_inspect_geometry_failure,
+        make_inspect_geometry_success,
+    )
 from . import diagnostics_shape_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str
@@ -80,6 +92,15 @@ def run_inspect_geometry(
         parent_chain=parent_chain if isinstance(parent_chain, list) else [],
         local_bbox=local_bbox if isinstance(local_bbox, dict) else {},
         global_bbox=global_bbox if isinstance(global_bbox, dict) else {},
+        subshape=(
+            {
+                "name": subshape,
+                "global_center": payload.get("global_center"),
+                "global_normal": payload.get("global_normal"),
+            }
+            if subshape
+            else None
+        ),
     )
 
 

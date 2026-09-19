@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_equal_contract import (
-    SketchConstrainEqualCollaborators,
-    SketchConstrainEqualFailure,
-    SketchConstrainEqualRequest,
-    SketchConstrainEqualResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_equal_failure,
-    make_sketch_constrain_equal_success,
-    make_sketch_constrain_equal_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_equal_contract import (
+        SketchConstrainEqualCollaborators,
+        SketchConstrainEqualFailure,
+        SketchConstrainEqualRequest,
+        SketchConstrainEqualResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_equal_failure,
+        make_sketch_constrain_equal_success,
+        make_sketch_constrain_equal_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_equal_contract import (
+        SketchConstrainEqualCollaborators,
+        SketchConstrainEqualFailure,
+        SketchConstrainEqualRequest,
+        SketchConstrainEqualResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_equal_failure,
+        make_sketch_constrain_equal_success,
+        make_sketch_constrain_equal_uncertain,
+    )
 from .sketch_constrain_equal_mutation import SketchConstrainEqualError, run_sketch_constrain_equal_native_mutation
 
 

@@ -18,20 +18,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.boolean_intersection_contract import (
-    BooleanIntersectionCollaborators,
-    BooleanIntersectionFailure,
-    BooleanIntersectionRequest,
-    BooleanIntersectionResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_boolean_intersection_failure,
-    make_boolean_intersection_success,
-    make_boolean_intersection_uncertain,
-)
+try:
+    from ...._shared.protocol.boolean_intersection_contract import (
+        BooleanIntersectionCollaborators,
+        BooleanIntersectionFailure,
+        BooleanIntersectionRequest,
+        BooleanIntersectionResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_intersection_failure,
+        make_boolean_intersection_success,
+        make_boolean_intersection_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.boolean_intersection_contract import (
+        BooleanIntersectionCollaborators,
+        BooleanIntersectionFailure,
+        BooleanIntersectionRequest,
+        BooleanIntersectionResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_intersection_failure,
+        make_boolean_intersection_success,
+        make_boolean_intersection_uncertain,
+    )
 from .boolean_intersection_mutation import BooleanIntersectionError, run_boolean_intersection_native_mutation
 
 

@@ -231,11 +231,41 @@ def render_register_module(module_name: str, source: str) -> str:
     return _GENERATED_HEADER.rstrip() + "\n" + body + "\n"
 
 
+def _strip_inline_runtime_info_imports(body: str) -> str:
+    """Drop register-only imports from the inline runtime-info body."""
+
+    body = re.sub(
+        r"\nfrom freecad_mcp\.server_ops\.compatibility import \(\n"
+        r"    compatibility_for_manifest as _compatibility_for_manifest,\n"
+        r"\)\n",
+        "\n",
+        body,
+    )
+    body = body.replace(
+        "from typing import TYPE_CHECKING, Any\n",
+        "from typing import Any\n",
+    )
+    body = re.sub(
+        r"\nfrom freecad_mcp\.server_ops\.tool_dependencies import ToolDependencies\n",
+        "\n",
+        body,
+    )
+    body = re.sub(
+        r"\nif TYPE_CHECKING:\n"
+        r"    from freecad_mcp\.instrumented_server import InstrumentedFastMCP\n",
+        "\n",
+        body,
+    )
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    return body
+
+
 def render_inline_tools_runtime_info(source: str) -> str:
     body = _rewrite_package_imports(_strip_hand_written_prologue(source))
     register_index = body.rfind("\ndef register(")
     if register_index != -1:
         body = body[:register_index].rstrip() + "\n"
+    body = _strip_inline_runtime_info_imports(body)
     body += (
         "\n\n"
         "def get_runtime_info(ctx: Context) -> CallToolResult:\n"
@@ -246,7 +276,7 @@ def render_inline_tools_runtime_info(source: str) -> str:
         "        message='Connected FreeCAD MCP runtime identity',\n"
         "    )\n"
     )
-    return _GENERATED_HEADER.rstrip() + "\n" + body + "\n"
+    return _GENERATED_HEADER + body
 
 
 def render_register_module_shim(module_name: str) -> str:
@@ -262,14 +292,22 @@ def render_inline_tools_runtime_info_shim() -> str:
     return (
         '"""Declarative shim — inline runtime info lives in generated/capabilities."""\n\n'
         "from freecad_mcp.generated.capabilities.inline.tools_runtime_info import (\n"
-        "    get_runtime_info,\n"
-        "    _compatibility_for_manifest,\n"
         "    _runtime_info_payload,\n"
+        "    get_runtime_info,\n"
+        ")\n"
+        "from freecad_mcp.server_ops.compatibility import (\n"
+        "    compatibility_for_manifest as _compatibility_for_manifest,\n"
+        ")\n"
+        "from freecad_mcp.server_ops.compatibility import (\n"
+        "    normalize_protocol_versions,\n"
+        "    runtime_compatibility,\n"
         ")\n\n"
         "__all__ = [\n"
-        "    'get_runtime_info',\n"
         "    '_compatibility_for_manifest',\n"
         "    '_runtime_info_payload',\n"
+        "    'get_runtime_info',\n"
+        "    'normalize_protocol_versions',\n"
+        "    'runtime_compatibility',\n"
         "]\n"
     )
 
@@ -286,10 +324,79 @@ def _read_register_module_source(module_name: str) -> str:
     raise FileNotFoundError(f"register module source missing for {module_name!r}")
 
 
+def _manifest_docstrings_for_register_module(
+    manifests: tuple[SubjectManifest, ...],
+    module_name: str,
+) -> dict[str, str]:
+    docstrings: dict[str, str] = {}
+    for manifest in manifests:
+        for entry in manifest.tools:
+            if entry.register_module == module_name:
+                docstrings[entry.name] = entry.docstring
+    return docstrings
+
+
+def _format_python_docstring(docstring: str, indent: str) -> list[str]:
+    lines = docstring.splitlines()
+    if not lines:
+        return [f'{indent}"""\n', f'{indent}"""\n']
+    if len(lines) == 1:
+        return [f'{indent}"""{lines[0]}"""\n']
+    formatted = [f'{indent}"""\n']
+    formatted.extend(f"{indent}{line}\n" for line in lines)
+    formatted.append(f'{indent}"""\n')
+    return formatted
+
+
+def _apply_manifest_docstrings_to_register_source(
+    source: str,
+    *,
+    docstrings_by_tool: dict[str, str],
+) -> str:
+    if not docstrings_by_tool:
+        return source
+    module = ast.parse(source)
+    lines = source.splitlines(keepends=True)
+    replacements: list[tuple[int, int, list[str]]] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.FunctionDef) or node.name not in docstrings_by_tool:
+            continue
+        new_text = docstrings_by_tool[node.name]
+        if not node.body:
+            continue
+        doc_node = node.body[0]
+        if not (
+            isinstance(doc_node, ast.Expr)
+            and isinstance(doc_node.value, ast.Constant)
+            and isinstance(doc_node.value.value, str)
+        ):
+            continue
+        if doc_node.value.value == new_text:
+            continue
+        if doc_node.end_lineno is None:
+            continue
+        doc_line = lines[doc_node.lineno - 1]
+        indent = doc_line[: len(doc_line) - len(doc_line.lstrip())]
+        replacements.append(
+            (
+                doc_node.lineno - 1,
+                doc_node.end_lineno,
+                _format_python_docstring(new_text, indent),
+            )
+        )
+    if not replacements:
+        return source
+    for start, end, new_lines in sorted(replacements, reverse=True):
+        lines[start:end] = new_lines
+    return "".join(lines)
+
+
 def write_register_module_outputs(
     *,
     root: Path | None = None,
     register_modules: tuple[str, ...] | None = None,
+    manifests: tuple[SubjectManifest, ...] | None = None,
+    docstring_sync_modules: tuple[str, ...] = (),
 ) -> dict[str, Path]:
     root = root or shadow_output_root()
     register_modules = register_modules or tuple(
@@ -308,12 +415,25 @@ def write_register_module_outputs(
         encoding="utf-8",
     )
 
+    manifests = manifests or all_subject_manifests()
+    sync_modules = set(docstring_sync_modules)
     paths: dict[str, Path] = {}
     for module_name in register_modules:
         source = _read_register_module_source(module_name)
+        if module_name in sync_modules:
+            updated = _apply_manifest_docstrings_to_register_source(
+                source,
+                docstrings_by_tool=_manifest_docstrings_for_register_module(
+                    manifests,
+                    module_name,
+                ),
+            )
+        else:
+            updated = source
         path = modules_dir / f"{module_name}.py"
-        path.write_text(render_register_module(module_name, source), encoding="utf-8")
-        paths[f"register_module:{module_name}"] = path
+        if updated != source:
+            path.write_text(render_register_module(module_name, updated), encoding="utf-8")
+            paths[f"register_module:{module_name}"] = path
 
     runtime_info_source = _read_register_module_source("tools_runtime_info")
     inline_path = inline_dir / "tools_runtime_info.py"
@@ -683,6 +803,7 @@ def write_production_outputs(
     *,
     root: Path | None = None,
     manifests: tuple[SubjectManifest, ...] | None = None,
+    docstring_sync_modules: tuple[str, ...] = (),
 ) -> dict[str, Path]:
     root = root or shadow_output_root()
     root.mkdir(parents=True, exist_ok=True)
@@ -721,7 +842,14 @@ def write_production_outputs(
         encoding="utf-8",
     )
     _write_gateway_dispatch_json(paths["gateway_dispatch"], manifests)
-    paths.update(write_register_module_outputs(root=root, register_modules=register_modules))
+    paths.update(
+        write_register_module_outputs(
+            root=root,
+            register_modules=register_modules,
+            manifests=manifests,
+            docstring_sync_modules=docstring_sync_modules,
+        )
+    )
     paths.update(write_connection_method_outputs(root=root))
     paths["addon_gateway_dispatch"] = write_addon_gateway_dispatch(manifests=manifests)
     return paths
@@ -733,12 +861,17 @@ def write_shadow_outputs(
     manifests: tuple[SubjectManifest, ...] | None = None,
     mcp: Any | None = None,
     dependencies: Any | None = None,
+    docstring_sync_modules: tuple[str, ...] = (),
 ) -> dict[str, Path]:
     root = root or shadow_output_root()
     root.mkdir(parents=True, exist_ok=True)
     manifests = manifests or all_subject_manifests()
 
-    paths = write_production_outputs(root=root, manifests=manifests)
+    paths = write_production_outputs(
+        root=root,
+        manifests=manifests,
+        docstring_sync_modules=docstring_sync_modules,
+    )
     paths.update(
         {
             "shadow_registration": root / "shadow_registration.py",

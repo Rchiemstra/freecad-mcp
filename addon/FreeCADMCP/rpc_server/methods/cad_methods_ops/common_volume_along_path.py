@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.common_volume_along_path_contract import (
-    CommonVolumeAlongPathCollaborators,
-    CommonVolumeAlongPathFailure,
-    CommonVolumeAlongPathRequest,
-    CommonVolumeAlongPathResult,
-    DocumentName,
-    make_common_volume_along_path_failure,
-    make_common_volume_along_path_success,
-)
+try:
+    from ...._shared.protocol.common_volume_along_path_contract import (
+        CommonVolumeAlongPathCollaborators,
+        CommonVolumeAlongPathFailure,
+        CommonVolumeAlongPathRequest,
+        CommonVolumeAlongPathResult,
+        DocumentName,
+        make_common_volume_along_path_failure,
+        make_common_volume_along_path_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.common_volume_along_path_contract import (
+        CommonVolumeAlongPathCollaborators,
+        CommonVolumeAlongPathFailure,
+        CommonVolumeAlongPathRequest,
+        CommonVolumeAlongPathResult,
+        DocumentName,
+        make_common_volume_along_path_failure,
+        make_common_volume_along_path_success,
+    )
 from . import measure_path_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_int, as_str

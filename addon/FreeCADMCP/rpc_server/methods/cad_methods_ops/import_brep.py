@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.import_brep_contract import (
-    ObjectName,
-    DocumentName,
-    ImportBrepCollaborators,
-    ImportBrepFailure,
-    ImportBrepRequest,
-    ImportBrepResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_import_brep_failure,
-    make_import_brep_success,
-    make_import_brep_uncertain,
-)
+try:
+    from ...._shared.protocol.import_brep_contract import (
+        ObjectName,
+        DocumentName,
+        ImportBrepCollaborators,
+        ImportBrepFailure,
+        ImportBrepRequest,
+        ImportBrepResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_import_brep_failure,
+        make_import_brep_success,
+        make_import_brep_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.import_brep_contract import (
+        ObjectName,
+        DocumentName,
+        ImportBrepCollaborators,
+        ImportBrepFailure,
+        ImportBrepRequest,
+        ImportBrepResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_import_brep_failure,
+        make_import_brep_success,
+        make_import_brep_uncertain,
+    )
 from .typed_runtime import as_float, as_int, as_str
 from . import measure_io_actions
 from .import_brep_mutation import ImportBrepError, run_import_brep_native_mutation

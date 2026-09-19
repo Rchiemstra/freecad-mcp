@@ -29,7 +29,7 @@ def get_active_screenshot(
     document: str | None = None,
     doc_name: str | None = None,
     document_name: str | None = None,
-) -> str:
+) -> str | dict[str, Any]:
     """Get a base64 PNG rendered from this requester's personal view context."""
 
     hint = document or doc_name or document_name
@@ -46,15 +46,16 @@ def get_active_screenshot(
             fit=True,
         )
         if is_near_blank_png(image):
-            return None
+            return public_error(
+                self,
+                RuntimeError("screenshot render produced a near-blank image"),
+                screenshot_miss_reason="near_blank_png",
+            )
         return encode_png_bytes(image)
     except GuiDispatchFailure:
         raise
-    except (PermissionError, ValueError):
-        raise
     except Exception as exc:
-        redacted_error(self, exc)
-        return None
+        return public_error(self, exc)
 
 
 def _sequence_specs(

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_line_contract import (
-    SketchAddLineCollaborators,
-    SketchAddLineFailure,
-    SketchAddLineRequest,
-    SketchAddLineResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_line_failure,
-    make_sketch_add_line_success,
-    make_sketch_add_line_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_line_contract import (
+        SketchAddLineCollaborators,
+        SketchAddLineFailure,
+        SketchAddLineRequest,
+        SketchAddLineResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_line_failure,
+        make_sketch_add_line_success,
+        make_sketch_add_line_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_line_contract import (
+        SketchAddLineCollaborators,
+        SketchAddLineFailure,
+        SketchAddLineRequest,
+        SketchAddLineResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_line_failure,
+        make_sketch_add_line_success,
+        make_sketch_add_line_uncertain,
+    )
 from .sketch_add_line_mutation import SketchAddLineError, run_sketch_add_line_native_mutation
 
 

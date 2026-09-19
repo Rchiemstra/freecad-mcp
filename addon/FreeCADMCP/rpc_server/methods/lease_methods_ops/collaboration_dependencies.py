@@ -6,11 +6,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from ...._shared.protocol.body_create_contract import (
-    BodyDocument,
-    BodyReadDocument,
-    DocumentName,
-)
+try:
+    from ...._shared.protocol.body_create_contract import (
+        BodyDocument,
+        BodyReadDocument,
+        DocumentName,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.body_create_contract import (
+        BodyDocument,
+        BodyReadDocument,
+        DocumentName,
+    )
 
 
 def compatibility_mutation_kwargs(

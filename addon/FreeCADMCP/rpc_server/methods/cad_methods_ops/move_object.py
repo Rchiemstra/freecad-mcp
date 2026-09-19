@@ -18,19 +18,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.move_object_contract import (
-    MoveObjectCollaborators,
-    MoveObjectDocument,
-    MoveObjectFailure,
-    MoveObjectName,
-    MoveObjectReadDocument,
-    MoveObjectRequest,
-    MoveObjectResult,
-    DocumentName,
-    make_move_object_failure,
-    make_move_object_success,
-    make_move_object_uncertain,
-)
+try:
+    from ...._shared.protocol.move_object_contract import (
+        MoveObjectCollaborators,
+        MoveObjectDocument,
+        MoveObjectFailure,
+        MoveObjectName,
+        MoveObjectReadDocument,
+        MoveObjectRequest,
+        MoveObjectResult,
+        DocumentName,
+        make_move_object_failure,
+        make_move_object_success,
+        make_move_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.move_object_contract import (
+        MoveObjectCollaborators,
+        MoveObjectDocument,
+        MoveObjectFailure,
+        MoveObjectName,
+        MoveObjectReadDocument,
+        MoveObjectRequest,
+        MoveObjectResult,
+        DocumentName,
+        make_move_object_failure,
+        make_move_object_success,
+        make_move_object_uncertain,
+    )
 from .move_object_mutation import MoveObjectError, run_move_object_native_mutation
 
 

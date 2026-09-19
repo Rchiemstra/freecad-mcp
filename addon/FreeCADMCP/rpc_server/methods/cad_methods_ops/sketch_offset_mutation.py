@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_offset_contract import (
-    SketchOffsetCollaborators,
-    SketchOffsetFailure,
-    SketchOffsetUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_offset_failure,
-    make_sketch_offset_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_offset_contract import (
+        SketchOffsetCollaborators,
+        SketchOffsetFailure,
+        SketchOffsetUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_offset_failure,
+        make_sketch_offset_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_offset_contract import (
+        SketchOffsetCollaborators,
+        SketchOffsetFailure,
+        SketchOffsetUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_offset_failure,
+        make_sketch_offset_uncertain,
+    )
 
 
 class SketchOffsetError(RuntimeError):

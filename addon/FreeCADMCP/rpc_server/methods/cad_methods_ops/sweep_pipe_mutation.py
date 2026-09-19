@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sweep_pipe_contract import (
-    SweepPipeCollaborators,
-    SweepPipeDocument,
-    SweepPipeFailure,
-    SweepPipeReadDocument,
-    SweepPipeUncertain,
-    DocumentName,
-    make_sweep_pipe_failure,
-    make_sweep_pipe_uncertain,
-)
+try:
+    from ...._shared.protocol.sweep_pipe_contract import (
+        SweepPipeCollaborators,
+        SweepPipeDocument,
+        SweepPipeFailure,
+        SweepPipeReadDocument,
+        SweepPipeUncertain,
+        DocumentName,
+        make_sweep_pipe_failure,
+        make_sweep_pipe_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sweep_pipe_contract import (
+        SweepPipeCollaborators,
+        SweepPipeDocument,
+        SweepPipeFailure,
+        SweepPipeReadDocument,
+        SweepPipeUncertain,
+        DocumentName,
+        make_sweep_pipe_failure,
+        make_sweep_pipe_uncertain,
+    )
 
 
 class SweepPipeError(RuntimeError):

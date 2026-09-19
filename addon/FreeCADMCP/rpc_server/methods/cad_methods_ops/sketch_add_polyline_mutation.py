@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_polyline_contract import (
-    SketchAddPolylineCollaborators,
-    SketchAddPolylineFailure,
-    SketchAddPolylineUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_add_polyline_failure,
-    make_sketch_add_polyline_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_polyline_contract import (
+        SketchAddPolylineCollaborators,
+        SketchAddPolylineFailure,
+        SketchAddPolylineUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_polyline_failure,
+        make_sketch_add_polyline_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_polyline_contract import (
+        SketchAddPolylineCollaborators,
+        SketchAddPolylineFailure,
+        SketchAddPolylineUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_polyline_failure,
+        make_sketch_add_polyline_uncertain,
+    )
 
 
 class SketchAddPolylineError(RuntimeError):

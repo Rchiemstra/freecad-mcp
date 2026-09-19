@@ -24,6 +24,8 @@ class SpreadsheetSetCellsObject(Protocol):
     @property
     def TypeId(self) -> str: ...
 
+    def getAlias(self, address: str) -> str | None: ...
+
 
 class SpreadsheetSetCellsReadDocument(Protocol):
     """Read-only document surface available after native recompute."""
@@ -83,6 +85,17 @@ class SpreadsheetSetCellsRequest:
     cells: object
 
 
+class SpreadsheetSetCellsUpdatedCell(TypedDict, total=False):
+    """Inspected cell row returned only after native recompute."""
+
+    address: str
+    alias: str | None
+    contents: str
+    value: object
+    contents_error: str
+    value_error: str
+
+
 class SpreadsheetSetCellsSuccess(TypedDict):
     """Only response shape that may become outward MCP success."""
 
@@ -93,6 +106,7 @@ class SpreadsheetSetCellsSuccess(TypedDict):
     committed: Literal[True]
     retry_safe: Literal[False]
     sheet: str
+    updated: list[SpreadsheetSetCellsUpdatedCell]
 
 
 class SpreadsheetSetCellsFailure(TypedDict):
@@ -135,12 +149,43 @@ SpreadsheetSetCellsResult = SpreadsheetSetCellsSuccess | SpreadsheetSetCellsFail
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'sheet', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version",
+        "success",
+        "ok",
+        "outcome",
+        "committed",
+        "retry_safe",
+        "sheet",
+        "updated",
+        "error_code",
+        "error",
+        "native_status",
+        "native_message",
+        "rollback_succeeded",
+        "rollback_failed",
+        "diagnostics",
     }
 )
 
 
-def make_spreadsheet_set_cells_success(sheet: str) -> SpreadsheetSetCellsSuccess:
+def _valid_updated_cells(updated: object) -> bool:
+    if not isinstance(updated, list) or not updated:
+        return False
+    for item in updated:
+        if not isinstance(item, dict):
+            return False
+        address = item.get("address")
+        if not isinstance(address, str) or not address.strip():
+            return False
+        if "alias" not in item:
+            return False
+    return True
+
+
+def make_spreadsheet_set_cells_success(
+    sheet: str,
+    updated: list[SpreadsheetSetCellsUpdatedCell],
+) -> SpreadsheetSetCellsSuccess:
     """Construct a complete committed result."""
 
     return {
@@ -151,6 +196,7 @@ def make_spreadsheet_set_cells_success(sheet: str) -> SpreadsheetSetCellsSuccess
         "committed": True,
         "retry_safe": False,
         "sheet": sheet,
+        "updated": updated,
     }
 
 
@@ -359,12 +405,15 @@ def parse_spreadsheet_set_cells_response(raw_response: object) -> SpreadsheetSet
     if type(version) is not int or version != SPREADSHEET_SET_CELLS_CONTRACT_VERSION or details is None:
         return _invalid_response(response)
 
-    sheet = response.get('sheet')
+    sheet = response.get("sheet")
+    updated = response.get("updated")
     if (
         _valid_success(response)
-        and isinstance(sheet, str) and sheet.strip()
+        and isinstance(sheet, str)
+        and sheet.strip()
+        and _valid_updated_cells(updated)
     ):
-        return make_spreadsheet_set_cells_success(str(sheet))
+        return make_spreadsheet_set_cells_success(str(sheet), updated)
 
     error_code = response.get("error_code")
     error = response.get("error")
@@ -375,7 +424,8 @@ def parse_spreadsheet_set_cells_response(raw_response: object) -> SpreadsheetSet
         and error_code.strip()
         and isinstance(error, str)
         and error.strip()
-        and 'sheet' not in response
+        and "sheet" not in response
+        and "updated" not in response
     ):
         if _valid_rejection(response):
             return make_spreadsheet_set_cells_failure(
@@ -393,17 +443,18 @@ def parse_spreadsheet_set_cells_response(raw_response: object) -> SpreadsheetSet
 
 __all__ = [
     "SPREADSHEET_SET_CELLS_CONTRACT_VERSION",
+    "DocumentName",
     "SpreadsheetSetCellsCollaborators",
+    "SpreadsheetSetCellsDocument",
     "SpreadsheetSetCellsFailure",
+    "SpreadsheetSetCellsName",
+    "SpreadsheetSetCellsObject",
+    "SpreadsheetSetCellsReadDocument",
     "SpreadsheetSetCellsRequest",
     "SpreadsheetSetCellsResult",
     "SpreadsheetSetCellsSuccess",
     "SpreadsheetSetCellsUncertain",
-    "SpreadsheetSetCellsDocument",
-    "SpreadsheetSetCellsName",
-    "SpreadsheetSetCellsObject",
-    "SpreadsheetSetCellsReadDocument",
-    "DocumentName",
+    "SpreadsheetSetCellsUpdatedCell",
     "make_spreadsheet_set_cells_failure",
     "make_spreadsheet_set_cells_success",
     "make_spreadsheet_set_cells_uncertain",

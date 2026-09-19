@@ -7,36 +7,6 @@ from unittest.mock import MagicMock
 import pytest
 from mcp.types import ImageContent
 
-from freecad_mcp.generated.capabilities.connection_methods.connection_assembly_ops import (
-    solve_assembly as solve_assembly_connection,
-)
-from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (
-    delete_object as delete_object_connection,
-)
-from freecad_mcp.generated.capabilities.client_stubs import (
-    solve_assembly as solve_assembly_client_stub,
-)
-from freecad_mcp.freecad_client import FreeCADConnection
-from freecad_mcp.freecad_client_ops.connection_methods.connection_assembly_ops import (
-    solve_assembly as public_solve_assembly_connection,
-)
-from freecad_mcp.operations.core import (
-    delete_object_operation,
-    sketch_add_constraint_operation,
-    sketch_add_geometry_operation,
-    sketch_create_operation,
-)
-from freecad_mcp.operations.p7_assembly import solve_assembly_operation
-from freecad_mcp.operations.parametric import (
-    body_create_operation,
-    body_set_tip_operation,
-    clear_expression_operation,
-    set_expression_operation,
-    sketch_edit_constraint_operation,
-    spreadsheet_create_operation,
-    spreadsheet_set_alias_operation,
-    spreadsheet_set_cells_operation,
-)
 from freecad_mcp._shared.protocol.body_create_contract import (
     BodyName,
     make_body_create_failure,
@@ -93,6 +63,36 @@ from freecad_mcp._shared.protocol.spreadsheet_set_cells_contract import (
     make_spreadsheet_set_cells_failure,
     make_spreadsheet_set_cells_success,
 )
+from freecad_mcp.freecad_client import FreeCADConnection
+from freecad_mcp.freecad_client_ops.connection_methods.connection_assembly_ops import (
+    solve_assembly as public_solve_assembly_connection,
+)
+from freecad_mcp.generated.capabilities.client_stubs import (
+    solve_assembly as solve_assembly_client_stub,
+)
+from freecad_mcp.generated.capabilities.connection_methods.connection_assembly_ops import (
+    solve_assembly as solve_assembly_connection,
+)
+from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (
+    delete_object as delete_object_connection,
+)
+from freecad_mcp.operations.core import (
+    delete_object_operation,
+    sketch_add_constraint_operation,
+    sketch_add_geometry_operation,
+    sketch_create_operation,
+)
+from freecad_mcp.operations.p7_assembly import solve_assembly_operation
+from freecad_mcp.operations.parametric import (
+    body_create_operation,
+    body_set_tip_operation,
+    clear_expression_operation,
+    set_expression_operation,
+    sketch_edit_constraint_operation,
+    spreadsheet_create_operation,
+    spreadsheet_set_alias_operation,
+    spreadsheet_set_cells_operation,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -112,7 +112,10 @@ _CONTRACT_SUCCESS = {
     "set_expression": make_set_expression_success("Pad", "Length", "<<Dims>>.Height"),
     "clear_expression": make_clear_expression_success("Pad", "Length"),
     "spreadsheet_create": make_spreadsheet_create_success("Dims", "Dims"),
-    "spreadsheet_set_cells": make_spreadsheet_set_cells_success("Dims"),
+    "spreadsheet_set_cells": make_spreadsheet_set_cells_success(
+        "Dims",
+        [{"address": "A1", "alias": "Height", "value": "1"}],
+    ),
     "spreadsheet_set_alias": make_spreadsheet_set_alias_success("Dims", "A1", "Height"),
     "solve_assembly": make_solve_assembly_success("Assembly", "assembly.solve()", "ok"),
 }

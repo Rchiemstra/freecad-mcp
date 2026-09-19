@@ -10,15 +10,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.pad_feature_contract import (
-    PadFeatureCollaborators,
-    PadFeatureDocument,
-    PadFeatureFailure,
-    PadFeatureReadDocument,
-    PadFeatureUncertain,
-    make_pad_feature_failure,
-    make_pad_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.pad_feature_contract import (
+        PadFeatureCollaborators,
+        PadFeatureDocument,
+        PadFeatureFailure,
+        PadFeatureReadDocument,
+        PadFeatureUncertain,
+        make_pad_feature_failure,
+        make_pad_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.pad_feature_contract import (
+        PadFeatureCollaborators,
+        PadFeatureDocument,
+        PadFeatureFailure,
+        PadFeatureReadDocument,
+        PadFeatureUncertain,
+        make_pad_feature_failure,
+        make_pad_feature_uncertain,
+    )
 
 
 class PadFeatureError(RuntimeError):

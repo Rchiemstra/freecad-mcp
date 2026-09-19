@@ -20,19 +20,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_part_container_contract import (
-    CreatePartContainerCollaborators,
-    CreatePartContainerDocument,
-    CreatePartContainerFailure,
-    CreatePartContainerName,
-    CreatePartContainerReadDocument,
-    CreatePartContainerRequest,
-    CreatePartContainerResult,
-    DocumentName,
-    make_create_part_container_failure,
-    make_create_part_container_success,
-    make_create_part_container_uncertain,
-)
+try:
+    from ...._shared.protocol.create_part_container_contract import (
+        CreatePartContainerCollaborators,
+        CreatePartContainerDocument,
+        CreatePartContainerFailure,
+        CreatePartContainerName,
+        CreatePartContainerReadDocument,
+        CreatePartContainerRequest,
+        CreatePartContainerResult,
+        DocumentName,
+        make_create_part_container_failure,
+        make_create_part_container_success,
+        make_create_part_container_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_part_container_contract import (
+        CreatePartContainerCollaborators,
+        CreatePartContainerDocument,
+        CreatePartContainerFailure,
+        CreatePartContainerName,
+        CreatePartContainerReadDocument,
+        CreatePartContainerRequest,
+        CreatePartContainerResult,
+        DocumentName,
+        make_create_part_container_failure,
+        make_create_part_container_success,
+        make_create_part_container_uncertain,
+    )
 from .create_part_container_mutation import CreatePartContainerError, run_create_part_container_native_mutation
 
 

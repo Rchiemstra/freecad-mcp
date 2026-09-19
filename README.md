@@ -298,7 +298,8 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 
 ### Documents & objects
 * `create_document`, `list_documents`, `close_document`
-* `get_objects`, `get_object`, `create_object`, `edit_object`
+* `get_document_tree` for lightweight structure; `get_objects` for paginated Name/Label/TypeId listing; `get_object` for a detailed single-object dump
+* `create_object`, `edit_object`
 * `delete_object` — deletes without silently orphaning dependents (P6): `recursive=True` removes dependents first, `force=True` deletes only the object and reports the orphans left, otherwise it refuses and lists them.
 * `execute_code`, `execute_code_async`, `recompute_document`, `undo`, `redo`, `reload_document`
 * `get_recompute_log` — per-object recompute state (read-only); includes expression bindings when present.

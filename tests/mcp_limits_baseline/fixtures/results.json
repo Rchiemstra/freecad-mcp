@@ -1,0 +1,137 @@
+{
+  "run_id": "run-20260916-mcp-limits",
+  "date": "2026-09-16",
+  "agent_selected_arbitrary_code_calls": 0,
+  "total_mcp_calls": 272,
+  "call_budget": 1000,
+  "max_outstanding_requests": 4,
+  "environment": {
+    "freecad_version": "26.3.0",
+    "freecad_revision": "48664 (Git)",
+    "freecad_binary": "/home/msi/FreeCAD/build/release/bin/FreeCAD",
+    "freecad_pid": 316969,
+    "mcp_server": "/home/msi/FreeCAD/tools/mcp/freecad-mcp/.venv/bin/freecad-mcp",
+    "mcp_pid": 317891,
+    "mcp_version": "0.2.0",
+    "addon_version": "0.2.0",
+    "build_id": "freecad-mcp-0.2.0+unknown",
+    "git_commit_reported_by_mcp": "unknown",
+    "checkout_head": "962f18d5ed1acfbbb91bab33582a176a36f3d2ca",
+    "checkout_branch": "FreeCAD-start",
+    "mcp_submodule_commit": "bcce4abc78073ccbe0f81116ec72540a4c8a37a1",
+    "mcp_submodule_branch": "heads/fix/solve-assembly-typed-rpc-binding",
+    "rpc_protocol_addon": 1,
+    "rpc_protocol_mcp": 2,
+    "compatible": false,
+    "runtime_identity_verified_via": "/proc/316969/exe",
+    "runtime_identity_verifiable_via_mcp": false
+  },
+  "calibration": {
+    "tolerance_volume_relative": 1e-06,
+    "expected_volume_before_pocket_mm3": 9600,
+    "measured_volume_before_pocket_mm3": 9600.0,
+    "expected_volume_after_pocket_mm3": 8971.681469282041,
+    "measured_volume_after_pocket_mm3": 8971.68146928204,
+    "bbox": [40.0, 30.0, 8.0],
+    "tip": "Pocket_Hole",
+    "solid_count": 1,
+    "hole_axis_global_center": [0.0, 0.0, 4.0],
+    "repetitions": 3,
+    "repetitions_identical": 3,
+    "outcome": "PASS"
+  },
+  "parametric_update": {
+    "change": "Dims.plate_len 40 -> 50",
+    "expected_volume_mm3": 11371.681469282041,
+    "measured_volume_mm3": 11371.681469,
+    "bbox": [50.0, 30.0, 8.0],
+    "downstream_features_valid": true,
+    "outcome": "PASS"
+  },
+  "assembly_model": {
+    "document": "MCPLimit_Shaft",
+    "spreadsheet_aliases": 17,
+    "bodies": ["BasePlate", "Support_A", "Support_B", "Shaft", "Collar_A", "Cover"],
+    "links": ["Collar_B"],
+    "verified_volumes_mm3": {
+      "BasePlate_4_slots": 55769.415987,
+      "Support_A": 9239.071022409446,
+      "Support_B": 9239.071022,
+      "Collar_A": 1165.153883
+    },
+    "design_changes": [
+      {"id": 1, "change": "base_length 120->140, base_width 80->90", "verified": "bbox 140x90x6", "outcome": "PASS"},
+      {"id": 2, "change": "shaft_diameter 8->10, bearing_outer_diameter 22->26", "verified": "Shaft dia 10, Support_A top z 56->58", "note": "Support_B and Cover unbound in the model built by the agent", "outcome": "PASS"},
+      {"id": 3, "change": "support_spacing 60->80, slot_spacing_x 90->110", "verified": "Support_A x 13..47 -> 23..57; BasePlate faces 22->26 (slot breaks out of edge); still one valid closed solid 73868.418478 mm3", "outcome": "PASS"}
+    ]
+  },
+  "defects": [
+    {"id": "D-01", "severity": "high", "outcome": "FAIL", "title": "timed-out mutations commit but are reported as failures", "reproduced": "10 of 11 timed-out mutations had committed"},
+    {"id": "D-02", "severity": "high", "outcome": "CAPABILITY_GAP", "title": "RPC v1/v2 mismatch disables 21 tools incl. save_document, open_document, undo, redo, get_request_status, cancel_request", "reproduced": "3/3 verified live"},
+    {"id": "D-03", "severity": "high", "outcome": "FAIL", "title": "revolve_feature: 'PartDesign.Feature' object has no attribute 'Symmetric'", "reproduced": "3/3"},
+    {"id": "D-04", "severity": "high", "outcome": "FAIL", "title": "sketch_create attach_to '<Body>:FaceN' hangs 30s and creates nothing; feature-face works", "reproduced": "3/3"},
+    {"id": "D-05", "severity": "medium", "outcome": "FAIL", "title": "bounding_box and measure_volume crash on App::Link despite documented link-safety", "reproduced": "3/3"},
+    {"id": "D-06", "severity": "medium", "outcome": "FAIL", "title": "get_object returns status succeeded for a nonexistent object", "reproduced": "1/1"},
+    {"id": "D-07", "severity": "medium", "outcome": "CAPABILITY_GAP", "title": "self-intersecting profile accepted by pad_feature", "reproduced": "1/1"},
+    {"id": "D-08", "severity": "low", "outcome": "FAIL", "title": "negative pad length silently reinterpreted as reversed", "reproduced": "1/1"},
+    {"id": "D-09", "severity": "medium", "outcome": "OBSERVABILITY_GAP", "title": "transaction.status unavailable, rollback_policy none on every mutation", "reproduced": "all calls"},
+    {"id": "D-10", "severity": "medium", "outcome": "OBSERVABILITY_GAP", "title": "no view capture; every feature returns presentation_warning", "reproduced": "all feature calls"},
+    {"id": "D-11", "severity": "low", "outcome": "OBSERVABILITY_GAP", "title": "get_objects has no projection or pagination (~15k tokens for 10 objects)", "reproduced": "1/1"},
+    {"id": "D-12", "severity": "low", "outcome": "FAIL", "title": "spreadsheet_set_cells reports alias:null for aliases it set", "reproduced": "1/1"},
+    {"id": "D-13", "severity": "info", "outcome": "INFO", "title": "dedicated actions run as generated_internal_execute (not native RPC)", "reproduced": "observed on ~18 tools"},
+    {"id": "D-14", "severity": "low", "outcome": "CAPABILITY_GAP", "title": "no action to set per-element placements of a link array", "reproduced": "1/1"}
+  ],
+  "measured_limits": {
+    "independent_objects": {"tested_pass": 10, "tested_fail": null, "higher_tiers": "NOT_TESTED"},
+    "link_array_instances": {"tested_pass": 250, "note": "created and inspected; instances co-located (D-14)"},
+    "sketch_geometry_elements": {"tested_pass": 50, "verification": "polygon area x height exact: 25066.868066 mm3", "higher_tiers": "NOT_TESTED"},
+    "parameter_edit_recompute_cycles": {"tested_pass": 10, "final_volume_exact": 75200.604197, "higher_tiers": "NOT_TESTED"},
+    "feature_chain_depth": {"tested_pass": 5, "higher_tiers": "NOT_TESTED"},
+    "concurrency": {"independent_documents": 3, "same_document_writes": 4, "outcome": "PASS", "lost_updates": 0},
+    "gui_mutation_timeout_threshold": {
+      "largest_verified_passing_document_objects": 23,
+      "first_observed_failing_document_objects": 38,
+      "client_timeout_seconds": 30,
+      "note": "dominant practical limit; read-only inspectors unaffected (worker snapshot mode)"
+    }
+  },
+  "negative_tests": {
+    "PASS_EXPECTED_REJECTION": 12,
+    "PASS": 4,
+    "FAIL": 3,
+    "CAPABILITY_GAP": 3,
+    "orphans_found": 0,
+    "wrong_tip_found": 0,
+    "broken_references_found": 0,
+    "unrelated_document_changes": 0
+  },
+  "sentinel": {
+    "document": "MCPLimit_Sentinel",
+    "object_count_final": 0,
+    "dirty_final": false,
+    "modified_at_any_point": false
+  },
+  "not_tested": [
+    "assembly joints (create_assembly, create_assembly_joint, create_assembly_grounded_joint, solve_assembly)",
+    "loft, sweep, helical_sweep, sweep_pipe",
+    "gears (spur, helical, involute, pair checks)",
+    "booleans (union, difference, intersection)",
+    "chamfer_feature, polar_pattern_feature",
+    "datums and binders",
+    "FEM",
+    "measure_distance, measure_angle, measure_area, center_of_mass, edge_axis, face_normal",
+    "reference repair tools (relink_references, repair_references, inspect_references, get_dependency_graph)",
+    "document lease lifecycle tools (no lease was ever refused in this runtime)",
+    "export_stl, export_brep, import_brep",
+    "object counts above 10, sketch geometry above 50, edit cycles above 10, feature depth above 5"
+  ],
+  "blocked": [
+    "save -> close -> reopen -> compare (open_document / reload_document unavailable)",
+    "undo / redo recovery (unavailable)",
+    "request status / cancellation after timeout (unavailable)",
+    "view capture / screenshots (unavailable)",
+    "revolve_feature (broken on this build)",
+    "sketch attachment to a Body-level face (hangs)"
+  ],
+  "unknown_outcome_remaining": 0
+}

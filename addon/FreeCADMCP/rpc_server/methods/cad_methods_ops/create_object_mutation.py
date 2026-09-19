@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_object_contract import (
-    CreateObjectCollaborators,
-    CreateObjectReadDocument,
-    CreateObjectFailure,
-    CreateObjectUncertain,
-    make_create_object_failure,
-    make_create_object_uncertain,
-)
+try:
+    from ...._shared.protocol.create_object_contract import (
+        CreateObjectCollaborators,
+        CreateObjectReadDocument,
+        CreateObjectFailure,
+        CreateObjectUncertain,
+        make_create_object_failure,
+        make_create_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_object_contract import (
+        CreateObjectCollaborators,
+        CreateObjectReadDocument,
+        CreateObjectFailure,
+        CreateObjectUncertain,
+        make_create_object_failure,
+        make_create_object_uncertain,
+    )
 
 
 class CreateObjectError(RuntimeError):

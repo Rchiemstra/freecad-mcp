@@ -52,11 +52,12 @@ def handle_gui_dispatch_error(
             )
         timeout_snapshot = inflight.token.snapshot() if inflight is not None else None
     code = getattr(exc, "error_code", "GUI_DISPATCH_FAILED")
+    resolved_request_id = getattr(exc, "request_id", None) or request_id
     return {
         "success": False,
         "error_code": code,
         "error": str(exc),
-        "request_id": request_id,
+        "request_id": resolved_request_id,
         "timeout_stage": getattr(exc, "timeout_stage", None),
         "execution_started": bool(getattr(exc, "execution_started", False)),
         "mutation_started": bool(

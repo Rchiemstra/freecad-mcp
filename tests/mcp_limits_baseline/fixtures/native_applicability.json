@@ -1,0 +1,21 @@
+{
+  "description": "Native behavioural CAD acceptance applicability for campaign defects. PASS is forbidden here until product gaps are actually closed.",
+  "campaign_run_id": "run-20260916-mcp-limits",
+  "defects": {
+    "D-01": "NOT_TESTED",
+    "D-02": "N/A",
+    "D-03": "NOT_TESTED",
+    "D-04": "NOT_TESTED",
+    "D-05": "NOT_TESTED",
+    "D-06": "NOT_TESTED",
+    "D-07": "NOT_TESTED",
+    "D-08": "NOT_TESTED",
+    "D-09": "N/A",
+    "D-10": "N/A",
+    "D-11": "N/A",
+    "D-12": "NOT_TESTED",
+    "D-13": "N/A",
+    "D-14": "N/A",
+    "F-05": "N/A"
+  }
+}

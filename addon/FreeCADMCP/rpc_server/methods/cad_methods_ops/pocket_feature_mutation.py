@@ -10,15 +10,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.pocket_feature_contract import (
-    PocketFeatureCollaborators,
-    PocketFeatureDocument,
-    PocketFeatureFailure,
-    PocketFeatureReadDocument,
-    PocketFeatureUncertain,
-    make_pocket_feature_failure,
-    make_pocket_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.pocket_feature_contract import (
+        PocketFeatureCollaborators,
+        PocketFeatureDocument,
+        PocketFeatureFailure,
+        PocketFeatureReadDocument,
+        PocketFeatureUncertain,
+        make_pocket_feature_failure,
+        make_pocket_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.pocket_feature_contract import (
+        PocketFeatureCollaborators,
+        PocketFeatureDocument,
+        PocketFeatureFailure,
+        PocketFeatureReadDocument,
+        PocketFeatureUncertain,
+        make_pocket_feature_failure,
+        make_pocket_feature_uncertain,
+    )
 
 
 class PocketFeatureError(RuntimeError):

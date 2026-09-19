@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.recompute_and_wait_contract import (
-    RecomputeAndWaitCollaborators,
-    RecomputeAndWaitFailure,
-    RecomputeAndWaitRequest,
-    RecomputeAndWaitResult,
-    DocumentName,
-    make_recompute_and_wait_failure,
-    make_recompute_and_wait_success,
-    make_recompute_and_wait_uncertain,
-)
+try:
+    from ...._shared.protocol.recompute_and_wait_contract import (
+        RecomputeAndWaitCollaborators,
+        RecomputeAndWaitFailure,
+        RecomputeAndWaitRequest,
+        RecomputeAndWaitResult,
+        DocumentName,
+        make_recompute_and_wait_failure,
+        make_recompute_and_wait_success,
+        make_recompute_and_wait_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.recompute_and_wait_contract import (
+        RecomputeAndWaitCollaborators,
+        RecomputeAndWaitFailure,
+        RecomputeAndWaitRequest,
+        RecomputeAndWaitResult,
+        DocumentName,
+        make_recompute_and_wait_failure,
+        make_recompute_and_wait_success,
+        make_recompute_and_wait_uncertain,
+    )
 from .recompute_and_wait_mutation import RecomputeAndWaitError, run_recompute_and_wait_native_mutation
 from .typed_rpc_document import document_name
 

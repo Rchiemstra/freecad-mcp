@@ -31,6 +31,7 @@ COMMON_ERROR_CODES = frozenset(
         "GUI_DISPATCH_FAILED",
         "GUI_TASK_FAILED",
         "GUI_TIMEOUT_BEFORE_EXECUTION",
+        "GUI_TIMEOUT_BLOCKED_BY_MODAL_DIALOG",
         "GUI_TIMEOUT_DURING_EXECUTION",
         "INVALID_ARGUMENT",
         "MALFORMED_RESPONSE",
@@ -56,6 +57,12 @@ def status_from_error_code(error_code: str | None) -> OutcomeStatus:
     code = str(error_code or "").upper()
     if "TIMEOUT" in code:
         return OutcomeStatus.TIMED_OUT
+    if (
+        "UNCERTAIN" in code
+        or "TRANSPORT" in code
+        or "COMPLETION_UNCERTAIN" in code
+    ):
+        return OutcomeStatus.UNKNOWN
     if "CANCEL" in code:
         return OutcomeStatus.CANCELLED
     if any(
