@@ -118,6 +118,7 @@ class SketchEditConstraintSuccess(TypedDict):
     sketch: SketchName
     index: int
     name: str
+    after: NotRequired[float]
 
 
 class SketchEditConstraintFailure(TypedDict):
@@ -169,6 +170,7 @@ _CORE_KEYS = frozenset(
         "sketch",
         "index",
         "name",
+        "after",
         "error_code",
         "error",
         "native_status",
@@ -180,10 +182,12 @@ _CORE_KEYS = frozenset(
 )
 
 
-def make_sketch_edit_constraint_success(sketch: SketchName, index: int, name: str) -> SketchEditConstraintSuccess:
+def make_sketch_edit_constraint_success(
+    sketch: SketchName, index: int, name: str, after: float | None = None
+) -> SketchEditConstraintSuccess:
     """Construct a complete committed result using the actual assigned identity."""
 
-    return {
+    result: SketchEditConstraintSuccess = {
         "contract_version": SKETCH_EDIT_CONSTRAINT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -194,6 +198,9 @@ def make_sketch_edit_constraint_success(sketch: SketchName, index: int, name: st
         "index": index,
         "name": name,
     }
+    if after is not None:
+        result["after"] = after
+    return result
 
 
 def make_sketch_edit_constraint_failure(
@@ -412,7 +419,18 @@ def parse_sketch_edit_constraint_response(raw_response: object) -> SketchEditCon
         and isinstance(index, int) and not isinstance(index, bool) and index >= 0
         and isinstance(name, str)
     ):
-        return make_sketch_edit_constraint_success(SketchName(sketch), index, name)
+        after_raw = response.get("after")
+        after_value = (
+            float(after_raw)
+            if isinstance(after_raw, (int, float)) and not isinstance(after_raw, bool)
+            else None
+        )
+        return make_sketch_edit_constraint_success(
+            SketchName(sketch),
+            index,
+            name,
+            after=after_value,
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

@@ -287,7 +287,58 @@ def model_state(document: object) -> tuple:
     )
 
 
+_REVISION_PROBE_SUBJECTS = frozenset(
+    {
+        "RejectedBody",
+        "RejectedFeature",
+        "TransientSupport",
+        "NativeSketch",
+        "NativePad",
+        "NativePocket",
+    }
+)
+
+
+def settle_stable_read_boundary(document: object) -> None:
+    """Make snapshotForEdit legal after a rollback that left mustExecute set."""
+
+    must_execute = getattr(document, "mustExecute", None)
+    if not callable(must_execute) or not must_execute():
+        return
+    purge = getattr(document, "purgeTouched", None)
+    if callable(purge):
+        purge()
+    if callable(must_execute) and must_execute():
+        recompute = getattr(document, "recompute", None)
+        if callable(recompute):
+            recompute()
+
+
+def revision_state(document: object, op: str = "native-state") -> object:
+    settle_stable_read_boundary(document)
+    keys = [{"kind": "UnknownModelMutation"}, {"kind": "DocumentStructure"}]
+    names = {item.Name for item in document.Objects} | _REVISION_PROBE_SUBJECTS
+    for name in sorted(names):
+        keys.extend(
+            {"kind": kind, "subject": name} for kind in ("ObjectExistence", "ObjectStructure")
+        )
+        item = document.getObject(name)
+        if item is not None:
+            keys.extend(
+                {"kind": "ObjectProperty", "subject": name, "property_name": prop}
+                for prop in sorted(item.PropertiesList)
+            )
+    session = document.beginEditSession(f"{op}-native-state-probe")
+    try:
+        snapshot = document.snapshotForEdit(session["session_id"], keys)
+        return snapshot["revisions"]
+    finally:
+        document.cancelEdit(session["session_id"])
+
+
 __all__ = [
     "model_state",
     "property_content",
+    "revision_state",
+    "settle_stable_read_boundary",
 ]

@@ -93,6 +93,7 @@ class RestoreSuccess(TypedDict):
     retry_safe: Literal[False]
     restored_id: str
     doc: str
+    new_doc: str
     count: int
 
 
@@ -136,7 +137,7 @@ RestoreResult = RestoreSuccess | RestoreFailure | RestoreUncertain
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'restored_id', 'doc', 'count', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'restored_id', 'doc', 'new_doc', 'count', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
@@ -153,6 +154,7 @@ def make_restore_success(restored_id: str, doc: str, count: int) -> RestoreSucce
         "retry_safe": False,
         "restored_id": restored_id,
         "doc": doc,
+        "new_doc": doc,
         "count": count,
     }
 

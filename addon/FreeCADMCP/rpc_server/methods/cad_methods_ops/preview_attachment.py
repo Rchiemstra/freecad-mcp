@@ -69,6 +69,15 @@ def _failure(error: PreviewAttachmentError, *, retry_safe: bool = True) -> Previ
     return make_preview_attachment_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _support_object_name(item: object) -> str:
+    name = object_name(item)
+    if name:
+        return name
+    if isinstance(item, str) and item.strip():
+        return item
+    return ""
+
+
 def _support_entries(datum: object) -> list[dict[str, object]]:
     support = getattr(datum, "AttachmentSupport", None)
     if support is None:
@@ -86,9 +95,9 @@ def _support_entries(datum: object) -> list[dict[str, object]]:
         if isinstance(item, (list, tuple)) and item:
             obj = item[0]
             sub = item[1] if len(item) > 1 else ""
-            entries.append({"object": object_name(obj), "sub": str(sub)})
+            entries.append({"object": _support_object_name(obj), "sub": str(sub), "item": obj})
         else:
-            entries.append({"object": object_name(item), "sub": ""})
+            entries.append({"object": _support_object_name(item), "sub": "", "item": item})
     return entries
 
 
@@ -121,6 +130,62 @@ def _placement_dict(placement: object) -> dict[str, object] | None:
     return {"base": base, "axis": axis, "angle_deg": angle_deg}
 
 
+def _is_body(candidate: object) -> bool:
+    derived = getattr(candidate, "isDerivedFrom", None)
+    if callable(derived):
+        try:
+            if bool(derived("PartDesign::Body")):
+                return True
+        except Exception:
+            pass
+    return str(getattr(candidate, "TypeId", "") or "") == "PartDesign::Body"
+
+
+def _owning_body(obj: object) -> object | None:
+    getter = getattr(obj, "getParentGeoFeatureGroup", None)
+    if callable(getter):
+        try:
+            owner: object | None = getter()
+        except Exception:
+            owner = None
+        if owner is not None and _is_body(owner):
+            located: object = owner
+            return located
+        if owner is not None:
+            nested = _owning_body(owner)
+            if nested is not None:
+                return nested
+    for candidate in getattr(obj, "InList", ()) or ():
+        if not _is_body(candidate):
+            continue
+        located_candidate: object = candidate
+        return located_candidate
+    return None
+
+
+def _placement_is_identity(placement: object) -> bool:
+    base = getattr(placement, "Base", None)
+    if base is None:
+        return True
+    try:
+        length = float(getattr(base, "Length", 0.0))
+    except Exception:
+        try:
+            length = (
+                abs(float(base.x)) + abs(float(base.y)) + abs(float(base.z))
+            )
+        except Exception:
+            return True
+    if length > 1.0e-9:
+        return False
+    rotation = getattr(placement, "Rotation", None)
+    angle = getattr(rotation, "Angle", 0.0) if rotation is not None else 0.0
+    try:
+        return abs(float(angle)) <= 1.0e-9
+    except Exception:
+        return True
+
+
 def _attachment_diagnostics(datum: object) -> dict[str, object]:
     support = _support_entries(datum)
     placement = _placement_dict(getattr(datum, "Placement", None))
@@ -132,7 +197,10 @@ def _attachment_diagnostics(datum: object) -> dict[str, object]:
         support_obj_name = str(first.get("object", ""))
         getter = getattr(datum, "getDocument", None)
         doc = getter() if callable(getter) else None
-        support_obj = doc.getObject(support_obj_name) if doc is not None and hasattr(doc, "getObject") else None
+        live_support = first.get("item")
+        support_obj = live_support if live_support is not None and not isinstance(live_support, str) else None
+        if support_obj is None and doc is not None and hasattr(doc, "getObject") and support_obj_name:
+            support_obj = doc.getObject(support_obj_name)
         if support_obj is not None:
             support_placement = getattr(support_obj, "Placement", None)
             datum_placement = getattr(datum, "Placement", None)
@@ -171,14 +239,53 @@ def _attachment_diagnostics(datum: object) -> dict[str, object]:
                                     normal_angle_deg = None
                 except Exception:
                     pass
-            if getattr(support_obj, "TypeId", "") in {"PartDesign::Body", "App::Part"}:
-                source_body_placement_dropped = datum_placement is None
+            datum_body = _owning_body(datum)
+            support_body = _owning_body(support_obj)
+            datum_body_name = object_name(datum_body) if datum_body is not None else None
+            support_body_name = object_name(support_body) if support_body is not None else None
+            if (
+                datum_body is not None
+                and support_body is not None
+                and datum_body is not support_body
+                and not _placement_is_identity(getattr(support_body, "Placement", None))
+            ):
+                source_body_placement_dropped = True
+            extras = {
+                "datum": object_name(datum),
+                "datum_body": datum_body_name,
+                "support_body": support_body_name,
+                "diff": {
+                    "signed_distance_mm": distance,
+                    "angle_deg": normal_angle_deg,
+                },
+            }
+        else:
+            extras = {
+                "datum": object_name(datum),
+                "datum_body": object_name(_owning_body(datum)),
+                "support_body": None,
+                "diff": {
+                    "signed_distance_mm": distance,
+                    "angle_deg": normal_angle_deg,
+                },
+            }
+    else:
+        extras = {
+            "datum": object_name(datum),
+            "datum_body": object_name(_owning_body(datum)),
+            "support_body": None,
+            "diff": {
+                "signed_distance_mm": distance,
+                "angle_deg": normal_angle_deg,
+            },
+        }
     return {
         "support": support,
         "placement": placement,
         "distance": distance,
         "normal_angle_deg": normal_angle_deg,
         "source_body_placement_dropped": source_body_placement_dropped,
+        **extras,
     }
 
 
@@ -260,6 +367,10 @@ class _PreviewAttachmentExecution:
             distance=extra.get("distance"),
             normal_angle_deg=extra.get("normal_angle_deg"),
             source_body_placement_dropped=extra.get("source_body_placement_dropped"),
+            datum=extra.get("datum"),
+            datum_body=extra.get("datum_body"),
+            support_body=extra.get("support_body"),
+            diff=extra.get("diff"),
         )
 
 

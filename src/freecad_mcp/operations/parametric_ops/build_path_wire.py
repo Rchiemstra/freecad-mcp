@@ -11,6 +11,7 @@ from ..._shared.protocol.build_path_wire_contract import (
 )
 from ...freecad_client import FreeCADConnection
 from ...responses.tool_results import tool_fail, tool_ok
+from ..diagnostics_ops.helpers import keep_historical_extras
 
 
 def build_path_wire_operation(
@@ -28,6 +29,7 @@ def build_path_wire_operation(
             committed=None,
         )
     result = parse_build_path_wire_response(raw_result)
+    result = keep_historical_extras(dict(result), raw_result, ("edge_count", "length_mm"))
     structured = dict(result)
     if result["success"] is False:
         return tool_fail(

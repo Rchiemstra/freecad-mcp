@@ -65,7 +65,8 @@ def test_pad_rejects_a_result_without_a_real_solid(solids: int, volume: float) -
 def test_pocket_rejects_a_result_without_a_real_solid(solids: int, volume: float) -> None:
     doc, pocket = _document("PartDesign::Pocket", _Shape(solids, volume))
     receipt = PocketFeatureReceipt(
-        name="F", pocket=pocket, body_name="Body", sketch_name="Sk", expected_length=5.0
+        name="F", pocket=pocket, body_name="Body", sketch_name="Sk", expected_length=5.0,
+        source_feature="Base", volume_before=16000.0,
     )
 
     with pytest.raises(PocketFeatureError) as caught:
@@ -81,5 +82,8 @@ def test_healthy_results_still_pass() -> None:
     doc, pocket = _document("PartDesign::Pocket", _Shape(1, 15000.0))
     read_pocket_feature_result(
         doc,
-        PocketFeatureReceipt(name="F", pocket=pocket, body_name="Body", sketch_name="Sk", expected_length=5.0),
+        PocketFeatureReceipt(
+            name="F", pocket=pocket, body_name="Body", sketch_name="Sk", expected_length=5.0,
+            source_feature="Base", volume_before=16000.0,
+        ),
     )

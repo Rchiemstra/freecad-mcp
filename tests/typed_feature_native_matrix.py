@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests.native_model_state import model_state
+from tests.native_model_state import model_state, revision_state
 from tests.typed_feature_native_setup import prepare_native_document, run_kwargs
 
 
@@ -19,27 +19,6 @@ def require_native_collaboration() -> None:
 
     if getattr(FreeCAD, "__mcp_test_stub__", False):
         raise RuntimeError("Native qualification requires a real branch-built FreeCAD")
-
-
-def revision_state(document, op: str):
-    keys = [{"kind": "UnknownModelMutation"}, {"kind": "DocumentStructure"}]
-    names = {item.Name for item in document.Objects} | {"RejectedFeature", "TransientSupport"}
-    for name in sorted(names):
-        keys.extend(
-            {"kind": kind, "subject": name} for kind in ("ObjectExistence", "ObjectStructure")
-        )
-        item = document.getObject(name)
-        if item is not None:
-            keys.extend(
-                {"kind": "ObjectProperty", "subject": name, "property_name": prop}
-                for prop in sorted(item.PropertiesList)
-            )
-    session = document.beginEditSession(f"{op}-native-state-probe")
-    try:
-        snapshot = document.snapshotForEdit(session["session_id"], keys)
-        return snapshot["revisions"]
-    finally:
-        document.cancelEdit(session["session_id"])
 
 
 def collaborators(FreeCAD, validator):

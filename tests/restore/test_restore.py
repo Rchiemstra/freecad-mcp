@@ -105,7 +105,7 @@ class _RecomputeFailureDocument(_Document):
 
 
 class _NativeBridgeDocument(_Document):
-    def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None):
+    def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None, recompute=True):
         assert structural is True or structural is False
         before_objects = dict(self.objects)
         before_recomputed = self.recomputed

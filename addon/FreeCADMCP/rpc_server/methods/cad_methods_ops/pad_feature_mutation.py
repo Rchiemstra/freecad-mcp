@@ -35,9 +35,15 @@ except ImportError:  # pragma: no cover - flat addon import path
 class PadFeatureError(RuntimeError):
     """An operation failure whose code survives a confirmed native rollback."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        diagnostics: dict[str, object] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.diagnostics = diagnostics
 
 
 class _AbortPadFeatureMutation(RuntimeError):
@@ -140,6 +146,7 @@ def _pad_feature_native_result(
         native_message=message,
         rollback_succeeded=True if rolled_back else None,
         rollback_failed=False if rolled_back else None,
+        diagnostics=failure.diagnostics if failure is not None else None,
     )
 
 

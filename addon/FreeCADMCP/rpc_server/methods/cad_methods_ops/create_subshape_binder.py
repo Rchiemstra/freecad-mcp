@@ -5,6 +5,7 @@ from __future__ import annotations
 from .typed_rpc_support import (
     as_bool,
     assign_attr,
+    invoke,
     nonempty_string,
     object_label,
     object_name,
@@ -108,6 +109,103 @@ def _resolve_owner(doc: CreateSubshapeBinderDocument, request: CreateSubshapeBin
     return None
 
 
+def _boundbox_values(obj: object) -> tuple[float, float, float, float, float, float] | None:
+    shape = getattr(obj, "Shape", None)
+    box = getattr(shape, "BoundBox", None) if shape is not None else None
+    if box is None:
+        box = getattr(obj, "BoundBox", None)
+    if box is None:
+        return None
+    try:
+        return (
+            float(getattr(box, "XMin", 0.0)),
+            float(getattr(box, "YMin", 0.0)),
+            float(getattr(box, "ZMin", 0.0)),
+            float(getattr(box, "XMax", 0.0)),
+            float(getattr(box, "YMax", 0.0)),
+            float(getattr(box, "ZMax", 0.0)),
+        )
+    except Exception:
+        return None
+
+
+def _sub_element_shape(source: object, sub_elements: object) -> object | None:
+    names: list[str] = []
+    if isinstance(sub_elements, (list, tuple)):
+        names = [str(item) for item in sub_elements if isinstance(item, str) and item]
+    getter = getattr(source, "getSubObject", None)
+    if callable(getter) and names:
+        try:
+            sub = invoke(getter, names[0])
+            if sub is not None:
+                return sub
+        except Exception:
+            pass
+    shape = getattr(source, "Shape", None)
+    if shape is None or not names:
+        return source
+    name = names[0]
+    try:
+        if name.startswith("Face"):
+            faces = list(getattr(shape, "Faces", ()) or ())
+            index = int(name[4:]) - 1
+            return faces[index] if 0 <= index < len(faces) else source
+        if name.startswith("Edge"):
+            edges = list(getattr(shape, "Edges", ()) or ())
+            index = int(name[4:]) - 1
+            return edges[index] if 0 <= index < len(edges) else source
+    except Exception:
+        return source
+    return source
+
+
+def _binder_bbox_extras(doc: CreateSubshapeBinderReadDocument, binder: object) -> dict[str, object]:
+    source = None
+    sub_names: list[str] = []
+    support = getattr(binder, "Support", None)
+    try:
+        values = list(getattr(support, "getValues", lambda: support)() or [])
+    except Exception:
+        values = list(support) if isinstance(support, (list, tuple)) else []
+    if values:
+        first = values[0]
+        candidate = first[0] if isinstance(first, (list, tuple)) and first else first
+        if isinstance(first, (list, tuple)) and len(first) > 1:
+            raw_subs = first[1]
+            if isinstance(raw_subs, str) and raw_subs:
+                sub_names = [raw_subs]
+            elif isinstance(raw_subs, (list, tuple)):
+                sub_names = [str(item) for item in raw_subs if item]
+        source = candidate if candidate is not None and not isinstance(candidate, str) else None
+        if source is None and isinstance(candidate, str):
+            source = doc.getObject(candidate)
+    compare = _sub_element_shape(source, sub_names) if source is not None else None
+    source_bb = _boundbox_values(compare) if compare is not None else None
+    binder_bb = _boundbox_values(binder)
+    delta = None
+    if source_bb is not None and binder_bb is not None:
+        delta = max(abs(left - right) for left, right in zip(source_bb, binder_bb))
+    return {
+        "bbox_delta_mm": None if delta is None else round(delta, 6),
+        "source_bbox": None if source_bb is None else {
+            "xmin": source_bb[0],
+            "ymin": source_bb[1],
+            "zmin": source_bb[2],
+            "xmax": source_bb[3],
+            "ymax": source_bb[4],
+            "zmax": source_bb[5],
+        },
+        "binder_bbox": None if binder_bb is None else {
+            "xmin": binder_bb[0],
+            "ymin": binder_bb[1],
+            "zmin": binder_bb[2],
+            "xmax": binder_bb[3],
+            "ymax": binder_bb[4],
+            "zmax": binder_bb[5],
+        },
+    }
+
+
 def _object_in_owner(located: object, owner: object) -> bool:
     group = list(getattr(owner, "Group", None) or [])
     if located in group:
@@ -141,12 +239,39 @@ def apply_create_subshape_binder(doc: CreateSubshapeBinderDocument, request: Cre
             support = [(source_obj, tuple(sub_elements))]
         else:
             support = [(source_obj, ("",))]
-        assign_attr(created, "Support", support)
+        assigned = False
+        support_prop = getattr(created, "Support", None)
+        setter = getattr(support_prop, "setValues", None)
+        if callable(setter):
+            try:
+                setter([source_obj], [tuple(sub_elements) if sub_elements else ("",)])
+                assigned = True
+            except Exception:
+                assigned = False
+        if not assigned:
+            assign_attr(created, "Support", support)
         assign_attr(created, "Relative", request.relative)
         bind_mode = "Synchronized" if request.sync_placement else "Frozen"
-        assign_attr(created, "BindMode", bind_mode)
+        try:
+            assign_attr(created, "BindMode", bind_mode)
+        except Exception:
+            assign_attr(created, "BindMode", 0 if request.sync_placement else 1)
         if hasattr(created, "TraceSupport"):
             assign_attr(created, "TraceSupport", request.sync_placement)
+        if request.sync_placement:
+            placement = getattr(source_obj, "Placement", None)
+            if placement is not None:
+                try:
+                    assign_attr(created, "Placement", placement)
+                except Exception:
+                    placement = None
+            if placement is None:
+                getter = getattr(source_obj, "getGlobalPlacement", None)
+                if callable(getter):
+                    try:
+                        assign_attr(created, "Placement", getter())
+                    except Exception:
+                        pass
     except CreateSubshapeBinderError:
         raise
     except Exception as exc:
@@ -177,8 +302,9 @@ def read_create_subshape_binder_result(doc: CreateSubshapeBinderReadDocument, re
         )
 
     owner_name = None
-    if isinstance(receipt.extra, dict):
-        owner_name = receipt.extra.get("owner_name")
+    extra = dict(receipt.extra) if isinstance(receipt.extra, dict) else {}
+    if extra:
+        owner_name = extra.get("owner_name")
     if owner_name:
         owner = doc.getObject(str(owner_name))
         if owner is not None and not _object_in_owner(located, owner):
@@ -186,11 +312,11 @@ def read_create_subshape_binder_result(doc: CreateSubshapeBinderReadDocument, re
                 "POSTCONDITION_FAILED",
                 f"Binder is not grouped under owner: {owner_name!r}",
             )
-
+    extra.update(_binder_bbox_extras(doc, located))
     return CreateSubshapeBinderInspection(
         name=CreateSubshapeBinderName(receipt.name),
         label=object_label(located),
-        extra=receipt.extra,
+        extra=extra,
     )
 
 
@@ -277,7 +403,13 @@ class _CreateSubshapeBinderExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_create_subshape_binder_success(binder_name=self.inspected.name)
+        success = dict(make_create_subshape_binder_success(binder_name=self.inspected.name))
+        extra = self.inspected.extra
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                if isinstance(key, str) and key not in success:
+                    success[key] = value
+        return success  # type: ignore[return-value]
 
 
 def run_create_subshape_binder(

@@ -57,6 +57,7 @@ class CreateDatumPlaneReceipt:
     name: str
     item: object | None
     skipped: bool = False
+    host_body_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,10 +66,81 @@ class CreateDatumPlaneInspection:
 
     name: CreateDatumPlaneName
     label: str
+    preflight_warning: str | None = None
 
 
 def _failure(error: CreateDatumPlaneError, *, retry_safe: bool = True) -> CreateDatumPlaneFailure:
     return make_create_datum_plane_failure(error.code, str(error), retry_safe=retry_safe)
+
+
+def _owning_body(obj: object) -> object | None:
+    getter = getattr(obj, "getParentGeoFeatureGroup", None)
+    if callable(getter):
+        try:
+            owner: object | None = getter()
+        except Exception:
+            owner = None
+        if owner is not None:
+            located: object = owner
+            return located
+    for candidate in getattr(obj, "InList", ()) or ():
+        if getattr(candidate, "TypeId", "") == "PartDesign::Body" and obj in getattr(
+            candidate, "Group", ()
+        ):
+            located_candidate: object = candidate
+            return located_candidate
+    return None
+
+
+def _placement_is_identity(placement: object) -> bool:
+    base = getattr(placement, "Base", None)
+    if base is None:
+        return True
+    try:
+        length = float(getattr(base, "Length", 0.0))
+    except Exception:
+        try:
+            length = abs(float(base.x)) + abs(float(base.y)) + abs(float(base.z))
+        except Exception:
+            return True
+    return length <= 1.0e-9
+
+
+def _preflight_warning(plane: object, host_body_name: str) -> str | None:
+    support = getattr(plane, "AttachmentSupport", None)
+    if support is None:
+        support = getattr(plane, "Support", None)
+    entries: list[object] = []
+    try:
+        getter = getattr(support, "getValues", None)
+        if callable(getter):
+            entries = list(getter() or [])
+        elif isinstance(support, Sequence) and not isinstance(support, (str, bytes)):
+            entries = list(support)
+        elif support is not None:
+            entries = [support]
+    except Exception:
+        if isinstance(support, Sequence) and not isinstance(support, (str, bytes)):
+            entries = list(support)
+    for item in entries:
+        support_obj = item[0] if isinstance(item, (list, tuple)) and item else item
+        if support_obj is None:
+            continue
+        support_body = _owning_body(support_obj)
+        support_body_name = str(getattr(support_body, "Name", "") or "")
+        if (
+            support_body is not None
+            and support_body_name
+            and support_body_name != host_body_name
+            and not _placement_is_identity(getattr(support_body, "Placement", None))
+        ):
+            plane_name = str(getattr(plane, "Name", "") or "datum")
+            return (
+                f"PREFLIGHT WARNING: support body {support_body_name} has a "
+                f"non-identity placement; cross-body attachment onto {plane_name} "
+                "may drop that placement"
+            )
+    return None
 
 
 def _body_xy_plane(body: object) -> object | None:
@@ -136,7 +208,12 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
     body = require_object(doc, request.body_name, missing_code="OBJECT_NOT_FOUND", error=CreateDatumPlaneError)
     skipped = resolve_if_exists(doc, request.plane_name, request.if_exists, error=CreateDatumPlaneError)
     if skipped is not None:
-        return CreateDatumPlaneReceipt(name=object_name(skipped) or request.plane_name, item=skipped, skipped=True)
+        return CreateDatumPlaneReceipt(
+            name=object_name(skipped) or request.plane_name,
+            item=skipped,
+            skipped=True,
+            host_body_name=str(request.body_name),
+        )
     factory = getattr(body, "newObject", None)
     if not callable(factory):
         raise CreateDatumPlaneError("INVALID_BODY", "Body must provide newObject")
@@ -197,7 +274,12 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
 
     if hasattr(plane, "Relative"):
         assign_attr(plane, "Relative", True)
-    return CreateDatumPlaneReceipt(name=object_name(plane) or request.plane_name, item=plane, skipped=False)
+    return CreateDatumPlaneReceipt(
+        name=object_name(plane) or request.plane_name,
+        item=plane,
+        skipped=False,
+        host_body_name=str(request.body_name),
+    )
 
 
 def read_create_datum_plane_result(doc: CreateDatumPlaneReadDocument, receipt: CreateDatumPlaneReceipt) -> CreateDatumPlaneInspection:
@@ -216,6 +298,7 @@ def read_create_datum_plane_result(doc: CreateDatumPlaneReadDocument, receipt: C
     return CreateDatumPlaneInspection(
         name=CreateDatumPlaneName(receipt.name),
         label=object_label(located),
+        preflight_warning=_preflight_warning(located, receipt.host_body_name),
     )
 
 
@@ -309,7 +392,11 @@ class _CreateDatumPlaneExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_create_datum_plane_success(plane_name=self.inspected.name, body_name=self.request.body_name)
+        return make_create_datum_plane_success(
+            plane_name=self.inspected.name,
+            body_name=self.request.body_name,
+            preflight_warning=self.inspected.preflight_warning,
+        )
 
 
 def run_create_datum_plane(

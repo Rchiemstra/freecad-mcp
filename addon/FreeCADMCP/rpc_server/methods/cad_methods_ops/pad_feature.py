@@ -64,10 +64,16 @@ class _PadFeatureRequest:
     body_name: str | None
     symmetric: bool
     reversed_dir: bool
+    strict: bool
 
 
 def _failure(error: PadFeatureError, *, retry_safe: bool = True) -> PadFeatureFailure:
-    return make_pad_feature_failure(error.code, str(error), retry_safe=retry_safe)
+    return make_pad_feature_failure(
+        error.code,
+        str(error),
+        retry_safe=retry_safe,
+        diagnostics=error.diagnostics,
+    )
 
 
 def _is_type(obj: object, type_id: str) -> bool:
@@ -100,39 +106,42 @@ def _resolve_body(doc: PadFeatureDocument, sketch: object, body_name: str | None
     )
 
 
+def _profile_diagnostics(sketch: object) -> dict[str, object]:
+    diagnostics: dict[str, object] = {
+        "conflicting": list(getattr(sketch, "ConflictingConstraints", []) or []),
+        "redundant": list(getattr(sketch, "RedundantConstraints", []) or []),
+        "malformed": list(getattr(sketch, "MalformedConstraints", []) or []),
+        "solver_message": getattr(sketch, "SolverMessage", None),
+        "is_closed": None,
+    }
+    try:
+        shape = getattr(sketch, "Shape", None)
+        is_null = getattr(shape, "isNull", None) if shape is not None else None
+        if shape is not None and not (callable(is_null) and is_null()):
+            diagnostics["is_closed"] = bool(shape.isClosed())
+    except Exception:
+        pass
+    return diagnostics
+
+
 def _require_closed_profile(sketch: object, sketch_name: str, *, part: object = None) -> None:
-    conflicting = list(getattr(sketch, "ConflictingConstraints", []) or [])
-    malformed = list(getattr(sketch, "MalformedConstraints", []) or [])
-    if conflicting:
+    diagnostics = _profile_diagnostics(sketch)
+    if (
+        diagnostics["conflicting"]
+        or diagnostics["malformed"]
+        or diagnostics["is_closed"] is not True
+    ):
         raise PadFeatureError(
-            "SKETCH_CONFLICTING_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has conflicting constraints",
+            "SKETCH_PROFILE_NOT_CLOSED",
+            "Sketch profile is not pad-ready",
+            diagnostics=diagnostics,
         )
-    if malformed:
-        raise PadFeatureError(
-            "SKETCH_MALFORMED_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has malformed constraints",
-        )
-    shape = getattr(sketch, "Shape", None)
-    is_closed = getattr(shape, "isClosed", None) if shape is not None else None
-    if callable(is_closed):
-        try:
-            closed = bool(is_closed())
-        except (AttributeError, TypeError, RuntimeError) as exc:
-            raise PadFeatureError(
-                "SKETCH_SHAPE_INVALID",
-                f"Sketch {sketch_name!r} profile shape is invalid: {exc}",
-            ) from exc
-        if not closed:
-            raise PadFeatureError(
-                "SKETCH_PROFILE_NOT_CLOSED",
-                f"Sketch {sketch_name!r} profile is not a closed wire",
-            )
-    crossing = self_intersecting_wire_numbers(shape, part)
+    crossing = self_intersecting_wire_numbers(getattr(sketch, "Shape", None), part)
     if crossing:
         raise PadFeatureError(
             "SKETCH_PROFILE_SELF_INTERSECTING",
             f"Sketch {sketch_name!r} profile wire(s) {crossing} intersect themselves",
+            diagnostics=diagnostics,
         )
 
 
@@ -255,6 +264,7 @@ def build_pad_feature_request(
     body_name: object,
     symmetric: object,
     reversed_dir: object,
+    strict: object = False,
 ) -> _PadFeatureRequest | PadFeatureFailure:
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(PadFeatureError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
@@ -272,6 +282,15 @@ def build_pad_feature_request(
         return _failure(PadFeatureError("INVALID_ARGUMENT", "symmetric must be a boolean"))
     if not isinstance(reversed_dir, bool):
         return _failure(PadFeatureError("INVALID_ARGUMENT", "reversed_dir must be a boolean"))
+    if not isinstance(strict, bool):
+        return _failure(PadFeatureError("INVALID_ARGUMENT", "strict must be a boolean"))
+    if strict and not body_name:
+        return _failure(
+            PadFeatureError(
+                "INVALID_ARGUMENT",
+                f"strict PartDesign mode requires an explicit body_name for pad {pad_name!r}",
+            )
+        )
     return _PadFeatureRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=sketch_name,
@@ -280,6 +299,7 @@ def build_pad_feature_request(
         body_name=body_name,
         symmetric=symmetric,
         reversed_dir=reversed_dir,
+        strict=strict,
     )
 
 
@@ -337,9 +357,10 @@ def run_pad_feature(
     body_name: object = None,
     symmetric: object = False,
     reversed_dir: object = False,
+    strict: object = False,
 ) -> PadFeatureResult:
     request = build_pad_feature_request(
-        doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir
+        doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir, strict
     )
     if isinstance(request, dict):
         return request
@@ -361,6 +382,7 @@ def rpc_pad_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -373,6 +395,7 @@ def rpc_pad_feature(
             body_name,
             symmetric,
             reversed_dir,
+            strict,
         )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}

@@ -40,6 +40,8 @@ class DeleteObjectReceipt:
 
     name: str
     deleted: tuple[str, ...]
+    refused: bool = False
+    dependents: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,21 +66,110 @@ def _as_bool(value: object, *, default: bool = False) -> bool | None:
     return None
 
 
-def _dependents(root: object) -> list[object]:
-    seen: set[int] = set()
-    order: list[object] = []
+def _links(item: object, attribute: str) -> tuple[object, ...]:
+    raw = getattr(item, attribute, ()) or ()
+    if isinstance(raw, (list, tuple)):
+        return tuple(raw)
+    return ()
 
-    def walk(node: object) -> None:
-        for child in getattr(node, "OutList", ()) or ():
-            marker = id(child)
-            if marker in seen:
+
+def _is_derived(item: object, type_id: str) -> bool:
+    derived = getattr(item, "isDerivedFrom", None)
+    if callable(derived):
+        try:
+            return bool(derived(type_id))
+        except Exception:
+            pass
+    return str(getattr(item, "TypeId", "")) == type_id
+
+
+def _owns(container: object, item: object) -> bool:
+    return any(member is item for member in _links(container, "Group"))
+
+
+def _owning_container(item: object) -> object | None:
+    getter = getattr(item, "getParentGeoFeatureGroup", None)
+    if callable(getter):
+        try:
+            owner: object | None = getter()
+        except Exception:
+            owner = None
+        if owner is not None and _owns(owner, item):
+            return owner
+    for candidate in _links(item, "InList"):
+        if _owns(candidate, item):
+            return candidate
+    return None
+
+
+def _ownership_exclusions(container: object | None) -> set[int]:
+    excluded: set[int] = set()
+
+    def mark(item: object) -> None:
+        identity = id(item)
+        if identity in excluded:
+            return
+        excluded.add(identity)
+        for child in _links(item, "OutList"):
+            mark(child)
+
+    origin = getattr(container, "Origin", None) if container is not None else None
+    if origin is not None:
+        mark(origin)
+    return excluded
+
+
+def _object_dependents(root: object) -> list[object]:
+    owner = _owning_container(root)
+    root_is_container = (
+        _is_derived(root, "PartDesign::Body")
+        or _is_derived(root, "App::DocumentObjectGroup")
+        or _is_derived(root, "App::Part")
+    )
+    excluded = _ownership_exclusions(root if root_is_container else owner)
+    if owner is not None:
+        excluded.add(id(owner))
+    seen = {id(root), *excluded}
+    ordered: list[object] = []
+
+    def visit_downstream(item: object, allowed: set[int] | None = None) -> None:
+        identity = id(item)
+        if identity in seen:
+            return
+        seen.add(identity)
+        for dependent in _links(item, "InList"):
+            dependent_id = id(dependent)
+            if dependent_id in seen or (allowed is not None and dependent_id not in allowed):
                 continue
-            seen.add(marker)
-            order.append(child)
-            walk(child)
+            if _owns(dependent, item):
+                seen.add(dependent_id)
+                continue
+            visit_downstream(dependent, allowed)
+        if item is not root:
+            ordered.append(item)
 
-    walk(root)
-    return order
+    if root_is_container:
+        payload = _links(root, "Group") or _links(root, "OutList")
+        payload = tuple(item for item in payload if id(item) not in excluded)
+        allowed = {id(item) for item in payload}
+        for item in payload:
+            visit_downstream(item, allowed)
+    else:
+        seen.remove(id(root))
+        visit_downstream(root)
+    return ordered
+
+
+def _dependent_summary(dependent: object) -> dict[str, object]:
+    return {
+        "name": str(getattr(dependent, "Name", "")),
+        "type": str(getattr(dependent, "TypeId", "?")),
+        "state": str(getattr(dependent, "State", "")),
+    }
+
+
+def _dependents(root: object) -> list[object]:
+    return list(_object_dependents(root))
 
 
 def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObjectReceipt:
@@ -98,31 +189,46 @@ def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObje
     ]
     root_name = str(getattr(obj, "Name", request.object_name))
     if dep_names and not request.recursive and not request.force:
-        raise DeleteObjectError(
-            "DELETE_REFUSED",
-            (
-                f"Refused to delete {root_name}: it has {len(dep_names)} dependent "
-                "object(s) that would be orphaned"
-            ),
-            diagnostics={
-                "dependents": [
-                    {
-                        "name": str(getattr(item, "Name", "")),
-                        "type": str(getattr(item, "TypeId", "")),
-                    }
-                    for item in dependents
-                ]
-            },
+        return DeleteObjectReceipt(
+            name=root_name,
+            deleted=(),
+            refused=True,
+            dependents=tuple(_dependent_summary(item) for item in dependents),
         )
     deleted: list[str] = []
-    if request.recursive:
-        for name in reversed(dep_names):
-            if get_object(doc, name) is not None:
-                remove_object(doc, name)
+    delete_order = [*dep_names, root_name] if request.recursive else [root_name]
+    remaining = [name for name in delete_order if name]
+    # KEEP BOTH: historical GUI order deletes deepest dependents then the
+    # root. The typed container shortcut only removed the Body, which left
+    # sketch/pad behind once MapReversed extras allowed the root to drop.
+    # Try dependents first, then the root, then any leftovers after the
+    # container unsetup.
+    for name in list(remaining):
+        if get_object(doc, name) is None:
+            if name not in deleted:
                 deleted.append(name)
+            continue
+        try:
+            remove_object(doc, name)
+        except Exception:
+            continue
+        if get_object(doc, name) is None and name not in deleted:
+            deleted.append(name)
     if get_object(doc, root_name) is not None:
         remove_object(doc, root_name)
-        deleted.append(root_name)
+        if get_object(doc, root_name) is None and root_name not in deleted:
+            deleted.append(root_name)
+    for name in remaining:
+        if get_object(doc, name) is None:
+            if name not in deleted:
+                deleted.append(name)
+            continue
+        try:
+            remove_object(doc, name)
+        except Exception:
+            continue
+        if get_object(doc, name) is None and name not in deleted:
+            deleted.append(name)
     return DeleteObjectReceipt(name=root_name, deleted=tuple(deleted))
 
 
@@ -188,16 +294,40 @@ class _DeleteObjectExecution:
             str(self.request.doc_name),
             self.apply,
             self.inspect,
+            validate=not self.request.force,
+            recompute=not self.request.force,
         )
         if result is not True:
             return result
+        if self.created is not None and self.created.refused:
+            return make_delete_object_success(
+                ObjectName(self.created.name),
+                [],
+                refused=True,
+                dependents=list(self.created.dependents),
+            )
         if self.inspected is None:
             return make_delete_object_uncertain(
                 "DELETE_OBJECT_COMMITTED_RESPONSE_INVALID",
                 "Native commit completed without an inspected delete result",
                 committed=True,
             )
-        return make_delete_object_success(self.inspected.name, self.inspected.deleted)
+        return make_delete_object_success(
+            self.inspected.name,
+            self.inspected.deleted,
+            refused=False,
+            recompute=(
+                {
+                    "policy": "deferred_recovery",
+                    "required": True,
+                    "message": (
+                        "Run recompute_document after force deletion to settle the document."
+                    ),
+                }
+                if self.request.force
+                else None
+            ),
+        )
 
 
 def run_delete_object(

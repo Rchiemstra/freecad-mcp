@@ -227,11 +227,19 @@ def read_build_path_wire_result(doc: BuildPathWireReadDocument, receipt: BuildPa
     shape = getattr(located, "Shape", None)
     if shape is not None and _wire_is_empty(shape):
         raise BuildPathWireError("CREATED_OBJECT_INVALID", f"Created wire has an empty Shape: {receipt.name!r}")
+    extra = dict(receipt.extra) if isinstance(receipt.extra, dict) else {}
+    if shape is not None:
+        edges = getattr(shape, "Edges", None)
+        extra["edge_count"] = len(edges) if isinstance(edges, (list, tuple)) else 0
+        try:
+            extra["length_mm"] = float(getattr(shape, "Length", 0.0) or 0.0)
+        except Exception:
+            extra["length_mm"] = 0.0
 
     return BuildPathWireInspection(
         name=BuildPathWireName(receipt.name),
         label=object_label(located),
-        extra=receipt.extra,
+        extra=extra,
     )
 
 
@@ -303,7 +311,13 @@ class _BuildPathWireExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_build_path_wire_success(wire_name=self.inspected.name)
+        success = dict(make_build_path_wire_success(wire_name=self.inspected.name))
+        extra = self.inspected.extra
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                if isinstance(key, str) and key not in success:
+                    success[key] = value
+        return success  # type: ignore[return-value]
 
 
 def run_build_path_wire(

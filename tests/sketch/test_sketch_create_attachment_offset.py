@@ -64,9 +64,7 @@ def test_rpc_signature_accepts_attachment_offset():
 
 def test_offset_is_applied_with_the_attachment():
     doc, plane = _document()
-    receipt = subject.apply_sketch_create(
-        doc, "SeatSketch", "Seat", "XY_Plane", object(), attachment_offset=OFFSET, dict_to_placement=_codec
-    )
+    receipt = subject.apply_sketch_create(doc, "SeatSketch", "Seat", "XY_Plane", OFFSET, object(), _codec)
     assert receipt.sketch.AttachmentSupport == [(plane, "")]
     assert receipt.sketch.MapMode == "FlatFace"
     assert receipt.sketch.AttachmentOffset == ("placement", OFFSET)
@@ -88,7 +86,5 @@ def test_non_object_offset_is_rejected():
 def test_missing_placement_codec_is_a_typed_error():
     doc, _plane = _document()
     with pytest.raises(SketchCreateError) as caught:
-        subject.apply_sketch_create(
-            doc, "SeatSketch", "Seat", "XY_Plane", object(), attachment_offset=OFFSET, dict_to_placement=None
-        )
+        subject.apply_sketch_create(doc, "SeatSketch", "Seat", "XY_Plane", OFFSET, object(), None)
     assert caught.value.code == "PLACEMENT_CODEC_UNAVAILABLE"

@@ -129,6 +129,7 @@ class CadCollaborators:
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Delegate generic typed native commits without per-op bridge methods.
 
@@ -140,12 +141,23 @@ class CadCollaborators:
 
         native = getattr(self.compatibility_api, "commit_native_mutation", None)
         if callable(native):
-            return native(
-                document_name,
-                callback,
-                postcondition,
-                structural=structural,
-            )
+            try:
+                return native(
+                    document_name,
+                    callback,
+                    postcondition,
+                    structural=structural,
+                    recompute=recompute,
+                )
+            except TypeError as exc:
+                if "recompute" not in str(exc):
+                    raise
+                return native(
+                    document_name,
+                    callback,
+                    postcondition,
+                    structural=structural,
+                )
         lookup = getattr(self.freecad, "getDocument", None)
         document = lookup(document_name) if callable(lookup) else None
         if document is None:
@@ -154,6 +166,7 @@ class CadCollaborators:
             document_name,
             lambda: callback(document),
             structural=structural,
+            recompute=recompute,
             postcondition=lambda: postcondition(document),
         )
 

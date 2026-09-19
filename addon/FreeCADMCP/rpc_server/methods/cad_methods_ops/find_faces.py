@@ -13,8 +13,8 @@ def run_find_faces(
     doc_name: str,
     object_name: str,
     type: str | None = None,
-    normal_approx: dict[str, float] | list[float] | None = None,
-    center_approx: dict[str, float] | list[float] | None = None,
+    normal_approx: object = None,
+    center_approx: object = None,
     radius: float | None = None,
     tol: float = 1e-3,
     center_tol: float = 1.0,
@@ -33,21 +33,22 @@ def run_find_faces(
     if lookup_object(document, object_name) is None:
         return _failure("OBJECT_NOT_FOUND", "Object not found")
     optional_recompute(collaborators, document)
+    radius_value = None if radius is None else float(radius)
     try:
         payload = diagnostics_shape_actions.find_subshapes(
             document,
             object_name,
             "Faces",
-            type_filter=type,
+            type_filter=type if isinstance(type, str) else None,
             normal_approx=normal_approx,
             center_approx=center_approx,
-            radius=radius,
-            tol=tol,
-            center_tol=center_tol,
-            limit=limit,
+            radius=radius_value,
+            tol=float(tol) if tol is not None else 1e-3,
+            center_tol=float(center_tol) if center_tol is not None else 1.0,
+            limit=int(limit) if limit is not None else 10,
         )
     except Exception as exc:
-        return _failure("FIND_FACES_FAILED", str(exc) or type(exc).__name__)
+        return _failure("FIND_FACES_FAILED", str(exc) or exc.__class__.__name__)
     return {"success": True, "ok": True, "outcome": "observed", "retry_safe": False, **payload}
 
 class _RpcFacade(Protocol):
@@ -59,8 +60,8 @@ def rpc_find_faces(
     doc_name: str,
     object_name: str,
     type: str | None = None,
-    normal_approx: dict[str, float] | list[float] | None = None,
-    center_approx: dict[str, float] | list[float] | None = None,
+    normal_approx: object = None,
+    center_approx: object = None,
     radius: float | None = None,
     tol: float = 1e-3,
     center_tol: float = 1.0,
@@ -68,8 +69,16 @@ def rpc_find_faces(
 ) -> dict[str, object]:
     res = self._dispatch_gui(
         lambda: run_find_faces(
-            self._cad_collaborators, doc_name, object_name,
-            type, normal_approx, center_approx, radius, tol, center_tol, limit,
+            self._cad_collaborators,
+            doc_name,
+            object_name,
+            type,
+            normal_approx,
+            center_approx,
+            radius,
+            tol,
+            center_tol,
+            limit,
         )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}

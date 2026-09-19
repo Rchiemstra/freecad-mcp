@@ -159,7 +159,7 @@ class _RecomputeFailureDocument(_Document):
 class _NativeBridgeDocument(_Document):
     """Document-shaped native binding used through the production bridge."""
 
-    def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None):
+    def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None, recompute=True):
         assert structural is True
         before_objects = dict(self.objects)
         before_tips = _snapshot_tips(self.objects)

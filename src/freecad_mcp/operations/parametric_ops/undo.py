@@ -26,6 +26,12 @@ def undo_operation(
             f"undo response unavailable: {exc}",
             committed=None,
         )
+    if isinstance(raw_result, dict):
+        raw_result = dict(raw_result)
+        # KEEP BOTH: historical GUI success often omits document_name. Fill it
+        # from the request only on verified payloads so rejections stay typed.
+        if raw_result.get("success") is True:
+            raw_result.setdefault("document_name", doc_name)
     result = parse_undo_response(raw_result)
     structured = dict(result)
     if result["success"] is False:

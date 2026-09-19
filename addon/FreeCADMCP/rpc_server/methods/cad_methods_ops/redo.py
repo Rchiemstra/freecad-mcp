@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 try:
     from ...._shared.protocol.redo_contract import (
@@ -104,8 +104,33 @@ class _RedoRpcFacade(Protocol):
 
 def rpc_redo(
     self: _RedoRpcFacade,
-    doc_name: str,
+    doc_name: object,
+    operation_id: object = None,
+    expected_redo_count: object = None,
+    expected_redo_head: object = None,
 ) -> dict[str, object]:
+    if operation_id is not None or not isinstance(doc_name, str):
+        # Lazy native history-head redo. Keep this out of the typed mypy graph:
+        # follow_imports=normal on cad_methods_ops would otherwise typecheck the
+        # untyped recompute_helpers -> cad_mutation -> mutation_readiness chain.
+        if TYPE_CHECKING:
+            def history_redo(
+                rpc: object,
+                doc_selector: object,
+                operation_id: object = None,
+                expected_redo_count: object = None,
+                expected_redo_head: object = None,
+            ) -> dict[str, object]: ...
+        else:
+            from .recompute_helpers import redo as history_redo
+
+        return history_redo(
+            self,
+            doc_name,
+            operation_id,
+            expected_redo_count,
+            expected_redo_head,
+        )
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(lambda: run_redo(collaborators, doc_name))
     return res if isinstance(res, dict) else {"success": False, "error": res}

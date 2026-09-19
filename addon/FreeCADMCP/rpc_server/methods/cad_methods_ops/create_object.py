@@ -88,7 +88,7 @@ def apply_create_object(
             f"Object already exists: {request.object_name!r}",
         )
     created = add_object(doc, str(request.object_type), str(request.object_name))
-    properties = dict(request.properties)
+    properties = _resolve_link_properties(doc, dict(request.properties))
     if properties:
         if set_object_property is not None:
             set_object_property(doc, created, properties)
@@ -127,6 +127,26 @@ def _is_type(obj: object, type_id: str) -> bool:
         except (AttributeError, TypeError):
             pass
     return getattr(obj, "TypeId", None) == type_id
+
+
+def _resolve_link_properties(doc: object, properties: dict[str, object]) -> dict[str, object]:
+    resolved: dict[str, object] = {}
+    for key, value in properties.items():
+        if (
+            isinstance(value, str)
+            and value.strip()
+            and (
+                key in {"LinkedObject", "Base", "Tool", "Source", "Profile", "Support", "Tip"}
+                or key.endswith("Object")
+                or key.endswith("Link")
+            )
+        ):
+            target = get_object(doc, value)
+            if target is not None:
+                resolved[key] = target
+                continue
+        resolved[key] = value
+    return resolved
 
 
 def read_create_object_result(

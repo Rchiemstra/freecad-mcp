@@ -42,6 +42,7 @@ class DeleteObjectCollaborators(Protocol):
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Run the mutation through the generic native transaction policy."""
 
@@ -69,6 +70,9 @@ class DeleteObjectSuccess(TypedDict):
     retry_safe: Literal[False]
     object_name: ObjectName
     deleted: list[str]
+    refused: NotRequired[bool]
+    dependents: NotRequired[list[object]]
+    recompute: NotRequired[object]
 
 
 class DeleteObjectFailure(TypedDict):
@@ -126,14 +130,24 @@ _CORE_KEYS = frozenset(
         "diagnostics",
         "object_name",
         "deleted",
+        "refused",
+        "dependents",
+        "recompute",
     }
 )
 
 
-def make_delete_object_success(object_name: ObjectName, deleted: list[str]) -> DeleteObjectSuccess:
+def make_delete_object_success(
+    object_name: ObjectName,
+    deleted: list[str],
+    *,
+    refused: bool | None = None,
+    dependents: list[object] | None = None,
+    recompute: object | None = None,
+) -> DeleteObjectSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: DeleteObjectSuccess = {
         "contract_version": DELETE_OBJECT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -143,6 +157,13 @@ def make_delete_object_success(object_name: ObjectName, deleted: list[str]) -> D
         "object_name": object_name,
         "deleted": deleted,
     }
+    if refused is not None:
+        result["refused"] = refused
+    if dependents is not None:
+        result["dependents"] = dependents
+    if recompute is not None:
+        result["recompute"] = recompute
+    return result
 
 
 def make_delete_object_failure(
@@ -360,7 +381,15 @@ def parse_delete_object_response(raw_response: object) -> DeleteObjectResult:
     ):
         deleted_names = [item for item in deleted if isinstance(item, str) and item.strip()]
         if len(deleted_names) == len(deleted):
-            return make_delete_object_success(ObjectName(object_name), deleted_names)
+            refused_raw = response.get("refused")
+            dependents_raw = response.get("dependents")
+            return make_delete_object_success(
+                ObjectName(object_name),
+                deleted_names,
+                refused=refused_raw if isinstance(refused_raw, bool) else None,
+                dependents=list(dependents_raw) if isinstance(dependents_raw, list) else None,
+                recompute=response.get("recompute"),
+            )
 
     error_code = response.get("error_code")
     error = response.get("error")

@@ -45,6 +45,7 @@ class _NativeMutationDocument(Protocol):
         *,
         structural: bool = False,
         postcondition: Callable[[], object] | None = None,
+        recompute: bool = True,
     ) -> object: ...
 
 __all__ = ["CollaborationAPI"]
@@ -61,6 +62,17 @@ def _validate_callbacks(
         raise TypeError("callback must be callable")
     if postcondition is not None and not callable(postcondition):
         raise TypeError("postcondition must be callable or None")
+
+
+def _settle_pending_recompute(document: object) -> None:
+    """Clear leftover mustExecute so the next native commit is not Busy."""
+
+    must_execute = getattr(document, "mustExecute", None)
+    if not callable(must_execute) or not must_execute():
+        return
+    recompute = getattr(document, "recompute", None)
+    if callable(recompute):
+        recompute()
 
 
 def _commit_without_native(
@@ -144,6 +156,7 @@ class CollaborationAPI:
                 "document must provide the native Body mutation contract"
             )
 
+        _settle_pending_recompute(document)
         refusals = _CallbackRefusals()
 
         def invoke_callback() -> object:
@@ -184,6 +197,7 @@ class CollaborationAPI:
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Run a typed native mutation with apply and inspect on one document."""
 
@@ -193,6 +207,8 @@ class CollaborationAPI:
                 "document must provide the native typed mutation contract"
             )
 
+        if recompute:
+            _settle_pending_recompute(document)
         refusals = _CallbackRefusals()
 
         def invoke_callback() -> object:
@@ -215,6 +231,7 @@ class CollaborationAPI:
                 invoke_callback,
                 structural=structural,
                 postcondition=invoke_postcondition,
+                recompute=recompute,
             )
         except Exception as exc:
             rejection = refusals.proven_rejection(exc)

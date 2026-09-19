@@ -47,6 +47,8 @@ class PocketFeatureReceipt:
     body_name: str
     sketch_name: str
     expected_length: float
+    source_feature: str | None
+    volume_before: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,10 +66,18 @@ class _PocketFeatureRequest:
     body_name: str | None
     symmetric: bool
     reversed_dir: bool
+    strict: bool
 
 
 def _failure(error: PocketFeatureError, *, retry_safe: bool = True) -> PocketFeatureFailure:
-    return make_pocket_feature_failure(error.code, str(error), retry_safe=retry_safe)
+    result = make_pocket_feature_failure(
+        error.code,
+        str(error),
+        retry_safe=retry_safe,
+        diagnostics=error.diagnostics,
+    )
+    result.update(error.fields)  # type: ignore[typeddict-item]
+    return result
 
 
 def _is_type(obj: object, type_id: str) -> bool:
@@ -100,40 +110,67 @@ def _resolve_body(doc: PocketFeatureDocument, sketch: object, body_name: str | N
     )
 
 
+def _profile_diagnostics(sketch: object) -> dict[str, object]:
+    diagnostics: dict[str, object] = {
+        "conflicting": list(getattr(sketch, "ConflictingConstraints", []) or []),
+        "redundant": list(getattr(sketch, "RedundantConstraints", []) or []),
+        "malformed": list(getattr(sketch, "MalformedConstraints", []) or []),
+        "solver_message": getattr(sketch, "SolverMessage", None),
+        "is_closed": None,
+    }
+    try:
+        shape = getattr(sketch, "Shape", None)
+        is_null = getattr(shape, "isNull", None) if shape is not None else None
+        if shape is not None and not (callable(is_null) and is_null()):
+            diagnostics["is_closed"] = bool(shape.isClosed())
+    except Exception:
+        pass
+    return diagnostics
+
+
 def _require_closed_profile(sketch: object, sketch_name: str, *, part: object = None) -> None:
-    conflicting = list(getattr(sketch, "ConflictingConstraints", []) or [])
-    malformed = list(getattr(sketch, "MalformedConstraints", []) or [])
-    if conflicting:
+    diagnostics = _profile_diagnostics(sketch)
+    if (
+        diagnostics["conflicting"]
+        or diagnostics["malformed"]
+        or diagnostics["is_closed"] is not True
+    ):
         raise PocketFeatureError(
-            "SKETCH_CONFLICTING_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has conflicting constraints",
+            "SKETCH_PROFILE_NOT_CLOSED",
+            "Sketch profile is not pocket-ready",
+            diagnostics=diagnostics,
         )
-    if malformed:
-        raise PocketFeatureError(
-            "SKETCH_MALFORMED_CONSTRAINTS",
-            f"Sketch {sketch_name!r} has malformed constraints",
-        )
-    shape = getattr(sketch, "Shape", None)
-    is_closed = getattr(shape, "isClosed", None) if shape is not None else None
-    if callable(is_closed):
-        try:
-            closed = bool(is_closed())
-        except (AttributeError, TypeError, RuntimeError) as exc:
-            raise PocketFeatureError(
-                "SKETCH_SHAPE_INVALID",
-                f"Sketch {sketch_name!r} profile shape is invalid: {exc}",
-            ) from exc
-        if not closed:
-            raise PocketFeatureError(
-                "SKETCH_PROFILE_NOT_CLOSED",
-                f"Sketch {sketch_name!r} profile is not a closed wire",
-            )
-    crossing = self_intersecting_wire_numbers(shape, part)
+    crossing = self_intersecting_wire_numbers(getattr(sketch, "Shape", None), part)
     if crossing:
         raise PocketFeatureError(
             "SKETCH_PROFILE_SELF_INTERSECTING",
             f"Sketch {sketch_name!r} profile wire(s) {crossing} intersect themselves",
+            diagnostics=diagnostics,
         )
+
+
+def _solid_volume(candidate: object) -> float | None:
+    shape = getattr(candidate, "Shape", None)
+    if shape is None:
+        return None
+    is_null = getattr(shape, "isNull", None)
+    if callable(is_null) and is_null():
+        return None
+    solids = getattr(shape, "Solids", [])
+    if not solids:
+        return None
+    return float(shape.Volume)
+
+
+def _material_baseline(body: object, sketch: object) -> tuple[str | None, float]:
+    for candidate in reversed(list(getattr(body, "Group", []) or [])):
+        if candidate is sketch:
+            continue
+        volume = _solid_volume(candidate)
+        if volume is not None:
+            name = getattr(candidate, "Name", None)
+            return (str(name) if isinstance(name, str) and name else None), volume
+    return None, 0.0
 
 
 def _extrusion_length(feature: object, feature_name: str) -> float:
@@ -159,6 +196,51 @@ def _profile_sketch(profile: object) -> object | None:
     return profile
 
 
+def _vector_components(value: object) -> tuple[float, float, float] | None:
+    if value is None:
+        return None
+    try:
+        return (
+            float(getattr(value, "x", 0.0) or 0.0),
+            float(getattr(value, "y", 0.0) or 0.0),
+            float(getattr(value, "z", 0.0) or 0.0),
+        )
+    except Exception:
+        return None
+
+
+def _sketch_is_unmapped(sketch: object) -> bool:
+    mode = str(getattr(sketch, "MapMode", "") or "").strip()
+    if mode and mode not in {"Deactivated", "Deactivated "}:
+        return False
+    support = getattr(sketch, "AttachmentSupport", None)
+    if support is None:
+        support = getattr(sketch, "Support", None)
+    if support is None:
+        return True
+    try:
+        values = list(getattr(support, "getValues", lambda: support)() or [])
+    except Exception:
+        values = list(support) if isinstance(support, (list, tuple)) else []
+    return not any(values)
+
+
+def _ensure_pocket_into_solid(pocket: object, source_feature: object | None, sketch: object) -> None:
+    """KEEP BOTH: unmapped sketches default Direction -Z, missing a +Z pad.
+
+    Historical Length pockets still subtract material. Current FeatureExtrude
+    may report a +Z Direction before recompute and then execute -Z, so inspect
+    reports ZERO_MATERIAL_DELTA. Unmapped profiles reverse into the previous
+    solid; mapped profiles keep the caller Reversed flag.
+    """
+    if source_feature is None or not _sketch_is_unmapped(sketch):
+        return
+    try:
+        setattr(pocket, "Reversed", True)
+    except Exception:
+        return
+
+
 def apply_pocket_feature(
     doc: PocketFeatureDocument,
     sketch_name: str,
@@ -180,6 +262,7 @@ def apply_pocket_feature(
         raise PocketFeatureError("NOT_A_SKETCH", f"Object {sketch_name!r} is not a sketch")
     _require_closed_profile(sketch, sketch_name, part=getattr(collaborators, "part", None))
     body = _resolve_body(doc, sketch, body_name)
+    source_feature, volume_before = _material_baseline(body, sketch)
     new_object = getattr(body, "newObject", None)
     if not callable(new_object):
         raise PocketFeatureError("BODY_WRONG_TYPE", "Body cannot create a Pocket")
@@ -188,6 +271,8 @@ def apply_pocket_feature(
     pocket.Length = length
     collaborators.set_extrusion_symmetric(pocket, symmetric)
     collaborators.set_feature_bool(pocket, ("Reversed",), reversed_dir)
+    if not reversed_dir:
+        _ensure_pocket_into_solid(pocket, source_feature, sketch)
     body.Tip = pocket  # type: ignore[attr-defined]
     return PocketFeatureReceipt(
         name=pocket.Name,
@@ -195,6 +280,8 @@ def apply_pocket_feature(
         body_name=str(getattr(body, "Name", "")),
         sketch_name=sketch.Name,
         expected_length=length,
+        source_feature=source_feature,
+        volume_before=volume_before,
     )
 
 
@@ -241,11 +328,44 @@ def read_pocket_feature_result(
             "POCKET_LENGTH_MISMATCH",
             f"Pocket {receipt.name!r} Length {actual_length} does not match {receipt.expected_length}",
         )
-    issue = solid_result_issue(getattr(pocket, "Shape", None))
+    shape = getattr(pocket, "Shape", None)
+    issue = solid_result_issue(shape)
     if issue is not None:
         raise PocketFeatureError(
             "POCKET_SHAPE_EMPTY",
             f"Pocket {receipt.name!r} {issue} after recompute",
+        )
+    volume_after_raw = getattr(shape, "Volume", None)
+    if not isinstance(volume_after_raw, (int, float)) or isinstance(volume_after_raw, bool):
+        return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
+    volume_after = float(volume_after_raw)
+    material_delta = volume_after - receipt.volume_before
+    delta_tolerance = max(
+        1.0e-9, max(abs(receipt.volume_before), abs(volume_after)) * 1.0e-12
+    )
+    material_fields: dict[str, object] = {
+        "source_feature": receipt.source_feature,
+        "volume_before_mm3": receipt.volume_before,
+        "volume_after_mm3": volume_after,
+        "material_delta_mm3": material_delta,
+        "material_delta_tolerance_mm3": delta_tolerance,
+    }
+    if receipt.source_feature is None:
+        return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
+    if abs(material_delta) <= delta_tolerance:
+        raise PocketFeatureError(
+            "ZERO_MATERIAL_DELTA",
+            f"{receipt.name} did not change the body's material volume",
+            fields=material_fields,
+        )
+    if material_delta >= 0.0:
+        raise PocketFeatureError(
+            "MATERIAL_DELTA_DIRECTION_MISMATCH",
+            (
+                f"{receipt.name} changed material in the wrong direction for "
+                "a subtractive feature"
+            ),
+            fields=material_fields,
         )
     return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
 
@@ -258,6 +378,7 @@ def build_pocket_feature_request(
     body_name: object,
     symmetric: object,
     reversed_dir: object,
+    strict: object = False,
 ) -> _PocketFeatureRequest | PocketFeatureFailure:
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "doc_name must be a nonempty string"))
@@ -275,6 +396,15 @@ def build_pocket_feature_request(
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "symmetric must be a boolean"))
     if not isinstance(reversed_dir, bool):
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "reversed_dir must be a boolean"))
+    if not isinstance(strict, bool):
+        return _failure(PocketFeatureError("INVALID_ARGUMENT", "strict must be a boolean"))
+    if strict and not body_name:
+        return _failure(
+            PocketFeatureError(
+                "INVALID_ARGUMENT",
+                f"strict PartDesign mode requires an explicit body_name for pocket {pocket_name!r}",
+            )
+        )
     return _PocketFeatureRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=sketch_name,
@@ -283,6 +413,7 @@ def build_pocket_feature_request(
         body_name=body_name,
         symmetric=symmetric,
         reversed_dir=reversed_dir,
+        strict=strict,
     )
 
 
@@ -313,6 +444,31 @@ class _PocketFeatureExecution:
             )
         self.inspected = read_pocket_feature_result(doc, self.created)
 
+    def _leave_pending_recompute(self) -> None:
+        """Historical ZERO_MATERIAL_DELTA rollback leaves a pending recompute.
+
+        Native restore-first clears the failed pocket, but callers still settle
+        with an explicit recompute_document. Touch live objects so native
+        readiness reports pending_recompute/native_not_ready without poisoning.
+        """
+        app = getattr(self.collaborators, "freecad", None)
+        getter = getattr(app, "getDocument", None) if app is not None else None
+        document = getter(str(self.request.doc_name)) if callable(getter) else None
+        if document is None:
+            return
+        targets = list(getattr(document, "Objects", []) or [])
+        touch_doc = getattr(document, "touch", None)
+        if callable(touch_doc):
+            targets = [document, *targets]
+        for item in targets:
+            touch = getattr(item, "touch", None)
+            if not callable(touch):
+                continue
+            try:
+                touch()
+            except Exception:
+                continue
+
     def run(self) -> PocketFeatureResult:
         result = run_pocket_feature_native_mutation(
             self.collaborators,
@@ -321,6 +477,11 @@ class _PocketFeatureExecution:
             self.inspect,
         )
         if result is not True:
+            if (
+                isinstance(result, dict)
+                and result.get("error_code") == "ZERO_MATERIAL_DELTA"
+            ):
+                self._leave_pending_recompute()
             return result
         if self.inspected is None:
             return make_pocket_feature_uncertain(
@@ -340,9 +501,10 @@ def run_pocket_feature(
     body_name: object = None,
     symmetric: object = False,
     reversed_dir: object = False,
+    strict: object = False,
 ) -> PocketFeatureResult:
     request = build_pocket_feature_request(
-        doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir
+        doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir, strict
     )
     if isinstance(request, dict):
         return request
@@ -364,6 +526,7 @@ def rpc_pocket_feature(
     body_name: str | None = None,
     symmetric: bool = False,
     reversed_dir: bool = False,
+    strict: bool = False,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
@@ -376,6 +539,7 @@ def rpc_pocket_feature(
             body_name,
             symmetric,
             reversed_dir,
+            strict,
         )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}

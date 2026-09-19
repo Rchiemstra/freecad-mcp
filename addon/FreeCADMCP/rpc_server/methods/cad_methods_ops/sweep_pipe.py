@@ -189,6 +189,118 @@ def _try_make_solid(shape: object) -> object:
     return shape
 
 
+def _fuse_shapes(shapes: list[object]) -> object | None:
+    fused: object | None = None
+    for shape in shapes:
+        if shape is None or _shape_is_null(shape):
+            continue
+        if fused is None:
+            fused = shape
+            continue
+        fuse = getattr(fused, "fuse", None)
+        if not callable(fuse):
+            return None
+        try:
+            fused = invoke(fuse, shape)
+        except Exception:
+            return None
+    return fused
+
+
+def _edge_endpoints(edge: object) -> tuple[object, object] | None:
+    verts = list(getattr(edge, "Vertexes", None) or [])
+    if len(verts) >= 2:
+        start = getattr(verts[0], "Point", None)
+        end = getattr(verts[1], "Point", None)
+        if start is not None and end is not None:
+            return start, end
+    value_at = getattr(edge, "valueAt", None)
+    first = getattr(edge, "FirstParameter", None)
+    last = getattr(edge, "LastParameter", None)
+    if callable(value_at) and first is not None and last is not None:
+        try:
+            start = invoke(value_at, first)
+            end = invoke(value_at, last)
+        except Exception:
+            return None
+        if start is not None and end is not None:
+            return start, end
+    return None
+
+
+def _cylinders_along_path(part: object, path_wire: object, radius: float) -> object | None:
+    make_cylinder = getattr(part, "makeCylinder", None)
+    if not callable(make_cylinder):
+        return None
+    solids: list[object] = []
+    for edge in list(getattr(path_wire, "Edges", None) or []):
+        ends = _edge_endpoints(edge)
+        if ends is None:
+            continue
+        start, end = ends
+        sub = getattr(end, "sub", None)
+        if not callable(sub):
+            continue
+        try:
+            direction = invoke(sub, start)
+        except Exception:
+            continue
+        length = getattr(direction, "Length", None)
+        if not isinstance(length, (int, float)) or isinstance(length, bool) or float(length) <= 0.0:
+            continue
+        try:
+            cylinder = invoke(make_cylinder, radius, float(length), start, direction)
+        except Exception:
+            continue
+        if cylinder is not None:
+            solids.append(cylinder)
+    return _fuse_shapes(solids)
+
+
+def _tubes_along_path(part: object, path_wire: object, radius: float) -> object | None:
+    make_tube = getattr(part, "makeTube", None)
+    if not callable(make_tube):
+        return None
+    tubes: list[object] = []
+    for edge in list(getattr(path_wire, "Edges", None) or []):
+        try:
+            tube = invoke(make_tube, edge, radius)
+        except Exception:
+            continue
+        if tube is not None:
+            tubes.append(tube)
+    return _fuse_shapes(tubes)
+
+
+def _circle_profile_at_path_start(part: object, path_wire: object, radius: float) -> object | None:
+    make_circle = getattr(part, "makeCircle", None)
+    wire_cls = getattr(part, "Wire", None)
+    if not callable(make_circle) or not callable(wire_cls):
+        return None
+    edges = list(getattr(path_wire, "Edges", None) or [])
+    if not edges:
+        return None
+    edge = edges[0]
+    ends = _edge_endpoints(edge)
+    center = ends[0] if ends is not None else None
+    tangent_at = getattr(edge, "tangentAt", None)
+    first = getattr(edge, "FirstParameter", None)
+    normal = None
+    if callable(tangent_at) and first is not None:
+        try:
+            normal = invoke(tangent_at, first)
+        except Exception:
+            normal = None
+    try:
+        if center is not None and normal is not None:
+            circle = invoke(make_circle, radius, center, normal)
+        else:
+            circle = invoke(make_circle, radius)
+        return invoke(wire_cls, [circle])
+    except Exception:
+        return None
+
+
 def _make_pipe_solid(path_wire: object, diameter_mm: float) -> object | None:
     try:
         part = load_module("Part")
@@ -220,13 +332,17 @@ def _make_pipe_solid(path_wire: object, diameter_mm: float) -> object | None:
 
     make_tube_fn = getattr(part, "makeTube", None)
     if callable(make_tube_fn):
-        for args in ((radius, path_wire), (radius, 0.0, path_wire)):
+        for args in (
+            (radius, path_wire),
+            (radius, 0.0, path_wire),
+            (path_wire, radius),
+        ):
             try:
                 solid = consider(invoke(make_tube_fn, *args))
                 if solid is not None:
                     return solid
-            except Exception as exc:
-                last_exc = exc
+            except Exception as extra_exc:
+                last_exc = extra_exc
 
     make_pipe = getattr(path_wire, "makePipe", None)
     if callable(make_pipe):
@@ -238,10 +354,44 @@ def _make_pipe_solid(path_wire: object, diameter_mm: float) -> object | None:
                     solid = consider(invoke(make_pipe, profile_arg))
                     if solid is not None:
                         return solid
-                except Exception as exc:
-                    last_exc = exc
-        except Exception as exc:
-            last_exc = exc
+                except Exception as extra_exc:
+                    last_exc = extra_exc
+        except Exception as extra_exc:
+            last_exc = extra_exc
+
+    try:
+        solid = consider(_cylinders_along_path(part, path_wire, radius))
+        if solid is not None:
+            return solid
+    except Exception as extra_exc:
+        last_exc = extra_exc
+
+    make_pipe_shell = getattr(path_wire, "makePipeShell", None)
+    if callable(make_pipe_shell):
+        try:
+            profile = _circle_profile_at_path_start(part, path_wire, radius)
+            if profile is not None:
+                pipe_shell_args: tuple[object, ...]
+                for pipe_shell_args in (
+                    ([profile],),
+                    ([profile], True, True),
+                    ([profile], True, False),
+                ):
+                    try:
+                        solid = consider(invoke(make_pipe_shell, *pipe_shell_args))
+                        if solid is not None:
+                            return solid
+                    except Exception as extra_exc:
+                        last_exc = extra_exc
+        except Exception as extra_exc:
+            last_exc = extra_exc
+
+    try:
+        solid = consider(_tubes_along_path(part, path_wire, radius))
+        if solid is not None:
+            return solid
+    except Exception as extra_exc:
+        last_exc = extra_exc
 
     if hollow_fallback is not None:
         return hollow_fallback
@@ -310,11 +460,17 @@ def read_sweep_pipe_result(doc: SweepPipeReadDocument, receipt: SweepPipeReceipt
     shape = getattr(located, "Shape", None)
     if shape is not None and not _solid_has_volume(shape):
         raise SweepPipeError("CREATED_OBJECT_INVALID", f"Created solid has no volume: {receipt.name!r}")
+    extra = dict(receipt.extra) if isinstance(receipt.extra, dict) else {}
+    if shape is not None:
+        try:
+            extra["volume_mm3"] = float(getattr(shape, "Volume", 0.0) or 0.0)
+        except Exception:
+            extra["volume_mm3"] = 0.0
 
     return SweepPipeInspection(
         name=SweepPipeName(receipt.name),
         label=object_label(located),
-        extra=receipt.extra,
+        extra=extra,
     )
 
 
@@ -403,7 +559,13 @@ class _SweepPipeExecution:
                 "Native commit completed without an inspected result",
                 committed=True,
             )
-        return make_sweep_pipe_success(solid_name=self.inspected.name)
+        success = dict(make_sweep_pipe_success(solid_name=self.inspected.name))
+        extra = self.inspected.extra
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                if isinstance(key, str) and key not in success:
+                    success[key] = value
+        return success  # type: ignore[return-value]
 
 
 def run_sweep_pipe(

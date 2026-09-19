@@ -53,7 +53,7 @@ def _document(*, tip: object | None):
 def test_body_face_resolves_to_tip_face():
     pad = SimpleNamespace(Name="SeatPad", TypeId="PartDesign::Pad")
     doc = _document(tip=pad)
-    receipt = subject.apply_sketch_create(doc, "ScrewSketch", "Seat", "Seat:Face6", object())
+    receipt = subject.apply_sketch_create(doc, "ScrewSketch", "Seat", "Seat:Face6", None, object(), None)
     assert receipt.sketch.AttachmentSupport == [(pad, "Face6")]
     assert receipt.sketch.MapMode == "FlatFace"
 
@@ -61,12 +61,12 @@ def test_body_face_resolves_to_tip_face():
 def test_feature_face_is_unchanged():
     pad = SimpleNamespace(Name="SeatPad", TypeId="PartDesign::Pad")
     doc = _document(tip=pad)
-    receipt = subject.apply_sketch_create(doc, "ScrewSketch", "Seat", "SeatPad:Face6", object())
+    receipt = subject.apply_sketch_create(doc, "ScrewSketch", "Seat", "SeatPad:Face6", None, object(), None)
     assert receipt.sketch.AttachmentSupport == [(pad, "Face6")]
 
 
 def test_body_without_tip_is_refused_instead_of_creating_a_cycle():
     doc = _document(tip=None)
     with pytest.raises(SketchCreateError) as caught:
-        subject.apply_sketch_create(doc, "ScrewSketch", "Seat", "Seat:Face6", object())
+        subject.apply_sketch_create(doc, "ScrewSketch", "Seat", "Seat:Face6", None, object(), None)
     assert caught.value.code == "SUPPORT_NOT_FOUND"

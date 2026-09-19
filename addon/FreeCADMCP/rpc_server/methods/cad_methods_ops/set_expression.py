@@ -97,10 +97,81 @@ def _expression_matches(bound: object, requested: str) -> bool:
     bound_text = str(bound)
     if bound_text == requested:
         return True
-    return _normalize_expression(bound_text) == _normalize_expression(requested)
+    if _normalize_expression(bound_text) == _normalize_expression(requested):
+        return True
+    compact_bound = bound_text.replace(" ", "").replace("<<", "<<").strip()
+    compact_requested = requested.replace(" ", "").strip()
+    return compact_bound == compact_requested
+
+
+def _expression_engine_bindings(item: object) -> dict[str, str]:
+    engine = getattr(item, "ExpressionEngine", None)
+    bindings: dict[str, str] = {}
+    if not engine:
+        return bindings
+    try:
+        pairs = list(engine)
+    except Exception:
+        return bindings
+    for entry in pairs:
+        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+            continue
+        name, expr = entry[0], entry[1]
+        if isinstance(name, str) and name:
+            bindings[name] = str(expr)
+    return bindings
+
+
+def _constraint_expression_keys(item: object, prop_path: str) -> list[str]:
+    keys = [prop_path, f".{prop_path}", prop_path.lstrip(".")]
+    if not _is_expression_engine_path(prop_path):
+        return keys
+    stripped = prop_path.strip()
+    try:
+        index = int(stripped[len("Constraints[") : -1])
+    except Exception:
+        return keys
+    constraints = getattr(item, "Constraints", None) or []
+    if not isinstance(constraints, (list, tuple)) or not (0 <= index < len(constraints)):
+        return keys
+    name = getattr(constraints[index], "Name", "")
+    if isinstance(name, str) and name.strip():
+        keys.extend(
+            [
+                f".Constraints.{name}",
+                f"Constraints.{name}",
+                name,
+            ]
+        )
+    return keys
+
+
+def _expression_bound(item: object, prop_path: str) -> object:
+    getter = getattr(item, "getExpression", None)
+    keys = _constraint_expression_keys(item, prop_path)
+    if callable(getter):
+        for key in keys:
+            try:
+                bound = getter(key)
+            except Exception:
+                bound = None
+            if bound is not None and str(bound).strip():
+                return bound
+    bindings = _expression_engine_bindings(item)
+    for key in keys:
+        if key in bindings:
+            return bindings[key]
+    return None
+
+
+def _is_expression_engine_path(prop_path: str) -> bool:
+    stripped = prop_path.strip()
+    return stripped.startswith("Constraints[") and stripped.endswith("]")
 
 
 def _has_expression_property(item: object, prop_path: str) -> bool:
+    if _is_expression_engine_path(prop_path):
+        return True
     properties = getattr(item, "PropertiesList", None)
     if isinstance(properties, (list, tuple)) and prop_path in properties:
         return True
@@ -193,27 +264,14 @@ def read_set_expression_result(doc: SetExpressionReadDocument, receipt: SetExpre
                 f"Expression helper is missing: {receipt.extra!r}",
             )
         binding_target = helper
-    getter = getattr(binding_target, "getExpression", None)
-    if callable(getter):
-        bound = getter(receipt.prop_path)
-        if not _expression_matches(bound, receipt.expression):
-            raise SetExpressionError(
-                "EXPRESSION_ERROR",
-                f"Expression on {receipt.prop_path!r} does not match the requested value",
-            )
-    else:
-        engine = getattr(binding_target, "ExpressionEngine", None)
-        if engine:
-            bindings = {
-                str(name): str(expr)
-                for name, expr in engine
-                if isinstance(name, str)
-            }
-            if not _expression_matches(bindings.get(receipt.prop_path), receipt.expression):
-                raise SetExpressionError(
-                    "EXPRESSION_ERROR",
-                    f"Expression on {receipt.prop_path!r} does not match the requested value",
-                )
+    bound = _expression_bound(binding_target, receipt.prop_path)
+    if not _expression_matches(bound, receipt.expression) and binding_target is not located:
+        bound = _expression_bound(located, receipt.prop_path)
+    if not _expression_matches(bound, receipt.expression):
+        raise SetExpressionError(
+            "EXPRESSION_ERROR",
+            f"Expression on {receipt.prop_path!r} does not match the requested value",
+        )
 
     extra = receipt.extra
 

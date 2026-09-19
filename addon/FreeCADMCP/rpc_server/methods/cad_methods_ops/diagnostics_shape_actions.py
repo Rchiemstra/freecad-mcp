@@ -69,10 +69,10 @@ def _row_number(row: dict[str, object], field: str) -> float:
 
 
 _SUBSHAPE_TYPE_ALIASES = {
-    "planar": "Plane", "plane": "Plane",
+    "planar": "Plane", "plane": "Plane", "geomplane": "Plane",
     "cylinder": "Cylinder", "cylindrical": "Cylinder",
     "cone": "Cone", "sphere": "Sphere", "toroidal": "Toroid", "toroid": "Toroid",
-    "line": "Line", "circle": "Circle", "arc": "Circle", "ellipse": "Ellipse",
+    "line": "Line", "circle": "Circle", "geomcircle": "Circle", "arc": "Circle", "ellipse": "Ellipse",
     "bspline": "BSplineCurve", "bezier": "BezierCurve",
 }
 
@@ -90,6 +90,14 @@ def _subshape_type(sub: object) -> str:
     # type(...).__name__ is the bare geometry class ('Plane', 'Line'); str() renders '<Plane object>'.
     geometry = _subshape_geometry(sub)
     return type(geometry).__name__ if geometry is not None else ""
+
+
+def _subshape_geom_type(sub: object, fallback: str) -> str:
+    """FreeCAD geometry TypeId without its module prefix (e.g. ``GeomPlane``)."""
+    type_id = getattr(_subshape_geometry(sub), "TypeId", None)
+    if isinstance(type_id, str) and type_id.strip():
+        return type_id.split("::")[-1].strip()
+    return fallback
 
 
 def _subshape_direction(sub: object) -> object | None:
@@ -159,7 +167,7 @@ def find_subshapes(
         if isinstance(point, dict):
             return _vector(float(point.get("x", 0.0)), float(point.get("y", 0.0)), float(point.get("z", 0.0)))
         if isinstance(point, (list, tuple)):
-            return _vector(float(point[0]), float(point[1]), float(point[2]))
+            return _vector(float(point[0]), float(point[1]), float(point[2] if len(point) > 2 else 0.0))
         return None
 
     nv = to_vec(normal_approx)
@@ -197,6 +205,7 @@ def find_subshapes(
             {
                 "sub": f"{kind_singular}{index}",
                 "type": sub_type,
+                "geom_type": _subshape_geom_type(sub, sub_type),
                 "global_center": _vec(center),
                 "global_normal": _vec(direction),
                 "radius": round(sub_radius, 6) if sub_radius is not None else None,
@@ -223,8 +232,10 @@ def find_subshapes(
 def diagnose_pocket(document: object, pocket_name: str) -> dict[str, object]:
     obj = require_object(document, pocket_name)
     shape = getattr(obj, "Shape", None)
+    shape_null = shape is None or getattr(shape, "isNull", lambda: True)()
     bbox = None
-    if shape is not None and not getattr(shape, "isNull", lambda: True)():
+    volume = None
+    if not shape_null:
         try:
             box = getattr(shape, "BoundBox", None)
             bbox = {
@@ -237,15 +248,40 @@ def diagnose_pocket(document: object, pocket_name: str) -> dict[str, object]:
             }
         except Exception:
             bbox = None
+        try:
+            volume = float(getattr(shape, "Volume", 0.0))
+        except Exception:
+            volume = None
     faces = getattr(shape, "Faces", None) if shape is not None else None
     face_count = len(faces) if isinstance(faces, (list, tuple)) else None
+    length_value = getattr(obj, "Length", 0.0)
+    try:
+        length = float(length_value)
+    except Exception:
+        length = 0.0
+    direction_value = getattr(obj, "Direction", None)
+    if direction_value is None:
+        direction_value = getattr(obj, "Dir", None)
+    direction = _vec(direction_value) or {"x": 0.0, "y": 0.0, "z": 0.0}
+    profile_value = getattr(obj, "Profile", None)
+    profile: object | None = None
+    if isinstance(profile_value, (list, tuple)) and profile_value:
+        first = profile_value[0]
+        profile = str(getattr(first, "Name", first))
+    elif profile_value is not None:
+        profile = str(getattr(profile_value, "Name", profile_value))
     return {
         "ok": True,
         "pocket": pocket_name,
         "type_id": str(getattr(obj, "TypeId", "")),
-        "shape_null": shape is None or getattr(shape, "isNull", lambda: True)(),
+        "shape_null": shape_null,
         "bbox": bbox,
         "face_count": face_count,
+        "reversed": bool(getattr(obj, "Reversed", False)),
+        "length": length,
+        "direction": direction,
+        "profile": profile,
+        "volume": volume,
     }
 
 
@@ -604,18 +640,102 @@ def match_subshape(
     }
 
 
+def _rotation_dict(rotation: object) -> dict[str, float] | None:
+    if rotation is None:
+        return None
+    try:
+        return {
+            "x": round(float(getattr(rotation, "x", 0.0)), 6),
+            "y": round(float(getattr(rotation, "y", 0.0)), 6),
+            "z": round(float(getattr(rotation, "z", 0.0)), 6),
+            "angle_deg": round(float(getattr(rotation, "Angle", 0.0)), 6),
+        }
+    except Exception:
+        return None
+
+
+def _parent_body(obj: object) -> object | None:
+    seen: set[int] = set()
+
+    def walk(candidate: object | None) -> object | None:
+        if candidate is None:
+            return None
+        identity = id(candidate)
+        if identity in seen:
+            return None
+        seen.add(identity)
+        type_id = str(getattr(candidate, "TypeId", ""))
+        if type_id in {"PartDesign::Body", "App::Part"}:
+            return candidate
+        for parent in getattr(candidate, "InList", []) or []:
+            found = walk(parent)
+            if found is not None:
+                return found
+        return None
+
+    return walk(obj)
+
+
+def _support_objects(obj: object) -> list[object]:
+    support = getattr(obj, "AttachmentSupport", None)
+    if support is None:
+        support = getattr(obj, "Support", None)
+    if support is None:
+        return []
+    try:
+        values = list(getattr(support, "getValues", lambda: support)() or [])
+    except Exception:
+        values = list(support) if isinstance(support, (list, tuple)) else []
+    found: list[object] = []
+    for item in values:
+        if item is None:
+            continue
+        if isinstance(item, (list, tuple)) and item:
+            found.append(item[0])
+        else:
+            found.append(item)
+    return found
+
+
 def placement_audit(document: object) -> dict[str, object]:
+    cross_by_body: dict[str, list[dict[str, object]]] = {}
+    for obj in getattr(document, "Objects", []) or []:
+        owner = _parent_body(obj)
+        if owner is None:
+            continue
+        owner_name = str(getattr(owner, "Name", ""))
+        for support in _support_objects(obj):
+            support_body = _parent_body(support)
+            support_body_name = str(getattr(support_body, "Name", "")) if support_body is not None else ""
+            if support_body is not None and support_body_name and support_body_name != owner_name:
+                cross_by_body.setdefault(support_body_name, []).append(
+                    {
+                        "datum": str(getattr(obj, "Name", "")),
+                        "datum_body": owner_name,
+                        "support": str(getattr(support, "Name", support)),
+                    }
+                )
     bodies: list[dict[str, object]] = []
     for obj in getattr(document, "Objects", []) or []:
         type_id = str(getattr(obj, "TypeId", ""))
-        if "Body" not in type_id and "Part" not in type_id:
+        if type_id not in {"PartDesign::Body", "App::Part"}:
             continue
         placement = getattr(obj, "Placement", None)
+        global_base = None
+        try:
+            global_placement = read_global_placement(obj)
+            global_base = getattr(global_placement, "Base", None) if global_placement is not None else None
+        except Exception:
+            global_base = None
+        name = str(getattr(obj, "Name", ""))
         bodies.append(
             {
-                "name": str(getattr(obj, "Name", "")),
+                "name": name,
                 "type": type_id,
                 "placement_base": _vec(getattr(placement, "Base", None)) if placement else None,
+                "placement_rotation": _rotation_dict(getattr(placement, "Rotation", None)) if placement else None,
+                "global_placement_base": _vec(global_base),
+                "cross_body_datums": cross_by_body.get(name, []),
             }
         )
     return {"ok": True, "doc": str(getattr(document, "Name", "")), "bodies": bodies}

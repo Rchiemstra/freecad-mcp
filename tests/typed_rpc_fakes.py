@@ -13,6 +13,8 @@ class FakeObject:
         self.Label = name
         self.TypeId = type_id
         self.OutList: list[FakeObject] = []
+        self.InList: list[FakeObject] = []
+        self.Group: list[FakeObject] = []
         self.PropertiesList = ["Label"]
         self._prop_types: dict[str, str] = {"Label": "App::PropertyString"}
 
@@ -131,7 +133,7 @@ class CompatibilityAPI:
         return {"status": "Committed", "committed": True}
 
     def commit_native_mutation(
-        self, document_name, callback, postcondition, *, structural=True
+        self, document_name, callback, postcondition, *, structural=True, recompute=True
     ):
         return self.commit_compatibility_mutation(
             document_name,

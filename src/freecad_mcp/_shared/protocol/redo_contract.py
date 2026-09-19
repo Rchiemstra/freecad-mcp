@@ -63,6 +63,7 @@ class RedoSuccess(TypedDict):
     outcome: Literal["verified"]
     retry_safe: Literal[False]
     document_name: DocumentName
+    operation_id: NotRequired[str]
 
 
 class RedoFailure(TypedDict):
@@ -327,7 +328,36 @@ def _invalid_response(response: dict[str, object]) -> RedoUncertain:
     )
 
 
-def parse_redo_response(raw_response: object) -> RedoResult:
+def _historical_verified_success(
+    response: dict[str, object],
+    fallback_document_name: str | None,
+) -> RedoSuccess | None:
+    """Accept historical GUI/live-fixture success plus the typed envelope."""
+
+    if response.get("success") is not True or response.get("ok") is False:
+        return None
+    if response.get("error") not in (None, ""):
+        return None
+    if response.get("error_code") not in (None, ""):
+        return None
+    operation_id = response.get("operation_id")
+    if not isinstance(operation_id, str) or not operation_id.strip():
+        return None
+    document_name = response.get("document_name")
+    if not isinstance(document_name, str) or not document_name.strip():
+        selector = response.get("selector")
+        if isinstance(selector, dict):
+            document_name = selector.get("document_name")
+    if not isinstance(document_name, str) or not document_name.strip():
+        document_name = fallback_document_name
+    if not isinstance(document_name, str) or not document_name.strip():
+        return None
+    result = make_redo_success(DocumentName(document_name))
+    result["operation_id"] = operation_id
+    return result
+
+
+def parse_redo_response(raw_response: object, *, document_name: str | None = None) -> RedoResult:
     """Validate all three wire variants; unknown state always stays uncertain."""
     response = _response_object(raw_response)
     if response is None:
@@ -338,16 +368,21 @@ def parse_redo_response(raw_response: object) -> RedoResult:
         )
     version = response.get("contract_version")
     details = _response_details(response)
+    historical = _historical_verified_success(response, document_name)
+    if historical is not None and (
+        type(version) is not int or version != REDO_CONTRACT_VERSION or details is None
+    ):
+        return historical
     if type(version) is not int or version != REDO_CONTRACT_VERSION or details is None:
         return _invalid_response(response)
 
-    document_name = response.get('document_name')
+    response_document_name = response.get("document_name")
     if (
         _valid_success(response)
-        and isinstance(document_name, str)
-        and document_name.strip()
+        and isinstance(response_document_name, str)
+        and response_document_name.strip()
     ):
-        return make_redo_success(DocumentName(document_name))
+        return make_redo_success(DocumentName(response_document_name))
 
     error_code = response.get("error_code")
     error = response.get("error")

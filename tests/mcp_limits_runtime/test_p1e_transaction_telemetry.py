@@ -261,6 +261,9 @@ def test_run_transaction_mcp_returns_retired_only() -> None:
 
 
 def test_validate_movement_follow_rejects_without_mutating() -> None:
+    # main restored the public read-only JSON-RPC route (c59fbc8): the call reaches
+    # FreeCAD's validate_movement_follow, never execute_code, and a malformed reply
+    # is an error rather than a success.
     conn = MagicMock()
 
     response = validate_movement_follow_operation(
@@ -276,7 +279,7 @@ def test_validate_movement_follow_rejects_without_mutating() -> None:
 
     assert response.isError is True
     envelope = response.structuredContent
-    assert envelope["data"]["error_code"] == "UNSUPPORTED_NATIVE_PHASE_BOUNDARY"
-    conn.validate_movement_follow.assert_not_called()
+    assert envelope["data"]["error_code"] == "INVALID_RPC_RESPONSE"
+    conn.validate_movement_follow.assert_called_once()
     conn.execute_code.assert_not_called()
     _assert_typed_no_campaign_transaction(envelope)
