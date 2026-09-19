@@ -102,6 +102,15 @@ def set_feature_bool(feature: object, names: Sequence[str], value: bool) -> str 
     return None
 
 
+def set_revolution_symmetric(feature: object, value: bool) -> str | None:
+    """Set a symmetric revolution on builds with ``SideType`` or the legacy boolean."""
+    properties = set(getattr(feature, "PropertiesList", []))
+    if "SideType" in properties:
+        set_attr(feature, "SideType", "Symmetric" if value else "One side")
+        return "SideType"
+    return set_feature_bool(feature, ("Symmetric", "Midplane"), value)
+
+
 def set_originals(feature: object, source: object) -> str:
     properties = set(getattr(feature, "PropertiesList", []))
     if not properties or "Originals" in properties:

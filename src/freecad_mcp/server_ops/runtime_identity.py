@@ -102,8 +102,10 @@ def identity_compatibility(
     mcp_compiled: dict[str, Any],
     addon_compiled: dict[str, Any],
     mcp_checkout: dict[str, Any],
+    addon_checkout: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     warnings: list[str] = []
+    checkout_match = _checkout_match(mcp_checkout, addon_checkout)
     mcp_build_id = str(mcp_compiled.get("build_id") or "")
     addon_build_id = str(addon_compiled.get("build_id") or "")
     mcp_commit = sanitize_git_commit(mcp_compiled.get("git_commit"))
@@ -120,9 +122,17 @@ def identity_compatibility(
         and not mcp_commit_known
         and not addon_commit_known
     )
-    if unknown_unmatched:
+    if unknown_unmatched and checkout_match is None:
         warnings.append(
             "Compiled MCP and addon identities are both unknown; match cannot be verified"
+        )
+    if checkout_match is False:
+        warnings.append(
+            "MCP and addon checkouts differ; the running addon was loaded from another commit"
+        )
+    if checkout_match and (mcp_checkout.get("git_dirty") or (addon_checkout or {}).get("git_dirty")):
+        warnings.append(
+            "Checkout has uncommitted changes; the commit identifies the base, not the exact code"
         )
 
     if mcp_commit_known and addon_commit_known and mcp_commit != addon_commit:
@@ -171,8 +181,22 @@ def identity_compatibility(
         "mcp_addon": mcp_addon,
         "compiled_checkout": compiled_checkout,
         "unknown_unmatched": unknown_unmatched,
+        "checkout_match": checkout_match,
         "warnings": warnings,
     }
+
+
+def _checkout_match(
+    mcp_checkout: dict[str, Any], addon_checkout: dict[str, Any] | None
+) -> bool | None:
+    """True/False when both checkouts name a commit; None when either is unavailable."""
+    if not addon_checkout or not addon_checkout.get("available") or not mcp_checkout.get("available"):
+        return None
+    mcp_commit = sanitize_git_commit(mcp_checkout.get("git_commit"))
+    addon_commit = sanitize_git_commit(addon_checkout.get("git_commit"))
+    if is_unknown_git_commit(mcp_commit) or is_unknown_git_commit(addon_commit):
+        return None
+    return mcp_commit == addon_commit
 
 
 def merge_compatibility(
@@ -190,5 +214,6 @@ def merge_compatibility(
             "mcp_addon": identity.get("mcp_addon", False),
             "compiled_checkout": identity.get("compiled_checkout", False),
             "unknown_unmatched": identity.get("unknown_unmatched", False),
+            "checkout_match": identity.get("checkout_match"),
         },
     }

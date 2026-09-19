@@ -110,6 +110,8 @@ def _addon_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any
         "build_timestamp": str(info.get("build_timestamp") or "unknown"),
         "source": str(info.get("addon_metadata_source") or "missing"),
     }
+    raw_checkout = info.get("addon_checkout")
+    checkout = raw_checkout if isinstance(raw_checkout, dict) else {}
     return {
         "runtime_id": (
             getattr(manifest, "addon_runtime_id", None)
@@ -118,6 +120,11 @@ def _addon_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any
         )
         or "unknown",
         "compiled": compiled,
+        "checkout": {
+            "git_commit": sanitize_git_commit(checkout.get("git_commit")),
+            "git_dirty": checkout.get("git_dirty"),
+            "available": bool(checkout.get("available")),
+        },
     }
 
 
@@ -212,6 +219,7 @@ def _runtime_info_payload() -> dict[str, Any]:
         mcp_compiled=mcp_build["compiled"],
         addon_compiled=addon["compiled"],
         mcp_checkout=mcp_build["checkout"],
+        addon_checkout=addon["checkout"] if addon["checkout"]["available"] else None,
     )
     compatibility = merge_compatibility(protocol, identity)
     server_state().compatibility_warnings = list(compatibility["warnings"])

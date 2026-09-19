@@ -19,6 +19,7 @@ from .feature_mutate_support import (
     set_attr,
     set_feature_bool,
     set_named_property,
+    set_revolution_symmetric,
     set_tip,
 )
 
@@ -95,7 +96,7 @@ def apply_revolve_feature(doc: FeatureDocument, request: RevolveFeatureRequest) 
             ("ReferenceAxis", "Axis"),
             resolve_revolve_axis(doc, body, sketch, request.axis),
         )
-        set_feature_bool(created, ("Symmetric",), request.symmetric)
+        set_revolution_symmetric(created, request.symmetric)
         set_feature_bool(created, ("Reversed",), request.reversed_dir)
         if body is not None:
             set_tip(body, created)

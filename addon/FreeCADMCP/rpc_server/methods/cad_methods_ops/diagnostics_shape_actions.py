@@ -68,6 +68,71 @@ def _row_number(row: dict[str, object], field: str) -> float:
     return float(value)
 
 
+_SUBSHAPE_TYPE_ALIASES = {
+    "planar": "Plane", "plane": "Plane",
+    "cylinder": "Cylinder", "cylindrical": "Cylinder",
+    "cone": "Cone", "sphere": "Sphere", "toroidal": "Toroid", "toroid": "Toroid",
+    "line": "Line", "circle": "Circle", "arc": "Circle", "ellipse": "Ellipse",
+    "bspline": "BSplineCurve", "bezier": "BezierCurve",
+}
+
+
+def _normalized_subshape_type(value: object) -> str:
+    text = str(value or "").strip()
+    return _SUBSHAPE_TYPE_ALIASES.get(text.lower(), text[:1].upper() + text[1:])
+
+
+def _subshape_geometry(sub: object) -> object | None:
+    return getattr(sub, "Surface", None) if hasattr(sub, "Surface") else getattr(sub, "Curve", None)
+
+
+def _subshape_type(sub: object) -> str:
+    # type(...).__name__ is the bare geometry class ('Plane', 'Line'); str() renders '<Plane object>'.
+    geometry = _subshape_geometry(sub)
+    return type(geometry).__name__ if geometry is not None else ""
+
+
+def _subshape_direction(sub: object) -> object | None:
+    """Face: normal at the parametric start; edge: curve axis, else line direction."""
+    try:
+        if hasattr(sub, "Surface"):
+            try:
+                u_range = getattr(sub, "ParameterRange")
+                return getattr(sub, "normalAt")(u_range[0], u_range[2])
+            except Exception:
+                axis = getattr(getattr(sub, "Surface"), "Axis", None)
+                return _vector(axis.x, axis.y, axis.z) if axis is not None else None
+        curve = getattr(sub, "Curve", None)
+        axis = getattr(curve, "Axis", None)
+        if axis is not None:
+            return _vector(axis.x, axis.y, axis.z)
+        direction = getattr(curve, "Direction", None)
+        return _vector(direction.x, direction.y, direction.z) if direction is not None else None
+    except Exception:
+        return None
+
+
+def _subshape_radius(sub: object) -> float | None:
+    geometry = _subshape_geometry(sub)
+    radius = getattr(geometry, "Radius", None)
+    if radius is None and hasattr(sub, "Surface"):
+        radius = getattr(geometry, "Radius1", None)
+    try:
+        return float(radius) if radius is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _global_direction(placement: object, direction: object | None) -> object | None:
+    if direction is None:
+        return None
+    try:
+        rotated = getattr(placement, "Rotation") * direction
+        return rotated.normalize()
+    except Exception:
+        return None
+
+
 def find_subshapes(
     document: object,
     object_name: str,
@@ -98,7 +163,10 @@ def find_subshapes(
         return None
 
     nv = to_vec(normal_approx)
+    if nv is not None and _vector_length(nv) > 0:
+        nv = nv.normalize()  # type: ignore[attr-defined]
     cv = to_vec(center_approx)
+    type_want = _normalized_subshape_type(type_filter) if type_filter else None
     results: list[dict[str, object]] = []
     for index, sub in enumerate(getattr(shape, kind, []), start=1):
         try:
@@ -108,13 +176,30 @@ def find_subshapes(
                 center = _transform_point(gp, getattr(sub, "CenterOfBoundBox"))
             except Exception:
                 continue
+        sub_type = _subshape_type(sub)
+        if type_want and _normalized_subshape_type(sub_type) != type_want:
+            continue
+        direction = _global_direction(gp, _subshape_direction(sub))
+        if nv is not None and direction is not None:
+            try:
+                dot = abs(float(direction.dot(nv)))  # type: ignore[attr-defined]
+            except Exception:
+                dot = 0.0
+            if dot < 1.0 - float(tol):
+                continue
         if cv is not None and _vector_length(_vector_sub(center, cv)) > center_tol:
+            continue
+        sub_radius = _subshape_radius(sub)
+        if radius is not None and (sub_radius is None or abs(sub_radius - float(radius)) > float(tol)):
             continue
         measure = float(getattr(sub, "Area", 0.0)) if kind == "Faces" else float(getattr(sub, "Length", 0.0))
         results.append(
             {
                 "sub": f"{kind_singular}{index}",
+                "type": sub_type,
                 "global_center": _vec(center),
+                "global_normal": _vec(direction),
+                "radius": round(sub_radius, 6) if sub_radius is not None else None,
                 "area" if kind == "Faces" else "length": round(measure, 6),
             }
         )

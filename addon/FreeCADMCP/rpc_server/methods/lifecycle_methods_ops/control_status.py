@@ -157,6 +157,7 @@ def get_instance_info(self):
         "git_dirty": build["compiled"]["git_dirty"],
         "build_timestamp": build["compiled"]["build_timestamp"],
         "addon_metadata_source": build["compiled"]["source"],
+        "addon_checkout": build.get("checkout"),
         "freecad_version": freecad_version,
         "freecad_git_commit": freecad_git_commit,
         "profile_path_fingerprint": collaborators.profile_fingerprint,

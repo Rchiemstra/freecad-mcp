@@ -8,7 +8,18 @@ from .policy_runtime import app_from, lookup_document, lookup_object, optional_r
 def _failure(code: str, message: str) -> dict[str, object]:
     return {"success": False, "ok": False, "outcome": "rejected", "error_code": code, "error": message, "retry_safe": True}
 
-def run_find_edges(collaborators: object, doc_name: str, object_name: str) -> dict[str, object]:
+def run_find_edges(
+    collaborators: object,
+    doc_name: str,
+    object_name: str,
+    type: str | None = None,
+    normal_approx: dict[str, float] | list[float] | None = None,
+    center_approx: dict[str, float] | list[float] | None = None,
+    radius: float | None = None,
+    tol: float = 1e-3,
+    center_tol: float = 1.0,
+    limit: int = 10,
+) -> dict[str, object]:
     if not isinstance(doc_name, str) or not doc_name.strip():
         return _failure("INVALID_ARGUMENT", "doc_name must be a nonempty string")
     if not isinstance(object_name, str) or not object_name.strip():
@@ -23,7 +34,18 @@ def run_find_edges(collaborators: object, doc_name: str, object_name: str) -> di
         return _failure("OBJECT_NOT_FOUND", "Object not found")
     optional_recompute(collaborators, document)
     try:
-        payload = diagnostics_shape_actions.find_subshapes(document, object_name, "Edges")
+        payload = diagnostics_shape_actions.find_subshapes(
+            document,
+            object_name,
+            "Edges",
+            type_filter=type,
+            normal_approx=normal_approx,
+            center_approx=center_approx,
+            radius=radius,
+            tol=tol,
+            center_tol=center_tol,
+            limit=limit,
+        )
     except Exception as exc:
         return _failure("FIND_EDGES_FAILED", str(exc) or type(exc).__name__)
     return {"success": True, "ok": True, "outcome": "observed", "retry_safe": False, **payload}
@@ -32,8 +54,24 @@ class _RpcFacade(Protocol):
     _cad_collaborators: object
     def _dispatch_gui(self, callback: Callable[[], object]) -> object: ...
 
-def rpc_find_edges(self: _RpcFacade, doc_name: str, object_name: str) -> dict[str, object]:
-    res = self._dispatch_gui(lambda: run_find_edges(self._cad_collaborators, doc_name, object_name))
+def rpc_find_edges(
+    self: _RpcFacade,
+    doc_name: str,
+    object_name: str,
+    type: str | None = None,
+    normal_approx: dict[str, float] | list[float] | None = None,
+    center_approx: dict[str, float] | list[float] | None = None,
+    radius: float | None = None,
+    tol: float = 1e-3,
+    center_tol: float = 1.0,
+    limit: int = 10,
+) -> dict[str, object]:
+    res = self._dispatch_gui(
+        lambda: run_find_edges(
+            self._cad_collaborators, doc_name, object_name,
+            type, normal_approx, center_approx, radius, tol, center_tol, limit,
+        )
+    )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 TYPED_RPC_HANDLER = ("find_edges", rpc_find_edges)

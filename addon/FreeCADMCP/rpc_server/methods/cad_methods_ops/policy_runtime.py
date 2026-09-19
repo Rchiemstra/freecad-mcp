@@ -29,8 +29,11 @@ def lookup_object(document: object, name: str) -> object | None:
 
 def optional_recompute(collaborators: object, document: object) -> None:
     runner = getattr(collaborators, "recompute_and_wait", None)
-    if callable(runner):
-        runner(document)
+    doc_name = getattr(document, "Name", None)
+    # The production runner is recompute_and_wait(doc_name: str); it resolves the
+    # document itself through FreeCAD.getDocument, which rejects a Document object.
+    if callable(runner) and isinstance(doc_name, str):
+        runner(doc_name)
         return
     recompute = getattr(document, "recompute", None)
     if callable(recompute):

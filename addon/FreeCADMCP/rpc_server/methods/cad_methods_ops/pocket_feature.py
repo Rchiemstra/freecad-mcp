@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -34,6 +36,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_pocket_feature_success,
         make_pocket_feature_uncertain,
     )
+from .profile_checks import self_intersecting_wire_numbers
 from .pocket_feature_mutation import PocketFeatureError, run_pocket_feature_native_mutation
 
 
@@ -97,7 +100,7 @@ def _resolve_body(doc: PocketFeatureDocument, sketch: object, body_name: str | N
     )
 
 
-def _require_closed_profile(sketch: object, sketch_name: str) -> None:
+def _require_closed_profile(sketch: object, sketch_name: str, *, part: object = None) -> None:
     conflicting = list(getattr(sketch, "ConflictingConstraints", []) or [])
     malformed = list(getattr(sketch, "MalformedConstraints", []) or [])
     if conflicting:
@@ -125,6 +128,12 @@ def _require_closed_profile(sketch: object, sketch_name: str) -> None:
                 "SKETCH_PROFILE_NOT_CLOSED",
                 f"Sketch {sketch_name!r} profile is not a closed wire",
             )
+    crossing = self_intersecting_wire_numbers(shape, part)
+    if crossing:
+        raise PocketFeatureError(
+            "SKETCH_PROFILE_SELF_INTERSECTING",
+            f"Sketch {sketch_name!r} profile wire(s) {crossing} intersect themselves",
+        )
 
 
 def _extrusion_length(feature: object, feature_name: str) -> float:
@@ -169,7 +178,7 @@ def apply_pocket_feature(
         raise PocketFeatureError("SKETCH_NOT_FOUND", f"Sketch {sketch_name!r} not found")
     if not _is_type(sketch, "Sketcher::SketchObject"):
         raise PocketFeatureError("NOT_A_SKETCH", f"Object {sketch_name!r} is not a sketch")
-    _require_closed_profile(sketch, sketch_name)
+    _require_closed_profile(sketch, sketch_name, part=getattr(collaborators, "part", None))
     body = _resolve_body(doc, sketch, body_name)
     new_object = getattr(body, "newObject", None)
     if not callable(new_object):
@@ -258,8 +267,8 @@ def build_pocket_feature_request(
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "pocket_name must be a nonempty string"))
     if isinstance(length, bool) or not isinstance(length, (int, float)):
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "length must be a number"))
-    if float(length) <= 0:
-        return _failure(PocketFeatureError("INVALID_ARGUMENT", "length must be greater than zero"))
+    if not math.isfinite(float(length)) or float(length) <= 0:
+        return _failure(PocketFeatureError("INVALID_ARGUMENT", "length must be a finite number greater than zero"))
     if body_name is not None and (not isinstance(body_name, str) or not body_name.strip()):
         return _failure(PocketFeatureError("INVALID_ARGUMENT", "body_name must be a nonempty string"))
     if not isinstance(symmetric, bool):

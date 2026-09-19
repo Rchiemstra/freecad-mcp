@@ -10150,6 +10150,81 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "type",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "normal_approx",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "center_approx",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "radius",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        {
+          "default": 0.001,
+          "kind": "positional_or_keyword",
+          "name": "tol",
+          "required": false,
+          "schema": {
+            "type": "number"
+          }
+        },
+        {
+          "default": 1.0,
+          "kind": "positional_or_keyword",
+          "name": "center_tol",
+          "required": false,
+          "schema": {
+            "type": "number"
+          }
+        },
+        {
+          "default": 10,
+          "kind": "positional_or_keyword",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
         }
       ],
       "result_examples": [
@@ -10298,6 +10373,81 @@
           "required": true,
           "schema": {
             "type": "string"
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "type",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "normal_approx",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "center_approx",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "radius",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        {
+          "default": 0.001,
+          "kind": "positional_or_keyword",
+          "name": "tol",
+          "required": false,
+          "schema": {
+            "type": "number"
+          }
+        },
+        {
+          "default": 1.0,
+          "kind": "positional_or_keyword",
+          "name": "center_tol",
+          "required": false,
+          "schema": {
+            "type": "number"
+          }
+        },
+        {
+          "default": 10,
+          "kind": "positional_or_keyword",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "type": "integer"
           }
         }
       ],
@@ -27743,6 +27893,18 @@
             "type": [
               "null",
               "string"
+            ]
+          }
+        },
+        {
+          "default": null,
+          "kind": "positional_or_keyword",
+          "name": "attachment_offset",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "object"
             ]
           }
         }

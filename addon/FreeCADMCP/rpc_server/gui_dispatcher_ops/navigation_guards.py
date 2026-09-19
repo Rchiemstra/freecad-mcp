@@ -6,6 +6,11 @@ from typing import Any
 
 from PySide import QtCore, QtWidgets
 
+try:
+    from ...dispatch.gui_block_state import clear_gui_block, note_blocking_widget
+except ImportError:  # pragma: no cover - flat addon import path
+    from dispatch.gui_block_state import clear_gui_block, note_blocking_widget
+
 
 def is_unittest_mock(value: Any) -> bool:
     return type(value).__module__.startswith("unittest.mock")
@@ -49,7 +54,11 @@ def blocking_overlay_active(app: Any) -> bool:
                 # If visibility cannot be established, preserve the
                 # conservative modal guard.
                 pass
+        note_blocking_widget(
+            "popup" if getter_name == "activePopupWidget" else "modal dialog", widget
+        )
         return True
+    clear_gui_block()
     return False
 
 

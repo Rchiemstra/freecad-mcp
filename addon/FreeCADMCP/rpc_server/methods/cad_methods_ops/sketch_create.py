@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
 
@@ -59,6 +59,7 @@ class _SketchCreateRequest:
     sketch_name: SketchName
     body_name: str | None
     attach_to: str | None
+    attachment_offset: Mapping[str, object] | None = None
 
 
 def _failure(error: SketchCreateError, *, retry_safe: bool = True) -> SketchCreateFailure:
@@ -126,6 +127,16 @@ def _apply_attach_to(
     ref_obj = cast(SketchCreateDocument, doc).getObject(obj_name)
     if ref_obj is None:
         raise SketchCreateError("SUPPORT_NOT_FOUND", f"Object {obj_name!r} not found for attach_to")
+    if _is_body(ref_obj):
+        # Body.Shape is its Tip's shape, so FaceN indices match. Supporting the sketch on the
+        # Body itself makes it depend on the container that owns it (a recompute cycle).
+        tip = getattr(ref_obj, "Tip", None)
+        if tip is None or tip is sketch:
+            raise SketchCreateError(
+                "SUPPORT_NOT_FOUND",
+                f"Body {obj_name!r} has no Tip feature to attach {face!r} to",
+            )
+        ref_obj = tip
     sketch.AttachmentSupport = [(ref_obj, face)]  # type: ignore[attr-defined]
     sketch.MapMode = "FlatFace"  # type: ignore[attr-defined]
 
@@ -136,8 +147,17 @@ def apply_sketch_create(
     body_name: str | None,
     attach_to: str | None,
     freecad: object,
+    *,
+    attachment_offset: Mapping[str, object] | None = None,
+    dict_to_placement: Callable[[Mapping[str, object]], object] | None = None,
 ) -> SketchCreateReceipt:
     """Create a Sketch without recomputing or managing a transaction."""
+
+    if attachment_offset is not None and not callable(dict_to_placement):
+        raise SketchCreateError(
+            "PLACEMENT_CODEC_UNAVAILABLE",
+            "attachment_offset cannot be applied without a placement codec",
+        )
 
     if not isinstance(sketch_name, str):
         raise SketchCreateError("INVALID_ARGUMENT", "sketch_name must be a string")
@@ -169,6 +189,9 @@ def apply_sketch_create(
 
     if attach_to:
         _apply_attach_to(sketch, doc, attach_body, attach_to, freecad)
+    if attachment_offset is not None and dict_to_placement is not None:
+        # Same structural commit as the attachment, so a later recompute cannot drop it (P3).
+        sketch.AttachmentOffset = dict_to_placement(attachment_offset)  # type: ignore[attr-defined]
     return SketchCreateReceipt(name=sketch.Name, sketch=sketch)
 
 
@@ -201,6 +224,7 @@ def build_sketch_create_request(
     sketch_name: object,
     body_name: object,
     attach_to: object,
+    attachment_offset: object = None,
 ) -> _SketchCreateRequest | SketchCreateFailure:
     """Validate the untyped JSON arguments before constructing internal types."""
 
@@ -218,11 +242,23 @@ def build_sketch_create_request(
         return _failure(
             SketchCreateError("INVALID_ARGUMENT", "attach_to must be a nonempty string")
         )
+    offset: Mapping[str, object] | None = None
+    if attachment_offset is not None:
+        if not isinstance(attachment_offset, Mapping) or not all(
+            isinstance(key, str) for key in attachment_offset
+        ):
+            return _failure(SketchCreateError("INVALID_ARGUMENT", "attachment_offset must be an object"))
+        if attach_to is None:
+            return _failure(
+                SketchCreateError("INVALID_ARGUMENT", "attachment_offset requires attach_to during sketch creation")
+            )
+        offset = {str(key): attachment_offset[key] for key in attachment_offset}
     return _SketchCreateRequest(
         doc_name=DocumentName(doc_name),
         sketch_name=SketchName(sketch_name),
         body_name=body_name,
         attach_to=attach_to,
+        attachment_offset=offset,
     )
 
 
@@ -240,6 +276,8 @@ class _SketchCreateExecution:
             self.request.body_name,
             self.request.attach_to,
             self.collaborators.freecad,
+            attachment_offset=self.request.attachment_offset,
+            dict_to_placement=getattr(self.collaborators, "dict_to_placement", None),
         )
 
     def inspect(self, doc: SketchCreateReadDocument) -> None:
@@ -274,10 +312,11 @@ def run_sketch_create(
     sketch_name: object,
     body_name: object = None,
     attach_to: object = None,
+    attachment_offset: object = None,
 ) -> SketchCreateResult:
     """Run Sketch creation through apply, recompute, inspection, and commit."""
 
-    request = build_sketch_create_request(doc_name, sketch_name, body_name, attach_to)
+    request = build_sketch_create_request(doc_name, sketch_name, body_name, attach_to, attachment_offset)
     if isinstance(request, dict):
         return request
     return _SketchCreateExecution(collaborators, request).run()
@@ -295,10 +334,13 @@ def rpc_sketch_create(
     sketch_name: str,
     body_name: str | None = None,
     attach_to: str | None = None,
+    attachment_offset: dict[str, object] | None = None,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     res = self._dispatch_gui(
-        lambda: run_sketch_create(collaborators, doc_name, sketch_name, body_name, attach_to)
+        lambda: run_sketch_create(
+            collaborators, doc_name, sketch_name, body_name, attach_to, attachment_offset
+        )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 

@@ -78,6 +78,7 @@ def test_compatibility_identity_block(monkeypatch) -> None:
         "mcp_addon",
         "compiled_checkout",
         "unknown_unmatched",
+        "checkout_match",
     }
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -127,7 +128,34 @@ def compiled_identity() -> dict[str, Any]:
     }
 
 
+def read_checkout_identity() -> dict[str, Any]:
+    """Git identity of the checkout this addon was loaded from.
+
+    Development installs symlink the addon into FreeCAD's Mod directory, so the bundled
+    metadata stays ``unknown``; the checkout itself still identifies the loaded code.
+    """
+    root = str(Path(__file__).resolve().parent)
+    unavailable: dict[str, Any] = {"git_commit": "unknown", "git_dirty": None, "available": False}
+    try:
+        commit = subprocess.run(
+            ["git", "-C", root, "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", root, "status", "--porcelain"],
+            check=True, capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return unavailable
+    commit = _sanitize_git_commit(commit)
+    if commit == "unknown":
+        return unavailable
+    return {"git_commit": commit, "git_dirty": bool(status.strip()), "available": True}
+
+
 _metadata = compiled_identity()
+# Captured once: the imported modules match the checkout as it was at load time.
+_checkout = read_checkout_identity()
 addon_version = _metadata["version"]
 addon_build_id = _metadata["build_id"]
 git_commit = _metadata["git_commit"]
@@ -144,6 +172,7 @@ def as_dict() -> dict[str, Any]:
         "git_dirty": compiled["git_dirty"],
         "build_timestamp": compiled["build_timestamp"],
         "compiled": compiled,
+        "checkout": dict(_checkout),
     }
 
 
@@ -155,4 +184,5 @@ __all__ = [
     "compiled_identity",
     "git_commit",
     "git_dirty",
+    "read_checkout_identity",
 ]

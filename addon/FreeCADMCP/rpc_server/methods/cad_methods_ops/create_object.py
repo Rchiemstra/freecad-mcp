@@ -35,6 +35,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_create_object_uncertain,
     )
 from .create_object_mutation import CreateObjectError, run_create_object_native_mutation
+from .property_postcondition import property_kept_value
 from .typed_rpc_document import add_object, assign_properties, get_object
 
 
@@ -128,21 +129,6 @@ def _is_type(obj: object, type_id: str) -> bool:
     return getattr(obj, "TypeId", None) == type_id
 
 
-def _scalar_property(value: object) -> object:
-    raw = getattr(value, "Value", value)
-    return raw
-
-
-def _property_matches(expected: object, actual: object) -> bool:
-    left = _scalar_property(expected)
-    right = _scalar_property(actual)
-    if isinstance(left, bool) or isinstance(right, bool):
-        return left is right
-    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-        return abs(float(left) - float(right)) <= 1e-6
-    return left == right
-
-
 def read_create_object_result(
     doc: object, receipt: CreateObjectReceipt
 ) -> CreateObjectInspection:
@@ -173,7 +159,7 @@ def read_create_object_result(
                 "PROPERTY_NOT_UPDATED",
                 f"Created object is missing property {key!r}",
             )
-        if not _property_matches(expected, getattr(created, key)):
+        if not property_kept_value(doc, expected, getattr(created, key)):
             raise CreateObjectError(
                 "PROPERTY_NOT_UPDATED",
                 f"Created object property {key!r} did not keep the assigned value",

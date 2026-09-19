@@ -87,6 +87,14 @@ class InspectGeometryRequest:
     subshape: str | None
 
 
+class InspectGeometrySubshape(TypedDict):
+    """World-frame pose of the requested sub-shape (``Face6``, ``Edge3``, ...)."""
+
+    name: str
+    global_center: object
+    global_normal: object
+
+
 class InspectGeometrySuccess(TypedDict):
     """Only response shape that may become outward MCP success."""
 
@@ -102,6 +110,7 @@ class InspectGeometrySuccess(TypedDict):
     parent_chain: object
     local_bbox: object
     global_bbox: object
+    subshape: NotRequired[InspectGeometrySubshape]
 
 
 class InspectGeometryFailure(TypedDict):
@@ -162,6 +171,7 @@ _CORE_KEYS = frozenset(
         "retry_safe",
         "rollback_failed",
         "rollback_succeeded",
+        "subshape",
         "success",
         "type_id",
     }
@@ -170,10 +180,11 @@ _CORE_KEYS = frozenset(
 
 def make_inspect_geometry_success(
     object: str, type_id: str, placement: object, global_placement: object, parent_chain: object, local_bbox: object, global_bbox: object,
+    *, subshape: InspectGeometrySubshape | None = None,
 ) -> InspectGeometrySuccess:
     """Construct a complete observed result."""
 
-    return {
+    result: InspectGeometrySuccess = {
         "contract_version": INSPECT_GEOMETRY_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -187,6 +198,9 @@ def make_inspect_geometry_success(
         "local_bbox": local_bbox,
         "global_bbox": global_bbox,
     }
+    if subshape is not None:
+        result["subshape"] = subshape
+    return result
 
 
 def make_inspect_geometry_failure(
@@ -380,6 +394,16 @@ def _invalid_response(response: dict[str, object]) -> InspectGeometryUncertain:
     )
 
 
+def _subshape_pose(value: object) -> InspectGeometrySubshape | None:
+    if not isinstance(value, dict) or not isinstance(value.get("name"), str):
+        return None
+    return {
+        "name": value["name"],
+        "global_center": value.get("global_center"),
+        "global_normal": value.get("global_normal"),
+    }
+
+
 def parse_inspect_geometry_response(raw_response: object) -> InspectGeometryResult:
     """Validate all three wire variants; unknown state always stays uncertain."""
     response = _response_object(raw_response)
@@ -402,7 +426,11 @@ def parse_inspect_geometry_response(raw_response: object) -> InspectGeometryResu
     local_bbox = response.get("local_bbox")
     global_bbox = response.get("global_bbox")
     if _valid_success(response) and isinstance(object_name, str) and isinstance(type_id, str) and placement is not None and global_placement is not None and parent_chain is not None and local_bbox is not None and global_bbox is not None:
-        return make_inspect_geometry_success(object_name, type_id, placement, global_placement, parent_chain, local_bbox, global_bbox)
+        subshape = response.get("subshape")
+        return make_inspect_geometry_success(
+            object_name, type_id, placement, global_placement, parent_chain, local_bbox, global_bbox,
+            subshape=_subshape_pose(subshape),
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

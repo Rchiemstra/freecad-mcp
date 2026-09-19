@@ -130,7 +130,7 @@ def test_pocket_feature_sends_exact_authenticated_json_rpc_values_to_freecad(mon
         "session_token": "test-session-token",
         "mcp_runtime_id": "c0deface-1111-4111-8111-000000000001",
         "method": "pocket_feature",
-        "params": {'doc_name': 'AgentDocument', 'sketch_name': 'Profile', 'pocket_name': 'MainPocket', 'length': 5.0, 'body_name': None, 'symmetric': False, 'reversed_dir': False, 'strict': False},
+        "params": {'doc_name': 'AgentDocument', 'sketch_name': 'Profile', 'pocket_name': 'MainPocket', 'length': 5.0, 'body_name': None, 'symmetric': False, 'reversed_dir': False},
         "lease_credentials": [],
         "operation": {"name": "Create Pocket"},
     }
