@@ -5,12 +5,15 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from mcp.server.fastmcp.exceptions import ToolError
+
 from ..telemetry.context import bind_context
 from .call_tool_helpers import (
     emit_tool_completion_event,
     emit_validation_events,
     extract_call_metadata,
     invoke_registered_tool,
+    unknown_argument_error,
 )
 from .surfaces import emit_event
 
@@ -42,6 +45,9 @@ async def call_tool_impl(self, name: str, arguments: dict[str, Any]):
         result = None
         tool_exc: BaseException | None = None
         try:
+            unknown = unknown_argument_error(self, name, arguments or {})
+            if unknown is not None:
+                raise ToolError(unknown)
             result = await invoke_registered_tool(self, context, name, arguments)
         except BaseException as exc:
             tool_exc = exc
