@@ -11317,67 +11317,81 @@
         }
       ],
       "result_examples": [
-        null,
         {
-          "Label": "Contract object",
-          "Name": "ContractObject",
-          "Placement": "identity",
-          "Properties": {},
-          "Shape": null,
-          "TypeId": "PartDesign::Feature",
-          "ViewObject": {}
+          "contract_version": 1,
+          "success": true,
+          "ok": true,
+          "outcome": "observed",
+          "retry_safe": false,
+          "object": "ContractObject",
+          "object_data": {
+            "Label": "Contract object",
+            "Name": "ContractObject",
+            "Placement": "identity",
+            "Properties": {},
+            "Shape": null,
+            "TypeId": "PartDesign::Feature",
+            "ViewObject": {}
+          }
         }
       ],
       "result_schema": {
+        "additionalProperties": true,
         "oneOf": [
           {
-            "type": "null"
-          },
-          {
-            "additionalProperties": true,
             "properties": {
-              "Label": {
-                "type": "string"
-              },
-              "Name": {
-                "type": "string"
-              },
-              "Placement": {
-                "type": [
-                  "array",
-                  "boolean",
-                  "integer",
-                  "null",
-                  "number",
-                  "object",
-                  "string"
-                ]
-              },
-              "Properties": {
-                "type": "object"
-              },
-              "Shape": {
-                "type": [
-                  "null",
-                  "object"
-                ]
-              },
-              "TypeId": {
-                "type": "string"
-              },
-              "ViewObject": {
-                "type": "object"
-              },
-              "error": {
-                "type": "string"
+              "success": {
+                "const": true
               }
             },
             "required": [
-              "Name"
-            ],
-            "type": "object"
+              "success",
+              "object",
+              "object_data"
+            ]
+          },
+          {
+            "properties": {
+              "success": {
+                "const": false
+              }
+            },
+            "required": [
+              "success",
+              "error"
+            ]
           }
-        ]
+        ],
+        "properties": {
+          "contract_version": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string"
+          },
+          "object_data": {
+            "type": "object"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "retry_safe": {
+            "type": "boolean"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     },
     "get_objects": {
@@ -32396,16 +32410,34 @@
         }
       },
       "rpc_started_at": "rpc-started-contract",
-      "rpc_v2_session_ready": true
+      "rpc_v2_session_ready": true,
+      "git_commit": "unknown",
+      "git_dirty": null,
+      "build_timestamp": "unknown",
+      "addon_metadata_source": "generated_metadata",
+      "addon_checkout": {
+        "git_commit": "unknown",
+        "git_dirty": null,
+        "available": false
+      },
+      "freecad_git_commit": "unknown"
     },
     "get_object": {
-      "Label": "Contract object",
-      "Name": "ContractObject",
-      "Placement": "identity",
-      "Properties": {},
-      "Shape": null,
-      "TypeId": "PartDesign::Feature",
-      "ViewObject": {}
+      "contract_version": 1,
+      "success": true,
+      "ok": true,
+      "outcome": "observed",
+      "retry_safe": false,
+      "object": "ContractObject",
+      "object_data": {
+        "Label": "Contract object",
+        "Name": "ContractObject",
+        "Placement": "identity",
+        "Properties": {},
+        "Shape": null,
+        "TypeId": "PartDesign::Feature",
+        "ViewObject": {}
+      }
     },
     "ping": true
   },

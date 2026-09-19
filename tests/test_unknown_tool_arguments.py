@@ -14,7 +14,9 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from mcp.types import CallToolResult, TextContent
 
 from freecad_mcp.instrumented_server import InstrumentedFastMCP
-from freecad_mcp.instrumented_server_ops.facade_bindings import bind_instrumented_fast_mcp
+from freecad_mcp.instrumented_server_ops.facade_bindings import (
+    bind_instrumented_fast_mcp,
+)
 from tests.volume.test_measure_volume_json_rpc_contract import (
     _DEFAULT_ARGUMENTS,
     _invoke,

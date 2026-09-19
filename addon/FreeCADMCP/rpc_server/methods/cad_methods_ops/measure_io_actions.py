@@ -422,7 +422,6 @@ __all__ = [
     "measure_area",
     "measure_distance",
     "measure_volume",
-    "resolve_global_shape",
     "validate_geometry",
     "export_brep",
     "export_step",

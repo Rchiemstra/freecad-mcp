@@ -250,8 +250,13 @@ def test_quarantine_is_bound_to_live_document_lifecycle_not_reused_name():
 def test_pending_recompute_uses_one_synchronous_settle_with_cancellation_checkpoints():
     document = _Document(readiness={"ready": False, "must_execute": True})
     phases: list[str] = []
+    begun: list[str] = []
     inflight = SimpleNamespace(
-        token=SimpleNamespace(checkpoint=lambda phase: phases.append(phase))
+        token=SimpleNamespace(
+            checkpoint=lambda phase: phases.append(phase),
+            # CancellationToken.begin_mutation marks the native callback's start.
+            begin_mutation=lambda phase="mutation_started": begun.append(phase),
+        )
     )
 
     readiness, waited = await_transient_mutation_readiness(
@@ -381,8 +386,13 @@ def test_native_mutation_admission_settles_once_before_entering_commit():
         validate_document_invariants=lambda _document: None,
     )
     phases: list[str] = []
+    begun: list[str] = []
     inflight = SimpleNamespace(
-        token=SimpleNamespace(checkpoint=lambda phase: phases.append(phase))
+        token=SimpleNamespace(
+            checkpoint=lambda phase: phases.append(phase),
+            # CancellationToken.begin_mutation marks the native callback's start.
+            begin_mutation=lambda phase="mutation_started": begun.append(phase),
+        )
     )
 
     assert (
@@ -390,6 +400,7 @@ def test_native_mutation_admission_settles_once_before_entering_commit():
         is True
     )
     assert commits == ["commit"]
+    assert begun == ["cad_mutation"]
     assert document.recompute_calls == 2  # settle, then native postcondition
     assert phases == [
         "mutation_readiness_wait_before",

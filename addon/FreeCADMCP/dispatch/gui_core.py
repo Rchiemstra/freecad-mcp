@@ -11,10 +11,10 @@ from .gui_block_state import describe_gui_block as _describe_gui_block
 
 import contextlib
 import threading
-import time
+import time as _time
 import uuid
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping as _Mapping
 from typing import Any
 
 from .gui_errors import (
@@ -36,7 +36,7 @@ from .gui_request import (
 from .gui_request import (
     TelemetryCallback as _TelemetryCallback,
 )
-from .gui_stage_clock import stage_clock_scope
+from .gui_stage_clock import stage_clock_scope as _stage_clock_scope
 
 
 class GuiDispatchCore:
@@ -88,7 +88,7 @@ class GuiDispatchCore:
         error_code: str | None = None,
         timeout_stage: str | None = None,
         completion_uncertain: bool | None = None,
-        extra_payload: Mapping[str, Any] | None = None,
+        extra_payload: _Mapping[str, Any] | None = None,
     ) -> None:
         request.stage_clock.finalize(
             timeout_stage=timeout_stage,
@@ -225,15 +225,15 @@ class GuiDispatchCore:
                         "mutation readiness",
                         request_id=request.request_id,
                     )
-                with stage_clock_scope(request.stage_clock):
-                    started = time.monotonic()
+                with _stage_clock_scope(request.stage_clock):
+                    started = _time.monotonic()
                     outcome = self._execute_request(request)
                     if (
                         request.stage_clock.mutation_callback_ms is None
                         and not request.stage_clock.mutation_started
                     ):
                         request.stage_clock.mutation_callback_ms = (
-                            (time.monotonic() - started) * 1000.0
+                            (_time.monotonic() - started) * 1000.0
                         )
                 request.complete(outcome)
                 self._release_outstanding(request)
@@ -273,7 +273,7 @@ class GuiDispatchCore:
                 timed_out = None
             if timed_out is not None:
                 request.stage_clock.queue_wait_ms = (
-                    (time.monotonic() - request.submitted_at) * 1000.0
+                    (_time.monotonic() - request.submitted_at) * 1000.0
                 )
                 raise GuiBusyAfterTimeout(
                     "FreeCAD GUI is still executing a request that timed out; "
@@ -698,15 +698,15 @@ class GuiDispatchCore:
                 payload=request.stage_clock.to_payload(),
             )
             try:
-                with stage_clock_scope(request.stage_clock):
-                    started = time.monotonic()
+                with _stage_clock_scope(request.stage_clock):
+                    started = _time.monotonic()
                     outcome = self._execute_request(request)
                     if (
                         request.stage_clock.mutation_callback_ms is None
                         and not request.stage_clock.mutation_started
                     ):
                         request.stage_clock.mutation_callback_ms = (
-                            (time.monotonic() - started) * 1000.0
+                            (_time.monotonic() - started) * 1000.0
                         )
             except BaseException as exc:
                 request.complete(
