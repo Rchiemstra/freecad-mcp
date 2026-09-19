@@ -263,6 +263,14 @@ def apply_pocket_feature(
     _require_closed_profile(sketch, sketch_name, part=getattr(collaborators, "part", None))
     body = _resolve_body(doc, sketch, body_name)
     source_feature, volume_before = _material_baseline(body, sketch)
+    if source_feature is None:
+        # With no base solid FreeCAD's subtractive features add their tool shape instead
+        # of removing it, so the "pocket" would commit new material (D-26).
+        raise PocketFeatureError(
+            "POCKET_NO_BASE_SOLID",
+            f"Body {getattr(body, 'Name', '')!r} has no solid to pocket into; pad a base "
+            "feature first, or FreeCAD would add the pocket's shape as material",
+        )
     new_object = getattr(body, "newObject", None)
     if not callable(new_object):
         raise PocketFeatureError("BODY_WRONG_TYPE", "Body cannot create a Pocket")
