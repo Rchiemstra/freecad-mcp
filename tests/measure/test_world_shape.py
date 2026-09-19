@@ -147,7 +147,11 @@ class FakeBoundBox:
 
 
 class UnitCubeShape:
-    """Local 10 mm cube oracle; transformShape applies a FakeMatrix once."""
+    """10 mm cube oracle; transformShape applies a FakeMatrix once.
+
+    As in FreeCAD, an object's Shape already carries that object's own Placement: build a
+    placed feature's cube with the same translation/rotation (D-30).
+    """
 
     def __init__(
         self,
@@ -328,7 +332,7 @@ def test_fake_object_without_get_global_placement_does_not_raise():
         Name="Box",
         TypeId="Part::Feature",
         Placement=FakePlacement(base=FakeVector(50.0, 0.0, 0.0)),
-        Shape=UnitCubeShape(),
+        Shape=UnitCubeShape(translation=(50.0, 0.0, 0.0)),
         InList=[],
     )
     obj.getParentGeoFeatureGroup = lambda: None
@@ -597,7 +601,7 @@ def test_part_feature_inside_part_applies_global_placement_once():
         Name="Box",
         TypeId="Part::Feature",
         Placement=FakePlacement(base=FakeVector(50.0, 0.0, 0.0)),
-        Shape=UnitCubeShape(),
+        Shape=UnitCubeShape(translation=(50.0, 0.0, 0.0)),
         InList=[],
     )
     feature.getParentGeoFeatureGroup = lambda: part
@@ -708,7 +712,7 @@ def test_translated_part_feature_matches_oracle():
         Name="Box",
         TypeId="Part::Feature",
         Placement=FakePlacement(base=FakeVector(5.0, -2.0, 1.0)),
-        Shape=UnitCubeShape(),
+        Shape=UnitCubeShape(translation=(5.0, -2.0, 1.0)),
         InList=[],
     )
     obj.getParentGeoFeatureGroup = lambda: None
@@ -731,7 +735,7 @@ def test_rotated_part_feature_matches_oracle():
         Name="Box",
         TypeId="Part::Feature",
         Placement=FakePlacement(rotation=FakeRotation(angle=math.pi / 2.0)),
-        Shape=UnitCubeShape(),
+        Shape=UnitCubeShape(angle_z=math.pi / 2.0),
         InList=[],
     )
     obj.getParentGeoFeatureGroup = lambda: None
@@ -940,7 +944,7 @@ def test_inspect_geometry_global_bbox_matches_independent_oracle():
         Name="Box",
         TypeId="Part::Feature",
         Placement=FakePlacement(base=FakeVector(12.0, 3.0, -4.0)),
-        Shape=UnitCubeShape(),
+        Shape=UnitCubeShape(translation=(12.0, 3.0, -4.0)),
         InList=[],
     )
     obj.getParentGeoFeatureGroup = lambda: None

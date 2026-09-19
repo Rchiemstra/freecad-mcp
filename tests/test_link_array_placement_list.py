@@ -18,20 +18,20 @@ import pytest
 FreeCAD = pytest.importorskip("FreeCAD")
 pytest.importorskip("Part")
 
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.create_object import (  # noqa: E402
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.create_object import (
     apply_create_object,
     build_create_object_request,
     read_create_object_result,
 )
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.edit_object import (  # noqa: E402
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.edit_object import (
     apply_edit_object,
     build_edit_object_request,
     read_edit_object_result,
 )
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.edit_object_mutation import (  # noqa: E402
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.edit_object_mutation import (
     EditObjectError,
 )
-from addon.FreeCADMCP.rpc_server.property_mapper_ops.property_assignment import (  # noqa: E402
+from addon.FreeCADMCP.rpc_server.property_mapper_ops.property_assignment import (
     set_object_property,
 )
 

@@ -40,11 +40,6 @@ def _linked_target(obj: object) -> object | None:
     return linked
 
 
-def _is_link_type(obj: object) -> bool:
-    type_id = str(getattr(obj, "TypeId", ""))
-    return type_id == "App::Link" or type_id.startswith("App::Link")
-
-
 def _resolve_shape_source(obj: object) -> tuple[object | None, object | None]:
     if obj is None:
         return None, None
@@ -189,20 +184,15 @@ def _world_transform_matrix(
     obj: object,
     *,
     used_linked_object: bool,
-    healthy_link_proxy: bool,
 ) -> object | None:
+    # obj.Shape already carries obj's own Placement (a healthy Link proxy carries the
+    # link placement too), so only the enclosing GeoFeatureGroups remain to be applied.
     mats: list[object] = []
     if used_linked_object:
         mats.append(_link_world_matrix(obj))
-        container = _container_placement_matrix(obj)
-        if container is not None:
-            mats.append(container)
-    elif healthy_link_proxy:
-        container = _container_placement_matrix(obj)
-        if container is not None:
-            mats.append(container)
-    else:
-        mats.append(_placement_to_matrix(read_global_placement(obj)))
+    container = _container_placement_matrix(obj)
+    if container is not None:
+        mats.append(container)
     if not mats:
         return None
     return _compose_matrices_parent_first(mats)
@@ -248,17 +238,8 @@ def resolve_global_shape(obj: object) -> tuple[object, dict[str, object]]:
             f"No usable Shape on {getattr(obj, 'Name', obj)!r}",
         )
     used_linked_object = source is not obj
-    healthy_link_proxy = (
-        not used_linked_object
-        and _is_link_type(obj)
-        and _shape_has_topology(getattr(obj, "Shape", None))
-    )
     out = _copy_shape(shape)
-    matrix = _world_transform_matrix(
-        obj,
-        used_linked_object=used_linked_object,
-        healthy_link_proxy=healthy_link_proxy,
-    )
+    matrix = _world_transform_matrix(obj, used_linked_object=used_linked_object)
     if matrix is not None:
         transform = getattr(out, "transformShape", None)
         if not callable(transform):
