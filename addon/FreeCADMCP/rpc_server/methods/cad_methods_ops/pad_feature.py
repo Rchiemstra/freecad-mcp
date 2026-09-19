@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_pad_feature_success,
         make_pad_feature_uncertain,
     )
-from .profile_checks import self_intersecting_wire_numbers
+from .profile_checks import self_intersecting_wire_numbers, solid_result_issue
 from .pad_feature_mutation import PadFeatureError, run_pad_feature_native_mutation
 
 
@@ -238,11 +238,11 @@ def read_pad_feature_result(
             "PAD_LENGTH_MISMATCH",
             f"Pad {receipt.name!r} Length {actual_length} does not match {receipt.expected_length}",
         )
-    shape = getattr(pad, "Shape", None)
-    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+    issue = solid_result_issue(getattr(pad, "Shape", None))
+    if issue is not None:
         raise PadFeatureError(
             "PAD_SHAPE_EMPTY",
-            f"Pad {receipt.name!r} has no solid after recompute",
+            f"Pad {receipt.name!r} {issue} after recompute",
         )
     return PadFeatureInspection(name=PadName(receipt.name), label=str(receipt.pad.Label))
 

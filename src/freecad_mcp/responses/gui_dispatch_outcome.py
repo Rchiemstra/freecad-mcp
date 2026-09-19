@@ -15,6 +15,7 @@ from .tool_results import tool_fail
 GUI_TIMEOUT_ERROR_CODES = frozenset(
     {
         "GUI_TIMEOUT_BEFORE_EXECUTION",
+        "GUI_TIMEOUT_BLOCKED_BY_MODAL_DIALOG",
         "GUI_TIMEOUT_DURING_EXECUTION",
         "GUI_BUSY_AFTER_TIMEOUT",
     }

@@ -400,7 +400,7 @@ class GuiDispatchCore:
             completion_uncertain=not before_execution,
         )
         error.error_code = (
-            "GUI_BLOCKED_BY_MODAL_DIALOG"
+            "GUI_TIMEOUT_BLOCKED_BY_MODAL_DIALOG"
             if blocked_by
             else "GUI_TIMEOUT_BEFORE_EXECUTION"
             if before_execution

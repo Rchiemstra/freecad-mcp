@@ -26,4 +26,24 @@ def self_intersecting_wire_numbers(shape: object, part: object) -> list[int]:
     return numbers
 
 
-__all__ = ["self_intersecting_wire_numbers"]
+# mm^3; below this a PartDesign result is degenerate, not a thin part.
+_MIN_SOLID_VOLUME = 1e-9
+
+
+def solid_result_issue(shape: object) -> str | None:
+    """Why a recomputed pad/pocket shape is not a usable solid, or None.
+
+    ``isNull()`` alone lets through a pocket that removed everything (no solids,
+    volume 0) and a pad of overlapping wires (one solid of volume -0.0).
+    """
+    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+        return "has no shape"
+    if not list(getattr(shape, "Solids", None) or []):
+        return "has no solid"
+    volume = getattr(shape, "Volume", None)
+    if isinstance(volume, bool) or not isinstance(volume, (int, float)) or not volume > _MIN_SOLID_VOLUME:
+        return f"has no positive volume ({volume})"
+    return None
+
+
+__all__ = ["self_intersecting_wire_numbers", "solid_result_issue"]

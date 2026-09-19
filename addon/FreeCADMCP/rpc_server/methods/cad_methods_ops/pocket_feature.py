@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_pocket_feature_success,
         make_pocket_feature_uncertain,
     )
-from .profile_checks import self_intersecting_wire_numbers
+from .profile_checks import self_intersecting_wire_numbers, solid_result_issue
 from .pocket_feature_mutation import PocketFeatureError, run_pocket_feature_native_mutation
 
 
@@ -241,11 +241,11 @@ def read_pocket_feature_result(
             "POCKET_LENGTH_MISMATCH",
             f"Pocket {receipt.name!r} Length {actual_length} does not match {receipt.expected_length}",
         )
-    shape = getattr(pocket, "Shape", None)
-    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+    issue = solid_result_issue(getattr(pocket, "Shape", None))
+    if issue is not None:
         raise PocketFeatureError(
             "POCKET_SHAPE_EMPTY",
-            f"Pocket {receipt.name!r} has no solid after recompute",
+            f"Pocket {receipt.name!r} {issue} after recompute",
         )
     return PocketFeatureInspection(name=PocketName(receipt.name), label=str(receipt.pocket.Label))
 

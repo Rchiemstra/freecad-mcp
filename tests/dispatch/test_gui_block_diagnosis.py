@@ -52,7 +52,7 @@ def test_submit_timeout_names_the_blocking_dialog():
     with pytest.raises(GuiDispatchTimeout) as caught:
         gui_submit.raise_submit_timeout_error(GuiRequest(callable=lambda: None), 30.0, before_execution=True)
     assert "Document Recovery" in str(caught.value)
-    assert caught.value.error_code == "GUI_BLOCKED_BY_MODAL_DIALOG"
+    assert caught.value.error_code == "GUI_TIMEOUT_BLOCKED_BY_MODAL_DIALOG"
     assert caught.value.execution_started is False
 
 
@@ -64,7 +64,7 @@ def test_core_timeout_names_the_blocking_dialog():
     with pytest.raises(GuiDispatchTimeout) as caught:
         core._raise_timeout(GuiRequest(callable=lambda: None), 30.0, before_execution=True)
     assert "Document Recovery" in str(caught.value)
-    assert caught.value.error_code == "GUI_BLOCKED_BY_MODAL_DIALOG"
+    assert caught.value.error_code == "GUI_TIMEOUT_BLOCKED_BY_MODAL_DIALOG"
 
 
 def test_unblocked_timeout_keeps_generic_code():
