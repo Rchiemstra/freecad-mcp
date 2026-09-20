@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
 from .typed_runtime import TypedMutationError, load_module, module_callable
 
@@ -74,11 +75,11 @@ def _compose_global_from_parents(obj: object) -> object | None:
     local = getattr(obj, "Placement", None)
     if local is None:
         return None
-    result = local
+    result: object = local
     for parent in _parent_geo_feature_groups(obj):
         parent_pl = getattr(parent, "Placement", None)
         if parent_pl is not None:
-            result = parent_pl * result  # type: ignore[operator]
+            result = cast(object, parent_pl * result)
     return result
 
 
@@ -176,7 +177,7 @@ def _container_placement_matrix(obj: object) -> object | None:
     for parent in groups:
         parent_pl = getattr(parent, "Placement", None)
         if parent_pl is not None:
-            result = parent_pl * result  # type: ignore[operator]
+            result = cast(object, parent_pl * result)
     return _placement_to_matrix(result)
 
 

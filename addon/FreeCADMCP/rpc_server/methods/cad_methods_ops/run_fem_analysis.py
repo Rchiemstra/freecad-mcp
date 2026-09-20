@@ -54,7 +54,7 @@ def _is_gmsh_mesh(item: object) -> bool:
     if "Fem::FemMeshGmsh" in type_id or type_id.endswith("FemMeshGmsh"):
         return True
     try:
-        from femtools.femutils import is_derived_from  # type: ignore[import-not-found]
+        from femtools.femutils import is_derived_from
     except ImportError:
         return False
     try:
@@ -90,7 +90,7 @@ def _ensure_fem_mesh(doc: object, analysis: object) -> None:
     if mesh is None:
         raise RunFemAnalysisError("GMSH_UNAVAILABLE", "analysis has no Gmsh mesh object")
     try:
-        from femmesh.gmshtools import GmshTools  # type: ignore[import-not-found]
+        from femmesh.gmshtools import GmshTools
     except ImportError as exc:
         raise RunFemAnalysisError("GMSH_UNAVAILABLE", "Gmsh tools are unavailable") from exc
     try:

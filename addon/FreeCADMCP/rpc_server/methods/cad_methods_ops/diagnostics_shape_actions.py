@@ -106,7 +106,9 @@ def _subshape_direction(sub: object) -> object | None:
         if hasattr(sub, "Surface"):
             try:
                 u_range = getattr(sub, "ParameterRange")
-                return getattr(sub, "normalAt")(u_range[0], u_range[2])
+                normal_at = getattr(sub, "normalAt")
+                normal: object = normal_at(u_range[0], u_range[2])
+                return normal
             except Exception:
                 axis = getattr(getattr(sub, "Surface"), "Axis", None)
                 return _vector(axis.x, axis.y, axis.z) if axis is not None else None
@@ -135,8 +137,11 @@ def _global_direction(placement: object, direction: object | None) -> object | N
     if direction is None:
         return None
     try:
-        rotated = getattr(placement, "Rotation") * direction
-        return rotated.normalize()
+        rotation = getattr(placement, "Rotation")
+        rotated: object = rotation * direction
+        normalize = getattr(rotated, "normalize")
+        normalized: object = normalize()
+        return normalized
     except Exception:
         return None
 

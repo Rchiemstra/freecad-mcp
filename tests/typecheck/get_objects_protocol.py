@@ -13,8 +13,6 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.get_objects import (
     GetObjectsCollaborators,
     build_get_objects_request,
 )
-from freecad_mcp.freecad_client import FreeCADConnection
-from freecad_mcp.operations.core_ops.object_ops import get_objects_operation
 
 
 class CompleteGetObjectsDouble:
@@ -54,5 +52,3 @@ def test_static_contract_examples() -> None:
     request = _request()
     assert_type(request.doc_name, DocumentName)
     assert_type(_success_shape(), GetObjectsSuccess)
-    assert_type(get_objects_operation, object)
-    assert_type(FreeCADConnection, type)

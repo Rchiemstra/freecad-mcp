@@ -20,7 +20,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.inspect_geometry import
 )
 from freecad_mcp._shared.protocol import inspect_geometry_contract as client_contract  # noqa: E402
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.core
 
 
 def _collaborators():

@@ -36,7 +36,7 @@ from addon.FreeCADMCP.rpc_server.property_mapper_ops.property_assignment import 
     set_object_property,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.core
 
 PLACEMENT = {"Base": {"x": -380, "y": 0, "z": 0}, "Rotation": {"Axis": {"x": 0, "y": 0, "z": 1}, "Angle": 90}}
 

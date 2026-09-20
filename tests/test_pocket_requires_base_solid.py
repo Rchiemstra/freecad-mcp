@@ -23,7 +23,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.pocket_feature_mutation
     PocketFeatureError,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.core
 
 COLLABORATORS = SimpleNamespace(
     part=Part,

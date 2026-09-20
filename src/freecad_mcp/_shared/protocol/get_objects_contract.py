@@ -486,7 +486,16 @@ def get_objects_wire_from_server(
     from .json_rpc_client import JsonRpcRemoteError
 
     try:
-        raw: object = server.get_objects(
+        method = getattr(server, "get_objects", None)
+        if not callable(method):
+            return dict(
+                make_get_objects_uncertain(
+                    "GET_OBJECTS_TRANSPORT_UNCERTAIN",
+                    "get_objects response unavailable: server has no get_objects method",
+                    committed=None,
+                )
+            )
+        raw: object = method(
             doc_name,
             fields,
             include_properties,

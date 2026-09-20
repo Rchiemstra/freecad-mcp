@@ -76,6 +76,22 @@ def test_valid_success_round_trips():
     assert parse_spreadsheet_set_cells_response(raw) == raw
 
 
+@pytest.mark.parametrize(
+    "updated",
+    [
+        [{"address": "A1", "alias": 1}],
+        [{"address": "A1", "alias": None, "contents": 1}],
+        [{"address": "A1", "alias": None, "contents_error": 1}],
+        [{"address": "A1", "alias": None, "value_error": 1}],
+    ],
+)
+def test_success_updated_cells_require_their_declared_string_fields(updated):
+    raw = make_spreadsheet_set_cells_success("Value", updated)
+    result = parse_spreadsheet_set_cells_response(raw)
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+
+
 _REQUEST_ID = "11111111-2222-4333-8444-555555555555"
 
 

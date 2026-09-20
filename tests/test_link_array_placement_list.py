@@ -35,7 +35,7 @@ from addon.FreeCADMCP.rpc_server.property_mapper_ops.property_assignment import 
     set_object_property,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.core
 
 
 def _at(x):

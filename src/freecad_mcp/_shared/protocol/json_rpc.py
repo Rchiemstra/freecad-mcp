@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
 
 JSON_RPC_VERSION = "2.0"
 JSON_RPC_PARSE_ERROR = -32700
@@ -25,7 +24,7 @@ class JsonRpcRequest:
     """One validated request or notification from a JSON-RPC payload."""
 
     method: str
-    params: list[Any] | dict[str, Any]
+    params: list[object] | dict[str, object]
     request_id: str | int | None
     notification: bool
 
@@ -58,7 +57,7 @@ def _reject_nonfinite_json(value: str) -> None:
     raise ValueError(f"non-finite JSON number is not permitted: {value}")
 
 
-def _validate_json_structure(value: Any) -> None:
+def _validate_json_structure(value: object) -> None:
     stack = [(value, 0)]
     visited = 0
     while stack:
@@ -77,13 +76,13 @@ def _validate_json_structure(value: Any) -> None:
                 stack.append((child, depth + 1))
 
 
-def _response_id(value: Any) -> str | int | None:
-    if value is None or type(value) in {str, int}:
+def _response_id(value: object) -> str | int | None:
+    if value is None or isinstance(value, str) or type(value) is int:
         return value
     return None
 
 
-def _decode_request(value: Any) -> JsonRpcRequest | JsonRpcInvalidRequest:
+def _decode_request(value: object) -> JsonRpcRequest | JsonRpcInvalidRequest:
     if not isinstance(value, dict):
         return JsonRpcInvalidRequest()
 
@@ -129,9 +128,9 @@ def _payload_text(payload: bytes | str) -> str:
     return text
 
 
-def _parse_json(text: str) -> Any:
+def _parse_json(text: str) -> object:
     try:
-        decoded = json.loads(text, parse_constant=_reject_nonfinite_json)
+        decoded: object = json.loads(text, parse_constant=_reject_nonfinite_json)
         _validate_json_structure(decoded)
     except (RecursionError, TypeError, ValueError) as exc:
         raise JsonRpcFramingError(JSON_RPC_PARSE_ERROR, "Parse error") from exc
@@ -155,7 +154,7 @@ def decode_json_rpc_payload(payload: bytes | str) -> JsonRpcPayload:
     return JsonRpcPayload((JsonRpcInvalidRequest(),), batch=False)
 
 
-def json_rpc_success(request_id: str | int | None, result: Any) -> dict[str, Any]:
+def json_rpc_success(request_id: str | int | None, result: object) -> dict[str, object]:
     """Build a JSON-RPC success response."""
 
     return {"jsonrpc": JSON_RPC_VERSION, "id": request_id, "result": result}
@@ -165,24 +164,24 @@ def json_rpc_error(
     request_id: str | int | None,
     code: int,
     message: str,
-    data: Any = _MISSING,
-) -> dict[str, Any]:
+    data: object = _MISSING,
+) -> dict[str, object]:
     """Build a JSON-RPC error response with optional structured data."""
 
-    error: dict[str, Any] = {"code": int(code), "message": str(message)}
+    error: dict[str, object] = {"code": int(code), "message": str(message)}
     if data is not _MISSING:
         error["data"] = data
     return {"jsonrpc": JSON_RPC_VERSION, "id": request_id, "error": error}
 
 
 def encode_json_rpc_responses(
-    responses: list[dict[str, Any]], *, batch: bool
+    responses: list[dict[str, object]], *, batch: bool
 ) -> bytes:
     """Encode response objects, returning an empty body for notifications."""
 
     if not responses:
         return b""
-    value: Any = responses if batch else responses[0]
+    value: object = responses if batch else responses[0]
     return json.dumps(
         value,
         allow_nan=False,
