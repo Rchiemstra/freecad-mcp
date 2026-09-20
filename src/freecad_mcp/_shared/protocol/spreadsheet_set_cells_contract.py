@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Literal, NewType, NotRequired, Protocol, TypedDict, runtime_checkable
+from typing import Literal, NewType, NotRequired, Protocol, TypeGuard, TypedDict, runtime_checkable
 
 SPREADSHEET_SET_CELLS_CONTRACT_VERSION: Literal[1] = 1
 
@@ -168,7 +168,9 @@ _CORE_KEYS = frozenset(
 )
 
 
-def _valid_updated_cells(updated: object) -> bool:
+def _valid_updated_cells(
+    updated: object,
+) -> TypeGuard[list[SpreadsheetSetCellsUpdatedCell]]:
     if not isinstance(updated, list) or not updated:
         return False
     for item in updated:
@@ -177,7 +179,13 @@ def _valid_updated_cells(updated: object) -> bool:
         address = item.get("address")
         if not isinstance(address, str) or not address.strip():
             return False
-        if "alias" not in item:
+        alias = item.get("alias")
+        if "alias" not in item or alias is not None and not isinstance(alias, str):
+            return False
+        if any(
+            field in item and not isinstance(item[field], str)
+            for field in ("contents", "contents_error", "value_error")
+        ):
             return False
     return True
 

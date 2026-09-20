@@ -111,6 +111,20 @@ module = [
 ]
 disallow_any_explicit = true
 
+# Addon handlers must support both the packaged ``addon.FreeCADMCP`` import
+# path and FreeCAD's flat ``_shared`` import path.  Mypy evaluates both arms
+# of each ImportError fallback even though a runtime can load only one, so the
+# aliases otherwise become false ``import-not-found``/``no-redef`` failures.
+# Keep this exception to the dual-path addon handler namespace: strict checks
+# (including all other error codes) still apply to its typed implementation.
+[[tool.mypy.overrides]]
+module = ["addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.*"]
+disable_error_code = ["import-not-found", "no-redef"]
+
+[[tool.mypy.overrides]]
+module = ["addon.FreeCADMCP.rpc_server.methods.lease_methods_ops.collaboration_dependencies"]
+disable_error_code = ["import-not-found", "no-redef"]
+
 [[tool.mypy.overrides]]
 module = [
     "addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.cad_dependencies",

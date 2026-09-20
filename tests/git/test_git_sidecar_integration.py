@@ -18,10 +18,11 @@ import pytest
 
 from addon.FreeCADMCP.git_sidecar import export_sidecar_after_save
 
-# tools/mcp/freecad-mcp/tests -> tools/freecad_git, both checked out together
-# in the monorepo (this submodule has no direct dependency on freecad_git).
+# tools/mcp/freecad-mcp/tests/git -> tools/freecad_git, both checked out
+# together in the monorepo (this submodule has no direct dependency on
+# freecad_git).
 _FIXTURE = (
-    Path(__file__).resolve().parents[3] / "freecad_git" / "tests" / "fixtures" / "basic.FCStd"
+    Path(__file__).resolve().parents[4] / "freecad_git" / "tests" / "fixtures" / "basic.FCStd"
 )
 
 

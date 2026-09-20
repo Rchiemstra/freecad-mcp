@@ -25,7 +25,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_shape_actio
     find_subshapes,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.core
 
 FILTERS = {
     "type": "Plane",

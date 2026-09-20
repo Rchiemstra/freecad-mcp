@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import json
 from collections.abc import Mapping
-from typing import Any
 
 from .json_rpc import (
     JSON_RPC_VERSION,
@@ -54,38 +53,51 @@ class JsonRpcRemoteError(RuntimeError):
         code: int,
         message: str,
         *,
-        data: Any = _MISSING,
+        data: object = _MISSING,
         request_id: str | int | None = None,
     ) -> None:
         self.code = code
         self.message = message
         self.request_id = request_id
-        self.data = None if data is _MISSING else copy.deepcopy(data)
+        self.data: object = None if data is _MISSING else copy.deepcopy(data)
         semantic = self.data.get("error_code") if isinstance(self.data, Mapping) else None
         self.semantic_code = str(semantic or code)
         super().__init__(f"FreeCAD RPC error {code}: {message}")
 
 
-def _nested_failure_payload(container: Mapping[str, Any]) -> Mapping[str, Any] | None:
+def _object_mapping(value: object) -> Mapping[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            return None
+        result[key] = item
+    return result
+
+
+def _nested_failure_payload(container: Mapping[str, object]) -> Mapping[str, object] | None:
     inner = container.get("result")
-    if isinstance(inner, Mapping) and (
-        inner.get("success") is False or inner.get("ok") is False
+    nested = _object_mapping(inner)
+    if nested is not None and (
+        nested.get("success") is False or nested.get("ok") is False
     ):
-        return inner
+        return nested
     if container.get("success") is False or container.get("ok") is False:
         return container
     return None
 
 
-def _nested_failure_message(payload: Mapping[str, Any]) -> str | None:
+def _nested_failure_message(payload: Mapping[str, object]) -> str | None:
     for key in ("error", "message"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
-        if isinstance(value, Mapping):
-            nested = value.get("message")
-            if isinstance(nested, str) and nested.strip():
-                return nested.strip()
+        nested = _object_mapping(value)
+        if nested is not None:
+            message = nested.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
     return None
 
 
@@ -96,15 +108,16 @@ def unwrap_nested_remote_error(error: JsonRpcRemoteError) -> JsonRpcRemoteError:
     if message and message not in _USELESS_REMOTE_MESSAGES:
         return error
     data = error.data
-    if not isinstance(data, Mapping):
+    data_mapping = _object_mapping(data)
+    if data_mapping is None:
         return error
-    nested = _nested_failure_payload(data)
+    nested = _nested_failure_payload(data_mapping)
     if nested is None:
         return error
     nested_message = _nested_failure_message(nested)
     if not nested_message:
         return error
-    new_data = copy.deepcopy(data)
+    new_data = {key: copy.deepcopy(value) for key, value in data_mapping.items()}
     nested_code = nested.get("error_code") or nested.get("code")
     if nested_code and "error_code" not in new_data:
         new_data["error_code"] = str(nested_code)
@@ -122,7 +135,7 @@ def _valid_id(value: object) -> bool:
 
 def encode_json_rpc_request(
     method: str,
-    params: list[Any] | tuple[Any, ...] | dict[str, Any],
+    params: list[object] | tuple[object, ...] | dict[str, object],
     *,
     request_id: str | int | None = None,
     notification: bool = False,
@@ -135,7 +148,7 @@ def encode_json_rpc_request(
         raise TypeError("JSON-RPC params must be an array or object")
     if not notification and not _valid_id(request_id):
         raise TypeError("JSON-RPC request ID must be a string, integer, or null")
-    document: dict[str, Any] = {
+    document: dict[str, object] = {
         "jsonrpc": JSON_RPC_VERSION,
         "method": method,
         "params": params,
@@ -160,7 +173,7 @@ def decode_json_rpc_response(
     payload: bytes | str,
     *,
     expected_id: str | int | None,
-) -> Any:
+) -> object:
     """Validate one response, returning its result or raising its native error."""
 
     if not _valid_id(expected_id):
@@ -171,31 +184,32 @@ def decode_json_rpc_response(
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC endpoint did not return a valid JSON-RPC 2.0 response"
         ) from exc
-    if not isinstance(document, dict):
+    document_mapping = _object_mapping(document)
+    if document_mapping is None:
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC endpoint returned a non-object JSON-RPC response"
         )
-    actual_version = document.get("jsonrpc")
+    actual_version = document_mapping.get("jsonrpc")
     if actual_version != JSON_RPC_VERSION:
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC protocol version mismatch: expected JSON-RPC 2.0",
             actual=actual_version,
         )
-    actual_id = document.get("id", _MISSING)
+    actual_id = document_mapping.get("id", _MISSING)
     if actual_id is _MISSING or not _valid_id(actual_id) or actual_id != expected_id:
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC response ID did not match its request"
         )
-    has_result = "result" in document
-    has_error = "error" in document
+    has_result = "result" in document_mapping
+    has_error = "error" in document_mapping
     if has_result == has_error:
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC response must contain exactly one result or error"
         )
     if has_result:
-        return document["result"]
-    error = document["error"]
-    if not isinstance(error, Mapping):
+        return document_mapping["result"]
+    error = _object_mapping(document_mapping["error"])
+    if error is None:
         raise JsonRpcProtocolMismatchError(
             "FreeCAD RPC response contained an invalid error object"
         )

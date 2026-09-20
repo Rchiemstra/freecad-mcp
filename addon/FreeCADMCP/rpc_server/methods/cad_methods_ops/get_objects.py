@@ -185,13 +185,16 @@ def _serialize_row(
             "error": f"Object not found during listing: {name!r}",
         }
     try:
-        return project_listing_object(
+        projected: object = project_listing_object(
             obj,
             fields=request.fields,
             include_properties=request.include_properties,
             include_shape=request.include_shape,
             include_view=request.include_view,
         )
+        if isinstance(projected, dict) and all(isinstance(key, str) for key in projected):
+            return {str(key): value for key, value in projected.items()}
+        raise TypeError("listing projection did not return a string-keyed object")
     except Exception as exc:
         return {
             "Name": str(getattr(obj, "Name", name)),

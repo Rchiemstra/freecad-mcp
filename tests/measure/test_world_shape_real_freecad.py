@@ -22,7 +22,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
     world_shape_actions,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.core
 
 
 @pytest.fixture()
