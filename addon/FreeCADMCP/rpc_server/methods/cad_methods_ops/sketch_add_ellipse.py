@@ -7,20 +7,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_ellipse_contract import (
-    SketchAddEllipseCollaborators,
-    SketchAddEllipseFailure,
-    SketchAddEllipseRequest,
-    SketchAddEllipseResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_ellipse_failure,
-    make_sketch_add_ellipse_success,
-    make_sketch_add_ellipse_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_ellipse_contract import (
+        SketchAddEllipseCollaborators,
+        SketchAddEllipseFailure,
+        SketchAddEllipseRequest,
+        SketchAddEllipseResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_ellipse_failure,
+        make_sketch_add_ellipse_success,
+        make_sketch_add_ellipse_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_ellipse_contract import (
+        SketchAddEllipseCollaborators,
+        SketchAddEllipseFailure,
+        SketchAddEllipseRequest,
+        SketchAddEllipseResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_ellipse_failure,
+        make_sketch_add_ellipse_success,
+        make_sketch_add_ellipse_uncertain,
+    )
 from .sketch_add_ellipse_mutation import SketchAddEllipseError, run_sketch_add_ellipse_native_mutation
 
 

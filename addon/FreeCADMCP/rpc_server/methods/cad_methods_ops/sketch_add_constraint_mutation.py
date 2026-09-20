@@ -10,15 +10,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_constraint_contract import (
-    SketchAddConstraintCollaborators,
-    SketchAddConstraintDocument,
-    SketchAddConstraintFailure,
-    SketchAddConstraintReadDocument,
-    SketchAddConstraintUncertain,
-    make_sketch_add_constraint_failure,
-    make_sketch_add_constraint_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_constraint_contract import (
+        SketchAddConstraintCollaborators,
+        SketchAddConstraintDocument,
+        SketchAddConstraintFailure,
+        SketchAddConstraintReadDocument,
+        SketchAddConstraintUncertain,
+        make_sketch_add_constraint_failure,
+        make_sketch_add_constraint_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_constraint_contract import (
+        SketchAddConstraintCollaborators,
+        SketchAddConstraintDocument,
+        SketchAddConstraintFailure,
+        SketchAddConstraintReadDocument,
+        SketchAddConstraintUncertain,
+        make_sketch_add_constraint_failure,
+        make_sketch_add_constraint_uncertain,
+    )
 
 
 class SketchAddConstraintError(RuntimeError):

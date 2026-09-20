@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_placement_datum_contract import (
-    CreatePlacementDatumCollaborators,
-    CreatePlacementDatumDocument,
-    CreatePlacementDatumFailure,
-    CreatePlacementDatumReadDocument,
-    CreatePlacementDatumUncertain,
-    DocumentName,
-    make_create_placement_datum_failure,
-    make_create_placement_datum_uncertain,
-)
+try:
+    from ...._shared.protocol.create_placement_datum_contract import (
+        CreatePlacementDatumCollaborators,
+        CreatePlacementDatumDocument,
+        CreatePlacementDatumFailure,
+        CreatePlacementDatumReadDocument,
+        CreatePlacementDatumUncertain,
+        DocumentName,
+        make_create_placement_datum_failure,
+        make_create_placement_datum_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_placement_datum_contract import (
+        CreatePlacementDatumCollaborators,
+        CreatePlacementDatumDocument,
+        CreatePlacementDatumFailure,
+        CreatePlacementDatumReadDocument,
+        CreatePlacementDatumUncertain,
+        DocumentName,
+        make_create_placement_datum_failure,
+        make_create_placement_datum_uncertain,
+    )
 
 
 class CreatePlacementDatumError(RuntimeError):

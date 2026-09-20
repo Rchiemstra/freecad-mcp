@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_toggle_construction_contract import (
-    SketchToggleConstructionCollaborators,
-    SketchToggleConstructionFailure,
-    SketchToggleConstructionUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_toggle_construction_failure,
-    make_sketch_toggle_construction_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_toggle_construction_contract import (
+        SketchToggleConstructionCollaborators,
+        SketchToggleConstructionFailure,
+        SketchToggleConstructionUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_toggle_construction_failure,
+        make_sketch_toggle_construction_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_toggle_construction_contract import (
+        SketchToggleConstructionCollaborators,
+        SketchToggleConstructionFailure,
+        SketchToggleConstructionUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_toggle_construction_failure,
+        make_sketch_toggle_construction_uncertain,
+    )
 
 
 class SketchToggleConstructionError(RuntimeError):

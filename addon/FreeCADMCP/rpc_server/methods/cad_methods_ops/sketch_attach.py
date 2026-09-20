@@ -6,19 +6,34 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_attach_contract import (
-    DocumentName,
-    SketchAttachCollaborators,
-    SketchAttachDocument,
-    SketchAttachFailure,
-    SketchAttachObject,
-    SketchAttachReadDocument,
-    SketchAttachResult,
-    SketchName,
-    make_sketch_attach_failure,
-    make_sketch_attach_success,
-    make_sketch_attach_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_attach_contract import (
+        DocumentName,
+        SketchAttachCollaborators,
+        SketchAttachDocument,
+        SketchAttachFailure,
+        SketchAttachObject,
+        SketchAttachReadDocument,
+        SketchAttachResult,
+        SketchName,
+        make_sketch_attach_failure,
+        make_sketch_attach_success,
+        make_sketch_attach_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_attach_contract import (
+        DocumentName,
+        SketchAttachCollaborators,
+        SketchAttachDocument,
+        SketchAttachFailure,
+        SketchAttachObject,
+        SketchAttachReadDocument,
+        SketchAttachResult,
+        SketchName,
+        make_sketch_attach_failure,
+        make_sketch_attach_success,
+        make_sketch_attach_uncertain,
+    )
 from .sketch_attach_mutation import SketchAttachError, run_sketch_attach_native_mutation
 
 

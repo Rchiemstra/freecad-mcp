@@ -6,22 +6,40 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_offset_contract import (
-    SketchOffsetCollaborators,
-    SketchOffsetFailure,
-    SketchOffsetRequest,
-    SketchOffsetResult,
-    DocumentName,
-    SketchDocument,
-    SketchFreeCAD,
-    SketchName,
-    SketchObject,
-    SketchPart,
-    SketchReadDocument,
-    make_sketch_offset_failure,
-    make_sketch_offset_success,
-    make_sketch_offset_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_offset_contract import (
+        SketchOffsetCollaborators,
+        SketchOffsetFailure,
+        SketchOffsetRequest,
+        SketchOffsetResult,
+        DocumentName,
+        SketchDocument,
+        SketchFreeCAD,
+        SketchName,
+        SketchObject,
+        SketchPart,
+        SketchReadDocument,
+        make_sketch_offset_failure,
+        make_sketch_offset_success,
+        make_sketch_offset_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_offset_contract import (
+        SketchOffsetCollaborators,
+        SketchOffsetFailure,
+        SketchOffsetRequest,
+        SketchOffsetResult,
+        DocumentName,
+        SketchDocument,
+        SketchFreeCAD,
+        SketchName,
+        SketchObject,
+        SketchPart,
+        SketchReadDocument,
+        make_sketch_offset_failure,
+        make_sketch_offset_success,
+        make_sketch_offset_uncertain,
+    )
 from .sketch_offset_mutation import SketchOffsetError, run_sketch_offset_native_mutation
 
 

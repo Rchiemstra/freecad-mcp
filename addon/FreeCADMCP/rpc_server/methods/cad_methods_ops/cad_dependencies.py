@@ -6,11 +6,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ...._shared.protocol.body_create_contract import (
-    BodyDocument,
-    BodyReadDocument,
-    DocumentName,
-)
+try:
+    from ...._shared.protocol.body_create_contract import (
+        BodyDocument,
+        BodyReadDocument,
+        DocumentName,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.body_create_contract import (
+        BodyDocument,
+        BodyReadDocument,
+        DocumentName,
+    )
 from ..lease_methods_ops.collaboration_dependencies import (
     CompatibilityMutationAPI,
     compatibility_mutation_kwargs,

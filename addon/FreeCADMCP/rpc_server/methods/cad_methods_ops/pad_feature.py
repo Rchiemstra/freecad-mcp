@@ -2,23 +2,41 @@
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.pad_feature_contract import (
-    DocumentName,
-    PadFeatureCollaborators,
-    PadFeatureDocument,
-    PadFeatureFailure,
-    PadFeatureObject,
-    PadFeatureReadDocument,
-    PadFeatureResult,
-    PadName,
-    make_pad_feature_failure,
-    make_pad_feature_success,
-    make_pad_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.pad_feature_contract import (
+        DocumentName,
+        PadFeatureCollaborators,
+        PadFeatureDocument,
+        PadFeatureFailure,
+        PadFeatureObject,
+        PadFeatureReadDocument,
+        PadFeatureResult,
+        PadName,
+        make_pad_feature_failure,
+        make_pad_feature_success,
+        make_pad_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.pad_feature_contract import (
+        DocumentName,
+        PadFeatureCollaborators,
+        PadFeatureDocument,
+        PadFeatureFailure,
+        PadFeatureObject,
+        PadFeatureReadDocument,
+        PadFeatureResult,
+        PadName,
+        make_pad_feature_failure,
+        make_pad_feature_success,
+        make_pad_feature_uncertain,
+    )
+from .profile_checks import self_intersecting_wire_numbers, solid_result_issue
 from .pad_feature_mutation import PadFeatureError, run_pad_feature_native_mutation
 
 
@@ -106,7 +124,7 @@ def _profile_diagnostics(sketch: object) -> dict[str, object]:
     return diagnostics
 
 
-def _require_closed_profile(sketch: object, sketch_name: str) -> None:
+def _require_closed_profile(sketch: object, sketch_name: str, *, part: object = None) -> None:
     diagnostics = _profile_diagnostics(sketch)
     if (
         diagnostics["conflicting"]
@@ -116,6 +134,13 @@ def _require_closed_profile(sketch: object, sketch_name: str) -> None:
         raise PadFeatureError(
             "SKETCH_PROFILE_NOT_CLOSED",
             "Sketch profile is not pad-ready",
+            diagnostics=diagnostics,
+        )
+    crossing = self_intersecting_wire_numbers(getattr(sketch, "Shape", None), part)
+    if crossing:
+        raise PadFeatureError(
+            "SKETCH_PROFILE_SELF_INTERSECTING",
+            f"Sketch {sketch_name!r} profile wire(s) {crossing} intersect themselves",
             diagnostics=diagnostics,
         )
 
@@ -162,7 +187,7 @@ def apply_pad_feature(
         raise PadFeatureError("SKETCH_NOT_FOUND", f"Sketch {sketch_name!r} not found")
     if not _is_type(sketch, "Sketcher::SketchObject"):
         raise PadFeatureError("NOT_A_SKETCH", f"Object {sketch_name!r} is not a sketch")
-    _require_closed_profile(sketch, sketch_name)
+    _require_closed_profile(sketch, sketch_name, part=getattr(collaborators, "part", None))
     body = _resolve_body(doc, sketch, body_name)
     new_object = getattr(body, "newObject", None)
     if not callable(new_object):
@@ -222,11 +247,11 @@ def read_pad_feature_result(
             "PAD_LENGTH_MISMATCH",
             f"Pad {receipt.name!r} Length {actual_length} does not match {receipt.expected_length}",
         )
-    shape = getattr(pad, "Shape", None)
-    if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+    issue = solid_result_issue(getattr(pad, "Shape", None))
+    if issue is not None:
         raise PadFeatureError(
             "PAD_SHAPE_EMPTY",
-            f"Pad {receipt.name!r} has no solid after recompute",
+            f"Pad {receipt.name!r} {issue} after recompute",
         )
     return PadFeatureInspection(name=PadName(receipt.name), label=str(receipt.pad.Label))
 
@@ -249,8 +274,8 @@ def build_pad_feature_request(
         return _failure(PadFeatureError("INVALID_ARGUMENT", "pad_name must be a nonempty string"))
     if isinstance(length, bool) or not isinstance(length, (int, float)):
         return _failure(PadFeatureError("INVALID_ARGUMENT", "length must be a number"))
-    if float(length) <= 0:
-        return _failure(PadFeatureError("INVALID_ARGUMENT", "length must be greater than zero"))
+    if not math.isfinite(float(length)) or float(length) <= 0:
+        return _failure(PadFeatureError("INVALID_ARGUMENT", "length must be a finite number greater than zero"))
     if body_name is not None and (not isinstance(body_name, str) or not body_name.strip()):
         return _failure(PadFeatureError("INVALID_ARGUMENT", "body_name must be a nonempty string"))
     if not isinstance(symmetric, bool):

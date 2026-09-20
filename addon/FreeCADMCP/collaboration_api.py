@@ -64,26 +64,6 @@ def _validate_callbacks(
         raise TypeError("postcondition must be callable or None")
 
 
-def _restored_callback_native_result(
-    exc: BaseException, *, postcondition_started: bool
-) -> dict[str, object]:
-    """Map a restored Python callback error to a native coordinator status.
-
-    FreeCAD restores the original callback exception after a classified
-    rollback unless the status is RollbackFailed. Typed mutations already
-    captured FEATURE_NOT_FOUND / apply failures in leaf state; they need
-    ApplyFailed or PostconditionFailed instead of a generic exception.
-    """
-
-    message = str(exc) or type(exc).__name__
-    return {
-        "status": "PostconditionFailed" if postcondition_started else "ApplyFailed",
-        "committed": False,
-        "message": message,
-        "rollback_succeeded": True,
-    }
-
-
 def _settle_pending_recompute(document: object) -> None:
     """Clear leftover mustExecute so the next native commit is not Busy."""
 
@@ -108,6 +88,38 @@ def _commit_without_native(
     # attribute the mutation. Typed-rpc still returns Unsupported when the
     # caller explicitly required a native postcondition or native-only lane.
     raise TypeError("document must provide commitCompatibilityMutation()")
+
+
+class _CallbackRefusals:
+    """Remember the exceptions our own native callbacks raised.
+
+    ``DocumentPy::commitCompatibilityMutation`` re-raises a failed apply or
+    postcondition callback's exception only after the coordinator restored the
+    document; a failed rollback is returned as a ``RollbackFailed`` result
+    instead. The very exception object raised by our callback escaping the
+    binding therefore proves a completed rollback. Any other exception stays
+    unproven and keeps propagating.
+    """
+
+    __slots__ = ("_raised", "started")
+
+    def __init__(self) -> None:
+        self.started = False
+        self._raised: list[tuple[str, BaseException]] = []
+
+    def record(self, status: str, exc: BaseException) -> None:
+        self._raised.append((status, exc))
+
+    def proven_rejection(self, exc: BaseException) -> dict[str, object] | None:
+        for status, raised in self._raised:
+            if raised is exc:
+                return {
+                    "status": status,
+                    "committed": False,
+                    "rollback_succeeded": True,
+                    "message": str(exc) or type(exc).__name__,
+                }
+        return None
 
 
 class CollaborationAPI:
@@ -145,16 +157,22 @@ class CollaborationAPI:
             )
 
         _settle_pending_recompute(document)
-        callback_started: list[bool] = []
-        postcondition_started: list[bool] = []
+        refusals = _CallbackRefusals()
 
         def invoke_callback() -> object:
-            callback_started.append(True)
-            return callback(document)
+            refusals.started = True
+            try:
+                return callback(document)
+            except Exception as exc:
+                refusals.record("ApplyFailed", exc)
+                raise
 
         def invoke_postcondition() -> object:
-            postcondition_started.append(True)
-            return postcondition(document)
+            try:
+                return postcondition(document)
+            except Exception as exc:
+                refusals.record("PostconditionFailed", exc)
+                raise
 
         try:
             return document.commitCompatibilityMutation(
@@ -162,18 +180,13 @@ class CollaborationAPI:
                 structural=True,
                 postcondition=invoke_postcondition,
             )
-        except TypeError as exc:
-            if not callback_started:
+        except Exception as exc:
+            rejection = refusals.proven_rejection(exc)
+            if rejection is not None:
+                return rejection
+            if isinstance(exc, TypeError) and not refusals.started:
                 return _unsupported(
                     "native postcondition callback is not supported"
-                )
-            return _restored_callback_native_result(
-                exc, postcondition_started=bool(postcondition_started)
-            )
-        except Exception as exc:
-            if callback_started:
-                return _restored_callback_native_result(
-                    exc, postcondition_started=bool(postcondition_started)
                 )
             raise
 
@@ -196,16 +209,22 @@ class CollaborationAPI:
 
         if recompute:
             _settle_pending_recompute(document)
-        callback_started: list[bool] = []
-        postcondition_started: list[bool] = []
+        refusals = _CallbackRefusals()
 
         def invoke_callback() -> object:
-            callback_started.append(True)
-            return callback(document)
+            refusals.started = True
+            try:
+                return callback(document)
+            except Exception as exc:
+                refusals.record("ApplyFailed", exc)
+                raise
 
         def invoke_postcondition() -> object:
-            postcondition_started.append(True)
-            return postcondition(document)
+            try:
+                return postcondition(document)
+            except Exception as exc:
+                refusals.record("PostconditionFailed", exc)
+                raise
 
         try:
             return document.commitCompatibilityMutation(
@@ -214,18 +233,13 @@ class CollaborationAPI:
                 postcondition=invoke_postcondition,
                 recompute=recompute,
             )
-        except TypeError as exc:
-            if not callback_started:
+        except Exception as exc:
+            rejection = refusals.proven_rejection(exc)
+            if rejection is not None:
+                return rejection
+            if isinstance(exc, TypeError) and not refusals.started:
                 return _unsupported(
                     "native postcondition callback is not supported"
-                )
-            return _restored_callback_native_result(
-                exc, postcondition_started=bool(postcondition_started)
-            )
-        except Exception as exc:
-            if callback_started:
-                return _restored_callback_native_result(
-                    exc, postcondition_started=bool(postcondition_started)
                 )
             raise
 

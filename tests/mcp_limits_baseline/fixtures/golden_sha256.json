@@ -1,0 +1,11 @@
+{
+  "campaign_run_id": "run-20260916-mcp-limits",
+  "files": {
+    "REPORT.md": "517f7c3a5ce8d56413b8a0b250cab95c0932bc4d95f495c341b5d050e3c354bc",
+    "findings-log.md": "f8a23bf9823a76e6f2b2b6c58e7d61020a55bf2527671c1b1f7126215e3831bb",
+    "coverage-matrix.md": "ef3451d49cd29f8b9a8f91e81c9cd54e7571331023ebead1184eb9f602378e34",
+    "reproductions.md": "c0732b637dc3c97ba36e67990e8b33066408bfa95e11f0de56a4acdbc716c5cf",
+    "results.json": "1021a281597164d92ee8ef54b4a12fd7d324da8632df5ecd20d85dfb09859028",
+    "mcp_debug_2026-09-16_317891_0a5ddd947d58.jsonl": "c5e11894c20df05042f7c8c4fbb855e8e7b79a003c9e7c774546c3687193c5f9"
+  }
+}

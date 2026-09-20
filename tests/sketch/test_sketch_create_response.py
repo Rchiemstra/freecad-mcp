@@ -142,18 +142,24 @@ def test_contradictory_failure_never_proves_rejection(change):
 
 
 def test_gui_completion_timeout_preserves_unknown_model_state():
+    request_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     raw = {
         "success": False,
-        "error_code": "GUI_COMPLETION_UNCERTAIN",
+        "error_code": "GUI_TIMEOUT_DURING_EXECUTION",
         "error": "Timed out",
         "completion_uncertain": True,
+        "request_id": request_id,
+        "timeout_stage": "during_execution",
     }
     response = sketch_create_operation(
         SimpleNamespace(sketch_create=lambda *_args, **_kwargs: raw), True, "Doc", "Sketch"
     )
     assert response.isError is True
-    assert response.structuredContent["data"]["outcome"] == "uncertain"
-    assert response.structuredContent["data"]["committed"] is None
+    envelope = response.structuredContent
+    assert envelope["status"] in {"timed_out", "unknown"}
+    assert envelope["status"] != "failed"
+    assert envelope["correlation"]["request_id"] == request_id
+    assert envelope["data"]["error_code"] == "GUI_TIMEOUT_DURING_EXECUTION"
 
 
 def test_transport_failure_preserves_unknown_model_state():

@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.body_create_contract import (
-    BodyCreateCollaborators,
-    BodyCreateFailure,
-    BodyCreateUncertain,
-    BodyDocument,
-    BodyReadDocument,
-    DocumentName,
-    make_body_create_failure,
-    make_body_create_uncertain,
-)
+try:
+    from ...._shared.protocol.body_create_contract import (
+        BodyCreateCollaborators,
+        BodyCreateFailure,
+        BodyCreateUncertain,
+        BodyDocument,
+        BodyReadDocument,
+        DocumentName,
+        make_body_create_failure,
+        make_body_create_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.body_create_contract import (
+        BodyCreateCollaborators,
+        BodyCreateFailure,
+        BodyCreateUncertain,
+        BodyDocument,
+        BodyReadDocument,
+        DocumentName,
+        make_body_create_failure,
+        make_body_create_uncertain,
+    )
 
 
 class BodyCreateError(RuntimeError):

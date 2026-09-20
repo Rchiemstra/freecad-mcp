@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol
 
-from ...._shared.protocol.redo_contract import (
-    DocumentName,
-    RedoCollaborators,
-    RedoFailure,
-    RedoRequest,
-    RedoResult,
-    make_redo_failure,
-    make_redo_success,
-    make_redo_uncertain,
-)
+try:
+    from ...._shared.protocol.redo_contract import (
+        DocumentName,
+        RedoCollaborators,
+        RedoFailure,
+        RedoRequest,
+        RedoResult,
+        make_redo_failure,
+        make_redo_success,
+        make_redo_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.redo_contract import (
+        DocumentName,
+        RedoCollaborators,
+        RedoFailure,
+        RedoRequest,
+        RedoResult,
+        make_redo_failure,
+        make_redo_success,
+        make_redo_uncertain,
+    )
 from .history_runtime import (
     admit_history_document,
     perform_history_action,

@@ -224,12 +224,38 @@ def animate_placement(
         return {"ok": False, "error": str(e)}
 
 
-def get_objects(conn, doc_name: str) -> list[dict[str, Any]]:
-    return conn.server.get_objects(doc_name)
+def get_objects(
+    conn,
+    doc_name: str,
+    fields: object = None,
+    include_properties: object = None,
+    include_shape: bool = False,
+    include_view: bool = False,
+    page_size: int = 50,
+    cursor: object = None,
+) -> dict[str, Any]:
+    from freecad_mcp._shared.protocol.get_objects_contract import (
+        get_objects_wire_from_server,
+    )
+
+    return get_objects_wire_from_server(
+        conn.server,
+        doc_name,
+        fields,
+        include_properties,
+        include_shape,
+        include_view,
+        page_size,
+        cursor,
+    )
 
 
 def get_object(conn, doc_name: str, obj_name: str) -> dict[str, Any]:
-    return conn.server.get_object(doc_name, obj_name)
+    from freecad_mcp._shared.protocol.get_object_contract import (
+        get_object_wire_from_server,
+    )
+
+    return get_object_wire_from_server(conn.server, doc_name, obj_name)
 
 
 def get_parts_list(conn) -> list[str]:

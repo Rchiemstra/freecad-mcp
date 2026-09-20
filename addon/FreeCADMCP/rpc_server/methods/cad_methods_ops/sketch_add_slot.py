@@ -7,20 +7,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_slot_contract import (
-    SketchAddSlotCollaborators,
-    SketchAddSlotFailure,
-    SketchAddSlotRequest,
-    SketchAddSlotResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_slot_failure,
-    make_sketch_add_slot_success,
-    make_sketch_add_slot_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_slot_contract import (
+        SketchAddSlotCollaborators,
+        SketchAddSlotFailure,
+        SketchAddSlotRequest,
+        SketchAddSlotResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_slot_failure,
+        make_sketch_add_slot_success,
+        make_sketch_add_slot_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_slot_contract import (
+        SketchAddSlotCollaborators,
+        SketchAddSlotFailure,
+        SketchAddSlotRequest,
+        SketchAddSlotResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_slot_failure,
+        make_sketch_add_slot_success,
+        make_sketch_add_slot_uncertain,
+    )
 from .sketch_add_slot_mutation import SketchAddSlotError, run_sketch_add_slot_native_mutation
 
 

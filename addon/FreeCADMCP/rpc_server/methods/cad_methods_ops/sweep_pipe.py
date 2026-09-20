@@ -23,19 +23,34 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sweep_pipe_contract import (
-    SweepPipeCollaborators,
-    SweepPipeDocument,
-    SweepPipeFailure,
-    SweepPipeName,
-    SweepPipeReadDocument,
-    SweepPipeRequest,
-    SweepPipeResult,
-    DocumentName,
-    make_sweep_pipe_failure,
-    make_sweep_pipe_success,
-    make_sweep_pipe_uncertain,
-)
+try:
+    from ...._shared.protocol.sweep_pipe_contract import (
+        SweepPipeCollaborators,
+        SweepPipeDocument,
+        SweepPipeFailure,
+        SweepPipeName,
+        SweepPipeReadDocument,
+        SweepPipeRequest,
+        SweepPipeResult,
+        DocumentName,
+        make_sweep_pipe_failure,
+        make_sweep_pipe_success,
+        make_sweep_pipe_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sweep_pipe_contract import (
+        SweepPipeCollaborators,
+        SweepPipeDocument,
+        SweepPipeFailure,
+        SweepPipeName,
+        SweepPipeReadDocument,
+        SweepPipeRequest,
+        SweepPipeResult,
+        DocumentName,
+        make_sweep_pipe_failure,
+        make_sweep_pipe_success,
+        make_sweep_pipe_uncertain,
+    )
 from .sweep_pipe_mutation import SweepPipeError, run_sweep_pipe_native_mutation
 from .typed_runtime import TypedMutationError, is_derived_from, load_module, module_callable
 

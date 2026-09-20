@@ -6,6 +6,8 @@ pure core or the narrow Qt adapter that owns one.
 
 from __future__ import annotations
 
+from .gui_block_state import describe_gui_block as _describe_gui_block
+
 import contextlib
 import uuid
 from collections.abc import Callable
@@ -135,6 +137,9 @@ def raise_submit_timeout_error(
             "the request finishes"
         )
     )
+    blocked_by = _describe_gui_block() if before_execution else None
+    if blocked_by:
+        suffix += f": {blocked_by}"
     error = GuiDispatchTimeout(
         f"Timed out after {timeout}s waiting for FreeCAD GUI response{suffix}",
         request_id=request.request_id,
@@ -143,7 +148,9 @@ def raise_submit_timeout_error(
         completion_uncertain=not before_execution,
     )
     error.error_code = (
-        "GUI_TIMEOUT_BEFORE_EXECUTION"
+        "GUI_TIMEOUT_BLOCKED_BY_MODAL_DIALOG"
+        if blocked_by
+        else "GUI_TIMEOUT_BEFORE_EXECUTION"
         if before_execution
         else "GUI_TIMEOUT_DURING_EXECUTION"
     )

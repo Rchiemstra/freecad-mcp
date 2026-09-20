@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_parametric_curve_contract import (
-    SketchAddParametricCurveCollaborators,
-    SketchAddParametricCurveFailure,
-    SketchAddParametricCurveUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_add_parametric_curve_failure,
-    make_sketch_add_parametric_curve_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_parametric_curve_contract import (
+        SketchAddParametricCurveCollaborators,
+        SketchAddParametricCurveFailure,
+        SketchAddParametricCurveUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_parametric_curve_failure,
+        make_sketch_add_parametric_curve_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_parametric_curve_contract import (
+        SketchAddParametricCurveCollaborators,
+        SketchAddParametricCurveFailure,
+        SketchAddParametricCurveUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_parametric_curve_failure,
+        make_sketch_add_parametric_curve_uncertain,
+    )
 
 
 class SketchAddParametricCurveError(RuntimeError):

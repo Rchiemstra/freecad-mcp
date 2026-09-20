@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.recompute_document_contract import (
-    RecomputeDocumentCollaborators,
-    RecomputeDocumentFailure,
-    RecomputeDocumentRequest,
-    RecomputeDocumentResult,
-    DocumentName,
-    make_recompute_document_failure,
-    make_recompute_document_success,
-    make_recompute_document_uncertain,
-)
+try:
+    from ...._shared.protocol.recompute_document_contract import (
+        RecomputeDocumentCollaborators,
+        RecomputeDocumentFailure,
+        RecomputeDocumentRequest,
+        RecomputeDocumentResult,
+        DocumentName,
+        make_recompute_document_failure,
+        make_recompute_document_success,
+        make_recompute_document_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.recompute_document_contract import (
+        RecomputeDocumentCollaborators,
+        RecomputeDocumentFailure,
+        RecomputeDocumentRequest,
+        RecomputeDocumentResult,
+        DocumentName,
+        make_recompute_document_failure,
+        make_recompute_document_success,
+        make_recompute_document_uncertain,
+    )
 from .recompute_document_mutation import RecomputeDocumentError, run_recompute_document_native_mutation
 from .typed_rpc_document import document_name
 

@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.repair_references_contract import (
-    RepairReferencesCollaborators,
-    RepairReferencesReadDocument,
-    RepairReferencesFailure,
-    RepairReferencesUncertain,
-    make_repair_references_failure,
-    make_repair_references_uncertain,
-)
+try:
+    from ...._shared.protocol.repair_references_contract import (
+        RepairReferencesCollaborators,
+        RepairReferencesReadDocument,
+        RepairReferencesFailure,
+        RepairReferencesUncertain,
+        make_repair_references_failure,
+        make_repair_references_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.repair_references_contract import (
+        RepairReferencesCollaborators,
+        RepairReferencesReadDocument,
+        RepairReferencesFailure,
+        RepairReferencesUncertain,
+        make_repair_references_failure,
+        make_repair_references_uncertain,
+    )
 
 
 class RepairReferencesError(RuntimeError):

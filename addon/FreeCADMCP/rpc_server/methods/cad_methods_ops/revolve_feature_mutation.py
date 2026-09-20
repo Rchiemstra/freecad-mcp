@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.revolve_feature_contract import (
-    RevolveFeatureCollaborators,
-    RevolveFeatureFailure,
-    RevolveFeatureUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_revolve_feature_failure,
-    make_revolve_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.revolve_feature_contract import (
+        RevolveFeatureCollaborators,
+        RevolveFeatureFailure,
+        RevolveFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_revolve_feature_failure,
+        make_revolve_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.revolve_feature_contract import (
+        RevolveFeatureCollaborators,
+        RevolveFeatureFailure,
+        RevolveFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_revolve_feature_failure,
+        make_revolve_feature_uncertain,
+    )
 
 
 class RevolveFeatureError(RuntimeError):

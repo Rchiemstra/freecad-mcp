@@ -27,20 +27,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.linear_pattern_feature_contract import (
-    LinearPatternFeatureCollaborators,
-    LinearPatternFeatureFailure,
-    LinearPatternFeatureRequest,
-    LinearPatternFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_linear_pattern_feature_failure,
-    make_linear_pattern_feature_success,
-    make_linear_pattern_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.linear_pattern_feature_contract import (
+        LinearPatternFeatureCollaborators,
+        LinearPatternFeatureFailure,
+        LinearPatternFeatureRequest,
+        LinearPatternFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_linear_pattern_feature_failure,
+        make_linear_pattern_feature_success,
+        make_linear_pattern_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.linear_pattern_feature_contract import (
+        LinearPatternFeatureCollaborators,
+        LinearPatternFeatureFailure,
+        LinearPatternFeatureRequest,
+        LinearPatternFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_linear_pattern_feature_failure,
+        make_linear_pattern_feature_success,
+        make_linear_pattern_feature_uncertain,
+    )
 from .linear_pattern_feature_mutation import LinearPatternFeatureError, run_linear_pattern_feature_native_mutation
 
 

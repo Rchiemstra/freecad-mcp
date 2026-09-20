@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.polar_pattern_feature_contract import (
-    PolarPatternFeatureCollaborators,
-    PolarPatternFeatureFailure,
-    PolarPatternFeatureUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_polar_pattern_feature_failure,
-    make_polar_pattern_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.polar_pattern_feature_contract import (
+        PolarPatternFeatureCollaborators,
+        PolarPatternFeatureFailure,
+        PolarPatternFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_polar_pattern_feature_failure,
+        make_polar_pattern_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.polar_pattern_feature_contract import (
+        PolarPatternFeatureCollaborators,
+        PolarPatternFeatureFailure,
+        PolarPatternFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_polar_pattern_feature_failure,
+        make_polar_pattern_feature_uncertain,
+    )
 
 
 class PolarPatternFeatureError(RuntimeError):

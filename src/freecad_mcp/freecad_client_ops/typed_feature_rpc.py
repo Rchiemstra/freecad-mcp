@@ -40,7 +40,9 @@ def invoke_typed_feature_rpc(
     fallback = getattr(conn.server, method, None)
     if not callable(fallback):
         raise TypeError(f"FreeCAD RPC server has no callable {method}")
-    return fallback(**dict(params))
+    # The v1 proxy sends positional JSON-RPC params only; every caller builds
+    # ``params`` in the addon handler's parameter order.
+    return fallback(*params.values())
 
 
 def _call(

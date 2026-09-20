@@ -56,11 +56,13 @@ def _make_proxy(conn, timeout: float) -> ProxyLane:
                 timeout,
                 conn._request_headers_snapshot,
                 transport=live_transport,
+                lift_rejections=True,
             )
         return ProxyLane(
             conn._uri,
             timeout,
             conn._request_headers_snapshot,
+            lift_rejections=True,
         )
 
 

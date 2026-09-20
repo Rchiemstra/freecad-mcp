@@ -23,19 +23,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_subshape_binder_contract import (
-    CreateSubshapeBinderCollaborators,
-    CreateSubshapeBinderDocument,
-    CreateSubshapeBinderFailure,
-    CreateSubshapeBinderName,
-    CreateSubshapeBinderReadDocument,
-    CreateSubshapeBinderRequest,
-    CreateSubshapeBinderResult,
-    DocumentName,
-    make_create_subshape_binder_failure,
-    make_create_subshape_binder_success,
-    make_create_subshape_binder_uncertain,
-)
+try:
+    from ...._shared.protocol.create_subshape_binder_contract import (
+        CreateSubshapeBinderCollaborators,
+        CreateSubshapeBinderDocument,
+        CreateSubshapeBinderFailure,
+        CreateSubshapeBinderName,
+        CreateSubshapeBinderReadDocument,
+        CreateSubshapeBinderRequest,
+        CreateSubshapeBinderResult,
+        DocumentName,
+        make_create_subshape_binder_failure,
+        make_create_subshape_binder_success,
+        make_create_subshape_binder_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_subshape_binder_contract import (
+        CreateSubshapeBinderCollaborators,
+        CreateSubshapeBinderDocument,
+        CreateSubshapeBinderFailure,
+        CreateSubshapeBinderName,
+        CreateSubshapeBinderReadDocument,
+        CreateSubshapeBinderRequest,
+        CreateSubshapeBinderResult,
+        DocumentName,
+        make_create_subshape_binder_failure,
+        make_create_subshape_binder_success,
+        make_create_subshape_binder_uncertain,
+    )
 from .create_subshape_binder_mutation import CreateSubshapeBinderError, run_create_subshape_binder_native_mutation
 from .typed_runtime import is_derived_from
 

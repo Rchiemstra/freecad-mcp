@@ -16,7 +16,7 @@ from freecad_mcp.operations.parametric_ops.measure_volume import measure_volume_
 
 
 def _success():
-    return make_measure_volume_success(object="Box", volume_mm3=1000.0, unit="mm3", frame="global")
+    return make_measure_volume_success(object="Box", volume_mm3=1000.0, unit="mm3", frame="global", used_linked_object=False)
 
 
 @pytest.mark.parametrize("raw", [None, [], 1, "timeout", {}, {1: "bad key"}])

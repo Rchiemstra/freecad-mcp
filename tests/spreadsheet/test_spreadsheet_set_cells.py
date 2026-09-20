@@ -7,13 +7,41 @@ from types import SimpleNamespace
 import pytest
 
 from addon.FreeCADMCP.collaboration_api import CollaborationAPI
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import spreadsheet_set_cells as subject
-from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.spreadsheet_set_cells import run_spreadsheet_set_cells
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
+    spreadsheet_set_cells as subject,
+)
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.spreadsheet_set_cells import (
+    run_spreadsheet_set_cells,
+)
 
 pytestmark = pytest.mark.unit
 
 
 def _item(name: str, *, label: str | None = None, type_id: str = "App::FeaturePython"):
+    values: dict[str, str] = {}
+    aliases: dict[str, str] = {}
+
+    def set_cell(address, value):
+        values[str(address)] = str(value)
+
+    def set_alias(address, alias):
+        address = str(address)
+        alias = str(alias)
+        for bound_address, bound_alias in list(aliases.items()):
+            if bound_alias == alias and bound_address != address:
+                del aliases[bound_address]
+        aliases[address] = alias
+
+    def get_alias(address):
+        return aliases.get(str(address))
+
+    def get_cell_from_alias(alias):
+        alias = str(alias)
+        for address, bound_alias in aliases.items():
+            if bound_alias == alias:
+                return address
+        return None
+
     obj = SimpleNamespace(
         Name=name,
         Label=label if label is not None else f"Label for {name}",
@@ -26,13 +54,13 @@ def _item(name: str, *, label: str | None = None, type_id: str = "App::FeaturePy
     )
     obj.setExpression = lambda *_a, **_k: None
     obj.clearExpression = lambda *_a, **_k: None
-    obj.set = lambda *_a, **_k: None
-    obj.setAlias = lambda *_a, **_k: None
-    obj.get = lambda *_a, **_k: "1"
-    obj.getContents = lambda *_a, **_k: "1"
-    obj.getAlias = lambda *_a, **_k: None
-    obj.getCellFromAlias = lambda *_a, **_k: None
-    obj.getNonEmptyCells = lambda: []
+    obj.set = set_cell
+    obj.setAlias = set_alias
+    obj.get = lambda address, *_a, **_k: values.get(str(address), "")
+    obj.getContents = lambda address, *_a, **_k: values.get(str(address), "")
+    obj.getAlias = get_alias
+    obj.getCellFromAlias = get_cell_from_alias
+    obj.getNonEmptyCells = lambda: list(values)
     obj.addObject = lambda other: obj.Group.append(other)
     obj.newObject = lambda type_id, name: _item(name, type_id=type_id)
     obj.addExternal = lambda *_a, **_k: None
@@ -236,7 +264,7 @@ def test_spreadsheet_set_cells_runs_apply_recompute_inspect_validate_then_commit
 
 def test_missing_document_fails_without_entering_the_apply_callback():
     events: list[str] = []
-    collaborators, api = _collaborators(None, events)
+    collaborators, _api = _collaborators(None, events)
     result = run_spreadsheet_set_cells(collaborators, "Doc", "Target", [{"address": "A1", "value": 1}])
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
@@ -348,10 +376,123 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
 
 
+def test_d12_repro_set_alias_cells_echo_committed_aliases():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+    cells = [
+        {"address": "A1", "value": "plate_len", "set_alias": None},
+        {"address": "B1", "value": 40, "set_alias": "plate_len"},
+        {"address": "A2", "value": "plate_wid"},
+        {"address": "B2", "value": 30, "set_alias": "plate_wid"},
+        {"address": "A3", "value": "plate_thk"},
+        {"address": "B3", "value": 8, "set_alias": "plate_thk"},
+        {"address": "A4", "value": "hole_dia"},
+        {"address": "B4", "value": 10, "set_alias": "hole_dia"},
+    ]
+    result = run_spreadsheet_set_cells(collaborators, "Doc", "Target", cells)
+    assert result["success"] is True
+    updated = result["updated"]
+    alias_by_address = {row["address"]: row["alias"] for row in updated}
+    assert alias_by_address["B1"] == "plate_len"
+    assert alias_by_address["B2"] == "plate_wid"
+    assert alias_by_address["B3"] == "plate_thk"
+    assert alias_by_address["B4"] == "hole_dia"
+
+
+def test_alias_addressing_updates_committed_alias():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    sheet = document.objects["Target"]
+    sheet.setAlias("B1", "plate_len")
+    collaborators, _api = _collaborators(document, events)
+    result = run_spreadsheet_set_cells(
+        collaborators,
+        "Doc",
+        "Target",
+        [{"alias": "plate_len", "value": 50}],
+    )
+    assert result["success"] is True
+    assert result["updated"][0]["address"] == "B1"
+    assert result["updated"][0]["alias"] == "plate_len"
+    assert result["updated"][0]["value"] == "50"
+
+
+def test_missing_set_alias_rejects_batch():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    sheet = document.objects["Target"]
+    sheet.setAlias = None
+    collaborators, _api = _collaborators(document, events)
+    result = run_spreadsheet_set_cells(
+        collaborators,
+        "Doc",
+        "Target",
+        [{"address": "B1", "value": 40, "set_alias": "plate_len"}],
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_SHEET"
+
+
+def test_in_batch_alias_collision_rejects():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+    result = run_spreadsheet_set_cells(
+        collaborators,
+        "Doc",
+        "Target",
+        [
+            {"address": "B1", "value": 40, "set_alias": "plate_len"},
+            {"address": "B2", "value": 30, "set_alias": "plate_len"},
+        ],
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+
+
+def test_existing_alias_collision_rejects():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    sheet = document.objects["Target"]
+    sheet.setAlias("B1", "plate_len")
+    collaborators, _api = _collaborators(document, events)
+    result = run_spreadsheet_set_cells(
+        collaborators,
+        "Doc",
+        "Target",
+        [{"address": "B2", "value": 30, "set_alias": "plate_len"}],
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+
+
+def test_requested_alias_not_bound_after_recompute_rejects():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    sheet = document.objects["Target"]
+    sheet.setAlias = lambda *_a, **_k: None
+    collaborators, _api = _collaborators(document, events)
+    result = run_spreadsheet_set_cells(
+        collaborators,
+        "Doc",
+        "Target",
+        [{"address": "B1", "value": 40, "set_alias": "plate_len"}],
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "EXPRESSION_ERROR"
+
+
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.spreadsheet_set_cells_mutation import (
-        _spreadsheet_set_cells_native_result,
         _NativeMutationState,
+        _spreadsheet_set_cells_native_result,
     )
 
     for native_result in (

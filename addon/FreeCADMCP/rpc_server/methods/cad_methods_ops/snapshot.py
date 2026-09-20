@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.snapshot_contract import (
-    DocumentName,
-    SnapshotCollaborators,
-    SnapshotFailure,
-    SnapshotRequest,
-    SnapshotResult,
-    make_snapshot_failure,
-    make_snapshot_success,
-)
+try:
+    from ...._shared.protocol.snapshot_contract import (
+        DocumentName,
+        SnapshotCollaborators,
+        SnapshotFailure,
+        SnapshotRequest,
+        SnapshotResult,
+        make_snapshot_failure,
+        make_snapshot_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.snapshot_contract import (
+        DocumentName,
+        SnapshotCollaborators,
+        SnapshotFailure,
+        SnapshotRequest,
+        SnapshotResult,
+        make_snapshot_failure,
+        make_snapshot_success,
+    )
 from . import diagnostics_io_actions
 from .policy_runtime import app_from, lookup_document, optional_recompute
 from .typed_runtime import as_int

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_perpendicular_contract import (
-    SketchConstrainPerpendicularCollaborators,
-    SketchConstrainPerpendicularFailure,
-    SketchConstrainPerpendicularRequest,
-    SketchConstrainPerpendicularResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_perpendicular_failure,
-    make_sketch_constrain_perpendicular_success,
-    make_sketch_constrain_perpendicular_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_perpendicular_contract import (
+        SketchConstrainPerpendicularCollaborators,
+        SketchConstrainPerpendicularFailure,
+        SketchConstrainPerpendicularRequest,
+        SketchConstrainPerpendicularResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_perpendicular_failure,
+        make_sketch_constrain_perpendicular_success,
+        make_sketch_constrain_perpendicular_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_perpendicular_contract import (
+        SketchConstrainPerpendicularCollaborators,
+        SketchConstrainPerpendicularFailure,
+        SketchConstrainPerpendicularRequest,
+        SketchConstrainPerpendicularResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_perpendicular_failure,
+        make_sketch_constrain_perpendicular_success,
+        make_sketch_constrain_perpendicular_uncertain,
+    )
 from .sketch_constrain_perpendicular_mutation import SketchConstrainPerpendicularError, run_sketch_constrain_perpendicular_native_mutation
 
 

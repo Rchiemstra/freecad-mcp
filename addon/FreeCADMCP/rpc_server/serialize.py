@@ -59,8 +59,49 @@ def serialize_view_object(view):
     result = {}
     for attr in ("ShapeColor", "Transparency", "Visibility"):
         with contextlib.suppress(Exception):
-            result[attr] = serialize_value(getattr(view, attr))
+            value = getattr(view, attr)
+            if attr == "ShapeColor" and isinstance(value, (list, tuple)):
+                result[attr] = [serialize_value(item) for item in value]
+            else:
+                result[attr] = serialize_value(value)
     return result
+
+
+def _serialize_property_value(obj, prop: str):
+    if prop == "Shape":
+        return serialize_shape(getattr(obj, prop, None))
+    if prop == "ViewObject":
+        return serialize_view_object(getattr(obj, prop, None))
+    return serialize_value(getattr(obj, prop))
+
+
+def project_listing_object(
+    obj,
+    *,
+    fields: tuple[str, ...],
+    include_properties: tuple[str, ...] | None,
+    include_shape: bool,
+    include_view: bool,
+) -> dict[str, object]:
+    row: dict[str, object] = {}
+    for field in fields:
+        if field == "Placement":
+            row[field] = serialize_value(getattr(obj, "Placement", None))
+        else:
+            row[field] = getattr(obj, field, None)
+    if include_shape:
+        row["Shape"] = serialize_shape(getattr(obj, "Shape", None))
+    if include_view:
+        row["ViewObject"] = serialize_view_object(getattr(obj, "ViewObject", None))
+    if include_properties:
+        properties: dict[str, object] = {}
+        for prop in include_properties:
+            try:
+                properties[prop] = _serialize_property_value(obj, prop)
+            except Exception as exc:
+                properties[prop] = f"<error: {exc!s}>"
+        row["Properties"] = properties
+    return row
 
 
 def serialize_object(obj):
@@ -86,14 +127,14 @@ def serialize_object(obj):
 
         for prop in obj.PropertiesList:
             try:
-                result["Properties"][prop] = serialize_value(getattr(obj, prop))
+                result["Properties"][prop] = _serialize_property_value(obj, prop)
             except Exception as e:
                 result["Properties"][prop] = f"<error: {e!s}>"
 
         try:
             if hasattr(obj, "ViewObject") and obj.ViewObject is not None:
                 result["ViewObject"] = serialize_view_object(obj.ViewObject)
-        except Exception:
-            pass
+        except Exception as exc:
+            result["ViewObject"] = {"error": f"ViewObject unavailable: {exc!s}"}
 
         return result

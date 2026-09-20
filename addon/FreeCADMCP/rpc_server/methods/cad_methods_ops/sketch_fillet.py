@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_fillet_contract import (
-    SketchFilletCollaborators,
-    SketchFilletFailure,
-    SketchFilletRequest,
-    SketchFilletResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_fillet_failure,
-    make_sketch_fillet_success,
-    make_sketch_fillet_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_fillet_contract import (
+        SketchFilletCollaborators,
+        SketchFilletFailure,
+        SketchFilletRequest,
+        SketchFilletResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_fillet_failure,
+        make_sketch_fillet_success,
+        make_sketch_fillet_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_fillet_contract import (
+        SketchFilletCollaborators,
+        SketchFilletFailure,
+        SketchFilletRequest,
+        SketchFilletResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_fillet_failure,
+        make_sketch_fillet_success,
+        make_sketch_fillet_uncertain,
+    )
 from .sketch_fillet_mutation import SketchFilletError, run_sketch_fillet_native_mutation
 
 

@@ -16,7 +16,7 @@ from freecad_mcp.operations.parametric_ops.bounding_box import bounding_box_oper
 
 
 def _success():
-    return make_bounding_box_success(object="Box", xmin=0.0, ymin=0.0, zmin=0.0, xmax=1.0, ymax=1.0, zmax=1.0, dx=1.0, dy=1.0, dz=1.0, diagonal=1.732, frame="world")
+    return make_bounding_box_success(object="Box", xmin=0.0, ymin=0.0, zmin=0.0, xmax=1.0, ymax=1.0, zmax=1.0, dx=1.0, dy=1.0, dz=1.0, diagonal=1.732, frame="world", used_linked_object=False)
 
 
 @pytest.mark.parametrize("raw", [None, [], 1, "timeout", {}, {1: "bad key"}])

@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.sweep_feature_contract import (
-    SweepFeatureCollaborators,
-    SweepFeatureFailure,
-    SweepFeatureUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_sweep_feature_failure,
-    make_sweep_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.sweep_feature_contract import (
+        SweepFeatureCollaborators,
+        SweepFeatureFailure,
+        SweepFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_sweep_feature_failure,
+        make_sweep_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sweep_feature_contract import (
+        SweepFeatureCollaborators,
+        SweepFeatureFailure,
+        SweepFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_sweep_feature_failure,
+        make_sweep_feature_uncertain,
+    )
 
 
 class SweepFeatureError(RuntimeError):

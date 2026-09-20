@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.solve_assembly_contract import (
-    DocumentName,
-    AssemblyName,
-    SolveAssemblyCollaborators,
-    SolveAssemblyFailure,
-    SolveAssemblyRequest,
-    SolveAssemblyResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_solve_assembly_failure,
-    make_solve_assembly_success,
-    make_solve_assembly_uncertain,
-)
+try:
+    from ...._shared.protocol.solve_assembly_contract import (
+        DocumentName,
+        AssemblyName,
+        SolveAssemblyCollaborators,
+        SolveAssemblyFailure,
+        SolveAssemblyRequest,
+        SolveAssemblyResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_solve_assembly_failure,
+        make_solve_assembly_success,
+        make_solve_assembly_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.solve_assembly_contract import (
+        DocumentName,
+        AssemblyName,
+        SolveAssemblyCollaborators,
+        SolveAssemblyFailure,
+        SolveAssemblyRequest,
+        SolveAssemblyResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_solve_assembly_failure,
+        make_solve_assembly_success,
+        make_solve_assembly_uncertain,
+    )
 from .typed_runtime import as_float, as_int, as_str
 from . import assembly_actions
 from .solve_assembly_mutation import SolveAssemblyError, run_solve_assembly_native_mutation

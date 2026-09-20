@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.delete_object_contract import (
-    DeleteObjectCollaborators,
-    DeleteObjectReadDocument,
-    DeleteObjectFailure,
-    DeleteObjectUncertain,
-    make_delete_object_failure,
-    make_delete_object_uncertain,
-)
+try:
+    from ...._shared.protocol.delete_object_contract import (
+        DeleteObjectCollaborators,
+        DeleteObjectReadDocument,
+        DeleteObjectFailure,
+        DeleteObjectUncertain,
+        make_delete_object_failure,
+        make_delete_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.delete_object_contract import (
+        DeleteObjectCollaborators,
+        DeleteObjectReadDocument,
+        DeleteObjectFailure,
+        DeleteObjectUncertain,
+        make_delete_object_failure,
+        make_delete_object_uncertain,
+    )
 
 
 class DeleteObjectError(RuntimeError):

@@ -5,18 +5,32 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.open_document_contract import (
-    DocumentName,
-    OpenDocumentCollaborators,
-    OpenDocumentFailure,
-    OpenDocumentRequest,
-    OpenDocumentResult,
-    PathName,
-    make_open_document_compensated,
-    make_open_document_failure,
-    make_open_document_success,
-    make_open_document_uncertain,
-)
+try:
+    from ...._shared.protocol.open_document_contract import (
+        DocumentName,
+        OpenDocumentCollaborators,
+        OpenDocumentFailure,
+        OpenDocumentRequest,
+        OpenDocumentResult,
+        PathName,
+        make_open_document_compensated,
+        make_open_document_failure,
+        make_open_document_success,
+        make_open_document_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.open_document_contract import (
+        DocumentName,
+        OpenDocumentCollaborators,
+        OpenDocumentFailure,
+        OpenDocumentRequest,
+        OpenDocumentResult,
+        PathName,
+        make_open_document_compensated,
+        make_open_document_failure,
+        make_open_document_success,
+        make_open_document_uncertain,
+    )
 from .policy_runtime import app_from, lookup_document
 from .typed_rpc_document import document_name
 

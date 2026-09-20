@@ -1,0 +1,552 @@
+{
+  "campaign_run_id": "run-20260916-mcp-limits",
+  "candidate_head": "891861f562a78ff97af58c856b67c291449b9075",
+  "d13_outcome": "INFO",
+  "authoritative_event": "tool_call_completed",
+  "tools": [
+    {
+      "tool": "audit_hardcoded_dimensions",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "body_create",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 11
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "bounding_box",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 6,
+        "typed_direct_rpc": 4
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "capture_state",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1,
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "check_rpc_sync",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 4
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "close_document",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "create_document",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 8
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "create_object",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 14
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "delete_object",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "edit_object",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 10
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "export_step",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "fillet_feature",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1,
+        "typed_direct_rpc": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "find_edges",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "find_faces",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "geometric_diff",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "get_document_tree",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 8
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "get_mutation_readiness",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "get_object",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "get_objects",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "get_runtime_info",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "get_sketch_diagnostics",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 5
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "import_step",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "inspect_geometry",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "linear_pattern_feature",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "list_documents",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "list_expressions",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 4
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "measure_volume",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 7,
+        "typed_direct_rpc": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "mirror_feature",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "open_document",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "pad_feature",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 15
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "pocket_feature",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 7
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "preview_attachment",
+      "baseline_completed_categories": {},
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "recompute_and_wait",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "restore",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "revolve_feature",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 4
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "save_document",
+      "baseline_completed_categories": {},
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "save_document_as",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 4
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "set_expression",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 25
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "sketch_add_circle",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 9,
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "sketch_add_constraint",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 20
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "sketch_add_polyline",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 3
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "sketch_add_rectangle",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 9
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "sketch_add_slot",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "sketch_create",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 26
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "snapshot",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "spreadsheet_create",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "spreadsheet_list_aliases",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 2
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    },
+    {
+      "tool": "spreadsheet_set_cells",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 7
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "translate",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": false,
+        "execution_mode": "auto"
+      }
+    },
+    {
+      "tool": "undo",
+      "baseline_completed_categories": {
+        "typed_direct_rpc": 1
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false
+    },
+    {
+      "tool": "validate_geometry",
+      "baseline_completed_categories": {
+        "generated_internal_execute": 4
+      },
+      "candidate_expected_completed": "typed_direct_rpc",
+      "candidate_reason": "TYPED_RPC_HANDLER + invoke_v2(method!=execute_code)",
+      "match_baseline_required": false,
+      "baseline_analysis": {
+        "read_only": true,
+        "execution_mode": "worker"
+      }
+    }
+  ]
+}

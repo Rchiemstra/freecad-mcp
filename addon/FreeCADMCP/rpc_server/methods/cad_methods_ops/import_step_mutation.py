@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.import_step_contract import (
-    ImportStepCollaborators,
-    ImportStepFailure,
-    ImportStepUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_import_step_failure,
-    make_import_step_uncertain,
-)
+try:
+    from ...._shared.protocol.import_step_contract import (
+        ImportStepCollaborators,
+        ImportStepFailure,
+        ImportStepUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_import_step_failure,
+        make_import_step_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.import_step_contract import (
+        ImportStepCollaborators,
+        ImportStepFailure,
+        ImportStepUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_import_step_failure,
+        make_import_step_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 

@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.get_document_tree_contract import (
-    DocumentName,
-    GetDocumentTreeCollaborators,
-    GetDocumentTreeFailure,
-    GetDocumentTreeRequest,
-    GetDocumentTreeResult,
-    make_get_document_tree_failure,
-    make_get_document_tree_success,
-)
+try:
+    from ...._shared.protocol.get_document_tree_contract import (
+        DocumentName,
+        GetDocumentTreeCollaborators,
+        GetDocumentTreeFailure,
+        GetDocumentTreeRequest,
+        GetDocumentTreeResult,
+        make_get_document_tree_failure,
+        make_get_document_tree_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.get_document_tree_contract import (
+        DocumentName,
+        GetDocumentTreeCollaborators,
+        GetDocumentTreeFailure,
+        GetDocumentTreeRequest,
+        GetDocumentTreeResult,
+        make_get_document_tree_failure,
+        make_get_document_tree_success,
+    )
 from . import assembly_io_actions
 from .policy_runtime import app_from, lookup_document, optional_recompute
 from .typed_runtime import as_int

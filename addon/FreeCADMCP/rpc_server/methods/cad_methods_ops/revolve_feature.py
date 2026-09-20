@@ -19,6 +19,7 @@ from .feature_mutate_support import (
     set_attr,
     set_feature_bool,
     set_named_property,
+    set_revolution_symmetric,
     set_tip,
 )
 
@@ -26,20 +27,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.revolve_feature_contract import (
-    RevolveFeatureCollaborators,
-    RevolveFeatureFailure,
-    RevolveFeatureRequest,
-    RevolveFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_revolve_feature_failure,
-    make_revolve_feature_success,
-    make_revolve_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.revolve_feature_contract import (
+        RevolveFeatureCollaborators,
+        RevolveFeatureFailure,
+        RevolveFeatureRequest,
+        RevolveFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_revolve_feature_failure,
+        make_revolve_feature_success,
+        make_revolve_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.revolve_feature_contract import (
+        RevolveFeatureCollaborators,
+        RevolveFeatureFailure,
+        RevolveFeatureRequest,
+        RevolveFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_revolve_feature_failure,
+        make_revolve_feature_success,
+        make_revolve_feature_uncertain,
+    )
 from .revolve_feature_mutation import RevolveFeatureError, run_revolve_feature_native_mutation
 
 
@@ -79,7 +96,7 @@ def apply_revolve_feature(doc: FeatureDocument, request: RevolveFeatureRequest) 
             ("ReferenceAxis", "Axis"),
             resolve_revolve_axis(doc, body, sketch, request.axis),
         )
-        set_feature_bool(created, ("Symmetric",), request.symmetric)
+        set_revolution_symmetric(created, request.symmetric)
         set_feature_bool(created, ("Reversed",), request.reversed_dir)
         if body is not None:
             set_tip(body, created)

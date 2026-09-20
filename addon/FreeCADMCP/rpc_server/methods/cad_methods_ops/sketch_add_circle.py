@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_circle_contract import (
-    SketchAddCircleCollaborators,
-    SketchAddCircleFailure,
-    SketchAddCircleRequest,
-    SketchAddCircleResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_add_circle_failure,
-    make_sketch_add_circle_success,
-    make_sketch_add_circle_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_circle_contract import (
+        SketchAddCircleCollaborators,
+        SketchAddCircleFailure,
+        SketchAddCircleRequest,
+        SketchAddCircleResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_circle_failure,
+        make_sketch_add_circle_success,
+        make_sketch_add_circle_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_circle_contract import (
+        SketchAddCircleCollaborators,
+        SketchAddCircleFailure,
+        SketchAddCircleRequest,
+        SketchAddCircleResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_add_circle_failure,
+        make_sketch_add_circle_success,
+        make_sketch_add_circle_uncertain,
+    )
 from .sketch_add_circle_mutation import SketchAddCircleError, run_sketch_add_circle_native_mutation
 
 

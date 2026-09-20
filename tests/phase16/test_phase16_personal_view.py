@@ -299,8 +299,11 @@ def test_get_active_screenshot_rejects_ambiguous_multi_doc_without_target():
     other = _Document("Other")
     facade, _, _ = _facade(documents=[model, other], active_document=None)
 
-    with pytest.raises(ValueError, match="document hint is required"):
-        get_active_screenshot(facade)
+    result = get_active_screenshot(facade)
+
+    assert isinstance(result, dict)
+    assert result["ok"] is False
+    assert "document hint is required" in result["error"]
 
 
 def test_get_active_screenshot_document_hint_overrides_active_document():

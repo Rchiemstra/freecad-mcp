@@ -8,7 +8,7 @@ from collections.abc import Mapping
 def _call_named(target: object, name: str, *args: object) -> object:
     attr = getattr(target, name, None)
     if not callable(attr):
-        raise AttributeError(name)
+        raise TypeError(name)
     method = attr
     return method(*args)
 
@@ -40,11 +40,16 @@ def apply_spreadsheet_cell(
         return None, f"Cell requires address or resolvable alias: {cell!r}"
     if "value" in cell:
         _call_named(sheet, "set", str(addr), str(cell["value"]))
-    if alias and cell.get("address"):
-        _call_named(sheet, "setAlias", str(addr), str(alias))
-    elif cell.get("set_alias"):
-        _call_named(sheet, "setAlias", str(addr), str(cell["set_alias"]))
-    return {"address": str(addr), "alias": alias}, None
+    alias_to_set = alias if alias and cell.get("address") else cell.get("set_alias")
+    if isinstance(alias_to_set, str) and alias_to_set:
+        alias_setter = getattr(sheet, "setAlias", None)
+        if not callable(alias_setter):
+            return None, "spreadsheet cannot set aliases"
+        try:
+            alias_setter(str(addr), str(alias_to_set))
+        except Exception as exc:
+            return None, str(exc) or type(exc).__name__
+    return {"address": str(addr)}, None
 
 
 def read_spreadsheet_cell(sheet: object, item: object) -> dict[str, object]:

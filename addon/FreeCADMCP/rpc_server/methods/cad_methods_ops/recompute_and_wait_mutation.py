@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.recompute_and_wait_contract import (
-    RecomputeAndWaitCollaborators,
-    RecomputeAndWaitReadDocument,
-    RecomputeAndWaitFailure,
-    RecomputeAndWaitUncertain,
-    make_recompute_and_wait_failure,
-    make_recompute_and_wait_uncertain,
-)
+try:
+    from ...._shared.protocol.recompute_and_wait_contract import (
+        RecomputeAndWaitCollaborators,
+        RecomputeAndWaitReadDocument,
+        RecomputeAndWaitFailure,
+        RecomputeAndWaitUncertain,
+        make_recompute_and_wait_failure,
+        make_recompute_and_wait_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.recompute_and_wait_contract import (
+        RecomputeAndWaitCollaborators,
+        RecomputeAndWaitReadDocument,
+        RecomputeAndWaitFailure,
+        RecomputeAndWaitUncertain,
+        make_recompute_and_wait_failure,
+        make_recompute_and_wait_uncertain,
+    )
 
 
 class RecomputeAndWaitError(RuntimeError):

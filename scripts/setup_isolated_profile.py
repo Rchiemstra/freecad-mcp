@@ -13,7 +13,6 @@ existing ``freecad`` MCP instance remains untouched.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
 import os
 import secrets
@@ -21,9 +20,9 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 ISOLATED_PORT = 9876
 RPC_HOST = "127.0.0.1"
@@ -41,6 +40,20 @@ def _repo_root() -> Path:
 
 def _freecad_mcp_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _default_freecadcmd_path(repo: Path) -> str:
+    candidate = repo / "build" / "release" / "bin" / "FreeCADCmd.exe"
+    if candidate.is_file():
+        return str(candidate)
+    return ""
+
+
+def _default_freecad_exe_path(repo: Path) -> str:
+    candidate = repo / "build" / "release" / "bin" / "FreeCAD.exe"
+    if candidate.is_file():
+        return str(candidate)
+    return ""
 
 
 def _appdata_freecad() -> Path:
@@ -73,7 +86,7 @@ def _ensure_not_appdata(path: Path) -> None:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+    return datetime.now(UTC).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
     )
 
@@ -332,6 +345,7 @@ def _junction(src: Path, dst: Path) -> None:
             ["cmd", "/c", "mklink", "/J", str(dst), str(src)],
             capture_output=True,
             text=True,
+            check=False,
         )
         if completed.returncode != 0:
             raise SystemExit(
@@ -411,9 +425,7 @@ def main() -> int:
         "auto_start_rpc": True,
         "rpc_bind_host": RPC_HOST,
         "rpc_port": port,
-        "freecadcmd_path": str(
-            repo / "build" / "release" / "bin" / "FreeCADCmd.exe"
-        ),
+        "freecadcmd_path": _default_freecadcmd_path(repo),
         "allow_remote_execute_code": False,
         "allow_authenticated_remote_without_transport_security": False,
         "profile_instance_id": profile_id,
@@ -438,7 +450,7 @@ def main() -> int:
         "auth_secret_file": str(secret_path),
         "rpc_endpoint": f"{RPC_HOST}:{port}",
         "profile_instance_id": profile_id,
-        "freecad_exe": str(repo / "build" / "release" / "bin" / "FreeCAD.exe"),
+        "freecad_exe": _default_freecad_exe_path(repo),
     }
     print("Isolated FreeCAD MCP profile ready:")
     for key, value in report.items():

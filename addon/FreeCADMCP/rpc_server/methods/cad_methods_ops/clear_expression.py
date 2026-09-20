@@ -13,19 +13,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.clear_expression_contract import (
-    ClearExpressionCollaborators,
-    ClearExpressionDocument,
-    ClearExpressionFailure,
-    ClearExpressionName,
-    ClearExpressionReadDocument,
-    ClearExpressionRequest,
-    ClearExpressionResult,
-    DocumentName,
-    make_clear_expression_failure,
-    make_clear_expression_success,
-    make_clear_expression_uncertain,
-)
+try:
+    from ...._shared.protocol.clear_expression_contract import (
+        ClearExpressionCollaborators,
+        ClearExpressionDocument,
+        ClearExpressionFailure,
+        ClearExpressionName,
+        ClearExpressionReadDocument,
+        ClearExpressionRequest,
+        ClearExpressionResult,
+        DocumentName,
+        make_clear_expression_failure,
+        make_clear_expression_success,
+        make_clear_expression_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.clear_expression_contract import (
+        ClearExpressionCollaborators,
+        ClearExpressionDocument,
+        ClearExpressionFailure,
+        ClearExpressionName,
+        ClearExpressionReadDocument,
+        ClearExpressionRequest,
+        ClearExpressionResult,
+        DocumentName,
+        make_clear_expression_failure,
+        make_clear_expression_success,
+        make_clear_expression_uncertain,
+    )
 from .clear_expression_mutation import ClearExpressionError, run_clear_expression_native_mutation
 
 

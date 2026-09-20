@@ -23,20 +23,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.fillet_feature_contract import (
-    FilletFeatureCollaborators,
-    FilletFeatureFailure,
-    FilletFeatureRequest,
-    FilletFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_fillet_feature_failure,
-    make_fillet_feature_success,
-    make_fillet_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.fillet_feature_contract import (
+        FilletFeatureCollaborators,
+        FilletFeatureFailure,
+        FilletFeatureRequest,
+        FilletFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_fillet_feature_failure,
+        make_fillet_feature_success,
+        make_fillet_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.fillet_feature_contract import (
+        FilletFeatureCollaborators,
+        FilletFeatureFailure,
+        FilletFeatureRequest,
+        FilletFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_fillet_feature_failure,
+        make_fillet_feature_success,
+        make_fillet_feature_uncertain,
+    )
 from .fillet_feature_mutation import FilletFeatureError, run_fillet_feature_native_mutation
 
 

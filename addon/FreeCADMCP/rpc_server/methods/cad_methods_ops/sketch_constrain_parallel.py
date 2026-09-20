@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_parallel_contract import (
-    SketchConstrainParallelCollaborators,
-    SketchConstrainParallelFailure,
-    SketchConstrainParallelRequest,
-    SketchConstrainParallelResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_parallel_failure,
-    make_sketch_constrain_parallel_success,
-    make_sketch_constrain_parallel_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_parallel_contract import (
+        SketchConstrainParallelCollaborators,
+        SketchConstrainParallelFailure,
+        SketchConstrainParallelRequest,
+        SketchConstrainParallelResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_parallel_failure,
+        make_sketch_constrain_parallel_success,
+        make_sketch_constrain_parallel_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_parallel_contract import (
+        SketchConstrainParallelCollaborators,
+        SketchConstrainParallelFailure,
+        SketchConstrainParallelRequest,
+        SketchConstrainParallelResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_parallel_failure,
+        make_sketch_constrain_parallel_success,
+        make_sketch_constrain_parallel_uncertain,
+    )
 from .sketch_constrain_parallel_mutation import SketchConstrainParallelError, run_sketch_constrain_parallel_native_mutation
 
 

@@ -23,20 +23,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.chamfer_feature_contract import (
-    ChamferFeatureCollaborators,
-    ChamferFeatureFailure,
-    ChamferFeatureRequest,
-    ChamferFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_chamfer_feature_failure,
-    make_chamfer_feature_success,
-    make_chamfer_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.chamfer_feature_contract import (
+        ChamferFeatureCollaborators,
+        ChamferFeatureFailure,
+        ChamferFeatureRequest,
+        ChamferFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_chamfer_feature_failure,
+        make_chamfer_feature_success,
+        make_chamfer_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.chamfer_feature_contract import (
+        ChamferFeatureCollaborators,
+        ChamferFeatureFailure,
+        ChamferFeatureRequest,
+        ChamferFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_chamfer_feature_failure,
+        make_chamfer_feature_success,
+        make_chamfer_feature_uncertain,
+    )
 from .chamfer_feature_mutation import ChamferFeatureError, run_chamfer_feature_native_mutation
 
 

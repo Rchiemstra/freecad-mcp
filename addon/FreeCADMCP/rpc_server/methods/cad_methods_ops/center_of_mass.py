@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.center_of_mass_contract import (
-    CenterOfMassCollaborators,
-    CenterOfMassFailure,
-    CenterOfMassRequest,
-    CenterOfMassResult,
-    DocumentName,
-    ObjectName,
-    make_center_of_mass_failure,
-    make_center_of_mass_success,
-)
+try:
+    from ...._shared.protocol.center_of_mass_contract import (
+        CenterOfMassCollaborators,
+        CenterOfMassFailure,
+        CenterOfMassRequest,
+        CenterOfMassResult,
+        DocumentName,
+        ObjectName,
+        make_center_of_mass_failure,
+        make_center_of_mass_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.center_of_mass_contract import (
+        CenterOfMassCollaborators,
+        CenterOfMassFailure,
+        CenterOfMassRequest,
+        CenterOfMassResult,
+        DocumentName,
+        ObjectName,
+        make_center_of_mass_failure,
+        make_center_of_mass_success,
+    )
 from . import measure_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_str

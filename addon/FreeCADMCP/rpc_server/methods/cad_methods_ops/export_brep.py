@@ -5,17 +5,30 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.export_brep_contract import (
-    DocumentName,
-    ExportBrepCollaborators,
-    ExportBrepFailure,
-    ExportBrepRequest,
-    ExportBrepResult,
-    ObjectName,
-    make_export_brep_failure,
-    make_export_brep_success,
-    make_export_brep_uncertain,
-)
+try:
+    from ...._shared.protocol.export_brep_contract import (
+        DocumentName,
+        ExportBrepCollaborators,
+        ExportBrepFailure,
+        ExportBrepRequest,
+        ExportBrepResult,
+        ObjectName,
+        make_export_brep_failure,
+        make_export_brep_success,
+        make_export_brep_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.export_brep_contract import (
+        DocumentName,
+        ExportBrepCollaborators,
+        ExportBrepFailure,
+        ExportBrepRequest,
+        ExportBrepResult,
+        ObjectName,
+        make_export_brep_failure,
+        make_export_brep_success,
+        make_export_brep_uncertain,
+    )
 from . import measure_io_actions
 from .policy_runtime import (
     app_from,

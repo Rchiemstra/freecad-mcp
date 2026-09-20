@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.spreadsheet_list_aliases_contract import (
-    DocumentName,
-    SpreadsheetListAliasesCollaborators,
-    SpreadsheetListAliasesFailure,
-    SpreadsheetListAliasesRequest,
-    SpreadsheetListAliasesResult,
-    make_spreadsheet_list_aliases_failure,
-    make_spreadsheet_list_aliases_success,
-)
+try:
+    from ...._shared.protocol.spreadsheet_list_aliases_contract import (
+        DocumentName,
+        SpreadsheetListAliasesCollaborators,
+        SpreadsheetListAliasesFailure,
+        SpreadsheetListAliasesRequest,
+        SpreadsheetListAliasesResult,
+        make_spreadsheet_list_aliases_failure,
+        make_spreadsheet_list_aliases_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_list_aliases_contract import (
+        DocumentName,
+        SpreadsheetListAliasesCollaborators,
+        SpreadsheetListAliasesFailure,
+        SpreadsheetListAliasesRequest,
+        SpreadsheetListAliasesResult,
+        make_spreadsheet_list_aliases_failure,
+        make_spreadsheet_list_aliases_success,
+    )
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .spreadsheet_alias_ops import collect_spreadsheet_aliases
 from .typed_rpc_support import nonempty_string

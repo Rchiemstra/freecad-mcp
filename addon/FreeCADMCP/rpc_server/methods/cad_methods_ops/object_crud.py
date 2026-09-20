@@ -1,6 +1,12 @@
 """CAD RPC helpers extracted from ``FreeCADRPC`` (Phase 4 slice 4F)."""
 
+from types import SimpleNamespace
 from typing import Any
+
+try:
+    from ....dispatch.gui_stage_clock import record_presentation
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from dispatch.gui_stage_clock import record_presentation
 
 from ...property_mapper import Object
 from .cad_mutation import run_cad_mutation, unsupported_native_phase_boundary
@@ -78,7 +84,8 @@ def create_object(self, doc_name, obj_data: dict[str, Any]):
         )
         if _committed_success(result) and deferred_presentation is not None:
             try:
-                deferred_presentation()
+                with record_presentation():
+                    deferred_presentation()
             except Exception as exc:
                 return _presentation_warning(
                     result, f"Post-commit presentation failed: {exc}"
@@ -218,37 +225,34 @@ def delete_object(
     return finalize_delete(res)
 
 
-def get_objects(self, doc_name):
-    # Must run in the GUI thread: serialize_object accesses ViewObject
-    # and other GUI-backed properties that FreeCAD guards against
-    # access from background threads.
-    collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: get_objects_gui(
-            doc_name,
-            freecad=collaborators.freecad,
-            serialize_object=collaborators.serialize_object,
-        )
+def get_objects(
+    self,
+    doc_name,
+    fields=None,
+    include_properties=None,
+    include_shape=False,
+    include_view=False,
+    page_size=50,
+    cursor=None,
+):
+    from .get_objects import rpc_get_objects
+
+    return rpc_get_objects(
+        self,
+        doc_name,
+        fields,
+        include_properties,
+        include_shape,
+        include_view,
+        page_size,
+        cursor,
     )
-    if isinstance(res, list):
-        return res
-    return []
 
 
 def get_object(self, doc_name, obj_name):
-    collaborators = self._cad_collaborators
-    res = self._dispatch_gui(
-        lambda: get_object_gui(
-            doc_name,
-            obj_name,
-            freecad=collaborators.freecad,
-            serialize_object=collaborators.serialize_object,
-        )
-    )
-    # False sentinel means "not found"; timeout string → None
-    if res is False or isinstance(res, str):
-        return None
-    return res
+    from .get_object import rpc_get_object
+
+    return rpc_get_object(self, doc_name, obj_name)
 
 
 def insert_part_from_library(self, doc_name, relative_path):
@@ -556,36 +560,11 @@ def delete_object_gui(
         return str(e)
 
 
-def get_objects_gui(doc_name, *, freecad, serialize_object):
-    doc = freecad.getDocument(doc_name)
-    if not doc:
-        return []
-    results = []
-    for obj in doc.Objects:
-        try:
-            results.append(serialize_object(obj))
-        except Exception as e:
-            results.append(
-                {
-                    "Name": getattr(obj, "Name", "<unknown>"),
-                    "Label": getattr(obj, "Label", "<unknown>"),
-                    "TypeId": getattr(obj, "TypeId", "<unknown>"),
-                    "error": f"Serialization failed: {e}",
-                }
-            )
-    return results if results else []
-
-
 def get_object_gui(doc_name, obj_name, *, freecad, serialize_object):
-    doc = freecad.getDocument(doc_name)
-    if doc:
-        obj = doc.getObject(obj_name)
-        if obj:
-            try:
-                return serialize_object(obj)
-            except Exception as e:
-                return {"Name": obj_name, "error": str(e)}
-    return False
+    from .get_object import run_get_object
+
+    collaborators = SimpleNamespace(freecad=freecad, serialize_object=serialize_object)
+    return run_get_object(collaborators, doc_name, obj_name)
 
 
 def insert_part_from_library_gui(doc_name, relative_path, *, insert_part_from_library):

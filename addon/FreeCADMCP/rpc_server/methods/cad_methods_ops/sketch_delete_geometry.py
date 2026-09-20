@@ -6,19 +6,34 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_delete_geometry_contract import (
-    DocumentName,
-    SketchDeleteGeometryCollaborators,
-    SketchDeleteGeometryDocument,
-    SketchDeleteGeometryFailure,
-    SketchDeleteGeometryObject,
-    SketchDeleteGeometryReadDocument,
-    SketchDeleteGeometryResult,
-    SketchName,
-    make_sketch_delete_geometry_failure,
-    make_sketch_delete_geometry_success,
-    make_sketch_delete_geometry_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_delete_geometry_contract import (
+        DocumentName,
+        SketchDeleteGeometryCollaborators,
+        SketchDeleteGeometryDocument,
+        SketchDeleteGeometryFailure,
+        SketchDeleteGeometryObject,
+        SketchDeleteGeometryReadDocument,
+        SketchDeleteGeometryResult,
+        SketchName,
+        make_sketch_delete_geometry_failure,
+        make_sketch_delete_geometry_success,
+        make_sketch_delete_geometry_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_delete_geometry_contract import (
+        DocumentName,
+        SketchDeleteGeometryCollaborators,
+        SketchDeleteGeometryDocument,
+        SketchDeleteGeometryFailure,
+        SketchDeleteGeometryObject,
+        SketchDeleteGeometryReadDocument,
+        SketchDeleteGeometryResult,
+        SketchName,
+        make_sketch_delete_geometry_failure,
+        make_sketch_delete_geometry_success,
+        make_sketch_delete_geometry_uncertain,
+    )
 from .sketch_delete_geometry_mutation import (
     SketchDeleteGeometryError,
     run_sketch_delete_geometry_native_mutation,

@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.boolean_intersection_contract import (
-    BooleanIntersectionCollaborators,
-    BooleanIntersectionFailure,
-    BooleanIntersectionUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_boolean_intersection_failure,
-    make_boolean_intersection_uncertain,
-)
+try:
+    from ...._shared.protocol.boolean_intersection_contract import (
+        BooleanIntersectionCollaborators,
+        BooleanIntersectionFailure,
+        BooleanIntersectionUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_intersection_failure,
+        make_boolean_intersection_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.boolean_intersection_contract import (
+        BooleanIntersectionCollaborators,
+        BooleanIntersectionFailure,
+        BooleanIntersectionUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_intersection_failure,
+        make_boolean_intersection_uncertain,
+    )
 
 
 class BooleanIntersectionError(RuntimeError):

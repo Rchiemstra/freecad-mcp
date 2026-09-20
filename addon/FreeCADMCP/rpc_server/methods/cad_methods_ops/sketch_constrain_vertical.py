@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_vertical_contract import (
-    SketchConstrainVerticalCollaborators,
-    SketchConstrainVerticalFailure,
-    SketchConstrainVerticalRequest,
-    SketchConstrainVerticalResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_vertical_failure,
-    make_sketch_constrain_vertical_success,
-    make_sketch_constrain_vertical_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_vertical_contract import (
+        SketchConstrainVerticalCollaborators,
+        SketchConstrainVerticalFailure,
+        SketchConstrainVerticalRequest,
+        SketchConstrainVerticalResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_vertical_failure,
+        make_sketch_constrain_vertical_success,
+        make_sketch_constrain_vertical_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_vertical_contract import (
+        SketchConstrainVerticalCollaborators,
+        SketchConstrainVerticalFailure,
+        SketchConstrainVerticalRequest,
+        SketchConstrainVerticalResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_vertical_failure,
+        make_sketch_constrain_vertical_success,
+        make_sketch_constrain_vertical_uncertain,
+    )
 from .sketch_constrain_vertical_mutation import SketchConstrainVerticalError, run_sketch_constrain_vertical_native_mutation
 
 

@@ -195,3 +195,4 @@ def test_instance_info_uses_eager_injected_status_values() -> None:
     assert result["profile_path_fingerprint"] == "profile-fingerprint"
     assert result["actual_endpoint"] is collaborators.actual_endpoint
     assert result["document_lease_mode"] == "off"
+    assert result["rpc_v2_session_ready"] is True

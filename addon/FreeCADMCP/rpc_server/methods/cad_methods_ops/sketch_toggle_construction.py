@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_toggle_construction_contract import (
-    SketchToggleConstructionCollaborators,
-    SketchToggleConstructionFailure,
-    SketchToggleConstructionRequest,
-    SketchToggleConstructionResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_toggle_construction_failure,
-    make_sketch_toggle_construction_success,
-    make_sketch_toggle_construction_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_toggle_construction_contract import (
+        SketchToggleConstructionCollaborators,
+        SketchToggleConstructionFailure,
+        SketchToggleConstructionRequest,
+        SketchToggleConstructionResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_toggle_construction_failure,
+        make_sketch_toggle_construction_success,
+        make_sketch_toggle_construction_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_toggle_construction_contract import (
+        SketchToggleConstructionCollaborators,
+        SketchToggleConstructionFailure,
+        SketchToggleConstructionRequest,
+        SketchToggleConstructionResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_toggle_construction_failure,
+        make_sketch_toggle_construction_success,
+        make_sketch_toggle_construction_uncertain,
+    )
 from .sketch_toggle_construction_mutation import SketchToggleConstructionError, run_sketch_toggle_construction_native_mutation
 
 

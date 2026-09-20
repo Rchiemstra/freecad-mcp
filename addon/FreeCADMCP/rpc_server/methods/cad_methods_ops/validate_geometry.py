@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.validate_geometry_contract import (
-    ValidateGeometryCollaborators,
-    ValidateGeometryFailure,
-    ValidateGeometryRequest,
-    ValidateGeometryResult,
-    DocumentName,
-    ObjectName,
-    make_validate_geometry_failure,
-    make_validate_geometry_success,
-)
+try:
+    from ...._shared.protocol.validate_geometry_contract import (
+        ValidateGeometryCollaborators,
+        ValidateGeometryFailure,
+        ValidateGeometryRequest,
+        ValidateGeometryResult,
+        DocumentName,
+        ObjectName,
+        make_validate_geometry_failure,
+        make_validate_geometry_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.validate_geometry_contract import (
+        ValidateGeometryCollaborators,
+        ValidateGeometryFailure,
+        ValidateGeometryRequest,
+        ValidateGeometryResult,
+        DocumentName,
+        ObjectName,
+        make_validate_geometry_failure,
+        make_validate_geometry_success,
+    )
 from . import measure_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_float, as_int, as_str

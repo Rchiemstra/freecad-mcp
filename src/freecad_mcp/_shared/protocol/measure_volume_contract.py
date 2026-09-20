@@ -98,6 +98,7 @@ class MeasureVolumeSuccess(TypedDict):
     volume_mm3: float
     unit: str
     frame: str
+    used_linked_object: bool
 
 
 class MeasureVolumeFailure(TypedDict):
@@ -157,12 +158,13 @@ _CORE_KEYS = frozenset(
         "success",
         "unit",
         "volume_mm3",
+        "used_linked_object",
     }
 )
 
 
 def make_measure_volume_success(
-    object: str, volume_mm3: float, unit: str, frame: str,
+    object: str, volume_mm3: float, unit: str, frame: str, used_linked_object: bool = False,
 ) -> MeasureVolumeSuccess:
     """Construct a complete observed result."""
 
@@ -176,6 +178,7 @@ def make_measure_volume_success(
         "volume_mm3": volume_mm3,
         "unit": unit,
         "frame": frame,
+        "used_linked_object": used_linked_object,
     }
 
 
@@ -388,12 +391,13 @@ def parse_measure_volume_response(raw_response: object) -> MeasureVolumeResult:
     volume_mm3 = response.get("volume_mm3")
     unit = response.get("unit")
     frame = response.get("frame")
-    if _valid_success(response) and isinstance(object_name, str) and isinstance(volume_mm3, (int, float)) and not isinstance(volume_mm3, bool) and isinstance(unit, str) and isinstance(frame, str):
-        return make_measure_volume_success(object_name, float(volume_mm3), unit, frame)
+    used_linked_object = response.get("used_linked_object")
+    if _valid_success(response) and isinstance(object_name, str) and isinstance(volume_mm3, (int, float)) and not isinstance(volume_mm3, bool) and isinstance(unit, str) and isinstance(frame, str) and isinstance(used_linked_object, bool):
+        return make_measure_volume_success(object_name, float(volume_mm3), unit, frame, used_linked_object)
 
     error_code = response.get("error_code")
     error = response.get("error")
-    success_keys = {'object', 'volume_mm3', 'unit', 'frame'}
+    success_keys = {'object', 'volume_mm3', 'unit', 'frame', 'used_linked_object'}
     if (
         response.get("success") is False
         and response.get("ok") is False

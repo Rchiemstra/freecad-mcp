@@ -16,19 +16,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_placement_binder_contract import (
-    CreatePlacementBinderCollaborators,
-    CreatePlacementBinderDocument,
-    CreatePlacementBinderFailure,
-    CreatePlacementBinderName,
-    CreatePlacementBinderReadDocument,
-    CreatePlacementBinderRequest,
-    CreatePlacementBinderResult,
-    DocumentName,
-    make_create_placement_binder_failure,
-    make_create_placement_binder_success,
-    make_create_placement_binder_uncertain,
-)
+try:
+    from ...._shared.protocol.create_placement_binder_contract import (
+        CreatePlacementBinderCollaborators,
+        CreatePlacementBinderDocument,
+        CreatePlacementBinderFailure,
+        CreatePlacementBinderName,
+        CreatePlacementBinderReadDocument,
+        CreatePlacementBinderRequest,
+        CreatePlacementBinderResult,
+        DocumentName,
+        make_create_placement_binder_failure,
+        make_create_placement_binder_success,
+        make_create_placement_binder_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_placement_binder_contract import (
+        CreatePlacementBinderCollaborators,
+        CreatePlacementBinderDocument,
+        CreatePlacementBinderFailure,
+        CreatePlacementBinderName,
+        CreatePlacementBinderReadDocument,
+        CreatePlacementBinderRequest,
+        CreatePlacementBinderResult,
+        DocumentName,
+        make_create_placement_binder_failure,
+        make_create_placement_binder_success,
+        make_create_placement_binder_uncertain,
+    )
 from .create_placement_binder_mutation import CreatePlacementBinderError, run_create_placement_binder_native_mutation
 from .typed_runtime import is_derived_from
 

@@ -18,6 +18,15 @@ from tests.typed_rpc_fakes import CompatibilityAPI, FakeDocument, collaborators
 pytestmark = pytest.mark.unit
 
 _FIXTURE = Path(__file__).resolve().parents[1] / "fixtures/freecad_rpc_contract_snapshot.json"
+_PINNED_BUILD_INFO = {
+    "compiled": {
+        "git_commit": "unknown",
+        "git_dirty": None,
+        "build_timestamp": "unknown",
+        "source": "generated_metadata",
+    },
+    "checkout": {"git_commit": "unknown", "git_dirty": None, "available": False},
+}
 
 
 @pytest.fixture(scope="module")
@@ -145,6 +154,8 @@ def test_production_methods_dispatch_the_frozen_listener_examples(
     status_module = inspect.getmodule(freecad_rpc_class.get_instance_info)
     assert status_module is not None
     monkeypatch.setattr(status_module.os, "getpid", lambda: 4242)
+    # F-05 build identity depends on the checkout; freeze it like the pid.
+    monkeypatch.setattr(status_module, "addon_build_info", lambda: _PINNED_BUILD_INFO)
     actual["get_instance_info"] = dispatcher._dispatch("get_instance_info", ())
 
     native_actual = {

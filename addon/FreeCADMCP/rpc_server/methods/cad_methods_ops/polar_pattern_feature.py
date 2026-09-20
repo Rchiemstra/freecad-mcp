@@ -27,20 +27,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.polar_pattern_feature_contract import (
-    PolarPatternFeatureCollaborators,
-    PolarPatternFeatureFailure,
-    PolarPatternFeatureRequest,
-    PolarPatternFeatureResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_polar_pattern_feature_failure,
-    make_polar_pattern_feature_success,
-    make_polar_pattern_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.polar_pattern_feature_contract import (
+        PolarPatternFeatureCollaborators,
+        PolarPatternFeatureFailure,
+        PolarPatternFeatureRequest,
+        PolarPatternFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_polar_pattern_feature_failure,
+        make_polar_pattern_feature_success,
+        make_polar_pattern_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.polar_pattern_feature_contract import (
+        PolarPatternFeatureCollaborators,
+        PolarPatternFeatureFailure,
+        PolarPatternFeatureRequest,
+        PolarPatternFeatureResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_polar_pattern_feature_failure,
+        make_polar_pattern_feature_success,
+        make_polar_pattern_feature_uncertain,
+    )
 from .polar_pattern_feature_mutation import PolarPatternFeatureError, run_polar_pattern_feature_native_mutation
 
 

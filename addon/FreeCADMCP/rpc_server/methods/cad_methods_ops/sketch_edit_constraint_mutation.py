@@ -10,15 +10,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_edit_constraint_contract import (
-    SketchEditConstraintCollaborators,
-    SketchEditConstraintDocument,
-    SketchEditConstraintFailure,
-    SketchEditConstraintReadDocument,
-    SketchEditConstraintUncertain,
-    make_sketch_edit_constraint_failure,
-    make_sketch_edit_constraint_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_edit_constraint_contract import (
+        SketchEditConstraintCollaborators,
+        SketchEditConstraintDocument,
+        SketchEditConstraintFailure,
+        SketchEditConstraintReadDocument,
+        SketchEditConstraintUncertain,
+        make_sketch_edit_constraint_failure,
+        make_sketch_edit_constraint_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_edit_constraint_contract import (
+        SketchEditConstraintCollaborators,
+        SketchEditConstraintDocument,
+        SketchEditConstraintFailure,
+        SketchEditConstraintReadDocument,
+        SketchEditConstraintUncertain,
+        make_sketch_edit_constraint_failure,
+        make_sketch_edit_constraint_uncertain,
+    )
 
 
 class SketchEditConstraintError(RuntimeError):

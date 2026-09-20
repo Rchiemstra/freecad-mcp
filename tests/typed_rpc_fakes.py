@@ -193,12 +193,20 @@ def collaborators(
         setActiveDocument=set_active_document,
         ActiveDocument=document,
     )
+    def _serialize_object(obj: FakeObject) -> dict[str, object]:
+        return {
+            "Name": obj.Name,
+            "Label": obj.Label,
+            "TypeId": obj.TypeId,
+        }
+
     collab = SimpleNamespace(
         freecad=app,
         validate_document_invariants=(
             validator if validator is not None else lambda _document: events.append("validate")
         ),
         commit_native_mutation=api.commit_native_mutation,
+        serialize_object=_serialize_object,
         set_object_property=lambda _doc, obj, properties: [
             setattr(obj, key, value) for key, value in properties.items()
         ],

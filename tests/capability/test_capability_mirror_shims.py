@@ -14,14 +14,15 @@ from freecad_mcp.capabilities.generator import (
     connection_method_module_names,
     current_relocated_body_digests,
     load_relocated_body_digests,
+    relocated_connection_method_body,
     render_connection_method,
     render_connection_method_shim,
     render_connection_methods_package_init,
+    render_inline_tools_runtime_info_shim,
     render_production_client_stubs,
     render_register_module,
     render_register_module_shim,
     shadow_output_root,
-    relocated_connection_method_body,
 )
 from freecad_mcp.capabilities.introspection import import_operation_symbol
 from freecad_mcp.capabilities.load import all_subject_manifests
@@ -168,6 +169,19 @@ def test_inline_runtime_info_operation_path_is_importable():
         "freecad_mcp.capabilities.inline.tools_runtime_info.get_runtime_info"
     )
     assert callable(symbol)
+
+
+def test_inline_tools_runtime_info_shim_matches_emitter_output():
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "freecad_mcp"
+        / "capabilities"
+        / "inline"
+        / "tools_runtime_info.py"
+    )
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert text == render_inline_tools_runtime_info_shim()
 
 
 def test_connection_method_module_count_is_twenty_two():

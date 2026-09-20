@@ -6,19 +6,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_add_constraint_contract import (
-    DocumentName,
-    SketchAddConstraintCollaborators,
-    SketchAddConstraintDocument,
-    SketchAddConstraintFailure,
-    SketchAddConstraintObject,
-    SketchAddConstraintReadDocument,
-    SketchAddConstraintResult,
-    SketchName,
-    make_sketch_add_constraint_failure,
-    make_sketch_add_constraint_success,
-    make_sketch_add_constraint_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_constraint_contract import (
+        DocumentName,
+        SketchAddConstraintCollaborators,
+        SketchAddConstraintDocument,
+        SketchAddConstraintFailure,
+        SketchAddConstraintObject,
+        SketchAddConstraintReadDocument,
+        SketchAddConstraintResult,
+        SketchName,
+        make_sketch_add_constraint_failure,
+        make_sketch_add_constraint_success,
+        make_sketch_add_constraint_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_constraint_contract import (
+        DocumentName,
+        SketchAddConstraintCollaborators,
+        SketchAddConstraintDocument,
+        SketchAddConstraintFailure,
+        SketchAddConstraintObject,
+        SketchAddConstraintReadDocument,
+        SketchAddConstraintResult,
+        SketchName,
+        make_sketch_add_constraint_failure,
+        make_sketch_add_constraint_success,
+        make_sketch_add_constraint_uncertain,
+    )
 from .sketch_add_constraint_mutation import (
     SketchAddConstraintError,
     run_sketch_add_constraint_native_mutation,

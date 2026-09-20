@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.rotate_contract import (
-    RotateCollaborators,
-    RotateFailure,
-    RotateUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_rotate_failure,
-    make_rotate_uncertain,
-)
+try:
+    from ...._shared.protocol.rotate_contract import (
+        RotateCollaborators,
+        RotateFailure,
+        RotateUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_rotate_failure,
+        make_rotate_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.rotate_contract import (
+        RotateCollaborators,
+        RotateFailure,
+        RotateUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_rotate_failure,
+        make_rotate_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 

@@ -14,7 +14,18 @@ from ..._shared.protocol.create_object_contract import (
     parse_create_object_response,
 )
 from ...freecad_client import FreeCADConnection
-from ...responses.tool_results import add_screenshot_if_available, capture_committed_screenshot, tool_fail, tool_ok
+from ...responses.gui_dispatch_outcome import (
+    is_gui_dispatch_timeout_envelope,
+    is_transport_failure_exception,
+    tool_fail_gui_dispatch_timeout,
+    tool_fail_transport_uncertain,
+)
+from ...responses.tool_results import (
+    add_screenshot_if_available,
+    capture_committed_screenshot,
+    tool_fail,
+    tool_ok,
+)
 
 
 def create_object_operation(
@@ -37,28 +48,22 @@ def create_object_operation(
     try:
         raw_result: object = freecad.create_object(DocumentName(doc_name), payload)
     except Exception as exc:
-        raw_result = make_create_object_uncertain(
+        uncertain = make_create_object_uncertain(
             "CREATE_OBJECT_TRANSPORT_UNCERTAIN",
             f"create_object response unavailable: {exc}",
             committed=None,
         )
-    # KEEP BOTH: GUI-dispatch timeout envelopes are not create_object contract
-    # variants. Preserve request_id / completion_uncertain for late replay.
-    if (
-        isinstance(raw_result, Mapping)
-        and raw_result.get("completion_uncertain") is True
-        and isinstance(raw_result.get("error_code"), str)
-        and raw_result.get("error_code")
-    ):
-        structured = dict(raw_result)
-        error = raw_result.get("error")
-        message = error if isinstance(error, str) and error.strip() else str(
-            raw_result["error_code"]
-        )
-        return tool_fail(
-            f"Failed to create object: {message}",
-            structured=structured,
-            error_code=str(raw_result["error_code"]),
+        if is_transport_failure_exception(exc):
+            return tool_fail_transport_uncertain(
+                uncertain,
+                message=f"create_object response unavailable: {exc}",
+                error_code="CREATE_OBJECT_TRANSPORT_UNCERTAIN",
+            )
+        raw_result = uncertain
+    if is_gui_dispatch_timeout_envelope(raw_result):
+        return tool_fail_gui_dispatch_timeout(
+            raw_result,
+            message_prefix="Failed to create object",
         )
     result = parse_create_object_response(raw_result)
     structured = dict(result)

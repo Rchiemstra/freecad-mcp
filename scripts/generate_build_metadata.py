@@ -4,12 +4,36 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def build_metadata(
+    *,
+    version: str,
+    git_commit: str = "unknown",
+    dirty: bool = False,
+    timestamp: str | None = None,
+) -> dict[str, object]:
+    resolved_timestamp = timestamp or (
+        datetime.now(UTC)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+    suffix = git_commit[:12] if git_commit != "unknown" else "unknown"
+    if dirty and git_commit != "unknown":
+        suffix += ".dirty"
+    git_dirty = None if git_commit == "unknown" else bool(dirty)
+    return {
+        "version": version,
+        "git_commit": git_commit,
+        "git_dirty": git_dirty,
+        "build_timestamp": resolved_timestamp,
+        "build_id": f"freecad-mcp-{version}+{suffix}",
+    }
 
 
 def render_python(metadata: dict[str, object]) -> str:
@@ -29,21 +53,12 @@ def main() -> int:
     parser.add_argument("--dirty", action="store_true")
     parser.add_argument("--timestamp")
     args = parser.parse_args()
-    timestamp = args.timestamp or (
-        datetime.now(timezone.utc)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
+    metadata = build_metadata(
+        version=args.version,
+        git_commit=args.git_commit,
+        dirty=args.dirty,
+        timestamp=args.timestamp,
     )
-    suffix = args.git_commit[:12] if args.git_commit != "unknown" else "unknown"
-    if args.dirty:
-        suffix += ".dirty"
-    metadata = {
-        "version": args.version,
-        "git_commit": args.git_commit,
-        "git_dirty": bool(args.dirty),
-        "build_timestamp": timestamp,
-        "build_id": f"freecad-mcp-{args.version}+{suffix}",
-    }
     package_path = ROOT / "src" / "freecad_mcp" / "_build_metadata.py"
     addon_path = ROOT / "addon" / "FreeCADMCP" / "_build_metadata.json"
     package_path.write_text(render_python(metadata), encoding="utf-8")

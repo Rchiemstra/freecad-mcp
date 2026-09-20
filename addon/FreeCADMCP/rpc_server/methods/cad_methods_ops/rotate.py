@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.rotate_contract import (
-    ObjectName,
-    DocumentName,
-    RotateCollaborators,
-    RotateFailure,
-    RotateRequest,
-    RotateResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_rotate_failure,
-    make_rotate_success,
-    make_rotate_uncertain,
-)
+try:
+    from ...._shared.protocol.rotate_contract import (
+        ObjectName,
+        DocumentName,
+        RotateCollaborators,
+        RotateFailure,
+        RotateRequest,
+        RotateResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_rotate_failure,
+        make_rotate_success,
+        make_rotate_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.rotate_contract import (
+        ObjectName,
+        DocumentName,
+        RotateCollaborators,
+        RotateFailure,
+        RotateRequest,
+        RotateResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_rotate_failure,
+        make_rotate_success,
+        make_rotate_uncertain,
+    )
 from .typed_runtime import as_float, as_int, as_str
 from . import measure_io_actions
 from .rotate_mutation import RotateError, run_rotate_native_mutation

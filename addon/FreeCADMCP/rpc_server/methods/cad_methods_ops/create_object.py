@@ -6,20 +6,36 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_object_contract import (
-    CreateObjectCollaborators,
-    CreateObjectFailure,
-    CreateObjectPayload,
-    CreateObjectRequest,
-    CreateObjectResult,
-    DocumentName,
-    ObjectName,
-    ObjectType,
-    make_create_object_failure,
-    make_create_object_success,
-    make_create_object_uncertain,
-)
+try:
+    from ...._shared.protocol.create_object_contract import (
+        CreateObjectCollaborators,
+        CreateObjectFailure,
+        CreateObjectPayload,
+        CreateObjectRequest,
+        CreateObjectResult,
+        DocumentName,
+        ObjectName,
+        ObjectType,
+        make_create_object_failure,
+        make_create_object_success,
+        make_create_object_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_object_contract import (
+        CreateObjectCollaborators,
+        CreateObjectFailure,
+        CreateObjectPayload,
+        CreateObjectRequest,
+        CreateObjectResult,
+        DocumentName,
+        ObjectName,
+        ObjectType,
+        make_create_object_failure,
+        make_create_object_success,
+        make_create_object_uncertain,
+    )
 from .create_object_mutation import CreateObjectError, run_create_object_native_mutation
+from .property_postcondition import kept_property, property_kept_value
 from .typed_rpc_document import add_object, assign_properties, get_object
 
 
@@ -113,11 +129,6 @@ def _is_type(obj: object, type_id: str) -> bool:
     return getattr(obj, "TypeId", None) == type_id
 
 
-def _scalar_property(value: object) -> object:
-    raw = getattr(value, "Value", value)
-    return raw
-
-
 def _resolve_link_properties(doc: object, properties: dict[str, object]) -> dict[str, object]:
     resolved: dict[str, object] = {}
     for key, value in properties.items():
@@ -136,23 +147,6 @@ def _resolve_link_properties(doc: object, properties: dict[str, object]) -> dict
                 continue
         resolved[key] = value
     return resolved
-
-
-def _property_matches(expected: object, actual: object) -> bool:
-    left = _scalar_property(expected)
-    right = _scalar_property(actual)
-    if isinstance(left, bool) or isinstance(right, bool):
-        return left is right
-    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-        return abs(float(left) - float(right)) <= 1e-6
-    if left == right:
-        return True
-    actual_name = getattr(actual, "Name", None)
-    if isinstance(expected, str) and isinstance(actual_name, str) and expected == actual_name:
-        return True
-    if isinstance(expected, str) and isinstance(actual, (list, tuple)) and actual:
-        return _property_matches(expected, actual[0])
-    return False
 
 
 def read_create_object_result(
@@ -185,7 +179,7 @@ def read_create_object_result(
                 "PROPERTY_NOT_UPDATED",
                 f"Created object is missing property {key!r}",
             )
-        if not _property_matches(expected, getattr(created, key)):
+        if not property_kept_value(doc, expected, kept_property(created, key)):
             raise CreateObjectError(
                 "PROPERTY_NOT_UPDATED",
                 f"Created object property {key!r} did not keep the assigned value",

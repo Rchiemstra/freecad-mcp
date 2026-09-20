@@ -21,7 +21,9 @@ from freecad_mcp.freecad_client_ops.connection_methods.connection_headers_ops im
 )
 from freecad_mcp.generated.capabilities.register_modules import tools_parametric_sheet_a
 from freecad_mcp.instrumented_server import InstrumentedFastMCP
-from freecad_mcp.instrumented_server_ops.facade_bindings import bind_instrumented_fast_mcp
+from freecad_mcp.instrumented_server_ops.facade_bindings import (
+    bind_instrumented_fast_mcp,
+)
 from freecad_mcp.rpc_session import RpcAuthenticationSession
 
 pytestmark = pytest.mark.unit
@@ -41,12 +43,16 @@ class _RecordingFreeCADTransport:
         envelope = request["params"][0]
         body_result = self.response_result
         if body_result is _DEFAULT_RESPONSE:
-            body_result = dict({"contract_version": 1, "success": True, "ok": True, "outcome": "committed", "committed": True, "retry_safe": False, "sheet": "Value"}, **{
-                key: envelope["params"][key]
-                for key in envelope["params"]
-                if key in ['sheet']
-            })
-            body_result = {"contract_version": 1, "success": True, "ok": True, "outcome": "committed", "committed": True, "retry_safe": False, "sheet": "Value"}
+            body_result = {
+                "contract_version": 1,
+                "success": True,
+                "ok": True,
+                "outcome": "committed",
+                "committed": True,
+                "retry_safe": False,
+                "sheet": "Value",
+                "updated": [{"address": "A1", "alias": None, "value": "1"}],
+            }
         response = {
             "jsonrpc": "2.0",
             "id": request["id"],
@@ -113,7 +119,7 @@ def test_spreadsheet_set_cells_sends_authenticated_json_rpc_to_freecad(monkeypat
 
 def test_mcp_schema_rejects_non_string_doc_name_before_json_rpc(monkeypatch):
     transport = _RecordingFreeCADTransport()
-    params = dict({"doc_name": "AgentDocument", "sheet_name": "Value", "cells": [{"address": "A1", "value": 1}]})
+    params = {"doc_name": "AgentDocument", "sheet_name": "Value", "cells": [{"address": "A1", "value": 1}]}
     params["doc_name"] = 42
     result = _invoke_registered(monkeypatch, transport, params)
     assert result.isError is True

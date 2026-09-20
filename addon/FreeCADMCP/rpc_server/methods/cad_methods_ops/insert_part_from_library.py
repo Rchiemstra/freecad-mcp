@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.insert_part_from_library_contract import (
-    DocumentName,
-    InsertPartFromLibraryCollaborators,
-    InsertPartFromLibraryFailure,
-    InsertPartFromLibraryRequest,
-    InsertPartFromLibraryResult,
-    make_insert_part_from_library_failure,
-    make_insert_part_from_library_success,
-    make_insert_part_from_library_uncertain,
-)
+try:
+    from ...._shared.protocol.insert_part_from_library_contract import (
+        DocumentName,
+        InsertPartFromLibraryCollaborators,
+        InsertPartFromLibraryFailure,
+        InsertPartFromLibraryRequest,
+        InsertPartFromLibraryResult,
+        make_insert_part_from_library_failure,
+        make_insert_part_from_library_success,
+        make_insert_part_from_library_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.insert_part_from_library_contract import (
+        DocumentName,
+        InsertPartFromLibraryCollaborators,
+        InsertPartFromLibraryFailure,
+        InsertPartFromLibraryRequest,
+        InsertPartFromLibraryResult,
+        make_insert_part_from_library_failure,
+        make_insert_part_from_library_success,
+        make_insert_part_from_library_uncertain,
+    )
 from .insert_part_from_library_mutation import (
     InsertPartFromLibraryError,
     run_insert_part_from_library_native_mutation,

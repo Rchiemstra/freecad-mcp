@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_spur_gear_contract import (
-    CreateSpurGearCollaborators,
-    CreateSpurGearFailure,
-    CreateSpurGearUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_create_spur_gear_failure,
-    make_create_spur_gear_uncertain,
-)
+try:
+    from ...._shared.protocol.create_spur_gear_contract import (
+        CreateSpurGearCollaborators,
+        CreateSpurGearFailure,
+        CreateSpurGearUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_create_spur_gear_failure,
+        make_create_spur_gear_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_spur_gear_contract import (
+        CreateSpurGearCollaborators,
+        CreateSpurGearFailure,
+        CreateSpurGearUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_create_spur_gear_failure,
+        make_create_spur_gear_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 

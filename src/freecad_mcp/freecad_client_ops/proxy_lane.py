@@ -82,6 +82,21 @@ def _redact_remote_error(
     )
 
 
+def proven_rejection_from_remote_error(error: JsonRpcRemoteError) -> dict[str, Any] | None:
+    """Rebuild the add-on's typed failure when its data proves nothing was committed."""
+    data = error.data if isinstance(error.data, Mapping) else None
+    if data is None or data.get("outcome") != "rejected" or data.get("committed") is not False:
+        return None
+    failure: dict[str, Any] = dict(data)
+    failure.update(
+        success=False,
+        ok=False,
+        error_code=str(data.get("error_code") or error.semantic_code),
+        error=str(error.message),
+    )
+    return failure
+
+
 class ProxyLane:
     """Thread-safe JSON-RPC lane with independent connection state.
 
@@ -96,8 +111,12 @@ class ProxyLane:
         header_provider: Callable[[str, tuple[Any, ...]], tuple[tuple[str, str], ...]],
         *,
         transport: JsonRpcHttpTransport | None = None,
+        lift_rejections: bool = False,
     ) -> None:
         self._header_provider = header_provider
+        # General (tool) lanes return a proven non-committed rejection as its structured
+        # failure, like authenticated v2 does; control lanes (handshake) keep raising.
+        self._lift_rejections = lift_rejections
         self._lock = threading.RLock()
         self._request_ids = itertools.count(1)
         self.transport = (
@@ -170,6 +189,10 @@ class ProxyLane:
                     return decode_json_rpc_response(response, expected_id=request_id)
                 except JsonRpcRemoteError as exc:
                     safe_error = _redact_remote_error(exc, request_secrets)
+                if self._lift_rejections:
+                    rejection = proven_rejection_from_remote_error(safe_error)
+                    if rejection is not None:
+                        return rejection
                 raise safe_error
             finally:
                 self.transport.extra_headers = []

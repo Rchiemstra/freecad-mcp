@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_split_contract import (
-    SketchSplitCollaborators,
-    SketchSplitFailure,
-    SketchSplitUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_split_failure,
-    make_sketch_split_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_split_contract import (
+        SketchSplitCollaborators,
+        SketchSplitFailure,
+        SketchSplitUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_split_failure,
+        make_sketch_split_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_split_contract import (
+        SketchSplitCollaborators,
+        SketchSplitFailure,
+        SketchSplitUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_split_failure,
+        make_sketch_split_uncertain,
+    )
 
 
 class SketchSplitError(RuntimeError):

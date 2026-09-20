@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.fillet_feature_contract import (
-    FilletFeatureCollaborators,
-    FilletFeatureFailure,
-    FilletFeatureUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_fillet_feature_failure,
-    make_fillet_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.fillet_feature_contract import (
+        FilletFeatureCollaborators,
+        FilletFeatureFailure,
+        FilletFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_fillet_feature_failure,
+        make_fillet_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.fillet_feature_contract import (
+        FilletFeatureCollaborators,
+        FilletFeatureFailure,
+        FilletFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_fillet_feature_failure,
+        make_fillet_feature_uncertain,
+    )
 
 
 class FilletFeatureError(RuntimeError):

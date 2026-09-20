@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.create_spur_gear_contract import (
-    GearName,
-    DocumentName,
-    CreateSpurGearCollaborators,
-    CreateSpurGearFailure,
-    CreateSpurGearRequest,
-    CreateSpurGearResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_create_spur_gear_failure,
-    make_create_spur_gear_success,
-    make_create_spur_gear_uncertain,
-)
+try:
+    from ...._shared.protocol.create_spur_gear_contract import (
+        GearName,
+        DocumentName,
+        CreateSpurGearCollaborators,
+        CreateSpurGearFailure,
+        CreateSpurGearRequest,
+        CreateSpurGearResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_spur_gear_failure,
+        make_create_spur_gear_success,
+        make_create_spur_gear_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_spur_gear_contract import (
+        GearName,
+        DocumentName,
+        CreateSpurGearCollaborators,
+        CreateSpurGearFailure,
+        CreateSpurGearRequest,
+        CreateSpurGearResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_create_spur_gear_failure,
+        make_create_spur_gear_success,
+        make_create_spur_gear_uncertain,
+    )
 from .typed_runtime import TypedMutationError, as_float, as_int, as_str
 from . import gear_actions
 from .create_spur_gear_mutation import CreateSpurGearError, run_create_spur_gear_native_mutation

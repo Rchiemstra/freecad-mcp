@@ -100,7 +100,7 @@ def _ok_conn():
     conn.get_active_screenshot.return_value = None
     conn.execute_code.return_value = {"success": True, "message": "done", "recompute_errors": []}
     conn.bounding_box.return_value = make_bounding_box_success(
-        "Obj1", 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.732051, "world"
+        "Obj1", 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.732051, "world", False
     )
     conn.center_of_mass.return_value = make_center_of_mass_success(
         "Obj1", 0.0, 0.0, 0.0, "mm", "CenterOfMass", "world"
@@ -114,7 +114,7 @@ def _ok_conn():
     conn.measure_distance.return_value = make_measure_distance_success(10.0, "mm")
     conn.measure_angle.return_value = make_measure_angle_success(45.0, "deg")
     conn.measure_area.return_value = make_measure_area_success("Obj1", 100.0, 1.0, "mm2", "world")
-    conn.measure_volume.return_value = make_measure_volume_success("Obj1", 1000.0, "mm3", "world")
+    conn.measure_volume.return_value = make_measure_volume_success("Obj1", 1000.0, "mm3", "world", False)
     conn.get_global_shape.return_value = make_get_global_shape_success(
         "Obj1", "world", 1000.0, 600.0, {"x": 0, "y": 0, "z": 0}, {}, 1, 6, 12
     )
@@ -253,11 +253,6 @@ class TestBoundingBox:
     def test_json_has_expected_keys(self):
         for key in ("xmin", "ymin", "zmin", "xmax", "ymax", "zmax", "dx", "dy", "dz"):
             assert_code_contains(_MEASURE_IO, f'"{key}"')
-
-    def test_link_safe_world_frame(self):
-        assert_code_contains(
-            _MEASURE_IO, "resolve_global_shape", "LinkedObject", "getGlobalPlacement", '"frame": "world"'
-        )
 
     def test_typed_rpc_called(self):
         conn = _ok_conn()

@@ -5,18 +5,32 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.run_fem_analysis_contract import (
-    DocumentName,
-    RunFemAnalysisCollaborators,
-    RunFemAnalysisFailure,
-    RunFemAnalysisName,
-    RunFemAnalysisRequest,
-    RunFemAnalysisResult,
-    RunFemAnalysisUncertain,
-    make_run_fem_analysis_failure,
-    make_run_fem_analysis_success,
-    make_run_fem_analysis_uncertain,
-)
+try:
+    from ...._shared.protocol.run_fem_analysis_contract import (
+        DocumentName,
+        RunFemAnalysisCollaborators,
+        RunFemAnalysisFailure,
+        RunFemAnalysisName,
+        RunFemAnalysisRequest,
+        RunFemAnalysisResult,
+        RunFemAnalysisUncertain,
+        make_run_fem_analysis_failure,
+        make_run_fem_analysis_success,
+        make_run_fem_analysis_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.run_fem_analysis_contract import (
+        DocumentName,
+        RunFemAnalysisCollaborators,
+        RunFemAnalysisFailure,
+        RunFemAnalysisName,
+        RunFemAnalysisRequest,
+        RunFemAnalysisResult,
+        RunFemAnalysisUncertain,
+        make_run_fem_analysis_failure,
+        make_run_fem_analysis_success,
+        make_run_fem_analysis_uncertain,
+    )
 from .policy_runtime import app_from, lookup_document, lookup_object
 from .typed_rpc_support import as_int, invoke, nonempty_string, object_name, require_object
 

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.translate_contract import (
-    ObjectName,
-    DocumentName,
-    TranslateCollaborators,
-    TranslateFailure,
-    TranslateRequest,
-    TranslateResult,
-    MutationDocument,
-    MutationObject,
-    MutationReadDocument,
-    make_translate_failure,
-    make_translate_success,
-    make_translate_uncertain,
-)
+try:
+    from ...._shared.protocol.translate_contract import (
+        ObjectName,
+        DocumentName,
+        TranslateCollaborators,
+        TranslateFailure,
+        TranslateRequest,
+        TranslateResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_translate_failure,
+        make_translate_success,
+        make_translate_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.translate_contract import (
+        ObjectName,
+        DocumentName,
+        TranslateCollaborators,
+        TranslateFailure,
+        TranslateRequest,
+        TranslateResult,
+        MutationDocument,
+        MutationObject,
+        MutationReadDocument,
+        make_translate_failure,
+        make_translate_success,
+        make_translate_uncertain,
+    )
 from .typed_runtime import as_float, as_int, as_str
 from . import measure_io_actions
 from .translate_mutation import TranslateError, run_translate_native_mutation

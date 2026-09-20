@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_part_container_contract import (
-    CreatePartContainerCollaborators,
-    CreatePartContainerDocument,
-    CreatePartContainerFailure,
-    CreatePartContainerReadDocument,
-    CreatePartContainerUncertain,
-    DocumentName,
-    make_create_part_container_failure,
-    make_create_part_container_uncertain,
-)
+try:
+    from ...._shared.protocol.create_part_container_contract import (
+        CreatePartContainerCollaborators,
+        CreatePartContainerDocument,
+        CreatePartContainerFailure,
+        CreatePartContainerReadDocument,
+        CreatePartContainerUncertain,
+        DocumentName,
+        make_create_part_container_failure,
+        make_create_part_container_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_part_container_contract import (
+        CreatePartContainerCollaborators,
+        CreatePartContainerDocument,
+        CreatePartContainerFailure,
+        CreatePartContainerReadDocument,
+        CreatePartContainerUncertain,
+        DocumentName,
+        make_create_part_container_failure,
+        make_create_part_container_uncertain,
+    )
 
 
 class CreatePartContainerError(RuntimeError):

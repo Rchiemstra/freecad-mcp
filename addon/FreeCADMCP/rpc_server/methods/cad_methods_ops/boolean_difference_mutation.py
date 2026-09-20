@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.boolean_difference_contract import (
-    BooleanDifferenceCollaborators,
-    BooleanDifferenceFailure,
-    BooleanDifferenceUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_boolean_difference_failure,
-    make_boolean_difference_uncertain,
-)
+try:
+    from ...._shared.protocol.boolean_difference_contract import (
+        BooleanDifferenceCollaborators,
+        BooleanDifferenceFailure,
+        BooleanDifferenceUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_difference_failure,
+        make_boolean_difference_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.boolean_difference_contract import (
+        BooleanDifferenceCollaborators,
+        BooleanDifferenceFailure,
+        BooleanDifferenceUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_difference_failure,
+        make_boolean_difference_uncertain,
+    )
 
 
 class BooleanDifferenceError(RuntimeError):

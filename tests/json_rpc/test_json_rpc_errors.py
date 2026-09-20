@@ -302,4 +302,4 @@ def test_every_frozen_result_example_obeys_the_declared_failure_indicators():
             else:
                 assert error is None
 
-    assert converted == 175
+    assert converted == 176  # includes the get_objects pagination failure example (D-11)

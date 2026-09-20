@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.insert_part_from_library_contract import (
-    InsertPartFromLibraryCollaborators,
-    InsertPartFromLibraryReadDocument,
-    InsertPartFromLibraryFailure,
-    InsertPartFromLibraryUncertain,
-    make_insert_part_from_library_failure,
-    make_insert_part_from_library_uncertain,
-)
+try:
+    from ...._shared.protocol.insert_part_from_library_contract import (
+        InsertPartFromLibraryCollaborators,
+        InsertPartFromLibraryReadDocument,
+        InsertPartFromLibraryFailure,
+        InsertPartFromLibraryUncertain,
+        make_insert_part_from_library_failure,
+        make_insert_part_from_library_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.insert_part_from_library_contract import (
+        InsertPartFromLibraryCollaborators,
+        InsertPartFromLibraryReadDocument,
+        InsertPartFromLibraryFailure,
+        InsertPartFromLibraryUncertain,
+        make_insert_part_from_library_failure,
+        make_insert_part_from_library_uncertain,
+    )
 
 
 class InsertPartFromLibraryError(RuntimeError):

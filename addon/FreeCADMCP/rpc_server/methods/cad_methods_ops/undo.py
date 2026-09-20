@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol
 
-from ...._shared.protocol.undo_contract import (
-    DocumentName,
-    UndoCollaborators,
-    UndoFailure,
-    UndoRequest,
-    UndoResult,
-    make_undo_failure,
-    make_undo_success,
-    make_undo_uncertain,
-)
+try:
+    from ...._shared.protocol.undo_contract import (
+        DocumentName,
+        UndoCollaborators,
+        UndoFailure,
+        UndoRequest,
+        UndoResult,
+        make_undo_failure,
+        make_undo_success,
+        make_undo_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.undo_contract import (
+        DocumentName,
+        UndoCollaborators,
+        UndoFailure,
+        UndoRequest,
+        UndoResult,
+        make_undo_failure,
+        make_undo_success,
+        make_undo_uncertain,
+    )
 from .history_runtime import (
     admit_history_document,
     perform_history_action,

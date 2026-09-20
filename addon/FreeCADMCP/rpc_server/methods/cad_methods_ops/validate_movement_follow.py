@@ -16,19 +16,34 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Protocol
 
-from ...._shared.protocol.validate_movement_follow_contract import (
-    ValidateMovementFollowCollaborators,
-    ValidateMovementFollowDocument,
-    ValidateMovementFollowFailure,
-    ValidateMovementFollowName,
-    ValidateMovementFollowReadDocument,
-    ValidateMovementFollowRequest,
-    ValidateMovementFollowResult,
-    DocumentName,
-    make_validate_movement_follow_failure,
-    make_validate_movement_follow_success,
-    make_validate_movement_follow_uncertain,
-)
+try:
+    from ...._shared.protocol.validate_movement_follow_contract import (
+        ValidateMovementFollowCollaborators,
+        ValidateMovementFollowDocument,
+        ValidateMovementFollowFailure,
+        ValidateMovementFollowName,
+        ValidateMovementFollowReadDocument,
+        ValidateMovementFollowRequest,
+        ValidateMovementFollowResult,
+        DocumentName,
+        make_validate_movement_follow_failure,
+        make_validate_movement_follow_success,
+        make_validate_movement_follow_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.validate_movement_follow_contract import (
+        ValidateMovementFollowCollaborators,
+        ValidateMovementFollowDocument,
+        ValidateMovementFollowFailure,
+        ValidateMovementFollowName,
+        ValidateMovementFollowReadDocument,
+        ValidateMovementFollowRequest,
+        ValidateMovementFollowResult,
+        DocumentName,
+        make_validate_movement_follow_failure,
+        make_validate_movement_follow_success,
+        make_validate_movement_follow_uncertain,
+    )
 from .validate_movement_follow_mutation import ValidateMovementFollowError, run_validate_movement_follow_native_mutation
 
 

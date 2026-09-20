@@ -12,7 +12,18 @@ from ..._shared.protocol.pad_feature_contract import (
     parse_pad_feature_response,
 )
 from ...freecad_client import FreeCADConnection
-from ...responses.tool_results import add_screenshot_if_available, capture_committed_screenshot, tool_fail, tool_ok
+from ...responses.gui_dispatch_outcome import (
+    is_gui_dispatch_timeout_envelope,
+    is_transport_failure_exception,
+    tool_fail_gui_dispatch_timeout,
+    tool_fail_transport_uncertain,
+)
+from ...responses.tool_results import (
+    add_screenshot_if_available,
+    capture_committed_screenshot,
+    tool_fail,
+    tool_ok,
+)
 
 
 def pad_feature_operation(
@@ -42,10 +53,22 @@ def pad_feature_operation(
             doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir
         )
     except Exception as exc:
-        raw_result = make_pad_feature_uncertain(
+        uncertain = make_pad_feature_uncertain(
             "PAD_FEATURE_TRANSPORT_UNCERTAIN",
             f"Pad response unavailable: {exc}",
             committed=None,
+        )
+        if is_transport_failure_exception(exc):
+            return tool_fail_transport_uncertain(
+                uncertain,
+                message=f"Pad response unavailable: {exc}",
+                error_code="PAD_FEATURE_TRANSPORT_UNCERTAIN",
+            )
+        raw_result = uncertain
+    if is_gui_dispatch_timeout_envelope(raw_result):
+        return tool_fail_gui_dispatch_timeout(
+            raw_result,
+            message_prefix="Failed to create pad",
         )
     result = parse_pad_feature_response(raw_result)
     structured = dict(result)

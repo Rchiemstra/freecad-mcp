@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.translate_contract import (
-    TranslateCollaborators,
-    TranslateFailure,
-    TranslateUncertain,
-    DocumentName,
-    MutationDocument,
-    MutationReadDocument,
-    make_translate_failure,
-    make_translate_uncertain,
-)
+try:
+    from ...._shared.protocol.translate_contract import (
+        TranslateCollaborators,
+        TranslateFailure,
+        TranslateUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_translate_failure,
+        make_translate_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.translate_contract import (
+        TranslateCollaborators,
+        TranslateFailure,
+        TranslateUncertain,
+        DocumentName,
+        MutationDocument,
+        MutationReadDocument,
+        make_translate_failure,
+        make_translate_uncertain,
+    )
 from .typed_runtime import TypedMutationError
 
 

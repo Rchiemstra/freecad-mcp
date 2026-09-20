@@ -6,15 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_add_arc_of_ellipse_contract import (
-    SketchAddArcOfEllipseCollaborators,
-    SketchAddArcOfEllipseFailure,
-    SketchAddArcOfEllipseUncertain,
-    SketchDocument,
-    SketchReadDocument,
-    make_sketch_add_arc_of_ellipse_failure,
-    make_sketch_add_arc_of_ellipse_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_add_arc_of_ellipse_contract import (
+        SketchAddArcOfEllipseCollaborators,
+        SketchAddArcOfEllipseFailure,
+        SketchAddArcOfEllipseUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_arc_of_ellipse_failure,
+        make_sketch_add_arc_of_ellipse_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_add_arc_of_ellipse_contract import (
+        SketchAddArcOfEllipseCollaborators,
+        SketchAddArcOfEllipseFailure,
+        SketchAddArcOfEllipseUncertain,
+        SketchDocument,
+        SketchReadDocument,
+        make_sketch_add_arc_of_ellipse_failure,
+        make_sketch_add_arc_of_ellipse_uncertain,
+    )
 
 
 class SketchAddArcOfEllipseError(RuntimeError):

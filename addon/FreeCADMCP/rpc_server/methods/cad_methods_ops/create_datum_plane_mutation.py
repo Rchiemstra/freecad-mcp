@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.create_datum_plane_contract import (
-    CreateDatumPlaneCollaborators,
-    CreateDatumPlaneDocument,
-    CreateDatumPlaneFailure,
-    CreateDatumPlaneReadDocument,
-    CreateDatumPlaneUncertain,
-    DocumentName,
-    make_create_datum_plane_failure,
-    make_create_datum_plane_uncertain,
-)
+try:
+    from ...._shared.protocol.create_datum_plane_contract import (
+        CreateDatumPlaneCollaborators,
+        CreateDatumPlaneDocument,
+        CreateDatumPlaneFailure,
+        CreateDatumPlaneReadDocument,
+        CreateDatumPlaneUncertain,
+        DocumentName,
+        make_create_datum_plane_failure,
+        make_create_datum_plane_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.create_datum_plane_contract import (
+        CreateDatumPlaneCollaborators,
+        CreateDatumPlaneDocument,
+        CreateDatumPlaneFailure,
+        CreateDatumPlaneReadDocument,
+        CreateDatumPlaneUncertain,
+        DocumentName,
+        make_create_datum_plane_failure,
+        make_create_datum_plane_uncertain,
+    )
 
 
 class CreateDatumPlaneError(RuntimeError):

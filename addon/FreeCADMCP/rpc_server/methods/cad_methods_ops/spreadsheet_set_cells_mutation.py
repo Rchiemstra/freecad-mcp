@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.spreadsheet_set_cells_contract import (
-    SpreadsheetSetCellsCollaborators,
-    SpreadsheetSetCellsDocument,
-    SpreadsheetSetCellsFailure,
-    SpreadsheetSetCellsReadDocument,
-    SpreadsheetSetCellsUncertain,
-    DocumentName,
-    make_spreadsheet_set_cells_failure,
-    make_spreadsheet_set_cells_uncertain,
-)
+try:
+    from ...._shared.protocol.spreadsheet_set_cells_contract import (
+        SpreadsheetSetCellsCollaborators,
+        SpreadsheetSetCellsDocument,
+        SpreadsheetSetCellsFailure,
+        SpreadsheetSetCellsReadDocument,
+        SpreadsheetSetCellsUncertain,
+        DocumentName,
+        make_spreadsheet_set_cells_failure,
+        make_spreadsheet_set_cells_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_set_cells_contract import (
+        SpreadsheetSetCellsCollaborators,
+        SpreadsheetSetCellsDocument,
+        SpreadsheetSetCellsFailure,
+        SpreadsheetSetCellsReadDocument,
+        SpreadsheetSetCellsUncertain,
+        DocumentName,
+        make_spreadsheet_set_cells_failure,
+        make_spreadsheet_set_cells_uncertain,
+    )
 
 
 class SpreadsheetSetCellsError(RuntimeError):

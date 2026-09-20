@@ -114,14 +114,15 @@ def spreadsheet_set_cells_gui(
         sheet = doc.getObject(sheet_name)
         if not sheet:
             return f"Spreadsheet '{sheet_name}' not found."
-        updated = []
+        touched: list[dict[str, object]] = []
         for cell in cells or []:
             row, error = apply_spreadsheet_cell(sheet, cell)
             if error:
                 return error
-            updated.append(row)
+            touched.append(row)
         if recompute:
             doc.recompute()
+        updated = [read_spreadsheet_cell(sheet, item) for item in touched]
         return {"success": True, "sheet": sheet.Name, "updated": updated}
     except Exception as e:
         return str(e)

@@ -72,7 +72,10 @@ def _ok_conn():
     conn = MagicMock()
     conn.get_active_screenshot.return_value = None
     conn.spreadsheet_create.return_value = make_spreadsheet_create_success("Dims", "Dims")
-    conn.spreadsheet_set_cells.return_value = make_spreadsheet_set_cells_success("Dims")
+    conn.spreadsheet_set_cells.return_value = make_spreadsheet_set_cells_success(
+        "Dims",
+        [{"address": "A1", "alias": "Wall", "value": "2.5"}],
+    )
     conn.spreadsheet_set_alias.return_value = make_spreadsheet_set_alias_success("Dims", "B1", "Bore")
     conn.spreadsheet_list_aliases.return_value = make_spreadsheet_list_aliases_success("Dims", {"Wall": "A1"})
     conn.spreadsheet_get_cells.return_value = make_spreadsheet_get_cells_success("Dims", [{"address": "A1", "value": 2.5}])

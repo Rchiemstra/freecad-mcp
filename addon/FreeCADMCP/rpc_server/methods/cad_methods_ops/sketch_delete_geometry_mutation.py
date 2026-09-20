@@ -10,15 +10,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.sketch_delete_geometry_contract import (
-    SketchDeleteGeometryCollaborators,
-    SketchDeleteGeometryDocument,
-    SketchDeleteGeometryFailure,
-    SketchDeleteGeometryReadDocument,
-    SketchDeleteGeometryUncertain,
-    make_sketch_delete_geometry_failure,
-    make_sketch_delete_geometry_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_delete_geometry_contract import (
+        SketchDeleteGeometryCollaborators,
+        SketchDeleteGeometryDocument,
+        SketchDeleteGeometryFailure,
+        SketchDeleteGeometryReadDocument,
+        SketchDeleteGeometryUncertain,
+        make_sketch_delete_geometry_failure,
+        make_sketch_delete_geometry_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_delete_geometry_contract import (
+        SketchDeleteGeometryCollaborators,
+        SketchDeleteGeometryDocument,
+        SketchDeleteGeometryFailure,
+        SketchDeleteGeometryReadDocument,
+        SketchDeleteGeometryUncertain,
+        make_sketch_delete_geometry_failure,
+        make_sketch_delete_geometry_uncertain,
+    )
 
 
 class SketchDeleteGeometryError(RuntimeError):

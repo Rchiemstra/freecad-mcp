@@ -18,20 +18,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.boolean_union_contract import (
-    BooleanUnionCollaborators,
-    BooleanUnionFailure,
-    BooleanUnionRequest,
-    BooleanUnionResult,
-    FeatureDocument,
-    FeatureName,
-    FeatureObject,
-    FeatureReadDocument,
-    DocumentName,
-    make_boolean_union_failure,
-    make_boolean_union_success,
-    make_boolean_union_uncertain,
-)
+try:
+    from ...._shared.protocol.boolean_union_contract import (
+        BooleanUnionCollaborators,
+        BooleanUnionFailure,
+        BooleanUnionRequest,
+        BooleanUnionResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_union_failure,
+        make_boolean_union_success,
+        make_boolean_union_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.boolean_union_contract import (
+        BooleanUnionCollaborators,
+        BooleanUnionFailure,
+        BooleanUnionRequest,
+        BooleanUnionResult,
+        FeatureDocument,
+        FeatureName,
+        FeatureObject,
+        FeatureReadDocument,
+        DocumentName,
+        make_boolean_union_failure,
+        make_boolean_union_success,
+        make_boolean_union_uncertain,
+    )
 from .boolean_union_mutation import BooleanUnionError, run_boolean_union_native_mutation
 
 

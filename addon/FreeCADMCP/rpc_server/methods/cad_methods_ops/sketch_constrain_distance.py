@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_distance_contract import (
-    SketchConstrainDistanceCollaborators,
-    SketchConstrainDistanceFailure,
-    SketchConstrainDistanceRequest,
-    SketchConstrainDistanceResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_distance_failure,
-    make_sketch_constrain_distance_success,
-    make_sketch_constrain_distance_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_distance_contract import (
+        SketchConstrainDistanceCollaborators,
+        SketchConstrainDistanceFailure,
+        SketchConstrainDistanceRequest,
+        SketchConstrainDistanceResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_distance_failure,
+        make_sketch_constrain_distance_success,
+        make_sketch_constrain_distance_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_distance_contract import (
+        SketchConstrainDistanceCollaborators,
+        SketchConstrainDistanceFailure,
+        SketchConstrainDistanceRequest,
+        SketchConstrainDistanceResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_distance_failure,
+        make_sketch_constrain_distance_success,
+        make_sketch_constrain_distance_uncertain,
+    )
 from .sketch_constrain_distance_mutation import SketchConstrainDistanceError, run_sketch_constrain_distance_native_mutation
 
 

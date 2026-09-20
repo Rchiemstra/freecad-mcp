@@ -14,7 +14,9 @@ from freecad_mcp._shared.protocol.pocket_feature_contract import (
     make_pocket_feature_uncertain,
     parse_pocket_feature_response,
 )
-from freecad_mcp.operations.parametric_ops.pocket_feature import pocket_feature_operation
+from freecad_mcp.operations.parametric_ops.pocket_feature import (
+    pocket_feature_operation,
+)
 
 
 def _success():
@@ -141,6 +143,9 @@ def test_contradictory_failure_never_proves_rejection(change):
     assert result["retry_safe"] is False
 
 
+_REQUEST_ID = "11111111-2222-4333-8444-555555555555"
+
+
 def test_gui_completion_timeout_preserves_unknown_model_state():
     raw = {
         "success": False,
@@ -154,6 +159,31 @@ def test_gui_completion_timeout_preserves_unknown_model_state():
     assert response.isError is True
     assert response.structuredContent["data"]["outcome"] == "uncertain"
     assert response.structuredContent["data"]["committed"] is None
+
+
+def test_gui_timeout_during_execution_reports_timed_out_not_failed():
+    raw = {
+        "success": False,
+        "request_id": _REQUEST_ID,
+        "error_code": "GUI_TIMEOUT_DURING_EXECUTION",
+        "timeout_stage": "during_execution",
+        "error": "Timed out during execution",
+        "completion_uncertain": True,
+        "mutation_started": True,
+    }
+    response = pocket_feature_operation(
+        SimpleNamespace(pocket_feature=lambda *_args, **_kwargs: raw),
+        True,
+        "Doc",
+        "Sketch",
+        "Pocket",
+        5.0,
+    )
+    envelope = response.structuredContent
+    assert envelope["status"] in {"timed_out", "unknown"}
+    assert envelope["status"] != "failed"
+    assert envelope["correlation"]["request_id"] == _REQUEST_ID
+    assert envelope["data"]["error_code"] == "GUI_TIMEOUT_DURING_EXECUTION"
 
 
 def test_transport_failure_preserves_unknown_model_state():

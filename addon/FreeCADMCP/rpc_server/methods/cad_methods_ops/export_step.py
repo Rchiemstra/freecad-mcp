@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.export_step_contract import (
-    DocumentName,
-    ExportStepCollaborators,
-    ExportStepFailure,
-    ExportStepRequest,
-    ExportStepResult,
-    make_export_step_failure,
-    make_export_step_success,
-    make_export_step_uncertain,
-)
+try:
+    from ...._shared.protocol.export_step_contract import (
+        DocumentName,
+        ExportStepCollaborators,
+        ExportStepFailure,
+        ExportStepRequest,
+        ExportStepResult,
+        make_export_step_failure,
+        make_export_step_success,
+        make_export_step_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.export_step_contract import (
+        DocumentName,
+        ExportStepCollaborators,
+        ExportStepFailure,
+        ExportStepRequest,
+        ExportStepResult,
+        make_export_step_failure,
+        make_export_step_success,
+        make_export_step_uncertain,
+    )
 from . import measure_io_actions
 from .policy_runtime import (
     app_from,

@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_import_points_contract import (
-    SketchImportPointsCollaborators,
-    SketchImportPointsFailure,
-    SketchImportPointsRequest,
-    SketchImportPointsResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_import_points_failure,
-    make_sketch_import_points_success,
-    make_sketch_import_points_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_import_points_contract import (
+        SketchImportPointsCollaborators,
+        SketchImportPointsFailure,
+        SketchImportPointsRequest,
+        SketchImportPointsResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_import_points_failure,
+        make_sketch_import_points_success,
+        make_sketch_import_points_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_import_points_contract import (
+        SketchImportPointsCollaborators,
+        SketchImportPointsFailure,
+        SketchImportPointsRequest,
+        SketchImportPointsResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_import_points_failure,
+        make_sketch_import_points_success,
+        make_sketch_import_points_uncertain,
+    )
 from .sketch_import_points_mutation import SketchImportPointsError, run_sketch_import_points_native_mutation
 
 

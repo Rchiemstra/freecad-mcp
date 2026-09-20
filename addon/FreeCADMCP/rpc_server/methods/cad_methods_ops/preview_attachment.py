@@ -14,19 +14,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.preview_attachment_contract import (
-    PreviewAttachmentCollaborators,
-    PreviewAttachmentDocument,
-    PreviewAttachmentFailure,
-    PreviewAttachmentName,
-    PreviewAttachmentReadDocument,
-    PreviewAttachmentRequest,
-    PreviewAttachmentResult,
-    DocumentName,
-    make_preview_attachment_failure,
-    make_preview_attachment_success,
-    make_preview_attachment_uncertain,
-)
+try:
+    from ...._shared.protocol.preview_attachment_contract import (
+        PreviewAttachmentCollaborators,
+        PreviewAttachmentDocument,
+        PreviewAttachmentFailure,
+        PreviewAttachmentName,
+        PreviewAttachmentReadDocument,
+        PreviewAttachmentRequest,
+        PreviewAttachmentResult,
+        DocumentName,
+        make_preview_attachment_failure,
+        make_preview_attachment_success,
+        make_preview_attachment_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.preview_attachment_contract import (
+        PreviewAttachmentCollaborators,
+        PreviewAttachmentDocument,
+        PreviewAttachmentFailure,
+        PreviewAttachmentName,
+        PreviewAttachmentReadDocument,
+        PreviewAttachmentRequest,
+        PreviewAttachmentResult,
+        DocumentName,
+        make_preview_attachment_failure,
+        make_preview_attachment_success,
+        make_preview_attachment_uncertain,
+    )
 from .preview_attachment_mutation import PreviewAttachmentError, run_preview_attachment_native_mutation
 
 

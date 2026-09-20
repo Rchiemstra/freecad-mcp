@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.relink_references_contract import (
-    RelinkReferencesCollaborators,
-    RelinkReferencesDocument,
-    RelinkReferencesFailure,
-    RelinkReferencesReadDocument,
-    RelinkReferencesUncertain,
-    DocumentName,
-    make_relink_references_failure,
-    make_relink_references_uncertain,
-)
+try:
+    from ...._shared.protocol.relink_references_contract import (
+        RelinkReferencesCollaborators,
+        RelinkReferencesDocument,
+        RelinkReferencesFailure,
+        RelinkReferencesReadDocument,
+        RelinkReferencesUncertain,
+        DocumentName,
+        make_relink_references_failure,
+        make_relink_references_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.relink_references_contract import (
+        RelinkReferencesCollaborators,
+        RelinkReferencesDocument,
+        RelinkReferencesFailure,
+        RelinkReferencesReadDocument,
+        RelinkReferencesUncertain,
+        DocumentName,
+        make_relink_references_failure,
+        make_relink_references_uncertain,
+    )
 
 
 class RelinkReferencesError(RuntimeError):

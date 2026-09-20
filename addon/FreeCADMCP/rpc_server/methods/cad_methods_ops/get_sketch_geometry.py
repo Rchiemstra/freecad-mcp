@@ -5,16 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.get_sketch_geometry_contract import (
-    DocumentName,
-    GetSketchGeometryCollaborators,
-    GetSketchGeometryFailure,
-    GetSketchGeometryRequest,
-    GetSketchGeometryResult,
-    SketchName,
-    make_get_sketch_geometry_failure,
-    make_get_sketch_geometry_success,
-)
+try:
+    from ...._shared.protocol.get_sketch_geometry_contract import (
+        DocumentName,
+        GetSketchGeometryCollaborators,
+        GetSketchGeometryFailure,
+        GetSketchGeometryRequest,
+        GetSketchGeometryResult,
+        SketchName,
+        make_get_sketch_geometry_failure,
+        make_get_sketch_geometry_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.get_sketch_geometry_contract import (
+        DocumentName,
+        GetSketchGeometryCollaborators,
+        GetSketchGeometryFailure,
+        GetSketchGeometryRequest,
+        GetSketchGeometryResult,
+        SketchName,
+        make_get_sketch_geometry_failure,
+        make_get_sketch_geometry_success,
+    )
 from . import assembly_io_actions
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .typed_runtime import as_int

@@ -6,16 +6,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from ...._shared.protocol.mirror_feature_contract import (
-    MirrorFeatureCollaborators,
-    MirrorFeatureFailure,
-    MirrorFeatureUncertain,
-    FeatureDocument,
-    FeatureReadDocument,
-    DocumentName,
-    make_mirror_feature_failure,
-    make_mirror_feature_uncertain,
-)
+try:
+    from ...._shared.protocol.mirror_feature_contract import (
+        MirrorFeatureCollaborators,
+        MirrorFeatureFailure,
+        MirrorFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_mirror_feature_failure,
+        make_mirror_feature_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.mirror_feature_contract import (
+        MirrorFeatureCollaborators,
+        MirrorFeatureFailure,
+        MirrorFeatureUncertain,
+        FeatureDocument,
+        FeatureReadDocument,
+        DocumentName,
+        make_mirror_feature_failure,
+        make_mirror_feature_uncertain,
+    )
 
 
 class MirrorFeatureError(RuntimeError):

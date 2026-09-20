@@ -6,20 +6,36 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_constrain_tangent_contract import (
-    SketchConstrainTangentCollaborators,
-    SketchConstrainTangentFailure,
-    SketchConstrainTangentRequest,
-    SketchConstrainTangentResult,
-    DocumentName,
-    SketchDocument,
-    SketchName,
-    SketchObject,
-    SketchReadDocument,
-    make_sketch_constrain_tangent_failure,
-    make_sketch_constrain_tangent_success,
-    make_sketch_constrain_tangent_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_constrain_tangent_contract import (
+        SketchConstrainTangentCollaborators,
+        SketchConstrainTangentFailure,
+        SketchConstrainTangentRequest,
+        SketchConstrainTangentResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_tangent_failure,
+        make_sketch_constrain_tangent_success,
+        make_sketch_constrain_tangent_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_constrain_tangent_contract import (
+        SketchConstrainTangentCollaborators,
+        SketchConstrainTangentFailure,
+        SketchConstrainTangentRequest,
+        SketchConstrainTangentResult,
+        DocumentName,
+        SketchDocument,
+        SketchName,
+        SketchObject,
+        SketchReadDocument,
+        make_sketch_constrain_tangent_failure,
+        make_sketch_constrain_tangent_success,
+        make_sketch_constrain_tangent_uncertain,
+    )
 from .sketch_constrain_tangent_mutation import SketchConstrainTangentError, run_sketch_constrain_tangent_native_mutation
 
 

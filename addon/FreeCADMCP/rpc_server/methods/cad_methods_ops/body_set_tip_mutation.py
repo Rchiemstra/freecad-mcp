@@ -10,16 +10,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from ...._shared.protocol.body_set_tip_contract import (
-    BodySetTipCollaborators,
-    BodySetTipFailure,
-    BodySetTipUncertain,
-    DocumentName,
-    TipBodyDocument,
-    TipReadDocument,
-    make_body_set_tip_failure,
-    make_body_set_tip_uncertain,
-)
+try:
+    from ...._shared.protocol.body_set_tip_contract import (
+        BodySetTipCollaborators,
+        BodySetTipFailure,
+        BodySetTipUncertain,
+        DocumentName,
+        TipBodyDocument,
+        TipReadDocument,
+        make_body_set_tip_failure,
+        make_body_set_tip_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.body_set_tip_contract import (
+        BodySetTipCollaborators,
+        BodySetTipFailure,
+        BodySetTipUncertain,
+        DocumentName,
+        TipBodyDocument,
+        TipReadDocument,
+        make_body_set_tip_failure,
+        make_body_set_tip_uncertain,
+    )
 
 
 class BodySetTipError(RuntimeError):

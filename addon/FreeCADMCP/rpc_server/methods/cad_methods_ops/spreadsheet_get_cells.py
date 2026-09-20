@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from ...._shared.protocol.spreadsheet_get_cells_contract import (
-    DocumentName,
-    SpreadsheetGetCellsCollaborators,
-    SpreadsheetGetCellsFailure,
-    SpreadsheetGetCellsRequest,
-    SpreadsheetGetCellsResult,
-    make_spreadsheet_get_cells_failure,
-    make_spreadsheet_get_cells_success,
-)
+try:
+    from ...._shared.protocol.spreadsheet_get_cells_contract import (
+        DocumentName,
+        SpreadsheetGetCellsCollaborators,
+        SpreadsheetGetCellsFailure,
+        SpreadsheetGetCellsRequest,
+        SpreadsheetGetCellsResult,
+        make_spreadsheet_get_cells_failure,
+        make_spreadsheet_get_cells_success,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.spreadsheet_get_cells_contract import (
+        DocumentName,
+        SpreadsheetGetCellsCollaborators,
+        SpreadsheetGetCellsFailure,
+        SpreadsheetGetCellsRequest,
+        SpreadsheetGetCellsResult,
+        make_spreadsheet_get_cells_failure,
+        make_spreadsheet_get_cells_success,
+    )
 from .policy_runtime import app_from, lookup_document, lookup_object, optional_recompute
 from .spreadsheet_cell_ops import read_spreadsheet_cell
 from .typed_rpc_support import nonempty_string

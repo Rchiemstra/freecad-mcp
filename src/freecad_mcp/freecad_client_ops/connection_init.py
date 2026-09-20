@@ -35,7 +35,9 @@ def init_connection(
     conn._rpc_method_capabilities: dict[str, Any] = {}
     conn._rpc_method_capabilities_loaded = False
     conn._refresh_headers()
-    conn.server = ProxyLane(conn._uri, timeout, conn._request_headers_snapshot)
+    conn.server = ProxyLane(
+        conn._uri, timeout, conn._request_headers_snapshot, lift_rejections=True
+    )
     conn.control_server = ProxyLane(
         conn._uri,
         min(timeout, 30),

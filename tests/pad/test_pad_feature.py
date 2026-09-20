@@ -46,6 +46,10 @@ class _ConstraintType:
 
 
 class _Shape:
+    # A recomputed feature result is a real solid (D-27 postcondition).
+    Solids = [object()]
+    Volume = 1000.0
+
     def isClosed(self):
         return True
 

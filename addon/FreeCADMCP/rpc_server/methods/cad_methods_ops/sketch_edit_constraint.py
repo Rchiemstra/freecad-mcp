@@ -6,19 +6,34 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...._shared.protocol.sketch_edit_constraint_contract import (
-    DocumentName,
-    SketchEditConstraintCollaborators,
-    SketchEditConstraintDocument,
-    SketchEditConstraintFailure,
-    SketchEditConstraintObject,
-    SketchEditConstraintReadDocument,
-    SketchEditConstraintResult,
-    SketchName,
-    make_sketch_edit_constraint_failure,
-    make_sketch_edit_constraint_success,
-    make_sketch_edit_constraint_uncertain,
-)
+try:
+    from ...._shared.protocol.sketch_edit_constraint_contract import (
+        DocumentName,
+        SketchEditConstraintCollaborators,
+        SketchEditConstraintDocument,
+        SketchEditConstraintFailure,
+        SketchEditConstraintObject,
+        SketchEditConstraintReadDocument,
+        SketchEditConstraintResult,
+        SketchName,
+        make_sketch_edit_constraint_failure,
+        make_sketch_edit_constraint_success,
+        make_sketch_edit_constraint_uncertain,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from _shared.protocol.sketch_edit_constraint_contract import (
+        DocumentName,
+        SketchEditConstraintCollaborators,
+        SketchEditConstraintDocument,
+        SketchEditConstraintFailure,
+        SketchEditConstraintObject,
+        SketchEditConstraintReadDocument,
+        SketchEditConstraintResult,
+        SketchName,
+        make_sketch_edit_constraint_failure,
+        make_sketch_edit_constraint_success,
+        make_sketch_edit_constraint_uncertain,
+    )
 from .sketch_edit_constraint_mutation import (
     SketchEditConstraintError,
     run_sketch_edit_constraint_native_mutation,

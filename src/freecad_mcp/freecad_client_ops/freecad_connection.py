@@ -958,16 +958,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_line", *params.values())
 
     def sketch_add_circle(
         self, doc_name: SketchAddCircleDocumentName, sketch_name: SketchAddCircleSketchName, cx: float, cy: float, radius: float, construction: bool = False,
@@ -988,16 +980,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_circle", *params.values())
 
     def sketch_add_arc(
         self, doc_name: SketchAddArcDocumentName, sketch_name: SketchAddArcSketchName, cx: float, cy: float, radius: float, start_angle: float, end_angle: float, construction: bool = False,
@@ -1020,16 +1004,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_arc", *params.values())
 
     def sketch_add_rectangle(
         self, doc_name: SketchAddRectangleDocumentName, sketch_name: SketchAddRectangleSketchName, x1: float, y1: float, x2: float, y2: float, construction: bool = False,
@@ -1051,16 +1027,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_rectangle", *params.values())
 
     def sketch_add_ellipse(
         self, doc_name: SketchAddEllipseDocumentName, sketch_name: SketchAddEllipseSketchName, cx: float, cy: float, major_radius: float, minor_radius: float, angle: float = 0.0, construction: bool = False,
@@ -1083,16 +1051,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_ellipse", *params.values())
 
     def sketch_add_arc_of_ellipse(
         self, doc_name: SketchAddArcOfEllipseDocumentName, sketch_name: SketchAddArcOfEllipseSketchName, cx: float, cy: float, major_radius: float, minor_radius: float, start_angle: float, end_angle: float, angle: float = 0.0, construction: bool = False,
@@ -1117,16 +1077,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_arc_of_ellipse", *params.values())
 
     def sketch_add_slot(
         self, doc_name: SketchAddSlotDocumentName, sketch_name: SketchAddSlotSketchName, x1: float, y1: float, x2: float, y2: float, width: float, construction: bool = False,
@@ -1149,16 +1101,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_slot", *params.values())
 
     def sketch_add_polyline(
         self, doc_name: SketchAddPolylineDocumentName, sketch_name: SketchAddPolylineSketchName, points: list[dict[str, float]], closed: bool = False, construction: bool = False,
@@ -1178,16 +1122,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_polyline", *params.values())
 
     def sketch_add_bspline(
         self, doc_name: SketchAddBsplineDocumentName, sketch_name: SketchAddBsplineSketchName, poles: list[dict[str, float]], degree: int = 3, weights: list[float] | None = None, knots: list[float] | None = None, multiplicities: list[int] | None = None, periodic: bool = False, construction: bool = False,
@@ -1211,16 +1147,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_bspline", *params.values())
 
     def sketch_add_bspline_through_points(
         self, doc_name: SketchAddBsplineThroughPointsDocumentName, sketch_name: SketchAddBsplineThroughPointsSketchName, points: list[dict[str, float]], degree: int = 3, periodic: bool = False, construction: bool = False,
@@ -1241,16 +1169,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_bspline_through_points", *params.values())
 
     def sketch_add_bezier(
         self, doc_name: SketchAddBezierDocumentName, sketch_name: SketchAddBezierSketchName, poles: list[dict[str, float]], construction: bool = False,
@@ -1269,16 +1189,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_bezier", *params.values())
 
     def sketch_add_regular_polygon(
         self, doc_name: SketchAddRegularPolygonDocumentName, sketch_name: SketchAddRegularPolygonSketchName, cx: float, cy: float, radius: float, sides: int, angle: float = 0.0, construction: bool = False,
@@ -1301,16 +1213,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_regular_polygon", *params.values())
 
     def sketch_add_parametric_curve(
         self, doc_name: SketchAddParametricCurveDocumentName, sketch_name: SketchAddParametricCurveSketchName, x_expr: str, y_expr: str, t_start: float, t_end: float, samples: int = 100, construction: bool = False,
@@ -1333,16 +1237,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_add_parametric_curve", *params.values())
 
     def sketch_import_points(
         self, doc_name: SketchImportPointsDocumentName, sketch_name: SketchImportPointsSketchName, points: list[dict[str, float]], construction: bool = False,
@@ -1361,16 +1257,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_import_points", *params.values())
 
     def sketch_toggle_construction(
         self, doc_name: SketchToggleConstructionDocumentName, sketch_name: SketchToggleConstructionSketchName, geo_indices: list[int], construction: bool = False,
@@ -1389,16 +1277,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_toggle_construction", *params.values())
 
     def sketch_constrain_coincident(
         self, doc_name: SketchConstrainCoincidentDocumentName, sketch_name: SketchConstrainCoincidentSketchName, geo1: int, pos1: int, geo2: int, pos2: int,
@@ -1419,16 +1299,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_coincident", *params.values())
 
     def sketch_constrain_horizontal(
         self, doc_name: SketchConstrainHorizontalDocumentName, sketch_name: SketchConstrainHorizontalSketchName, geo: int,
@@ -1446,16 +1318,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_horizontal", *params.values())
 
     def sketch_constrain_vertical(
         self, doc_name: SketchConstrainVerticalDocumentName, sketch_name: SketchConstrainVerticalSketchName, geo: int,
@@ -1473,16 +1337,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_vertical", *params.values())
 
     def sketch_constrain_distance(
         self, doc_name: SketchConstrainDistanceDocumentName, sketch_name: SketchConstrainDistanceSketchName, geo: int, value: float, pos: int | None = None, name: str | None = None,
@@ -1503,16 +1359,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_distance", *params.values())
 
     def sketch_constrain_radius(
         self, doc_name: SketchConstrainRadiusDocumentName, sketch_name: SketchConstrainRadiusSketchName, geo: int, value: float, name: str | None = None,
@@ -1532,16 +1380,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_radius", *params.values())
 
     def sketch_constrain_equal(
         self, doc_name: SketchConstrainEqualDocumentName, sketch_name: SketchConstrainEqualSketchName, geo1: int, geo2: int,
@@ -1560,16 +1400,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_equal", *params.values())
 
     def sketch_constrain_parallel(
         self, doc_name: SketchConstrainParallelDocumentName, sketch_name: SketchConstrainParallelSketchName, geo1: int, geo2: int,
@@ -1588,16 +1420,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_parallel", *params.values())
 
     def sketch_constrain_perpendicular(
         self, doc_name: SketchConstrainPerpendicularDocumentName, sketch_name: SketchConstrainPerpendicularSketchName, geo1: int, geo2: int,
@@ -1616,16 +1440,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_perpendicular", *params.values())
 
     def sketch_constrain_tangent(
         self, doc_name: SketchConstrainTangentDocumentName, sketch_name: SketchConstrainTangentSketchName, geo1: int, geo2: int,
@@ -1644,16 +1460,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_constrain_tangent", *params.values())
 
     def sketch_trim(
         self, doc_name: SketchTrimDocumentName, sketch_name: SketchTrimSketchName, geo_index: int, point_x: float, point_y: float,
@@ -1673,16 +1481,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_trim", *params.values())
 
     def sketch_extend(
         self, doc_name: SketchExtendDocumentName, sketch_name: SketchExtendSketchName, geo_index: int, increment: float, end_point: int = 2,
@@ -1702,16 +1502,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_extend", *params.values())
 
     def sketch_split(
         self, doc_name: SketchSplitDocumentName, sketch_name: SketchSplitSketchName, geo_index: int, point_x: float, point_y: float,
@@ -1731,16 +1523,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_split", *params.values())
 
     def sketch_fillet(
         self, doc_name: SketchFilletDocumentName, sketch_name: SketchFilletSketchName, geo1: int, geo2: int, radius: float,
@@ -1760,16 +1544,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_fillet", *params.values())
 
     def sketch_offset(
         self,
@@ -1796,16 +1572,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_offset", *params.values())
 
     def sketch_symmetry(
         self, doc_name: SketchSymmetryDocumentName, sketch_name: SketchSymmetrySketchName, geo_indices: list[int], symmetry_geo: int, copy: bool = True,
@@ -1825,16 +1593,8 @@ class FreeCADConnection:
         )
         if routed is not None:
             return routed
-        return {
-            "contract_version": 1,
-            "success": False,
-            "ok": False,
-            "outcome": "uncertain",
-            "committed": None,
-            "retry_safe": False,
-            "error_code": "INVALID_RPC_RESPONSE",
-            "error": "typed RPC v2 context is unavailable",
-        }
+        # No authenticated v2 session: the addon serves the same typed handler over v1.
+        return self.invoke_rpc("sketch_symmetry", *params.values())
 
     if TYPE_CHECKING:
 
