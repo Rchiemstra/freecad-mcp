@@ -54,8 +54,10 @@ def apply_yaw(view: Any, yaw_deg: float | None) -> None:
     try:
         if hasattr(view, "setCameraOrientation"):
             current = view.getCameraOrientation()
+            if not isinstance(current, FreeCAD.Rotation):  # older builds return a quaternion tuple
+                current = FreeCAD.Rotation(*current)
             extra = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), float(yaw_deg))
-            view.setCameraOrientation((extra * FreeCAD.Rotation(*current)).Q)
+            view.setCameraOrientation((extra * current).Q)
         elif hasattr(view, "viewRotateLeft"):
             steps = round(float(yaw_deg) / 10.0) % 36
             for _ in range(max(0, steps)):
