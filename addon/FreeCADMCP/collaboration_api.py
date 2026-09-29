@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 try:
     from .document_recompute_settlement import settle_document_must_execute
 except ImportError:  # pragma: no cover - flat addon import path
-    from document_recompute_settlement import settle_document_must_execute
+    from document_recompute_settlement import (  # type: ignore[import-not-found]
+        settle_document_must_execute,
+    )
 
 if TYPE_CHECKING:
     from ._shared.protocol.body_create_contract import (

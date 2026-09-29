@@ -95,7 +95,9 @@ def _settle_synchronously(
                 try:
                     from ....document_recompute_settlement import settle_document_must_execute
                 except ImportError:  # pragma: no cover - flat addon import path
-                    from document_recompute_settlement import settle_document_must_execute
+                    from document_recompute_settlement import (  # type: ignore[import-not-found]
+                        settle_document_must_execute,
+                    )
 
                 would_block = None
                 try:
