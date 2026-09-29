@@ -86,9 +86,11 @@ def _settle_synchronously(
             readiness.get("pending_removal")
             or (not allow_pending_recompute and readiness["must_execute"])
         ):
-            recompute = getattr(document, "recompute", None)
-            if callable(recompute):
-                recompute()
+            try:
+                from ....document_recompute_settlement import settle_document_must_execute
+            except ImportError:  # pragma: no cover - flat addon import path
+                from document_recompute_settlement import settle_document_must_execute
+            settle_document_must_execute(document)
 
 
 def _can_settle_synchronously(
