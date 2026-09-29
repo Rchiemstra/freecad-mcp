@@ -54,11 +54,27 @@ def _settle_with_async_pump(document: object, *, force: bool) -> None:
         time.sleep(0.002)
 
 
+def document_has_pending_must_execute(document: object) -> bool:
+    """Return whether the document reports dirty recompute work."""
+
+    must_execute = getattr(document, "mustExecute", None)
+    if callable(must_execute):
+        return bool(must_execute())
+    getter = getattr(document, "getMutationReadiness", None)
+    if callable(getter):
+        try:
+            readiness = getter()
+        except Exception:
+            return False
+        if isinstance(readiness, dict):
+            return bool(readiness.get("must_execute"))
+    return False
+
+
 def settle_document_must_execute(document: object, *, max_passes: int = 2) -> None:
     """Clear pending recompute work without blocking the GUI thread."""
 
-    must_execute = getattr(document, "mustExecute", None)
-    if not callable(must_execute):
+    if not document_has_pending_must_execute(document):
         return
 
     would_block = _document_would_block_type()
@@ -67,7 +83,7 @@ def settle_document_must_execute(document: object, *, max_passes: int = 2) -> No
         return
 
     for pass_index in range(max_passes):
-        if not must_execute():
+        if not document_has_pending_must_execute(document):
             return
         force = pass_index > 0
         try:
@@ -80,13 +96,13 @@ def settle_document_must_execute(document: object, *, max_passes: int = 2) -> No
                 _settle_with_async_pump(document, force=force)
             else:
                 raise
-        if not must_execute():
+        if not document_has_pending_must_execute(document):
             return
 
     purge = getattr(document, "purgeTouched", None)
-    if callable(purge) and must_execute():
+    if callable(purge) and document_has_pending_must_execute(document):
         purge()
-        if not must_execute():
+        if not document_has_pending_must_execute(document):
             return
         try:
             recompute()
@@ -97,4 +113,4 @@ def settle_document_must_execute(document: object, *, max_passes: int = 2) -> No
                 raise
 
 
-__all__ = ["settle_document_must_execute"]
+__all__ = ["document_has_pending_must_execute", "settle_document_must_execute"]
