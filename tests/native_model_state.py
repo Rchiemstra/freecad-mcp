@@ -302,16 +302,11 @@ _REVISION_PROBE_SUBJECTS = frozenset(
 def settle_stable_read_boundary(document: object) -> None:
     """Make snapshotForEdit legal after a rollback that left mustExecute set."""
 
-    must_execute = getattr(document, "mustExecute", None)
-    if not callable(must_execute) or not must_execute():
-        return
-    purge = getattr(document, "purgeTouched", None)
-    if callable(purge):
-        purge()
-    if callable(must_execute) and must_execute():
-        recompute = getattr(document, "recompute", None)
-        if callable(recompute):
-            recompute()
+    try:
+        from addon.FreeCADMCP.document_recompute_settlement import settle_document_must_execute
+    except ImportError:  # pragma: no cover - package test layout
+        from FreeCADMCP.document_recompute_settlement import settle_document_must_execute
+    settle_document_must_execute(document)
 
 
 def revision_state(document: object, op: str = "native-state") -> object:

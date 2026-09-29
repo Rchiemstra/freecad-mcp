@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from .document_recompute_settlement import settle_document_must_execute
+
 if TYPE_CHECKING:
     from ._shared.protocol.body_create_contract import (
         BodyDocument,
@@ -67,12 +69,7 @@ def _validate_callbacks(
 def _settle_pending_recompute(document: object) -> None:
     """Clear leftover mustExecute so the next native commit is not Busy."""
 
-    must_execute = getattr(document, "mustExecute", None)
-    if not callable(must_execute) or not must_execute():
-        return
-    recompute = getattr(document, "recompute", None)
-    if callable(recompute):
-        recompute()
+    settle_document_must_execute(document)
 
 
 def _commit_without_native(
