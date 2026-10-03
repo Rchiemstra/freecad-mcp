@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -57,6 +58,165 @@ class _NativeMutationDocument(Protocol):
 
 __all__ = ["CollaborationAPI"]
 
+
+# ---------------------------------------------------------------------------
+# GUI-thread detection and async mutation waiter
+# ---------------------------------------------------------------------------
+
+def _is_freecad_gui_thread() -> bool:
+    """Return ``True`` when called on the FreeCAD/Qt GUI main thread.
+
+    Uses Qt's thread-affinity query so it works regardless of how FreeCAD
+    started Python.  Returns ``False`` in headless runs where there is no
+    ``QCoreApplication`` instance.
+    """
+    try:
+        from PySide2.QtCore import QCoreApplication, QThread  # type: ignore[import]
+    except ImportError:
+        try:
+            from PySide.QtCore import QCoreApplication, QThread  # type: ignore[import]
+        except ImportError:
+            return False
+    app = QCoreApplication.instance()
+    if app is None:
+        return False
+    return QThread.currentThread() is app.thread()
+
+
+class _AsyncMutationWaiter:
+    """Returned from a GUI-thread commit call so the RPC thread can wait.
+
+    The GUI callable sets up a :class:`threading.Event` and returns this
+    object immediately.  The RPC thread (unblocked from ``dispatch_to_gui``)
+    calls :meth:`await_result` to block until the owner thread has finished
+    the mutation and the event has been set.
+
+    ``refusals`` is the :class:`_CallbackRefusals` from the same call frame
+    so that proven-rollback rejections can be returned as dicts (matching the
+    sync path) instead of re-raised exceptions.
+    """
+
+    __slots__ = ("_event", "_refusals", "_result_holder")
+
+    def __init__(
+        self,
+        event: threading.Event,
+        result_holder: list,
+        refusals: _CallbackRefusals | None = None,
+    ) -> None:
+        self._event = event
+        self._result_holder = result_holder
+        self._refusals = refusals
+
+    def await_result(self, timeout: float = 60.0) -> Any:
+        """Block the calling thread until the async mutation completes.
+
+        Returns the commit result dict on success.  On failure raises the
+        original exception, unless the exception was a proven callback
+        rejection (completed rollback), in which case it returns the
+        rejection dict—matching the sync path's ``proven_rejection`` path.
+        """
+        if not self._event.wait(timeout):
+            raise TimeoutError(
+                "async GUI-thread mutation did not complete within "
+                f"{timeout}s timeout"
+            )
+        if not self._result_holder:
+            raise RuntimeError(
+                "async GUI-thread mutation completed without a result record"
+            )
+        status, value = self._result_holder[0]
+        if status == "error":
+            if self._refusals is not None:
+                rejection = self._refusals.proven_rejection(value)
+                if rejection is not None:
+                    return rejection
+            raise value
+        return value
+
+
+def _commit_async_on_gui_thread(
+    document: object,
+    invoke_callback: Callable[[], object],
+    invoke_postcondition: Callable[[], object] | None,
+    refusals: _CallbackRefusals | None,
+    *,
+    structural: bool = False,
+    recompute: bool = True,
+    object_name: str | None = None,
+) -> _AsyncMutationWaiter:
+    """Submit a compatibility mutation from the GUI thread without blocking.
+
+    Calls ``document.commitCompatibilityMutationAsync`` (the non-blocking
+    variant) and returns an :class:`_AsyncMutationWaiter` immediately.  The
+    async C++ binding posts the work to the document's owner thread; the RPC
+    thread (blocked in ``dispatch_to_gui``) is the one that eventually calls
+    ``waiter.await_result()`` to retrieve the final status.
+
+    A synthetic signaling postcondition wraps *invoke_postcondition* (or
+    supplies ``True`` when no user postcondition exists) so that the owner
+    thread sets the threading event after the mutation is complete.  Callback
+    and postcondition failures set the event with the original exception so
+    ``await_result`` can re-raise or return a proven-rejection dict.
+
+    Raises ``RuntimeError`` when ``commitCompatibilityMutationAsync`` is not
+    present on the document (headless or older FreeCAD without the binding).
+    On the GUI thread the caller must never fall back to the sync method.
+    """
+    commit_async = getattr(document, "commitCompatibilityMutationAsync", None)
+    if not callable(commit_async):
+        raise RuntimeError(
+            "commitCompatibilityMutationAsync is not available on this document "
+            "object; the GUI thread must not call the synchronous "
+            "commitCompatibilityMutation"
+        )
+
+    event: threading.Event = threading.Event()
+    result_holder: list = []
+
+    def _signaling_callback() -> object:
+        try:
+            return invoke_callback()
+        except Exception as exc:
+            if not result_holder:
+                result_holder.append(("error", exc))
+                event.set()
+            raise
+
+    def _signaling_postcondition() -> object:
+        if invoke_postcondition is not None:
+            try:
+                success = invoke_postcondition()
+            except Exception as exc:
+                if not result_holder:
+                    result_holder.append(("error", exc))
+                    event.set()
+                raise
+        else:
+            success = True
+        if not result_holder:
+            if success:
+                result_holder.append(("ok", {"status": "Committed", "committed": True}))
+            else:
+                result_holder.append(
+                    ("ok", {"status": "PostconditionFailed", "committed": False})
+                )
+            event.set()
+        return bool(success)
+
+    kwargs: dict[str, Any] = {"structural": structural, "postcondition": _signaling_postcondition}
+    if not recompute:
+        kwargs["recompute"] = False
+    if object_name is not None:
+        kwargs["object_name"] = object_name
+
+    commit_async(_signaling_callback, **kwargs)
+    return _AsyncMutationWaiter(event, result_holder, refusals)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers (unchanged from original)
+# ---------------------------------------------------------------------------
 
 def _unsupported(message: str) -> dict[str, object]:
     return {"status": "Unsupported", "committed": False, "message": message}
@@ -176,6 +336,18 @@ class CollaborationAPI:
                 refusals.record("PostconditionFailed", exc)
                 raise
 
+        # B4: On the GUI thread, never call the blocking sync variant.  Post
+        # to the document's owner thread via the async binding and return a
+        # waiter immediately; the RPC thread calls waiter.await_result().
+        if _is_freecad_gui_thread():
+            return _commit_async_on_gui_thread(
+                document,
+                invoke_callback,
+                invoke_postcondition,
+                refusals,
+                structural=True,
+            )
+
         try:
             return document.commitCompatibilityMutation(
                 invoke_callback,
@@ -227,6 +399,17 @@ class CollaborationAPI:
             except Exception as exc:
                 refusals.record("PostconditionFailed", exc)
                 raise
+
+        # B4: On the GUI thread use the non-blocking async binding.
+        if _is_freecad_gui_thread():
+            return _commit_async_on_gui_thread(
+                document,
+                invoke_callback,
+                invoke_postcondition,
+                refusals,
+                structural=structural,
+                recompute=recompute,
+            )
 
         try:
             return document.commitCompatibilityMutation(
@@ -281,6 +464,22 @@ class CollaborationAPI:
                 has_postcondition=postcondition is not None,
                 require_native=require_native,
             )
+
+        # B4: On the GUI thread use the non-blocking async binding so the
+        # event-loop thread is never stalled waiting for the owner thread.
+        # The RPC thread (blocked in dispatch_to_gui) is the waiter.
+        if _is_freecad_gui_thread():
+            # invoke_postcondition already returns True when postcondition is
+            # None, so passing it as the signaling postcondition is safe.
+            return _commit_async_on_gui_thread(
+                document,
+                invoke_callback,
+                invoke_postcondition if (postcondition is not None or bind_document) else None,
+                None,  # _CallbackRefusals not tracked for this path
+                structural=structural,
+                recompute=recompute,
+            )
+
         options: dict[str, Any] = {"structural": structural}
         if not recompute:
             # Deferred recompute is an ordering contract: only pass the keyword
