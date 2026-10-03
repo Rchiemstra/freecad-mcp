@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -87,64 +86,96 @@ def _is_freecad_gui_thread() -> bool:
 class _AsyncMutationWaiter:
     """Returned from a GUI-thread commit call so the RPC thread can wait.
 
-    The GUI callable submits the sync mutation to a background thread and
-    returns this object immediately.  The RPC thread (unblocked from
-    ``dispatch_to_gui``) calls :meth:`await_result` to block until the
-    background thread finishes and delivers the native result unchanged.
+    The GUI callable calls ``commitCompatibilityMutationAsync`` (the
+    non-blocking C++ binding that posts work to the document's owner thread)
+    and wraps the returned ``wait()`` callable in this object.  The RPC
+    thread — already unblocked from ``dispatch_to_gui`` — calls
+    :meth:`await_result` to block on the C++ future without holding the
+    GUI event loop.
 
-    Using a ``concurrent.futures.Future`` means the waiter returns the
-    *exact same object* the sync path returns — no synthetic dicts, no
-    lost fields like ``operation_id``, ``message``, or ``conflicts``.
-    Exceptions (including proven-rejection dicts already resolved inside
-    the background thread) propagate identically to the sync path.
+    *refusals* is the :class:`_CallbackRefusals` from the same call frame
+    so that proven-rollback rejections can be returned as dicts (matching
+    the sync path) rather than re-raised exceptions.
     """
 
-    __slots__ = ("_future",)
+    __slots__ = ("_wait_fn", "_refusals")
 
-    def __init__(self, future: concurrent.futures.Future) -> None:  # type: ignore[type-arg]
-        self._future = future
+    def __init__(
+        self,
+        wait_fn: Any,
+        refusals: _CallbackRefusals | None = None,
+    ) -> None:
+        self._wait_fn = wait_fn
+        self._refusals = refusals
 
     def await_result(self, timeout: float = 60.0) -> Any:
         """Block the calling thread until the async mutation completes.
 
-        Returns the native commit result on success.  Raises the original
-        exception on unhandled failures.  Proven-rollback rejections are
-        already resolved to dicts inside the background thread, matching
-        the sync path exactly.
+        Calls the C++ ``wait(timeout)`` callable which releases the GIL,
+        blocks on ``std::future::wait_for``, then returns the commit result
+        dict — the same object the sync path returns — or raises the
+        original callback/postcondition exception.
+
+        Proven-rollback rejections (callback raised after a completed
+        rollback) are caught and returned as dicts, matching the sync path's
+        ``proven_rejection`` path.  All other exceptions propagate unchanged.
         """
         try:
-            return self._future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError as exc:
-            raise TimeoutError(
-                "async GUI-thread mutation did not complete within "
-                f"{timeout}s timeout"
-            ) from exc
+            return self._wait_fn(timeout)
+        except Exception as exc:
+            if self._refusals is not None:
+                rejection = self._refusals.proven_rejection(exc)
+                if rejection is not None:
+                    return rejection
+            raise
 
 
-def _commit_async_on_gui_thread(sync_fn: Callable[[], Any]) -> _AsyncMutationWaiter:
-    """Submit *sync_fn* to a background thread; return a waiter immediately.
+def _commit_async_on_gui_thread(
+    document: object,
+    callback: Any,
+    async_kwargs: dict[str, Any],
+    refusals: _CallbackRefusals | None,
+) -> _AsyncMutationWaiter:
+    """Call ``commitCompatibilityMutationAsync`` and return a waiter immediately.
 
     The GUI thread must never call ``document.commitCompatibilityMutation``
-    directly because the C++ binding raises ``DocumentWouldBlock`` when
-    invoked from the Qt main thread.  This helper offloads the *identical*
-    sync call to a ``ThreadPoolExecutor`` worker (which is not the GUI
-    thread), so the GUI callable returns instantly while the RPC thread —
-    already blocked in ``dispatch_to_gui`` — waits via
-    ``waiter.await_result()``.
+    (sync) because the C++ binding raises ``DocumentWouldBlock`` from the Qt
+    main thread.  The async variant posts the same work to the document's
+    owner thread via ``DocumentExecutionLane::postToOwner``, avoiding any
+    blocking on the GUI thread.
 
-    Because the background worker calls the real sync binding, the result
-    is the actual ``commitResultToPython`` dict (or the proven-rejection
-    dict from ``_CallbackRefusals.proven_rejection``), not a synthetic
-    placeholder.  The Python ``Future`` propagates exceptions unmodified
-    so the RPC thread sees the same errors as the non-GUI-thread sync path.
+    The returned :class:`_AsyncMutationWaiter` wraps the C++ ``wait()``
+    callable embedded in the handle dict.  The RPC thread (blocked in
+    ``dispatch_to_gui`` and unblocked when the GUI callable returns) calls
+    ``waiter.await_result(timeout)`` which blocks inside C++ without holding
+    the Qt event loop.
+
+    The C++ ``wait()`` callable releases the GIL, calls
+    ``std::future::wait_for``, and on completion either returns the
+    ``commitResultToPython`` dict (the exact same object the sync path
+    returns, including ``operation_id``, ``message``, ``conflicts``, and
+    ``published_revisions``) or restores and re-raises the
+    callback/postcondition exception on the waiting thread.
+
+    Raises ``RuntimeError`` when either the async binding is absent
+    (headless or older FreeCAD) or the returned handle does not carry a
+    ``wait()`` callable (FreeCAD version mismatch).
     """
-    executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=1,
-        thread_name_prefix="freecad_mcp_gui_mutation",
-    )
-    future = executor.submit(sync_fn)
-    executor.shutdown(wait=False)
-    return _AsyncMutationWaiter(future)
+    commit_async = getattr(document, "commitCompatibilityMutationAsync", None)
+    if not callable(commit_async):
+        raise RuntimeError(
+            "commitCompatibilityMutationAsync is not available on this document "
+            "object; the GUI thread must not call the synchronous "
+            "commitCompatibilityMutation"
+        )
+    handle = commit_async(callback, **async_kwargs)
+    wait_fn = handle.get("wait") if isinstance(handle, dict) else None
+    if not callable(wait_fn):
+        raise RuntimeError(
+            "commitCompatibilityMutationAsync did not return a handle with a "
+            "wait() callable; FreeCAD may need to be updated"
+        )
+    return _AsyncMutationWaiter(wait_fn, refusals)
 
 
 # ---------------------------------------------------------------------------
@@ -269,30 +300,32 @@ class CollaborationAPI:
                 refusals.record("PostconditionFailed", exc)
                 raise
 
-        # B4: On the GUI thread, never call the blocking sync variant directly.
-        # Offload the identical sync call to a background thread so the GUI
-        # callable returns immediately; the RPC thread calls
-        # waiter.await_result() to retrieve the actual native result.
-        def _do_sync() -> object:
-            try:
-                return document.commitCompatibilityMutation(
-                    invoke_callback,
-                    structural=True,
-                    postcondition=invoke_postcondition,
-                )
-            except Exception as exc:
-                rejection = refusals.proven_rejection(exc)
-                if rejection is not None:
-                    return rejection
-                if isinstance(exc, TypeError) and not refusals.started:
-                    return _unsupported(
-                        "native postcondition callback is not supported"
-                    )
-                raise
-
         if _is_freecad_gui_thread():
-            return _commit_async_on_gui_thread(_do_sync)
-        return _do_sync()
+            # B4: Never call the blocking sync variant on the GUI thread.
+            # Use commitCompatibilityMutationAsync so the owner-thread work is
+            # posted without blocking the event loop.  The RPC thread waits.
+            return _commit_async_on_gui_thread(
+                document,
+                invoke_callback,
+                {"structural": True, "postcondition": invoke_postcondition},
+                refusals,
+            )
+
+        try:
+            return document.commitCompatibilityMutation(
+                invoke_callback,
+                structural=True,
+                postcondition=invoke_postcondition,
+            )
+        except Exception as exc:
+            rejection = refusals.proven_rejection(exc)
+            if rejection is not None:
+                return rejection
+            if isinstance(exc, TypeError) and not refusals.started:
+                return _unsupported(
+                    "native postcondition callback is not supported"
+                )
+            raise
 
     def commit_native_mutation(
         self,
@@ -330,31 +363,33 @@ class CollaborationAPI:
                 refusals.record("PostconditionFailed", exc)
                 raise
 
-        # B4: On the GUI thread, never call the blocking sync variant directly.
-        # Offload the identical sync call to a background thread so the GUI
-        # callable returns immediately; the RPC thread calls
-        # waiter.await_result() to retrieve the actual native result.
-        def _do_sync() -> object:
-            try:
-                return document.commitCompatibilityMutation(
-                    invoke_callback,
-                    structural=structural,
-                    postcondition=invoke_postcondition,
-                    recompute=recompute,
-                )
-            except Exception as exc:
-                rejection = refusals.proven_rejection(exc)
-                if rejection is not None:
-                    return rejection
-                if isinstance(exc, TypeError) and not refusals.started:
-                    return _unsupported(
-                        "native postcondition callback is not supported"
-                    )
-                raise
-
         if _is_freecad_gui_thread():
-            return _commit_async_on_gui_thread(_do_sync)
-        return _do_sync()
+            # B4: Never call the blocking sync variant on the GUI thread.
+            async_kw: dict[str, Any] = {
+                "structural": structural,
+                "postcondition": invoke_postcondition,
+                "recompute": recompute,
+            }
+            return _commit_async_on_gui_thread(
+                document, invoke_callback, async_kw, refusals
+            )
+
+        try:
+            return document.commitCompatibilityMutation(
+                invoke_callback,
+                structural=structural,
+                postcondition=invoke_postcondition,
+                recompute=recompute,
+            )
+        except Exception as exc:
+            rejection = refusals.proven_rejection(exc)
+            if rejection is not None:
+                return rejection
+            if isinstance(exc, TypeError) and not refusals.started:
+                return _unsupported(
+                    "native postcondition callback is not supported"
+                )
+            raise
 
     def commit_compatibility_mutation(
         self,
@@ -415,21 +450,25 @@ class CollaborationAPI:
             # rejecting an unknown postcondition keyword.
             native_callback = invoke_callback
 
-        # B4: On the GUI thread, never call the blocking sync variant directly.
-        # Offload the identical sync call to a background thread so the GUI
-        # callable returns immediately; the RPC thread calls
-        # waiter.await_result() to retrieve the actual native result.
-        def _do_sync() -> Any:
+        if _is_freecad_gui_thread():
+            # B4: Never call the blocking sync variant on the GUI thread.
+            # options and native_callback are already computed identically to
+            # the sync path; reuse them for the async call.
             try:
-                return commit(native_callback, **options)
+                return _commit_async_on_gui_thread(
+                    document, native_callback, options, None
+                )
             except TypeError:
-                # An older native binding rejects the new keyword before
-                # invoking the callback. Report a closed, non-mutating
-                # rejection for the explicitly native-only path.
                 if require_native and postcondition is not None and not callback_started:
                     return _unsupported("native postcondition callback is not supported")
                 raise
 
-        if _is_freecad_gui_thread():
-            return _commit_async_on_gui_thread(_do_sync)
-        return _do_sync()
+        try:
+            return commit(native_callback, **options)
+        except TypeError:
+            # An older native binding rejects the new keyword before invoking
+            # the callback. Report a closed, non-mutating rejection for the
+            # explicitly native-only path.
+            if require_native and postcondition is not None and not callback_started:
+                return _unsupported("native postcondition callback is not supported")
+            raise
