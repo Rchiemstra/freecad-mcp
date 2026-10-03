@@ -1,9 +1,12 @@
-"""B4 – GUI-thread collaboration API must use commitCompatibilityMutationAsync.
+"""B4 – GUI-thread collaboration API must offload sync mutation to background.
 
 Unit tests verify that when the caller is the FreeCAD GUI thread:
-- ``commitCompatibilityMutation`` (sync, blocking) is never invoked.
-- ``commitCompatibilityMutationAsync`` is invoked instead.
-- The returned :class:`_AsyncMutationWaiter` resolves off the GUI thread.
+- ``commitCompatibilityMutation`` (sync) is called from a *background* thread,
+  never from the GUI thread itself.
+- The returned :class:`_AsyncMutationWaiter` resolves to the **actual**
+  native result (same object the sync path returns), not a synthetic dict.
+- Exceptions from the callback propagate as proven-rejection dicts or re-raised
+  exceptions, identical to the non-GUI-thread sync path.
 
 All three commit entry-points are covered:
     * ``commit_body_create_mutation``
@@ -31,16 +34,32 @@ def _load_module():
     return importlib.import_module("addon.FreeCADMCP.collaboration_api")
 
 
-class _FakeAsyncBodyDoc:
-    """Document fake that exposes both sync and async mutation surfaces."""
+# A distinctive sentinel result that the fake sync method returns.
+# Tests assert the *exact same object* is delivered by the waiter — not
+# a synthetic {"status": "Committed", "committed": True} copy.
+_SENTINEL_RESULT = {
+    "status": "Committed",
+    "committed": True,
+    "operation_id": "test-op-42",
+    "message": "sentinel commit",
+    "conflicts": [],
+    "published_revisions": [7],
+}
+
+
+class _FakeBodyDoc:
+    """Document fake exposing the sync mutation surface.
+
+    The background-thread path calls ``commitCompatibilityMutation`` from a
+    worker thread.  The fake records which thread called it so tests can
+    verify the GUI thread was never the caller.
+    """
 
     def __init__(self, result: object = None) -> None:
         self.Name = "TestDoc"
-        self.result = result or {"status": "Committed", "committed": True}
+        self.result = result if result is not None else dict(_SENTINEL_RESULT)
         self.sync_calls: list[tuple[Any, dict[str, Any]]] = []
-        self.async_calls: list[tuple[Any, dict[str, Any]]] = []
-        self._pending_callback: Any = None
-        self._pending_postcondition: Any = None
+        self.caller_threads: list[threading.Thread] = []
 
     # --- _NativeBodyDocument protocol ---
 
@@ -51,30 +70,14 @@ class _FakeAsyncBodyDoc:
         return object()
 
     def commitCompatibilityMutation(self, callback, **kwargs):
-        """Sync variant – must NOT be called on the GUI thread."""
+        """Sync variant – called from the background thread, never the GUI thread."""
         self.sync_calls.append((callback, dict(kwargs)))
+        self.caller_threads.append(threading.current_thread())
         callback()
         pc = kwargs.get("postcondition")
         if callable(pc):
             pc()
         return self.result
-
-    def commitCompatibilityMutationAsync(self, callback, **kwargs):
-        """Async variant – stores the callbacks for deferred triggering."""
-        self.async_calls.append((callback, dict(kwargs)))
-        self._pending_callback = callback
-        self._pending_postcondition = kwargs.get("postcondition")
-        # Return a minimal handle dict (the real C++ returns a capsule dict).
-        return {"state": "Running"}
-
-    def trigger(self) -> None:
-        """Simulate the owner thread executing the pending mutation."""
-        if self._pending_callback is not None:
-            self._pending_callback()
-        if callable(self._pending_postcondition):
-            self._pending_postcondition()
-        self._pending_callback = None
-        self._pending_postcondition = None
 
 
 # ---------------------------------------------------------------------------
@@ -82,45 +85,48 @@ class _FakeAsyncBodyDoc:
 # ---------------------------------------------------------------------------
 
 
-def test_body_create_uses_async_on_gui_thread(monkeypatch) -> None:
+def test_body_create_returns_actual_native_result_on_gui_thread(monkeypatch) -> None:
+    """Waiter must deliver the real native result, not a synthetic dict."""
     mod = _load_module()
-    doc = _FakeAsyncBodyDoc()
+    doc = _FakeBodyDoc()
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
     applied: list[object] = []
-    postcondition_called: list[bool] = []
 
     def callback(d):
         applied.append(d)
 
     def postcondition(d):
-        postcondition_called.append(True)
         return True
 
     waiter = api.commit_body_create_mutation("TestDoc", callback, postcondition)
 
-    # Sync method must not have been touched.
-    assert doc.sync_calls == [], "commitCompatibilityMutation must not be called on GUI thread"
-    assert len(doc.async_calls) == 1, "commitCompatibilityMutationAsync must be called"
-    assert applied == [], "callback must not run before trigger()"
+    # The waiter must be returned before the background thread completes.
+    assert hasattr(waiter, "await_result"), "must return _AsyncMutationWaiter"
 
-    # Simulate owner thread completing the mutation.
-    doc.trigger()
-    assert applied == [doc], "callback must receive the document"
-    assert postcondition_called == [True]
-
-    # Await the result off the GUI thread (event already set by trigger).
+    # Await the actual result; the background thread runs the sync method.
     result = waiter.await_result(timeout=5.0)
-    assert isinstance(result, dict)
-    assert result.get("status") == "Committed"
-    assert result.get("committed") is True
+
+    # The exact same object the fake sync method returns.
+    assert result is doc.result, "waiter must return the actual native result object"
+    assert result.get("operation_id") == "test-op-42", "operation_id must not be lost"
+    assert result.get("published_revisions") == [7], "published_revisions must not be lost"
+
+    # Sync method was called, but NOT from the main (GUI-spoofed) thread.
+    assert doc.sync_calls, "sync method must have been called (by background thread)"
+    gui_thread = threading.main_thread()
+    for t in doc.caller_threads:
+        assert t is not gui_thread, "sync method must not be called on the GUI thread"
+
+    # Callback received the document.
+    assert applied == [doc]
 
 
 def test_body_create_sync_path_on_non_gui_thread(monkeypatch) -> None:
-    """Sync path is used when NOT on the GUI thread."""
+    """Sync path is used directly when NOT on the GUI thread."""
     mod = _load_module()
-    doc = _FakeAsyncBodyDoc()
+    doc = _FakeBodyDoc()
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: False)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
@@ -129,8 +135,33 @@ def test_body_create_sync_path_on_non_gui_thread(monkeypatch) -> None:
     )
 
     assert doc.sync_calls, "commitCompatibilityMutation must be called off GUI thread"
-    assert doc.async_calls == [], "async variant must not be called off GUI thread"
-    assert result.get("committed") is True
+    assert result is doc.result, "sync path must return the native result"
+
+
+def test_body_create_callback_raises_on_gui_thread(monkeypatch) -> None:
+    """Callback exception → proven-rejection dict returned by waiter."""
+    mod = _load_module()
+    doc = _FakeBodyDoc()
+    monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
+
+    api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
+
+    class _ApplyError(Exception):
+        pass
+
+    def bad_callback(d):
+        raise _ApplyError("apply failed")
+
+    # Make the fake propagate the exception (simulating C++ rollback + re-raise).
+    waiter = api.commit_body_create_mutation("TestDoc", bad_callback, lambda d: True)
+    result = waiter.await_result(timeout=5.0)
+
+    # The proven-rejection dict must be returned, not the exception re-raised.
+    assert isinstance(result, dict), "proven rejection must be returned as dict"
+    assert result.get("status") == "ApplyFailed"
+    assert result.get("committed") is False
+    assert result.get("rollback_succeeded") is True
+    assert "apply failed" in result.get("message", "")
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +169,9 @@ def test_body_create_sync_path_on_non_gui_thread(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_native_mutation_uses_async_on_gui_thread(monkeypatch) -> None:
+def test_native_mutation_returns_actual_result_on_gui_thread(monkeypatch) -> None:
     mod = _load_module()
-    doc = _FakeAsyncBodyDoc()
+    doc = _FakeBodyDoc()
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
@@ -150,20 +181,38 @@ def test_native_mutation_uses_async_on_gui_thread(monkeypatch) -> None:
         applied.append(d)
         return True
 
-    def postcondition(d):
-        return True
+    waiter = api.commit_native_mutation("TestDoc", callback, lambda d: True)
+    result = waiter.await_result(timeout=5.0)
 
-    waiter = api.commit_native_mutation("TestDoc", callback, postcondition)
-
-    assert doc.sync_calls == [], "sync variant must not be called on GUI thread"
-    assert len(doc.async_calls) == 1
-
-    doc.trigger()
+    assert result is doc.result, "waiter must return actual native result"
     assert applied == [doc]
 
+    gui_thread = threading.main_thread()
+    for t in doc.caller_threads:
+        assert t is not gui_thread
+
+
+def test_native_mutation_callback_raises_on_gui_thread(monkeypatch) -> None:
+    """Callback exception → proven-rejection dict returned by waiter."""
+    mod = _load_module()
+    doc = _FakeBodyDoc()
+    monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
+
+    api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
+
+    class _NativeError(Exception):
+        pass
+
+    waiter = api.commit_native_mutation(
+        "TestDoc",
+        lambda d: (_ for _ in ()).throw(_NativeError("native failed")),  # type: ignore[misc]
+        lambda d: True,
+    )
     result = waiter.await_result(timeout=5.0)
-    assert result.get("status") == "Committed"
-    assert result.get("committed") is True
+
+    assert result.get("status") == "ApplyFailed"
+    assert result.get("committed") is False
+    assert result.get("rollback_succeeded") is True
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +220,9 @@ def test_native_mutation_uses_async_on_gui_thread(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_compat_mutation_uses_async_on_gui_thread(monkeypatch) -> None:
+def test_compat_mutation_returns_actual_result_on_gui_thread(monkeypatch) -> None:
     mod = _load_module()
-    doc = _FakeAsyncBodyDoc()
+    doc = _FakeBodyDoc()
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
@@ -181,21 +230,15 @@ def test_compat_mutation_uses_async_on_gui_thread(monkeypatch) -> None:
     callback = lambda: called.append(True)  # noqa: E731
 
     waiter = api.commit_compatibility_mutation("TestDoc", callback)
-
-    assert doc.sync_calls == [], "sync variant must not be called on GUI thread"
-    assert len(doc.async_calls) == 1
-    assert called == [], "callback must not run before trigger()"
-
-    doc.trigger()
-    assert called == [True]
-
     result = waiter.await_result(timeout=5.0)
-    assert result.get("status") == "Committed"
+
+    assert result is doc.result, "waiter must return actual native result"
+    assert called == [True], "callback must have been called by background thread"
 
 
 def test_compat_mutation_with_postcondition_on_gui_thread(monkeypatch) -> None:
     mod = _load_module()
-    doc = _FakeAsyncBodyDoc()
+    doc = _FakeBodyDoc()
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
@@ -207,26 +250,42 @@ def test_compat_mutation_with_postcondition_on_gui_thread(monkeypatch) -> None:
         lambda: callback_ran.append(True),
         postcondition=lambda: postcondition_ran.append(True) or True,
     )
-
-    assert doc.sync_calls == []
-    assert doc.async_calls
-
-    doc.trigger()
-    assert callback_ran == [True]
-    # postcondition wrapped by signaling_postcondition; may be called inside trigger
     result = waiter.await_result(timeout=5.0)
-    assert result.get("committed") is True
+
+    assert result is doc.result
+    assert callback_ran == [True]
+    assert postcondition_ran == [True]
+
+
+def test_compat_mutation_callback_raises_on_gui_thread(monkeypatch) -> None:
+    """Callback exception raises from waiter (no proven_rejection for compat path)."""
+    mod = _load_module()
+    doc = _FakeBodyDoc()
+    monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
+
+    api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
+
+    class _CompatError(Exception):
+        pass
+
+    def bad_callback():
+        raise _CompatError("compat failed")
+
+    waiter = api.commit_compatibility_mutation("TestDoc", bad_callback)
+
+    with pytest.raises(_CompatError, match="compat failed"):
+        waiter.await_result(timeout=5.0)
 
 
 # ---------------------------------------------------------------------------
-# Test: await off the GUI thread via a real background thread
+# Test: await off the GUI thread via real background threads
 # ---------------------------------------------------------------------------
 
 
 def test_await_result_off_gui_thread(monkeypatch) -> None:
     """The awaiter must be safe to call from a non-GUI background thread."""
     mod = _load_module()
-    doc = _FakeAsyncBodyDoc()
+    doc = _FakeBodyDoc()
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
@@ -234,16 +293,7 @@ def test_await_result_off_gui_thread(monkeypatch) -> None:
         "TestDoc", lambda d: None, lambda d: True
     )
 
-    # Trigger from a background thread (simulating the owner thread).
-    def _owner_thread():
-        import time
-        time.sleep(0.02)
-        doc.trigger()
-
-    owner = threading.Thread(target=_owner_thread, daemon=True)
-    owner.start()
-
-    # Await result from another background thread (simulating the RPC thread).
+    # Await result from a dedicated background thread (simulating the RPC thread).
     rpc_result: list[Any] = []
     rpc_error: list[BaseException] = []
 
@@ -256,32 +306,29 @@ def test_await_result_off_gui_thread(monkeypatch) -> None:
     rpc = threading.Thread(target=_rpc_thread, daemon=True)
     rpc.start()
     rpc.join(timeout=6.0)
-    owner.join(timeout=1.0)
 
     assert not rpc_error, f"await_result raised: {rpc_error[0]}"
     assert rpc_result, "await_result must return a result"
-    assert rpc_result[0].get("status") == "Committed"
+    assert rpc_result[0] is doc.result, "RPC thread must receive actual native result"
+    assert rpc_result[0].get("operation_id") == "test-op-42"
 
 
-def test_no_async_binding_on_gui_thread_raises(monkeypatch) -> None:
-    """When commitCompatibilityMutationAsync is absent, GUI-thread raises."""
+def test_sync_path_on_gui_thread_calls_background_not_caller(monkeypatch) -> None:
+    """No matter which thread is 'GUI', the sync method is called on a worker."""
     mod = _load_module()
+    doc = _FakeBodyDoc()
 
-    class _SyncOnlyDoc:
-        Name = "SyncOnly"
-
-        def getObject(self, name):
-            return None
-
-        def addObject(self, t, n):
-            return object()
-
-        def commitCompatibilityMutation(self, cb, **kw):
-            return {"status": "Committed", "committed": True}
-
-    doc = _SyncOnlyDoc()
+    caller_thread_id = threading.current_thread().ident
     monkeypatch.setattr(mod, "_is_freecad_gui_thread", lambda: True)
 
     api = mod.CollaborationAPI(document_lookup=lambda _name: doc)
-    with pytest.raises(RuntimeError, match="commitCompatibilityMutationAsync"):
-        api.commit_body_create_mutation("SyncOnly", lambda d: None, lambda d: True)
+    waiter = api.commit_body_create_mutation(
+        "TestDoc", lambda d: None, lambda d: True
+    )
+    waiter.await_result(timeout=5.0)
+
+    assert doc.caller_threads, "sync method must have been called"
+    for t in doc.caller_threads:
+        assert t.ident != caller_thread_id, (
+            "sync method must not run on the calling (GUI) thread"
+        )
