@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -233,16 +235,18 @@ class _SketchAddGeometryExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_geometry_uncertain(
-                "SKETCH_ADD_GEOMETRY_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected geometry result",
-                committed=True,
-            )
-        return make_sketch_add_geometry_success(self.inspected.name, self.inspected.indices)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_geometry_uncertain(
+                    "SKETCH_ADD_GEOMETRY_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected geometry result",
+                    committed=True,
+                )
+            return make_sketch_add_geometry_success(self.inspected.name, self.inspected.indices)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_geometry(
     collaborators: SketchAddGeometryCollaborators,

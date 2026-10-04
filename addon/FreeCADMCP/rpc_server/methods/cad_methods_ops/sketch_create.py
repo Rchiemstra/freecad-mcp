@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
@@ -310,16 +312,18 @@ class _SketchCreateExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_create_uncertain(
-                "SKETCH_CREATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Sketch result",
-                committed=True,
-            )
-        return make_sketch_create_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_create_uncertain(
+                    "SKETCH_CREATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Sketch result",
+                    committed=True,
+                )
+            return make_sketch_create_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_create(
     collaborators: SketchCreateCollaborators,

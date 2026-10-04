@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -189,18 +191,20 @@ class _SketchDeleteGeometryExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_delete_geometry_uncertain(
-                "SKETCH_DELETE_GEOMETRY_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected delete result",
-                committed=True,
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_delete_geometry_uncertain(
+                    "SKETCH_DELETE_GEOMETRY_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected delete result",
+                    committed=True,
+                )
+            return make_sketch_delete_geometry_success(
+                self.inspected.name, self.inspected.deleted_count
             )
-        return make_sketch_delete_geometry_success(
-            self.inspected.name, self.inspected.deleted_count
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_delete_geometry(
     collaborators: SketchDeleteGeometryCollaborators,

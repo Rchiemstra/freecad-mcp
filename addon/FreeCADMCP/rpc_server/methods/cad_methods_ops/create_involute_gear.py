@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -155,19 +157,19 @@ class _CreateInvoluteGearExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_involute_gear_uncertain(
-                "CREATE_INVOLUTE_GEAR_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_involute_gear result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_create_involute_gear_uncertain(
+                    "CREATE_INVOLUTE_GEAR_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_involute_gear result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_involute_gear_success(
+                body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
             )
-        payload = self.inspected.payload
-        return make_create_involute_gear_success(
-            body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_involute_gear(doc: MutationDocument, request: CreateInvoluteGearRequest) -> CreateInvoluteGearReceipt:
     """Apply create_involute_gear without recomputing or managing a transaction."""

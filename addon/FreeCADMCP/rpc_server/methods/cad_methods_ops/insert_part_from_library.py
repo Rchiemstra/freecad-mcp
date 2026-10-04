@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -158,18 +160,18 @@ class _InsertPartFromLibraryExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_insert_part_from_library_uncertain(
-                "INSERT_PART_FROM_LIBRARY_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected insert result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_insert_part_from_library_uncertain(
+                    "INSERT_PART_FROM_LIBRARY_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected insert result",
+                    committed=True,
+                )
+            return make_insert_part_from_library_success(
+                self.inspected.name, self.inspected.relative_path
             )
-        return make_insert_part_from_library_success(
-            self.inspected.name, self.inspected.relative_path
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_insert_part_from_library(
     collaborators: InsertPartFromLibraryCollaborators,

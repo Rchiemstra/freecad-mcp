@@ -2,6 +2,8 @@
 """Typed ``build_path_wire`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .typed_rpc_support import (
     as_float,
     as_int,
@@ -303,22 +305,22 @@ class _BuildPathWireExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_build_path_wire_uncertain(
-                "BUILD_PATH_WIRE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        success = dict(make_build_path_wire_success(wire_name=self.inspected.name))
-        extra = self.inspected.extra
-        if isinstance(extra, dict):
-            for key, value in extra.items():
-                if isinstance(key, str) and key not in success:
-                    success[key] = value
-        return success  # type: ignore[return-value]
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_build_path_wire_uncertain(
+                    "BUILD_PATH_WIRE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            success = dict(make_build_path_wire_success(wire_name=self.inspected.name))
+            extra = self.inspected.extra
+            if isinstance(extra, dict):
+                for key, value in extra.items():
+                    if isinstance(key, str) and key not in success:
+                        success[key] = value
+            return success  # type: ignore[return-value]
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_build_path_wire(
     collaborators: BuildPathWireCollaborators,

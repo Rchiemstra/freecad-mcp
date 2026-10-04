@@ -130,6 +130,7 @@ class ApprovedLaunchSource:
             "check": False,
             "env": dict(environment),
             "timeout": timeout,
+            "stdin": subprocess.DEVNULL,
         }
         if os.name != "nt":
             kwargs["pass_fds"] = tuple(source._fd for source in sources.values() if source._fd is not None)

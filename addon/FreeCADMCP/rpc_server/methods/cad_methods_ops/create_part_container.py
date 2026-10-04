@@ -2,6 +2,8 @@
 """Typed ``create_part_container`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .typed_rpc_support import (
     nonempty_string,
     object_label,
@@ -190,16 +192,16 @@ class _CreatePartContainerExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_part_container_uncertain(
-                "CREATE_PART_CONTAINER_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_create_part_container_success(part_name=self.inspected.name, label=self.inspected.label)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_create_part_container_uncertain(
+                    "CREATE_PART_CONTAINER_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_create_part_container_success(part_name=self.inspected.name, label=self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_create_part_container(
     collaborators: CreatePartContainerCollaborators,

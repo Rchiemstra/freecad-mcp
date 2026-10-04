@@ -2,6 +2,8 @@
 """Typed ``spreadsheet_create`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     as_float,
@@ -160,16 +162,18 @@ class _SpreadsheetCreateExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_spreadsheet_create_uncertain(
-                "SPREADSHEET_CREATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_spreadsheet_create_success(sheet=self.inspected.name, label=self.inspected.label)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_spreadsheet_create_uncertain(
+                    "SPREADSHEET_CREATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_spreadsheet_create_success(sheet=self.inspected.name, label=self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_spreadsheet_create(
     collaborators: SpreadsheetCreateCollaborators,

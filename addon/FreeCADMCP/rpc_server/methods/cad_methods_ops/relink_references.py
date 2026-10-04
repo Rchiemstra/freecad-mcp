@@ -2,6 +2,8 @@
 """Typed ``relink_references`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     nonempty_string,
     object_label,
@@ -197,16 +199,18 @@ class _RelinkReferencesExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_relink_references_uncertain(
-                "RELINK_REFERENCES_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_relink_references_success(from_obj=self.request.from_obj, to_obj=self.request.to_obj)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_relink_references_uncertain(
+                    "RELINK_REFERENCES_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_relink_references_success(from_obj=self.request.from_obj, to_obj=self.request.to_obj)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_relink_references(
     collaborators: RelinkReferencesCollaborators,

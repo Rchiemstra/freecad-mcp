@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -508,16 +510,18 @@ class _SketchOffsetExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_offset_uncertain(
-                "SKETCH_OFFSET_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_offset result",
-                committed=True,
-            )
-        return make_sketch_offset_success(SketchName(self.inspected.sketch_name))
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_offset_uncertain(
+                    "SKETCH_OFFSET_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_offset result",
+                    committed=True,
+                )
+            return make_sketch_offset_success(SketchName(self.inspected.sketch_name))
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_offset(
     collaborators: SketchOffsetCollaborators,

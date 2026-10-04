@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -148,16 +150,16 @@ class _BodyCreateExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_body_create_uncertain(
-                "BODY_CREATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Body result",
-                committed=True,
-            )
-        return make_body_create_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_body_create_uncertain(
+                    "BODY_CREATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Body result",
+                    committed=True,
+                )
+            return make_body_create_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_body_create(
     collaborators: BodyCreateCollaborators,

@@ -2,6 +2,8 @@
 """Typed ``create_placement_binder`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     assign_attr,
@@ -193,16 +195,16 @@ class _CreatePlacementBinderExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_placement_binder_uncertain(
-                "CREATE_PLACEMENT_BINDER_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_create_placement_binder_success(binder_name=self.inspected.name)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_create_placement_binder_uncertain(
+                    "CREATE_PLACEMENT_BINDER_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_create_placement_binder_success(binder_name=self.inspected.name)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_create_placement_binder(
     collaborators: CreatePlacementBinderCollaborators,

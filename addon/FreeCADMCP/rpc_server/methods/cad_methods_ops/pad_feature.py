@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 import math
 
 from collections.abc import Callable
@@ -337,16 +339,16 @@ class _PadFeatureExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_pad_feature_uncertain(
-                "PAD_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Pad result",
-                committed=True,
-            )
-        return make_pad_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_pad_feature_uncertain(
+                    "PAD_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Pad result",
+                    committed=True,
+                )
+            return make_pad_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_pad_feature(
     collaborators: PadFeatureCollaborators,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -292,16 +294,18 @@ class _SketchAddArcExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_arc_uncertain(
-                "SKETCH_ADD_ARC_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_arc result",
-                committed=True,
-            )
-        return make_sketch_add_arc_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_arc_uncertain(
+                    "SKETCH_ADD_ARC_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_arc result",
+                    committed=True,
+                )
+            return make_sketch_add_arc_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_arc(
     collaborators: SketchAddArcCollaborators,

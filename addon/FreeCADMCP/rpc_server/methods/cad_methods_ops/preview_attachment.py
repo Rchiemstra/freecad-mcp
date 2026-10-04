@@ -2,6 +2,8 @@
 """Typed ``preview_attachment`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     nonempty_string,
     object_label,
@@ -351,28 +353,30 @@ class _PreviewAttachmentExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_preview_attachment_uncertain(
-                "PREVIEW_ATTACHMENT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_preview_attachment_uncertain(
+                    "PREVIEW_ATTACHMENT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            extra = self.inspected.extra if isinstance(self.inspected.extra, Mapping) else {}
+            return make_preview_attachment_success(
+                datum_name=self.inspected.name,
+                support=extra.get("support"),
+                placement=extra.get("placement"),
+                distance=extra.get("distance"),
+                normal_angle_deg=extra.get("normal_angle_deg"),
+                source_body_placement_dropped=extra.get("source_body_placement_dropped"),
+                datum=extra.get("datum"),
+                datum_body=extra.get("datum_body"),
+                support_body=extra.get("support_body"),
+                diff=extra.get("diff"),
             )
-        extra = self.inspected.extra if isinstance(self.inspected.extra, Mapping) else {}
-        return make_preview_attachment_success(
-            datum_name=self.inspected.name,
-            support=extra.get("support"),
-            placement=extra.get("placement"),
-            distance=extra.get("distance"),
-            normal_angle_deg=extra.get("normal_angle_deg"),
-            source_body_placement_dropped=extra.get("source_body_placement_dropped"),
-            datum=extra.get("datum"),
-            datum_body=extra.get("datum_body"),
-            support_body=extra.get("support_body"),
-            diff=extra.get("diff"),
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_preview_attachment(
     collaborators: PreviewAttachmentCollaborators,

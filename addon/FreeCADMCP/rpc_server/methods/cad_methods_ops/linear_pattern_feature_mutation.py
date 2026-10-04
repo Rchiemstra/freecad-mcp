@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -217,4 +219,6 @@ def run_linear_pattern_feature_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _linear_pattern_feature_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _linear_pattern_feature_native_result(terminal, state)
+    )

@@ -2,6 +2,8 @@
 """Typed ``fillet_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -197,16 +199,16 @@ class _FilletFeatureExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_fillet_feature_uncertain(
-                "FILLET_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected fillet_feature result",
-                committed=True,
-            )
-        return make_fillet_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_fillet_feature_uncertain(
+                    "FILLET_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected fillet_feature result",
+                    committed=True,
+                )
+            return make_fillet_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_fillet_feature(
     collaborators: FilletFeatureCollaborators,

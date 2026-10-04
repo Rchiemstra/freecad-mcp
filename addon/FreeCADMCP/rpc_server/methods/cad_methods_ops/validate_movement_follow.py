@@ -2,6 +2,8 @@
 """Typed ``validate_movement_follow`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     as_float,
@@ -345,36 +347,38 @@ class _ValidateMovementFollowExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_validate_movement_follow_uncertain(
-                "VALIDATE_MOVEMENT_FOLLOW_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        if self.request.restore and self.created is not None:
-            extra = self.created.extra
-            if isinstance(extra, dict):
-                originals = extra.get("originals")
-                if isinstance(originals, dict):
-                    doc = self.created.document
-                    if doc is None:
-                        doc = self.created.item
-                    app = getattr(self.collaborators, "freecad", None)
-                    if app is not None:
-                        getter = getattr(app, "getDocument", None)
-                        if callable(getter):
-                            try:
-                                live_doc = getter(str(self.request.doc_name))
-                            except Exception:
-                                live_doc = None
-                            if live_doc is not None:
-                                doc = live_doc
-                    if doc is not None:
-                        _restore_saved_placements(doc, originals)
-        return make_validate_movement_follow_success(source=self.inspected.name)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_validate_movement_follow_uncertain(
+                    "VALIDATE_MOVEMENT_FOLLOW_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            if self.request.restore and self.created is not None:
+                extra = self.created.extra
+                if isinstance(extra, dict):
+                    originals = extra.get("originals")
+                    if isinstance(originals, dict):
+                        doc = self.created.document
+                        if doc is None:
+                            doc = self.created.item
+                        app = getattr(self.collaborators, "freecad", None)
+                        if app is not None:
+                            getter = getattr(app, "getDocument", None)
+                            if callable(getter):
+                                try:
+                                    live_doc = getter(str(self.request.doc_name))
+                                except Exception:
+                                    live_doc = None
+                                if live_doc is not None:
+                                    doc = live_doc
+                        if doc is not None:
+                            _restore_saved_placements(doc, originals)
+            return make_validate_movement_follow_success(source=self.inspected.name)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_validate_movement_follow(
     collaborators: ValidateMovementFollowCollaborators,

@@ -2,6 +2,8 @@
 """Typed ``sketch_add_external_projection`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     invoke,
@@ -204,16 +206,18 @@ class _SketchAddExternalProjectionExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_external_projection_uncertain(
-                "SKETCH_ADD_EXTERNAL_PROJECTION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_sketch_add_external_projection_success(sketch_name=self.inspected.name)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_external_projection_uncertain(
+                    "SKETCH_ADD_EXTERNAL_PROJECTION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_sketch_add_external_projection_success(sketch_name=self.inspected.name)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_external_projection(
     collaborators: SketchAddExternalProjectionCollaborators,

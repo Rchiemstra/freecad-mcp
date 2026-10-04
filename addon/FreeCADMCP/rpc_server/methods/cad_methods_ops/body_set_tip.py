@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -221,18 +223,18 @@ class _BodySetTipExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_body_set_tip_uncertain(
-                "BODY_SET_TIP_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Body Tip result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_body_set_tip_uncertain(
+                    "BODY_SET_TIP_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Body Tip result",
+                    committed=True,
+                )
+            return make_body_set_tip_success(
+                self.inspected.body, self.inspected.tip, self.inspected.feature
             )
-        return make_body_set_tip_success(
-            self.inspected.body, self.inspected.tip, self.inspected.feature
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_body_set_tip(
     collaborators: BodySetTipCollaborators,

@@ -2,6 +2,8 @@
 """Typed ``spreadsheet_set_cells`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -240,23 +242,25 @@ class _SpreadsheetSetCellsExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_spreadsheet_set_cells_uncertain(
-                "SPREADSHEET_SET_CELLS_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        updated = self.inspected.extra
-        if not isinstance(updated, list):
-            return make_spreadsheet_set_cells_uncertain(
-                "SPREADSHEET_SET_CELLS_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without inspected updated cells",
-                committed=True,
-            )
-        return make_spreadsheet_set_cells_success(sheet=self.inspected.name, updated=updated)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_spreadsheet_set_cells_uncertain(
+                    "SPREADSHEET_SET_CELLS_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            updated = self.inspected.extra
+            if not isinstance(updated, list):
+                return make_spreadsheet_set_cells_uncertain(
+                    "SPREADSHEET_SET_CELLS_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without inspected updated cells",
+                    committed=True,
+                )
+            return make_spreadsheet_set_cells_success(sheet=self.inspected.name, updated=updated)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_spreadsheet_set_cells(
     collaborators: SpreadsheetSetCellsCollaborators,

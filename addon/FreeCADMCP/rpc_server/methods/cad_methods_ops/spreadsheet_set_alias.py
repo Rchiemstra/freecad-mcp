@@ -2,6 +2,8 @@
 """Typed ``spreadsheet_set_alias`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     as_float,
@@ -181,16 +183,18 @@ class _SpreadsheetSetAliasExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_spreadsheet_set_alias_uncertain(
-                "SPREADSHEET_SET_ALIAS_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_spreadsheet_set_alias_success(sheet=self.inspected.name, address=self.request.address, alias=self.request.alias)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_spreadsheet_set_alias_uncertain(
+                    "SPREADSHEET_SET_ALIAS_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_spreadsheet_set_alias_success(sheet=self.inspected.name, address=self.request.address, alias=self.request.alias)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_spreadsheet_set_alias(
     collaborators: SpreadsheetSetAliasCollaborators,

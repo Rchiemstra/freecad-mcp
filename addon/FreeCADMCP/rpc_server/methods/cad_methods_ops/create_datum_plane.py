@@ -2,6 +2,8 @@
 """Typed ``create_datum_plane`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .typed_rpc_support import (
     assign_attr,
     nonempty_string,
@@ -384,20 +386,20 @@ class _CreateDatumPlaneExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_datum_plane_uncertain(
-                "CREATE_DATUM_PLANE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_create_datum_plane_uncertain(
+                    "CREATE_DATUM_PLANE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_create_datum_plane_success(
+                plane_name=self.inspected.name,
+                body_name=self.request.body_name,
+                preflight_warning=self.inspected.preflight_warning,
             )
-        return make_create_datum_plane_success(
-            plane_name=self.inspected.name,
-            body_name=self.request.body_name,
-            preflight_warning=self.inspected.preflight_warning,
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_create_datum_plane(
     collaborators: CreateDatumPlaneCollaborators,

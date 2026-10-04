@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -297,38 +299,38 @@ class _DeleteObjectExecution:
             validate=not self.request.force,
             recompute=not self.request.force,
         )
-        if result is not True:
-            return result
-        if self.created is not None and self.created.refused:
+        def _finish_native_commit():
+            if self.created is not None and self.created.refused:
+                return make_delete_object_success(
+                    ObjectName(self.created.name),
+                    [],
+                    refused=True,
+                    dependents=list(self.created.dependents),
+                )
+            if self.inspected is None:
+                return make_delete_object_uncertain(
+                    "DELETE_OBJECT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected delete result",
+                    committed=True,
+                )
             return make_delete_object_success(
-                ObjectName(self.created.name),
-                [],
-                refused=True,
-                dependents=list(self.created.dependents),
+                self.inspected.name,
+                self.inspected.deleted,
+                refused=False,
+                recompute=(
+                    {
+                        "policy": "deferred_recovery",
+                        "required": True,
+                        "message": (
+                            "Run recompute_document after force deletion to settle the document."
+                        ),
+                    }
+                    if self.request.force
+                    else None
+                ),
             )
-        if self.inspected is None:
-            return make_delete_object_uncertain(
-                "DELETE_OBJECT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected delete result",
-                committed=True,
-            )
-        return make_delete_object_success(
-            self.inspected.name,
-            self.inspected.deleted,
-            refused=False,
-            recompute=(
-                {
-                    "policy": "deferred_recovery",
-                    "required": True,
-                    "message": (
-                        "Run recompute_document after force deletion to settle the document."
-                    ),
-                }
-                if self.request.force
-                else None
-            ),
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_delete_object(
     collaborators: DeleteObjectCollaborators,

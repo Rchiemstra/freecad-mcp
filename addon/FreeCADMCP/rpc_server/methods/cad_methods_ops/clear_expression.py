@@ -2,6 +2,8 @@
 """Typed ``clear_expression`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .typed_rpc_support import (
     nonempty_string,
     object_label,
@@ -168,16 +170,16 @@ class _ClearExpressionExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_clear_expression_uncertain(
-                "CLEAR_EXPRESSION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_clear_expression_success(object=self.inspected.name, prop_path=self.request.prop_path)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_clear_expression_uncertain(
+                    "CLEAR_EXPRESSION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_clear_expression_success(object=self.inspected.name, prop_path=self.request.prop_path)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_clear_expression(
     collaborators: ClearExpressionCollaborators,

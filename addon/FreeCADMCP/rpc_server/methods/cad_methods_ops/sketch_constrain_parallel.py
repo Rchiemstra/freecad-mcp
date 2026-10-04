@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -269,16 +271,18 @@ class _SketchConstrainParallelExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_constrain_parallel_uncertain(
-                "SKETCH_CONSTRAIN_PARALLEL_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_constrain_parallel result",
-                committed=True,
-            )
-        return make_sketch_constrain_parallel_success(SketchName(self.inspected.sketch_name), self.inspected.constraint_index)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_constrain_parallel_uncertain(
+                    "SKETCH_CONSTRAIN_PARALLEL_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_constrain_parallel result",
+                    committed=True,
+                )
+            return make_sketch_constrain_parallel_success(SketchName(self.inspected.sketch_name), self.inspected.constraint_index)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_constrain_parallel(
     collaborators: SketchConstrainParallelCollaborators,

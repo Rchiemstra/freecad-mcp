@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -97,19 +99,21 @@ class _SolveAssemblyExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_solve_assembly_uncertain(
-                "SOLVE_ASSEMBLY_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected solve_assembly result",
-                committed=True,
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_solve_assembly_uncertain(
+                    "SOLVE_ASSEMBLY_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected solve_assembly result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_solve_assembly_success(
+                assembly=as_str(payload["assembly"]), method=as_str(payload["method"]), status=(as_str(payload["status"]) if payload.get("status") is not None else None)
             )
-        payload = self.inspected.payload
-        return make_solve_assembly_success(
-            assembly=as_str(payload["assembly"]), method=as_str(payload["method"]), status=(as_str(payload["status"]) if payload.get("status") is not None else None)
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def apply_solve_assembly(doc: MutationDocument, request: SolveAssemblyRequest) -> SolveAssemblyReceipt:
     """Apply solve_assembly without recomputing or managing a transaction."""

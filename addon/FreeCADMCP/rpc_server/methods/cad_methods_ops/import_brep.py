@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -104,19 +106,19 @@ class _ImportBrepExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_import_brep_uncertain(
-                "IMPORT_BREP_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected import_brep result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_import_brep_uncertain(
+                    "IMPORT_BREP_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected import_brep result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_import_brep_success(
+                path=as_str(payload["path"]), object=as_str(payload["object"]), imported=bool(payload["imported"])
             )
-        payload = self.inspected.payload
-        return make_import_brep_success(
-            path=as_str(payload["path"]), object=as_str(payload["object"]), imported=bool(payload["imported"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_import_brep(doc: MutationDocument, request: ImportBrepRequest) -> ImportBrepReceipt:
     """Apply import_brep without recomputing or managing a transaction."""

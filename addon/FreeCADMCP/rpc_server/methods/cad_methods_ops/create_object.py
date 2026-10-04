@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -252,18 +254,18 @@ class _CreateObjectExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_object_uncertain(
-                "CREATE_OBJECT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected object result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_create_object_uncertain(
+                    "CREATE_OBJECT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected object result",
+                    committed=True,
+                )
+            return make_create_object_success(
+                self.inspected.name, self.inspected.object_type, self.inspected.label
             )
-        return make_create_object_success(
-            self.inspected.name, self.inspected.object_type, self.inspected.label
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_create_object(
     collaborators: CreateObjectCollaborators,

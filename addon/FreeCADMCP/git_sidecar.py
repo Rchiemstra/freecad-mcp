@@ -91,6 +91,7 @@ def export_sidecar_after_save(filename: str) -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=300,
+            stdin=subprocess.DEVNULL,
             creationflags=_subprocess_creation_flags(),
         )
         if proc.returncode != 0:

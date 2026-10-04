@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 import math
 
 from collections.abc import Callable
@@ -484,21 +486,23 @@ class _PocketFeatureExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            if (
-                isinstance(result, dict)
-                and result.get("error_code") == "ZERO_MATERIAL_DELTA"
-            ):
-                self._leave_pending_recompute()
-            return result
-        if self.inspected is None:
-            return make_pocket_feature_uncertain(
-                "POCKET_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Pocket result",
-                committed=True,
-            )
-        return make_pocket_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(result):
+            if result is not True:
+                if (
+                    isinstance(result, dict)
+                    and result.get("error_code") == "ZERO_MATERIAL_DELTA"
+                ):
+                    self._leave_pending_recompute()
+                return result
+            if self.inspected is None:
+                return make_pocket_feature_uncertain(
+                    "POCKET_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Pocket result",
+                    committed=True,
+                )
+            return make_pocket_feature_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_pocket_feature(
     collaborators: PocketFeatureCollaborators,

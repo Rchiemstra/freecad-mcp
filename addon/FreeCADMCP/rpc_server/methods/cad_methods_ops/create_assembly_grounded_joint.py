@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -116,19 +118,19 @@ class _CreateAssemblyGroundedJointExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_assembly_grounded_joint_uncertain(
-                "CREATE_ASSEMBLY_GROUNDED_JOINT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_assembly_grounded_joint result",
-                committed=True,
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_create_assembly_grounded_joint_uncertain(
+                    "CREATE_ASSEMBLY_GROUNDED_JOINT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_assembly_grounded_joint result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_assembly_grounded_joint_success(
+                joint=as_str(payload["joint"]), label=as_str(payload["label"]), joint_type=as_str(payload["joint_type"]), assembly=as_str(payload["assembly"]), component=as_str(payload["component"])
             )
-        payload = self.inspected.payload
-        return make_create_assembly_grounded_joint_success(
-            joint=as_str(payload["joint"]), label=as_str(payload["label"]), joint_type=as_str(payload["joint_type"]), assembly=as_str(payload["assembly"]), component=as_str(payload["component"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_assembly_grounded_joint(doc: MutationDocument, request: CreateAssemblyGroundedJointRequest) -> CreateAssemblyGroundedJointReceipt:
     """Apply create_assembly_grounded_joint without recomputing or managing a transaction."""

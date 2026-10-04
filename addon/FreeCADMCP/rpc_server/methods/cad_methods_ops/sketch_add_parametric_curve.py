@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -305,16 +307,18 @@ class _SketchAddParametricCurveExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_parametric_curve_uncertain(
-                "SKETCH_ADD_PARAMETRIC_CURVE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_parametric_curve result",
-                committed=True,
-            )
-        return make_sketch_add_parametric_curve_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index, self.inspected.sample_count)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_parametric_curve_uncertain(
+                    "SKETCH_ADD_PARAMETRIC_CURVE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_parametric_curve result",
+                    committed=True,
+                )
+            return make_sketch_add_parametric_curve_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index, self.inspected.sample_count)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_parametric_curve(
     collaborators: SketchAddParametricCurveCollaborators,

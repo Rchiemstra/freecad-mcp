@@ -2,6 +2,8 @@
 """Typed ``revolve_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -204,16 +206,18 @@ class _RevolveFeatureExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_revolve_feature_uncertain(
-                "REVOLVE_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected revolve_feature result",
-                committed=True,
-            )
-        return make_revolve_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_revolve_feature_uncertain(
+                    "REVOLVE_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected revolve_feature result",
+                    committed=True,
+                )
+            return make_revolve_feature_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_revolve_feature(
     collaborators: RevolveFeatureCollaborators,

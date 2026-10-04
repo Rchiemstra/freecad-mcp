@@ -2,6 +2,8 @@
 """Typed ``set_expression`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     as_float,
@@ -328,16 +330,18 @@ class _SetExpressionExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_set_expression_uncertain(
-                "SET_EXPRESSION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_set_expression_success(object=self.inspected.name, prop_path=self.request.prop_path, expression=self.request.expression)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_set_expression_uncertain(
+                    "SET_EXPRESSION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_set_expression_success(object=self.inspected.name, prop_path=self.request.prop_path, expression=self.request.expression)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_set_expression(
     collaborators: SetExpressionCollaborators,

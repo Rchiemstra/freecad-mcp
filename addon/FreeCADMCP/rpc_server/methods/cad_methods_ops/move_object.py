@@ -2,6 +2,8 @@
 """Typed ``move_object`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import continue_after_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     nonempty_string,
@@ -177,16 +179,16 @@ class _MoveObjectExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_move_object_uncertain(
-                "MOVE_OBJECT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_move_object_success(object_name=self.inspected.name, target_container=self.request.target_container)
+        def _finish_native_commit():
+            if self.inspected is None:
+                return make_move_object_uncertain(
+                    "MOVE_OBJECT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_move_object_success(object_name=self.inspected.name, target_container=self.request.target_container)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_move_object(
     collaborators: MoveObjectCollaborators,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -107,19 +109,21 @@ class _ScaleExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_scale_uncertain(
-                "SCALE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected scale result",
-                committed=True,
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_scale_uncertain(
+                    "SCALE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected scale result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_scale_success(
+                object=as_str(payload["object"]), label=as_str(payload["label"])
             )
-        payload = self.inspected.payload
-        return make_scale_success(
-            object=as_str(payload["object"]), label=as_str(payload["label"])
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def _snapshot_bound_box(obj: object) -> dict[str, object]:
     shape = getattr(obj, "Shape", None)

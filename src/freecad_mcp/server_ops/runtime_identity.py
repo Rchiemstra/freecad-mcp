@@ -80,12 +80,16 @@ def read_checkout_git() -> dict[str, Any]:
             check=True,
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
         ).stdout.strip()
         status = subprocess.run(
             ["git", "-C", str(root), "status", "--porcelain"],
             check=True,
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
         ).stdout
         dirty = bool(status.strip())
         return {
@@ -93,7 +97,7 @@ def read_checkout_git() -> dict[str, Any]:
             "git_dirty": dirty,
             "available": True,
         }
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return {"git_commit": "unknown", "git_dirty": None, "available": False}
 
 

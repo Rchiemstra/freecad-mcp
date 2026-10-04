@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -287,16 +289,18 @@ class _SketchAddPolylineExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_polyline_uncertain(
-                "SKETCH_ADD_POLYLINE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_polyline result",
-                committed=True,
-            )
-        return make_sketch_add_polyline_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_indices)
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_polyline_uncertain(
+                    "SKETCH_ADD_POLYLINE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_polyline result",
+                    committed=True,
+                )
+            return make_sketch_add_polyline_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_indices)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_polyline(
     collaborators: SketchAddPolylineCollaborators,

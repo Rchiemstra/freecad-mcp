@@ -60,6 +60,7 @@ def probe_version(candidate: Path) -> tuple[str, str, str, str]:
         text=True,
         timeout=VERSION_PROBE_TIMEOUT_SECONDS,
         check=False,
+        stdin=subprocess.DEVNULL,
         **popen_platform_options(),
     )
     output = (completed.stdout or "") + (completed.stderr or "")

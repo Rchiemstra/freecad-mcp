@@ -2,6 +2,8 @@
 """Typed ``sweep_pipe`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import settle_native_commit
+
 from .typed_rpc_support import (
     as_float,
     assign_attr,
@@ -551,22 +553,24 @@ class _SweepPipeExecution:
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sweep_pipe_uncertain(
-                "SWEEP_PIPE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        success = dict(make_sweep_pipe_success(solid_name=self.inspected.name))
-        extra = self.inspected.extra
-        if isinstance(extra, dict):
-            for key, value in extra.items():
-                if isinstance(key, str) and key not in success:
-                    success[key] = value
-        return success  # type: ignore[return-value]
+        def _finish_native_commit(result):
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sweep_pipe_uncertain(
+                    "SWEEP_PIPE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            success = dict(make_sweep_pipe_success(solid_name=self.inspected.name))
+            extra = self.inspected.extra
+            if isinstance(extra, dict):
+                for key, value in extra.items():
+                    if isinstance(key, str) and key not in success:
+                        success[key] = value
+            return success  # type: ignore[return-value]
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sweep_pipe(
     collaborators: SweepPipeCollaborators,
