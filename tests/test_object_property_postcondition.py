@@ -99,3 +99,56 @@ def test_edit_object_reverted_placement_fails(doc):
     doc.getObject("Leg").Placement = FreeCAD.Placement()
     with pytest.raises(EditObjectError):
         read_edit_object_result(doc, receipt)
+
+
+# ``App::PropertyFileIncluded`` (Image::ImagePlane.ImageFile) reads back as FreeCAD's copy in
+# the document's transient directory, never as the assigned path. create_object rolled every
+# canvas back with "Created object property 'ImageFile' did not keep the assigned value".
+PNG_1X1 = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"
+)
+
+
+def _image(tmp_path, name, data=PNG_1X1):
+    path = tmp_path / name
+    path.write_bytes(data)
+    return str(path)
+
+
+def test_image_plane_image_file_verifies_against_transient_copy(doc, tmp_path):
+    source = _image(tmp_path, "canvas.png")
+    request = build_create_object_request(
+        doc.Name,
+        {"Name": "Canvas_01", "Type": "Image::ImagePlane", "Properties": {"ImageFile": source}},
+    )
+    assert not isinstance(request, dict), request
+    receipt = apply_create_object(doc, request, set_object_property)
+    doc.recompute()
+    plane = doc.getObject("Canvas_01")
+    assert plane.ImageFile != source  # FreeCAD keeps its own copy
+    assert read_create_object_result(doc, receipt).name == "Canvas_01"
+
+
+def test_image_plane_with_a_different_image_still_fails(doc, tmp_path):
+    source = _image(tmp_path, "canvas.png")
+    request = build_create_object_request(
+        doc.Name,
+        {"Name": "Canvas_02", "Type": "Image::ImagePlane", "Properties": {"ImageFile": source}},
+    )
+    receipt = apply_create_object(doc, request, set_object_property)
+    doc.getObject("Canvas_02").ImageFile = _image(tmp_path, "other.png", PNG_1X1 + b"other")
+    with pytest.raises(CreateObjectError) as caught:
+        read_create_object_result(doc, receipt)
+    assert caught.value.code == "PROPERTY_NOT_UPDATED"
+
+
+def test_edit_object_image_file_verifies(doc, tmp_path):
+    doc.addObject("Image::ImagePlane", "Canvas_03")
+    request = build_edit_object_request(
+        doc.Name, "Canvas_03", {"ImageFile": _image(tmp_path, "edited.png")}
+    )
+    assert not isinstance(request, dict), request
+    receipt = apply_edit_object(doc, request, set_object_property)
+    doc.recompute()
+    assert read_edit_object_result(doc, receipt).name == "Canvas_03"
