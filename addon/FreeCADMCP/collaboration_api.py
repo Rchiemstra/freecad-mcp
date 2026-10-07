@@ -86,13 +86,13 @@ def _is_freecad_gui_thread() -> bool:
     """
     if not _freecad_gui_up():
         return False
+    # FreeCAD's ``PySide`` shim maps to the Qt binding the GUI runs on.  Never
+    # probe PySide2 directly: a stray system PySide2 next to a Qt6 FreeCAD
+    # fails inside its ``__init__`` with NameError, not ImportError.
     try:
-        from PySide2.QtCore import QCoreApplication, QThread  # type: ignore[import-not-found]
+        from PySide.QtCore import QCoreApplication, QThread  # type: ignore[import-not-found]
     except ImportError:
-        try:
-            from PySide.QtCore import QCoreApplication, QThread  # type: ignore[import-not-found]
-        except ImportError:
-            return False
+        return False
     app = QCoreApplication.instance()
     if app is None:
         return False

@@ -10,6 +10,8 @@ thread" that receives a pending waiter instead of a terminal result.
 from __future__ import annotations
 
 import importlib
+import importlib.abc
+import importlib.util
 import sys
 import threading
 import types
@@ -74,6 +76,39 @@ def test_bare_qcoreapplication_without_freecad_gui_is_not_the_gui_thread(
 
     for check in _detectors():
         assert check() is False
+
+
+class _BrokenPySide2Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """A stray PySide2 whose ``__init__`` dies without shiboken2.
+
+    PySide2's own ``__init__`` raises ``NameError: name
+    '_init_pyside_extension' is not defined`` in that state, not
+    ``ImportError``; this is what a system ``python3-pyside2`` next to a
+    Qt6 FreeCAD looks like.
+    """
+
+    def find_spec(self, name, path=None, target=None):
+        if name == "PySide2" or name.startswith("PySide2."):
+            return importlib.util.spec_from_loader(name, self)
+        return None
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module):
+        raise NameError("name '_init_pyside_extension' is not defined")
+
+
+def test_stray_broken_pyside2_does_not_hide_the_freecad_gui_thread(
+    qt_main_thread: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_freecad(monkeypatch, 1)
+    monkeypatch.delitem(sys.modules, "PySide2")
+    monkeypatch.delitem(sys.modules, "PySide2.QtCore")
+    monkeypatch.setattr(sys, "meta_path", [_BrokenPySide2Finder(), *sys.meta_path])
+
+    for check in _detectors():
+        assert check() is True
 
 
 def test_missing_freecad_module_is_not_the_gui_thread(
