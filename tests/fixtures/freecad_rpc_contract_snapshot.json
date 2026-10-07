@@ -18232,10 +18232,11 @@
         {
           "name": "doc_name",
           "kind": "positional_or_keyword",
-          "required": true,
+          "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": null
         },
         {
           "name": "operation_id",
@@ -18261,6 +18262,15 @@
           "required": false,
           "schema": {
             "type": "string"
+          },
+          "default": null
+        },
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "object"
           },
           "default": null
         }
@@ -30380,10 +30390,11 @@
         {
           "name": "doc_name",
           "kind": "positional_or_keyword",
-          "required": true,
+          "required": false,
           "schema": {
             "type": "string"
-          }
+          },
+          "default": null
         },
         {
           "name": "operation_id",
@@ -30409,6 +30420,15 @@
           "required": false,
           "schema": {
             "type": "string"
+          },
+          "default": null
+        },
+        {
+          "name": "doc_selector",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": "object"
           },
           "default": null
         }
