@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_split_contract import (
@@ -14,6 +14,7 @@ try:
         SketchSplitFailure,
         SketchSplitRequest,
         SketchSplitResult,
+        SketchSplitUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchSplitFailure,
         SketchSplitRequest,
         SketchSplitResult,
+        SketchSplitUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -264,14 +266,16 @@ class _SketchSplitExecution:
             )
         self.inspected = read_sketch_split_result(doc, self.created)
 
-    def run(self) -> SketchSplitResult:
+    def run(self) -> NativeOutcome[SketchSplitResult]:
         result = run_sketch_split_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchSplitFailure | SketchSplitUncertain,
+        ) -> SketchSplitResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -287,7 +291,7 @@ class _SketchSplitExecution:
 def run_sketch_split(
     collaborators: SketchSplitCollaborators,
     doc_name: object, sketch_name: object, geo_index: object, point_x: object, point_y: object,
-) -> SketchSplitResult:
+) -> NativeOutcome[SketchSplitResult]:
     request = build_sketch_split_request(doc_name, sketch_name, geo_index, point_x, point_y)
     if isinstance(request, dict):
         return request

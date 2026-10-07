@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -149,7 +149,7 @@ def run_delete_object_native_mutation(
     *,
     validate: bool = True,
     recompute: bool = True,
-) -> Literal[True] | DeleteObjectFailure | DeleteObjectUncertain:
+) -> NativeOutcome[Literal[True] | DeleteObjectFailure | DeleteObjectUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()

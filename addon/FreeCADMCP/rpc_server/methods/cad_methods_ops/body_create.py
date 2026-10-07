@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -143,14 +143,14 @@ class _BodyCreateExecution:
             )
         self.inspected = read_body_result(doc, self.created)
 
-    def run(self) -> BodyCreateResult:
+    def run(self) -> NativeOutcome[BodyCreateResult]:
         result = run_body_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> BodyCreateResult:
             if self.inspected is None:
                 return make_body_create_uncertain(
                     "BODY_CREATE_COMMITTED_RESPONSE_INVALID",
@@ -165,7 +165,7 @@ def run_body_create(
     collaborators: BodyCreateCollaborators,
     doc_name: object,
     body_name: object,
-) -> BodyCreateResult:
+) -> NativeOutcome[BodyCreateResult]:
     """Run Body creation through apply, recompute, inspection, and commit."""
 
     request = build_body_create_request(doc_name, body_name)

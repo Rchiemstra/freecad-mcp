@@ -2,7 +2,7 @@
 """Typed ``spreadsheet_set_alias`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
     as_bool,
@@ -29,7 +29,7 @@ from .typed_rpc_container_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.spreadsheet_set_alias_contract import (
@@ -40,6 +40,7 @@ try:
         SpreadsheetSetAliasReadDocument,
         SpreadsheetSetAliasRequest,
         SpreadsheetSetAliasResult,
+        SpreadsheetSetAliasUncertain,
         DocumentName,
         make_spreadsheet_set_alias_failure,
         make_spreadsheet_set_alias_success,
@@ -54,6 +55,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SpreadsheetSetAliasReadDocument,
         SpreadsheetSetAliasRequest,
         SpreadsheetSetAliasResult,
+        SpreadsheetSetAliasUncertain,
         DocumentName,
         make_spreadsheet_set_alias_failure,
         make_spreadsheet_set_alias_success,
@@ -176,14 +178,16 @@ class _SpreadsheetSetAliasExecution:
             )
         self.inspected = read_spreadsheet_set_alias_result(doc, self.created)
 
-    def run(self) -> SpreadsheetSetAliasResult:
+    def run(self) -> NativeOutcome[SpreadsheetSetAliasResult]:
         result = run_spreadsheet_set_alias_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SpreadsheetSetAliasFailure | SpreadsheetSetAliasUncertain,
+        ) -> SpreadsheetSetAliasResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -199,7 +203,7 @@ class _SpreadsheetSetAliasExecution:
 def run_spreadsheet_set_alias(
     collaborators: SpreadsheetSetAliasCollaborators,
     doc_name: object, sheet_name: object, address: object, alias: object,
-) -> SpreadsheetSetAliasResult:
+) -> NativeOutcome[SpreadsheetSetAliasResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_spreadsheet_set_alias_request(doc_name, sheet_name, address, alias)

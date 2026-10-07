@@ -2,7 +2,7 @@
 """Typed ``validate_movement_follow`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
     as_bool,
@@ -16,7 +16,7 @@ from .typed_rpc_support import (
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.validate_movement_follow_contract import (
@@ -27,6 +27,7 @@ try:
         ValidateMovementFollowReadDocument,
         ValidateMovementFollowRequest,
         ValidateMovementFollowResult,
+        ValidateMovementFollowUncertain,
         DocumentName,
         make_validate_movement_follow_failure,
         make_validate_movement_follow_success,
@@ -41,6 +42,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         ValidateMovementFollowReadDocument,
         ValidateMovementFollowRequest,
         ValidateMovementFollowResult,
+        ValidateMovementFollowUncertain,
         DocumentName,
         make_validate_movement_follow_failure,
         make_validate_movement_follow_success,
@@ -340,14 +342,16 @@ class _ValidateMovementFollowExecution:
             )
         self.inspected = read_validate_movement_follow_result(doc, self.created)
 
-    def run(self) -> ValidateMovementFollowResult:
+    def run(self) -> NativeOutcome[ValidateMovementFollowResult]:
         result = run_validate_movement_follow_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | ValidateMovementFollowFailure | ValidateMovementFollowUncertain,
+        ) -> ValidateMovementFollowResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -390,7 +394,7 @@ def run_validate_movement_follow(
     angle_deg: object,
     restore: object,
     tolerance: object,
-) -> ValidateMovementFollowResult:
+) -> NativeOutcome[ValidateMovementFollowResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_validate_movement_follow_request(

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.solve_assembly_contract import (
@@ -16,6 +16,7 @@ try:
         SolveAssemblyFailure,
         SolveAssemblyRequest,
         SolveAssemblyResult,
+        SolveAssemblyUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SolveAssemblyFailure,
         SolveAssemblyRequest,
         SolveAssemblyResult,
+        SolveAssemblyUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -92,14 +94,16 @@ class _SolveAssemblyExecution:
             )
         self.inspected = read_solve_assembly_result(doc, self.created, self.request)
 
-    def run(self) -> SolveAssemblyResult:
+    def run(self) -> NativeOutcome[SolveAssemblyResult]:
         result = run_solve_assembly_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SolveAssemblyFailure | SolveAssemblyUncertain,
+        ) -> SolveAssemblyResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -160,7 +164,7 @@ def read_solve_assembly_result(
 def run_solve_assembly(
     collaborators: SolveAssemblyCollaborators,
     doc_name: str, assembly_name: str,
-) -> SolveAssemblyResult:
+) -> NativeOutcome[SolveAssemblyResult]:
     """Run solve_assembly through apply, recompute, inspection, and commit."""
 
     request = build_solve_assembly_request(doc_name, assembly_name)

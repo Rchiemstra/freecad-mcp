@@ -2,7 +2,7 @@
 """Typed ``create_part_container`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .typed_rpc_support import (
     nonempty_string,
@@ -185,14 +185,14 @@ class _CreatePartContainerExecution:
             )
         self.inspected = read_create_part_container_result(doc, self.created)
 
-    def run(self) -> CreatePartContainerResult:
+    def run(self) -> NativeOutcome[CreatePartContainerResult]:
         result = run_create_part_container_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> CreatePartContainerResult:
             if self.inspected is None:
                 return make_create_part_container_uncertain(
                     "CREATE_PART_CONTAINER_COMMITTED_RESPONSE_INVALID",
@@ -206,7 +206,7 @@ class _CreatePartContainerExecution:
 def run_create_part_container(
     collaborators: CreatePartContainerCollaborators,
     doc_name: object, part_name: object, parent_container: object, if_exists: object,
-) -> CreatePartContainerResult:
+) -> NativeOutcome[CreatePartContainerResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_create_part_container_request(doc_name, part_name, parent_container, if_exists)

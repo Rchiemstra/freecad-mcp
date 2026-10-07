@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_constrain_horizontal_contract import (
@@ -14,6 +14,7 @@ try:
         SketchConstrainHorizontalFailure,
         SketchConstrainHorizontalRequest,
         SketchConstrainHorizontalResult,
+        SketchConstrainHorizontalUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchConstrainHorizontalFailure,
         SketchConstrainHorizontalRequest,
         SketchConstrainHorizontalResult,
+        SketchConstrainHorizontalUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -258,14 +260,16 @@ class _SketchConstrainHorizontalExecution:
             )
         self.inspected = read_sketch_constrain_horizontal_result(doc, self.created)
 
-    def run(self) -> SketchConstrainHorizontalResult:
+    def run(self) -> NativeOutcome[SketchConstrainHorizontalResult]:
         result = run_sketch_constrain_horizontal_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchConstrainHorizontalFailure | SketchConstrainHorizontalUncertain,
+        ) -> SketchConstrainHorizontalResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -281,7 +285,7 @@ class _SketchConstrainHorizontalExecution:
 def run_sketch_constrain_horizontal(
     collaborators: SketchConstrainHorizontalCollaborators,
     doc_name: object, sketch_name: object, geo: object,
-) -> SketchConstrainHorizontalResult:
+) -> NativeOutcome[SketchConstrainHorizontalResult]:
     request = build_sketch_constrain_horizontal_request(doc_name, sketch_name, geo)
     if isinstance(request, dict):
         return request

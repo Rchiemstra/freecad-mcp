@@ -2,7 +2,7 @@
 """Typed ``create_placement_datum`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .typed_rpc_support import (
     as_bool,
@@ -204,14 +204,14 @@ class _CreatePlacementDatumExecution:
             )
         self.inspected = read_create_placement_datum_result(doc, self.created)
 
-    def run(self) -> CreatePlacementDatumResult:
+    def run(self) -> NativeOutcome[CreatePlacementDatumResult]:
         result = run_create_placement_datum_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> CreatePlacementDatumResult:
             if self.inspected is None:
                 return make_create_placement_datum_uncertain(
                     "CREATE_PLACEMENT_DATUM_COMMITTED_RESPONSE_INVALID",
@@ -225,7 +225,7 @@ class _CreatePlacementDatumExecution:
 def run_create_placement_datum(
     collaborators: CreatePlacementDatumCollaborators,
     doc_name: object, owner_body: object, name: object, source: object, relative: object, offset: object,
-) -> CreatePlacementDatumResult:
+) -> NativeOutcome[CreatePlacementDatumResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_create_placement_datum_request(doc_name, owner_body, name, source, relative, offset)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -247,14 +247,14 @@ class _CreateObjectExecution:
             )
         self.inspected = read_create_object_result(doc, self.created)
 
-    def run(self) -> CreateObjectResult:
+    def run(self) -> NativeOutcome[CreateObjectResult]:
         result = run_create_object_native_mutation(
             self.collaborators,
             str(self.request.doc_name),
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> CreateObjectResult:
             if self.inspected is None:
                 return make_create_object_uncertain(
                     "CREATE_OBJECT_COMMITTED_RESPONSE_INVALID",
@@ -272,7 +272,7 @@ def run_create_object(
     doc_name: object,
     obj_data: object,
     set_object_property: Callable[[object, object, dict[str, object]], object] | None = None,
-) -> CreateObjectResult:
+) -> NativeOutcome[CreateObjectResult]:
     """Run object creation through apply, recompute, inspection, and commit."""
 
     request = build_create_object_request(doc_name, obj_data)

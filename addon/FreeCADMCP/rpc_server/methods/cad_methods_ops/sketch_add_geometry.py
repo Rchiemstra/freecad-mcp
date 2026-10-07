@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_geometry_contract import (
@@ -18,6 +18,7 @@ try:
         SketchAddGeometryObject,
         SketchAddGeometryReadDocument,
         SketchAddGeometryResult,
+        SketchAddGeometryUncertain,
         SketchName,
         make_sketch_add_geometry_failure,
         make_sketch_add_geometry_success,
@@ -32,6 +33,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddGeometryObject,
         SketchAddGeometryReadDocument,
         SketchAddGeometryResult,
+        SketchAddGeometryUncertain,
         SketchName,
         make_sketch_add_geometry_failure,
         make_sketch_add_geometry_success,
@@ -228,14 +230,16 @@ class _SketchAddGeometryExecution:
             )
         self.inspected = read_sketch_add_geometry_result(doc, self.created)
 
-    def run(self) -> SketchAddGeometryResult:
+    def run(self) -> NativeOutcome[SketchAddGeometryResult]:
         result = run_sketch_add_geometry_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddGeometryFailure | SketchAddGeometryUncertain,
+        ) -> SketchAddGeometryResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -253,7 +257,7 @@ def run_sketch_add_geometry(
     doc_name: object,
     sketch_name: object,
     geometry: object,
-) -> SketchAddGeometryResult:
+) -> NativeOutcome[SketchAddGeometryResult]:
     request = build_sketch_add_geometry_request(doc_name, sketch_name, geometry)
     if isinstance(request, dict):
         return request

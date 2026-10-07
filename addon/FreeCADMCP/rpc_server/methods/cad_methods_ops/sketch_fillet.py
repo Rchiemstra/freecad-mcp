@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_fillet_contract import (
@@ -14,6 +14,7 @@ try:
         SketchFilletFailure,
         SketchFilletRequest,
         SketchFilletResult,
+        SketchFilletUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchFilletFailure,
         SketchFilletRequest,
         SketchFilletResult,
+        SketchFilletUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -329,14 +331,16 @@ class _SketchFilletExecution:
             )
         self.inspected = read_sketch_fillet_result(doc, self.created)
 
-    def run(self) -> SketchFilletResult:
+    def run(self) -> NativeOutcome[SketchFilletResult]:
         result = run_sketch_fillet_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchFilletFailure | SketchFilletUncertain,
+        ) -> SketchFilletResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -352,7 +356,7 @@ class _SketchFilletExecution:
 def run_sketch_fillet(
     collaborators: SketchFilletCollaborators,
     doc_name: object, sketch_name: object, geo1: object, geo2: object, radius: object,
-) -> SketchFilletResult:
+) -> NativeOutcome[SketchFilletResult]:
     request = build_sketch_fillet_request(doc_name, sketch_name, geo1, geo2, radius)
     if isinstance(request, dict):
         return request

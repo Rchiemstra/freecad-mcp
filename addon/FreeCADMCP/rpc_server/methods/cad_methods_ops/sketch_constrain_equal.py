@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_constrain_equal_contract import (
@@ -14,6 +14,7 @@ try:
         SketchConstrainEqualFailure,
         SketchConstrainEqualRequest,
         SketchConstrainEqualResult,
+        SketchConstrainEqualUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchConstrainEqualFailure,
         SketchConstrainEqualRequest,
         SketchConstrainEqualResult,
+        SketchConstrainEqualUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -264,14 +266,16 @@ class _SketchConstrainEqualExecution:
             )
         self.inspected = read_sketch_constrain_equal_result(doc, self.created)
 
-    def run(self) -> SketchConstrainEqualResult:
+    def run(self) -> NativeOutcome[SketchConstrainEqualResult]:
         result = run_sketch_constrain_equal_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchConstrainEqualFailure | SketchConstrainEqualUncertain,
+        ) -> SketchConstrainEqualResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -287,7 +291,7 @@ class _SketchConstrainEqualExecution:
 def run_sketch_constrain_equal(
     collaborators: SketchConstrainEqualCollaborators,
     doc_name: object, sketch_name: object, geo1: object, geo2: object,
-) -> SketchConstrainEqualResult:
+) -> NativeOutcome[SketchConstrainEqualResult]:
     request = build_sketch_constrain_equal_request(doc_name, sketch_name, geo1, geo2)
     if isinstance(request, dict):
         return request

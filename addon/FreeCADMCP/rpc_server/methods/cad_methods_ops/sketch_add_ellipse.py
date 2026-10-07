@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_ellipse_contract import (
@@ -15,6 +15,7 @@ try:
         SketchAddEllipseFailure,
         SketchAddEllipseRequest,
         SketchAddEllipseResult,
+        SketchAddEllipseUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -30,6 +31,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddEllipseFailure,
         SketchAddEllipseRequest,
         SketchAddEllipseResult,
+        SketchAddEllipseUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -283,14 +285,16 @@ class _SketchAddEllipseExecution:
             )
         self.inspected = read_sketch_add_ellipse_result(doc, self.created)
 
-    def run(self) -> SketchAddEllipseResult:
+    def run(self) -> NativeOutcome[SketchAddEllipseResult]:
         result = run_sketch_add_ellipse_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddEllipseFailure | SketchAddEllipseUncertain,
+        ) -> SketchAddEllipseResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -306,7 +310,7 @@ class _SketchAddEllipseExecution:
 def run_sketch_add_ellipse(
     collaborators: SketchAddEllipseCollaborators,
     doc_name: object, sketch_name: object, cx: object, cy: object, major_radius: object, minor_radius: object, angle: object, construction: object,
-) -> SketchAddEllipseResult:
+) -> NativeOutcome[SketchAddEllipseResult]:
     request = build_sketch_add_ellipse_request(doc_name, sketch_name, cx, cy, major_radius, minor_radius, angle, construction)
     if isinstance(request, dict):
         return request

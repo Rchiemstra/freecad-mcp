@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -146,7 +146,7 @@ def run_recompute_and_wait_native_mutation(
     document_name: str,
     apply: Callable[[object], None],
     postcondition: Callable[[object], None],
-) -> Literal[True] | RecomputeAndWaitFailure | RecomputeAndWaitUncertain:
+) -> NativeOutcome[Literal[True] | RecomputeAndWaitFailure | RecomputeAndWaitUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()

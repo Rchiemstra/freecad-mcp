@@ -2,7 +2,7 @@
 """Typed ``loft_feature`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .feature_lookup_support import (
     is_derived_from,
@@ -194,14 +194,14 @@ class _LoftFeatureExecution:
             )
         self.inspected = read_loft_feature_result(doc, self.created)
 
-    def run(self) -> LoftFeatureResult:
+    def run(self) -> NativeOutcome[LoftFeatureResult]:
         result = run_loft_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> LoftFeatureResult:
             if self.inspected is None:
                 return make_loft_feature_uncertain(
                     "LOFT_FEATURE_COMMITTED_RESPONSE_INVALID",
@@ -215,7 +215,7 @@ class _LoftFeatureExecution:
 def run_loft_feature(
     collaborators: LoftFeatureCollaborators,
     doc_name: str, sketch_names: list[str], loft_name: str, body_name: str | None = None, ruled: bool = False, closed: bool = False
-) -> LoftFeatureResult:
+) -> NativeOutcome[LoftFeatureResult]:
     """Run loft_feature through apply, recompute, inspection, and commit."""
 
     request = build_loft_feature_request(doc_name, sketch_names, loft_name, body_name, ruled, closed)

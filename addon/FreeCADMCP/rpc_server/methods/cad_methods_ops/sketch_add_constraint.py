@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_constraint_contract import (
@@ -17,6 +17,7 @@ try:
         SketchAddConstraintObject,
         SketchAddConstraintReadDocument,
         SketchAddConstraintResult,
+        SketchAddConstraintUncertain,
         SketchName,
         make_sketch_add_constraint_failure,
         make_sketch_add_constraint_success,
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddConstraintObject,
         SketchAddConstraintReadDocument,
         SketchAddConstraintResult,
+        SketchAddConstraintUncertain,
         SketchName,
         make_sketch_add_constraint_failure,
         make_sketch_add_constraint_success,
@@ -280,14 +282,16 @@ class _SketchAddConstraintExecution:
             )
         self.inspected = read_sketch_add_constraint_result(doc, self.created)
 
-    def run(self) -> SketchAddConstraintResult:
+    def run(self) -> NativeOutcome[SketchAddConstraintResult]:
         result = run_sketch_add_constraint_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddConstraintFailure | SketchAddConstraintUncertain,
+        ) -> SketchAddConstraintResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -305,7 +309,7 @@ def run_sketch_add_constraint(
     doc_name: object,
     sketch_name: object,
     constraints: object,
-) -> SketchAddConstraintResult:
+) -> NativeOutcome[SketchAddConstraintResult]:
     request = build_sketch_add_constraint_request(doc_name, sketch_name, constraints)
     if isinstance(request, dict):
         return request

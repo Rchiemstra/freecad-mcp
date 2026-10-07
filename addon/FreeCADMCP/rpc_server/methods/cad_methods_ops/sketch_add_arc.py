@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_arc_contract import (
@@ -15,6 +15,7 @@ try:
         SketchAddArcFailure,
         SketchAddArcRequest,
         SketchAddArcResult,
+        SketchAddArcUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -30,6 +31,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddArcFailure,
         SketchAddArcRequest,
         SketchAddArcResult,
+        SketchAddArcUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -287,14 +289,16 @@ class _SketchAddArcExecution:
             )
         self.inspected = read_sketch_add_arc_result(doc, self.created)
 
-    def run(self) -> SketchAddArcResult:
+    def run(self) -> NativeOutcome[SketchAddArcResult]:
         result = run_sketch_add_arc_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddArcFailure | SketchAddArcUncertain,
+        ) -> SketchAddArcResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -310,7 +314,7 @@ class _SketchAddArcExecution:
 def run_sketch_add_arc(
     collaborators: SketchAddArcCollaborators,
     doc_name: object, sketch_name: object, cx: object, cy: object, radius: object, start_angle: object, end_angle: object, construction: object,
-) -> SketchAddArcResult:
+) -> NativeOutcome[SketchAddArcResult]:
     request = build_sketch_add_arc_request(doc_name, sketch_name, cx, cy, radius, start_angle, end_angle, construction)
     if isinstance(request, dict):
         return request

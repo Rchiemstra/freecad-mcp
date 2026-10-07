@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -145,7 +145,7 @@ def run_create_assembly_native_mutation(
     document_name: DocumentName,
     apply: Callable[[MutationDocument], None],
     postcondition: Callable[[MutationReadDocument], None],
-) -> Literal[True] | CreateAssemblyFailure | CreateAssemblyUncertain:
+) -> NativeOutcome[Literal[True] | CreateAssemblyFailure | CreateAssemblyUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()

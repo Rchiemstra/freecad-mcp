@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_attach_contract import (
@@ -17,6 +17,7 @@ try:
         SketchAttachObject,
         SketchAttachReadDocument,
         SketchAttachResult,
+        SketchAttachUncertain,
         SketchName,
         make_sketch_attach_failure,
         make_sketch_attach_success,
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAttachObject,
         SketchAttachReadDocument,
         SketchAttachResult,
+        SketchAttachUncertain,
         SketchName,
         make_sketch_attach_failure,
         make_sketch_attach_success,
@@ -270,14 +272,16 @@ class _SketchAttachExecution:
             )
         self.inspected = read_sketch_attach_result(doc, self.created)
 
-    def run(self) -> SketchAttachResult:
+    def run(self) -> NativeOutcome[SketchAttachResult]:
         result = run_sketch_attach_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAttachFailure | SketchAttachUncertain,
+        ) -> SketchAttachResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -301,7 +305,7 @@ def run_sketch_attach(
     sketch_name: object,
     support: object,
     attachment_offset: object = None,
-) -> SketchAttachResult:
+) -> NativeOutcome[SketchAttachResult]:
     request = build_sketch_attach_request(doc_name, sketch_name, support, attachment_offset)
     if isinstance(request, dict):
         return request

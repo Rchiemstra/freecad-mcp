@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_circle_contract import (
@@ -14,6 +14,7 @@ try:
         SketchAddCircleFailure,
         SketchAddCircleRequest,
         SketchAddCircleResult,
+        SketchAddCircleUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddCircleFailure,
         SketchAddCircleRequest,
         SketchAddCircleResult,
+        SketchAddCircleUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -274,14 +276,16 @@ class _SketchAddCircleExecution:
             )
         self.inspected = read_sketch_add_circle_result(doc, self.created)
 
-    def run(self) -> SketchAddCircleResult:
+    def run(self) -> NativeOutcome[SketchAddCircleResult]:
         result = run_sketch_add_circle_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddCircleFailure | SketchAddCircleUncertain,
+        ) -> SketchAddCircleResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -297,7 +301,7 @@ class _SketchAddCircleExecution:
 def run_sketch_add_circle(
     collaborators: SketchAddCircleCollaborators,
     doc_name: object, sketch_name: object, cx: object, cy: object, radius: object, construction: object,
-) -> SketchAddCircleResult:
+) -> NativeOutcome[SketchAddCircleResult]:
     request = build_sketch_add_circle_request(doc_name, sketch_name, cx, cy, radius, construction)
     if isinstance(request, dict):
         return request

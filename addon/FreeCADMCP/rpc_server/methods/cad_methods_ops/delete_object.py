@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -290,7 +290,7 @@ class _DeleteObjectExecution:
             )
         self.inspected = read_delete_object_result(doc, self.created)
 
-    def run(self) -> DeleteObjectResult:
+    def run(self) -> NativeOutcome[DeleteObjectResult]:
         result = run_delete_object_native_mutation(
             self.collaborators,
             str(self.request.doc_name),
@@ -299,7 +299,7 @@ class _DeleteObjectExecution:
             validate=not self.request.force,
             recompute=not self.request.force,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> DeleteObjectResult:
             if self.created is not None and self.created.refused:
                 return make_delete_object_success(
                     ObjectName(self.created.name),
@@ -338,7 +338,7 @@ def run_delete_object(
     obj_name: object,
     recursive: object = False,
     force: object = False,
-) -> DeleteObjectResult:
+) -> NativeOutcome[DeleteObjectResult]:
     """Run object deletion through apply, recompute, inspection, and commit."""
 
     request = build_delete_object_request(doc_name, obj_name, recursive, force)

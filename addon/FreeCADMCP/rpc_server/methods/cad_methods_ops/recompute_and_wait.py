@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.recompute_and_wait_contract import (
@@ -14,6 +14,7 @@ try:
         RecomputeAndWaitFailure,
         RecomputeAndWaitRequest,
         RecomputeAndWaitResult,
+        RecomputeAndWaitUncertain,
         DocumentName,
         make_recompute_and_wait_failure,
         make_recompute_and_wait_success,
@@ -25,6 +26,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         RecomputeAndWaitFailure,
         RecomputeAndWaitRequest,
         RecomputeAndWaitResult,
+        RecomputeAndWaitUncertain,
         DocumentName,
         make_recompute_and_wait_failure,
         make_recompute_and_wait_success,
@@ -101,14 +103,16 @@ class _RecomputeAndWaitExecution:
             )
         self.inspected = read_recompute_and_wait_result(doc, self.created)
 
-    def run(self) -> RecomputeAndWaitResult:
+    def run(self) -> NativeOutcome[RecomputeAndWaitResult]:
         result = run_recompute_and_wait_native_mutation(
             self.collaborators,
             str(getattr(self.request, "doc_name", getattr(self.request, "name", ""))),
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | RecomputeAndWaitFailure | RecomputeAndWaitUncertain,
+        ) -> RecomputeAndWaitResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -124,7 +128,7 @@ class _RecomputeAndWaitExecution:
 def run_recompute_and_wait(
     collaborators: RecomputeAndWaitCollaborators,
     doc_name: object,
-) -> RecomputeAndWaitResult:
+) -> NativeOutcome[RecomputeAndWaitResult]:
     """Run recompute_and_wait through apply, recompute, inspection, and commit."""
 
     request = build_recompute_and_wait_request(doc_name)

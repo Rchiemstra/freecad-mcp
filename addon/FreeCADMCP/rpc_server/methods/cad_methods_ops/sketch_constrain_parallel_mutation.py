@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -144,7 +144,7 @@ def run_sketch_constrain_parallel_native_mutation(
     document_name: str,
     apply: Callable[[SketchDocument], None],
     postcondition: Callable[[SketchReadDocument], None],
-) -> Literal[True] | SketchConstrainParallelFailure | SketchConstrainParallelUncertain:
+) -> NativeOutcome[Literal[True] | SketchConstrainParallelFailure | SketchConstrainParallelUncertain]:
     state = _NativeSketchConstrainParallelMutationState()
 
     def native_apply(document: object) -> None:

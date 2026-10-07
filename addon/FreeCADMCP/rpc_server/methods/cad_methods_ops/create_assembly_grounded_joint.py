@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -111,14 +111,14 @@ class _CreateAssemblyGroundedJointExecution:
             )
         self.inspected = read_create_assembly_grounded_joint_result(doc, self.created, self.request)
 
-    def run(self) -> CreateAssemblyGroundedJointResult:
+    def run(self) -> NativeOutcome[CreateAssemblyGroundedJointResult]:
         result = run_create_assembly_grounded_joint_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> CreateAssemblyGroundedJointResult:
             if self.inspected is None:
                 return make_create_assembly_grounded_joint_uncertain(
                     "CREATE_ASSEMBLY_GROUNDED_JOINT_COMMITTED_RESPONSE_INVALID",
@@ -165,7 +165,7 @@ def read_create_assembly_grounded_joint_result(
 def run_create_assembly_grounded_joint(
     collaborators: CreateAssemblyGroundedJointCollaborators,
     doc_name: str, assembly_name: str, component_name: str, label: str | None = None, recompute: bool = True,
-) -> CreateAssemblyGroundedJointResult:
+) -> NativeOutcome[CreateAssemblyGroundedJointResult]:
     """Run create_assembly_grounded_joint through apply, recompute, inspection, and commit."""
 
     request = build_create_assembly_grounded_joint_request(doc_name, assembly_name, component_name, label, recompute)

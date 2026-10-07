@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_constrain_perpendicular_contract import (
@@ -14,6 +14,7 @@ try:
         SketchConstrainPerpendicularFailure,
         SketchConstrainPerpendicularRequest,
         SketchConstrainPerpendicularResult,
+        SketchConstrainPerpendicularUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchConstrainPerpendicularFailure,
         SketchConstrainPerpendicularRequest,
         SketchConstrainPerpendicularResult,
+        SketchConstrainPerpendicularUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -264,14 +266,16 @@ class _SketchConstrainPerpendicularExecution:
             )
         self.inspected = read_sketch_constrain_perpendicular_result(doc, self.created)
 
-    def run(self) -> SketchConstrainPerpendicularResult:
+    def run(self) -> NativeOutcome[SketchConstrainPerpendicularResult]:
         result = run_sketch_constrain_perpendicular_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchConstrainPerpendicularFailure | SketchConstrainPerpendicularUncertain,
+        ) -> SketchConstrainPerpendicularResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -287,7 +291,7 @@ class _SketchConstrainPerpendicularExecution:
 def run_sketch_constrain_perpendicular(
     collaborators: SketchConstrainPerpendicularCollaborators,
     doc_name: object, sketch_name: object, geo1: object, geo2: object,
-) -> SketchConstrainPerpendicularResult:
+) -> NativeOutcome[SketchConstrainPerpendicularResult]:
     request = build_sketch_constrain_perpendicular_request(doc_name, sketch_name, geo1, geo2)
     if isinstance(request, dict):
         return request

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_line_contract import (
@@ -14,6 +14,7 @@ try:
         SketchAddLineFailure,
         SketchAddLineRequest,
         SketchAddLineResult,
+        SketchAddLineUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddLineFailure,
         SketchAddLineRequest,
         SketchAddLineResult,
+        SketchAddLineUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -278,14 +280,16 @@ class _SketchAddLineExecution:
             )
         self.inspected = read_sketch_add_line_result(doc, self.created)
 
-    def run(self) -> SketchAddLineResult:
+    def run(self) -> NativeOutcome[SketchAddLineResult]:
         result = run_sketch_add_line_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddLineFailure | SketchAddLineUncertain,
+        ) -> SketchAddLineResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -301,7 +305,7 @@ class _SketchAddLineExecution:
 def run_sketch_add_line(
     collaborators: SketchAddLineCollaborators,
     doc_name: object, sketch_name: object, x1: object, y1: object, x2: object, y2: object, construction: object,
-) -> SketchAddLineResult:
+) -> NativeOutcome[SketchAddLineResult]:
     request = build_sketch_add_line_request(doc_name, sketch_name, x1, y1, x2, y2, construction)
     if isinstance(request, dict):
         return request

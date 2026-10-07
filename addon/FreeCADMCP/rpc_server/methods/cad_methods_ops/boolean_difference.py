@@ -2,7 +2,7 @@
 """Typed ``boolean_difference`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .feature_lookup_support import (
     is_derived_from,
@@ -172,14 +172,14 @@ class _BooleanDifferenceExecution:
             )
         self.inspected = read_boolean_difference_result(doc, self.created)
 
-    def run(self) -> BooleanDifferenceResult:
+    def run(self) -> NativeOutcome[BooleanDifferenceResult]:
         result = run_boolean_difference_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> BooleanDifferenceResult:
             if self.inspected is None:
                 return make_boolean_difference_uncertain(
                     "BOOLEAN_DIFFERENCE_COMMITTED_RESPONSE_INVALID",
@@ -193,7 +193,7 @@ class _BooleanDifferenceExecution:
 def run_boolean_difference(
     collaborators: BooleanDifferenceCollaborators,
     doc_name: str, shape1: str, shape2: str, result_name: str
-) -> BooleanDifferenceResult:
+) -> NativeOutcome[BooleanDifferenceResult]:
     """Run boolean_difference through apply, recompute, inspection, and commit."""
 
     request = build_boolean_difference_request(doc_name, shape1, shape2, result_name)

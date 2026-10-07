@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_arc_of_ellipse_contract import (
@@ -15,6 +15,7 @@ try:
         SketchAddArcOfEllipseFailure,
         SketchAddArcOfEllipseRequest,
         SketchAddArcOfEllipseResult,
+        SketchAddArcOfEllipseUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -30,6 +31,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddArcOfEllipseFailure,
         SketchAddArcOfEllipseRequest,
         SketchAddArcOfEllipseResult,
+        SketchAddArcOfEllipseUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -294,14 +296,16 @@ class _SketchAddArcOfEllipseExecution:
             )
         self.inspected = read_sketch_add_arc_of_ellipse_result(doc, self.created)
 
-    def run(self) -> SketchAddArcOfEllipseResult:
+    def run(self) -> NativeOutcome[SketchAddArcOfEllipseResult]:
         result = run_sketch_add_arc_of_ellipse_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddArcOfEllipseFailure | SketchAddArcOfEllipseUncertain,
+        ) -> SketchAddArcOfEllipseResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -317,7 +321,7 @@ class _SketchAddArcOfEllipseExecution:
 def run_sketch_add_arc_of_ellipse(
     collaborators: SketchAddArcOfEllipseCollaborators,
     doc_name: object, sketch_name: object, cx: object, cy: object, major_radius: object, minor_radius: object, start_angle: object, end_angle: object, angle: object, construction: object,
-) -> SketchAddArcOfEllipseResult:
+) -> NativeOutcome[SketchAddArcOfEllipseResult]:
     request = build_sketch_add_arc_of_ellipse_request(doc_name, sketch_name, cx, cy, major_radius, minor_radius, start_angle, end_angle, angle, construction)
     if isinstance(request, dict):
         return request

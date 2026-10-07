@@ -6,7 +6,7 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -156,7 +156,7 @@ def run_body_set_tip_native_mutation(
     document_name: DocumentName,
     apply: Callable[[TipBodyDocument], None],
     postcondition: Callable[[TipReadDocument], None],
-) -> Literal[True] | BodySetTipFailure | BodySetTipUncertain:
+) -> NativeOutcome[Literal[True] | BodySetTipFailure | BodySetTipUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeTipMutationState()

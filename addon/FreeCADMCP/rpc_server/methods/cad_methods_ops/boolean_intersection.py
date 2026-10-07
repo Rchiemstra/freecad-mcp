@@ -2,7 +2,7 @@
 """Typed ``boolean_intersection`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .feature_lookup_support import (
     is_derived_from,
@@ -170,14 +170,14 @@ class _BooleanIntersectionExecution:
             )
         self.inspected = read_boolean_intersection_result(doc, self.created)
 
-    def run(self) -> BooleanIntersectionResult:
+    def run(self) -> NativeOutcome[BooleanIntersectionResult]:
         result = run_boolean_intersection_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> BooleanIntersectionResult:
             if self.inspected is None:
                 return make_boolean_intersection_uncertain(
                     "BOOLEAN_INTERSECTION_COMMITTED_RESPONSE_INVALID",
@@ -191,7 +191,7 @@ class _BooleanIntersectionExecution:
 def run_boolean_intersection(
     collaborators: BooleanIntersectionCollaborators,
     doc_name: str, shape1: str, shape2: str, result_name: str
-) -> BooleanIntersectionResult:
+) -> NativeOutcome[BooleanIntersectionResult]:
     """Run boolean_intersection through apply, recompute, inspection, and commit."""
 
     request = build_boolean_intersection_request(doc_name, shape1, shape2, result_name)

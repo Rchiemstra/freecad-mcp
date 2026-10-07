@@ -6,7 +6,7 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -150,7 +150,7 @@ def run_sketch_add_geometry_native_mutation(
     document_name: str,
     apply: Callable[[SketchAddGeometryDocument], None],
     postcondition: Callable[[SketchAddGeometryReadDocument], None],
-) -> Literal[True] | SketchAddGeometryFailure | SketchAddGeometryUncertain:
+) -> NativeOutcome[Literal[True] | SketchAddGeometryFailure | SketchAddGeometryUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeSketchAddGeometryMutationState()

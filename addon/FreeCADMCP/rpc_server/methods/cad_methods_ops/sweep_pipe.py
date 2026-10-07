@@ -2,7 +2,7 @@
 """Typed ``sweep_pipe`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
     as_float,
@@ -23,7 +23,7 @@ from .typed_rpc_container_support import (
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sweep_pipe_contract import (
@@ -34,6 +34,7 @@ try:
         SweepPipeReadDocument,
         SweepPipeRequest,
         SweepPipeResult,
+        SweepPipeUncertain,
         DocumentName,
         make_sweep_pipe_failure,
         make_sweep_pipe_success,
@@ -48,6 +49,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SweepPipeReadDocument,
         SweepPipeRequest,
         SweepPipeResult,
+        SweepPipeUncertain,
         DocumentName,
         make_sweep_pipe_failure,
         make_sweep_pipe_success,
@@ -546,14 +548,16 @@ class _SweepPipeExecution:
             )
         self.inspected = read_sweep_pipe_result(doc, self.created)
 
-    def run(self) -> SweepPipeResult:
+    def run(self) -> NativeOutcome[SweepPipeResult]:
         result = run_sweep_pipe_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SweepPipeFailure | SweepPipeUncertain,
+        ) -> SweepPipeResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -575,7 +579,7 @@ class _SweepPipeExecution:
 def run_sweep_pipe(
     collaborators: SweepPipeCollaborators,
     doc_name: object, path_wire: object, diameter_mm: object, solid_name: object, profile_mode: object, color: object, container: object, if_exists: object,
-) -> SweepPipeResult:
+) -> NativeOutcome[SweepPipeResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_sweep_pipe_request(doc_name, path_wire, diameter_mm, solid_name, profile_mode, color, container, if_exists)

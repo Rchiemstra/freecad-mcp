@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 try:
@@ -71,10 +71,10 @@ def _is_freecad_gui_thread() -> bool:
     ``QCoreApplication`` instance.
     """
     try:
-        from PySide2.QtCore import QCoreApplication, QThread  # type: ignore[import]
+        from PySide2.QtCore import QCoreApplication, QThread  # type: ignore[import-not-found]
     except ImportError:
         try:
-            from PySide.QtCore import QCoreApplication, QThread  # type: ignore[import]
+            from PySide.QtCore import QCoreApplication, QThread  # type: ignore[import-not-found]
         except ImportError:
             return False
     app = QCoreApplication.instance()
@@ -102,13 +102,13 @@ class _AsyncMutationWaiter:
 
     def __init__(
         self,
-        wait_fn: Any,
+        wait_fn: Callable[[float], object],
         refusals: _CallbackRefusals | None = None,
     ) -> None:
         self._wait_fn = wait_fn
         self._refusals = refusals
 
-    def await_result(self, timeout: float = 60.0) -> Any:
+    def await_result(self, timeout: float = 60.0) -> object:
         """Block the calling thread until the async mutation completes.
 
         Calls the C++ ``wait(timeout)`` callable which releases the GIL,
@@ -132,8 +132,8 @@ class _AsyncMutationWaiter:
 
 def _commit_async_on_gui_thread(
     document: object,
-    callback: Any,
-    async_kwargs: dict[str, Any],
+    callback: Callable[[], object],
+    async_kwargs: Mapping[str, object],
     refusals: _CallbackRefusals | None,
 ) -> _AsyncMutationWaiter:
     """Call ``commitCompatibilityMutationAsync`` and return a waiter immediately.
@@ -365,13 +365,15 @@ class CollaborationAPI:
 
         if _is_freecad_gui_thread():
             # B4: Never call the blocking sync variant on the GUI thread.
-            async_kw: dict[str, Any] = {
-                "structural": structural,
-                "postcondition": invoke_postcondition,
-                "recompute": recompute,
-            }
             return _commit_async_on_gui_thread(
-                document, invoke_callback, async_kw, refusals
+                document,
+                invoke_callback,
+                {
+                    "structural": structural,
+                    "postcondition": invoke_postcondition,
+                    "recompute": recompute,
+                },
+                refusals,
             )
 
         try:

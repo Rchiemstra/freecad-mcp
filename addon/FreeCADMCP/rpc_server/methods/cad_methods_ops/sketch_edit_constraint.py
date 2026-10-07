@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_edit_constraint_contract import (
@@ -17,6 +17,7 @@ try:
         SketchEditConstraintObject,
         SketchEditConstraintReadDocument,
         SketchEditConstraintResult,
+        SketchEditConstraintUncertain,
         SketchName,
         make_sketch_edit_constraint_failure,
         make_sketch_edit_constraint_success,
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchEditConstraintObject,
         SketchEditConstraintReadDocument,
         SketchEditConstraintResult,
+        SketchEditConstraintUncertain,
         SketchName,
         make_sketch_edit_constraint_failure,
         make_sketch_edit_constraint_success,
@@ -238,14 +240,16 @@ class _SketchEditConstraintExecution:
             )
         self.inspected = read_sketch_edit_constraint_result(doc, self.created)
 
-    def run(self) -> SketchEditConstraintResult:
+    def run(self) -> NativeOutcome[SketchEditConstraintResult]:
         result = run_sketch_edit_constraint_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchEditConstraintFailure | SketchEditConstraintUncertain,
+        ) -> SketchEditConstraintResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -270,7 +274,7 @@ def run_sketch_edit_constraint(
     value: object = None,
     name: object = None,
     index: object = None,
-) -> SketchEditConstraintResult:
+) -> NativeOutcome[SketchEditConstraintResult]:
     request = build_sketch_edit_constraint_request(doc_name, sketch_name, value, name, index)
     if isinstance(request, dict):
         return request

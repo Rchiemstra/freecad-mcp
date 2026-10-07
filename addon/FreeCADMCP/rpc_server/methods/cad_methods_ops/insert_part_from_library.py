@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -153,14 +153,14 @@ class _InsertPartFromLibraryExecution:
             )
         self.inspected = read_insert_part_from_library_result(doc, self.created)
 
-    def run(self) -> InsertPartFromLibraryResult:
+    def run(self) -> NativeOutcome[InsertPartFromLibraryResult]:
         result = run_insert_part_from_library_native_mutation(
             self.collaborators,
             str(self.request.doc_name),
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> InsertPartFromLibraryResult:
             if self.inspected is None:
                 return make_insert_part_from_library_uncertain(
                     "INSERT_PART_FROM_LIBRARY_COMMITTED_RESPONSE_INVALID",
@@ -177,7 +177,7 @@ def run_insert_part_from_library(
     collaborators: InsertPartFromLibraryCollaborators,
     doc_name: object,
     relative_path: object,
-) -> InsertPartFromLibraryResult:
+) -> NativeOutcome[InsertPartFromLibraryResult]:
     """Run library insertion through apply, recompute, inspection, and commit."""
 
     request = build_insert_part_from_library_request(doc_name, relative_path)

@@ -6,7 +6,7 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -152,7 +152,7 @@ def run_build_path_wire_native_mutation(
     document_name: DocumentName,
     apply: Callable[[BuildPathWireDocument], None],
     postcondition: Callable[[BuildPathWireReadDocument], None],
-) -> Literal[True] | BuildPathWireFailure | BuildPathWireUncertain:
+) -> NativeOutcome[Literal[True] | BuildPathWireFailure | BuildPathWireUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()

@@ -2,7 +2,7 @@
 """Typed ``linear_pattern_feature`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .feature_lookup_support import (
     is_derived_from,
@@ -198,14 +198,14 @@ class _LinearPatternFeatureExecution:
             )
         self.inspected = read_linear_pattern_feature_result(doc, self.created)
 
-    def run(self) -> LinearPatternFeatureResult:
+    def run(self) -> NativeOutcome[LinearPatternFeatureResult]:
         result = run_linear_pattern_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> LinearPatternFeatureResult:
             if self.inspected is None:
                 return make_linear_pattern_feature_uncertain(
                     "LINEAR_PATTERN_FEATURE_COMMITTED_RESPONSE_INVALID",
@@ -219,7 +219,7 @@ class _LinearPatternFeatureExecution:
 def run_linear_pattern_feature(
     collaborators: LinearPatternFeatureCollaborators,
     doc_name: str, feature_name: str, pattern_name: str, length: float, occurrences: int, direction: str = 'X_Axis', body_name: str | None = None, reversed_dir: bool = False
-) -> LinearPatternFeatureResult:
+) -> NativeOutcome[LinearPatternFeatureResult]:
     """Run linear_pattern_feature through apply, recompute, inspection, and commit."""
 
     request = build_linear_pattern_feature_request(doc_name, feature_name, pattern_name, length, occurrences, direction, body_name, reversed_dir)

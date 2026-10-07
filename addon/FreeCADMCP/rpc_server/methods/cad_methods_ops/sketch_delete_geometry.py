@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_delete_geometry_contract import (
@@ -17,6 +17,7 @@ try:
         SketchDeleteGeometryObject,
         SketchDeleteGeometryReadDocument,
         SketchDeleteGeometryResult,
+        SketchDeleteGeometryUncertain,
         SketchName,
         make_sketch_delete_geometry_failure,
         make_sketch_delete_geometry_success,
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchDeleteGeometryObject,
         SketchDeleteGeometryReadDocument,
         SketchDeleteGeometryResult,
+        SketchDeleteGeometryUncertain,
         SketchName,
         make_sketch_delete_geometry_failure,
         make_sketch_delete_geometry_success,
@@ -184,14 +186,16 @@ class _SketchDeleteGeometryExecution:
             )
         self.inspected = read_sketch_delete_geometry_result(doc, self.created)
 
-    def run(self) -> SketchDeleteGeometryResult:
+    def run(self) -> NativeOutcome[SketchDeleteGeometryResult]:
         result = run_sketch_delete_geometry_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchDeleteGeometryFailure | SketchDeleteGeometryUncertain,
+        ) -> SketchDeleteGeometryResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -211,7 +215,7 @@ def run_sketch_delete_geometry(
     doc_name: object,
     sketch_name: object,
     geometry_indices: object,
-) -> SketchDeleteGeometryResult:
+) -> NativeOutcome[SketchDeleteGeometryResult]:
     request = build_sketch_delete_geometry_request(doc_name, sketch_name, geometry_indices)
     if isinstance(request, dict):
         return request

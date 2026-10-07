@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 import math
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.pocket_feature_contract import (
@@ -19,6 +19,7 @@ try:
         PocketFeatureObject,
         PocketFeatureReadDocument,
         PocketFeatureResult,
+        PocketFeatureUncertain,
         PocketName,
         make_pocket_feature_failure,
         make_pocket_feature_success,
@@ -33,6 +34,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         PocketFeatureObject,
         PocketFeatureReadDocument,
         PocketFeatureResult,
+        PocketFeatureUncertain,
         PocketName,
         make_pocket_feature_failure,
         make_pocket_feature_success,
@@ -479,14 +481,16 @@ class _PocketFeatureExecution:
             except Exception:
                 continue
 
-    def run(self) -> PocketFeatureResult:
+    def run(self) -> NativeOutcome[PocketFeatureResult]:
         result = run_pocket_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | PocketFeatureFailure | PocketFeatureUncertain,
+        ) -> PocketFeatureResult:
             if result is not True:
                 if (
                     isinstance(result, dict)
@@ -514,7 +518,7 @@ def run_pocket_feature(
     symmetric: object = False,
     reversed_dir: object = False,
     strict: object = False,
-) -> PocketFeatureResult:
+) -> NativeOutcome[PocketFeatureResult]:
     request = build_pocket_feature_request(
         doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir, strict
     )

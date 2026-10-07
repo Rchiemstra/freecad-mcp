@@ -2,7 +2,7 @@
 """Typed ``preview_attachment`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
     nonempty_string,
@@ -14,7 +14,7 @@ from .typed_rpc_support import (
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.preview_attachment_contract import (
@@ -25,6 +25,7 @@ try:
         PreviewAttachmentReadDocument,
         PreviewAttachmentRequest,
         PreviewAttachmentResult,
+        PreviewAttachmentUncertain,
         DocumentName,
         make_preview_attachment_failure,
         make_preview_attachment_success,
@@ -39,6 +40,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         PreviewAttachmentReadDocument,
         PreviewAttachmentRequest,
         PreviewAttachmentResult,
+        PreviewAttachmentUncertain,
         DocumentName,
         make_preview_attachment_failure,
         make_preview_attachment_success,
@@ -346,14 +348,16 @@ class _PreviewAttachmentExecution:
             )
         self.inspected = read_preview_attachment_result(doc, self.created)
 
-    def run(self) -> PreviewAttachmentResult:
+    def run(self) -> NativeOutcome[PreviewAttachmentResult]:
         result = run_preview_attachment_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | PreviewAttachmentFailure | PreviewAttachmentUncertain,
+        ) -> PreviewAttachmentResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -381,7 +385,7 @@ class _PreviewAttachmentExecution:
 def run_preview_attachment(
     collaborators: PreviewAttachmentCollaborators,
     doc_name: object, datum_name: object,
-) -> PreviewAttachmentResult:
+) -> NativeOutcome[PreviewAttachmentResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_preview_attachment_request(doc_name, datum_name)

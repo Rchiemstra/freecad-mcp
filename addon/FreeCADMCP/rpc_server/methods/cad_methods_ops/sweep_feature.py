@@ -2,7 +2,7 @@
 """Typed ``sweep_feature`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .feature_lookup_support import (
     is_derived_from,
@@ -23,7 +23,7 @@ from .feature_mutate_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sweep_feature_contract import (
@@ -31,6 +31,7 @@ try:
         SweepFeatureFailure,
         SweepFeatureRequest,
         SweepFeatureResult,
+        SweepFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -46,6 +47,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SweepFeatureFailure,
         SweepFeatureRequest,
         SweepFeatureResult,
+        SweepFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -188,14 +190,16 @@ class _SweepFeatureExecution:
             )
         self.inspected = read_sweep_feature_result(doc, self.created)
 
-    def run(self) -> SweepFeatureResult:
+    def run(self) -> NativeOutcome[SweepFeatureResult]:
         result = run_sweep_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SweepFeatureFailure | SweepFeatureUncertain,
+        ) -> SweepFeatureResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -211,7 +215,7 @@ class _SweepFeatureExecution:
 def run_sweep_feature(
     collaborators: SweepFeatureCollaborators,
     doc_name: str, profile_sketch: str, path_sketch: str, sweep_name: str, body_name: str | None = None, frenet: bool = False
-) -> SweepFeatureResult:
+) -> NativeOutcome[SweepFeatureResult]:
     """Run sweep_feature through apply, recompute, inspection, and commit."""
 
     request = build_sweep_feature_request(doc_name, profile_sketch, path_sketch, sweep_name, body_name, frenet)

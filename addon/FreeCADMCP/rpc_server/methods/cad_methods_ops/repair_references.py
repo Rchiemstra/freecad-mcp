@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.repair_references_contract import (
@@ -18,6 +18,7 @@ try:
         RepairReferencesFailure,
         RepairReferencesRequest,
         RepairReferencesResult,
+        RepairReferencesUncertain,
         make_repair_references_failure,
         make_repair_references_success,
         make_repair_references_uncertain,
@@ -32,6 +33,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         RepairReferencesFailure,
         RepairReferencesRequest,
         RepairReferencesResult,
+        RepairReferencesUncertain,
         make_repair_references_failure,
         make_repair_references_success,
         make_repair_references_uncertain,
@@ -498,14 +500,16 @@ class _RepairReferencesExecution:
             )
         self.inspected = read_repair_references_result(doc, self.created)
 
-    def run(self) -> RepairReferencesResult:
+    def run(self) -> NativeOutcome[RepairReferencesResult]:
         result = run_repair_references_native_mutation(
             self.collaborators,
             str(self.work.request.doc_name),
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | RepairReferencesFailure | RepairReferencesUncertain,
+        ) -> RepairReferencesResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -537,7 +541,7 @@ def run_repair_references(
     repairs: object,
     recompute: object = False,
     validate: object = False,
-) -> RepairReferencesResult:
+) -> NativeOutcome[RepairReferencesResult]:
     """Run reference repair through apply, recompute, inspection, and commit."""
 
     if not isinstance(doc_name, str) or not doc_name.strip():

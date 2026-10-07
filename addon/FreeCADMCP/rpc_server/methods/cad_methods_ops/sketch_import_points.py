@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_import_points_contract import (
@@ -14,6 +14,7 @@ try:
         SketchImportPointsFailure,
         SketchImportPointsRequest,
         SketchImportPointsResult,
+        SketchImportPointsUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchImportPointsFailure,
         SketchImportPointsRequest,
         SketchImportPointsResult,
+        SketchImportPointsUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -270,14 +272,16 @@ class _SketchImportPointsExecution:
             )
         self.inspected = read_sketch_import_points_result(doc, self.created)
 
-    def run(self) -> SketchImportPointsResult:
+    def run(self) -> NativeOutcome[SketchImportPointsResult]:
         result = run_sketch_import_points_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | SketchImportPointsFailure | SketchImportPointsUncertain,
+        ) -> SketchImportPointsResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -293,7 +297,7 @@ class _SketchImportPointsExecution:
 def run_sketch_import_points(
     collaborators: SketchImportPointsCollaborators,
     doc_name: object, sketch_name: object, points: object, construction: object,
-) -> SketchImportPointsResult:
+) -> NativeOutcome[SketchImportPointsResult]:
     request = build_sketch_import_points_request(doc_name, sketch_name, points, construction)
     if isinstance(request, dict):
         return request

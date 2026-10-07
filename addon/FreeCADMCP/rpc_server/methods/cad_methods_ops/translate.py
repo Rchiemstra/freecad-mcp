@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.translate_contract import (
@@ -16,6 +16,7 @@ try:
         TranslateFailure,
         TranslateRequest,
         TranslateResult,
+        TranslateUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -31,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         TranslateFailure,
         TranslateRequest,
         TranslateResult,
+        TranslateUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -102,14 +104,16 @@ class _TranslateExecution:
             )
         self.inspected = read_translate_result(doc, self.created, self.request)
 
-    def run(self) -> TranslateResult:
+    def run(self) -> NativeOutcome[TranslateResult]:
         result = run_translate_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | TranslateFailure | TranslateUncertain,
+        ) -> TranslateResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -193,7 +197,7 @@ def read_translate_result(
 def run_translate(
     collaborators: TranslateCollaborators,
     doc_name: str, obj_name: str, dx: float, dy: float, dz: float,
-) -> TranslateResult:
+) -> NativeOutcome[TranslateResult]:
     """Run translate through apply, recompute, inspection, and commit."""
 
     request = build_translate_request(doc_name, obj_name, dx, dy, dz)

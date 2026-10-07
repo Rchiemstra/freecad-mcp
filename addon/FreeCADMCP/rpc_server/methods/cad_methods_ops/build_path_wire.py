@@ -2,7 +2,7 @@
 """Typed ``build_path_wire`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .typed_rpc_support import (
     as_float,
@@ -298,14 +298,14 @@ class _BuildPathWireExecution:
             )
         self.inspected = read_build_path_wire_result(doc, self.created)
 
-    def run(self) -> BuildPathWireResult:
+    def run(self) -> NativeOutcome[BuildPathWireResult]:
         result = run_build_path_wire_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> BuildPathWireResult:
             if self.inspected is None:
                 return make_build_path_wire_uncertain(
                     "BUILD_PATH_WIRE_COMMITTED_RESPONSE_INVALID",
@@ -325,7 +325,7 @@ class _BuildPathWireExecution:
 def run_build_path_wire(
     collaborators: BuildPathWireCollaborators,
     doc_name: object, wire_name: object, segments: object, tolerance_mm: object, container: object, if_exists: object,
-) -> BuildPathWireResult:
+) -> NativeOutcome[BuildPathWireResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_build_path_wire_request(doc_name, wire_name, segments, tolerance_mm, container, if_exists)

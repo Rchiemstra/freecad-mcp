@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -92,14 +92,14 @@ class _ImportStepExecution:
             )
         self.inspected = read_import_step_result(doc, self.created, self.request)
 
-    def run(self) -> ImportStepResult:
+    def run(self) -> NativeOutcome[ImportStepResult]:
         result = run_import_step_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> ImportStepResult:
             if self.inspected is None:
                 return make_import_step_uncertain(
                     "IMPORT_STEP_COMMITTED_RESPONSE_INVALID",
@@ -141,7 +141,7 @@ def read_import_step_result(
 def run_import_step(
     collaborators: ImportStepCollaborators,
     doc_name: str, file_path: str,
-) -> ImportStepResult:
+) -> NativeOutcome[ImportStepResult]:
     """Run import_step through apply, recompute, inspection, and commit."""
 
     request = build_import_step_request(doc_name, file_path)

@@ -2,7 +2,7 @@
 """Typed ``revolve_feature`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .feature_lookup_support import (
     is_derived_from,
@@ -27,7 +27,7 @@ from .feature_mutate_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.revolve_feature_contract import (
@@ -35,6 +35,7 @@ try:
         RevolveFeatureFailure,
         RevolveFeatureRequest,
         RevolveFeatureResult,
+        RevolveFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -50,6 +51,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         RevolveFeatureFailure,
         RevolveFeatureRequest,
         RevolveFeatureResult,
+        RevolveFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -199,14 +201,16 @@ class _RevolveFeatureExecution:
             )
         self.inspected = read_revolve_feature_result(doc, self.created)
 
-    def run(self) -> RevolveFeatureResult:
+    def run(self) -> NativeOutcome[RevolveFeatureResult]:
         result = run_revolve_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | RevolveFeatureFailure | RevolveFeatureUncertain,
+        ) -> RevolveFeatureResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -222,7 +226,7 @@ class _RevolveFeatureExecution:
 def run_revolve_feature(
     collaborators: RevolveFeatureCollaborators,
     doc_name: str, sketch_name: str, revolve_name: str, angle: float = 360.0, axis: str = 'Z_Axis', body_name: str | None = None, symmetric: bool = False, reversed_dir: bool = False
-) -> RevolveFeatureResult:
+) -> NativeOutcome[RevolveFeatureResult]:
     """Run revolve_feature through apply, recompute, inspection, and commit."""
 
     request = build_revolve_feature_request(doc_name, sketch_name, revolve_name, angle, axis, body_name, symmetric, reversed_dir)

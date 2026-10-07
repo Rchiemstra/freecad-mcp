@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import defer_native_result
+from .native_commit_wait import NativeOutcome, defer_native_result
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -152,7 +152,7 @@ def run_fillet_feature_native_mutation(
     document_name: DocumentName,
     apply: Callable[[FeatureDocument], None],
     postcondition: Callable[[FeatureReadDocument], None],
-) -> Literal[True] | FilletFeatureFailure | FilletFeatureUncertain:
+) -> NativeOutcome[Literal[True] | FilletFeatureFailure | FilletFeatureUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _FilletFeatureNativeMutationState()

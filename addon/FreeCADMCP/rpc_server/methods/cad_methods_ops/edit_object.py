@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -179,14 +179,14 @@ class _EditObjectExecution:
             )
         self.inspected = read_edit_object_result(doc, self.created)
 
-    def run(self) -> EditObjectResult:
+    def run(self) -> NativeOutcome[EditObjectResult]:
         result = run_edit_object_native_mutation(
             self.collaborators,
             str(self.request.doc_name),
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> EditObjectResult:
             if self.inspected is None:
                 return make_edit_object_uncertain(
                     "EDIT_OBJECT_COMMITTED_RESPONSE_INVALID",
@@ -203,7 +203,7 @@ def run_edit_object(
     obj_name: object,
     properties: object,
     set_object_property: Callable[[object, object, dict[str, object]], object] | None = None,
-) -> EditObjectResult:
+) -> NativeOutcome[EditObjectResult]:
     """Run object editing through apply, recompute, inspection, and commit."""
 
     request = build_edit_object_request(doc_name, obj_name, properties)

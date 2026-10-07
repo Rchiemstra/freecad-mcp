@@ -2,7 +2,7 @@
 """Typed ``create_subshape_binder`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import continue_after_native_commit
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .typed_rpc_support import (
     as_bool,
@@ -390,14 +390,14 @@ class _CreateSubshapeBinderExecution:
             )
         self.inspected = read_create_subshape_binder_result(doc, self.created)
 
-    def run(self) -> CreateSubshapeBinderResult:
+    def run(self) -> NativeOutcome[CreateSubshapeBinderResult]:
         result = run_create_subshape_binder_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit():
+        def _finish_native_commit() -> CreateSubshapeBinderResult:
             if self.inspected is None:
                 return make_create_subshape_binder_uncertain(
                     "CREATE_SUBSHAPE_BINDER_COMMITTED_RESPONSE_INVALID",
@@ -417,7 +417,7 @@ class _CreateSubshapeBinderExecution:
 def run_create_subshape_binder(
     collaborators: CreateSubshapeBinderCollaborators,
     doc_name: object, binder_name: object, source_object: object, sub_elements: object, target_body: object, target_container: object, relative: object, sync_placement: object, if_exists: object,
-) -> CreateSubshapeBinderResult:
+) -> NativeOutcome[CreateSubshapeBinderResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_create_subshape_binder_request(doc_name, binder_name, source_object, sub_elements, target_body, target_container, relative, sync_placement, if_exists)

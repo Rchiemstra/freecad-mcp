@@ -2,7 +2,7 @@
 """Typed ``restore`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import settle_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
     nonempty_string,
@@ -278,14 +278,16 @@ class _RestoreExecution:
             )
         self.inspected = read_restore_result(doc, self.created)
 
-    def run(self) -> RestoreResult:
+    def run(self) -> NativeOutcome[RestoreResult]:
         result = run_restore_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        def _finish_native_commit(result):
+        def _finish_native_commit(
+            result: Literal[True] | RestoreFailure | RestoreUncertain,
+        ) -> RestoreResult:
             if result is not True:
                 return result
             if self.inspected is None:
@@ -320,7 +322,7 @@ class _RestoreExecution:
 def run_restore(
     collaborators: RestoreCollaborators,
     doc_name: object, snapshot_id: object,
-) -> RestoreResult:
+) -> NativeOutcome[RestoreResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_restore_request(doc_name, snapshot_id)
