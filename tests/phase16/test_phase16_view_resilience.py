@@ -177,6 +177,44 @@ def test_fit_recurses_container_children_and_accepts_mesh_and_direct_bounds():
     assert _float_field(context["camera"], "nearDistance") > 0
 
 
+def test_fit_ignores_unbounded_origin_datums():
+    """FreeCAD reports origin axes and planes as +/-1e100 boxes.
+
+    Fitting to them put the camera at 1e100, which overflows Coin's float
+    fields: Coin logged "Detected non-valid floating point number" and
+    rendered with zeroed camera values.
+    """
+
+    pad = SimpleNamespace(Name="Pad", Shape=SimpleNamespace(BoundBox=_bound(0, 20, 0, 10, 0, 5)))
+    axis = SimpleNamespace(
+        Name="X_Axis", Shape=SimpleNamespace(BoundBox=_bound(-1e100, 1e100, 0, 0, 0, 0))
+    )
+    plane = SimpleNamespace(
+        Name="XY_Plane",
+        Shape=SimpleNamespace(BoundBox=_bound(-1e100, 1e100, -1e100, 1e100, 0, 0)),
+    )
+    origin = SimpleNamespace(Name="Origin", OutList=[axis, plane])
+    body = SimpleNamespace(Name="Body", Group=[pad], OutList=[origin, pad])
+    document = _Document("Model", [body, origin, axis, plane, pad])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    context = build_view_context(facade, document, "actor-a", fit=True)
+
+    for field in ("height", "nearDistance", "farDistance", "focalDistance"):
+        assert 0 < _float_field(context["camera"], field) < 1e6
+
+
+def test_fit_with_only_unbounded_datums_has_no_renderable_bounds():
+    axis = SimpleNamespace(
+        Name="X_Axis", Shape=SimpleNamespace(BoundBox=_bound(-1e100, 1e100, 0, 0, 0, 0))
+    )
+    document = _Document("Model", [SimpleNamespace(Name="Origin", OutList=[axis]), axis])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    with pytest.raises(ValueError, match="no renderable bounds"):
+        build_view_context(facade, document, "actor-a", fit=True)
+
+
 def test_resolve_document_uses_freecad_active_document_when_unambiguous():
     model = _Document("Model")
     other = _Document("Other")
