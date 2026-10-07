@@ -29,6 +29,14 @@ NativeOutcome = Union[_T, PendingNativeResult[_T]]
 
 def _on_gui_thread() -> bool:
     try:
+        import FreeCAD
+    except ImportError:
+        return False
+    # Like ``DocumentWouldBlock``, only an initialised FreeCAD GUI owns a GUI
+    # thread; a bare QCoreApplication (FreeCADCmd, tests) does not.
+    if getattr(FreeCAD, "GuiUp", 0) not in (1, True):
+        return False
+    try:
         from PySide import QtCore
     except ImportError:
         try:

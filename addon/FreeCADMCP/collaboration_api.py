@@ -63,13 +63,29 @@ __all__ = ["CollaborationAPI"]
 # GUI-thread detection and async mutation waiter
 # ---------------------------------------------------------------------------
 
+def _freecad_gui_up() -> bool:
+    """Return whether FreeCAD's GUI is initialised in this process.
+
+    The C++ ``DocumentWouldBlock`` rule only applies once the GUI has
+    installed its main-thread hooks, which happens with ``FreeCAD.GuiUp``.  A
+    bare ``QCoreApplication`` (FreeCADCmd, tests) never refuses sync calls.
+    """
+    try:
+        import FreeCAD
+    except ImportError:
+        return False
+    return getattr(FreeCAD, "GuiUp", 0) in (1, True)
+
+
 def _is_freecad_gui_thread() -> bool:
     """Return ``True`` when called on the FreeCAD/Qt GUI main thread.
 
     Uses Qt's thread-affinity query so it works regardless of how FreeCAD
-    started Python.  Returns ``False`` in headless runs where there is no
-    ``QCoreApplication`` instance.
+    started Python.  Returns ``False`` in headless runs, where the GUI is not
+    up or there is no ``QCoreApplication`` instance.
     """
+    if not _freecad_gui_up():
+        return False
     try:
         from PySide2.QtCore import QCoreApplication, QThread  # type: ignore[import-not-found]
     except ImportError:
