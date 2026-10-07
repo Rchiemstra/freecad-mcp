@@ -27,12 +27,27 @@ pytestmark = pytest.mark.requires_live_freecad_gui
 
 @pytest.fixture(scope="module")
 def freecad_gui():
-    """Import FreeCAD and FreeCADGui; skip if not available."""
+    """Import FreeCAD and FreeCADGui; skip unless a real GUI main window is up.
+
+    Unit-test stubs can install ``FreeCAD``, ``FreeCADGui`` and ``PySide``
+    (with any ``GuiUp`` value), so importability alone does not prove a live
+    GUI.  A stub cannot return a genuine PySide ``QMainWindow``.
+    """
     try:
         import FreeCAD
-        import FreeCADGui  # noqa: F401
+        import FreeCADGui
+        from PySide import QtWidgets
     except ImportError:
         pytest.skip("FreeCAD GUI not available")
+    try:
+        main_window = FreeCADGui.getMainWindow()
+    except Exception:  # noqa: BLE001
+        main_window = None
+    main_window_type = getattr(QtWidgets, "QMainWindow", None)
+    if not isinstance(main_window_type, type) or not isinstance(
+        main_window, main_window_type
+    ):
+        pytest.skip("FreeCAD GUI main window is not running")
     return FreeCAD
 
 
