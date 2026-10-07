@@ -195,6 +195,10 @@ class ServerLifespanTest(unittest.TestCase):
         self.state.rpc_port = 19876
         self.state.instance_id = "profile-a"
         self.state.auth_file = "C:/isolated-profile/auth.secret"
+        self.state.freecad_connection = connection
+        self.state.rpc_session.mark_connected("old-session-token")
+        self.state.rpc_session_expires_at = expiry
+        self.state.authenticated_manifest = SimpleNamespace(addon_runtime_id="runtime-old")
 
         with (
             mock.patch.object(
@@ -217,14 +221,41 @@ class ServerLifespanTest(unittest.TestCase):
                 return_value=verified,
             ) as verify_response,
         ):
-            server._authenticate_connection(connection, force=True)
+            result = server.get_freecad_connection()
 
+        self.assertIs(result, connection)
         reload_manifest.assert_called_once_with(manifest_path)
+        connection.invoke_rpc.assert_called_once_with(
+            "handshake_v2", {"client_nonce": "nonce"}, control=True
+        )
         self.assertIs(build_request.call_args.kwargs["manifest"], refreshed)
         self.assertIs(verify_response.call_args.kwargs["manifest"], refreshed)
         refreshed.require_complete_runtime.assert_called_once_with()
         self.assertIs(self.state.instance_manifest, refreshed)
+        self.assertIs(self.state.authenticated_manifest, verified.manifest)
         self.assertEqual(self.state.rpc_session_id, "new-session-id")
+
+    def test_unexpired_session_reuses_validated_unchanged_manifest(self):
+        baseline = SimpleNamespace(auth_secret_file="profile.auth")
+        unchanged = SimpleNamespace(auth_secret_file="profile.auth")
+        self.state.instance_manifest = baseline
+        self.state.rpc_session_expires_at = (
+            datetime.now(UTC) + timedelta(minutes=5)
+        ).isoformat()
+        connection = mock.Mock()
+
+        with (
+            mock.patch.object(
+                manifest_auth, "manifest_for_authentication", return_value=unchanged
+            ) as validate_manifest,
+            mock.patch.object(manifest_auth, "load_profile_secret") as load_secret,
+        ):
+            server._authenticate_connection(connection)
+
+        validate_manifest.assert_called_once_with()
+        load_secret.assert_not_called()
+        connection.invoke_rpc.assert_not_called()
+        self.assertIs(self.state.instance_manifest, baseline)
 
     def test_session_refresh_rejects_immutable_manifest_change(self):
         baseline = SimpleNamespace(
@@ -252,18 +283,23 @@ class ServerLifespanTest(unittest.TestCase):
         self.state.rpc_port = 19876
         self.state.instance_id = "profile-a"
         self.state.auth_file = "C:/isolated-profile/auth.secret"
+        self.state.rpc_session_expires_at = (
+            datetime.now(UTC) + timedelta(minutes=5)
+        ).isoformat()
 
-        with (
-            mock.patch.object(
-                manifest_auth, "load_instance_manifest", return_value=changed
-            ),
-            mock.patch.object(manifest_auth, "load_profile_secret") as load_secret,
-            self.assertRaisesRegex(Exception, "immutable profile configuration"),
-        ):
-            server._authenticate_connection(mock.Mock(), force=True)
+        for force in (False, True):
+            with (
+                self.subTest(force=force),
+                mock.patch.object(
+                    manifest_auth, "load_instance_manifest", return_value=changed
+                ),
+                mock.patch.object(manifest_auth, "load_profile_secret") as load_secret,
+                self.assertRaisesRegex(Exception, "immutable profile configuration"),
+            ):
+                server._authenticate_connection(mock.Mock(), force=force)
 
-        load_secret.assert_not_called()
-        self.assertIs(self.state.instance_manifest, baseline)
+            load_secret.assert_not_called()
+            self.assertIs(self.state.instance_manifest, baseline)
 
     def test_removed_heartbeat_is_inert(self):
         self.assertFalse(asyncio.run(lease_heartbeat_once()))

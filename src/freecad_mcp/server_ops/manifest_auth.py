@@ -82,9 +82,18 @@ def manifest_for_authentication() -> Any:
 
 def authenticate_connection(conn: FreeCADConnection, *, force: bool = False) -> None:
     """Refresh the short-lived RPC authentication session."""
-    if surfaces.state.instance_manifest is None or (not force and not session_needs_refresh()):
+    if surfaces.state.instance_manifest is None:
         return
     manifest = manifest_for_authentication()
+    # A launcher-authorized restart replaces runtime identity before the cached
+    # session expires. Validate its manifest before deciding authentication can
+    # be reused, including for lightweight identity reads.
+    if (
+        not force
+        and manifest == surfaces.state.instance_manifest
+        and not session_needs_refresh()
+    ):
+        return
     secret_path = surfaces.state.auth_file or manifest.auth_secret_file
     surfaces.emit_event(
         "authentication",
