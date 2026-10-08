@@ -12,7 +12,7 @@ def _active_document_name(freecad):
 
 
 def _restore_active_document(freecad, gui_module, document_name):
-    if document_name and freecad.getDocument(document_name) is not None:
+    if document_name and document_name in freecad.listDocuments():
         freecad.setActiveDocument(document_name)
         gui_module.ActiveDocument = gui_module.getDocument(document_name)
         return
@@ -84,7 +84,10 @@ def open_document(freecad, gui_module, path):
 def _reload_preflight(freecad, document_name):
     if document_name not in freecad.listDocuments():
         return f"Document '{document_name}' is not loaded.", None, None
-    document = freecad.getDocument(document_name)
+    try:
+        document = freecad.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        document = None
     file_path = str(getattr(document, "FileName", "") or "")
     if not file_path:
         return (

@@ -18,7 +18,10 @@ def inspect_references_gui(
     validate: bool = False,
 ) -> dict[str, Any]:
     """Inspect links without serializing owner geometry or recomputing the document."""
-    doc = FreeCAD.getDocument(document_name)
+    try:
+        doc = FreeCAD.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document '{document_name}' not found"}
 

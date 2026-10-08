@@ -443,21 +443,21 @@
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
-        "line": 59,
+        "line": 62,
         "column": 35,
         "symbol": "core_authority",
         "kind": "ImportAlias"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
-        "line": 61,
+        "line": 64,
         "column": 8,
         "symbol": "core_authority",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
-        "line": 61,
+        "line": 64,
         "column": 8,
         "symbol": "sync_owner_from_lease_record",
         "kind": "Attribute"
@@ -605,7 +605,7 @@
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
-        "line": 46,
+        "line": 49,
         "column": 12,
         "symbol": "claim_locked_error_handoff",
         "kind": "Attribute"
@@ -1072,7 +1072,7 @@
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 86,
+        "line": 89,
         "column": 29,
         "symbol": "last_heartbeat",
         "kind": "Attribute"
@@ -5381,42 +5381,42 @@
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 107,
+        "line": 110,
         "column": 16,
         "symbol": "_read_sidecar",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 107,
+        "line": 110,
         "column": 30,
         "symbol": "sidecar_path_for",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 118,
+        "line": 121,
         "column": 27,
         "symbol": "to_sidecar_dict",
         "kind": "Attribute"
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 132,
+        "line": 135,
         "column": 0,
         "symbol": "discover_sidecar_leases",
         "kind": "FunctionDef"
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 138,
+        "line": 141,
         "column": 15,
         "symbol": "sidecar_path_for",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/document_lock_ops/registry_queries.py",
-        "line": 139,
+        "line": 142,
         "column": 15,
         "symbol": "_read_sidecar",
         "kind": "Name"
@@ -5769,147 +5769,147 @@
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 78,
+        "line": 81,
         "column": 0,
         "symbol": "sidecar_scope_required_error",
         "kind": "FunctionDef"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 80,
+        "line": 83,
         "column": 8,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 92,
+        "line": 95,
         "column": 60,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 97,
+        "line": 100,
         "column": 0,
         "symbol": "sidecar_scope_unresolved_error",
         "kind": "FunctionDef"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 98,
+        "line": 101,
         "column": 7,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 106,
+        "line": 109,
         "column": 60,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 117,
+        "line": 120,
         "column": 33,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 121,
+        "line": 124,
         "column": 0,
         "symbol": "collect_sidecar_blocks",
         "kind": "FunctionDef"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 122,
+        "line": 125,
         "column": 4,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 126,
+        "line": 129,
         "column": 12,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 127,
+        "line": 130,
         "column": 11,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 130,
+        "line": 133,
         "column": 0,
         "symbol": "document_sidecar_block",
         "kind": "FunctionDef"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 133,
+        "line": 136,
         "column": 45,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 150,
+        "line": 153,
         "column": 4,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 150,
+        "line": 153,
         "column": 21,
         "symbol": "collect_sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 154,
+        "line": 157,
         "column": 27,
         "symbol": "sidecar_scope_required_error",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 155,
+        "line": 158,
         "column": 16,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 161,
+        "line": 164,
         "column": 23,
         "symbol": "sidecar_scope_unresolved_error",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 161,
+        "line": 164,
         "column": 54,
         "symbol": "sidecar_blocks",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 165,
+        "line": 168,
         "column": 14,
         "symbol": "document_sidecar_block",
         "kind": "Name"
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/dispatch_helpers_ops/dispatch_core_unenforced.py",
-        "line": 165,
+        "line": 168,
         "column": 48,
         "symbol": "sidecar_blocks",
         "kind": "Name"
@@ -6013,7 +6013,7 @@
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/rpc_helpers_ops/document_identity.py",
-        "line": 184,
+        "line": 187,
         "column": 0,
         "symbol": "_effective_sidecar_block",
         "kind": "FunctionDef"
@@ -7419,7 +7419,7 @@
       },
       {
         "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/save_legacy_phases.py",
-        "line": 198,
+        "line": 204,
         "column": 15,
         "symbol": "mark_save_verified",
         "kind": "Attribute"
@@ -7799,7 +7799,7 @@
     },
     {
       "path": "addon/FreeCADMCP/rpc_server/methods/lease_methods_ops/handoff_continuation_claim.py",
-      "line": 59,
+      "line": 62,
       "column": 8,
       "function": "claim_handoff_gui",
       "target": "document_lease.core_authority",

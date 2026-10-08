@@ -7,9 +7,8 @@ from ._support import *
 
 
 def run_unenforced_lease_task(self, collaborators, original_task, captured, inflight):
-    documents = [
-        collaborators.freecad.getDocument(name) for name in captured["doc_names"]
-    ]
+    open_documents = collaborators.freecad.listDocuments()
+    documents = [open_documents.get(name) for name in captured["doc_names"]]
     if any(document is None for document in documents):
         return {
             "success": False,
@@ -34,7 +33,10 @@ def _transition_legacy_leases(
 ):
     dirty_by_name = {}
     for name in captured["doc_names"]:
-        doc = collaborators.freecad.getDocument(name)
+        try:
+            doc = collaborators.freecad.getDocument(name)
+        except NameError:  # getDocument raises for unknown names
+            doc = None
         dirty_by_name[name] = document_modified_or_dirty(doc) if doc is not None else True
     for index, key in enumerate(captured["doc_keys"]):
         name = captured["doc_names"][index] if index < len(captured["doc_names"]) else None

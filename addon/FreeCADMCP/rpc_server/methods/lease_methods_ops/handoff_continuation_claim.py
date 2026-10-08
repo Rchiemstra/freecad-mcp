@@ -15,7 +15,10 @@ def claim_handoff_gui(
     lease,
 ):
     collaborators = self._collaboration_collaborators
-    document = collaborators.freecad.getDocument(phase["document_name"])
+    try:
+        document = collaborators.freecad.getDocument(phase["document_name"])
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise RuntimeError("document closed while handoff authorization was pending")
     original_identity = phase["document_identity"]

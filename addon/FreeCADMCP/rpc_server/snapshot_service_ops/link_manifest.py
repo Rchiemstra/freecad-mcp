@@ -40,12 +40,13 @@ def _append_reference_rows(
     for ref_index, (target, subelements) in enumerate(refs):
         target_doc = getattr(getattr(target, "Document", None), "Name", None)
         target_name = getattr(target, "Name", None)
-        if (
-            not target_doc
-            or target_doc not in open_names
-            or not target_name
-            or FreeCAD.getDocument(target_doc).getObject(target_name) is None
-        ):
+        resolved = None
+        if target_doc and target_doc in open_names and target_name:
+            try:
+                resolved = FreeCAD.getDocument(target_doc).getObject(target_name)
+            except NameError:  # getDocument raises for unknown names
+                resolved = None
+        if resolved is None:
             broken.append(f"{doc.Name}.{obj.Name}.{prop}")
             continue
         for subelement in subelements:

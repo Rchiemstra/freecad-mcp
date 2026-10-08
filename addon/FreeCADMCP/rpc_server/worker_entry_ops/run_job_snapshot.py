@@ -17,7 +17,10 @@ def open_snapshot_documents(snapshot: dict) -> tuple[list[str], object]:
         doc = FreeCAD.openDocument(entry["load_path"])
         opened.append(doc.Name)
     primary_name = snapshot["primary_document"]
-    primary = FreeCAD.getDocument(primary_name)
+    try:
+        primary = FreeCAD.getDocument(primary_name)
+    except NameError:  # getDocument raises for unknown names
+        primary = None
     if primary is None:
         raise RuntimeError(f"Primary snapshot did not open as {primary_name!r}")
     FreeCAD.setActiveDocument(primary.Name)

@@ -66,7 +66,10 @@ def recompute_and_wait(doc_name: str) -> dict[str, Any]:
         large ``invoked`` means the recompute ran and did not settle, which is
         a different failure from "the recompute never ran".
     """
-    doc = FreeCAD.getDocument(doc_name)
+    try:
+        doc = FreeCAD.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document not found: {doc_name}"}
 

@@ -11,7 +11,10 @@ def create_document(self, name="New_Document"):
     def create_with_evidence():
         result = self._create_document_gui(name)
         if result is True:
-            document = FreeCAD.getDocument(name)
+            try:
+                document = FreeCAD.getDocument(name)
+            except NameError:  # getDocument raises for unknown names
+                document = None
             response = {"success": True, "document_name": name}
             if document is not None:
                 response.update(

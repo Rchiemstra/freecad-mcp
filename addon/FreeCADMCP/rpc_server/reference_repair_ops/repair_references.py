@@ -23,7 +23,10 @@ def _validate_subelement_reference(target: Any, subelement: str) -> None:
 
 def resolve_target(owner_doc: Any, reference: dict[str, Any]) -> Any:
     document_name = str(reference.get("document") or owner_doc.Name)
-    target_doc = FreeCAD.getDocument(document_name)
+    try:
+        target_doc = FreeCAD.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        target_doc = None
     if target_doc is None:
         raise ValueError(f"Target document '{document_name}' is not open")
     object_name = reference.get("object")
@@ -206,7 +209,10 @@ def repair_references_gui(
     phase: str = "complete",
 ) -> dict[str, Any]:
     """Apply or inspect preflighted replacements at an explicit commit phase."""
-    doc = FreeCAD.getDocument(document_name)
+    try:
+        doc = FreeCAD.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document '{document_name}' not found"}
     if not isinstance(repairs, list) or not repairs:

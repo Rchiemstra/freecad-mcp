@@ -55,7 +55,10 @@ def _viewport_size(viewport):
 
 
 def capture_baseline(gui_module, document_name):
-    gui_document = gui_module.getDocument(document_name)
+    try:
+        gui_document = gui_module.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        gui_document = None
     if gui_document is None:
         raise RuntimeError(f"GUI document not found: {document_name}")
     viewport = gui_document.activeView()

@@ -71,7 +71,10 @@ def _insert_box_into_document(document: object) -> None:
 
 
 def insert_part_from_library(document_name, relative_path):
-    document = FreeCAD.getDocument(document_name)
+    try:
+        document = FreeCAD.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise ValueError(f"Document {document_name!r} is not open")
 

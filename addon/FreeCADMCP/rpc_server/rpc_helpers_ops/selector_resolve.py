@@ -33,7 +33,10 @@ def validate_selector_fields(selector):
 
 
 def resolve_named_document(name, dependencies: RpcHelperDependencies):
-    document = FreeCAD.getDocument(str(name))
+    try:
+        document = FreeCAD.getDocument(str(name))
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise ValueError(f"Document {name!r} is not open")
     identity = dependencies.ensure_v2_document(document)

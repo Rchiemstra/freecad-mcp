@@ -402,7 +402,10 @@ def _resolve_document_gui(facade: Any, selector: Mapping[str, Any]):
 
     name = str(selector.get("document_name") or "")
     if name:
-        document = freecad.getDocument(name)
+        try:
+            document = freecad.getDocument(name)
+        except NameError:  # getDocument raises for unknown names
+            document = None
         if document is None:
             return None
         resolved.append(document)

@@ -21,7 +21,10 @@ def set_tree_expanded(
       - expand / collapse: operate on ``object_names`` (or current selection)
       - expand_document / collapse_document: whole document tree commands
     """
-    doc = FreeCAD.getDocument(doc_name)
+    try:
+        doc = FreeCAD.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document not found: {doc_name}"}
 

@@ -7,7 +7,10 @@ from typing import Any
 
 
 def _named_view(gui_module, document_name):
-    gui_document = gui_module.getDocument(str(document_name))
+    try:
+        gui_document = gui_module.getDocument(str(document_name))
+    except NameError:  # getDocument raises for unknown names
+        gui_document = None
     if gui_document is None:
         raise RuntimeError(f"GUI document not found: {document_name}")
     view = gui_document.activeView()
