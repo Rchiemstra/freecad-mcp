@@ -167,7 +167,10 @@ def legacy_invoke_gui(
     ]
     attribution_started = False
     try:
-        document = collaborators.freecad.getDocument(phase["document_name"])
+        try:
+            document = collaborators.freecad.getDocument(phase["document_name"])
+        except NameError:  # getDocument raises for unknown names
+            document = None
         if document is None:
             raise RuntimeError("document closed before save invocation")
         authorized = dl.check_persisted_mutation_allowed(
@@ -191,7 +194,10 @@ def legacy_invoke_gui(
 
 
 def legacy_promote_gui(self, *, phase, dl, token, result, collaborators):
-    document = collaborators.freecad.getDocument(phase["document_name"])
+    try:
+        document = collaborators.freecad.getDocument(phase["document_name"])
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise RuntimeError("saved document closed before lease promotion")
     collaborators.save_service.revalidate_saved_document_gui(document, result)

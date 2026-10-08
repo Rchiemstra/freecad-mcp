@@ -55,7 +55,10 @@ def resolve_mutation_documents(collaborators, names, params, scope_resolution_fa
     selected_path = str(selector.get("canonical_path") or "")
     documents = []
     for name in names:
-        document = collaborators.freecad.getDocument(name)
+        try:
+            document = collaborators.freecad.getDocument(name)
+        except NameError:  # getDocument raises for unknown names
+            document = None
         if document is not None and document not in documents:
             documents.append(document)
         elif document is None:

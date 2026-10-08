@@ -67,7 +67,10 @@ def resolve_doc_key(
         try:
             import FreeCAD
 
-            doc = FreeCAD.getDocument(doc_name)
+            try:
+                doc = FreeCAD.getDocument(doc_name)
+            except NameError:  # getDocument raises for unknown names
+                doc = None
             if doc is not None:
                 fname = getattr(doc, "FileName", None) or ""
                 if fname and _is_eligible_target(fname):

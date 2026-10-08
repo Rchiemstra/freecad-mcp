@@ -91,7 +91,10 @@ def create_object(self, doc_name, obj_data: dict[str, Any]):
                     result, f"Post-commit presentation failed: {exc}"
                 )
         if _committed_success(result) and presentation_properties:
-            document = collaborators.freecad.getDocument(doc_name)
+            try:
+                document = collaborators.freecad.getDocument(doc_name)
+            except NameError:  # getDocument raises for unknown names
+                document = None
             created = document.getObject(obj.name) if document else None
             if created is None:
                 return _presentation_warning(
@@ -148,7 +151,10 @@ def edit_object(
             structural=True,
         )
         if _committed_success(result) and presentation_properties:
-            document = collaborators.freecad.getDocument(doc_name)
+            try:
+                document = collaborators.freecad.getDocument(doc_name)
+            except NameError:  # getDocument raises for unknown names
+                document = None
             edited = document.getObject(obj.name) if document else None
             if edited is None:
                 return _presentation_warning(
@@ -285,7 +291,10 @@ def edit_object_gui(
     set_object_property,
     recompute: bool = True,
 ):
-    doc = freecad.getDocument(doc_name)
+    try:
+        doc = freecad.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if not doc:
         freecad.Console.PrintError(f"Document '{doc_name}' not found.\n")
         return f"Document '{doc_name}' not found.\n"
@@ -514,7 +523,10 @@ def delete_object_gui(
     recursive: bool = False,
     force: bool = False,
 ):
-    doc = freecad.getDocument(doc_name)
+    try:
+        doc = freecad.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if not doc:
         freecad.Console.PrintError(f"Document '{doc_name}' not found.\n")
         return f"Document '{doc_name}' not found.\n"

@@ -11,7 +11,10 @@ def reload_preflight(self, doc_name: str):
     del self
     if doc_name not in FreeCAD.listDocuments():
         return f"Document '{doc_name}' is not loaded.", None, None
-    doc = FreeCAD.getDocument(doc_name)
+    try:
+        doc = FreeCAD.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     file_path = doc.FileName
     if not file_path:
         return (

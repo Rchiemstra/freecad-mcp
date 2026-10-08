@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Mapping
 from typing import Any
 
@@ -230,6 +232,23 @@ def get_report_view(
     return {"ok": False, "error": str(res)}
 
 
+def _vector_error(name: str, value: Any, *, nonzero: bool = False) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return f"{name} must be a list of three numbers"
+    numbers = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            return f"{name} must be a list of three numbers"
+        if not math.isfinite(float(item)):
+            return f"{name} must contain finite numbers"
+        numbers.append(float(item))
+    if nonzero and not any(numbers):
+        return f"{name} must not be a zero vector"
+    return None
+
+
 def set_section_view(
     self,
     enabled: bool | None = None,
@@ -240,6 +259,9 @@ def set_section_view(
 ) -> dict[str, Any]:
     """Apply shared presentation to the actor's explicit document target."""
 
+    error = _vector_error("base", base) or _vector_error("normal", normal, nonzero=True)
+    if error is not None:
+        return {"ok": False, "success": False, "error_code": "INVALID_ARGUMENT", "error": error}
     collaborators = self._gui_collaborators
     try:
         actor = request_actor(self)

@@ -152,7 +152,10 @@ def animate_object_placement(
     frame_dir: str | None = None,
 ) -> dict[str, Any]:
     """Temporarily move ``Placement`` along samples, capture frames, then restore."""
-    doc = FreeCAD.getDocument(doc_name)
+    try:
+        doc = FreeCAD.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document {doc_name!r} not found"}
     obj = doc.getObject(obj_name)

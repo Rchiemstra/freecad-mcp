@@ -22,7 +22,10 @@ def select_subshapes(
       - ``"Box"`` or ``"Box:Face1"``
       - ``{"object": "Box", "sub": "Face1"}`` / ``{"obj": ..., "subshape": ...}``
     """
-    doc = FreeCAD.getDocument(doc_name)
+    try:
+        doc = FreeCAD.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document not found: {doc_name}"}
 

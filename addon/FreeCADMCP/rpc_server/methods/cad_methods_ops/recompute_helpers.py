@@ -205,7 +205,10 @@ def get_recompute_log(self, doc_name: str) -> list:
 
 
 def get_recompute_log_gui(doc_name: str, *, freecad) -> list:
-    doc = freecad.getDocument(doc_name)
+    try:
+        doc = freecad.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if not doc:
         return [{"error": f"Document '{doc_name}' not found"}]
     results = []
@@ -480,7 +483,10 @@ def recompute_and_wait(self, doc_name: str) -> dict[str, Any]:
 def recompute_and_wait_gui(doc_name: str, *, collaborators) -> Any:
     """Apply the standard mutation readiness gate before recompute/GUI drain."""
 
-    document = collaborators.freecad.getDocument(doc_name)
+    try:
+        document = collaborators.freecad.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         return collaborators.recompute_and_wait(doc_name)
     admission_failure = admit_cad_mutation(

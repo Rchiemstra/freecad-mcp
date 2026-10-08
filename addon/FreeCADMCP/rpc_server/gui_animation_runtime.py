@@ -70,7 +70,10 @@ def _path_positions(part_module, document, path_object, sample_count):
 
 
 def prepare(freecad, part_module, document_name, object_name, **options):
-    document = freecad.getDocument(document_name)
+    try:
+        document = freecad.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise ValueError(f"Document {document_name!r} not found")
     obj = document.getObject(object_name)
@@ -112,7 +115,10 @@ def restore(plan):
 
 
 def repair_placements(freecad, document_name, object_names):
-    document = freecad.getDocument(document_name)
+    try:
+        document = freecad.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise ValueError(f"Document {document_name!r} not found")
     touched = []

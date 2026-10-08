@@ -399,7 +399,10 @@ def execute_code(
         pending = False
         try:
             if primary_document and options.get("activate_document"):
-                target = collaborators.freecad.getDocument(primary_document)
+                try:
+                    target = collaborators.freecad.getDocument(primary_document)
+                except NameError:  # getDocument raises for unknown names
+                    target = None
                 if target is not None:
                     try:
                         collaborators.freecad.setActiveDocument(primary_document)

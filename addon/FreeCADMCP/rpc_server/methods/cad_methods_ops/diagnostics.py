@@ -112,7 +112,10 @@ def get_sketch_diagnostics(self, doc_name: str, sketch_name: str) -> dict:
 
 
 def get_sketch_diagnostics_gui(doc_name: str, sketch_name: str, *, freecad) -> dict:
-    doc = freecad.getDocument(doc_name)
+    try:
+        doc = freecad.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if not doc:
         return {"error": f"Document '{doc_name}' not found"}
     sk = doc.getObject(sketch_name)

@@ -75,7 +75,7 @@ def create_snapshot_bundle_gui(  # noqa: C901
             "error_code": "invalid_link_policy",
             "error": f"Unsupported link_policy: {link_policy!r}",
         }
-    doc = FreeCAD.getDocument(document_name) if document_name else FreeCAD.ActiveDocument
+    doc = FreeCAD.listDocuments().get(document_name) if document_name else FreeCAD.ActiveDocument
     if doc is None:
         return {"ok": False, "error_code": "snapshot_failed", "error": "Document not found"}
     closure = dependency_closure(doc)

@@ -27,7 +27,10 @@ def open_document(path: str) -> dict[str, Any]:
 
 
 def activate_document(doc_name: str) -> dict[str, Any]:
-    doc = FreeCAD.getDocument(doc_name)
+    try:
+        doc = FreeCAD.getDocument(doc_name)
+    except NameError:  # getDocument raises for unknown names
+        doc = None
     if doc is None:
         return {"ok": False, "error": f"Document not found: {doc_name}"}
     FreeCAD.setActiveDocument(doc.Name)

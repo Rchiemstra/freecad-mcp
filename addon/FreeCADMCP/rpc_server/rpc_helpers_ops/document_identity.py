@@ -133,7 +133,10 @@ def _credential_for_document(
     identity = dict(
         identity or dependencies.import_document_lock().get_request_identity()
     )
-    document = FreeCAD.getDocument(document_name)
+    try:
+        document = FreeCAD.getDocument(document_name)
+    except NameError:  # getDocument raises for unknown names
+        document = None
     if document is None:
         raise ValueError(f"Document {document_name!r} is not open")
     document_identity = _ensure_v2_document(document, dependencies)
