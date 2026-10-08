@@ -1297,3 +1297,23 @@ def test_run_wrapper_forwards_manifest_auth_and_canonical_endpoint(
     ]
     command = runner._instrumented_command(captured["extra"])
     assert command[1:3] == ["-c", "from freecad_mcp.server import main; main()"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX library path fallback")
+def test_launcher_falls_back_to_build_library_path_without_parent_helper(
+    monkeypatch, tmp_path
+):
+    """Linux and CI checkouts have no FreeCADModeling/start_freecad.py.
+
+    The launcher exited there, so a live-GUI run needed a hand-made shim.
+    """
+
+    launcher = _load_script("start_freecad_isolated.py")
+    monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path / "FreeCAD" / "mcp")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/existing")
+    freecad = tmp_path / "build" / "debug" / "bin" / "FreeCAD"
+
+    env = launcher._load_parent_start_freecad()._launch_env(freecad)
+
+    assert env["LD_LIBRARY_PATH"] == f"{tmp_path / 'build' / 'debug' / 'lib'}:/opt/existing"
+    assert env["PATH"] == os.environ["PATH"]

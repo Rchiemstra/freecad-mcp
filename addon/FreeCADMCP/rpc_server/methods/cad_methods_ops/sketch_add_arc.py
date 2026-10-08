@@ -201,6 +201,8 @@ def build_sketch_add_arc_request(doc_name: object, sketch_name: object, cx: obje
     radius_value = _require_float(radius, 'radius')
     if isinstance(radius_value, dict):
         return radius_value
+    if not math.isfinite(radius_value) or radius_value <= 0:
+        return _failure(SketchAddArcError("INVALID_ARGUMENT", "radius must be a finite number greater than zero"))
     start_angle_value = _require_float(start_angle, 'start_angle')
     if isinstance(start_angle_value, dict):
         return start_angle_value

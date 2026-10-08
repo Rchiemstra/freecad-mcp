@@ -153,3 +153,70 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success(native_
 
 def test_delete_object_has_apply_entry_point():
     assert callable(apply_delete_object)
+
+
+class _TipBody:
+    """A PartDesign Body that moves its Tip only through Body.removeObject."""
+
+    TypeId = "PartDesign::Body"
+
+    def __init__(self, log: list[str]) -> None:
+        self.Name = "Body"
+        self.InList: list[object] = []
+        self.Group: list[object] = []
+        self.Tip: object | None = None
+        self._log = log
+
+    def isDerivedFrom(self, type_id: str) -> bool:
+        return type_id == self.TypeId
+
+    def removeObject(self, feature: object) -> list[object]:
+        self._log.append(f"Body.removeObject({feature.Name})")
+        index = self.Group.index(feature)
+        if self.Tip is feature:
+            self.Tip = self.Group[index - 1] if index else None
+        self.Group.remove(feature)
+        return []
+
+
+class _BodyDocument:
+    def __init__(self, objects: list[object], log: list[str]) -> None:
+        self._objects = {item.Name: item for item in objects}
+        self._log = log
+
+    def getObject(self, name: str) -> object | None:
+        return self._objects.get(name)
+
+    def removeObject(self, name: str) -> None:
+        self._log.append(f"Document.removeObject({name})")
+        self._objects.pop(name)
+
+
+def test_deleting_the_tip_feature_moves_the_body_tip_back():
+    """Document.removeObject knows nothing about bodies.
+
+    FreeCAD's own delete calls Body.removeObject first so the Tip moves to the
+    previous solid. Without it, MCP left Tip empty and the whole Body had a
+    null shape although its first pad was intact.
+    """
+
+    log: list[str] = []
+    body = _TipBody(log)
+
+    def feature(name: str) -> SimpleNamespace:
+        item = SimpleNamespace(Name=name, TypeId="PartDesign::Pad", InList=[body])
+        item.isDerivedFrom = lambda type_id: type_id == item.TypeId
+        item.getParentGeoFeatureGroup = lambda: body
+        return item
+
+    first, second = feature("PadMain"), feature("PadDup")
+    body.Group = [first, second]
+    body.Tip = second
+    document = _BodyDocument([body, first, second], log)
+    request = SimpleNamespace(object_name="PadDup", recursive=False, force=False)
+
+    receipt = apply_delete_object(document, request)
+
+    assert receipt.deleted == ("PadDup",)
+    assert body.Tip is first
+    assert log == ["Body.removeObject(PadDup)", "Document.removeObject(PadDup)"]

@@ -20,7 +20,7 @@
     "connection_spreadsheet_ops": "fdf7485b2fbb96c4bcf9476dc2aedc24e3a379f38158d0f5995c4401af9df206",
     "connection_stale_ops": "2acaca31435271e4bebf58ed376e14b8186d52c802c7a54b282e01340dae4bfe",
     "connection_v2_context_helpers": "c5c292607982c0de4b361be08eee86196d0ac86abe5834bb9f4cd3e718fcf784",
-    "connection_v2_ops": "7ba7df357116518b40a47830a673398db59ec40718fdb645a684febf0d4845f3",
+    "connection_v2_ops": "82fa1fd40aa29cc67f4ec0701e2815fef50d43918dc2145acba134b221843fbf",
     "connection_view_ops": "1cde1801542e5ae807a6ae3c435705c548e2ab4c6f7a74d7726580aca019d0a5"
   },
   "register_modules": {

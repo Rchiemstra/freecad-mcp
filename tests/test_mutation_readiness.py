@@ -719,3 +719,26 @@ def test_recompute_and_wait_healthy_path_recomputes_and_flushes_once():
     assert result == {"ok": True, "idle": True}
     assert leaf_calls == ["recompute", "flush"]
     assert document.recompute_calls == 1
+
+
+def test_readiness_for_an_unknown_document_is_document_not_found():
+    """FreeCAD.getDocument raises NameError for unknown names, never None.
+
+    The NameError escaped the GUI task: MCP undo/redo on a misspelled document
+    returned "RPC task raised NameError" and logged an error in the Report view.
+    """
+
+    def get_document(name):
+        raise NameError(f"Unknown document '{name}'")
+
+    freecad = SimpleNamespace(listDocuments=lambda: {}, getDocument=get_document)
+
+    result = mutation_readiness.get_mutation_readiness_gui(
+        freecad=freecad, doc_name="NoSuchDoc"
+    )
+
+    assert result == {
+        "success": False,
+        "error_code": "DOCUMENT_NOT_FOUND",
+        "error": "Document 'NoSuchDoc' not found",
+    }
