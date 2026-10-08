@@ -69,6 +69,16 @@ def _unwrap_v2_response(
         if not isinstance(response, Mapping):
             raise RuntimeError("Invalid invoke_v2 response type")
         result = response.get("result")
+        if (
+            "result" not in response
+            and response.get("outcome") == "rejected"
+            and response.get("committed") is False
+            and response.get("success") is False
+            and isinstance(response.get("error"), str)
+        ):
+            # The general lane lifts a proven non-committed rejection out of
+            # its JSON-RPC error, so the method result arrives unenveloped.
+            result = response
         if isinstance(result, Mapping):
             # The inner RPC method owns success/error semantics.  This is also
             # how validation and save failures remain structured when the
