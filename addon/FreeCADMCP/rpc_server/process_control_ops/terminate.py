@@ -35,6 +35,7 @@ def terminate_process_tree(
         except subprocess.TimeoutExpired:
             subprocess.run(
                 ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=max(grace, 1.0),

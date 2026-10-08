@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 import math
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.pocket_feature_contract import (
@@ -17,6 +19,7 @@ try:
         PocketFeatureObject,
         PocketFeatureReadDocument,
         PocketFeatureResult,
+        PocketFeatureUncertain,
         PocketName,
         make_pocket_feature_failure,
         make_pocket_feature_success,
@@ -31,6 +34,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         PocketFeatureObject,
         PocketFeatureReadDocument,
         PocketFeatureResult,
+        PocketFeatureUncertain,
         PocketName,
         make_pocket_feature_failure,
         make_pocket_feature_success,
@@ -477,28 +481,32 @@ class _PocketFeatureExecution:
             except Exception:
                 continue
 
-    def run(self) -> PocketFeatureResult:
+    def run(self) -> NativeOutcome[PocketFeatureResult]:
         result = run_pocket_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            if (
-                isinstance(result, dict)
-                and result.get("error_code") == "ZERO_MATERIAL_DELTA"
-            ):
-                self._leave_pending_recompute()
-            return result
-        if self.inspected is None:
-            return make_pocket_feature_uncertain(
-                "POCKET_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Pocket result",
-                committed=True,
-            )
-        return make_pocket_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(
+            result: Literal[True] | PocketFeatureFailure | PocketFeatureUncertain,
+        ) -> PocketFeatureResult:
+            if result is not True:
+                if (
+                    isinstance(result, dict)
+                    and result.get("error_code") == "ZERO_MATERIAL_DELTA"
+                ):
+                    self._leave_pending_recompute()
+                return result
+            if self.inspected is None:
+                return make_pocket_feature_uncertain(
+                    "POCKET_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Pocket result",
+                    committed=True,
+                )
+            return make_pocket_feature_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_pocket_feature(
     collaborators: PocketFeatureCollaborators,
@@ -510,7 +518,7 @@ def run_pocket_feature(
     symmetric: object = False,
     reversed_dir: object = False,
     strict: object = False,
-) -> PocketFeatureResult:
+) -> NativeOutcome[PocketFeatureResult]:
     request = build_pocket_feature_request(
         doc_name, sketch_name, pocket_name, length, body_name, symmetric, reversed_dir, strict
     )

@@ -2,6 +2,8 @@
 """Typed ``mirror_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -185,28 +187,28 @@ class _MirrorFeatureExecution:
             )
         self.inspected = read_mirror_feature_result(doc, self.created)
 
-    def run(self) -> MirrorFeatureResult:
+    def run(self) -> NativeOutcome[MirrorFeatureResult]:
         result = run_mirror_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_mirror_feature_uncertain(
-                "MIRROR_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected mirror_feature result",
-                committed=True,
-            )
-        return make_mirror_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> MirrorFeatureResult:
+            if self.inspected is None:
+                return make_mirror_feature_uncertain(
+                    "MIRROR_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected mirror_feature result",
+                    committed=True,
+                )
+            return make_mirror_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_mirror_feature(
     collaborators: MirrorFeatureCollaborators,
     doc_name: str, feature_name: str, mirror_name: str, plane: str = 'YZ_Plane', body_name: str | None = None
-) -> MirrorFeatureResult:
+) -> NativeOutcome[MirrorFeatureResult]:
     """Run mirror_feature through apply, recompute, inspection, and commit."""
 
     request = build_mirror_feature_request(doc_name, feature_name, mirror_name, plane, body_name)

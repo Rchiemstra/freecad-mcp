@@ -186,7 +186,15 @@ def dispatch_gui(
                 defer_probe=readiness_probe,
                 document_keys=tuple(captured["doc_names"]),
             )
-        return dispatcher.submit(gui_task, t, **submit_options)
+        result = dispatcher.submit(gui_task, t, **submit_options)
+        # B4: If the GUI callable submitted an async mutation (because it runs
+        # on the GUI thread), await the result here on the RPC thread.  The
+        # GUI callable returns immediately after posting to the owner thread;
+        # this thread is the designated waiter so the Qt event loop is never
+        # stalled.
+        if hasattr(result, "await_result"):
+            result = result.await_result(timeout=t)
+        return result
     except GuiDispatchError as exc:
         return handle_gui_dispatch_error(
             self,

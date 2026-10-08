@@ -2,6 +2,8 @@
 """Typed ``linear_pattern_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -196,28 +198,28 @@ class _LinearPatternFeatureExecution:
             )
         self.inspected = read_linear_pattern_feature_result(doc, self.created)
 
-    def run(self) -> LinearPatternFeatureResult:
+    def run(self) -> NativeOutcome[LinearPatternFeatureResult]:
         result = run_linear_pattern_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_linear_pattern_feature_uncertain(
-                "LINEAR_PATTERN_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected linear_pattern_feature result",
-                committed=True,
-            )
-        return make_linear_pattern_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> LinearPatternFeatureResult:
+            if self.inspected is None:
+                return make_linear_pattern_feature_uncertain(
+                    "LINEAR_PATTERN_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected linear_pattern_feature result",
+                    committed=True,
+                )
+            return make_linear_pattern_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_linear_pattern_feature(
     collaborators: LinearPatternFeatureCollaborators,
     doc_name: str, feature_name: str, pattern_name: str, length: float, occurrences: int, direction: str = 'X_Axis', body_name: str | None = None, reversed_dir: bool = False
-) -> LinearPatternFeatureResult:
+) -> NativeOutcome[LinearPatternFeatureResult]:
     """Run linear_pattern_feature through apply, recompute, inspection, and commit."""
 
     request = build_linear_pattern_feature_request(doc_name, feature_name, pattern_name, length, occurrences, direction, body_name, reversed_dir)

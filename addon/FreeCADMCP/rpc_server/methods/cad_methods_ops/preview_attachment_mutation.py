@@ -6,6 +6,8 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -150,7 +152,7 @@ def run_preview_attachment_native_mutation(
     document_name: DocumentName,
     apply: Callable[[PreviewAttachmentDocument], None],
     postcondition: Callable[[PreviewAttachmentReadDocument], None],
-) -> Literal[True] | PreviewAttachmentFailure | PreviewAttachmentUncertain:
+) -> NativeOutcome[Literal[True] | PreviewAttachmentFailure | PreviewAttachmentUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()
@@ -220,4 +222,6 @@ def run_preview_attachment_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _preview_attachment_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _preview_attachment_native_result(terminal, state)
+    )

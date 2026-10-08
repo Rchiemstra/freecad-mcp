@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_delete_constraint_contract import (
@@ -15,6 +17,7 @@ try:
         SketchDeleteConstraintObject,
         SketchDeleteConstraintReadDocument,
         SketchDeleteConstraintResult,
+        SketchDeleteConstraintUncertain,
         SketchName,
         make_sketch_delete_constraint_failure,
         make_sketch_delete_constraint_success,
@@ -29,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchDeleteConstraintObject,
         SketchDeleteConstraintReadDocument,
         SketchDeleteConstraintResult,
+        SketchDeleteConstraintUncertain,
         SketchName,
         make_sketch_delete_constraint_failure,
         make_sketch_delete_constraint_success,
@@ -235,25 +239,29 @@ class _SketchDeleteConstraintExecution:
             )
         self.inspected = read_sketch_delete_constraint_result(doc, self.created)
 
-    def run(self) -> SketchDeleteConstraintResult:
+    def run(self) -> NativeOutcome[SketchDeleteConstraintResult]:
         result = run_sketch_delete_constraint_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_delete_constraint_uncertain(
-                "SKETCH_DELETE_CONSTRAINT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected delete result",
-                committed=True,
+        def _finish_native_commit(
+            result: Literal[True] | SketchDeleteConstraintFailure | SketchDeleteConstraintUncertain,
+        ) -> SketchDeleteConstraintResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_delete_constraint_uncertain(
+                    "SKETCH_DELETE_CONSTRAINT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected delete result",
+                    committed=True,
+                )
+            return make_sketch_delete_constraint_success(
+                self.inspected.name, self.inspected.deleted_count
             )
-        return make_sketch_delete_constraint_success(
-            self.inspected.name, self.inspected.deleted_count
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_delete_constraint(
     collaborators: SketchDeleteConstraintCollaborators,
@@ -261,7 +269,7 @@ def run_sketch_delete_constraint(
     sketch_name: object,
     constraint_indices: object = None,
     constraint_names: object = None,
-) -> SketchDeleteConstraintResult:
+) -> NativeOutcome[SketchDeleteConstraintResult]:
     request = build_sketch_delete_constraint_request(
         doc_name, sketch_name, constraint_indices, constraint_names
     )

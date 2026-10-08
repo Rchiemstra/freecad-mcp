@@ -6,6 +6,8 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -148,7 +150,7 @@ def run_sketch_edit_constraint_native_mutation(
     document_name: str,
     apply: Callable[[SketchEditConstraintDocument], None],
     postcondition: Callable[[SketchEditConstraintReadDocument], None],
-) -> Literal[True] | SketchEditConstraintFailure | SketchEditConstraintUncertain:
+) -> NativeOutcome[Literal[True] | SketchEditConstraintFailure | SketchEditConstraintUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeSketchEditConstraintMutationState()
@@ -216,4 +218,6 @@ def run_sketch_edit_constraint_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _sketch_edit_constraint_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _sketch_edit_constraint_native_result(terminal, state)
+    )

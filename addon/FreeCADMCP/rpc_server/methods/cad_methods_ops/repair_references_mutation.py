@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -144,7 +146,7 @@ def run_repair_references_native_mutation(
     document_name: str,
     apply: Callable[[object], None],
     postcondition: Callable[[object], None],
-) -> Literal[True] | RepairReferencesFailure | RepairReferencesUncertain:
+) -> NativeOutcome[Literal[True] | RepairReferencesFailure | RepairReferencesUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()
@@ -212,4 +214,6 @@ def run_repair_references_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _repair_references_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _repair_references_native_result(terminal, state)
+    )

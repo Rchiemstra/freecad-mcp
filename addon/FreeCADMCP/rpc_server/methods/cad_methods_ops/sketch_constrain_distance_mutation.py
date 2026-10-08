@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -142,7 +144,7 @@ def run_sketch_constrain_distance_native_mutation(
     document_name: str,
     apply: Callable[[SketchDocument], None],
     postcondition: Callable[[SketchReadDocument], None],
-) -> Literal[True] | SketchConstrainDistanceFailure | SketchConstrainDistanceUncertain:
+) -> NativeOutcome[Literal[True] | SketchConstrainDistanceFailure | SketchConstrainDistanceUncertain]:
     state = _NativeSketchConstrainDistanceMutationState()
 
     def native_apply(document: object) -> None:
@@ -210,4 +212,6 @@ def run_sketch_constrain_distance_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _sketch_constrain_distance_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _sketch_constrain_distance_native_result(terminal, state)
+    )

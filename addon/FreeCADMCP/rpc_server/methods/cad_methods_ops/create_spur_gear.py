@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -155,26 +157,26 @@ class _CreateSpurGearExecution:
             )
         self.inspected = read_create_spur_gear_result(doc, self.created, self.request)
 
-    def run(self) -> CreateSpurGearResult:
+    def run(self) -> NativeOutcome[CreateSpurGearResult]:
         result = run_create_spur_gear_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_spur_gear_uncertain(
-                "CREATE_SPUR_GEAR_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_spur_gear result",
-                committed=True,
+        def _finish_native_commit() -> CreateSpurGearResult:
+            if self.inspected is None:
+                return make_create_spur_gear_uncertain(
+                    "CREATE_SPUR_GEAR_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_spur_gear result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_spur_gear_success(
+                body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
             )
-        payload = self.inspected.payload
-        return make_create_spur_gear_success(
-            body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_spur_gear(doc: MutationDocument, request: CreateSpurGearRequest) -> CreateSpurGearReceipt:
     """Apply create_spur_gear without recomputing or managing a transaction."""
@@ -232,7 +234,7 @@ def read_create_spur_gear_result(
 def run_create_spur_gear(
     collaborators: CreateSpurGearCollaborators,
     doc_name: str, gear_name: str, teeth: int, module: float, width: float, pressure_angle: float = 20.0, bore_diameter: float = 0.0, clearance: float = 0.0, backlash: float = 0.0, samples_per_flank: int = 8, body_name: str | None = None, sketch_name: str | None = None, tooth_profile: str = "involute",
-) -> CreateSpurGearResult:
+) -> NativeOutcome[CreateSpurGearResult]:
     """Run create_spur_gear through apply, recompute, inspection, and commit."""
 
     request = build_create_spur_gear_request(doc_name, gear_name, teeth, module, width, pressure_angle, bore_diameter, clearance, backlash, samples_per_flank, body_name, sketch_name, tooth_profile)

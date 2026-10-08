@@ -22,6 +22,7 @@ def _posix_descendants(root_pid: int) -> list[int]:
         out = subprocess.check_output(
             ["ps", "-o", "pid=", "--ppid", str(root_pid)],
             text=True,
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     except Exception:
@@ -46,6 +47,7 @@ def _win_descendants(root_pid: int) -> list[int]:
                 "ProcessId",
             ],
             text=True,
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     except Exception:
@@ -68,6 +70,7 @@ def kill_process_tree(root_pid: int, *, grace_seconds: float = 2.0) -> None:
             if sys.platform == "win32":
                 subprocess.run(
                     ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     check=False,
@@ -135,6 +138,7 @@ def count_matching_processes(name_substrings: Iterable[str]) -> int:
             out = subprocess.check_output(
                 ["wmic", "process", "get", "ProcessId,CommandLine"],
                 text=True,
+                stdin=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
         except Exception:
@@ -145,7 +149,9 @@ def count_matching_processes(name_substrings: Iterable[str]) -> int:
                 count += 1
         return count
     try:
-        out = subprocess.check_output(["ps", "-eo", "pid,args"], text=True)
+        out = subprocess.check_output(
+            ["ps", "-eo", "pid,args"], text=True, stdin=subprocess.DEVNULL
+        )
     except Exception:
         return 0
     count = 0

@@ -2,6 +2,8 @@
 """Typed ``spreadsheet_create`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     as_float,
@@ -27,7 +29,7 @@ from .typed_rpc_container_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.spreadsheet_create_contract import (
@@ -38,6 +40,7 @@ try:
         SpreadsheetCreateReadDocument,
         SpreadsheetCreateRequest,
         SpreadsheetCreateResult,
+        SpreadsheetCreateUncertain,
         DocumentName,
         make_spreadsheet_create_failure,
         make_spreadsheet_create_success,
@@ -52,6 +55,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SpreadsheetCreateReadDocument,
         SpreadsheetCreateRequest,
         SpreadsheetCreateResult,
+        SpreadsheetCreateUncertain,
         DocumentName,
         make_spreadsheet_create_failure,
         make_spreadsheet_create_success,
@@ -153,28 +157,32 @@ class _SpreadsheetCreateExecution:
             )
         self.inspected = read_spreadsheet_create_result(doc, self.created)
 
-    def run(self) -> SpreadsheetCreateResult:
+    def run(self) -> NativeOutcome[SpreadsheetCreateResult]:
         result = run_spreadsheet_create_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_spreadsheet_create_uncertain(
-                "SPREADSHEET_CREATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_spreadsheet_create_success(sheet=self.inspected.name, label=self.inspected.label)
+        def _finish_native_commit(
+            result: Literal[True] | SpreadsheetCreateFailure | SpreadsheetCreateUncertain,
+        ) -> SpreadsheetCreateResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_spreadsheet_create_uncertain(
+                    "SPREADSHEET_CREATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_spreadsheet_create_success(sheet=self.inspected.name, label=self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_spreadsheet_create(
     collaborators: SpreadsheetCreateCollaborators,
     doc_name: object, sheet_name: object,
-) -> SpreadsheetCreateResult:
+) -> NativeOutcome[SpreadsheetCreateResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_spreadsheet_create_request(doc_name, sheet_name)

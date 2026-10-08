@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 import math
 
 from collections.abc import Callable
@@ -330,23 +332,23 @@ class _PadFeatureExecution:
             )
         self.inspected = read_pad_feature_result(doc, self.created)
 
-    def run(self) -> PadFeatureResult:
+    def run(self) -> NativeOutcome[PadFeatureResult]:
         result = run_pad_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_pad_feature_uncertain(
-                "PAD_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Pad result",
-                committed=True,
-            )
-        return make_pad_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> PadFeatureResult:
+            if self.inspected is None:
+                return make_pad_feature_uncertain(
+                    "PAD_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Pad result",
+                    committed=True,
+                )
+            return make_pad_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_pad_feature(
     collaborators: PadFeatureCollaborators,
@@ -358,7 +360,7 @@ def run_pad_feature(
     symmetric: object = False,
     reversed_dir: object = False,
     strict: object = False,
-) -> PadFeatureResult:
+) -> NativeOutcome[PadFeatureResult]:
     request = build_pad_feature_request(
         doc_name, sketch_name, pad_name, length, body_name, symmetric, reversed_dir, strict
     )

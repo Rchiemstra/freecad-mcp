@@ -140,10 +140,12 @@ def read_checkout_identity() -> dict[str, Any]:
         commit = subprocess.run(
             ["git", "-C", root, "rev-parse", "HEAD"],
             check=True, capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         ).stdout.strip()
         status = subprocess.run(
             ["git", "-C", root, "status", "--porcelain"],
             check=True, capture_output=True, text=True, timeout=5,
+            stdin=subprocess.DEVNULL,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return unavailable

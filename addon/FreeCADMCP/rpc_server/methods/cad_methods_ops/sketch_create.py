@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 try:
     from ...._shared.protocol.sketch_create_contract import (
@@ -15,6 +17,7 @@ try:
         SketchCreateObject,
         SketchCreateReadDocument,
         SketchCreateResult,
+        SketchCreateUncertain,
         SketchName,
         make_sketch_create_failure,
         make_sketch_create_success,
@@ -29,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchCreateObject,
         SketchCreateReadDocument,
         SketchCreateResult,
+        SketchCreateUncertain,
         SketchName,
         make_sketch_create_failure,
         make_sketch_create_success,
@@ -303,23 +307,27 @@ class _SketchCreateExecution:
             )
         self.inspected = read_sketch_create_result(doc, self.created)
 
-    def run(self) -> SketchCreateResult:
+    def run(self) -> NativeOutcome[SketchCreateResult]:
         result = run_sketch_create_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_create_uncertain(
-                "SKETCH_CREATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Sketch result",
-                committed=True,
-            )
-        return make_sketch_create_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(
+            result: Literal[True] | SketchCreateFailure | SketchCreateUncertain,
+        ) -> SketchCreateResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_create_uncertain(
+                    "SKETCH_CREATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Sketch result",
+                    committed=True,
+                )
+            return make_sketch_create_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_create(
     collaborators: SketchCreateCollaborators,
@@ -328,7 +336,7 @@ def run_sketch_create(
     body_name: object = None,
     attach_to: object = None,
     attachment_offset: object = None,
-) -> SketchCreateResult:
+) -> NativeOutcome[SketchCreateResult]:
     """Run Sketch creation through apply, recompute, inspection, and commit."""
 
     request = build_sketch_create_request(

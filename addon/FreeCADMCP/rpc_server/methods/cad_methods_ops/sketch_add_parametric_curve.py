@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_parametric_curve_contract import (
@@ -13,6 +15,7 @@ try:
         SketchAddParametricCurveFailure,
         SketchAddParametricCurveRequest,
         SketchAddParametricCurveResult,
+        SketchAddParametricCurveUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -28,6 +31,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddParametricCurveFailure,
         SketchAddParametricCurveRequest,
         SketchAddParametricCurveResult,
+        SketchAddParametricCurveUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -298,28 +302,32 @@ class _SketchAddParametricCurveExecution:
             )
         self.inspected = read_sketch_add_parametric_curve_result(doc, self.created)
 
-    def run(self) -> SketchAddParametricCurveResult:
+    def run(self) -> NativeOutcome[SketchAddParametricCurveResult]:
         result = run_sketch_add_parametric_curve_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_parametric_curve_uncertain(
-                "SKETCH_ADD_PARAMETRIC_CURVE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_parametric_curve result",
-                committed=True,
-            )
-        return make_sketch_add_parametric_curve_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index, self.inspected.sample_count)
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddParametricCurveFailure | SketchAddParametricCurveUncertain,
+        ) -> SketchAddParametricCurveResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_parametric_curve_uncertain(
+                    "SKETCH_ADD_PARAMETRIC_CURVE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_parametric_curve result",
+                    committed=True,
+                )
+            return make_sketch_add_parametric_curve_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index, self.inspected.sample_count)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_parametric_curve(
     collaborators: SketchAddParametricCurveCollaborators,
     doc_name: object, sketch_name: object, x_expr: object, y_expr: object, t_start: object, t_end: object, samples: object, construction: object,
-) -> SketchAddParametricCurveResult:
+) -> NativeOutcome[SketchAddParametricCurveResult]:
     request = build_sketch_add_parametric_curve_request(doc_name, sketch_name, x_expr, y_expr, t_start, t_end, samples, construction)
     if isinstance(request, dict):
         return request

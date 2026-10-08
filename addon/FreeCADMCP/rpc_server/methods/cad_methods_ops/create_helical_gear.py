@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -148,26 +150,26 @@ class _CreateHelicalGearExecution:
             )
         self.inspected = read_create_helical_gear_result(doc, self.created, self.request)
 
-    def run(self) -> CreateHelicalGearResult:
+    def run(self) -> NativeOutcome[CreateHelicalGearResult]:
         result = run_create_helical_gear_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_helical_gear_uncertain(
-                "CREATE_HELICAL_GEAR_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_helical_gear result",
-                committed=True,
+        def _finish_native_commit() -> CreateHelicalGearResult:
+            if self.inspected is None:
+                return make_create_helical_gear_uncertain(
+                    "CREATE_HELICAL_GEAR_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_helical_gear result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_helical_gear_success(
+                body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
             )
-        payload = self.inspected.payload
-        return make_create_helical_gear_success(
-            body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_helical_gear(doc: MutationDocument, request: CreateHelicalGearRequest) -> CreateHelicalGearReceipt:
     """Apply create_helical_gear without recomputing or managing a transaction."""
@@ -225,7 +227,7 @@ def read_create_helical_gear_result(
 def run_create_helical_gear(
     collaborators: CreateHelicalGearCollaborators,
     doc_name: str, gear_name: str, teeth: int, module: float, width: float, helix_angle: float = 15.0, pressure_angle: float = 20.0, bore_diameter: float = 0.0, clearance: float = 0.0, backlash: float = 0.0, samples_per_flank: int = 12, body_name: str | None = None,
-) -> CreateHelicalGearResult:
+) -> NativeOutcome[CreateHelicalGearResult]:
     """Run create_helical_gear through apply, recompute, inspection, and commit."""
 
     request = build_create_helical_gear_request(doc_name, gear_name, teeth, module, width, helix_angle, pressure_angle, bore_diameter, clearance, backlash, samples_per_flank, body_name)

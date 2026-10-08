@@ -104,11 +104,24 @@ class _UndoRpcFacade(Protocol):
 
 def rpc_undo(
     self: _UndoRpcFacade,
-    doc_name: object,
+    doc_name: object = None,
     operation_id: object = None,
     expected_undo_count: object = None,
     expected_undo_head: object = None,
+    doc_selector: object = None,
 ) -> dict[str, object]:
+    # Authenticated v2 binds params by name and the client sends the history
+    # selector as ``doc_selector``; legacy callers pass it positionally.
+    if doc_selector is not None:
+        if doc_name is not None:
+            return dict(
+                _failure(
+                    UndoError(
+                        "INVALID_ARGUMENT", "pass doc_name or doc_selector, not both"
+                    )
+                )
+            )
+        doc_name = doc_selector
     if operation_id is not None or not isinstance(doc_name, str):
         # Lazy native history-head undo. Keep this out of the typed mypy graph:
         # follow_imports=normal on cad_methods_ops would otherwise typecheck the

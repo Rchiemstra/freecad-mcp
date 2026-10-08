@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -150,7 +152,7 @@ def run_loft_feature_native_mutation(
     document_name: DocumentName,
     apply: Callable[[FeatureDocument], None],
     postcondition: Callable[[FeatureReadDocument], None],
-) -> Literal[True] | LoftFeatureFailure | LoftFeatureUncertain:
+) -> NativeOutcome[Literal[True] | LoftFeatureFailure | LoftFeatureUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _LoftFeatureNativeMutationState()
@@ -217,4 +219,6 @@ def run_loft_feature_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _loft_feature_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _loft_feature_native_result(terminal, state)
+    )

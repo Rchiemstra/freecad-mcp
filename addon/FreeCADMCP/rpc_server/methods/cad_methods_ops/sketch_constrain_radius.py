@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_constrain_radius_contract import (
@@ -12,6 +14,7 @@ try:
         SketchConstrainRadiusFailure,
         SketchConstrainRadiusRequest,
         SketchConstrainRadiusResult,
+        SketchConstrainRadiusUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -27,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchConstrainRadiusFailure,
         SketchConstrainRadiusRequest,
         SketchConstrainRadiusResult,
+        SketchConstrainRadiusUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -268,28 +272,32 @@ class _SketchConstrainRadiusExecution:
             )
         self.inspected = read_sketch_constrain_radius_result(doc, self.created)
 
-    def run(self) -> SketchConstrainRadiusResult:
+    def run(self) -> NativeOutcome[SketchConstrainRadiusResult]:
         result = run_sketch_constrain_radius_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_constrain_radius_uncertain(
-                "SKETCH_CONSTRAIN_RADIUS_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_constrain_radius result",
-                committed=True,
-            )
-        return make_sketch_constrain_radius_success(SketchName(self.inspected.sketch_name), self.inspected.constraint_index)
+        def _finish_native_commit(
+            result: Literal[True] | SketchConstrainRadiusFailure | SketchConstrainRadiusUncertain,
+        ) -> SketchConstrainRadiusResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_constrain_radius_uncertain(
+                    "SKETCH_CONSTRAIN_RADIUS_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_constrain_radius result",
+                    committed=True,
+                )
+            return make_sketch_constrain_radius_success(SketchName(self.inspected.sketch_name), self.inspected.constraint_index)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_constrain_radius(
     collaborators: SketchConstrainRadiusCollaborators,
     doc_name: object, sketch_name: object, geo: object, value: object, name: object,
-) -> SketchConstrainRadiusResult:
+) -> NativeOutcome[SketchConstrainRadiusResult]:
     request = build_sketch_constrain_radius_request(doc_name, sketch_name, geo, value, name)
     if isinstance(request, dict):
         return request

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -117,26 +119,26 @@ class _CreateAssemblyExecution:
             )
         self.inspected = read_create_assembly_result(doc, self.created, self.request)
 
-    def run(self) -> CreateAssemblyResult:
+    def run(self) -> NativeOutcome[CreateAssemblyResult]:
         result = run_create_assembly_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_assembly_uncertain(
-                "CREATE_ASSEMBLY_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_assembly result",
-                committed=True,
+        def _finish_native_commit() -> CreateAssemblyResult:
+            if self.inspected is None:
+                return make_create_assembly_uncertain(
+                    "CREATE_ASSEMBLY_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_assembly result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_assembly_success(
+                assembly=AssemblyName(as_str(payload["assembly"])), label=as_str(payload["label"]), type=as_str(payload["type"]), joint_group=(as_str(payload["joint_group"]) if payload.get("joint_group") is not None else None)
             )
-        payload = self.inspected.payload
-        return make_create_assembly_success(
-            assembly=AssemblyName(as_str(payload["assembly"])), label=as_str(payload["label"]), type=as_str(payload["type"]), joint_group=(as_str(payload["joint_group"]) if payload.get("joint_group") is not None else None)
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_assembly(doc: MutationDocument, request: CreateAssemblyRequest) -> CreateAssemblyReceipt:
     """Apply create_assembly without recomputing or managing a transaction."""
@@ -180,7 +182,7 @@ def read_create_assembly_result(
 def run_create_assembly(
     collaborators: CreateAssemblyCollaborators,
     doc_name: str, assembly_name: str = "Assembly", create_joint_group: bool = True, recompute: bool = False, if_exists: str = "error",
-) -> CreateAssemblyResult:
+) -> NativeOutcome[CreateAssemblyResult]:
     """Run create_assembly through apply, recompute, inspection, and commit."""
 
     request = build_create_assembly_request(doc_name, assembly_name, create_joint_group, recompute, if_exists)

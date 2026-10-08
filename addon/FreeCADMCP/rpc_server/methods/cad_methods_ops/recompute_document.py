@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.recompute_document_contract import (
@@ -12,6 +14,7 @@ try:
         RecomputeDocumentFailure,
         RecomputeDocumentRequest,
         RecomputeDocumentResult,
+        RecomputeDocumentUncertain,
         DocumentName,
         make_recompute_document_failure,
         make_recompute_document_success,
@@ -23,6 +26,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         RecomputeDocumentFailure,
         RecomputeDocumentRequest,
         RecomputeDocumentResult,
+        RecomputeDocumentUncertain,
         DocumentName,
         make_recompute_document_failure,
         make_recompute_document_success,
@@ -97,28 +101,32 @@ class _RecomputeDocumentExecution:
             )
         self.inspected = read_recompute_document_result(doc, self.created)
 
-    def run(self) -> RecomputeDocumentResult:
+    def run(self) -> NativeOutcome[RecomputeDocumentResult]:
         result = run_recompute_document_native_mutation(
             self.collaborators,
             str(getattr(self.request, "doc_name", getattr(self.request, "name", ""))),
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_recompute_document_uncertain(
-                "RECOMPUTE_DOCUMENT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected recompute_document result",
-                committed=True,
-            )
-        return make_recompute_document_success(self.inspected.name)
+        def _finish_native_commit(
+            result: Literal[True] | RecomputeDocumentFailure | RecomputeDocumentUncertain,
+        ) -> RecomputeDocumentResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_recompute_document_uncertain(
+                    "RECOMPUTE_DOCUMENT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected recompute_document result",
+                    committed=True,
+                )
+            return make_recompute_document_success(self.inspected.name)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_recompute_document(
     collaborators: RecomputeDocumentCollaborators,
     doc_name: object,
-) -> RecomputeDocumentResult:
+) -> NativeOutcome[RecomputeDocumentResult]:
     """Run recompute_document through apply, recompute, inspection, and commit."""
 
     request = build_recompute_document_request(doc_name)

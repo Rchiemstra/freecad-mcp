@@ -6,6 +6,8 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -150,7 +152,7 @@ def run_validate_movement_follow_native_mutation(
     document_name: DocumentName,
     apply: Callable[[ValidateMovementFollowDocument], None],
     postcondition: Callable[[ValidateMovementFollowReadDocument], None],
-) -> Literal[True] | ValidateMovementFollowFailure | ValidateMovementFollowUncertain:
+) -> NativeOutcome[Literal[True] | ValidateMovementFollowFailure | ValidateMovementFollowUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()
@@ -220,4 +222,6 @@ def run_validate_movement_follow_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _validate_movement_follow_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _validate_movement_follow_native_result(terminal, state)
+    )

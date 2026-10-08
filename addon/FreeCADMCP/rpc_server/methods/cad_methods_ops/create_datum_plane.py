@@ -2,6 +2,8 @@
 """Typed ``create_datum_plane`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .typed_rpc_support import (
     assign_attr,
     nonempty_string,
@@ -377,32 +379,32 @@ class _CreateDatumPlaneExecution:
             )
         self.inspected = read_create_datum_plane_result(doc, self.created)
 
-    def run(self) -> CreateDatumPlaneResult:
+    def run(self) -> NativeOutcome[CreateDatumPlaneResult]:
         result = run_create_datum_plane_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_datum_plane_uncertain(
-                "CREATE_DATUM_PLANE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
+        def _finish_native_commit() -> CreateDatumPlaneResult:
+            if self.inspected is None:
+                return make_create_datum_plane_uncertain(
+                    "CREATE_DATUM_PLANE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_create_datum_plane_success(
+                plane_name=self.inspected.name,
+                body_name=self.request.body_name,
+                preflight_warning=self.inspected.preflight_warning,
             )
-        return make_create_datum_plane_success(
-            plane_name=self.inspected.name,
-            body_name=self.request.body_name,
-            preflight_warning=self.inspected.preflight_warning,
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_create_datum_plane(
     collaborators: CreateDatumPlaneCollaborators,
     doc_name: object, plane_name: object, body_name: object, mode: object, source_ref: object, face_a: object, face_b: object, offset_along_normal: object, map_mode: object, if_exists: object,
-) -> CreateDatumPlaneResult:
+) -> NativeOutcome[CreateDatumPlaneResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_create_datum_plane_request(doc_name, plane_name, body_name, mode, source_ref, face_a, face_b, offset_along_normal, map_mode, if_exists)

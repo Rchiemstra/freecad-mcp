@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -148,26 +150,26 @@ class _CreateInvoluteGearExecution:
             )
         self.inspected = read_create_involute_gear_result(doc, self.created, self.request)
 
-    def run(self) -> CreateInvoluteGearResult:
+    def run(self) -> NativeOutcome[CreateInvoluteGearResult]:
         result = run_create_involute_gear_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_involute_gear_uncertain(
-                "CREATE_INVOLUTE_GEAR_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_involute_gear result",
-                committed=True,
+        def _finish_native_commit() -> CreateInvoluteGearResult:
+            if self.inspected is None:
+                return make_create_involute_gear_uncertain(
+                    "CREATE_INVOLUTE_GEAR_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_involute_gear result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_involute_gear_success(
+                body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
             )
-        payload = self.inspected.payload
-        return make_create_involute_gear_success(
-            body=as_str(payload["body"]), sketch=as_str(payload["sketch"]), feature=as_str(payload["feature"]), teeth=as_int(payload["teeth"]), module=as_float(payload["module"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_involute_gear(doc: MutationDocument, request: CreateInvoluteGearRequest) -> CreateInvoluteGearReceipt:
     """Apply create_involute_gear without recomputing or managing a transaction."""
@@ -225,7 +227,7 @@ def read_create_involute_gear_result(
 def run_create_involute_gear(
     collaborators: CreateInvoluteGearCollaborators,
     doc_name: str, gear_name: str, teeth: int, module: float, width: float, pressure_angle: float = 20.0, bore_diameter: float = 0.0, clearance: float = 0.0, backlash: float = 0.0, samples_per_flank: int = 12, body_name: str | None = None, sketch_name: str | None = None,
-) -> CreateInvoluteGearResult:
+) -> NativeOutcome[CreateInvoluteGearResult]:
     """Run create_involute_gear through apply, recompute, inspection, and commit."""
 
     request = build_create_involute_gear_request(doc_name, gear_name, teeth, module, width, pressure_angle, bore_diameter, clearance, backlash, samples_per_flank, body_name, sketch_name)

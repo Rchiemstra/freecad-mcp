@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_trim_contract import (
@@ -12,6 +14,7 @@ try:
         SketchTrimFailure,
         SketchTrimRequest,
         SketchTrimResult,
+        SketchTrimUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -27,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchTrimFailure,
         SketchTrimRequest,
         SketchTrimResult,
+        SketchTrimUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -262,28 +266,32 @@ class _SketchTrimExecution:
             )
         self.inspected = read_sketch_trim_result(doc, self.created)
 
-    def run(self) -> SketchTrimResult:
+    def run(self) -> NativeOutcome[SketchTrimResult]:
         result = run_sketch_trim_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_trim_uncertain(
-                "SKETCH_TRIM_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_trim result",
-                committed=True,
-            )
-        return make_sketch_trim_success(SketchName(self.inspected.sketch_name))
+        def _finish_native_commit(
+            result: Literal[True] | SketchTrimFailure | SketchTrimUncertain,
+        ) -> SketchTrimResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_trim_uncertain(
+                    "SKETCH_TRIM_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_trim result",
+                    committed=True,
+                )
+            return make_sketch_trim_success(SketchName(self.inspected.sketch_name))
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_trim(
     collaborators: SketchTrimCollaborators,
     doc_name: object, sketch_name: object, geo_index: object, point_x: object, point_y: object,
-) -> SketchTrimResult:
+) -> NativeOutcome[SketchTrimResult]:
     request = build_sketch_trim_request(doc_name, sketch_name, geo_index, point_x, point_y)
     if isinstance(request, dict):
         return request

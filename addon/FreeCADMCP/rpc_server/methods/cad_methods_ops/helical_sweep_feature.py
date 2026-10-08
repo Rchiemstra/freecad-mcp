@@ -2,6 +2,8 @@
 """Typed ``helical_sweep_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -201,28 +203,28 @@ class _HelicalSweepFeatureExecution:
             )
         self.inspected = read_helical_sweep_feature_result(doc, self.created)
 
-    def run(self) -> HelicalSweepFeatureResult:
+    def run(self) -> NativeOutcome[HelicalSweepFeatureResult]:
         result = run_helical_sweep_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_helical_sweep_feature_uncertain(
-                "HELICAL_SWEEP_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected helical_sweep_feature result",
-                committed=True,
-            )
-        return make_helical_sweep_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> HelicalSweepFeatureResult:
+            if self.inspected is None:
+                return make_helical_sweep_feature_uncertain(
+                    "HELICAL_SWEEP_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected helical_sweep_feature result",
+                    committed=True,
+                )
+            return make_helical_sweep_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_helical_sweep_feature(
     collaborators: HelicalSweepFeatureCollaborators,
     doc_name: str, profile_sketch: str, helix_name: str, pitch: float, height: float, radius: float, body_name: str | None = None, left_handed: bool = False, reversed_dir: bool = False
-) -> HelicalSweepFeatureResult:
+) -> NativeOutcome[HelicalSweepFeatureResult]:
     """Run helical_sweep_feature through apply, recompute, inspection, and commit."""
 
     request = build_helical_sweep_feature_request(doc_name, profile_sketch, helix_name, pitch, height, radius, body_name, left_handed, reversed_dir)

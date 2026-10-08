@@ -13,7 +13,13 @@ except ImportError:  # pragma: no cover - flat addon import path
 def ordered_envelope_params(method, params):
     """Bind named envelope params to the legacy positional RPC methods."""
     signature = inspect.signature(method)
-    bound = signature.bind(**dict(params))
+    try:
+        bound = signature.bind(**dict(params))
+    except TypeError as exc:
+        raise LeaseProtocolError(
+            "INVALID_METHOD_PARAMS",
+            "Authenticated RPC params do not match the target method",
+        ) from exc
     bound.apply_defaults()
     ordered = []
     for parameter in signature.parameters.values():

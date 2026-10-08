@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_geometry_contract import (
@@ -16,6 +18,7 @@ try:
         SketchAddGeometryObject,
         SketchAddGeometryReadDocument,
         SketchAddGeometryResult,
+        SketchAddGeometryUncertain,
         SketchName,
         make_sketch_add_geometry_failure,
         make_sketch_add_geometry_success,
@@ -30,6 +33,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddGeometryObject,
         SketchAddGeometryReadDocument,
         SketchAddGeometryResult,
+        SketchAddGeometryUncertain,
         SketchName,
         make_sketch_add_geometry_failure,
         make_sketch_add_geometry_success,
@@ -226,30 +230,34 @@ class _SketchAddGeometryExecution:
             )
         self.inspected = read_sketch_add_geometry_result(doc, self.created)
 
-    def run(self) -> SketchAddGeometryResult:
+    def run(self) -> NativeOutcome[SketchAddGeometryResult]:
         result = run_sketch_add_geometry_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_geometry_uncertain(
-                "SKETCH_ADD_GEOMETRY_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected geometry result",
-                committed=True,
-            )
-        return make_sketch_add_geometry_success(self.inspected.name, self.inspected.indices)
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddGeometryFailure | SketchAddGeometryUncertain,
+        ) -> SketchAddGeometryResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_geometry_uncertain(
+                    "SKETCH_ADD_GEOMETRY_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected geometry result",
+                    committed=True,
+                )
+            return make_sketch_add_geometry_success(self.inspected.name, self.inspected.indices)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_geometry(
     collaborators: SketchAddGeometryCollaborators,
     doc_name: object,
     sketch_name: object,
     geometry: object,
-) -> SketchAddGeometryResult:
+) -> NativeOutcome[SketchAddGeometryResult]:
     request = build_sketch_add_geometry_request(doc_name, sketch_name, geometry)
     if isinstance(request, dict):
         return request

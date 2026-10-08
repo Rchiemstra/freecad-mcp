@@ -2,6 +2,8 @@
 """Typed ``relink_references`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .typed_rpc_support import (
     nonempty_string,
     object_label,
@@ -11,7 +13,7 @@ from .typed_rpc_support import (
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.relink_references_contract import (
@@ -22,6 +24,7 @@ try:
         RelinkReferencesReadDocument,
         RelinkReferencesRequest,
         RelinkReferencesResult,
+        RelinkReferencesUncertain,
         DocumentName,
         make_relink_references_failure,
         make_relink_references_success,
@@ -36,6 +39,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         RelinkReferencesReadDocument,
         RelinkReferencesRequest,
         RelinkReferencesResult,
+        RelinkReferencesUncertain,
         DocumentName,
         make_relink_references_failure,
         make_relink_references_success,
@@ -190,28 +194,32 @@ class _RelinkReferencesExecution:
             )
         self.inspected = read_relink_references_result(doc, self.created)
 
-    def run(self) -> RelinkReferencesResult:
+    def run(self) -> NativeOutcome[RelinkReferencesResult]:
         result = run_relink_references_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_relink_references_uncertain(
-                "RELINK_REFERENCES_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_relink_references_success(from_obj=self.request.from_obj, to_obj=self.request.to_obj)
+        def _finish_native_commit(
+            result: Literal[True] | RelinkReferencesFailure | RelinkReferencesUncertain,
+        ) -> RelinkReferencesResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_relink_references_uncertain(
+                    "RELINK_REFERENCES_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_relink_references_success(from_obj=self.request.from_obj, to_obj=self.request.to_obj)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_relink_references(
     collaborators: RelinkReferencesCollaborators,
     doc_name: object, from_obj: object, to_obj: object,
-) -> RelinkReferencesResult:
+) -> NativeOutcome[RelinkReferencesResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_relink_references_request(doc_name, from_obj, to_obj)

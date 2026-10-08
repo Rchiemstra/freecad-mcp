@@ -67,6 +67,7 @@ def encode_png_sequence_to_mp4(
         capture_output=True,
         text=True,
         check=False,
+        stdin=subprocess.DEVNULL,
     )
     if completed.returncode != 0 or not out.is_file():
         detail = (completed.stderr or completed.stdout or "").strip()

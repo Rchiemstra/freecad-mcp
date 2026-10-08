@@ -2,6 +2,8 @@
 """Typed ``sweep_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -21,7 +23,7 @@ from .feature_mutate_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sweep_feature_contract import (
@@ -29,6 +31,7 @@ try:
         SweepFeatureFailure,
         SweepFeatureRequest,
         SweepFeatureResult,
+        SweepFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -44,6 +47,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SweepFeatureFailure,
         SweepFeatureRequest,
         SweepFeatureResult,
+        SweepFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -186,28 +190,32 @@ class _SweepFeatureExecution:
             )
         self.inspected = read_sweep_feature_result(doc, self.created)
 
-    def run(self) -> SweepFeatureResult:
+    def run(self) -> NativeOutcome[SweepFeatureResult]:
         result = run_sweep_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sweep_feature_uncertain(
-                "SWEEP_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sweep_feature result",
-                committed=True,
-            )
-        return make_sweep_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(
+            result: Literal[True] | SweepFeatureFailure | SweepFeatureUncertain,
+        ) -> SweepFeatureResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sweep_feature_uncertain(
+                    "SWEEP_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sweep_feature result",
+                    committed=True,
+                )
+            return make_sweep_feature_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sweep_feature(
     collaborators: SweepFeatureCollaborators,
     doc_name: str, profile_sketch: str, path_sketch: str, sweep_name: str, body_name: str | None = None, frenet: bool = False
-) -> SweepFeatureResult:
+) -> NativeOutcome[SweepFeatureResult]:
     """Run sweep_feature through apply, recompute, inspection, and commit."""
 
     request = build_sweep_feature_request(doc_name, profile_sketch, path_sketch, sweep_name, body_name, frenet)

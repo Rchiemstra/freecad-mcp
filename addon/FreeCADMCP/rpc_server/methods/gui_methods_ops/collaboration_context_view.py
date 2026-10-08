@@ -257,6 +257,11 @@ def _camera_vectors(camera: str) -> tuple[tuple[float, float, float], ...]:
     )
 
 
+# FreeCAD reports unbounded geometry (origin axes and planes) as +/-1e100
+# boxes. Fitting to them overflows Coin's float camera fields.
+_UNBOUNDED_EXTENT = 1e30
+
+
 def _bound_box(value: Any) -> Any:
     bound = getattr(value, "BoundBox", None)
     if bound is None:
@@ -265,9 +270,13 @@ def _bound_box(value: Any) -> Any:
     if callable(valid) and not valid():
         return None
     try:
-        for name in ("XMin", "XMax", "YMin", "YMax", "ZMin", "ZMax"):
+        coordinates = [
             float(getattr(bound, name))
+            for name in ("XMin", "XMax", "YMin", "YMax", "ZMin", "ZMax")
+        ]
     except (AttributeError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(c) and abs(c) < _UNBOUNDED_EXTENT for c in coordinates):
         return None
     return bound
 

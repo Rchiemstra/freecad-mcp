@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.scale_contract import (
@@ -14,6 +16,7 @@ try:
         ScaleFailure,
         ScaleRequest,
         ScaleResult,
+        ScaleUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -29,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         ScaleFailure,
         ScaleRequest,
         ScaleResult,
+        ScaleUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -100,26 +104,30 @@ class _ScaleExecution:
             )
         self.inspected = read_scale_result(doc, self.created, self.request)
 
-    def run(self) -> ScaleResult:
+    def run(self) -> NativeOutcome[ScaleResult]:
         result = run_scale_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_scale_uncertain(
-                "SCALE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected scale result",
-                committed=True,
+        def _finish_native_commit(
+            result: Literal[True] | ScaleFailure | ScaleUncertain,
+        ) -> ScaleResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_scale_uncertain(
+                    "SCALE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected scale result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_scale_success(
+                object=as_str(payload["object"]), label=as_str(payload["label"])
             )
-        payload = self.inspected.payload
-        return make_scale_success(
-            object=as_str(payload["object"]), label=as_str(payload["label"])
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def _snapshot_bound_box(obj: object) -> dict[str, object]:
     shape = getattr(obj, "Shape", None)
@@ -193,7 +201,7 @@ def read_scale_result(
 def run_scale(
     collaborators: ScaleCollaborators,
     doc_name: str, obj_name: str, sx: float, sy: float, sz: float,
-) -> ScaleResult:
+) -> NativeOutcome[ScaleResult]:
     """Run scale through apply, recompute, inspection, and commit."""
 
     request = build_scale_request(doc_name, obj_name, sx, sy, sz)

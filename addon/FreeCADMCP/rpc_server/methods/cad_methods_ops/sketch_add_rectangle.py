@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_rectangle_contract import (
@@ -12,6 +14,7 @@ try:
         SketchAddRectangleFailure,
         SketchAddRectangleRequest,
         SketchAddRectangleResult,
+        SketchAddRectangleUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -27,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddRectangleFailure,
         SketchAddRectangleRequest,
         SketchAddRectangleResult,
+        SketchAddRectangleUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -287,28 +291,32 @@ class _SketchAddRectangleExecution:
             )
         self.inspected = read_sketch_add_rectangle_result(doc, self.created)
 
-    def run(self) -> SketchAddRectangleResult:
+    def run(self) -> NativeOutcome[SketchAddRectangleResult]:
         result = run_sketch_add_rectangle_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_rectangle_uncertain(
-                "SKETCH_ADD_RECTANGLE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_rectangle result",
-                committed=True,
-            )
-        return make_sketch_add_rectangle_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_indices)
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddRectangleFailure | SketchAddRectangleUncertain,
+        ) -> SketchAddRectangleResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_rectangle_uncertain(
+                    "SKETCH_ADD_RECTANGLE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_rectangle result",
+                    committed=True,
+                )
+            return make_sketch_add_rectangle_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_indices)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_rectangle(
     collaborators: SketchAddRectangleCollaborators,
     doc_name: object, sketch_name: object, x1: object, y1: object, x2: object, y2: object, construction: object,
-) -> SketchAddRectangleResult:
+) -> NativeOutcome[SketchAddRectangleResult]:
     request = build_sketch_add_rectangle_request(doc_name, sketch_name, x1, y1, x2, y2, construction)
     if isinstance(request, dict):
         return request

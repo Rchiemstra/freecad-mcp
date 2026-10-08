@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -214,32 +216,32 @@ class _BodySetTipExecution:
             )
         self.inspected = read_body_set_tip_result(doc, self.assigned)
 
-    def run(self) -> BodySetTipResult:
+    def run(self) -> NativeOutcome[BodySetTipResult]:
         result = run_body_set_tip_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_body_set_tip_uncertain(
-                "BODY_SET_TIP_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected Body Tip result",
-                committed=True,
+        def _finish_native_commit() -> BodySetTipResult:
+            if self.inspected is None:
+                return make_body_set_tip_uncertain(
+                    "BODY_SET_TIP_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected Body Tip result",
+                    committed=True,
+                )
+            return make_body_set_tip_success(
+                self.inspected.body, self.inspected.tip, self.inspected.feature
             )
-        return make_body_set_tip_success(
-            self.inspected.body, self.inspected.tip, self.inspected.feature
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_body_set_tip(
     collaborators: BodySetTipCollaborators,
     doc_name: object,
     body_name: object,
     feature_name: object,
-) -> BodySetTipResult:
+) -> NativeOutcome[BodySetTipResult]:
     """Run Body Tip assignment through apply, recompute, inspection, and commit."""
 
     request = build_body_set_tip_request(doc_name, body_name, feature_name)

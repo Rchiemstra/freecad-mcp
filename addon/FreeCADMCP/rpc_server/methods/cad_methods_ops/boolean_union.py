@@ -2,6 +2,8 @@
 """Typed ``boolean_union`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -169,28 +171,28 @@ class _BooleanUnionExecution:
             )
         self.inspected = read_boolean_union_result(doc, self.created)
 
-    def run(self) -> BooleanUnionResult:
+    def run(self) -> NativeOutcome[BooleanUnionResult]:
         result = run_boolean_union_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_boolean_union_uncertain(
-                "BOOLEAN_UNION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected boolean_union result",
-                committed=True,
-            )
-        return make_boolean_union_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> BooleanUnionResult:
+            if self.inspected is None:
+                return make_boolean_union_uncertain(
+                    "BOOLEAN_UNION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected boolean_union result",
+                    committed=True,
+                )
+            return make_boolean_union_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_boolean_union(
     collaborators: BooleanUnionCollaborators,
     doc_name: str, shape1: str, shape2: str, result_name: str
-) -> BooleanUnionResult:
+) -> NativeOutcome[BooleanUnionResult]:
     """Run boolean_union through apply, recompute, inspection, and commit."""
 
     request = build_boolean_union_request(doc_name, shape1, shape2, result_name)

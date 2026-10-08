@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_toggle_construction_contract import (
@@ -12,6 +14,7 @@ try:
         SketchToggleConstructionFailure,
         SketchToggleConstructionRequest,
         SketchToggleConstructionResult,
+        SketchToggleConstructionUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -27,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchToggleConstructionFailure,
         SketchToggleConstructionRequest,
         SketchToggleConstructionResult,
+        SketchToggleConstructionUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -264,28 +268,32 @@ class _SketchToggleConstructionExecution:
             )
         self.inspected = read_sketch_toggle_construction_result(doc, self.created)
 
-    def run(self) -> SketchToggleConstructionResult:
+    def run(self) -> NativeOutcome[SketchToggleConstructionResult]:
         result = run_sketch_toggle_construction_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_toggle_construction_uncertain(
-                "SKETCH_TOGGLE_CONSTRUCTION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_toggle_construction result",
-                committed=True,
-            )
-        return make_sketch_toggle_construction_success(SketchName(self.inspected.sketch_name))
+        def _finish_native_commit(
+            result: Literal[True] | SketchToggleConstructionFailure | SketchToggleConstructionUncertain,
+        ) -> SketchToggleConstructionResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_toggle_construction_uncertain(
+                    "SKETCH_TOGGLE_CONSTRUCTION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_toggle_construction result",
+                    committed=True,
+                )
+            return make_sketch_toggle_construction_success(SketchName(self.inspected.sketch_name))
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_toggle_construction(
     collaborators: SketchToggleConstructionCollaborators,
     doc_name: object, sketch_name: object, geo_indices: object, construction: object,
-) -> SketchToggleConstructionResult:
+) -> NativeOutcome[SketchToggleConstructionResult]:
     request = build_sketch_toggle_construction_request(doc_name, sketch_name, geo_indices, construction)
     if isinstance(request, dict):
         return request

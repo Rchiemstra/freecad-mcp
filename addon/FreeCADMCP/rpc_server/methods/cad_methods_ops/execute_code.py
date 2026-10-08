@@ -95,6 +95,26 @@ def _run_gui_execute_with_native_attribution(  # noqa: C901
             and captured["result"].get("ok") is False
         )
 
+    def native_exception_result(exc):
+        if isinstance(exc, _GuiExecuteRollback):
+            if document is None:
+                return captured["result"]
+            return postflight_cad_mutation(
+                document,
+                captured["result"],
+                include_failure_readiness=True,
+            )
+        if document is not None:
+            rollback_failure = native_rollback_exception_result(document, exc)
+            if rollback_failure is not None:
+                return {
+                    **rollback_failure,
+                    "traceback": None,
+                    "session": {},
+                    "stdout": "",
+                }
+        raise exc
+
     try:
         # GUI execute_code can create/remove objects or trigger Assembly
         # structural side effects; always request the structural grant.
@@ -112,87 +132,83 @@ def _run_gui_execute_with_native_attribution(  # noqa: C901
                 structural=True,
                 recompute=False,
             )
-    except _GuiExecuteRollback:
-        if document is None:
-            return captured["result"]
-        return postflight_cad_mutation(
-            document,
-            captured["result"],
-            include_failure_readiness=True,
-        )
     except Exception as exc:
-        if document is not None:
-            rollback_failure = native_rollback_exception_result(document, exc)
-            if rollback_failure is not None:
+        return native_exception_result(exc)
+
+    def finish_native_result(resolved):
+        native_status = (
+            resolved.get("status") if isinstance(resolved, dict) else None
+        )
+        native_committed = (
+            resolved.get("committed") if isinstance(resolved, dict) else False
+        )
+        if native_status == "Committed" and native_committed is True:
+            if native_recompute and not captured.get("postcondition_called"):
+                diagnostic = (
+                    "native compatibility mutation committed execute_code without "
+                    "its requested postcondition"
+                )
+                if document is not None:
+                    mark_quarantined(document, diagnostic)
                 return {
-                    **rollback_failure,
+                    "ok": False,
+                    "success": False,
+                    "is_error": True,
+                    "error_code": "NATIVE_POSTCONDITION_NOT_RUN",
+                    "error": diagnostic,
+                    "mutation_readiness": (
+                        [document_readiness(document)] if document is not None else []
+                    ),
+                    "retryable": False,
                     "traceback": None,
                     "session": {},
                     "stdout": "",
                 }
-        raise
-    native_status = (
-        native_result.get("status") if isinstance(native_result, dict) else None
-    )
-    native_committed = (
-        native_result.get("committed") if isinstance(native_result, dict) else False
-    )
-    if native_status == "Committed" and native_committed is True:
-        if native_recompute and not captured.get("postcondition_called"):
-            diagnostic = (
-                "native compatibility mutation committed execute_code without "
-                "its requested postcondition"
-            )
+            result = captured["result"]
             if document is not None:
-                mark_quarantined(document, diagnostic)
-            return {
-                "ok": False,
-                "success": False,
-                "is_error": True,
-                "error_code": "NATIVE_POSTCONDITION_NOT_RUN",
-                "error": diagnostic,
-                "mutation_readiness": (
-                    [document_readiness(document)] if document is not None else []
-                ),
-                "retryable": False,
-                "traceback": None,
-                "session": {},
-                "stdout": "",
-            }
-        result = captured["result"]
-        if document is not None:
-            result = postflight_cad_mutation(document, result)
-        if isinstance(result, dict) and result.get("ok") is True:
-            with suppress(Exception):
-                _flush_gui_events()
-        return result
-    if (
-        native_status == "PostconditionFailed"
-        and captured.get("postcondition_called")
-        and isinstance(captured.get("result"), dict)
-        and captured["result"].get("ok") is False
-    ):
-        # A signed generated continuation may perform read-only shape checks
-        # after the native recompute. Preserve its precise failure after the
-        # coordinator has rolled the apply transaction back.
-        result = captured["result"]
-        if document is not None:
-            result = postflight_cad_mutation(
-                document,
-                result,
-                include_failure_readiness=True,
-            )
-        return result
-    return {
-        **native_mutation_rejection(
-            native_result,
-            document,
-            operation_label="execution",
-        ),
-        "traceback": None,
-        "session": {},
-        "stdout": "",
-    }
+                result = postflight_cad_mutation(document, result)
+            return result
+        if (
+            native_status == "PostconditionFailed"
+            and captured.get("postcondition_called")
+            and isinstance(captured.get("result"), dict)
+            and captured["result"].get("ok") is False
+        ):
+            # Preserve the continuation's precise failure after native rollback.
+            result = captured["result"]
+            if document is not None:
+                result = postflight_cad_mutation(
+                    document, result, include_failure_readiness=True
+                )
+            return result
+        return {
+            **native_mutation_rejection(
+                resolved, document, operation_label="execution"
+            ),
+            "traceback": None,
+            "session": {},
+            "stdout": "",
+        }
+
+    wait = getattr(native_result, "await_result", None)
+    if callable(wait):
+        class _PendingExecute:
+            def await_result(self, timeout: float = 60.0):
+                # dispatch_gui invokes this on the RPC thread. Never interpret
+                # an async handle as a terminal rejection before its callback
+                # has finished, and classify callback rollback here too.
+                try:
+                    resolved = wait(timeout)
+                except TimeoutError:
+                    # A pending native transaction is expected while the
+                    # callback is still running, and is not rollback evidence.
+                    raise
+                except Exception as exc:
+                    return native_exception_result(exc)
+                return finish_native_result(resolved)
+
+        return _PendingExecute()
+    return finish_native_result(native_result)
 
 
 def _gui_execute_policy_block(
@@ -358,10 +374,29 @@ def execute_code(
             manage_active_document=False,
         )
 
+    def finish_gui_execution(active_before, result):
+        # Document activation and GUI delivery must remain on the GUI thread,
+        # after the owner-thread commit has completed or rolled back.
+        restore_active_document(
+            active_before,
+            bool(options.get("restore_active_document", True)),
+            freecad=collaborators.freecad,
+        )
+        if isinstance(result, dict) and result.get("ok") is True:
+            with suppress(Exception):
+                _flush_gui_events()
+        if isinstance(result, dict) and isinstance(result.get("session"), dict):
+            active_after = getattr(collaborators.freecad, "ActiveDocument", None)
+            result["session"]["active_document_after"] = (
+                getattr(active_after, "Name", None) if active_after else None
+            )
+        return result
+
     def execute_code_gui_task():
         active = getattr(collaborators.freecad, "ActiveDocument", None)
         active_before = getattr(active, "Name", None) if active else None
         result = None
+        pending = False
         try:
             if primary_document and options.get("activate_document"):
                 target = collaborators.freecad.getDocument(primary_document)
@@ -386,20 +421,33 @@ def execute_code(
                     native_recompute=native_recompute,
                     postcondition_sink=postcondition_sink,
                 )
+            wait = getattr(result, "await_result", None)
+            if callable(wait):
+                pending = True
+
+                class _PendingGuiCompletion:
+                    def await_result(pending_self, timeout: float = 60.0):
+                        try:
+                            resolved = wait(timeout)
+                        except TimeoutError:
+                            # The native callback may still be running; changing
+                            # document activation now would violate its scope.
+                            raise
+                        except Exception:
+                            self._dispatch_gui(
+                                lambda: finish_gui_execution(active_before, None),
+                                timeout,
+                            )
+                            raise
+                        return self._dispatch_gui(
+                            lambda: finish_gui_execution(active_before, resolved),
+                            timeout,
+                        )
+
+                return _PendingGuiCompletion()
         finally:
-            # setActiveDocument changes document lifecycle.  It must happen
-            # before the prepared commit and restoration must wait until that
-            # commit has completed or rolled back.
-            restore_active_document(
-                active_before,
-                bool(options.get("restore_active_document", True)),
-                freecad=collaborators.freecad,
-            )
-        if isinstance(result, dict) and isinstance(result.get("session"), dict):
-            active_after = getattr(collaborators.freecad, "ActiveDocument", None)
-            result["session"]["active_document_after"] = (
-                getattr(active_after, "Name", None) if active_after else None
-            )
+            if not pending:
+                result = finish_gui_execution(active_before, result)
         return result
 
     def finalize_late_result(value):

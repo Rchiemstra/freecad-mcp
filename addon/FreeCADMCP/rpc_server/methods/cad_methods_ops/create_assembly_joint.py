@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -162,26 +164,26 @@ class _CreateAssemblyJointExecution:
             )
         self.inspected = read_create_assembly_joint_result(doc, self.created, self.request)
 
-    def run(self) -> CreateAssemblyJointResult:
+    def run(self) -> NativeOutcome[CreateAssemblyJointResult]:
         result = run_create_assembly_joint_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_assembly_joint_uncertain(
-                "CREATE_ASSEMBLY_JOINT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected create_assembly_joint result",
-                committed=True,
+        def _finish_native_commit() -> CreateAssemblyJointResult:
+            if self.inspected is None:
+                return make_create_assembly_joint_uncertain(
+                    "CREATE_ASSEMBLY_JOINT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected create_assembly_joint result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_create_assembly_joint_success(
+                joint=as_str(payload["joint"]), label=as_str(payload["label"]), joint_type=as_str(payload["joint_type"]), assembly=as_str(payload["assembly"])
             )
-        payload = self.inspected.payload
-        return make_create_assembly_joint_success(
-            joint=as_str(payload["joint"]), label=as_str(payload["label"]), joint_type=as_str(payload["joint_type"]), assembly=as_str(payload["assembly"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_create_assembly_joint(doc: MutationDocument, request: CreateAssemblyJointRequest) -> CreateAssemblyJointReceipt:
     """Apply create_assembly_joint without recomputing or managing a transaction."""
@@ -230,7 +232,7 @@ def read_create_assembly_joint_result(
 def run_create_assembly_joint(
     collaborators: CreateAssemblyJointCollaborators,
     doc_name: str, assembly_name: str, joint_type: str, ref1_component: str, ref2_component: str, ref1_element: str = "", ref2_element: str = "", ref1_vertex: str | None = None, ref2_vertex: str | None = None, label: str | None = None, solve: bool = True, presolve: bool = True, recompute: bool = True, properties: dict[str, object] | None = None,
-) -> CreateAssemblyJointResult:
+) -> NativeOutcome[CreateAssemblyJointResult]:
     """Run create_assembly_joint through apply, recompute, inspection, and commit."""
 
     request = build_create_assembly_joint_request(doc_name, assembly_name, joint_type, ref1_component, ref2_component, ref1_element, ref2_element, ref1_vertex, ref2_vertex, label, solve, presolve, recompute, properties)

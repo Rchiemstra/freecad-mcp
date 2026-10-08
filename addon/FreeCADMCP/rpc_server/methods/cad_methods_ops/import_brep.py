@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -97,26 +99,26 @@ class _ImportBrepExecution:
             )
         self.inspected = read_import_brep_result(doc, self.created, self.request)
 
-    def run(self) -> ImportBrepResult:
+    def run(self) -> NativeOutcome[ImportBrepResult]:
         result = run_import_brep_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_import_brep_uncertain(
-                "IMPORT_BREP_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected import_brep result",
-                committed=True,
+        def _finish_native_commit() -> ImportBrepResult:
+            if self.inspected is None:
+                return make_import_brep_uncertain(
+                    "IMPORT_BREP_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected import_brep result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_import_brep_success(
+                path=as_str(payload["path"]), object=as_str(payload["object"]), imported=bool(payload["imported"])
             )
-        payload = self.inspected.payload
-        return make_import_brep_success(
-            path=as_str(payload["path"]), object=as_str(payload["object"]), imported=bool(payload["imported"])
-        )
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def apply_import_brep(doc: MutationDocument, request: ImportBrepRequest) -> ImportBrepReceipt:
     """Apply import_brep without recomputing or managing a transaction."""
@@ -151,7 +153,7 @@ def read_import_brep_result(
 def run_import_brep(
     collaborators: ImportBrepCollaborators,
     doc_name: str, file_path: str, obj_name: str = "BRepImport",
-) -> ImportBrepResult:
+) -> NativeOutcome[ImportBrepResult]:
     """Run import_brep through apply, recompute, inspection, and commit."""
 
     request = build_import_brep_request(doc_name, file_path, obj_name)

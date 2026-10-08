@@ -2,6 +2,8 @@
 """Typed ``fillet_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -190,28 +192,28 @@ class _FilletFeatureExecution:
             )
         self.inspected = read_fillet_feature_result(doc, self.created)
 
-    def run(self) -> FilletFeatureResult:
+    def run(self) -> NativeOutcome[FilletFeatureResult]:
         result = run_fillet_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_fillet_feature_uncertain(
-                "FILLET_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected fillet_feature result",
-                committed=True,
-            )
-        return make_fillet_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> FilletFeatureResult:
+            if self.inspected is None:
+                return make_fillet_feature_uncertain(
+                    "FILLET_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected fillet_feature result",
+                    committed=True,
+                )
+            return make_fillet_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_fillet_feature(
     collaborators: FilletFeatureCollaborators,
     doc_name: str, base_feature: str, fillet_name: str, radius: float, edge_refs: list[str] | None = None, body_name: str | None = None
-) -> FilletFeatureResult:
+) -> NativeOutcome[FilletFeatureResult]:
     """Run fillet_feature through apply, recompute, inspection, and commit."""
 
     request = build_fillet_feature_request(doc_name, base_feature, fillet_name, radius, edge_refs, body_name)

@@ -2,6 +2,8 @@
 """Typed ``set_expression`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     as_float,
@@ -27,7 +29,7 @@ from .typed_rpc_container_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.set_expression_contract import (
@@ -38,6 +40,7 @@ try:
         SetExpressionReadDocument,
         SetExpressionRequest,
         SetExpressionResult,
+        SetExpressionUncertain,
         DocumentName,
         make_set_expression_failure,
         make_set_expression_success,
@@ -52,6 +55,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SetExpressionReadDocument,
         SetExpressionRequest,
         SetExpressionResult,
+        SetExpressionUncertain,
         DocumentName,
         make_set_expression_failure,
         make_set_expression_success,
@@ -321,28 +325,32 @@ class _SetExpressionExecution:
             )
         self.inspected = read_set_expression_result(doc, self.created)
 
-    def run(self) -> SetExpressionResult:
+    def run(self) -> NativeOutcome[SetExpressionResult]:
         result = run_set_expression_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_set_expression_uncertain(
-                "SET_EXPRESSION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_set_expression_success(object=self.inspected.name, prop_path=self.request.prop_path, expression=self.request.expression)
+        def _finish_native_commit(
+            result: Literal[True] | SetExpressionFailure | SetExpressionUncertain,
+        ) -> SetExpressionResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_set_expression_uncertain(
+                    "SET_EXPRESSION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_set_expression_success(object=self.inspected.name, prop_path=self.request.prop_path, expression=self.request.expression)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_set_expression(
     collaborators: SetExpressionCollaborators,
     doc_name: object, object_name: object, prop_path: object, expression: object,
-) -> SetExpressionResult:
+) -> NativeOutcome[SetExpressionResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_set_expression_request(doc_name, object_name, prop_path, expression)

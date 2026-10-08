@@ -2,6 +2,8 @@
 """Typed ``polar_pattern_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -25,7 +27,7 @@ from .feature_mutate_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.polar_pattern_feature_contract import (
@@ -33,6 +35,7 @@ try:
         PolarPatternFeatureFailure,
         PolarPatternFeatureRequest,
         PolarPatternFeatureResult,
+        PolarPatternFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -48,6 +51,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         PolarPatternFeatureFailure,
         PolarPatternFeatureRequest,
         PolarPatternFeatureResult,
+        PolarPatternFeatureUncertain,
         FeatureDocument,
         FeatureName,
         FeatureObject,
@@ -196,28 +200,32 @@ class _PolarPatternFeatureExecution:
             )
         self.inspected = read_polar_pattern_feature_result(doc, self.created)
 
-    def run(self) -> PolarPatternFeatureResult:
+    def run(self) -> NativeOutcome[PolarPatternFeatureResult]:
         result = run_polar_pattern_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_polar_pattern_feature_uncertain(
-                "POLAR_PATTERN_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected polar_pattern_feature result",
-                committed=True,
-            )
-        return make_polar_pattern_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit(
+            result: Literal[True] | PolarPatternFeatureFailure | PolarPatternFeatureUncertain,
+        ) -> PolarPatternFeatureResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_polar_pattern_feature_uncertain(
+                    "POLAR_PATTERN_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected polar_pattern_feature result",
+                    committed=True,
+                )
+            return make_polar_pattern_feature_success(self.inspected.name, self.inspected.label)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_polar_pattern_feature(
     collaborators: PolarPatternFeatureCollaborators,
     doc_name: str, feature_name: str, pattern_name: str, occurrences: int, angle: float = 360.0, axis: str = 'Z_Axis', body_name: str | None = None, reversed_dir: bool = False
-) -> PolarPatternFeatureResult:
+) -> NativeOutcome[PolarPatternFeatureResult]:
     """Run polar_pattern_feature through apply, recompute, inspection, and commit."""
 
     request = build_polar_pattern_feature_request(doc_name, feature_name, pattern_name, occurrences, angle, axis, body_name, reversed_dir)

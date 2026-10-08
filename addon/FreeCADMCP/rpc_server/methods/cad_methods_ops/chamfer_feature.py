@@ -2,6 +2,8 @@
 """Typed ``chamfer_feature`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
@@ -190,28 +192,28 @@ class _ChamferFeatureExecution:
             )
         self.inspected = read_chamfer_feature_result(doc, self.created)
 
-    def run(self) -> ChamferFeatureResult:
+    def run(self) -> NativeOutcome[ChamferFeatureResult]:
         result = run_chamfer_feature_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_chamfer_feature_uncertain(
-                "CHAMFER_FEATURE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected chamfer_feature result",
-                committed=True,
-            )
-        return make_chamfer_feature_success(self.inspected.name, self.inspected.label)
+        def _finish_native_commit() -> ChamferFeatureResult:
+            if self.inspected is None:
+                return make_chamfer_feature_uncertain(
+                    "CHAMFER_FEATURE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected chamfer_feature result",
+                    committed=True,
+                )
+            return make_chamfer_feature_success(self.inspected.name, self.inspected.label)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_chamfer_feature(
     collaborators: ChamferFeatureCollaborators,
     doc_name: str, base_feature: str, chamfer_name: str, size: float, edge_refs: list[str] | None = None, body_name: str | None = None
-) -> ChamferFeatureResult:
+) -> NativeOutcome[ChamferFeatureResult]:
     """Run chamfer_feature through apply, recompute, inspection, and commit."""
 
     request = build_chamfer_feature_request(doc_name, base_feature, chamfer_name, size, edge_refs, body_name)

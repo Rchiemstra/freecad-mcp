@@ -2,6 +2,8 @@
 """Typed ``create_placement_binder`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, continue_after_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     assign_attr,
@@ -186,28 +188,28 @@ class _CreatePlacementBinderExecution:
             )
         self.inspected = read_create_placement_binder_result(doc, self.created)
 
-    def run(self) -> CreatePlacementBinderResult:
+    def run(self) -> NativeOutcome[CreatePlacementBinderResult]:
         result = run_create_placement_binder_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_create_placement_binder_uncertain(
-                "CREATE_PLACEMENT_BINDER_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_create_placement_binder_success(binder_name=self.inspected.name)
+        def _finish_native_commit() -> CreatePlacementBinderResult:
+            if self.inspected is None:
+                return make_create_placement_binder_uncertain(
+                    "CREATE_PLACEMENT_BINDER_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_create_placement_binder_success(binder_name=self.inspected.name)
 
+        return continue_after_native_commit(result, _finish_native_commit)
 
 def run_create_placement_binder(
     collaborators: CreatePlacementBinderCollaborators,
     doc_name: object, owner_body: object, name: object, source: object, relative: object, bind_mode: object,
-) -> CreatePlacementBinderResult:
+) -> NativeOutcome[CreatePlacementBinderResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_create_placement_binder_request(doc_name, owner_body, name, source, relative, bind_mode)

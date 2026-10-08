@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_offset_contract import (
@@ -12,6 +14,7 @@ try:
         SketchOffsetFailure,
         SketchOffsetRequest,
         SketchOffsetResult,
+        SketchOffsetUncertain,
         DocumentName,
         SketchDocument,
         SketchFreeCAD,
@@ -29,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchOffsetFailure,
         SketchOffsetRequest,
         SketchOffsetResult,
+        SketchOffsetUncertain,
         DocumentName,
         SketchDocument,
         SketchFreeCAD,
@@ -501,23 +505,27 @@ class _SketchOffsetExecution:
             )
         self.inspected = read_sketch_offset_result(doc, self.created)
 
-    def run(self) -> SketchOffsetResult:
+    def run(self) -> NativeOutcome[SketchOffsetResult]:
         result = run_sketch_offset_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_offset_uncertain(
-                "SKETCH_OFFSET_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_offset result",
-                committed=True,
-            )
-        return make_sketch_offset_success(SketchName(self.inspected.sketch_name))
+        def _finish_native_commit(
+            result: Literal[True] | SketchOffsetFailure | SketchOffsetUncertain,
+        ) -> SketchOffsetResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_offset_uncertain(
+                    "SKETCH_OFFSET_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_offset result",
+                    committed=True,
+                )
+            return make_sketch_offset_success(SketchName(self.inspected.sketch_name))
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_offset(
     collaborators: SketchOffsetCollaborators,
@@ -527,7 +535,7 @@ def run_sketch_offset(
     offset: object,
     copy: object,
     construction: object,
-) -> SketchOffsetResult:
+) -> NativeOutcome[SketchOffsetResult]:
     request = build_sketch_offset_request(
         doc_name, sketch_name, geo_indices, offset, copy, construction
     )

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_constrain_equal_contract import (
@@ -12,6 +14,7 @@ try:
         SketchConstrainEqualFailure,
         SketchConstrainEqualRequest,
         SketchConstrainEqualResult,
+        SketchConstrainEqualUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -27,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchConstrainEqualFailure,
         SketchConstrainEqualRequest,
         SketchConstrainEqualResult,
+        SketchConstrainEqualUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -262,28 +266,32 @@ class _SketchConstrainEqualExecution:
             )
         self.inspected = read_sketch_constrain_equal_result(doc, self.created)
 
-    def run(self) -> SketchConstrainEqualResult:
+    def run(self) -> NativeOutcome[SketchConstrainEqualResult]:
         result = run_sketch_constrain_equal_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_constrain_equal_uncertain(
-                "SKETCH_CONSTRAIN_EQUAL_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_constrain_equal result",
-                committed=True,
-            )
-        return make_sketch_constrain_equal_success(SketchName(self.inspected.sketch_name), self.inspected.constraint_index)
+        def _finish_native_commit(
+            result: Literal[True] | SketchConstrainEqualFailure | SketchConstrainEqualUncertain,
+        ) -> SketchConstrainEqualResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_constrain_equal_uncertain(
+                    "SKETCH_CONSTRAIN_EQUAL_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_constrain_equal result",
+                    committed=True,
+                )
+            return make_sketch_constrain_equal_success(SketchName(self.inspected.sketch_name), self.inspected.constraint_index)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_constrain_equal(
     collaborators: SketchConstrainEqualCollaborators,
     doc_name: object, sketch_name: object, geo1: object, geo2: object,
-) -> SketchConstrainEqualResult:
+) -> NativeOutcome[SketchConstrainEqualResult]:
     request = build_sketch_constrain_equal_request(doc_name, sketch_name, geo1, geo2)
     if isinstance(request, dict):
         return request

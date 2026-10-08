@@ -104,11 +104,24 @@ class _RedoRpcFacade(Protocol):
 
 def rpc_redo(
     self: _RedoRpcFacade,
-    doc_name: object,
+    doc_name: object = None,
     operation_id: object = None,
     expected_redo_count: object = None,
     expected_redo_head: object = None,
+    doc_selector: object = None,
 ) -> dict[str, object]:
+    # Authenticated v2 binds params by name and the client sends the history
+    # selector as ``doc_selector``; legacy callers pass it positionally.
+    if doc_selector is not None:
+        if doc_name is not None:
+            return dict(
+                _failure(
+                    RedoError(
+                        "INVALID_ARGUMENT", "pass doc_name or doc_selector, not both"
+                    )
+                )
+            )
+        doc_name = doc_selector
     if operation_id is not None or not isinstance(doc_name, str):
         # Lazy native history-head redo. Keep this out of the typed mypy graph:
         # follow_imports=normal on cad_methods_ops would otherwise typecheck the

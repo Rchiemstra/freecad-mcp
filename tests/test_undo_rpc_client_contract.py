@@ -7,6 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import (
+    recompute_helpers,
+    redo as typed_redo_module,
+    undo as typed_undo_module,
+)
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.recompute_helpers import (
     redo as rpc_redo,
     undo as rpc_undo,
@@ -170,3 +175,45 @@ def test_undo_operation_id_is_stable_for_same_mcp_request(request_ctx):
     undo(conn, "OtherDoc")
     other_id = conn._invoke_mutation_v2.call_args.args[1]["operation_id"]
     assert other_id != first_id
+
+
+@pytest.mark.parametrize(
+    ("client", "typed_module", "count_key", "head_key"),
+    [
+        (undo, typed_undo_module, "expected_undo_count", "expected_undo_head"),
+        (redo, typed_redo_module, "expected_redo_count", "expected_redo_head"),
+    ],
+)
+def test_client_history_params_reach_the_registered_rpc_handler(
+    client, typed_module, count_key, head_key, monkeypatch
+):
+    """The invoke_v2 target for undo/redo is the typed module's handler.
+
+    Binding against ``recompute_helpers`` alone missed that the registered
+    handler named its selector ``doc_name``, so every authenticated undo and
+    redo failed in a live GUI before reaching FreeCAD.
+    """
+
+    conn = _mock_conn()
+    client(conn, "Doc")
+    method, params = conn._invoke_mutation_v2.call_args.args[:2]
+    name, handler = typed_module.TYPED_RPC_HANDLER
+    assert name == method
+
+    seen = []
+    monkeypatch.setattr(
+        recompute_helpers,
+        method,
+        lambda _rpc, *args: seen.append(args) or {"success": True},
+    )
+    target = MethodType(handler, SimpleNamespace())
+
+    assert target(*ordered_envelope_params(target, params)) == {"success": True}
+    assert seen == [
+        (
+            params["doc_selector"],
+            params["operation_id"],
+            params[count_key],
+            params[head_key],
+        )
+    ]

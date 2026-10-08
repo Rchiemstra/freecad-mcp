@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_bezier_contract import (
@@ -12,6 +14,7 @@ try:
         SketchAddBezierFailure,
         SketchAddBezierRequest,
         SketchAddBezierResult,
+        SketchAddBezierUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -27,6 +30,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddBezierFailure,
         SketchAddBezierRequest,
         SketchAddBezierResult,
+        SketchAddBezierUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -285,28 +289,32 @@ class _SketchAddBezierExecution:
             )
         self.inspected = read_sketch_add_bezier_result(doc, self.created)
 
-    def run(self) -> SketchAddBezierResult:
+    def run(self) -> NativeOutcome[SketchAddBezierResult]:
         result = run_sketch_add_bezier_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_bezier_uncertain(
-                "SKETCH_ADD_BEZIER_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_bezier result",
-                committed=True,
-            )
-        return make_sketch_add_bezier_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index)
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddBezierFailure | SketchAddBezierUncertain,
+        ) -> SketchAddBezierResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_bezier_uncertain(
+                    "SKETCH_ADD_BEZIER_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_bezier result",
+                    committed=True,
+                )
+            return make_sketch_add_bezier_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_index)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_bezier(
     collaborators: SketchAddBezierCollaborators,
     doc_name: object, sketch_name: object, poles: object, construction: object,
-) -> SketchAddBezierResult:
+) -> NativeOutcome[SketchAddBezierResult]:
     request = build_sketch_add_bezier_request(doc_name, sketch_name, poles, construction)
     if isinstance(request, dict):
         return request

@@ -2,6 +2,8 @@
 """Typed ``restore`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .typed_rpc_support import (
     nonempty_string,
     optional_string,
@@ -276,47 +278,51 @@ class _RestoreExecution:
             )
         self.inspected = read_restore_result(doc, self.created)
 
-    def run(self) -> RestoreResult:
+    def run(self) -> NativeOutcome[RestoreResult]:
         result = run_restore_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_restore_uncertain(
-                "RESTORE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
+        def _finish_native_commit(
+            result: Literal[True] | RestoreFailure | RestoreUncertain,
+        ) -> RestoreResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_restore_uncertain(
+                    "RESTORE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            count = self.inspected.extra
+            if not isinstance(count, int):
+                count = 0
+            success = make_restore_success(
+                restored_id=str(self.inspected.name),
+                doc=str(self.request.doc_name),
+                count=count,
             )
-        count = self.inspected.extra
-        if not isinstance(count, int):
-            count = 0
-        success = make_restore_success(
-            restored_id=str(self.inspected.name),
-            doc=str(self.request.doc_name),
-            count=count,
-        )
-        receipt = self.created
-        if receipt is None or not isinstance(receipt.snapshot_path, str) or not receipt.snapshot_path:
+            receipt = self.created
+            if receipt is None or not isinstance(receipt.snapshot_path, str) or not receipt.snapshot_path:
+                return success
+            load_result = _load_snapshot_after_commit(
+                self.collaborators,
+                str(self.request.doc_name),
+                receipt.snapshot_path,
+                receipt.item,
+            )
+            if load_result is not True:
+                return load_result
             return success
-        load_result = _load_snapshot_after_commit(
-            self.collaborators,
-            str(self.request.doc_name),
-            receipt.snapshot_path,
-            receipt.item,
-        )
-        if load_result is not True:
-            return load_result
-        return success
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_restore(
     collaborators: RestoreCollaborators,
     doc_name: object, snapshot_id: object,
-) -> RestoreResult:
+) -> NativeOutcome[RestoreResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_restore_request(doc_name, snapshot_id)

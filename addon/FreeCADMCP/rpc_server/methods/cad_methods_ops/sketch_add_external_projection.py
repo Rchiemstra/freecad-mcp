@@ -2,6 +2,8 @@
 """Typed ``sketch_add_external_projection`` mutation."""
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from .typed_rpc_support import (
     as_bool,
     invoke,
@@ -14,7 +16,7 @@ from .typed_rpc_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_external_projection_contract import (
@@ -25,6 +27,7 @@ try:
         SketchAddExternalProjectionReadDocument,
         SketchAddExternalProjectionRequest,
         SketchAddExternalProjectionResult,
+        SketchAddExternalProjectionUncertain,
         DocumentName,
         make_sketch_add_external_projection_failure,
         make_sketch_add_external_projection_success,
@@ -39,6 +42,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddExternalProjectionReadDocument,
         SketchAddExternalProjectionRequest,
         SketchAddExternalProjectionResult,
+        SketchAddExternalProjectionUncertain,
         DocumentName,
         make_sketch_add_external_projection_failure,
         make_sketch_add_external_projection_success,
@@ -197,28 +201,32 @@ class _SketchAddExternalProjectionExecution:
             )
         self.inspected = read_sketch_add_external_projection_result(doc, self.created)
 
-    def run(self) -> SketchAddExternalProjectionResult:
+    def run(self) -> NativeOutcome[SketchAddExternalProjectionResult]:
         result = run_sketch_add_external_projection_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_external_projection_uncertain(
-                "SKETCH_ADD_EXTERNAL_PROJECTION_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected result",
-                committed=True,
-            )
-        return make_sketch_add_external_projection_success(sketch_name=self.inspected.name)
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddExternalProjectionFailure | SketchAddExternalProjectionUncertain,
+        ) -> SketchAddExternalProjectionResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_external_projection_uncertain(
+                    "SKETCH_ADD_EXTERNAL_PROJECTION_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected result",
+                    committed=True,
+                )
+            return make_sketch_add_external_projection_success(sketch_name=self.inspected.name)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_external_projection(
     collaborators: SketchAddExternalProjectionCollaborators,
     doc_name: object, sketch_name: object, source_ref: object, projection_mode: object, defining: object, allow_gui_geometry_loop: object,
-) -> SketchAddExternalProjectionResult:
+) -> NativeOutcome[SketchAddExternalProjectionResult]:
     """Run the mutation through apply, recompute, inspection, and commit."""
 
     request = build_sketch_add_external_projection_request(doc_name, sketch_name, source_ref, projection_mode, defining, allow_gui_geometry_loop)

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.translate_contract import (
@@ -14,6 +16,7 @@ try:
         TranslateFailure,
         TranslateRequest,
         TranslateResult,
+        TranslateUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -29,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         TranslateFailure,
         TranslateRequest,
         TranslateResult,
+        TranslateUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -100,26 +104,30 @@ class _TranslateExecution:
             )
         self.inspected = read_translate_result(doc, self.created, self.request)
 
-    def run(self) -> TranslateResult:
+    def run(self) -> NativeOutcome[TranslateResult]:
         result = run_translate_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_translate_uncertain(
-                "TRANSLATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected translate result",
-                committed=True,
+        def _finish_native_commit(
+            result: Literal[True] | TranslateFailure | TranslateUncertain,
+        ) -> TranslateResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_translate_uncertain(
+                    "TRANSLATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected translate result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_translate_success(
+                object=as_str(payload["object"]), label=as_str(payload["label"])
             )
-        payload = self.inspected.payload
-        return make_translate_success(
-            object=as_str(payload["object"]), label=as_str(payload["label"])
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def _snapshot_placement_base(obj: object) -> dict[str, object]:
     placement = getattr(obj, "Placement", None)
@@ -189,7 +197,7 @@ def read_translate_result(
 def run_translate(
     collaborators: TranslateCollaborators,
     doc_name: str, obj_name: str, dx: float, dy: float, dz: float,
-) -> TranslateResult:
+) -> NativeOutcome[TranslateResult]:
     """Run translate through apply, recompute, inspection, and commit."""
 
     request = build_translate_request(doc_name, obj_name, dx, dy, dz)

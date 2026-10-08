@@ -6,6 +6,8 @@ prove commit or rollback; exceptions and unknown statuses remain uncertain.
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -160,7 +162,7 @@ def run_pocket_feature_native_mutation(
     document_name: str,
     apply: Callable[[PocketFeatureDocument], None],
     postcondition: Callable[[PocketFeatureReadDocument], None],
-) -> Literal[True] | PocketFeatureFailure | PocketFeatureUncertain:
+) -> NativeOutcome[Literal[True] | PocketFeatureFailure | PocketFeatureUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativePocketFeatureMutationState()
@@ -228,4 +230,6 @@ def run_pocket_feature_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _pocket_feature_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _pocket_feature_native_result(terminal, state)
+    )

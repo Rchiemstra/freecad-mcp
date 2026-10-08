@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.sketch_add_slot_contract import (
@@ -13,6 +15,7 @@ try:
         SketchAddSlotFailure,
         SketchAddSlotRequest,
         SketchAddSlotResult,
+        SketchAddSlotUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -28,6 +31,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         SketchAddSlotFailure,
         SketchAddSlotRequest,
         SketchAddSlotResult,
+        SketchAddSlotUncertain,
         DocumentName,
         SketchDocument,
         SketchName,
@@ -316,28 +320,32 @@ class _SketchAddSlotExecution:
             )
         self.inspected = read_sketch_add_slot_result(doc, self.created)
 
-    def run(self) -> SketchAddSlotResult:
+    def run(self) -> NativeOutcome[SketchAddSlotResult]:
         result = run_sketch_add_slot_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_sketch_add_slot_uncertain(
-                "SKETCH_ADD_SLOT_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected sketch_add_slot result",
-                committed=True,
-            )
-        return make_sketch_add_slot_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_indices)
+        def _finish_native_commit(
+            result: Literal[True] | SketchAddSlotFailure | SketchAddSlotUncertain,
+        ) -> SketchAddSlotResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_sketch_add_slot_uncertain(
+                    "SKETCH_ADD_SLOT_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected sketch_add_slot result",
+                    committed=True,
+                )
+            return make_sketch_add_slot_success(SketchName(self.inspected.sketch_name), self.inspected.geometry_indices)
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_sketch_add_slot(
     collaborators: SketchAddSlotCollaborators,
     doc_name: object, sketch_name: object, x1: object, y1: object, x2: object, y2: object, width: object, construction: object,
-) -> SketchAddSlotResult:
+) -> NativeOutcome[SketchAddSlotResult]:
     request = build_sketch_add_slot_request(doc_name, sketch_name, x1, y1, x2, y2, width, construction)
     if isinstance(request, dict):
         return request

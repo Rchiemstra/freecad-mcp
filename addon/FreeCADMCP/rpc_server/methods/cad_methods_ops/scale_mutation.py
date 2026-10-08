@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, defer_native_result
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -143,7 +145,7 @@ def run_scale_native_mutation(
     document_name: DocumentName,
     apply: Callable[[MutationDocument], None],
     postcondition: Callable[[MutationReadDocument], None],
-) -> Literal[True] | ScaleFailure | ScaleUncertain:
+) -> NativeOutcome[Literal[True] | ScaleFailure | ScaleUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
     state = _NativeMutationState()
@@ -210,4 +212,6 @@ def run_scale_native_mutation(
             str(exc) or type(exc).__name__,
             committed=None,
         )
-    return _scale_native_result(native_result, state)
+    return defer_native_result(
+        native_result, lambda terminal: _scale_native_result(terminal, state)
+    )

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from .native_commit_wait import NativeOutcome, settle_native_commit
+
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.rotate_contract import (
@@ -14,6 +16,7 @@ try:
         RotateFailure,
         RotateRequest,
         RotateResult,
+        RotateUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -29,6 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         RotateFailure,
         RotateRequest,
         RotateResult,
+        RotateUncertain,
         MutationDocument,
         MutationObject,
         MutationReadDocument,
@@ -124,26 +128,30 @@ class _RotateExecution:
             )
         self.inspected = read_rotate_result(doc, self.created, self.request)
 
-    def run(self) -> RotateResult:
+    def run(self) -> NativeOutcome[RotateResult]:
         result = run_rotate_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
         )
-        if result is not True:
-            return result
-        if self.inspected is None:
-            return make_rotate_uncertain(
-                "ROTATE_COMMITTED_RESPONSE_INVALID",
-                "Native commit completed without an inspected rotate result",
-                committed=True,
+        def _finish_native_commit(
+            result: Literal[True] | RotateFailure | RotateUncertain,
+        ) -> RotateResult:
+            if result is not True:
+                return result
+            if self.inspected is None:
+                return make_rotate_uncertain(
+                    "ROTATE_COMMITTED_RESPONSE_INVALID",
+                    "Native commit completed without an inspected rotate result",
+                    committed=True,
+                )
+            payload = self.inspected.payload
+            return make_rotate_success(
+                object=as_str(payload["object"]), label=as_str(payload["label"])
             )
-        payload = self.inspected.payload
-        return make_rotate_success(
-            object=as_str(payload["object"]), label=as_str(payload["label"])
-        )
 
+        return settle_native_commit(result, _finish_native_commit)
 
 def _snapshot_placement(obj: object) -> dict[str, object]:
     placement = getattr(obj, "Placement", None)
@@ -245,7 +253,7 @@ def read_rotate_result(
 def run_rotate(
     collaborators: RotateCollaborators,
     doc_name: str, obj_name: str, axis_x: float, axis_y: float, axis_z: float, angle_deg: float, center_x: float = 0.0, center_y: float = 0.0, center_z: float = 0.0,
-) -> RotateResult:
+) -> NativeOutcome[RotateResult]:
     """Run rotate through apply, recompute, inspection, and commit."""
 
     request = build_rotate_request(doc_name, obj_name, axis_x, axis_y, axis_z, angle_deg, center_x, center_y, center_z)

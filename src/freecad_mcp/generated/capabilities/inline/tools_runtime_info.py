@@ -179,13 +179,12 @@ def _rpc_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any]:
     }
 
 def _runtime_info_payload() -> dict[str, Any]:
+    # Connection lookup and the RPC can authenticate or refresh after a restart.
+    # Read the manifest afterwards, and let transport failures reach MCP's error
+    # handling instead of reporting an old authenticated runtime as connected.
+    reported = server_connection().get_instance_info()
+    info = dict(reported) if isinstance(reported, dict) else {}
     manifest = server_state().authenticated_manifest
-    info: dict[str, Any] = {}
-    try:
-        reported = server_connection().get_instance_info()
-        info = dict(reported) if isinstance(reported, dict) else {}
-    except Exception:
-        info = {}
 
     mcp_build = mcp_build_info()
     addon = _addon_identity(manifest, info)
