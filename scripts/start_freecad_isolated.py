@@ -1229,6 +1229,19 @@ def _prove_authenticated_instance(
     }
 
 
+class _BuildTreeLaunchHelper:
+    """Minimal launch environment for a build-tree FreeCAD."""
+
+    @staticmethod
+    def _launch_env(freecad: Path) -> dict[str, str]:
+        env = dict(os.environ)
+        if os.name != "nt":
+            library_dir = str(Path(freecad).parent.parent / "lib")
+            current = env.get("LD_LIBRARY_PATH")
+            env["LD_LIBRARY_PATH"] = f"{library_dir}:{current}" if current else library_dir
+        return env
+
+
 def _load_parent_start_freecad():
     """Load FreeCADModeling/start_freecad.py for PATH/Qt helpers only."""
 
@@ -1237,7 +1250,8 @@ def _load_parent_start_freecad():
         alt = _repo_root() / ".." / "start_freecad.py"
         parent = alt.resolve() if alt.is_file() else parent
     if not parent.is_file():
-        raise SystemExit(f"Parent start_freecad.py not found at {parent}")
+        # Plain FreeCAD checkouts (Linux, CI) have no FreeCADModeling helper.
+        return _BuildTreeLaunchHelper
     spec = importlib.util.spec_from_file_location("freecadmodeling_start_freecad", parent)
     if spec is None or spec.loader is None:
         raise SystemExit(f"Cannot load {parent}")
