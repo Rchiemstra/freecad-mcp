@@ -56,6 +56,8 @@ def build_set_color_request(
     for field, value in (("r", r), ("g", g), ("b", b), ("transparency", transparency)):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return _failure(SetColorError("INVALID_ARGUMENT", f"{field} must be a number"))
+        if not 0.0 <= float(value) <= 1.0:
+            return _failure(SetColorError("INVALID_ARGUMENT", f"{field} must be between 0.0 and 1.0"))
     return SetColorRequest(
         doc_name=DocumentName(doc_name),
         obj_name=ObjectName(obj_name),
