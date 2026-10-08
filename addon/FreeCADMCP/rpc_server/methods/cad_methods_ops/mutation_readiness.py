@@ -348,7 +348,14 @@ def get_mutation_readiness_gui(*, freecad: Any, doc_name: str | None = None) -> 
     documents = freecad.listDocuments()
     prune_closed_quarantines(documents.values())
     if doc_name:
-        document = documents.get(doc_name) or freecad.getDocument(doc_name)
+        document = documents.get(doc_name)
+        if document is None:
+            try:
+                document = freecad.getDocument(doc_name)
+            except NameError:
+                # FreeCAD.getDocument raises for unknown names; it never
+                # returns None.
+                document = None
         if document is None:
             return {
                 "success": False,
