@@ -237,3 +237,45 @@ def test_save_as_writes_a_thumbnail_without_warnings(mcp, gui_log, live_gui):
     assert not destination.with_name("thumbnail.FCStd.FreeCAD-save.lock").exists()
     assert_ok(mcp.call("close_document", doc_name="LiveThumb"))
     assert_clean(gui_log)
+
+
+def test_restoring_a_snapshot_keeps_freecad_responsive(mcp, gui_log):
+    """restore closes the document from an RPC worker thread. FreeCAD's GUI
+    delete handler runs Python, and the worker kept the GIL while waiting for
+    the GUI thread, so FreeCAD deadlocked and every later call timed out."""
+
+    assert_ok(mcp.call("create_document", name="LiveRestore"))
+    for name in ("BoxA", "BoxB"):
+        assert_ok(mcp.call("create_object", doc_name="LiveRestore", obj_type="Part::Box",
+                           obj_name=name))
+    assert_ok(mcp.call("snapshot", doc_name="LiveRestore"))
+    assert_ok(mcp.call("delete_object", doc_name="LiveRestore", obj_name="BoxB"))
+
+    assert_ok(mcp.call("restore", doc_name="LiveRestore"))
+
+    objects = assert_ok(mcp.call("get_objects", doc_name="LiveRestore"))
+    assert "BoxB" in objects.text
+    assert_ok(mcp.call("close_document", doc_name="LiveRestore"))
+    assert_clean(gui_log)
+
+
+def test_assembly_joints_can_be_created(mcp, gui_log):
+    """MCP mutations run off the GUI thread. Creating a joint probed the
+    joint's ViewObject there, which raised "GUI API 'getViewObject' may only be
+    used from the main thread", so no joint could be created in a live GUI."""
+
+    assert_ok(mcp.call("create_document", name="LiveAsm"))
+    assert_ok(mcp.call("create_assembly", doc_name="LiveAsm", assembly_name="Asm"))
+    assert_ok(mcp.call("create_object", doc_name="LiveAsm", obj_type="Part::Box",
+                       obj_name="BoxA"))
+    assert_ok(mcp.call("create_object", doc_name="LiveAsm", obj_type="Part::Box",
+                       obj_name="BoxB", obj_properties={"Placement": {"Base": {"x": 30}}}))
+
+    assert_ok(mcp.call("create_assembly_grounded_joint", doc_name="LiveAsm",
+                       assembly_name="Asm", component_name="BoxA"))
+    assert_ok(mcp.call("create_assembly_joint", doc_name="LiveAsm", assembly_name="Asm",
+                       joint_type="Fixed", ref1_component="BoxA", ref1_element="Face2",
+                       ref2_component="BoxB", ref2_element="Face1"))
+    assert_ok(mcp.call("solve_assembly", doc_name="LiveAsm", assembly_name="Asm"))
+    assert_ok(mcp.call("close_document", doc_name="LiveAsm"))
+    assert_clean(gui_log)
