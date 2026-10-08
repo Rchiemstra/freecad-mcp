@@ -296,7 +296,7 @@ def test_gui_interaction_routes_presentation_calls_through_injected_dispatcher()
         "count": 1,
     }
     assert get_gui_state(facade)["selection_count"] == 1
-    assert set_section_view(facade, True, {"x": 1}, [1], [0, 0, 1], False) == {
+    assert set_section_view(facade, True, {"x": 1}, [1, 0, 0], [0, 0, 1], False) == {
         "ok": True
     }
     assert stored[("Model", "actor")]["selection_paths"] == ["Body.Face1"]
