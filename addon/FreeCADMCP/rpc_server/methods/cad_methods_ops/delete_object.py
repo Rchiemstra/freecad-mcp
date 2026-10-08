@@ -174,6 +174,22 @@ def _dependents(root: object) -> list[object]:
     return list(_object_dependents(root))
 
 
+def _remove(doc: object, name: str) -> None:
+    """Remove *name*, letting an owning PartDesign Body move its Tip first.
+
+    Document.removeObject knows nothing about bodies. FreeCAD's own delete
+    calls Body.removeObject beforehand (PartDesignGui::ViewProvider::onDelete);
+    without it, deleting the Tip feature left the Body with no shape.
+    """
+    item = get_object(doc, name)
+    owner = _owning_container(item) if item is not None else None
+    if owner is not None and _is_derived(owner, "PartDesign::Body"):
+        detach = getattr(owner, "removeObject", None)
+        if callable(detach):
+            detach(item)
+    remove_object(doc, name)
+
+
 def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObjectReceipt:
     """Delete an object without recomputing or managing a transaction."""
 
@@ -211,13 +227,13 @@ def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObje
                 deleted.append(name)
             continue
         try:
-            remove_object(doc, name)
+            _remove(doc, name)
         except Exception:
             continue
         if get_object(doc, name) is None and name not in deleted:
             deleted.append(name)
     if get_object(doc, root_name) is not None:
-        remove_object(doc, root_name)
+        _remove(doc, root_name)
         if get_object(doc, root_name) is None and root_name not in deleted:
             deleted.append(root_name)
     for name in remaining:
@@ -226,7 +242,7 @@ def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObje
                 deleted.append(name)
             continue
         try:
-            remove_object(doc, name)
+            _remove(doc, name)
         except Exception:
             continue
         if get_object(doc, name) is None and name not in deleted:
