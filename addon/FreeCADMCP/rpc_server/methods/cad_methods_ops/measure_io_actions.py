@@ -385,6 +385,23 @@ def validate_geometry(document: object, obj_name: str) -> dict[str, object]:
     if shape is None:
         raise TypedMutationError("OBJECT_NOT_FOUND", "Object has no Shape")
     is_null = bool(getattr(shape, "isNull", lambda: True)())
+    if is_null:
+        # OCC raises Standard_NullObject for every query on a null shape (for
+        # example a PartDesign Body without a Tip); report it as invalid.
+        return {
+            "object": object_name(obj),
+            "is_null": True,
+            "is_valid": False,
+            "is_closed": False,
+            "volume_mm3": 0.0,
+            "area_mm2": 0.0,
+            "face_count": 0,
+            "edge_count": 0,
+            "vertex_count": 0,
+            "shape_type": "",
+            "check_ok": False,
+            "check_errors": ["shape is null"],
+        }
     is_valid = bool(getattr(shape, "isValid", lambda: False)())
     is_closed = bool(getattr(shape, "isClosed", lambda: False)())
     result: dict[str, object] = {
