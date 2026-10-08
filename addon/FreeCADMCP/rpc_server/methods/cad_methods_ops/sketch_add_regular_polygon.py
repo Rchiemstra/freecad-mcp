@@ -201,6 +201,8 @@ def build_sketch_add_regular_polygon_request(doc_name: object, sketch_name: obje
     radius_value = _require_float(radius, 'radius')
     if isinstance(radius_value, dict):
         return radius_value
+    if not math.isfinite(radius_value) or radius_value <= 0:
+        return _failure(SketchAddRegularPolygonError("INVALID_ARGUMENT", "radius must be a finite number greater than zero"))
     sides_value = _require_int(sides, 'sides')
     if isinstance(sides_value, dict):
         return sides_value

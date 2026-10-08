@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from collections.abc import Callable
@@ -200,6 +202,8 @@ def build_sketch_fillet_request(doc_name: object, sketch_name: object, geo1: obj
     radius_value = _require_float(radius, 'radius')
     if isinstance(radius_value, dict):
         return radius_value
+    if not math.isfinite(radius_value) or radius_value <= 0:
+        return _failure(SketchFilletError("INVALID_ARGUMENT", "radius must be a finite number greater than zero"))
     if radius_value <= 0:
         return _failure(SketchFilletError("INVALID_ARGUMENT", "fillet radius must be > 0"))
     return SketchFilletRequest(

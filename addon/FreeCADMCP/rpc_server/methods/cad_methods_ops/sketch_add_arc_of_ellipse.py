@@ -201,9 +201,13 @@ def build_sketch_add_arc_of_ellipse_request(doc_name: object, sketch_name: objec
     major_radius_value = _require_float(major_radius, 'major_radius')
     if isinstance(major_radius_value, dict):
         return major_radius_value
+    if not math.isfinite(major_radius_value) or major_radius_value <= 0:
+        return _failure(SketchAddArcOfEllipseError("INVALID_ARGUMENT", "major_radius must be a finite number greater than zero"))
     minor_radius_value = _require_float(minor_radius, 'minor_radius')
     if isinstance(minor_radius_value, dict):
         return minor_radius_value
+    if not math.isfinite(minor_radius_value) or minor_radius_value <= 0:
+        return _failure(SketchAddArcOfEllipseError("INVALID_ARGUMENT", "minor_radius must be a finite number greater than zero"))
     start_angle_value = _require_float(start_angle, 'start_angle')
     if isinstance(start_angle_value, dict):
         return start_angle_value
