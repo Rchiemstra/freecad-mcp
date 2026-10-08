@@ -152,7 +152,7 @@ def _reset_global_mutation_gate_state():
 # ---------------------------------------------------------------------------
 
 def pytest_configure(config: pytest.Config) -> None:
-    for marker in ("unit", "e2e", "core", "session_e2e", "benchmark", "integration"):
+    for marker in ("unit", "e2e", "core", "session_e2e", "benchmark", "integration", "live_gui"):
         config.addinivalue_line("markers", marker)
 
 
@@ -177,7 +177,7 @@ def pytest_collection_modifyitems(
     would pick them up and fail in an environment that was never meant to run
     them.
     """
-    layers = {"unit", "e2e", "core", "session_e2e", "benchmark", "integration"}
+    layers = {"unit", "e2e", "core", "session_e2e", "benchmark", "integration", "live_gui"}
     for item in items:
         if not layers.intersection(m.name for m in item.iter_markers()):
             item.add_marker(pytest.mark.unit)
