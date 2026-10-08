@@ -131,12 +131,17 @@ def _profile_to_sketch(sketch: object, points: list[object], min_length: float) 
     if len(points) >= 4:
         bspline_cls = getattr(part, "BSplineCurve", None)
         if bspline_cls is not None:
+            # Periodic interpolation needs distinct points; OpenCASCADE rejects
+            # the closing duplicate that _close_points appends.
+            periodic = list(points)
+            closing = periodic[0] - periodic[-1]  # type: ignore[operator]
+            if float(getattr(closing, "Length", 0.0)) <= min_length:
+                periodic.pop()
             try:
                 curve = bspline_cls()
                 interpolate = getattr(curve, "interpolate", None)
-                to_shape = getattr(curve, "toShape", None)
                 if callable(interpolate):
-                    interpolate(Points=points, PeriodicFlag=True)
+                    interpolate(Points=periodic, PeriodicFlag=True)
                     add_geometry(curve, False)
                     return 1
             except Exception:
@@ -147,19 +152,28 @@ def _profile_to_sketch(sketch: object, points: list[object], min_length: float) 
     add_constraint = getattr(sketch, "addConstraint", None)
     if not callable(add_constraint):
         raise TypedMutationError("INVALID_SKETCH", "sketch must provide addConstraint")
-    indices: list[object] = []
+    segments: list[object] = []
     for idx in range(len(points) - 1):
         p1 = points[idx]
         p2 = points[idx + 1]
         delta = p2 - p1  # type: ignore[operator]
         if float(getattr(delta, "Length", 0.0)) <= min_length:
             continue
-        geo = add_geometry(line_segment(p1, p2), False)
-        indices.append(geo)
-        if len(indices) > 1:
-            add_constraint(constraint("Coincident", indices[-2], 2, indices[-1], 1))
+        segments.append(line_segment(p1, p2))
+    if not segments:
+        return 0
+    # Every addGeometry/addConstraint call re-solves the sketch: add the whole
+    # profile in one call each instead of once per segment.
+    added = add_geometry(segments, False)
+    indices = list(added) if isinstance(added, (list, tuple)) else [added]
+    constraints = [
+        constraint("Coincident", indices[idx - 1], 2, indices[idx], 1)
+        for idx in range(1, len(indices))
+    ]
     if len(indices) > 1:
-        add_constraint(constraint("Coincident", indices[-1], 2, indices[0], 1))
+        constraints.append(constraint("Coincident", indices[-1], 2, indices[0], 1))
+    if constraints:
+        add_constraint(constraints)
     return len(indices)
 
 
