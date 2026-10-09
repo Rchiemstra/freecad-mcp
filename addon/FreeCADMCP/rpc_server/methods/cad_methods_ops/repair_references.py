@@ -43,6 +43,8 @@ from .repair_references_mutation import (
     run_repair_references_native_mutation,
 )
 from .typed_rpc_document import document_name, get_object
+from ...worker_protocol_ops.subelement_validation import validate_subelement_reference
+from ...worker_protocol_types.protocol_error import ProtocolError
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +75,7 @@ class RepairReferencesInspection:
 
     document_name: DocumentName
     repaired_count: int
+    repaired: tuple[str, ...] = ()
 
 
 def _failure(
@@ -214,10 +217,27 @@ def _relink_all(doc: object, from_name: str, to_name: str) -> int:
     return changed
 
 
+def _validate_subelements(doc: object, request: RepairReferencesRequest) -> None:
+    """Reject proposed subelements the target shapes lack, before any write."""
+
+    for item in request.repairs:
+        for ref in item.references:
+            target = get_object(doc, str(ref.object_name))
+            if target is None:
+                continue
+            for subelement in ref.subelements:
+                try:
+                    validate_subelement_reference(target, subelement)
+                except ProtocolError as exc:
+                    raise RepairReferencesError("INVALID_ARGUMENT", str(exc)) from exc
+
+
 def apply_repair_references(doc: object, work: _RepairWork) -> RepairReferencesReceipt:
     """Repair link properties without recomputing or managing a transaction."""
 
     request = work.request
+    if request.validate:
+        _validate_subelements(doc, request)
     repaired: list[tuple[str, str]] = []
     for relink in work.relinks:
         changed = _relink_all(doc, relink.from_name, relink.to_name)
@@ -386,9 +406,14 @@ def read_repair_references_result(
                     "REPAIR_NOT_APPLIED",
                     f"{item.object_name}.{item.property_name} did not keep repaired references",
                 )
+    # Relinks are applied first; every property repair adds exactly one entry.
+    split = len(receipt.repaired) - len(receipt.property_repairs)
+    labels = [f"{source}->{target}" for source, target in receipt.repaired[:split]]
+    labels += [f"{owner}.{prop}" for owner, prop in receipt.repaired[split:]]
     return RepairReferencesInspection(
         document_name=DocumentName(receipt.document_name),
         repaired_count=len(receipt.repaired),
+        repaired=tuple(labels),
     )
 
 
@@ -506,6 +531,7 @@ class _RepairReferencesExecution:
             str(self.work.request.doc_name),
             self.apply,
             self.inspect,
+            recompute=self.work.request.recompute,
         )
         def _finish_native_commit(
             result: Literal[True] | RepairReferencesFailure | RepairReferencesUncertain,
@@ -519,7 +545,10 @@ class _RepairReferencesExecution:
                     committed=True,
                 )
             return make_repair_references_success(
-                self.inspected.document_name, self.inspected.repaired_count
+                self.inspected.document_name,
+                self.inspected.repaired_count,
+                repaired=list(self.inspected.repaired),
+                recompute="done" if self.work.request.recompute else "deferred",
             )
 
         return settle_native_commit(result, _finish_native_commit)

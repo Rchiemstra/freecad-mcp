@@ -68,7 +68,7 @@ def run_audit_hardcoded_dimensions(
     if document is None:
         return _failure(AuditHardcodedDimensionsError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.body_name)) is None:
-        return _failure(AuditHardcodedDimensionsError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(AuditHardcodedDimensionsError("OBJECT_NOT_FOUND", f"Object not found: {request.body_name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_shape_actions.audit_hardcoded_dimensions(document, str(request.body_name), bool(request.flag_aliases))

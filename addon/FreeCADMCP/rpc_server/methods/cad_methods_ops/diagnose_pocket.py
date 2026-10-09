@@ -20,7 +20,7 @@ def run_diagnose_pocket(collaborators: object, doc_name: str, pocket_name: str) 
     if document is None:
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
     if lookup_object(document, pocket_name) is None:
-        return _failure("OBJECT_NOT_FOUND", "Object not found")
+        return _failure("OBJECT_NOT_FOUND", f"Object not found: {pocket_name!r}")
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_shape_actions.diagnose_pocket(document, str(pocket_name))

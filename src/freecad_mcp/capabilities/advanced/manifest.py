@@ -23,7 +23,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="get_dependency_graph",
-            docstring='Property-annotated dependency graph from a root object (M13).',
+            docstring='Property-annotated dependency graph from a root object (M13).\n\n``edges`` run from an object to what it depends on (upstream of the root),\nwith the link property and subelements. ``dependents`` lists the objects that\ndepend on the root, nearest first: what breaks if it is deleted.\n``history_order`` is the feature order of the root\'s Body (or of the root\nitself when it is a container). ``cycle_detected`` reports a link cycle.',
             signature="(ctx: 'Context', doc_name: 'str', root: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.get_dependency_graph_operation",
             rpc_method="get_dependency_graph",
@@ -106,7 +106,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="relink_references",
-            docstring='Re-point every reference to ``from_obj`` so it points to ``to_obj`` (M5).\n\nScans all link-type properties (AttachmentSupport, Support, Profile, Base,\nTool, Source, Group, ...) of all document objects and re-points them, making\nrebuilds non-destructive. Subshape names are preserved; mismatches surface\nvia the recompute log. Returns JSON ``{ok, from, to, relinked, count}``.\n\nArgs:\n    doc_name: The document to edit.\n    from_obj: The object whose references are being redirected away from.\n    to_obj: The object references should now point to.',
+            docstring='Re-point every reference to ``from_obj`` so it points to ``to_obj`` (M5).\n\nScans all link-type properties (AttachmentSupport, Support, Profile, Base,\nTool, Source, Group, ...) of all document objects and re-points them, making\nrebuilds non-destructive. Subshape names are preserved; mismatches surface\nvia the recompute log. Returns JSON ``{ok, from_obj, to_obj, relinked, count}``\nwhere ``relinked`` lists the rewritten ``Object.Property`` links; a relink that\nmatches nothing fails with RELINK_NOT_APPLIED.\n\nArgs:\n    doc_name: The document to edit.\n    from_obj: The object whose references are being redirected away from.\n    to_obj: The object references should now point to.',
             signature="(ctx: 'Context', doc_name: 'str', from_obj: 'str', to_obj: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.relink_references_operation",
             rpc_method="relink_references",

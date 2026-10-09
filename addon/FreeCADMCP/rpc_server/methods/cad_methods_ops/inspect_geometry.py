@@ -68,7 +68,7 @@ def run_inspect_geometry(
     if document is None:
         return _failure(InspectGeometryError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.object_name)) is None:
-        return _failure(InspectGeometryError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(InspectGeometryError("OBJECT_NOT_FOUND", f"Object not found: {request.object_name!r}"))
     optional_recompute(collaborators, document)
     subshape = request.subshape if isinstance(request.subshape, str) and request.subshape else None
     try:

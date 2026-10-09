@@ -40,14 +40,14 @@ def _register_revolve_feature(
             doc_name: Document containing the sketch and body.
             sketch_name: Name of the sketch to revolve.
             revolve_name: Name for the resulting Revolution feature.
-            angle: Revolution angle in degrees (default 360 = full solid of revolution).
+            angle: Revolution angle in degrees, in (0, 360] (default 360 = full solid of revolution).
             axis: Revolution axis. Examples: ``Z_Axis``, ``X_Axis``, ``ObjectName:Edge1``.
             body_name: Optional explicit PartDesign Body name.
             symmetric: If true, revolve symmetrically about the sketch plane.
             reversed_dir: If true, reverse the revolution direction.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return revolve_feature_operation(
             server_connection(),
@@ -90,7 +90,7 @@ def _register_loft_feature(
             closed: If true, close the loft back to the first section.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return loft_feature_operation(
             server_connection(),
@@ -131,7 +131,7 @@ def _register_sweep_feature(
             frenet: If true, use Frenet-Serret frame (avoids twisting on curved paths).
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return sweep_feature_operation(
             server_connection(),

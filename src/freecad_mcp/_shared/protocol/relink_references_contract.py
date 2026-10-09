@@ -94,6 +94,8 @@ class RelinkReferencesSuccess(TypedDict):
     retry_safe: Literal[False]
     from_obj: str
     to_obj: str
+    relinked: NotRequired[list[str]]
+    count: NotRequired[int]
 
 
 class RelinkReferencesFailure(TypedDict):
@@ -136,15 +138,17 @@ RelinkReferencesResult = RelinkReferencesSuccess | RelinkReferencesFailure | Rel
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'from_obj', 'to_obj', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'from_obj', 'to_obj', "relinked", "count", "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
     }
 )
 
 
-def make_relink_references_success(from_obj: str, to_obj: str) -> RelinkReferencesSuccess:
+def make_relink_references_success(
+    from_obj: str, to_obj: str, relinked: list[str] | None = None
+) -> RelinkReferencesSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: RelinkReferencesSuccess = {
         "contract_version": RELINK_REFERENCES_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -154,6 +158,10 @@ def make_relink_references_success(from_obj: str, to_obj: str) -> RelinkReferenc
         "from_obj": from_obj,
         "to_obj": to_obj,
     }
+    if relinked is not None:
+        result["relinked"] = relinked
+        result["count"] = len(relinked)
+    return result
 
 
 def make_relink_references_failure(
@@ -368,7 +376,12 @@ def parse_relink_references_response(raw_response: object) -> RelinkReferencesRe
         and isinstance(from_obj, str) and from_obj.strip()
         and isinstance(to_obj, str) and to_obj.strip()
     ):
-        return make_relink_references_success(str(from_obj), str(to_obj))
+        relinked = response.get("relinked")
+        return make_relink_references_success(
+            str(from_obj),
+            str(to_obj),
+            [str(item) for item in relinked] if isinstance(relinked, list) else None,
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

@@ -43,14 +43,14 @@ def _register_polar_pattern_feature(
             feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.
             pattern_name: Name for the resulting PolarPattern feature.
             occurrences: Number of repeated instances, including the original.
-            angle: Total angular span in degrees. Defaults to 360.
+            angle: Total angular span in degrees, in (0, 360]. Defaults to 360.
             axis: Axis or reference edge. Examples: `Z_Axis`, `X_Axis`, or
                 `ObjectName:Edge1`.
             body_name: Optional explicit PartDesign Body name.
             reversed_dir: If true, reverse the angular direction.
 
         Returns:
-            A message indicating success or failure and an isometric screenshot.
+            A message indicating success or failure.
 
         Examples:
             Pattern a pocket 6 times around the Z axis:
@@ -102,7 +102,7 @@ def _register_mirror_feature(
             body_name: Optional explicit PartDesign Body name.
 
         Returns:
-            A message indicating success or failure and an isometric screenshot.
+            A message indicating success or failure.
 
         Examples:
             Mirror a pocket across the YZ plane:

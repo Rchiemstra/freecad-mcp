@@ -39,7 +39,7 @@ def _register_boolean_union(
             result_name: Name for the resulting fused shape.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return boolean_union_operation(
             server_connection(),
@@ -74,7 +74,7 @@ def _register_boolean_difference(
             result_name: Name for the resulting cut shape.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return boolean_difference_operation(
             server_connection(),
@@ -109,7 +109,7 @@ def _register_boolean_intersection(
             result_name: Name for the resulting common shape.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return boolean_intersection_operation(
             server_connection(),

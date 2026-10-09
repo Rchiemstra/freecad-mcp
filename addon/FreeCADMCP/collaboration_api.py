@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import inspect
 import threading
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 try:
     from .document_recompute_settlement import settle_document_must_execute
+    from .rpc_method_context import current_rpc_method
 except ImportError:  # pragma: no cover - flat addon import path
     from document_recompute_settlement import (  # type: ignore[import-not-found]
         settle_document_must_execute,
+    )
+    from rpc_method_context import (  # type: ignore[import-not-found]
+        current_rpc_method,
     )
 
 if TYPE_CHECKING:
@@ -184,7 +189,7 @@ def _commit_async_on_gui_thread(
             "object; the GUI thread must not call the synchronous "
             "commitCompatibilityMutation"
         )
-    handle = commit_async(callback, **async_kwargs)
+    handle = commit_async(callback, **async_kwargs, **_label_kwargs(commit_async))
     wait_fn = handle.get("wait") if isinstance(handle, dict) else None
     if not callable(wait_fn):
         raise RuntimeError(
@@ -192,6 +197,24 @@ def _commit_async_on_gui_thread(
             "wait() callable; FreeCAD may need to be updated"
         )
     return _AsyncMutationWaiter(wait_fn, refusals)
+
+
+def _label_kwargs(commit: object) -> dict[str, str]:
+    """Name the undo step after the RPC being served, when FreeCAD supports it.
+
+    Without a label FreeCAD lists every MCP edit in Edit > Undo as
+    "Collaborative operation <uuid>". Older builds have no ``label`` keyword;
+    their text signature tells, so the commit is never retried.
+    """
+
+    method = current_rpc_method()
+    if not method:
+        return {}
+    try:
+        parameters = inspect.signature(commit).parameters  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return {}
+    return {"label": f"MCP: {method}"} if "label" in parameters else {}
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +355,7 @@ class CollaborationAPI:
                 invoke_callback,
                 structural=True,
                 postcondition=invoke_postcondition,
+                **_label_kwargs(document.commitCompatibilityMutation),
             )
         except Exception as exc:
             rejection = refusals.proven_rejection(exc)
@@ -398,6 +422,7 @@ class CollaborationAPI:
                 structural=structural,
                 postcondition=invoke_postcondition,
                 recompute=recompute,
+                **_label_kwargs(document.commitCompatibilityMutation),
             )
         except Exception as exc:
             rejection = refusals.proven_rejection(exc)
@@ -482,7 +507,7 @@ class CollaborationAPI:
                 raise
 
         try:
-            return commit(native_callback, **options)
+            return commit(native_callback, **options, **_label_kwargs(commit))
         except TypeError:
             # An older native binding rejects the new keyword before invoking
             # the callback. Report a closed, non-mutating rejection for the

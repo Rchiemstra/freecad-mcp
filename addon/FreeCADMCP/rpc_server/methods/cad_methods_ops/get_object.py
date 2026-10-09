@@ -77,7 +77,7 @@ def run_get_object(
         )
     obj = lookup_object(document, str(request.obj_name))
     if obj is None:
-        return _failure(GetObjectError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(GetObjectError("OBJECT_NOT_FOUND", f"Object not found: {request.obj_name!r}"))
     serialize = getattr(collaborators, "serialize_object", None)
     if not callable(serialize):
         return _failure(

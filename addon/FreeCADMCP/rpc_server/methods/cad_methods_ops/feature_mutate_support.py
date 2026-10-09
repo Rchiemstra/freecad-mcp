@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Sequence
 from typing import cast
 
@@ -20,12 +22,20 @@ def optional_name(value: object, field: str) -> str | None:
     return nonempty_string(value, field)
 
 
-def number_value(value: object, field: str, *, positive: bool = False) -> float:
+def number_value(
+    value: object,
+    field: str,
+    *,
+    positive: bool = False,
+    maximum: float | None = None,
+) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"{field} must be a number")
     number = float(value)
     if positive and number <= 0:
         raise ValueError(f"{field} must be > 0")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{field} must be <= {maximum:g}")
     return number
 
 
@@ -132,6 +142,50 @@ def require_nonempty_shape(feature: object, *, missing: str) -> None:
         raise LookupError(missing)
 
 
+_SUBELEMENT_REF = re.compile(r"(Edge|Face|Vertex)(\d+)")
+_SUBELEMENT_LISTS = {"Edge": "Edges", "Face": "Faces", "Vertex": "Vertexes"}
+
+
+def require_subelements(source: object, refs: Sequence[str], field: str) -> None:
+    """Reject ``EdgeN``/``FaceN``/``VertexN`` refs that *source* does not have.
+
+    Other spellings (mapped topological names) are left to FreeCAD.
+    """
+
+    shape = getattr(source, "Shape", None)
+    name = getattr(source, "Name", "?")
+    for ref in refs:
+        match = _SUBELEMENT_REF.fullmatch(ref)
+        if match is None:
+            continue
+        elements = getattr(shape, _SUBELEMENT_LISTS[match.group(1)], None)
+        if elements is None:
+            continue
+        index = int(match.group(2))
+        if not 1 <= index <= len(elements):
+            raise ValueError(
+                f"{field}: {ref!r} does not exist on {name!r} "
+                f"({len(elements)} {_SUBELEMENT_LISTS[match.group(1)].lower()})"
+            )
+
+
+def require_within_extent(source: object, value: float, field: str) -> None:
+    """Reject a dress-up size no smaller than the whole *source* shape.
+
+    OpenCASCADE reports such sizes only as "BRep_API: command not done".
+    """
+
+    box = getattr(getattr(source, "Shape", None), "BoundBox", None)
+    diagonal = getattr(box, "DiagonalLength", None)
+    if not isinstance(diagonal, int | float) or not math.isfinite(diagonal):
+        return
+    if 0 < diagonal <= value:
+        raise ValueError(
+            f"{field} {value:g} does not fit on {getattr(source, 'Name', '?')!r} "
+            f"(bounding-box diagonal {diagonal:.6g} mm)"
+        )
+
+
 def is_read_only_property(item: object, name: str) -> bool:
     checker = getattr(item, "isReadOnly", None)
     if callable(checker):
@@ -159,6 +213,8 @@ __all__ = [
     "number_value",
     "optional_name",
     "require_nonempty_shape",
+    "require_subelements",
+    "require_within_extent",
     "set_attr",
     "set_feature_bool",
     "set_named_property",

@@ -134,7 +134,7 @@ def _register_set_color(
             transparency: Transparency 0.0 (opaque) - 1.0 (fully transparent).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return set_color_operation(
             server_connection(),

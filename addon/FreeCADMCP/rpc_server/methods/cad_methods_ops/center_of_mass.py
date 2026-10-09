@@ -69,7 +69,7 @@ def run_center_of_mass(
             CenterOfMassError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}")
         )
     if lookup_object(document, str(request.obj_name)) is None:
-        return _failure(CenterOfMassError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(CenterOfMassError("OBJECT_NOT_FOUND", f"Object not found: {request.obj_name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.center_of_mass(document, str(request.obj_name))

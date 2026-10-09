@@ -88,7 +88,7 @@ def run_set_color(
         return _failure(SetColorError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     obj = lookup_object(document, str(request.obj_name))
     if obj is None:
-        return _failure(SetColorError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(SetColorError("OBJECT_NOT_FOUND", f"Object not found: {request.obj_name!r}"))
     view = getattr(obj, "ViewObject", None)
     if view is None:
         return _failure(SetColorError("VIEW_NOT_AVAILABLE", "Object has no ViewObject"))

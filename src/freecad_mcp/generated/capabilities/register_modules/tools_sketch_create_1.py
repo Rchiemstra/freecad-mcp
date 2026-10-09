@@ -46,7 +46,7 @@ def _register_sketch_create(
                 sketch is attached. ``Rotation.Angle`` is in degrees.
 
         Returns:
-            A message indicating success or failure and a screenshot.
+            A message indicating success or failure.
 
         Recipe (avoid the silent P3 trap):
           Pass ``attach_to`` and ``attachment_offset`` when creating the sketch. This
@@ -112,7 +112,7 @@ def _register_sketch_add_geometry(
             geometry: List of geometry descriptors (see above).
 
         Returns:
-            A message with the assigned geometry indices and a screenshot.
+            A message with the assigned geometry indices.
 
         Examples:
             Add a 20x10 rectangle and a circle of radius 3:
@@ -186,7 +186,7 @@ def _register_sketch_add_constraint(
             constraints: List of constraint descriptors (see table above).
 
         Returns:
-            A message indicating success or failure and a screenshot.
+            A message indicating success or failure.
 
         Examples:
             Constrain a rectangle at the origin with width=20, height=10:

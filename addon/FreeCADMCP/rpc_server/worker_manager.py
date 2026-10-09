@@ -177,7 +177,12 @@ class WorkerManager:
         with self._state_lock:
             invocation = self._invocations.get(job_id)
             if invocation is None:
-                return {"success": False, "error_code": "worker_job_not_found", "job_id": job_id}
+                return {
+                    "success": False,
+                    "error_code": "worker_job_not_found",
+                    "error": f"Worker job not found: {job_id!r}",
+                    "job_id": job_id,
+                }
             invocation.cancelled = True
             active = self._active_invocation is invocation
             process = self._active_process if active else None

@@ -103,8 +103,11 @@ def apply_relink_references(doc: RelinkReferencesDocument, request: RelinkRefere
 
     source = require_object(doc, request.from_obj, missing_code="OBJECT_NOT_FOUND", error=RelinkReferencesError)
     target = require_object(doc, request.to_obj, missing_code="OBJECT_NOT_FOUND", error=RelinkReferencesError)
-    changed = 0
+    relinked: list[str] = []
     for item in _iter_document_objects(doc):
+        # Retargeting the target's own links would make it link to itself.
+        if item is source or item is target:
+            continue
         props = getattr(item, "PropertiesList", None)
         if not isinstance(props, list):
             continue
@@ -129,10 +132,15 @@ def apply_relink_references(doc: RelinkReferencesDocument, request: RelinkRefere
             if did_change:
                 try:
                     setattr(item, prop, updated)
-                    changed += 1
                 except Exception:
                     continue
-    return RelinkReferencesReceipt(name=request.to_obj, item=target, skipped=False, extra=changed)
+                relinked.append(f"{object_name(item)}.{prop}")
+    if not relinked:
+        raise RelinkReferencesError(
+            "RELINK_NOT_APPLIED",
+            f"No link properties referenced {request.from_obj!r}",
+        )
+    return RelinkReferencesReceipt(name=request.to_obj, item=target, skipped=False, extra=relinked)
 
 
 def read_relink_references_result(doc: RelinkReferencesReadDocument, receipt: RelinkReferencesReceipt) -> RelinkReferencesInspection:
@@ -169,6 +177,8 @@ def build_relink_references_request(doc_name: object, from_obj: object, to_obj: 
     to_obj_value = nonempty_string(to_obj, 'to_obj')
     if to_obj_value is None:
         return _failure(RelinkReferencesError("INVALID_ARGUMENT", "to_obj must be a nonempty string"))
+    if from_obj_value == to_obj_value:
+        return _failure(RelinkReferencesError("INVALID_ARGUMENT", "from_obj and to_obj must differ"))
     return RelinkReferencesRequest(
         doc_name=DocumentName(doc_name_value),
         from_obj=from_obj_value,
@@ -212,7 +222,12 @@ class _RelinkReferencesExecution:
                     "Native commit completed without an inspected result",
                     committed=True,
                 )
-            return make_relink_references_success(from_obj=self.request.from_obj, to_obj=self.request.to_obj)
+            extra = self.inspected.extra
+            return make_relink_references_success(
+                from_obj=self.request.from_obj,
+                to_obj=self.request.to_obj,
+                relinked=[str(item) for item in extra] if isinstance(extra, list) else None,
+            )
 
         return settle_native_commit(result, _finish_native_commit)
 

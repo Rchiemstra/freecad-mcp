@@ -332,3 +332,20 @@ def test_cached_parts_path_avoids_background_freecad_path_lookup(tmp_path, monke
         ),
     )
     assert parts_library.get_parts_list() == ["Part.FCStd"]
+
+
+def test_cancelling_an_unknown_job_says_why(tmp_path):
+    """The not-found result had no error text, so clients only saw "RPC failed"."""
+
+    manager = WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=tmp_path / "workers",
+        autostart=False,
+    )
+
+    result = manager.cancel("bogus-job-id")
+
+    assert result["success"] is False
+    assert result["error_code"] == "worker_job_not_found"
+    assert "bogus-job-id" in result["error"]

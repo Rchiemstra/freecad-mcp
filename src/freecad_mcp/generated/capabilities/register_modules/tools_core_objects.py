@@ -142,8 +142,10 @@ def _register_repair_references(
                 validate with an explicit recompute after the complete batch.
 
         Returns:
-            Applied properties, commit state, deferred/attempted recompute state,
-            and any invalid links remaining on the repaired owner objects.
+            JSON ``{ok, document_name, repaired_count, repaired, recompute}``:
+            the repaired ``Object.Property`` links (and ``From->To`` relinks) and
+            whether the recompute ran (``done``) or was ``deferred``. Use
+            inspect_references to find invalid links that remain.
         """
         return repair_references_operation(
             server_connection(),
@@ -174,7 +176,8 @@ def _register_delete_object(
         them Invalid. To avoid silent orphans this tool:
           * ``recursive=True`` -> remove dependents (leaves first) then the object;
           * ``force=True``      -> remove only the object and report the orphans left;
-          * otherwise           -> refuse and list the dependents so the agent decides.
+          * otherwise           -> refuse (error ``OBJECT_HAS_DEPENDENTS``, nothing
+            deleted) and list the dependents in ``diagnostics.dependents``.
 
         Args:
             doc_name: The name of the document to delete the object from.
@@ -184,8 +187,8 @@ def _register_delete_object(
                 remain and are reported).
 
         Returns:
-            JSON ``{ok, object, deleted, refused, dependents|orphans_left, ...}``
-            plus a recompute log of any non-clean objects, and a screenshot.
+            JSON ``{ok, object_name, deleted, orphans_left (force only), recompute}``
+            and a screenshot.
         """
         return delete_object_operation(
             server_connection(),

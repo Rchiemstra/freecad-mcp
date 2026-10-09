@@ -58,6 +58,7 @@ class RepairReferencesCollaborators(Protocol):
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Run the mutation through the generic native transaction policy."""
 
@@ -103,6 +104,8 @@ class RepairReferencesSuccess(TypedDict):
     retry_safe: Literal[False]
     document_name: DocumentName
     repaired_count: int
+    repaired: NotRequired[list[str]]
+    recompute: NotRequired[str]
 
 
 class RepairReferencesFailure(TypedDict):
@@ -160,14 +163,22 @@ _CORE_KEYS = frozenset(
         "diagnostics",
         "document_name",
         "repaired_count",
+        "repaired",
+        "recompute",
     }
 )
 
 
-def make_repair_references_success(document_name: DocumentName, repaired_count: int) -> RepairReferencesSuccess:
+def make_repair_references_success(
+    document_name: DocumentName,
+    repaired_count: int,
+    *,
+    repaired: list[str] | None = None,
+    recompute: str | None = None,
+) -> RepairReferencesSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: RepairReferencesSuccess = {
         "contract_version": REPAIR_REFERENCES_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -177,6 +188,11 @@ def make_repair_references_success(document_name: DocumentName, repaired_count: 
         "document_name": document_name,
         "repaired_count": repaired_count,
     }
+    if repaired is not None:
+        result["repaired"] = repaired
+    if recompute is not None:
+        result["recompute"] = recompute
+    return result
 
 
 def make_repair_references_failure(
@@ -392,7 +408,14 @@ def parse_repair_references_response(raw_response: object) -> RepairReferencesRe
         and document_name.strip()
         and type(repaired_count) is int
     ):
-        return make_repair_references_success(DocumentName(document_name), repaired_count)
+        repaired = response.get("repaired")
+        recompute = response.get("recompute")
+        return make_repair_references_success(
+            DocumentName(document_name),
+            repaired_count,
+            repaired=[str(item) for item in repaired] if isinstance(repaired, list) else None,
+            recompute=recompute if isinstance(recompute, str) else None,
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

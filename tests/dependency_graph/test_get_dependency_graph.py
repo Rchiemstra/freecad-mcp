@@ -52,3 +52,23 @@ def test_missing_object_is_rejected():
 
     assert result["success"] is False
     assert result["error_code"] == "OBJECT_NOT_FOUND"
+
+
+def test_dependents_reach_the_typed_result():
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.objects["Hole"] = FakeObject("Hole")
+    collab, _api = collaborators(document, events)
+    payload = {
+        "root": "Hole",
+        "history_order": ["Pad", "Hole", "Mirror"],
+        "edges": [],
+        "dependents": ["Mirror"],
+        "cycle_detected": False,
+        "node_count": 1,
+    }
+    with patch.object(diagnostics_shape_actions, "get_dependency_graph", return_value=payload):
+        result = run_get_dependency_graph(collab, "Doc", "Hole")
+
+    assert result["success"] is True
+    assert result["dependents"] == ["Mirror"]

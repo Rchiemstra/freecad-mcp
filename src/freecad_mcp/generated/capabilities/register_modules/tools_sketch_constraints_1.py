@@ -49,7 +49,7 @@ def _register_sketch_constrain_coincident(
             pos2: Point position on geo2 (1, 2, or 3).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_coincident_operation(
             server_connection(),
@@ -84,7 +84,7 @@ def _register_sketch_constrain_horizontal(
             geo: Index of the line geometry element.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_horizontal_operation(
             server_connection(),
@@ -116,7 +116,7 @@ def _register_sketch_constrain_vertical(
             geo: Index of the line geometry element.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_vertical_operation(
             server_connection(),
@@ -161,7 +161,7 @@ def _register_sketch_constrain_distance(
             name: Optional stable constraint name (recommended for parametric edits).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_distance_operation(
             server_connection(),
@@ -203,7 +203,7 @@ def _register_sketch_constrain_radius(
             name: Optional stable constraint name (recommended for parametric edits).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_radius_operation(
             server_connection(),

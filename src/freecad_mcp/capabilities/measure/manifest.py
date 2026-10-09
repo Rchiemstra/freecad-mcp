@@ -23,7 +23,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="measure_angle",
-            docstring='Measure the angle between two edges or objects.\n\nRefs can be ``"ObjectName"`` or ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``).\n\nArgs:\n    doc_name: Document containing the objects.\n    edge1_ref: First edge reference.\n    edge2_ref: Second edge reference.\n\nReturns:\n    JSON with ``angle_deg`` in degrees.',
+            docstring='Measure the angle between two edges or objects.\n\nRefs can be ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``), or ``"ObjectName"`` for\nan object whose shape is a single edge (e.g. a Part::Line).\n\nArgs:\n    doc_name: Document containing the objects.\n    edge1_ref: First edge reference.\n    edge2_ref: Second edge reference.\n\nReturns:\n    JSON with ``angle_deg`` in degrees.',
             signature="(ctx: 'Context', doc_name: 'str', edge1_ref: 'str', edge2_ref: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.measure_angle_operation",
             rpc_method="measure_angle",

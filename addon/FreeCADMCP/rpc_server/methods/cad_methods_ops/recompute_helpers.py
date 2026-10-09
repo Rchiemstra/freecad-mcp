@@ -350,6 +350,12 @@ def undo_gui(
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
+        # FreeCAD's undo() is a silent no-op on an empty stack.
+        if capture_undo_head(document)["undo_count"] <= 0:
+            failure = _error("EMPTY_HISTORY_STACK", "Nothing to undo")
+            _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
+            return failure
+
         admission_failure = admit_cad_mutation(
             document, inflight=current_cad_mutation_inflight()
         )
@@ -447,6 +453,12 @@ def redo_gui(
                 current_redo_count=live["redo_count"],
                 current_redo_head=live["redo_head"],
             )
+            _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
+            return failure
+
+        # FreeCAD's redo() is a silent no-op on an empty stack.
+        if capture_redo_head(document)["redo_count"] <= 0:
+            failure = _error("EMPTY_HISTORY_STACK", "Nothing to redo")
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 

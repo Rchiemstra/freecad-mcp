@@ -72,6 +72,7 @@ class DeleteObjectSuccess(TypedDict):
     deleted: list[str]
     refused: NotRequired[bool]
     dependents: NotRequired[list[object]]
+    orphans_left: NotRequired[list[object]]
     recompute: NotRequired[object]
 
 
@@ -132,6 +133,7 @@ _CORE_KEYS = frozenset(
         "deleted",
         "refused",
         "dependents",
+        "orphans_left",
         "recompute",
     }
 )
@@ -143,6 +145,7 @@ def make_delete_object_success(
     *,
     refused: bool | None = None,
     dependents: list[object] | None = None,
+    orphans_left: list[object] | None = None,
     recompute: object | None = None,
 ) -> DeleteObjectSuccess:
     """Construct a complete committed result."""
@@ -161,6 +164,8 @@ def make_delete_object_success(
         result["refused"] = refused
     if dependents is not None:
         result["dependents"] = dependents
+    if orphans_left is not None:
+        result["orphans_left"] = orphans_left
     if recompute is not None:
         result["recompute"] = recompute
     return result
@@ -383,11 +388,13 @@ def parse_delete_object_response(raw_response: object) -> DeleteObjectResult:
         if len(deleted_names) == len(deleted):
             refused_raw = response.get("refused")
             dependents_raw = response.get("dependents")
+            orphans_raw = response.get("orphans_left")
             return make_delete_object_success(
                 ObjectName(object_name),
                 deleted_names,
                 refused=refused_raw if isinstance(refused_raw, bool) else None,
                 dependents=list(dependents_raw) if isinstance(dependents_raw, list) else None,
+                orphans_left=list(orphans_raw) if isinstance(orphans_raw, list) else None,
                 recompute=response.get("recompute"),
             )
 

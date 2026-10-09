@@ -51,7 +51,7 @@ def _register_helical_sweep_feature(
             reversed_dir: If true, reverse the helix direction.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return helical_sweep_feature_operation(
             server_connection(),
@@ -96,7 +96,7 @@ def _register_fillet_feature(
             body_name: Optional explicit PartDesign Body name.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return fillet_feature_operation(
             server_connection(),
@@ -138,7 +138,7 @@ def _register_chamfer_feature(
             body_name: Optional explicit PartDesign Body name.
 
         Returns:
-            Success message and an isometric screenshot.
+            Success message.
         """
         return chamfer_feature_operation(
             server_connection(),

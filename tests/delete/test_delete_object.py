@@ -220,3 +220,63 @@ def test_deleting_the_tip_feature_moves_the_body_tip_back():
     assert receipt.deleted == ("PadDup",)
     assert body.Tip is first
     assert log == ["Body.removeObject(PadDup)", "Document.removeObject(PadDup)"]
+
+
+def _hole_with_dependents(events):
+    document = FakeDocument(events)
+    hole = document.addObject("PartDesign::Pocket", "Hole")
+    for name in ("Mirror", "Pattern"):
+        dependent = document.addObject("PartDesign::Mirrored", name)
+        dependent.OutList.append(hole)
+        hole.InList.append(dependent)
+    document.events.clear()
+    return document
+
+
+def test_refusal_is_a_rejection_that_lists_the_dependents():
+    """A refusal deletes nothing, so it must not read as a commit."""
+
+    events: list[str] = []
+    document = _hole_with_dependents(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_delete_object(collab, "Doc", "Hole", False, False)
+
+    assert result["success"] is False
+    assert result["ok"] is False
+    assert result["committed"] is False
+    assert result["outcome"] == "rejected"
+    assert result["error_code"] == "OBJECT_HAS_DEPENDENTS"
+    assert "Mirror" in result["error"] and "Pattern" in result["error"]
+    assert result["retry_safe"] is True
+    diagnostics = result["diagnostics"]
+    assert diagnostics["refused"] is True
+    assert [item["name"] for item in diagnostics["dependents"]] == ["Mirror", "Pattern"]
+    assert set(document.objects) == {"Hole", "Mirror", "Pattern"}
+    assert "commit" not in events
+
+
+def test_force_reports_the_orphans_it_leaves():
+    events: list[str] = []
+    document = _hole_with_dependents(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_delete_object(collab, "Doc", "Hole", False, True)
+
+    assert result["success"] is True
+    assert result["deleted"] == ["Hole"]
+    assert [item["name"] for item in result["orphans_left"]] == ["Mirror", "Pattern"]
+    assert set(document.objects) == {"Mirror", "Pattern"}
+
+
+def test_recursive_delete_leaves_no_orphans():
+    events: list[str] = []
+    document = _hole_with_dependents(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_delete_object(collab, "Doc", "Hole", True, False)
+
+    assert result["success"] is True
+    assert sorted(result["deleted"]) == ["Hole", "Mirror", "Pattern"]
+    assert "orphans_left" not in result
+    assert document.objects == {}

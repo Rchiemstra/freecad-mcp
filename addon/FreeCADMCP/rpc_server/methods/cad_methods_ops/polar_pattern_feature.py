@@ -164,7 +164,8 @@ def build_polar_pattern_feature_request(
         source = FeatureName(nonempty_string(feature_name, "feature_name"))
         created = FeatureName(nonempty_string(pattern_name, "pattern_name"))
         count = count_value(occurrences, "occurrences", minimum=2)
-        angle_value = number_value(angle, "angle", positive=True)
+        # FreeCAD clamps PropertyAngle to [-360, 360] without an error.
+        angle_value = number_value(angle, "angle", positive=True, maximum=360.0)
         axis_value = nonempty_string(axis, "axis")
         body = optional_name(body_name, "body_name")
         reversed_value = bool_value(reversed_dir, "reversed_dir")

@@ -77,6 +77,7 @@ def test_unknown_cancellation_target_is_structured():
         assert result == {
             "success": False,
             "error_code": "worker_job_not_found",
+            "error": "Worker job not found: 'missing-job'",
             "job_id": "missing-job",
         }
     finally:

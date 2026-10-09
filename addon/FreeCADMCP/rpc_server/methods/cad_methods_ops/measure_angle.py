@@ -69,8 +69,9 @@ def run_measure_angle(
         return _failure(MeasureAngleError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     edge1_object = str(request.edge1_ref).split(":", 1)[0]
     edge2_object = str(request.edge2_ref).split(":", 1)[0]
-    if lookup_object(document, edge1_object) is None or lookup_object(document, edge2_object) is None:
-        return _failure(MeasureAngleError("OBJECT_NOT_FOUND", "Object not found"))
+    for name in (str(edge1_object), str(edge2_object)):
+        if lookup_object(document, name) is None:
+            return _failure(MeasureAngleError("OBJECT_NOT_FOUND", f"Object not found: {name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.measure_angle(document, str(request.edge1_ref), str(request.edge2_ref))

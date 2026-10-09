@@ -20,7 +20,7 @@ def run_diagnose_helix(collaborators: object, doc_name: str, helix_name: str) ->
     if document is None:
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
     if lookup_object(document, helix_name) is None:
-        return _failure("OBJECT_NOT_FOUND", "Object not found")
+        return _failure("OBJECT_NOT_FOUND", f"Object not found: {helix_name!r}")
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_shape_actions.diagnose_helix(document, str(helix_name))

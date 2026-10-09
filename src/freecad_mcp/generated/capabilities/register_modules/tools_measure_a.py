@@ -32,7 +32,8 @@ def _register_measure_angle(mcp: InstrumentedFastMCP, *, dependencies: ToolDepen
     def measure_angle(ctx: Context, doc_name: str, edge1_ref: str, edge2_ref: str) -> CallToolResult:
         """Measure the angle between two edges or objects.
 
-Refs can be ``"ObjectName"`` or ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``).
+Refs can be ``"ObjectName:EdgeN"`` (e.g. ``"Box:Edge1"``), or ``"ObjectName"`` for
+an object whose shape is a single edge (e.g. a Part::Line).
 
 Args:
     doc_name: Document containing the objects.

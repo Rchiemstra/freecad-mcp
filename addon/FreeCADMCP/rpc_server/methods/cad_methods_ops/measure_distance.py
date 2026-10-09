@@ -67,8 +67,9 @@ def run_measure_distance(
     document = lookup_document(app, str(request.doc_name))
     if document is None:
         return _failure(MeasureDistanceError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
-    if lookup_object(document, str(request.shape1_ref)) is None or lookup_object(document, str(request.shape2_ref)) is None:
-        return _failure(MeasureDistanceError("OBJECT_NOT_FOUND", "Object not found"))
+    for name in (str(request.shape1_ref), str(request.shape2_ref)):
+        if lookup_object(document, name) is None:
+            return _failure(MeasureDistanceError("OBJECT_NOT_FOUND", f"Object not found: {name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.measure_distance(document, str(request.shape1_ref), str(request.shape2_ref))

@@ -23,7 +23,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="create_assembly_grounded_joint",
-            docstring='Ground an assembly component through the headless Assembly API.',
+            docstring='Ground an assembly component through the headless Assembly API.\n\nThe component must be inside the assembly: create it there or move it in\nwith move_object(target_container=<assembly>). Other objects are rejected\nwith INVALID_ARGUMENT because the solver ignores them.',
             signature="(ctx: 'Context', doc_name: 'str', assembly_name: 'str', component_name: 'str', label: 'str | None' = None, recompute: 'bool' = True) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.create_assembly_grounded_joint_operation",
             rpc_method="create_assembly_grounded_joint",
@@ -35,7 +35,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="create_assembly_joint",
-            docstring='Create a built-in Assembly joint from two component subelement references.',
+            docstring='Create a built-in Assembly joint from two component subelement references.\n\nBoth components must be inside the assembly: create them there or move them\nin with move_object(target_container=<assembly>). Other objects are rejected\nwith INVALID_ARGUMENT because the solver ignores them.',
             signature='(ctx: \'Context\', doc_name: \'str\', assembly_name: \'str\', joint_type: "Literal[\'Fixed\', \'Revolute\', \'Cylindrical\', \'Slider\', \'Ball\', \'Distance\', \'Parallel\', \'Perpendicular\', \'Angle\', \'RackPinion\', \'Screw\', \'Gears\', \'Belt\']", ref1_component: \'str\', ref2_component: \'str\', ref1_element: \'str\' = \'\', ref2_element: \'str\' = \'\', ref1_vertex: \'str | None\' = None, ref2_vertex: \'str | None\' = None, label: \'str | None\' = None, solve: \'bool\' = True, presolve: \'bool\' = True, recompute: \'bool\' = True, properties: \'dict[str, Any] | None\' = None) -> \'CallToolResult\'',
             operation_path="freecad_mcp.operations.create_assembly_joint_operation",
             rpc_method="create_assembly_joint",
@@ -47,7 +47,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="solve_assembly",
-            docstring='Re-solve an Assembly after editing a joint or a referenced face (I9 / P9).\n\nTries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a\nplain recompute, and reports which method succeeded. Returns JSON\n``{ok, assembly, method, status}`` plus a screenshot.\n\nArgs:\n    doc_name: The document containing the assembly.\n    assembly_name: The name of the Assembly::AssemblyObject to solve.',
+            docstring='Re-solve an Assembly after editing a joint or a referenced face (I9 / P9).\n\nTries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a\nplain recompute, and reports which method succeeded. Returns JSON\n``{ok, assembly, method, status, solver_status}`` plus a screenshot.\nA solve the solver rejects (a non-zero status, such as joints it cannot\nsatisfy) fails with ASSEMBLY_SOLVE_FAILED.\n\nArgs:\n    doc_name: The document containing the assembly.\n    assembly_name: The name of the Assembly::AssemblyObject to solve.',
             signature="(ctx: 'Context', doc_name: 'str', assembly_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.solve_assembly_operation",
             rpc_method="solve_assembly",

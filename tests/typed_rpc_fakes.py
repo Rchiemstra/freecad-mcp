@@ -94,6 +94,7 @@ class CompatibilityAPI:
         postcondition=None,
         bind_document=False,
         require_native=False,
+        recompute=True,
     ):
         self.calls.append((document_name, structural, bind_document, require_native))
         if self.document is None:
@@ -106,7 +107,8 @@ class CompatibilityAPI:
             self._restore(before_objects, before_recomputed)
             return {"status": "ApplyFailed", "committed": False, "message": str(exc)}
         try:
-            self.document.recompute()
+            if recompute:
+                self.document.recompute()
         except Exception as exc:
             self._restore(before_objects, before_recomputed)
             return {
@@ -142,6 +144,7 @@ class CompatibilityAPI:
             postcondition=postcondition,
             bind_document=True,
             require_native=True,
+            recompute=recompute,
         )
 
     def newDocument(self, name: str) -> FakeDocument:

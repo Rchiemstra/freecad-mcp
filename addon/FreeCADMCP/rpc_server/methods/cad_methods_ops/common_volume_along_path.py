@@ -142,12 +142,12 @@ def run_common_volume_along_path(
             CommonVolumeAlongPathError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}")
         )
     if lookup_object(document, request.moving_object) is None:
-        return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", f"Object not found: {request.moving_object!r}"))
     for obstacle_name in request.obstacle_objects:
         if lookup_object(document, obstacle_name) is None:
-            return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", "Object not found"))
+            return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", f"Object not found: {obstacle_name!r}"))
     if request.path_object is not None and lookup_object(document, request.path_object) is None:
-        return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(CommonVolumeAlongPathError("OBJECT_NOT_FOUND", f"Object not found: {request.path_object!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = measure_path_actions.common_volume_along_path(

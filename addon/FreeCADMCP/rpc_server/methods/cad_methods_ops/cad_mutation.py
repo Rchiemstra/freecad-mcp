@@ -9,8 +9,10 @@ from typing import Any
 
 try:
     from ....dispatch.gui_stage_clock import current_stage_clock
+    from ....rpc_method_context import current_rpc_method, rpc_method_scope
 except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
     from dispatch.gui_stage_clock import current_stage_clock
+    from rpc_method_context import current_rpc_method, rpc_method_scope
 
 from ...recompute_policy import assert_recompute_policy
 from .mutation_readiness import document_readiness, mark_quarantined
@@ -21,9 +23,6 @@ from .mutation_readiness_wait import (
 
 _ACTIVE_INFLIGHT: ContextVar[Any | None] = ContextVar(
     "freecad_mcp_cad_mutation_inflight", default=None
-)
-_ACTIVE_RPC_METHOD: ContextVar[str | None] = ContextVar(
-    "freecad_mcp_cad_mutation_method", default=None
 )
 
 
@@ -54,19 +53,14 @@ def current_cad_mutation_inflight() -> Any:
     return _ACTIVE_INFLIGHT.get()
 
 
-@contextmanager
 def cad_mutation_rpc_method(method: str | None):
     """Carry the active typed RPC method name into ``run_cad_mutation``."""
 
-    token = _ACTIVE_RPC_METHOD.set(method)
-    try:
-        yield
-    finally:
-        _ACTIVE_RPC_METHOD.reset(token)
+    return rpc_method_scope(method)
 
 
 def current_cad_mutation_rpc_method() -> str | None:
-    return _ACTIVE_RPC_METHOD.get()
+    return current_rpc_method()
 
 
 def _document_name(document: Any) -> str:

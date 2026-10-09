@@ -379,3 +379,45 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _restore_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+def test_snapshot_reload_runs_through_the_gui_executor():
+    """Restore reopened the snapshot on the RPC thread after the native commit.
+
+    Opening a document also restores its view providers; a Python view
+    provider (an assembly joint's) then raised "GUI API
+    'ViewProviderDocumentObject::getPyObject' may only be used from the main
+    thread".
+    """
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+    calls: list[str] = []
+
+    def on_gui(task):
+        calls.append("gui")
+        assert not document.restored_paths
+        return task()
+
+    result = run_restore(collaborators, "Doc", "snap-test", on_gui=on_gui)
+
+    assert result["success"] is True
+    assert calls == ["gui"]
+    assert document.restored_paths
+
+
+def test_a_failed_gui_dispatch_leaves_the_restore_uncertain():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_restore(
+        collaborators, "Doc", "snap-test", on_gui=lambda _task: "GUI dispatcher stopped"
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+    assert "GUI dispatcher stopped" in result["error"]

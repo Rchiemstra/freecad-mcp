@@ -73,7 +73,7 @@ def run_spreadsheet_list_aliases(
         )
     sheet = lookup_object(document, request.sheet_name)
     if sheet is None:
-        return _failure(SpreadsheetListAliasesError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(SpreadsheetListAliasesError("OBJECT_NOT_FOUND", f"Object not found: {request.sheet_name!r}"))
     optional_recompute(collaborators, document)
     try:
         aliases = collect_spreadsheet_aliases(sheet)

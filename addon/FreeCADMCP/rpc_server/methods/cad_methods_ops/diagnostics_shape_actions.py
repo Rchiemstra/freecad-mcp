@@ -11,6 +11,7 @@ from .typed_runtime import (
     module_callable,
     require_object,
 )
+from .delete_object import object_dependents
 from .world_shape_actions import read_global_placement, resolve_global_shape
 
 
@@ -529,36 +530,83 @@ def audit_hardcoded_dimensions(document: object, body_name: str, flag_aliases: b
     return {"ok": len(findings) == 0, "body": body_name, "findings": findings, "count": len(findings)}
 
 
+_FALLBACK_LINK_PROPERTIES = (
+    "Support", "AttachmentSupport", "Profile", "Base", "Tool", "Source",
+    "Original", "Originals", "References",
+)
+# Container bookkeeping, not modelling dependencies.
+_CONTAINER_LINK_PROPERTIES = frozenset({"Group", "Origin", "OriginFeatures"})
+
+
+def _link_properties(obj: object) -> list[str]:
+    names = [str(name) for name in getattr(obj, "PropertiesList", []) or []]
+    type_of = getattr(obj, "getTypeIdOfProperty", None)
+    if not callable(type_of):
+        return [name for name in _FALLBACK_LINK_PROPERTIES if name in names]
+    links = []
+    for name in names:
+        if name in _CONTAINER_LINK_PROPERTIES or name.startswith("_"):
+            continue
+        try:
+            type_id = str(type_of(name))
+        except Exception:
+            continue
+        if "PropertyLink" in type_id or "PropertyXLink" in type_id:
+            links.append(name)
+    return links
+
+
+def _link_targets(value: object) -> list[tuple[object, list[str]]]:
+    """Flatten Link, LinkList, LinkSub and LinkSubList values."""
+
+    if value is None:
+        return []
+    if hasattr(value, "Name"):
+        return [(value, [])]
+    if isinstance(value, tuple) and value and hasattr(value[0], "Name"):
+        subs = value[1] if len(value) > 1 else ()
+        names = [subs] if isinstance(subs, str) else list(subs or ())
+        return [(value[0], [str(sub) for sub in names if sub])]
+    if isinstance(value, (list, tuple)):
+        return [target for item in value for target in _link_targets(item)]
+    return []
+
+
+def _history_owner(obj: object) -> object | None:
+    if getattr(obj, "Group", None):
+        return obj
+    getter = getattr(obj, "getParentGeoFeatureGroup", None)
+    if callable(getter):
+        try:
+            return cast(object | None, getter())
+        except Exception:
+            return None
+    return None
+
+
 def get_dependency_graph(document: object, root: str) -> dict[str, object]:
     root_obj = require_object(document, root)
     edges: list[dict[str, object]] = []
     seen: set[str] = set()
-    link_props = ("Support", "AttachmentSupport", "Profile", "Base", "Tool", "Source", "Original", "Originals", "References")
+    path: set[str] = set()
+    cycle = False
 
     def walk(obj: object, stage: int) -> None:
+        nonlocal cycle
         name = str(getattr(obj, "Name", ""))
+        if name in path:
+            cycle = True
+            return
         if name in seen:
             return
         seen.add(name)
-        for prop in link_props:
-            if prop not in getattr(obj, "PropertiesList", []):
-                continue
+        path.add(name)
+        for prop in _link_properties(obj):
             try:
                 value = getattr(obj, prop)
             except Exception:
                 continue
-            targets: list[tuple[object, list[str]]] = []
-            if isinstance(value, (list, tuple)):
-                for item in value:
-                    if isinstance(item, tuple) and item:
-                        targets.append((item[0], list(item[1:]) if len(item) > 1 else []))
-                    elif hasattr(item, "Name"):
-                        targets.append((item, []))
-            elif hasattr(value, "Name"):
-                targets.append((value, []))
-            for target, subs in targets:
-                if target is None or not hasattr(target, "Name"):
-                    continue
+            for target, subs in _link_targets(value):
                 edges.append(
                     {
                         "from": name,
@@ -568,10 +616,11 @@ def get_dependency_graph(document: object, root: str) -> dict[str, object]:
                         "stage": stage,
                     }
                 )
-                if str(getattr(target, "Name", "")) not in seen:
-                    walk(target, stage + 1)
+                walk(target, stage + 1)
+        path.discard(name)
 
-    history = [str(getattr(item, "Name", "")) for item in getattr(root_obj, "Group", []) or []]
+    owner = _history_owner(root_obj)
+    history = [str(getattr(item, "Name", "")) for item in getattr(owner, "Group", []) or []]
     walk(root_obj, 0)
     names = {edge["from"] for edge in edges} | {edge["to"] for edge in edges}
     return {
@@ -579,7 +628,11 @@ def get_dependency_graph(document: object, root: str) -> dict[str, object]:
         "root": root,
         "history_order": history,
         "edges": edges,
-        "cycle_detected": False,
+        # Nearest dependents first; object_dependents yields deletion order.
+        "dependents": [
+            str(getattr(item, "Name", "")) for item in reversed(object_dependents(root_obj))
+        ],
+        "cycle_detected": cycle,
         "node_count": len(names),
     }
 

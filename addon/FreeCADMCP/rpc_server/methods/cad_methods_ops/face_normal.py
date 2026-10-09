@@ -68,7 +68,7 @@ def run_face_normal(
     if document is None:
         return _failure(FaceNormalError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.object_name)) is None:
-        return _failure(FaceNormalError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(FaceNormalError("OBJECT_NOT_FOUND", f"Object not found: {request.object_name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_shape_actions.face_normal(document, str(request.object_name), str(request.face))

@@ -497,3 +497,42 @@ def test_missing_stable_runtime_identity_fails_closed() -> None:
     assert result.get("success") is False, result
     assert result.get("error_code") == "LEASE_PROTOCOL_REQUIRED"
     document.beginEditSession.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["undo", "redo"])
+def test_history_action_on_an_empty_stack_is_refused(action) -> None:
+    """Undo/redo past the end of the stack must not report success.
+
+    FreeCAD's undo()/redo() are silent no-ops on an empty stack, so the
+    history-head path reported ``success`` for every call past the end and an
+    agent could not tell that nothing changed.
+    """
+
+    document = _mock_document()
+    document.UndoNames, document.UndoCount = [], 0
+    document.RedoNames, document.RedoCount = [], 0
+    document.undo = MagicMock()
+    document.redo = MagicMock()
+    rpc = _mock_rpc(document)
+    selector = {
+        "document_uid": "uid-1",
+        "document_instance_id": 5,
+        "lifecycle_epoch": 1,
+        "document_name": "Model",
+    }
+    run = recompute_helpers.undo_gui if action == "undo" else recompute_helpers.redo_gui
+    head = {f"expected_{action}_count": 0, f"expected_{action}_head": ""}
+
+    result = run(
+        selector,
+        operation_id=f"{action}-empty",
+        freecad=rpc._execution_collaborators.freecad,
+        rpc=rpc,
+        **head,
+    )
+
+    assert result.get("success") is False, result
+    assert result.get("error_code") == "EMPTY_HISTORY_STACK"
+    assert f"Nothing to {action}" in result.get("error", "")
+    getattr(document, action).assert_not_called()
+    document.recompute.assert_not_called()

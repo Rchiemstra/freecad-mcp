@@ -32,6 +32,7 @@ from .policy_runtime import (
     app_from,
     atomic_publish,
     lookup_document,
+    missing_parent_directory,
     staged_path,
     unlink_quiet,
     verify_nonempty_file,
@@ -60,6 +61,8 @@ def build_export_step_request(
         obj_names_value: list[str] | None = None
     elif not isinstance(obj_names, list) or any(not isinstance(item, str) for item in obj_names):
         return _failure(ExportStepError("INVALID_ARGUMENT", "obj_names must be a list of strings"))
+    elif not obj_names:
+        return _failure(ExportStepError("INVALID_ARGUMENT", "obj_names must not be empty; omit it to export the document"))
     else:
         obj_names_value = obj_names
     return ExportStepRequest(
@@ -84,6 +87,9 @@ def run_export_step(
     document = lookup_document(app, str(request.doc_name))
     if document is None:
         return _failure(ExportStepError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
+    missing = missing_parent_directory(str(request.file_path))
+    if missing is not None:
+        return _failure(ExportStepError("DIRECTORY_NOT_FOUND", f"Directory does not exist: {missing}"))
     tmp_path = staged_path(str(request.file_path))
     try:
         payload = measure_io_actions.export_step(document, tmp_path, request.obj_names)

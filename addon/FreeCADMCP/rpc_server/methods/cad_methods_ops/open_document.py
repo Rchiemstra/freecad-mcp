@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from collections.abc import Callable
 from typing import Protocol
 
@@ -57,6 +59,9 @@ def build_open_document_request(path: object) -> OpenDocumentRequest | OpenDocum
 def prepare_open_document(_app: object, request: OpenDocumentRequest) -> OpenDocumentFailure | None:
     if not str(request.path).strip():
         return _failure(OpenDocumentError("INVALID_ARGUMENT", "path must be a nonempty string"))
+    if not os.path.isfile(str(request.path)):
+        # FreeCAD would raise and log the exception in the Report view.
+        return _failure(OpenDocumentError("FILE_NOT_FOUND", f"File does not exist: {str(request.path)!r}"))
     return None
 
 

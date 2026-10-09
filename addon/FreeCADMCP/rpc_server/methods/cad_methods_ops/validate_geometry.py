@@ -66,7 +66,7 @@ def run_validate_geometry(
     if document is None:
         return _failure(ValidateGeometryError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.obj_name)) is None:
-        return _failure(ValidateGeometryError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(ValidateGeometryError("OBJECT_NOT_FOUND", f"Object not found: {request.obj_name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.validate_geometry(document, str(request.obj_name))

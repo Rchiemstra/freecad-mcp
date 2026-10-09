@@ -43,8 +43,11 @@ def test_partdesign_flow_with_undo_redo_and_views(mcp, gui_log):
                        pocket_name="Pocket", length=3, body_name="Body"))
     assert_ok(mcp.call("refresh_view", fit=True))
     assert_ok(mcp.call("get_view", view_name="Isometric", width=320, height=240))
-    refused = assert_ok(mcp.call("delete_object", doc_name="LiveA", obj_name="Fillet"))
-    assert refused.payload["refused"] is True
+    refused = mcp.call("delete_object", doc_name="LiveA", obj_name="Fillet")
+    assert not refused.ok
+    assert "Refused to delete 'Fillet'" in refused.text and "Pocket" in refused.text
+    objects = assert_ok(mcp.call("get_objects", doc_name="LiveA"))
+    assert "Fillet" in objects.text
     assert_ok(mcp.call("close_document", doc_name="LiveA"))
 
     assert_clean(gui_log)
@@ -270,6 +273,9 @@ def test_assembly_joints_can_be_created(mcp, gui_log):
                        obj_name="BoxA"))
     assert_ok(mcp.call("create_object", doc_name="LiveAsm", obj_type="Part::Box",
                        obj_name="BoxB", obj_properties={"Placement": {"Base": {"x": 30}}}))
+    for box in ("BoxA", "BoxB"):
+        assert_ok(mcp.call("move_object", doc_name="LiveAsm", obj_name=box,
+                           target_container="Asm"))
 
     assert_ok(mcp.call("create_assembly_grounded_joint", doc_name="LiveAsm",
                        assembly_name="Asm", component_name="BoxA"))
