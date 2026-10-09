@@ -61,6 +61,16 @@ def build_create_document_request(
         return _failure(
             CreateDocumentError("INVALID_ARGUMENT", "name must be a nonempty string")
         )
+    # FreeCAD rewrites '.', '/' and a leading digit, then this handler looks
+    # the document up under the caller's original name and reports it missing.
+    if not name.isidentifier():
+        return _failure(
+            CreateDocumentError(
+                "INVALID_ARGUMENT",
+                "name must be a FreeCAD document identifier "
+                "(letters, digits, and underscore; not starting with a digit)",
+            )
+        )
     return CreateDocumentRequest(name=DocumentName(name))
 
 

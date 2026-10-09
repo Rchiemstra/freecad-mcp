@@ -66,6 +66,10 @@ class GuiDispatchCore:
         self._timed_out_request: GuiRequest | None = None
         self._requests_by_owner: dict[tuple[str, str], GuiRequest] = {}
         self._outstanding_requests = 0
+        # newDocument pumps Qt events, which can deliver the next queued wake
+        # on this thread. A nested drain would run that request inside the
+        # current one and corrupt FreeCAD's shared name/label buffer.
+        self._draining = False
 
     def _release_outstanding(self, request: GuiRequest) -> None:
         if request._outstanding_released:
@@ -734,21 +738,27 @@ class GuiDispatchCore:
 
     def drain_one(self) -> None:
         self._require_owner_thread()
-        request = self._take_next_request()
-        if request is None:
+        if self._draining:
             return
-        request.stage_clock.mark_drain_started()
-        if request._deadline_expired and request._expire_if_waiting(
-            lambda: self._remove_pending(request)
-        ):
-            return
-        if self._gui_is_busy():
-            self._defer_busy_request(request)
-            return
-        if self._probe_or_defer_request(request):
-            return
-        if self._start_request(request):
-            self._run_request(request)
+        self._draining = True
+        try:
+            request = self._take_next_request()
+            if request is None:
+                return
+            request.stage_clock.mark_drain_started()
+            if request._deadline_expired and request._expire_if_waiting(
+                lambda: self._remove_pending(request)
+            ):
+                return
+            if self._gui_is_busy():
+                self._defer_busy_request(request)
+                return
+            if self._probe_or_defer_request(request):
+                return
+            if self._start_request(request):
+                self._run_request(request)
+        finally:
+            self._draining = False
 
     def _forget_after_execution(self, request: GuiRequest) -> None:
         with self._queue_lock:

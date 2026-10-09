@@ -105,6 +105,48 @@ def test_off_owner_fifo_runs_exactly_once_on_injected_owner() -> None:
 
 
 @pytest.mark.unit
+def test_drain_does_not_run_the_next_request_from_inside_the_current_one() -> None:
+    """newDocument pumps events; the queued wake must not start the next create."""
+
+    harness = _Harness()
+    core = harness.core()
+    order: list[str] = []
+    results: list[str] = []
+    errors: list[BaseException] = []
+
+    def first() -> str:
+        order.append("first-start")
+        core.drain_one()
+        order.append("first-end")
+        return "first"
+
+    def second() -> str:
+        order.append("second")
+        return "second"
+
+    threads = []
+    for callback in (first, second):
+        thread = threading.Thread(
+            target=_capture,
+            args=(lambda cb=callback: core.submit(cb, 1.0), results, errors),
+        )
+        thread.start()
+        threads.append(thread)
+        _wait_until(lambda expected=len(threads): core.pending_count == expected)
+
+    core.drain_one()
+    assert order == ["first-start", "first-end"]
+
+    core.drain_one()
+    for thread in threads:
+        thread.join(timeout=1.0)
+
+    assert errors == []
+    assert order == ["first-start", "first-end", "second"]
+    assert sorted(results) == ["first", "second"]
+
+
+@pytest.mark.unit
 def test_off_owner_drain_is_rejected_without_executing_or_losing_work() -> None:
     harness = _Harness()
     core = harness.core()
