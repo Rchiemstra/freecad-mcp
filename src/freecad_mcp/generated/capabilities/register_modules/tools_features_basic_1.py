@@ -57,9 +57,9 @@ def _register_pad_feature(
                 is disabled). Recommended for a deterministic PartDesign history.
 
         Returns:
-            A structured JSON workflow result (document, body, sketch, feature,
-            attachment, tip, solid_count, state, bbox, diagnostics) plus an isometric
-            screenshot, or a clear failure.
+            JSON ``{pad, feature, label}`` plus an isometric screenshot, or a
+            failure whose ``diagnostics`` explain a profile that is not pad-ready.
+            Use get_object or validate_geometry for the resulting solid.
 
         Examples:
             Pad "Sketch" by 15 mm inside "Body":
@@ -123,9 +123,9 @@ def _register_pocket_feature(
                 is disabled). Recommended for a deterministic PartDesign history.
 
         Returns:
-            A structured JSON workflow result (document, body, sketch, feature,
-            attachment, tip, solid_count, state, bbox, diagnostics) plus an isometric
-            screenshot, or a clear failure.
+            JSON ``{pocket, feature, label}`` plus an isometric screenshot, or a
+            failure whose ``diagnostics`` explain a profile that is not pad-ready.
+            Use get_object or validate_geometry for the resulting solid.
 
         Examples:
             Pocket "HoleSketch" by 5 mm:
