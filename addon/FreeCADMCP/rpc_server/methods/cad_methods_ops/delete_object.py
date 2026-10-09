@@ -42,8 +42,7 @@ class DeleteObjectReceipt:
 
     name: str
     deleted: tuple[str, ...]
-    refused: bool = False
-    dependents: tuple[object, ...] = ()
+    orphans: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +51,7 @@ class DeleteObjectInspection:
 
     name: ObjectName
     deleted: list[str]
+    orphans_left: list[object]
 
 
 def _failure(error: DeleteObjectError, *, retry_safe: bool = True) -> DeleteObjectFailure:
@@ -170,8 +170,13 @@ def _dependent_summary(dependent: object) -> dict[str, object]:
     }
 
 
-def _dependents(root: object) -> list[object]:
+def object_dependents(root: object) -> list[object]:
+    """Objects that would be orphaned without *root*, leaves first (deletion order)."""
+
     return list(_object_dependents(root))
+
+
+_dependents = object_dependents
 
 
 def _remove(doc: object, name: str) -> None:
@@ -207,11 +212,15 @@ def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObje
     ]
     root_name = str(getattr(obj, "Name", request.object_name))
     if dep_names and not request.recursive and not request.force:
-        return DeleteObjectReceipt(
-            name=root_name,
-            deleted=(),
-            refused=True,
-            dependents=tuple(_dependent_summary(item) for item in dependents),
+        raise DeleteObjectError(
+            "OBJECT_HAS_DEPENDENTS",
+            f"Refused to delete {root_name!r}: {len(dep_names)} dependent(s) would be "
+            f"orphaned ({', '.join(dep_names)}). Pass recursive=true to delete them "
+            "too, or force=true to delete only this object.",
+            diagnostics={
+                "refused": True,
+                "dependents": [_dependent_summary(item) for item in dependents],
+            },
         )
     deleted: list[str] = []
     delete_order = [*dep_names, root_name] if request.recursive else [root_name]
@@ -247,7 +256,8 @@ def apply_delete_object(doc: object, request: DeleteObjectRequest) -> DeleteObje
             continue
         if get_object(doc, name) is None and name not in deleted:
             deleted.append(name)
-    return DeleteObjectReceipt(name=root_name, deleted=tuple(deleted))
+    orphans = tuple(name for name in dep_names if name not in deleted)
+    return DeleteObjectReceipt(name=root_name, deleted=tuple(deleted), orphans=orphans)
 
 
 def read_delete_object_result(
@@ -261,7 +271,16 @@ def read_delete_object_result(
             "DELETED_OBJECT_REMAINING",
             f"Deleted objects are still present: {remaining!r}",
         )
-    return DeleteObjectInspection(name=ObjectName(receipt.name), deleted=list(receipt.deleted))
+    orphans_left: list[object] = []
+    for name in receipt.orphans:
+        orphan = get_object(doc, name)
+        if orphan is not None:
+            orphans_left.append(_dependent_summary(orphan))
+    return DeleteObjectInspection(
+        name=ObjectName(receipt.name),
+        deleted=list(receipt.deleted),
+        orphans_left=orphans_left,
+    )
 
 
 def build_delete_object_request(
@@ -316,13 +335,6 @@ class _DeleteObjectExecution:
             recompute=not self.request.force,
         )
         def _finish_native_commit() -> DeleteObjectResult:
-            if self.created is not None and self.created.refused:
-                return make_delete_object_success(
-                    ObjectName(self.created.name),
-                    [],
-                    refused=True,
-                    dependents=list(self.created.dependents),
-                )
             if self.inspected is None:
                 return make_delete_object_uncertain(
                     "DELETE_OBJECT_COMMITTED_RESPONSE_INVALID",
@@ -333,6 +345,7 @@ class _DeleteObjectExecution:
                 self.inspected.name,
                 self.inspected.deleted,
                 refused=False,
+                orphans_left=self.inspected.orphans_left if self.request.force else None,
                 recompute=(
                     {
                         "policy": "deferred_recovery",
@@ -393,6 +406,7 @@ __all__ = [
     "DeleteObjectReceipt",
     "apply_delete_object",
     "build_delete_object_request",
+    "object_dependents",
     "read_delete_object_result",
     "rpc_delete_object",
     "run_delete_object",

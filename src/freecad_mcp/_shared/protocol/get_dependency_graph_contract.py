@@ -99,6 +99,7 @@ class GetDependencyGraphSuccess(TypedDict):
     edges: object
     cycle_detected: bool
     node_count: int
+    dependents: NotRequired[list[str]]
 
 
 class GetDependencyGraphFailure(TypedDict):
@@ -152,6 +153,7 @@ _CORE_KEYS = frozenset(
         "native_message",
         "native_status",
         "node_count",
+        "dependents",
         "ok",
         "outcome",
         "retry_safe",
@@ -165,10 +167,11 @@ _CORE_KEYS = frozenset(
 
 def make_get_dependency_graph_success(
     root: str, history_order: object, edges: object, cycle_detected: bool, node_count: int,
+    dependents: list[str] | None = None,
 ) -> GetDependencyGraphSuccess:
     """Construct a complete observed result."""
 
-    return {
+    result: GetDependencyGraphSuccess = {
         "contract_version": GET_DEPENDENCY_GRAPH_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -180,6 +183,9 @@ def make_get_dependency_graph_success(
         "cycle_detected": cycle_detected,
         "node_count": node_count,
     }
+    if dependents is not None:
+        result["dependents"] = dependents
+    return result
 
 
 def make_get_dependency_graph_failure(
@@ -392,12 +398,18 @@ def parse_get_dependency_graph_response(raw_response: object) -> GetDependencyGr
     edges = response.get("edges")
     cycle_detected = response.get("cycle_detected")
     node_count = response.get("node_count")
+    dependents = response.get("dependents")
     if _valid_success(response) and isinstance(root, str) and history_order is not None and edges is not None and isinstance(cycle_detected, bool) and type(node_count) is int:
-        return make_get_dependency_graph_success(root, history_order, edges, cycle_detected, node_count)
+        return make_get_dependency_graph_success(
+            root, history_order, edges, cycle_detected, node_count,
+            dependents=(
+                [str(item) for item in dependents] if isinstance(dependents, list) else None
+            ),
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")
-    success_keys = {'root', 'history_order', 'edges', 'cycle_detected', 'node_count'}
+    success_keys = {'root', 'history_order', 'edges', 'cycle_detected', 'node_count', 'dependents'}
     if (
         response.get("success") is False
         and response.get("ok") is False

@@ -66,18 +66,20 @@ def run_get_dependency_graph(
     if document is None:
         return _failure(GetDependencyGraphError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.root)) is None:
-        return _failure(GetDependencyGraphError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(GetDependencyGraphError("OBJECT_NOT_FOUND", f"Object not found: {request.root!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_shape_actions.get_dependency_graph(document, str(request.root))
     except Exception as exc:
         return _failure(GetDependencyGraphError("GET_DEPENDENCY_GRAPH_FAILED", str(exc) or type(exc).__name__))
+    dependents = payload.get("dependents")
     return make_get_dependency_graph_success(
         root=as_str(payload["root"]),
         history_order=payload["history_order"],
         edges=payload["edges"],
         cycle_detected=bool(payload["cycle_detected"]),
-        node_count=as_int(payload["node_count"])
+        node_count=as_int(payload["node_count"]),
+        dependents=[as_str(item) for item in dependents] if isinstance(dependents, list) else None,
     )
 
 
