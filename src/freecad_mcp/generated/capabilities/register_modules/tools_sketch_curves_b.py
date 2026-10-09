@@ -48,7 +48,7 @@ def _register_sketch_add_regular_polygon(
             construction: If true, add all edges as construction lines.
 
         Returns:
-            Success message with the assigned geometry indices and a screenshot.
+            Success message with the assigned geometry indices.
         """
         return sketch_add_regular_polygon_operation(
             server_connection(),
@@ -185,7 +185,7 @@ def _register_sketch_toggle_construction(
             construction: Target state — True for construction, False for normal.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_toggle_construction_operation(
             server_connection(),

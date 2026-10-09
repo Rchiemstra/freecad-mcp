@@ -11,7 +11,7 @@ MANIFEST = SubjectManifest(
     tools=(
         ToolEntry(
             name="sketch_constrain_coincident",
-            docstring='Constrain two sketch points to be coincident (share the same position).\n\nPoint positions: 1 = start/first endpoint, 2 = end/second endpoint,\n3 = centre (circles/arcs). Use index -1 for the sketch origin point,\n-2 for a point on the Y axis, -3 for a point on the X axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    pos1: Point position on geo1 (1, 2, or 3).\n    geo2: Index of the second geometry element.\n    pos2: Point position on geo2 (1, 2, or 3).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain two sketch points to be coincident (share the same position).\n\nPoint positions: 1 = start/first endpoint, 2 = end/second endpoint,\n3 = centre (circles/arcs). Use index -1 for the sketch origin point,\n-2 for a point on the Y axis, -3 for a point on the X axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    pos1: Point position on geo1 (1, 2, or 3).\n    geo2: Index of the second geometry element.\n    pos2: Point position on geo2 (1, 2, or 3).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', pos1: 'int', geo2: 'int', pos2: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_coincident_operation",
             rpc_method="sketch_constrain_coincident",
@@ -23,7 +23,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_distance",
-            docstring='Add a distance (length) constraint to a line or between two points.\n\nFor a line, omit `pos` to constrain its full length.\nTo constrain the distance from a specific point to the origin, provide\n`pos` (1 = start point, 2 = end point).\n\nPrefer `name` over geo index for later edits (geo indices shift after\ntrim/fillet). Use `sketch_edit_constraint(name=...)` to change the value.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the geometry element.\n    value: Required distance in mm.\n    pos: Optional point position (1 or 2) for point-to-origin distance.\n    name: Optional stable constraint name (recommended for parametric edits).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Add a distance (length) constraint to a line or between two points.\n\nFor a line, omit `pos` to constrain its full length.\nTo constrain the distance from a specific point to the origin, provide\n`pos` (1 = start point, 2 = end point).\n\nPrefer `name` over geo index for later edits (geo indices shift after\ntrim/fillet). Use `sketch_edit_constraint(name=...)` to change the value.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the geometry element.\n    value: Required distance in mm.\n    pos: Optional point position (1 or 2) for point-to-origin distance.\n    name: Optional stable constraint name (recommended for parametric edits).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int', value: 'float', pos: 'int | None' = None, name: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_distance_operation",
             rpc_method="sketch_constrain_distance",
@@ -35,7 +35,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_horizontal",
-            docstring='Constrain a line to be horizontal.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the line geometry element.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain a line to be horizontal.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the line geometry element.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_horizontal_operation",
             rpc_method="sketch_constrain_horizontal",
@@ -47,7 +47,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_radius",
-            docstring='Constrain the radius of a circle or arc.\n\nPrefer `name` over geo index for later edits. Bind live values with\n`set_expression` on `Constraints[i]` or edit via `sketch_edit_constraint`.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the circle or arc geometry element.\n    value: Required radius in mm.\n    name: Optional stable constraint name (recommended for parametric edits).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain the radius of a circle or arc.\n\nPrefer `name` over geo index for later edits. Bind live values with\n`set_expression` on `Constraints[i]` or edit via `sketch_edit_constraint`.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the circle or arc geometry element.\n    value: Required radius in mm.\n    name: Optional stable constraint name (recommended for parametric edits).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int', value: 'float', name: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_radius_operation",
             rpc_method="sketch_constrain_radius",
@@ -59,7 +59,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_vertical",
-            docstring='Constrain a line to be vertical.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the line geometry element.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain a line to be vertical.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo: Index of the line geometry element.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_vertical_operation",
             rpc_method="sketch_constrain_vertical",
@@ -71,7 +71,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_equal",
-            docstring='Constrain two geometry elements to have equal length or radius.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain two geometry elements to have equal length or radius.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_equal_operation",
             rpc_method="sketch_constrain_equal",
@@ -83,7 +83,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_parallel",
-            docstring='Constrain two lines to be parallel.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first line.\n    geo2: Index of the second line.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain two lines to be parallel.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first line.\n    geo2: Index of the second line.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_parallel_operation",
             rpc_method="sketch_constrain_parallel",
@@ -95,7 +95,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_perpendicular",
-            docstring='Constrain two lines to be perpendicular (90°).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first line.\n    geo2: Index of the second line.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain two lines to be perpendicular (90°).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first line.\n    geo2: Index of the second line.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_perpendicular_operation",
             rpc_method="sketch_constrain_perpendicular",
@@ -107,7 +107,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_constrain_tangent",
-            docstring='Constrain two curves (or a curve and a line) to be tangent.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Constrain two curves (or a curve and a line) to be tangent.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_constrain_tangent_operation",
             rpc_method="sketch_constrain_tangent",
@@ -119,7 +119,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_constraint",
-            docstring='Add constraints to an existing Sketcher sketch.\n\nEach constraint is a dict with a "type" key. Geometry indices refer to the\norder in which geometry was added (0-based). Point positions: 1 = start,\n2 = end, 3 = centre (circles/arcs).\n\nSupported constraint types and required keys:\n\n| type | keys |\n|------|------|\n| Coincident | geo1, pos1, geo2, pos2 |\n| Horizontal | geo |\n| Vertical | geo |\n| Distance | geo, value  **or**  geo1, pos1, geo2, pos2, value |\n| DistanceX | geo, value  **or**  geo, pos, value |\n| DistanceY | geo, value  **or**  geo, pos, value |\n| Radius | geo, value |\n| Diameter | geo, value |\n| Angle | geo, value  **or**  geo1, pos1, geo2, pos2, value |\n| Parallel | geo1, geo2 |\n| Perpendicular | geo1, geo2 |\n| Equal | geo1, geo2 |\n| Tangent | geo1, geo2 |\n| PointOnObject | geo1, pos1, geo2 |\n| Symmetric | geo1, pos1, geo2, pos2, geo3 |\n| Block | geo |\n\nOptional key on any dimensional constraint: ``name`` — stable identity for\nlater ``sketch_edit_constraint`` / expression binding (prefer over geo index\nafter trim/fillet).\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the target sketch.\n    constraints: List of constraint descriptors (see table above).\n\nReturns:\n    A message indicating success or failure and a screenshot.\n\nExamples:\n    Constrain a rectangle at the origin with width=20, height=10:\n    ```json\n    {\n      "doc_name": "Part",\n      "sketch_name": "Sketch",\n      "constraints": [\n        {"type": "Coincident", "geo1": 0, "pos1": 1, "geo2": -1, "pos2": 1},\n        {"type": "Horizontal", "geo": 0},\n        {"type": "Horizontal", "geo": 2},\n        {"type": "Vertical", "geo": 1},\n        {"type": "Vertical", "geo": 3},\n        {"type": "Distance", "geo": 0, "value": 20},\n        {"type": "Distance", "geo": 1, "value": 10}\n      ]\n    }\n    ```',
+            docstring='Add constraints to an existing Sketcher sketch.\n\nEach constraint is a dict with a "type" key. Geometry indices refer to the\norder in which geometry was added (0-based). Point positions: 1 = start,\n2 = end, 3 = centre (circles/arcs).\n\nSupported constraint types and required keys:\n\n| type | keys |\n|------|------|\n| Coincident | geo1, pos1, geo2, pos2 |\n| Horizontal | geo |\n| Vertical | geo |\n| Distance | geo, value  **or**  geo1, pos1, geo2, pos2, value |\n| DistanceX | geo, value  **or**  geo, pos, value |\n| DistanceY | geo, value  **or**  geo, pos, value |\n| Radius | geo, value |\n| Diameter | geo, value |\n| Angle | geo, value  **or**  geo1, pos1, geo2, pos2, value |\n| Parallel | geo1, geo2 |\n| Perpendicular | geo1, geo2 |\n| Equal | geo1, geo2 |\n| Tangent | geo1, geo2 |\n| PointOnObject | geo1, pos1, geo2 |\n| Symmetric | geo1, pos1, geo2, pos2, geo3 |\n| Block | geo |\n\nOptional key on any dimensional constraint: ``name`` — stable identity for\nlater ``sketch_edit_constraint`` / expression binding (prefer over geo index\nafter trim/fillet).\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the target sketch.\n    constraints: List of constraint descriptors (see table above).\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    Constrain a rectangle at the origin with width=20, height=10:\n    ```json\n    {\n      "doc_name": "Part",\n      "sketch_name": "Sketch",\n      "constraints": [\n        {"type": "Coincident", "geo1": 0, "pos1": 1, "geo2": -1, "pos2": 1},\n        {"type": "Horizontal", "geo": 0},\n        {"type": "Horizontal", "geo": 2},\n        {"type": "Vertical", "geo": 1},\n        {"type": "Vertical", "geo": 3},\n        {"type": "Distance", "geo": 0, "value": 20},\n        {"type": "Distance", "geo": 1, "value": 10}\n      ]\n    }\n    ```',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', constraints: 'list[dict[str, Any]]') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_constraint_operation",
             rpc_method="sketch_add_constraint",
@@ -131,7 +131,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_geometry",
-            docstring='Add geometry elements to an existing Sketcher sketch.\n\nEach element in `geometry` is a dict with a "type" key. Supported types:\n\n- **line**: `{"type": "line", "start": {"x": 0, "y": 0}, "end": {"x": 10, "y": 0}}`\n- **circle**: `{"type": "circle", "center": {"x": 0, "y": 0}, "radius": 5}`\n- **arc**: `{"type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,\n  "start_angle": 0, "end_angle": 90}`\n  (angles in degrees, counter-clockwise)\n- **rectangle**: `{"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}`\n  (expands to 4 connected line segments)\n- **point**: `{"type": "point", "x": 5, "y": 5}`\n\nAll geometry can carry an optional `"construction": true` key to mark it as a\nconstruction (helper) line.\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geometry: List of geometry descriptors (see above).\n\nReturns:\n    A message with the assigned geometry indices and a screenshot.\n\nExamples:\n    Add a 20x10 rectangle and a circle of radius 3:\n    ```json\n    {\n      "doc_name": "Part",\n      "sketch_name": "Sketch",\n      "geometry": [\n        {"type": "rectangle", "x1": -10, "y1": -5, "x2": 10, "y2": 5},\n        {"type": "circle", "center": {"x": 0, "y": 0}, "radius": 3}\n      ]\n    }\n    ```',
+            docstring='Add geometry elements to an existing Sketcher sketch.\n\nEach element in `geometry` is a dict with a "type" key. Supported types:\n\n- **line**: `{"type": "line", "start": {"x": 0, "y": 0}, "end": {"x": 10, "y": 0}}`\n- **circle**: `{"type": "circle", "center": {"x": 0, "y": 0}, "radius": 5}`\n- **arc**: `{"type": "arc", "center": {"x": 0, "y": 0}, "radius": 5,\n  "start_angle": 0, "end_angle": 90}`\n  (angles in degrees, counter-clockwise)\n- **rectangle**: `{"type": "rectangle", "x1": 0, "y1": 0, "x2": 10, "y2": 10}`\n  (expands to 4 connected line segments)\n- **point**: `{"type": "point", "x": 5, "y": 5}`\n\nAll geometry can carry an optional `"construction": true` key to mark it as a\nconstruction (helper) line.\n\nArgs:\n    doc_name: The document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geometry: List of geometry descriptors (see above).\n\nReturns:\n    A message with the assigned geometry indices.\n\nExamples:\n    Add a 20x10 rectangle and a circle of radius 3:\n    ```json\n    {\n      "doc_name": "Part",\n      "sketch_name": "Sketch",\n      "geometry": [\n        {"type": "rectangle", "x1": -10, "y1": -5, "x2": 10, "y2": 5},\n        {"type": "circle", "center": {"x": 0, "y": 0}, "radius": 3}\n      ]\n    }\n    ```',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geometry: 'list[dict[str, Any]]') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_geometry_operation",
             rpc_method="sketch_add_geometry",
@@ -143,7 +143,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_create",
-            docstring='Create a new Sketcher sketch in FreeCAD.\n\nArgs:\n    doc_name: The document to create the sketch in.\n    sketch_name: Name for the new sketch object.\n    body_name: Optional PartDesign Body to contain the sketch. If omitted the\n        sketch is added directly to the document.\n    attach_to: Optional attachment target. Accepted values:\n        - "XY_Plane", "XZ_Plane", "YZ_Plane" — attach to a coordinate plane.\n        - "ObjectName:FaceN" — attach to a specific face of an existing object\n          (e.g. "Box:Face1").\n    attachment_offset: Optional Placement dict applied atomically while the new\n        sketch is attached. ``Rotation.Angle`` is in degrees.\n\nReturns:\n    A message indicating success or failure and a screenshot.\n\nRecipe (avoid the silent P3 trap):\n  Pass ``attach_to`` and ``attachment_offset`` when creating the sketch. This\n  keeps support, map mode, and offset in the same structural commit. Do not\n  rotate the Placement of a "Deactivated" sketch; a later feature recompute can\n  silently drop that rotation (P3). For cross-body supports, keep the source\n  body at an identity placement (P1) and verify with ``preview_attachment``.\n\nExamples:\n    Create a sketch on the XY plane inside a Body:\n    ```json\n    {"doc_name": "Part", "sketch_name": "Sketch", "body_name": "Body", "attach_to": "XY_Plane"}\n    ```\n\n    Create a standalone sketch on Face1 of Box:\n    ```json\n    {"doc_name": "Part", "sketch_name": "Sketch", "attach_to": "Box:Face1"}\n    ```',
+            docstring='Create a new Sketcher sketch in FreeCAD.\n\nArgs:\n    doc_name: The document to create the sketch in.\n    sketch_name: Name for the new sketch object.\n    body_name: Optional PartDesign Body to contain the sketch. If omitted the\n        sketch is added directly to the document.\n    attach_to: Optional attachment target. Accepted values:\n        - "XY_Plane", "XZ_Plane", "YZ_Plane" — attach to a coordinate plane.\n        - "ObjectName:FaceN" — attach to a specific face of an existing object\n          (e.g. "Box:Face1").\n    attachment_offset: Optional Placement dict applied atomically while the new\n        sketch is attached. ``Rotation.Angle`` is in degrees.\n\nReturns:\n    A message indicating success or failure.\n\nRecipe (avoid the silent P3 trap):\n  Pass ``attach_to`` and ``attachment_offset`` when creating the sketch. This\n  keeps support, map mode, and offset in the same structural commit. Do not\n  rotate the Placement of a "Deactivated" sketch; a later feature recompute can\n  silently drop that rotation (P3). For cross-body supports, keep the source\n  body at an identity placement (P1) and verify with ``preview_attachment``.\n\nExamples:\n    Create a sketch on the XY plane inside a Body:\n    ```json\n    {"doc_name": "Part", "sketch_name": "Sketch", "body_name": "Body", "attach_to": "XY_Plane"}\n    ```\n\n    Create a standalone sketch on Face1 of Box:\n    ```json\n    {"doc_name": "Part", "sketch_name": "Sketch", "attach_to": "Box:Face1"}\n    ```',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', body_name: 'str | None' = None, attach_to: 'str | None' = None, attachment_offset: 'dict[str, Any] | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_create_operation",
             rpc_method="sketch_create",
@@ -179,7 +179,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_bezier",
-            docstring='Add a Bezier curve defined by control poles to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    poles: Control points as ``{"x": …, "y": …}`` dicts.\n        Degree = len(poles) - 1.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add a Bezier curve defined by control poles to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    poles: Control points as ``{"x": …, "y": …}`` dicts.\n        Degree = len(poles) - 1.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', poles: 'list[dict[str, float]]', construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_bezier_operation",
             rpc_method="sketch_add_bezier",
@@ -191,7 +191,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_bspline",
-            docstring='Add a B-spline defined by control points (poles) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    poles: Control points as ``{"x": …, "y": …}`` dicts.\n    degree: Polynomial degree (default 3 = cubic).\n    weights: Optional rational weights (uniform if omitted).\n    knots: Optional knot vector.\n    multiplicities: Optional knot multiplicities.\n    periodic: If true, generate a closed periodic spline.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add a B-spline defined by control points (poles) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    poles: Control points as ``{"x": …, "y": …}`` dicts.\n    degree: Polynomial degree (default 3 = cubic).\n    weights: Optional rational weights (uniform if omitted).\n    knots: Optional knot vector.\n    multiplicities: Optional knot multiplicities.\n    periodic: If true, generate a closed periodic spline.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', poles: 'list[dict[str, float]]', degree: 'int' = 3, weights: 'list[float] | None' = None, knots: 'list[float] | None' = None, multiplicities: 'list[int] | None' = None, periodic: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_bspline_operation",
             rpc_method="sketch_add_bspline",
@@ -203,7 +203,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_bspline_through_points",
-            docstring='Add a B-spline that interpolates (passes through) a set of points.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: Points to interpolate as ``{"x": …, "y": …}`` dicts.\n    degree: Polynomial degree (default 3).\n    periodic: If true, close the spline back to the first point.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add a B-spline that interpolates (passes through) a set of points.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: Points to interpolate as ``{"x": …, "y": …}`` dicts.\n    degree: Polynomial degree (default 3).\n    periodic: If true, close the spline back to the first point.\n    construction: If true, add as a construction curve.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', degree: 'int' = 3, periodic: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_bspline_through_points_operation",
             rpc_method="sketch_add_bspline_through_points",
@@ -215,7 +215,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_polyline",
-            docstring='Add a polyline (connected line segments) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{"x": …, "y": …}`` dicts.\n    closed: If true, close the polyline back to the first point.\n    construction: If true, add all segments as construction lines.\n\nReturns:\n    Success message with assigned geometry indices and a screenshot.',
+            docstring='Add a polyline (connected line segments) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{"x": …, "y": …}`` dicts.\n    closed: If true, close the polyline back to the first point.\n    construction: If true, add all segments as construction lines.\n\nReturns:\n    Success message with assigned geometry indices.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', closed: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_polyline_operation",
             rpc_method="sketch_add_polyline",
@@ -227,7 +227,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_arc_of_ellipse",
-            docstring='Add an arc of an ellipse to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of ellipse centre.\n    cy: Y coordinate of ellipse centre.\n    major_radius: Semi-major axis length in mm.\n    minor_radius: Semi-minor axis length in mm.\n    start_angle: Start angle on the ellipse in degrees.\n    end_angle: End angle on the ellipse in degrees.\n    angle: Rotation of major axis from X axis in degrees.\n    construction: If true, add as a construction arc.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add an arc of an ellipse to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of ellipse centre.\n    cy: Y coordinate of ellipse centre.\n    major_radius: Semi-major axis length in mm.\n    minor_radius: Semi-minor axis length in mm.\n    start_angle: Start angle on the ellipse in degrees.\n    end_angle: End angle on the ellipse in degrees.\n    angle: Rotation of major axis from X axis in degrees.\n    construction: If true, add as a construction arc.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', major_radius: 'float', minor_radius: 'float', start_angle: 'float', end_angle: 'float', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_arc_of_ellipse_operation",
             rpc_method="sketch_add_arc_of_ellipse",
@@ -239,7 +239,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_ellipse",
-            docstring='Add a full ellipse to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of ellipse centre.\n    cy: Y coordinate of ellipse centre.\n    major_radius: Semi-major axis length in mm.\n    minor_radius: Semi-minor axis length in mm.\n    angle: Rotation of the major axis from the X axis, in degrees.\n    construction: If true, add as a construction ellipse.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add a full ellipse to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of ellipse centre.\n    cy: Y coordinate of ellipse centre.\n    major_radius: Semi-major axis length in mm.\n    minor_radius: Semi-minor axis length in mm.\n    angle: Rotation of the major axis from the X axis, in degrees.\n    construction: If true, add as a construction ellipse.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', major_radius: 'float', minor_radius: 'float', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_ellipse_operation",
             rpc_method="sketch_add_ellipse",
@@ -275,7 +275,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_regular_polygon",
-            docstring='Add a regular polygon to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the circumscribed circle centre.\n    cy: Y coordinate of the circumscribed circle centre.\n    radius: Circumradius in mm (vertex-to-centre distance).\n    sides: Number of sides (minimum 3).\n    angle: Rotation offset for the first vertex in degrees.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the assigned geometry indices and a screenshot.',
+            docstring='Add a regular polygon to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the circumscribed circle centre.\n    cy: Y coordinate of the circumscribed circle centre.\n    radius: Circumradius in mm (vertex-to-centre distance).\n    sides: Number of sides (minimum 3).\n    angle: Rotation offset for the first vertex in degrees.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the assigned geometry indices.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', sides: 'int', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_regular_polygon_operation",
             rpc_method="sketch_add_regular_polygon",
@@ -299,7 +299,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_toggle_construction",
-            docstring='Toggle one or more sketch geometry elements between normal and construction mode.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: List of 0-based geometry indices to toggle.\n    construction: Target state — True for construction, False for normal.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Toggle one or more sketch geometry elements between normal and construction mode.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: List of 0-based geometry indices to toggle.\n    construction: Target state — True for construction, False for normal.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', construction: 'bool' = True) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_toggle_construction_operation",
             rpc_method="sketch_toggle_construction",
@@ -311,7 +311,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_extend",
-            docstring='Extend a sketch curve by a given increment.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to extend.\n    increment: Extension amount in mm.\n    end_point: Which end to extend: 1 = start, 2 = end (default).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Extend a sketch curve by a given increment.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to extend.\n    increment: Extension amount in mm.\n    end_point: Which end to extend: 1 = start, 2 = end (default).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', increment: 'float', end_point: 'int' = 2) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_extend_operation",
             rpc_method="sketch_extend",
@@ -323,7 +323,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_fillet",
-            docstring='Add a fillet arc between two sketch curves.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n    radius: Fillet radius in mm (must be > 0).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Add a fillet arc between two sketch curves.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo1: Index of the first geometry element.\n    geo2: Index of the second geometry element.\n    radius: Fillet radius in mm (must be > 0).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo1: 'int', geo2: 'int', radius: 'float') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_fillet_operation",
             rpc_method="sketch_fillet",
@@ -335,7 +335,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_offset",
-            docstring='Offset sketch geometry inward or outward.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the geometry elements to offset.\n    offset: Offset distance in mm (nonzero).\n    copy: If true, keep the original elements (default).\n    construction: If true, add offset curves as construction geometry.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Offset sketch geometry inward or outward.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the geometry elements to offset.\n    offset: Offset distance in mm (nonzero).\n    copy: If true, keep the original elements (default).\n    construction: If true, add offset curves as construction geometry.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', offset: 'float', copy: 'bool' = True, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_offset_operation",
             rpc_method="sketch_offset",
@@ -347,7 +347,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_split",
-            docstring='Split a sketch curve into two pieces at the given point.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to split.\n    point_x: X coordinate of the split point.\n    point_y: Y coordinate of the split point.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Split a sketch curve into two pieces at the given point.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to split.\n    point_x: X coordinate of the split point.\n    point_y: Y coordinate of the split point.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', point_x: 'float', point_y: 'float') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_split_operation",
             rpc_method="sketch_split",
@@ -359,7 +359,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_symmetry",
-            docstring='Apply symmetry to a set of sketch elements about a symmetry axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the elements to mirror.\n    symmetry_geo: Index of the symmetry axis geometry element.\n    copy: If true, keep the original elements (default).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Apply symmetry to a set of sketch elements about a symmetry axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_indices: Indices of the elements to mirror.\n    symmetry_geo: Index of the symmetry axis geometry element.\n    copy: If true, keep the original elements (default).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_indices: 'list[int]', symmetry_geo: 'int', copy: 'bool' = True) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_symmetry_operation",
             rpc_method="sketch_symmetry",
@@ -371,7 +371,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_trim",
-            docstring='Trim a sketch curve at the given point (nearest intersection).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to trim.\n    point_x: X coordinate on the curve near the desired cut point.\n    point_y: Y coordinate on the curve near the desired cut point.\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Trim a sketch curve at the given point (nearest intersection).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    geo_index: Index of the geometry element to trim.\n    point_x: X coordinate on the curve near the desired cut point.\n    point_y: Y coordinate on the curve near the desired cut point.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', geo_index: 'int', point_x: 'float', point_y: 'float') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_trim_operation",
             rpc_method="sketch_trim",
@@ -383,7 +383,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_arc",
-            docstring='Add a circular arc to a sketch.\n\nAngles are in degrees, measured counter-clockwise from the positive X axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the arc centre.\n    cy: Y coordinate of the arc centre.\n    radius: Arc radius in mm.\n    start_angle: Start angle in degrees (0 = right, 90 = up).\n    end_angle: End angle in degrees (must be > start_angle for CCW arc).\n    construction: If true, add as a construction arc.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add a circular arc to a sketch.\n\nAngles are in degrees, measured counter-clockwise from the positive X axis.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the arc centre.\n    cy: Y coordinate of the arc centre.\n    radius: Arc radius in mm.\n    start_angle: Start angle in degrees (0 = right, 90 = up).\n    end_angle: End angle in degrees (must be > start_angle for CCW arc).\n    construction: If true, add as a construction arc.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', start_angle: 'float', end_angle: 'float', construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_arc_operation",
             rpc_method="sketch_add_arc",
@@ -395,7 +395,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_circle",
-            docstring='Add a full circle to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the centre.\n    cy: Y coordinate of the centre.\n    radius: Circle radius in mm.\n    construction: If true, add as a construction circle.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.',
+            docstring='Add a full circle to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the centre.\n    cy: Y coordinate of the centre.\n    radius: Circle radius in mm.\n    construction: If true, add as a construction circle.\n\nReturns:\n    Success message with the assigned geometry index.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_circle_operation",
             rpc_method="sketch_add_circle",
@@ -407,7 +407,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_line",
-            docstring="Add a line segment to a sketch.\n\nAll coordinates are in the sketch's local 2-D plane (mm).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the start point.\n    y1: Y coordinate of the start point.\n    x2: X coordinate of the end point.\n    y2: Y coordinate of the end point.\n    construction: If true, add as a construction (helper) line.\n\nReturns:\n    Success message with the assigned geometry index and a screenshot.",
+            docstring="Add a line segment to a sketch.\n\nAll coordinates are in the sketch's local 2-D plane (mm).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the start point.\n    y1: Y coordinate of the start point.\n    x2: X coordinate of the end point.\n    y2: Y coordinate of the end point.\n    construction: If true, add as a construction (helper) line.\n\nReturns:\n    Success message with the assigned geometry index.",
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x1: 'float', y1: 'float', x2: 'float', y2: 'float', construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_line_operation",
             rpc_method="sketch_add_line",
@@ -419,7 +419,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_rectangle",
-            docstring='Add an axis-aligned rectangle to a sketch (4 connected line segments).\n\nReturns the 4 geometry indices in order: bottom, right, top, left.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the first corner.\n    y1: Y coordinate of the first corner.\n    x2: X coordinate of the opposite corner.\n    y2: Y coordinate of the opposite corner.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the 4 assigned geometry indices and a screenshot.',
+            docstring='Add an axis-aligned rectangle to a sketch (4 connected line segments).\n\nReturns the 4 geometry indices in order: bottom, right, top, left.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the first corner.\n    y1: Y coordinate of the first corner.\n    x2: X coordinate of the opposite corner.\n    y2: Y coordinate of the opposite corner.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the 4 assigned geometry indices.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x1: 'float', y1: 'float', x2: 'float', y2: 'float', construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_rectangle_operation",
             rpc_method="sketch_add_rectangle",

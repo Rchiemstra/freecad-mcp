@@ -67,7 +67,7 @@ def _register_create_spur_gear(
                 `pin` / `lantern` for hub-and-pin style gears.
 
         Returns:
-            A message indicating success or failure and an isometric screenshot.
+            A message indicating success or failure.
 
         Examples:
             Create a 24-tooth, module 2 gear with a 6 mm bore:
@@ -147,7 +147,7 @@ def _register_create_involute_gear(
             sketch_name: Optional sketch name (default: ``<gear_name>_Sketch``).
 
         Returns:
-            Success message with gear metadata and an isometric screenshot.
+            Success message with gear metadata.
 
         Examples:
             24-tooth module-2 gear with 6 mm bore:
@@ -212,7 +212,7 @@ def _register_create_helical_gear(
             body_name: Optional existing PartDesign Body.
 
         Returns:
-            Success message with gear metadata and an isometric screenshot.
+            Success message with gear metadata.
         """
         return create_helical_gear_operation(
             server_connection(),

@@ -183,7 +183,7 @@ def _register_linear_pattern_feature(
             reversed_dir: If true, reverse the pattern direction.
 
         Returns:
-            A message indicating success or failure and an isometric screenshot.
+            A message indicating success or failure.
 
         Examples:
             Pattern a pocket 5 times over 40 mm along X:

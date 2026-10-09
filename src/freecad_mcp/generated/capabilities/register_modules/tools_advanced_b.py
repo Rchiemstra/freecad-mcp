@@ -31,7 +31,9 @@ def _register_relink_references(
         Scans all link-type properties (AttachmentSupport, Support, Profile, Base,
         Tool, Source, Group, ...) of all document objects and re-points them, making
         rebuilds non-destructive. Subshape names are preserved; mismatches surface
-        via the recompute log. Returns JSON ``{ok, from, to, relinked, count}``.
+        via the recompute log. Returns JSON ``{ok, from_obj, to_obj, relinked, count}``
+        where ``relinked`` lists the rewritten ``Object.Property`` links; a relink that
+        matches nothing fails with RELINK_NOT_APPLIED.
 
         Args:
             doc_name: The document to edit.

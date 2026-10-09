@@ -47,7 +47,7 @@ def _register_sketch_add_ellipse(
             construction: If true, add as a construction ellipse.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_ellipse_operation(
             server_connection(),
@@ -98,7 +98,7 @@ def _register_sketch_add_arc_of_ellipse(
             construction: If true, add as a construction arc.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_arc_of_ellipse_operation(
             server_connection(),

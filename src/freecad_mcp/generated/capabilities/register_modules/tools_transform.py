@@ -41,7 +41,7 @@ def _register_translate(
             dz: Z displacement in mm.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return translate_operation(
             server_connection(),
@@ -87,7 +87,7 @@ def _register_rotate(
             center_z: Z coordinate of the rotation centre (default 0).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return rotate_operation(
             server_connection(),
@@ -132,7 +132,7 @@ def _register_scale(
             sz: Scale factor along Z.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return scale_operation(
             server_connection(),

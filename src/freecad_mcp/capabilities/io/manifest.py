@@ -59,7 +59,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="set_color",
-            docstring='Set the display colour and transparency of an object.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the object.\n    r: Red channel 0.0-1.0.\n    g: Green channel 0.0-1.0.\n    b: Blue channel 0.0-1.0.\n    transparency: Transparency 0.0 (opaque) - 1.0 (fully transparent).\n\nReturns:\n    Success message and a screenshot.',
+            docstring='Set the display colour and transparency of an object.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the object.\n    r: Red channel 0.0-1.0.\n    g: Green channel 0.0-1.0.\n    b: Blue channel 0.0-1.0.\n    transparency: Transparency 0.0 (opaque) - 1.0 (fully transparent).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', obj_name: 'str', r: 'float', g: 'float', b: 'float', transparency: 'float' = 0.0) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.set_color_operation",
             rpc_method="set_color",

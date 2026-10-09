@@ -59,7 +59,11 @@ def _register_create_assembly_grounded_joint(
         label: str | None = None,
         recompute: bool = True,
     ) -> CallToolResult:
-        """Ground an assembly component through the headless Assembly API."""
+        """Ground an assembly component through the headless Assembly API.
+
+        The component must be inside the assembly: create it there or move it in
+        with move_object(target_container=<assembly>). Other objects are rejected
+        with INVALID_ARGUMENT because the solver ignores them."""
         return create_assembly_grounded_joint_operation(
             server_connection(),
             server_state().only_text_feedback,
@@ -109,7 +113,11 @@ def _register_create_assembly_joint(
         recompute: bool = True,
         properties: dict[str, Any] | None = None,
     ) -> CallToolResult:
-        """Create a built-in Assembly joint from two component subelement references."""
+        """Create a built-in Assembly joint from two component subelement references.
+
+        Both components must be inside the assembly: create them there or move them
+        in with move_object(target_container=<assembly>). Other objects are rejected
+        with INVALID_ARGUMENT because the solver ignores them."""
         return create_assembly_joint_operation(
             server_connection(),
             server_state().only_text_feedback,
@@ -142,7 +150,9 @@ def _register_solve_assembly(
 
         Tries ``assembly.solve()`` (C++), then ``JointObject.solveIfAllowed``, then a
         plain recompute, and reports which method succeeded. Returns JSON
-        ``{ok, assembly, method, status}`` plus a screenshot.
+        ``{ok, assembly, method, status, solver_status}`` plus a screenshot.
+        A solve the solver rejects (a non-zero status, such as joints it cannot
+        satisfy) fails with ASSEMBLY_SOLVE_FAILED.
 
         Args:
             doc_name: The document containing the assembly.

@@ -148,7 +148,13 @@ def _register_get_dependency_graph(
         doc_name: str,
         root: str,
     ) -> CallToolResult:
-        """Property-annotated dependency graph from a root object (M13)."""
+        """Property-annotated dependency graph from a root object (M13).
+
+        ``edges`` run from an object to what it depends on (upstream of the root),
+        with the link property and subelements. ``dependents`` lists the objects that
+        depend on the root, nearest first: what breaks if it is deleted.
+        ``history_order`` is the feature order of the root's Body (or of the root
+        itself when it is a container). ``cycle_detected`` reports a link cycle."""
         return get_dependency_graph_operation(
             server_connection(),
             server_state().only_text_feedback,

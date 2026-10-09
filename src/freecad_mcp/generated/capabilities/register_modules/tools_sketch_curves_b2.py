@@ -44,7 +44,7 @@ def _register_sketch_trim(
             point_y: Y coordinate on the curve near the desired cut point.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_trim_operation(
             server_connection(),
@@ -82,7 +82,7 @@ def _register_sketch_extend(
             end_point: Which end to extend: 1 = start, 2 = end (default).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_extend_operation(
             server_connection(),
@@ -120,7 +120,7 @@ def _register_sketch_split(
             point_y: Y coordinate of the split point.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_split_operation(
             server_connection(),
@@ -158,7 +158,7 @@ def _register_sketch_fillet(
             radius: Fillet radius in mm (must be > 0).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_fillet_operation(
             server_connection(),
@@ -198,7 +198,7 @@ def _register_sketch_offset(
             construction: If true, add offset curves as construction geometry.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_offset_operation(
             server_connection(),
@@ -237,7 +237,7 @@ def _register_sketch_symmetry(
             copy: If true, keep the original elements (default).
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_symmetry_operation(
             server_connection(),

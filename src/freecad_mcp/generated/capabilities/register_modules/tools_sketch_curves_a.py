@@ -42,7 +42,7 @@ def _register_sketch_add_polyline(
             construction: If true, add all segments as construction lines.
 
         Returns:
-            Success message with assigned geometry indices and a screenshot.
+            Success message with assigned geometry indices.
         """
         return sketch_add_polyline_operation(
             server_connection(),
@@ -88,7 +88,7 @@ def _register_sketch_add_bspline(
             construction: If true, add as a construction curve.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_bspline_operation(
             server_connection(),
@@ -132,7 +132,7 @@ def _register_sketch_add_bspline_through_points(
             construction: If true, add as a construction curve.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_bspline_through_points_operation(
             server_connection(),
@@ -170,7 +170,7 @@ def _register_sketch_add_bezier(
             construction: If true, add as a construction curve.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_bezier_operation(
             server_connection(),

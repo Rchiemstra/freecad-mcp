@@ -40,7 +40,7 @@ def _register_sketch_constrain_equal(
             geo2: Index of the second geometry element.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_equal_operation(
             server_connection(),
@@ -75,7 +75,7 @@ def _register_sketch_constrain_parallel(
             geo2: Index of the second line.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_parallel_operation(
             server_connection(),
@@ -110,7 +110,7 @@ def _register_sketch_constrain_perpendicular(
             geo2: Index of the second line.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_perpendicular_operation(
             server_connection(),
@@ -145,7 +145,7 @@ def _register_sketch_constrain_tangent(
             geo2: Index of the second geometry element.
 
         Returns:
-            Success message and a screenshot.
+            Success message.
         """
         return sketch_constrain_tangent_operation(
             server_connection(),

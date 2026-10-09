@@ -48,7 +48,7 @@ def _register_sketch_add_line(
             construction: If true, add as a construction (helper) line.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_line_operation(
             server_connection(),
@@ -90,7 +90,7 @@ def _register_sketch_add_circle(
             construction: If true, add as a construction circle.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_circle_operation(
             server_connection(),
@@ -137,7 +137,7 @@ def _register_sketch_add_arc(
             construction: If true, add as a construction arc.
 
         Returns:
-            Success message with the assigned geometry index and a screenshot.
+            Success message with the assigned geometry index.
         """
         return sketch_add_arc_operation(
             server_connection(),
@@ -184,7 +184,7 @@ def _register_sketch_add_rectangle(
             construction: If true, add all edges as construction lines.
 
         Returns:
-            Success message with the 4 assigned geometry indices and a screenshot.
+            Success message with the 4 assigned geometry indices.
         """
         return sketch_add_rectangle_operation(
             server_connection(),

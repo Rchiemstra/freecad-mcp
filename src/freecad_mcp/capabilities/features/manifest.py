@@ -11,7 +11,7 @@ MANIFEST = SubjectManifest(
     tools=(
         ToolEntry(
             name="loft_feature",
-            docstring='Loft through two or more sketch sections (PartDesign::AdditiveLoft).\n\nArgs:\n    doc_name: Document containing the sketches and body.\n    sketch_names: Ordered list of sketch names to loft through (minimum 2).\n    loft_name: Name for the resulting Loft feature.\n    body_name: Optional explicit PartDesign Body name.\n    ruled: If true, use straight (ruled) lofting instead of smooth.\n    closed: If true, close the loft back to the first section.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Loft through two or more sketch sections (PartDesign::AdditiveLoft).\n\nArgs:\n    doc_name: Document containing the sketches and body.\n    sketch_names: Ordered list of sketch names to loft through (minimum 2).\n    loft_name: Name for the resulting Loft feature.\n    body_name: Optional explicit PartDesign Body name.\n    ruled: If true, use straight (ruled) lofting instead of smooth.\n    closed: If true, close the loft back to the first section.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_names: 'list[str]', loft_name: 'str', body_name: 'str | None' = None, ruled: 'bool' = False, closed: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.loft_feature_operation",
             rpc_method="loft_feature",
@@ -23,7 +23,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="revolve_feature",
-            docstring='Revolve a closed sketch profile around an axis (PartDesign::Revolution).\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    sketch_name: Name of the sketch to revolve.\n    revolve_name: Name for the resulting Revolution feature.\n    angle: Revolution angle in degrees (default 360 = full solid of revolution).\n    axis: Revolution axis. Examples: ``Z_Axis``, ``X_Axis``, ``ObjectName:Edge1``.\n    body_name: Optional explicit PartDesign Body name.\n    symmetric: If true, revolve symmetrically about the sketch plane.\n    reversed_dir: If true, reverse the revolution direction.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Revolve a closed sketch profile around an axis (PartDesign::Revolution).\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    sketch_name: Name of the sketch to revolve.\n    revolve_name: Name for the resulting Revolution feature.\n    angle: Revolution angle in degrees, in (0, 360] (default 360 = full solid of revolution).\n    axis: Revolution axis. Examples: ``Z_Axis``, ``X_Axis``, ``ObjectName:Edge1``.\n    body_name: Optional explicit PartDesign Body name.\n    symmetric: If true, revolve symmetrically about the sketch plane.\n    reversed_dir: If true, reverse the revolution direction.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', revolve_name: 'str', angle: 'float' = 360.0, axis: 'str' = 'Z_Axis', body_name: 'str | None' = None, symmetric: 'bool' = False, reversed_dir: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.revolve_feature_operation",
             rpc_method="revolve_feature",
@@ -35,7 +35,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sweep_feature",
-            docstring='Sweep a profile sketch along a path sketch (PartDesign::AdditivePipe).\n\nArgs:\n    doc_name: Document containing the sketches and body.\n    profile_sketch: Name of the cross-section sketch.\n    path_sketch: Name of the path sketch.\n    sweep_name: Name for the resulting Sweep feature.\n    body_name: Optional explicit PartDesign Body name.\n    frenet: If true, use Frenet-Serret frame (avoids twisting on curved paths).\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Sweep a profile sketch along a path sketch (PartDesign::AdditivePipe).\n\nArgs:\n    doc_name: Document containing the sketches and body.\n    profile_sketch: Name of the cross-section sketch.\n    path_sketch: Name of the path sketch.\n    sweep_name: Name for the resulting Sweep feature.\n    body_name: Optional explicit PartDesign Body name.\n    frenet: If true, use Frenet-Serret frame (avoids twisting on curved paths).\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', profile_sketch: 'str', path_sketch: 'str', sweep_name: 'str', body_name: 'str | None' = None, frenet: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sweep_feature_operation",
             rpc_method="sweep_feature",
@@ -47,7 +47,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="chamfer_feature",
-            docstring='Add a chamfer to edges of an existing solid (PartDesign::Chamfer).\n\nArgs:\n    doc_name: Document containing the body and feature.\n    base_feature: Name of the feature to chamfer.\n    chamfer_name: Name for the resulting Chamfer feature.\n    size: Chamfer size in mm (must be > 0).\n    edge_refs: Optional list of edge references like ``["Edge1","Edge3"]``.\n        If omitted, all edges are chamfered.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Add a chamfer to edges of an existing solid (PartDesign::Chamfer).\n\nArgs:\n    doc_name: Document containing the body and feature.\n    base_feature: Name of the feature to chamfer.\n    chamfer_name: Name for the resulting Chamfer feature.\n    size: Chamfer size in mm (must be > 0).\n    edge_refs: Optional list of edge references like ``["Edge1","Edge3"]``.\n        If omitted, all edges are chamfered.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', base_feature: 'str', chamfer_name: 'str', size: 'float', edge_refs: 'list[str] | None' = None, body_name: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.chamfer_feature_operation",
             rpc_method="chamfer_feature",
@@ -59,7 +59,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="fillet_feature",
-            docstring='Add a fillet to edges of an existing solid (PartDesign::Fillet).\n\nArgs:\n    doc_name: Document containing the body and feature.\n    base_feature: Name of the feature to fillet.\n    fillet_name: Name for the resulting Fillet feature.\n    radius: Fillet radius in mm (must be > 0).\n    edge_refs: Optional list of edge references like ``["Edge1","Edge3"]``.\n        If omitted, all edges are filleted.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Add a fillet to edges of an existing solid (PartDesign::Fillet).\n\nArgs:\n    doc_name: Document containing the body and feature.\n    base_feature: Name of the feature to fillet.\n    fillet_name: Name for the resulting Fillet feature.\n    radius: Fillet radius in mm (must be > 0).\n    edge_refs: Optional list of edge references like ``["Edge1","Edge3"]``.\n        If omitted, all edges are filleted.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', base_feature: 'str', fillet_name: 'str', radius: 'float', edge_refs: 'list[str] | None' = None, body_name: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.fillet_feature_operation",
             rpc_method="fillet_feature",
@@ -71,7 +71,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="helical_sweep_feature",
-            docstring='Sweep a profile along a helix (PartDesign::AdditiveHelix).\n\nUse this to create springs, screw threads, worm gear blanks, etc.\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    profile_sketch: Name of the cross-section sketch.\n    helix_name: Name for the resulting Helix feature.\n    pitch: Distance between successive turns in mm.\n    height: Total height of the helix in mm.\n    radius: Helix radius in mm.\n    body_name: Optional explicit PartDesign Body name.\n    left_handed: If true, produce a left-handed helix.\n    reversed_dir: If true, reverse the helix direction.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Sweep a profile along a helix (PartDesign::AdditiveHelix).\n\nUse this to create springs, screw threads, worm gear blanks, etc.\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    profile_sketch: Name of the cross-section sketch.\n    helix_name: Name for the resulting Helix feature.\n    pitch: Distance between successive turns in mm.\n    height: Total height of the helix in mm.\n    radius: Helix radius in mm.\n    body_name: Optional explicit PartDesign Body name.\n    left_handed: If true, produce a left-handed helix.\n    reversed_dir: If true, reverse the helix direction.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', profile_sketch: 'str', helix_name: 'str', pitch: 'float', height: 'float', radius: 'float', body_name: 'str | None' = None, left_handed: 'bool' = False, reversed_dir: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.helical_sweep_feature_operation",
             rpc_method="helical_sweep_feature",
@@ -83,7 +83,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="linear_pattern_feature",
-            docstring='Repeat an existing PartDesign feature along a straight direction.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting LinearPattern feature.\n    length: Total pattern length in mm.\n    occurrences: Number of repeated instances, including the original.\n    direction: Axis or reference edge. Examples: `X_Axis`, `Y_Axis`,\n        `Z_Axis`, or `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the pattern direction.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Pattern a pocket 5 times over 40 mm along X:\n    ```json\n    {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "PocketArray",\n     "length": 40, "occurrences": 5}\n    ```',
+            docstring='Repeat an existing PartDesign feature along a straight direction.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting LinearPattern feature.\n    length: Total pattern length in mm.\n    occurrences: Number of repeated instances, including the original.\n    direction: Axis or reference edge. Examples: `X_Axis`, `Y_Axis`,\n        `Z_Axis`, or `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the pattern direction.\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    Pattern a pocket 5 times over 40 mm along X:\n    ```json\n    {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "PocketArray",\n     "length": 40, "occurrences": 5}\n    ```',
             signature="(ctx: 'Context', doc_name: 'str', feature_name: 'str', pattern_name: 'str', length: 'float', occurrences: 'int', direction: 'str' = 'X_Axis', body_name: 'str | None' = None, reversed_dir: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.linear_pattern_feature_operation",
             rpc_method="linear_pattern_feature",
@@ -119,7 +119,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="mirror_feature",
-            docstring='Mirror an existing PartDesign feature across a plane.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to mirror, for example `Pocket` or `Pad`.\n    mirror_name: Name for the resulting Mirrored feature.\n    plane: Mirror plane. Examples: `YZ_Plane`, `XZ_Plane`, `XY_Plane`,\n        or `ObjectName:Face1`.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Mirror a pocket across the YZ plane:\n    ```json\n    {"doc_name": "Part", "feature_name": "Pocket", "mirror_name": "PocketMirror",\n     "plane": "YZ_Plane"}\n    ```',
+            docstring='Mirror an existing PartDesign feature across a plane.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to mirror, for example `Pocket` or `Pad`.\n    mirror_name: Name for the resulting Mirrored feature.\n    plane: Mirror plane. Examples: `YZ_Plane`, `XZ_Plane`, `XY_Plane`,\n        or `ObjectName:Face1`.\n    body_name: Optional explicit PartDesign Body name.\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    Mirror a pocket across the YZ plane:\n    ```json\n    {"doc_name": "Part", "feature_name": "Pocket", "mirror_name": "PocketMirror",\n     "plane": "YZ_Plane"}\n    ```',
             signature="(ctx: 'Context', doc_name: 'str', feature_name: 'str', mirror_name: 'str', plane: 'str' = 'YZ_Plane', body_name: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.mirror_feature_operation",
             rpc_method="mirror_feature",
@@ -131,7 +131,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="polar_pattern_feature",
-            docstring='Repeat an existing PartDesign feature around an axis.\n\nUse this for circular hole patterns or radial repeats of sketch-based Pads\nand Pockets. The source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting PolarPattern feature.\n    occurrences: Number of repeated instances, including the original.\n    angle: Total angular span in degrees. Defaults to 360.\n    axis: Axis or reference edge. Examples: `Z_Axis`, `X_Axis`, or\n        `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the angular direction.\n\nReturns:\n    A message indicating success or failure and an isometric screenshot.\n\nExamples:\n    Pattern a pocket 6 times around the Z axis:\n    ```json\n    {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "BoltCircle",\n     "occurrences": 6}\n    ```',
+            docstring='Repeat an existing PartDesign feature around an axis.\n\nUse this for circular hole patterns or radial repeats of sketch-based Pads\nand Pockets. The source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting PolarPattern feature.\n    occurrences: Number of repeated instances, including the original.\n    angle: Total angular span in degrees, in (0, 360]. Defaults to 360.\n    axis: Axis or reference edge. Examples: `Z_Axis`, `X_Axis`, or\n        `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the angular direction.\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    Pattern a pocket 6 times around the Z axis:\n    ```json\n    {"doc_name": "Part", "feature_name": "Pocket", "pattern_name": "BoltCircle",\n     "occurrences": 6}\n    ```',
             signature="(ctx: 'Context', doc_name: 'str', feature_name: 'str', pattern_name: 'str', occurrences: 'int', angle: 'float' = 360.0, axis: 'str' = 'Z_Axis', body_name: 'str | None' = None, reversed_dir: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.polar_pattern_feature_operation",
             rpc_method="polar_pattern_feature",
@@ -143,7 +143,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="boolean_difference",
-            docstring='Subtract shape2 from shape1 (Part::Cut).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the base shape.\n    shape2: Name of the tool shape to subtract.\n    result_name: Name for the resulting cut shape.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Subtract shape2 from shape1 (Part::Cut).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the base shape.\n    shape2: Name of the tool shape to subtract.\n    result_name: Name for the resulting cut shape.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.boolean_difference_operation",
             rpc_method="boolean_difference",
@@ -155,7 +155,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="boolean_intersection",
-            docstring='Compute the Boolean intersection (common) of two shapes (Part::Common).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the first shape.\n    shape2: Name of the second shape.\n    result_name: Name for the resulting common shape.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Compute the Boolean intersection (common) of two shapes (Part::Common).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the first shape.\n    shape2: Name of the second shape.\n    result_name: Name for the resulting common shape.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.boolean_intersection_operation",
             rpc_method="boolean_intersection",
@@ -167,7 +167,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="boolean_union",
-            docstring='Compute the Boolean union (fuse) of two shapes (Part::Fuse).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the first shape object.\n    shape2: Name of the second shape object.\n    result_name: Name for the resulting fused shape.\n\nReturns:\n    Success message and an isometric screenshot.',
+            docstring='Compute the Boolean union (fuse) of two shapes (Part::Fuse).\n\nArgs:\n    doc_name: Document containing both shapes.\n    shape1: Name of the first shape object.\n    shape2: Name of the second shape object.\n    result_name: Name for the resulting fused shape.\n\nReturns:\n    Success message.',
             signature="(ctx: 'Context', doc_name: 'str', shape1: 'str', shape2: 'str', result_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.boolean_union_operation",
             rpc_method="boolean_union",
