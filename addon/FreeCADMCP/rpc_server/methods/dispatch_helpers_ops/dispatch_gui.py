@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from ..cad_methods_ops.cad_mutation import cad_mutation_inflight
+from ..cad_methods_ops.cad_mutation import (
+    cad_mutation_inflight,
+    cad_mutation_rpc_method,
+    current_cad_mutation_rpc_method,
+)
 from ..cad_methods_ops.mutation_readiness_wait import (
     asynchronous_transient_document_keys,
     await_transient_mutation_readiness,
@@ -77,6 +81,7 @@ def dispatch_gui(
     completion_handoff = {"held": False}
     context = getattr(self._mutation_context, "value", None)
     inflight = self._current_inflight()
+    rpc_method = current_cad_mutation_rpc_method()
     request_id = inflight.request_id if inflight is not None else None
     if context:
         captured = {
@@ -164,7 +169,7 @@ def dispatch_gui(
             # ContextVar preserves the same request id/cancellation token for
             # its bounded readiness settle turn without widening CAD's
             # dependency container with dispatcher policy.
-            with cad_mutation_inflight(inflight):
+            with cad_mutation_inflight(inflight), cad_mutation_rpc_method(rpc_method):
                 return task()
 
         submit_options = {
