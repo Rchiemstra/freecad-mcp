@@ -145,6 +145,8 @@ def test_async_body_exception_preserves_actual_error_and_traceback_after_rollbac
     )
 
     assert result["success"] is False
+    assert result["committed"] is False
+    assert result["outcome"] == "rejected"
     assert result["error"] == "execute_code failed in document 'Target': " + message
     assert result["traceback"]["exception_type"] == "RuntimeError"
     assert result["traceback"]["message"] == message
