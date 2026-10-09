@@ -73,8 +73,9 @@ def run_match_subshape(
     document = lookup_document(app, str(request.doc_name))
     if document is None:
         return _failure(MatchSubshapeError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
-    if lookup_object(document, str(request.source_object)) is None or lookup_object(document, str(request.target_object)) is None:
-        return _failure(MatchSubshapeError("OBJECT_NOT_FOUND", "Object not found"))
+    for name in (str(request.source_object), str(request.target_object)):
+        if lookup_object(document, name) is None:
+            return _failure(MatchSubshapeError("OBJECT_NOT_FOUND", f"Object not found: {name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_shape_actions.match_subshape(document, str(request.source_object), str(request.source_subshape), str(request.target_object), int(request.limit), float(request.tolerance))

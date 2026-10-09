@@ -66,7 +66,7 @@ def run_get_global_shape(
     if document is None:
         return _failure(GetGlobalShapeError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.obj_name)) is None:
-        return _failure(GetGlobalShapeError("OBJECT_NOT_FOUND", "Object not found"))
+        return _failure(GetGlobalShapeError("OBJECT_NOT_FOUND", f"Object not found: {request.obj_name!r}"))
     optional_recompute(collaborators, document)
     try:
         payload = measure_io_actions.get_global_shape(document, str(request.obj_name))

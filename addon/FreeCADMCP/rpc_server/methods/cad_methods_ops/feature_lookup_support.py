@@ -58,7 +58,7 @@ def lookup_object(document: object, name: str) -> object | None:
 def require_object(document: object, name: str, *, missing: str) -> object:
     obj = lookup_object(document, name)
     if obj is None:
-        raise LookupError(missing)
+        raise LookupError(f"{missing}: {name!r}")
     return obj
 
 

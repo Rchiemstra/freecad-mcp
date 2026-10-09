@@ -39,7 +39,7 @@ def run_list_expressions(collaborators: object, doc_name: str, object_name: str)
     if document is None:
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
     if lookup_object(document, object_name) is None:
-        return _failure("OBJECT_NOT_FOUND", "Object not found")
+        return _failure("OBJECT_NOT_FOUND", f"Object not found: {object_name!r}")
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_io_actions.list_expressions(document, object_name)

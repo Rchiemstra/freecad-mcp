@@ -32,7 +32,7 @@ def run_find_edges(
     if document is None:
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
     if lookup_object(document, object_name) is None:
-        return _failure("OBJECT_NOT_FOUND", "Object not found")
+        return _failure("OBJECT_NOT_FOUND", f"Object not found: {object_name!r}")
     optional_recompute(collaborators, document)
     radius_value = None if radius is None else float(radius)
     try:
