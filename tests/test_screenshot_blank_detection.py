@@ -223,6 +223,40 @@ def test_render_personal_context_gui_falls_back_to_active_view_save_image(monkey
     assert context["screenshot_fallback"] == "active_view_save_image"
 
 
+def test_blank_render_of_another_document_does_not_show_the_active_view(monkeypatch):
+    blank = _png_bytes(4, 4, (30, 30, 30))
+    document = SimpleNamespace(Name="B", Label="B", Objects=[])
+
+    monkeypatch.setattr(
+        "addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_render.build_view_context",
+        lambda *_args, **_kwargs: {"selection_paths": []},
+    )
+    monkeypatch.setattr(
+        "addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_render.render_temporary_context_gui",
+        lambda *_args, **_kwargs: blank,
+    )
+    monkeypatch.setattr(
+        "addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_render.capture_active_view_png_bytes",
+        lambda **_kwargs: pytest.fail("active view must not replace the requested document"),
+    )
+    monkeypatch.setattr(
+        "addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.collaboration_context_render.resolve_document",
+        lambda *_args, **_kwargs: document,
+    )
+    facade = SimpleNamespace(
+        _gui_collaborators=SimpleNamespace(
+            freecad=SimpleNamespace(ActiveDocument=SimpleNamespace(Name="A"))
+        )
+    )
+
+    image, context = render_personal_context_gui(
+        facade, actor="runtime", hint="B", view_name="Isometric"
+    )
+
+    assert image == blank
+    assert "screenshot_fallback" not in context
+
+
 def test_capture_active_view_png_bytes_reads_saved_file(monkeypatch):
     expected = _png_bytes(2, 2, (90, 90, 90))
 
