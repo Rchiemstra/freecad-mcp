@@ -153,10 +153,10 @@ def _run_worker_job(
 def execute_job_now(manager, invocation: WorkerInvocation) -> dict:
     job_id = invocation.job_id
     workspace = invocation.workspace
-    timeout = clamp_timeout(invocation.options.get("timeout_seconds"))
     job_object = None
     started = time.monotonic()
     try:
+        timeout = clamp_timeout(invocation.options.get("timeout_seconds"))
         preflight_error = _preflight_worker_job(manager, invocation)
         if preflight_error is not None:
             return preflight_error
