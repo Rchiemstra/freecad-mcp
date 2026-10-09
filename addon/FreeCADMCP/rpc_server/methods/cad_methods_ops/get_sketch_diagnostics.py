@@ -35,13 +35,13 @@ def run_get_sketch_diagnostics(
     if document is None:
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
     if lookup_object(document, sketch_name) is None:
-        return _failure("OBJECT_NOT_FOUND", "Sketch not found")
+        return _failure("OBJECT_NOT_FOUND", f"Sketch not found: {sketch_name!r}")
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_io_actions.get_sketch_diagnostics(document, sketch_name)
     except Exception as exc:
         return _failure("GET_SKETCH_DIAGNOSTICS_FAILED", str(exc) or type(exc).__name__)
-    return {
+    result: dict[str, object] = {
         "success": True,
         "ok": True,
         "outcome": "observed",
@@ -51,6 +51,13 @@ def run_get_sketch_diagnostics(
         "constraint_count": int(payload["constraint_count"]),
         "conflict": bool(payload["conflict"]),
     }
+    for key in (
+        "state", "conflicting_constraints", "redundant_constraints",
+        "malformed_constraints", "solver_message", "is_closed", "dof", "fully_constrained",
+    ):
+        if key in payload:
+            result[key] = payload[key]
+    return result
 
 
 class _GetSketchDiagnosticsRpcFacade(Protocol):
