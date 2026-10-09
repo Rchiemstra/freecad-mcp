@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ElementTree
+import zipfile
 from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol
 
 try:
@@ -60,6 +63,32 @@ def build_reload_document_request(
     return ReloadDocumentRequest(doc_name=DocumentName(doc_name))
 
 
+def _document_xml_error(file_name: str) -> str | None:
+    """Reject a saved FCStd whose Document.xml will not parse.
+
+    FreeCAD's openDocument prints a fatal XML error and still returns a partial
+    document, which this handler would report as a successful reload. Missing
+    files and non-zip paths stay on the existing open path.
+    """
+
+    path = Path(file_name)
+    if not path.is_file() or not zipfile.is_zipfile(path):
+        return None
+    try:
+        with zipfile.ZipFile(path) as archive:
+            try:
+                payload = archive.read("Document.xml")
+            except KeyError:
+                return f"{file_name} has no Document.xml"
+    except zipfile.BadZipFile:
+        return None
+    try:
+        ElementTree.fromstring(payload)
+    except ElementTree.ParseError as exc:
+        return f"Document.xml in {file_name} is not well-formed XML: {exc}"
+    return None
+
+
 def prepare_reload_document(
     app: object, request: ReloadDocumentRequest
 ) -> tuple[ReloadDocumentFailure | None, str | None]:
@@ -82,6 +111,9 @@ def prepare_reload_document(
                 "or close_document and open_document to discard them",
             )
         ), None
+    xml_error = _document_xml_error(file_name)
+    if xml_error is not None:
+        return _failure(ReloadDocumentError("RELOAD_DOCUMENT_FAILED", xml_error)), None
     return None, file_name
 
 
