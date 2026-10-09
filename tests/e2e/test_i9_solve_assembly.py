@@ -50,6 +50,7 @@ def test_solve_assembly_runs_the_solver(freecad_session):
 
     comp = doc.addObject("Part::Box", "Comp1")
     comp.Length, comp.Width, comp.Height = 5.0, 5.0, 5.0
+    doc.getObject("Asm").addObject(comp)
     FreeCAD.ActiveDocument.recompute()
 
     grounded = create_assembly_grounded_joint_operation(

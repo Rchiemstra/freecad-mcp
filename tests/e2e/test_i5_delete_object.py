@@ -30,6 +30,12 @@ pytestmark = pytest.mark.e2e
 
 
 def _payload(response) -> dict:
+    structured = getattr(response, "structuredContent", None)
+    if isinstance(structured, dict):
+        data = structured.get("data")
+        if isinstance(data, dict):
+            return data
+        return structured
     text = tool_response_text(response)
     if "Output:" in text:
         text = text.split("Output:", 1)[1].strip()
@@ -51,9 +57,11 @@ def test_delete_refuses_and_lists_dependents(freecad_session):
     resp = delete_object_operation(freecad_session, True, doc.Name, body.Name)
     payload = _payload(resp)
 
-    assert payload["ok"] is True
-    assert payload["refused"] is True
-    dep_names = {d["name"] for d in payload["dependents"]}
+    assert resp.isError
+    assert payload["ok"] is False
+    assert payload["error_code"] == "OBJECT_HAS_DEPENDENTS"
+    assert payload["diagnostics"]["refused"] is True
+    dep_names = {d["name"] for d in payload["diagnostics"]["dependents"]}
     assert sk.Name in dep_names
     assert pad.Name in dep_names
     # Nothing was actually deleted.
