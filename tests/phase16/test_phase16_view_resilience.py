@@ -316,3 +316,33 @@ def test_disk_capture_returns_structured_error_when_directory_creation_fails(
     assert result["frames"] == []
     assert result["frame_dir"] is None
     assert result["error"] == "redacted:denied"
+
+
+def test_unparseable_camera_still_accepts_a_named_fit_view():
+    """A NaN Coin camera must not block the next named view or fit."""
+
+    box = SimpleNamespace(Name="Box", BoundBox=_bound(-10, 10, -10, 10, -10, 10))
+    document = _Document("Model", [box])
+    poisoned = (
+        "OrthographicCamera { position 0 0 1 orientation nan nan nan nan "
+        "focalDistance 5 height 10 }"
+    )
+    facade, _saved = _facade(
+        [document], {("Model", "actor-a"): _baseline("Model", poisoned)}
+    )
+
+    context = build_view_context(
+        facade, document, "actor-a", view_name="Isometric", fit=True
+    )
+
+    assert "nan" not in context["camera"].lower()
+    assert re.search(r"orientation\s+[-+0-9.eE]+", context["camera"])
+
+    facade._gui_collaborators.snapshot_view_context = lambda name: _baseline(
+        name, poisoned
+    )
+    healed = build_view_context(
+        facade, document, "actor-a", view_name="Front", fit=True
+    )
+    assert "nan" not in healed["camera"].lower()
+    assert re.search(r"orientation\s+[-+0-9.eE]+", healed["camera"])
