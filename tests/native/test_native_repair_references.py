@@ -71,10 +71,12 @@ def test_repair_references_native_success_inspects_after_recompute(monkeypatch):
             collaborators(FreeCAD, lambda _d: events.append("validate")),
             document.Name,
             _repairs(),
+            recompute=True,
         )
         assert result["success"] is True, f"error_code={result.get('error_code')}: {result}"
         assert result["committed"] is True
         assert result["repaired_count"] >= 1
+        assert result["recompute"] == "done"
         assert events == ["apply", "recompute", "inspect", "validate"], (events, result)
         linker = document.getObject("Linker")
         target = document.getObject("Target")

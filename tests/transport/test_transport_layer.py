@@ -614,3 +614,32 @@ finally:
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_an_exception_carrying_a_structured_failure_keeps_it() -> None:
+    """list_documents raised GuiDispatchFailure while the GUI was still busy with
+    a timed-out request; the caller only saw -32603 "Internal error"."""
+
+    class _StructuredFailure(RuntimeError):
+        def __init__(self, result: dict[str, Any]) -> None:
+            super().__init__(result["error"])
+            self.result = result
+
+    def dispatch(_method: str, _params: object) -> object:
+        raise _StructuredFailure(
+            {
+                "success": False,
+                "error_code": "GUI_DISPATCH_BUSY",
+                "error": "FreeCAD GUI is still executing a request that timed out",
+            }
+        )
+
+    transport = JsonRpcTransport(dispatch, result_to_error=json_rpc_error_from_result)
+
+    payload = transport.handle_bytes(
+        b'{"jsonrpc":"2.0","method":"list_documents","params":[],"id":3}'
+    )
+    assert payload is not None
+    error = json.loads(payload)["error"]
+    assert error["message"] == "FreeCAD GUI is still executing a request that timed out"
+    assert error["data"]["error_code"] == "GUI_DISPATCH_BUSY"

@@ -22,6 +22,8 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
             if_exists="error",
         )
         base = document.addObject("Part::Box", "Base")
+        # Joints only accept components inside the assembly.
+        document.getObject(str(payload["assembly"])).addObject(base)
         document.recompute()
         ctx["assembly"] = str(payload["assembly"])
         ctx["base"] = base.Name
@@ -38,6 +40,9 @@ def prepare_assembly_document(document, kind: str) -> dict[str, str]:
         part_a = document.addObject("Part::Box", "A")
         part_b = document.addObject("Part::Box", "B")
         part_b.Placement.Base = FreeCAD.Vector(20, 0, 0)
+        assembly = document.getObject(str(payload["assembly"]))
+        assembly.addObject(part_a)
+        assembly.addObject(part_b)
         document.recompute()
         ctx["assembly"] = str(payload["assembly"])
         ctx["a"] = part_a.Name

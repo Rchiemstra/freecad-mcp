@@ -60,7 +60,13 @@ def test_history_past_its_end_is_reported(mcp, gui_log, action):
     doc = f"LiveEmpty{action.title()}"
     assert_ok(mcp.call("create_document", name=doc))
 
-    _rejected(mcp.call(action, doc_name=doc), f"Nothing to {action}")
+    refused = mcp.call(action, doc_name=doc)
+    _rejected(refused, f"Nothing to {action}")
+    # A refusal, not a transport failure that leaves the state uncertain.
+    assert "response unavailable" not in refused.text, refused.text[:600]
+    missing = mcp.call(action, doc_name="LiveNoSuchDoc")
+    _rejected(missing, "not found")
+    assert "response unavailable" not in missing.text, missing.text[:600]
     assert_ok(mcp.call("close_document", doc_name=doc))
     assert_clean(gui_log)
 

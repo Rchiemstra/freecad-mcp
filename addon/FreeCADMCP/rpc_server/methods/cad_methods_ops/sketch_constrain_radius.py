@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_sketch_constrain_radius_uncertain,
     )
 from .sketch_constrain_radius_mutation import SketchConstrainRadiusError, run_sketch_constrain_radius_native_mutation
+from .sketch_geometry_kinds import circular_geometry_error
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +217,9 @@ def apply_sketch_constrain_radius(
     """Mutate the sketch without recomputing or managing a transaction."""
 
     sketch = _require_sketch(doc, request.sketch_name)
+    shape_error = circular_geometry_error(sketch, request.geo, "Radius")
+    if shape_error is not None:
+        raise SketchConstrainRadiusError("INVALID_ARGUMENT", shape_error)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
     idx = sketch.addConstraint(

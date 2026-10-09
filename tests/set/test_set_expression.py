@@ -385,3 +385,61 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _set_expression_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+def test_a_missing_property_is_rejected_without_creating_objects():
+    """set_expression on Pad.NoSuchProperty reported success and left a
+    FeaturePython "__mcp_expr_Pad_NoSuchProperty" in the user's document."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    before = set(document.objects)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_set_expression(collaborators, "Doc", "Seed", "NoSuchProperty", "1+1")
+
+    assert result["success"] is False
+    assert result["error_code"] == "PROPERTY_NOT_FOUND"
+    assert "'NoSuchProperty'" in result["error"] and "'Seed'" in result["error"]
+    assert set(document.objects) == before
+    assert "commit" not in events
+
+
+@pytest.mark.parametrize(
+    "ctype, value, accepted",
+    [
+        ("Distance", -5.0, False),
+        ("Distance", 0.0, False),
+        ("Radius", -1.0, False),
+        ("Diameter", 0.0, False),
+        ("Distance", 12.5, True),
+        ("DistanceX", -5.0, True),
+        ("Angle", -0.5, True),
+    ],
+)
+@pytest.mark.parametrize("prop_path", ["Constraints[0]", ".Constraints.Width"])
+def test_sketch_datums_driven_out_of_range_are_rejected(ctype, value, accepted, prop_path):
+    """An expression driving a Distance negative made FreeCAD's solver print
+    "Both points are equal" and "Invalid solution from DogLeg solver" before the
+    change was rolled back; sketch_edit_constraint already refuses such values."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    sketch = _item("Sketch", type_id="Sketcher::SketchObject")
+    sketch.PropertiesList = ["Constraints"]
+    sketch.Constraints = [SimpleNamespace(Type=ctype, Name="Width")]
+    sketch.evalExpression = lambda _expression: value
+    document.objects["Sketch"] = sketch
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_set_expression(collaborators, "Doc", "Sketch", prop_path, "<<Dims>>.W")
+
+    if accepted:
+        assert result.get("error_code") != "INVALID_ARGUMENT", result
+    else:
+        assert result["success"] is False
+        assert result["error_code"] == "INVALID_ARGUMENT"
+        assert f"{ctype} constraint" in result["error"] and "must be > 0" in result["error"]
+        assert "commit" not in events

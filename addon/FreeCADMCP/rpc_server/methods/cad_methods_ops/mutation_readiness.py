@@ -357,8 +357,14 @@ def get_mutation_readiness_gui(*, freecad: Any, doc_name: str | None = None) -> 
                 # returns None.
                 document = None
         if document is None:
+            # A proven rejection: the transport hands it back as a result
+            # instead of an RPC error the client must treat as uncertain.
             return {
                 "success": False,
+                "ok": False,
+                "outcome": "rejected",
+                "committed": False,
+                "retry_safe": True,
                 "error_code": "DOCUMENT_NOT_FOUND",
                 "error": f"Document '{doc_name}' not found",
             }

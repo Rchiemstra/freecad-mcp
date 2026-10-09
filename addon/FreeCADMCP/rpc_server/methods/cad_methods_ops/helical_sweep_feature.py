@@ -155,6 +155,10 @@ def read_helical_sweep_feature_result(doc: FeatureReadDocument, receipt: Helical
     )
 
 
+# A debug build sweeps 150 turns in under a second but 200 in over a minute.
+_MAX_TURNS = 150
+
+
 def build_helical_sweep_feature_request(
     doc_name: str, profile_sketch: str, helix_name: str, pitch: float, height: float, radius: float, body_name: str | None = None, left_handed: bool = False, reversed_dir: bool = False
 ) -> HelicalSweepFeatureRequest | HelicalSweepFeatureFailure:
@@ -170,6 +174,13 @@ def build_helical_sweep_feature_request(
         body = optional_name(body_name, "body_name")
         left = bool_value(left_handed, "left_handed")
         reversed_value = bool_value(reversed_dir, "reversed_dir")
+        turns = height_value / pitch_value
+        if turns > _MAX_TURNS:
+            raise ValueError(
+                f"height/pitch gives {turns:g} turns; helical_sweep_feature supports at "
+                f"most {_MAX_TURNS} turns because FreeCAD's sweep then takes minutes and "
+                "blocks the GUI"
+            )
     except ValueError as exc:
         return _failure(HelicalSweepFeatureError("INVALID_ARGUMENT", str(exc)))
     return HelicalSweepFeatureRequest(

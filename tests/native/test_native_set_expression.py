@@ -29,7 +29,8 @@ def _collaborators(FreeCAD, validator):
 
 def _prepare(document):
     if document.getObject('Seed') is None:
-        document.addObject('App::FeaturePython', 'Seed')
+        seed = document.addObject('App::FeaturePython', 'Seed')
+        seed.addProperty("App::PropertyFloat", "Length")
     if document.getObject('Target') is None:
         document.addObject('App::FeaturePython', 'Target')
     body = document.getObject('Body')

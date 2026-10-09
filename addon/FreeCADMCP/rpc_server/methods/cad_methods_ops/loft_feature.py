@@ -160,6 +160,9 @@ def build_loft_feature_request(
         sketches = tuple(
             FeatureName(name) for name in string_list(sketch_names, "sketch_names", minimum=2)
         )
+        repeated = sorted({name for name in sketches if sketches.count(name) > 1})
+        if repeated:
+            raise ValueError(f"sketch_names repeats {', '.join(map(repr, repeated))}")
         created = FeatureName(nonempty_string(loft_name, "loft_name"))
         body = optional_name(body_name, "body_name")
         ruled_value = bool_value(ruled, "ruled")

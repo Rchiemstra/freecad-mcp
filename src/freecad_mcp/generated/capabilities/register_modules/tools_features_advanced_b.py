@@ -44,7 +44,8 @@ def _register_helical_sweep_feature(
             profile_sketch: Name of the cross-section sketch.
             helix_name: Name for the resulting Helix feature.
             pitch: Distance between successive turns in mm.
-            height: Total height of the helix in mm.
+            height: Total height of the helix in mm; height/pitch may be at
+                most 150 turns.
             radius: Helix radius in mm.
             body_name: Optional explicit PartDesign Body name.
             left_handed: If true, produce a left-handed helix.

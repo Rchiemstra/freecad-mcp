@@ -27,9 +27,18 @@ def _history_operation_id(conn, method: str, doc_name: str) -> str:
 
 
 def _prepare_history_mutation(conn, doc_name: str, *, undo: bool) -> dict[str, Any]:
+    def _history_rejection(failure: dict[str, Any]) -> dict[str, Any]:
+        # Nothing was undone or redone: a rejection, not an uncertain outcome.
+        rejection = dict(failure)
+        rejection.pop("document_name", None)
+        rejection.setdefault("contract_version", 1)
+        rejection.update(success=False, ok=False, outcome="rejected", committed=False)
+        rejection.setdefault("retry_safe", True)
+        return rejection
+
     readiness = get_mutation_readiness(conn, doc_name)
     if not readiness.get("success"):
-        return readiness
+        return _history_rejection(readiness)
     if not readiness.get("ready"):
         failure: dict[str, Any] = {
             "success": False,
@@ -39,14 +48,14 @@ def _prepare_history_mutation(conn, doc_name: str, *, undo: bool) -> dict[str, A
         for key in ("documents", "reasons", "automation_pause", "mutation_readiness"):
             if key in readiness:
                 failure[key] = readiness[key]
-        return failure
+        return _history_rejection(failure)
     documents = readiness.get("documents") or []
     if not documents:
-        return {
+        return _history_rejection({
             "success": False,
             "error_code": "DOCUMENT_NOT_FOUND",
             "error": f"Document '{doc_name}' not found",
-        }
+        })
     entry = documents[0]
     doc_selector = {
         "document_uid": entry["document_uid"],
