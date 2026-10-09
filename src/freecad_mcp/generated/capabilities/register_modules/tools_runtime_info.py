@@ -91,6 +91,27 @@ def _tool_availability(*, authenticated_rpc_v2: bool) -> dict[str, Any]:
     }
 
 
+def _with_worker_availability(availability: dict[str, Any]) -> dict[str, Any]:
+    """List read-only execution as degraded when the worker cannot run jobs."""
+
+    try:
+        status = server_connection().get_worker_status()
+    except Exception:
+        return availability
+    if not isinstance(status, dict) or status.get("available") is not False:
+        return availability
+    reason = status.get("last_error") or status.get("state") or "unknown"
+    availability["degraded_tools"] = [
+        *availability.get("degraded_tools", []),
+        {
+            "tool": "execute_code",
+            "effective_operation": "gui_only",
+            "limitation": f"read-only worker execution is unavailable: {reason}",
+        },
+    ]
+    return availability
+
+
 def _addon_identity(manifest: Any | None, info: dict[str, Any]) -> dict[str, Any]:
     compiled = {
         "version": (
@@ -239,8 +260,8 @@ def _runtime_info_payload() -> dict[str, Any]:
             "path_fingerprint": profile_fingerprint or "unknown",
         },
         "compatibility": compatibility,
-        "tool_availability": _tool_availability(
-            authenticated_rpc_v2=authenticated_rpc_v2
+        "tool_availability": _with_worker_availability(
+            _tool_availability(authenticated_rpc_v2=authenticated_rpc_v2)
         ),
     }
 
