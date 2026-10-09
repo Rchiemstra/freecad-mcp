@@ -30,14 +30,9 @@ def _tip(mcp, doc_name: str) -> str:
             "print(body.Tip.Name if body is not None and body.Tip else '')\n"
         ),
     ))
-    output = ""
-    if result.payload:
-        output = str(result.payload.get("output") or "")
-    if not output.strip():
-        output = result.text
-    names = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_]*)$", output)
-    assert names, result.text[:600]
-    return names[-1]
+    match = re.search(r"Output:\s*(\S+)", result.text)
+    assert match, result.text[:600]
+    return match.group(1)
 
 
 def test_a_pattern_over_the_cap_is_refused_and_a_small_one_commits(mcp, gui_log):
