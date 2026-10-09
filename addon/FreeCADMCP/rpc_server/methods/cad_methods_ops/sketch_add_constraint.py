@@ -38,6 +38,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_sketch_add_constraint_success,
         make_sketch_add_constraint_uncertain,
     )
+from .sketch_geometry_kinds import circular_geometry_error
 from .sketch_add_constraint_mutation import (
     SketchAddConstraintError,
     run_sketch_add_constraint_native_mutation,
@@ -201,7 +202,12 @@ def apply_sketch_add_constraint(
     constraint_type = getattr(collaborators.sketcher, "Constraint")
     added = 0
     for constraint in constraints:
-        idx = add_constraint(constraint_type(*_constraint_args(constraint)))
+        args = _constraint_args(constraint)
+        if args[0] in ("Radius", "Diameter") and isinstance(args[1], int):
+            shape_error = circular_geometry_error(sketch, args[1], str(args[0]))
+            if shape_error is not None:
+                raise SketchAddConstraintError("INVALID_ARGUMENT", shape_error)
+        idx = add_constraint(constraint_type(*args))
         name = constraint.get("name")
         if isinstance(name, str) and name and idx is not None:
             rename = getattr(sketch, "renameConstraint", None)
