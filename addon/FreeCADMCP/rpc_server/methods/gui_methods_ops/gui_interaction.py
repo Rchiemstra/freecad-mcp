@@ -14,6 +14,7 @@ from .collaboration_context import (
 )
 from .collaboration_context_core import request_actor, resolve_document
 from .collaboration_context_dispatch import dispatch_gui
+from ...gui_tools_ops.selection_parse import subshape_missing
 
 
 def _selection_entry(item: Any) -> tuple[str, str, str | None]:
@@ -159,8 +160,7 @@ def select_subshapes(
                 if obj is None:
                     errors.append(f"Object not found: {obj_name}")
                     continue
-                get_subobject = getattr(obj, "getSubObject", None)
-                if sub and callable(get_subobject) and get_subobject(sub) is None:
+                if sub and subshape_missing(obj, sub):
                     errors.append(f"Subobject not found: {obj_name}.{sub}")
                     continue
                 path = f"{obj_name}.{sub}" if sub else obj_name
