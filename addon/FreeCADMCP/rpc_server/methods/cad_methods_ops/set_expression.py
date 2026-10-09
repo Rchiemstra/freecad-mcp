@@ -187,6 +187,52 @@ def _has_expression_property(item: object, prop_path: str) -> bool:
     return hasattr(item, root)
 
 
+# Sketch datums FreeCAD's setDatum refuses at or below zero. The expression
+# engine bypasses that check, so the solver failed noisily before rollback.
+_POSITIVE_DATUMS = frozenset({"Distance", "Radius", "Diameter", "Weight"})
+
+
+def _sketch_constraint(item: object, prop_path: str) -> object | None:
+    constraints = getattr(item, "Constraints", None)
+    if not isinstance(constraints, (list, tuple)):
+        return None
+    path = prop_path.strip().lstrip(".")
+    if path.startswith("Constraints[") and path.endswith("]"):
+        try:
+            index = int(path[len("Constraints[") : -1])
+        except ValueError:
+            return None
+        return constraints[index] if 0 <= index < len(constraints) else None
+    if path.startswith("Constraints."):
+        name = path[len("Constraints.") :]
+        return next(
+            (item for item in constraints if getattr(item, "Name", None) == name), None
+        )
+    return None
+
+
+def _datum_error(item: object, prop_path: str, expression: str) -> str | None:
+    constraint = _sketch_constraint(item, prop_path)
+    ctype = getattr(constraint, "Type", None)
+    if ctype not in _POSITIVE_DATUMS:
+        return None
+    evaluate = getattr(item, "evalExpression", None)
+    if not callable(evaluate):
+        return None
+    try:
+        evaluated = evaluate(expression)
+        value = float(getattr(evaluated, "Value", evaluated))
+    except Exception:
+        # FreeCAD reports unparsable or unresolved expressions itself.
+        return None
+    if value > 0:
+        return None
+    return (
+        f"{ctype} constraint {prop_path!r} must be > 0, but {expression!r} "
+        f"evaluates to {value:g}"
+    )
+
+
 def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionRequest) -> SetExpressionReceipt:
     """Bind an expression without recomputing."""
 
@@ -199,6 +245,9 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
     setter = getattr(item, "setExpression", None)
     if not callable(setter):
         raise SetExpressionError("INVALID_OBJECT", "object cannot set expressions")
+    datum_error = _datum_error(item, request.prop_path, request.expression)
+    if datum_error is not None:
+        raise SetExpressionError("INVALID_ARGUMENT", datum_error)
     if is_read_only_property(item, request.prop_path):
         raise SetExpressionError("EXPRESSION_ERROR", f"{request.prop_path!r} is read-only")
     try:
