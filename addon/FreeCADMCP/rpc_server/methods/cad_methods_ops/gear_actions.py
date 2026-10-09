@@ -436,11 +436,25 @@ def _finish_sketch(
     sketch: object,
     points: list[object],
     *,
+    pitch: float,
+    base: float,
+    root: float,
+    outer: float,
     bore_diameter: float,
     min_length: float,
 ) -> None:
     _close_points(points, min_length)
     _profile_to_sketch(sketch, points, min_length)
+    # Reference circles documented on the gear sketch: root, base, pitch, outer.
+    _construction_circles(
+        sketch,
+        (
+            ("RootRadius", root),
+            ("BaseRadius", base),
+            ("PitchRadius", pitch),
+            ("OuterRadius", outer),
+        ),
+    )
     _maybe_bore(sketch, bore_diameter)
 
 
@@ -485,6 +499,10 @@ def create_involute_gear(
     _finish_sketch(
         sketch,
         points,
+        pitch=pitch,
+        base=base,
+        root=root,
+        outer=outer,
         bore_diameter=bore_diameter,
         min_length=1e-8,
     )
@@ -547,6 +565,10 @@ def create_helical_gear(
     _finish_sketch(
         sketch,
         points,
+        pitch=pitch,
+        base=base,
+        root=root,
+        outer=outer,
         bore_diameter=bore_diameter,
         min_length=1e-8,
     )
@@ -641,6 +663,10 @@ def create_spur_gear(
     _finish_sketch(
         sketch,
         points,
+        pitch=pitch,
+        base=base,
+        root=root,
+        outer=outer,
         bore_diameter=bore_diameter,
         min_length=1e-7,
     )
