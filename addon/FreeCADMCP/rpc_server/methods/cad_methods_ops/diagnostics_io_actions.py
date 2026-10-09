@@ -87,36 +87,87 @@ def _int_list(sketch: object, name: str) -> list[int]:
     return [int(item) for item in value] if isinstance(value, (list, tuple)) else []
 
 
+def _id_list(values: list[int]) -> str:
+    return "(" + ", ".join(str(item) for item in values) + ")"
+
+
+def _solver_message(
+    *,
+    geometry_count: int,
+    dof: int,
+    conflicting: list[int],
+    malformed: list[int],
+    redundant: list[int],
+    partially_redundant: list[int],
+    solver_failed: bool,
+) -> str:
+    """Match Sketcher's ViewProviderSketch solver text without calling solve()."""
+
+    if geometry_count == 0:
+        return "Empty sketch"
+    if dof < 0 or conflicting:
+        return "Over-constrained: " + _id_list(conflicting)
+    if malformed:
+        return "Malformed constraints: " + _id_list(malformed)
+    if redundant:
+        return "Redundant constraints: " + _id_list(redundant)
+    if partially_redundant:
+        return "Partially redundant: " + _id_list(partially_redundant)
+    if solver_failed:
+        return "Solver failed to converge"
+    if dof > 0:
+        noun = "Degree" if dof == 1 else "Degrees"
+        return f"Under-constrained: {dof} {noun} of Freedom"
+    return "Fully constrained"
+
+
 def get_sketch_diagnostics(document: object, sketch_name: str) -> dict[str, object]:
     sketch = require_object(document, sketch_name)
     conflicting = _int_list(sketch, "ConflictingConstraints")
-    payload: dict[str, object] = {
+    malformed = _int_list(sketch, "MalformedConstraints")
+    redundant = _int_list(sketch, "RedundantConstraints")
+    partially_redundant = _int_list(sketch, "PartiallyRedundantConstraints")
+    geometry_count = int(getattr(sketch, "GeometryCount", 0) or 0)
+    raw_dof = getattr(sketch, "DoF", None)
+    dof = raw_dof if isinstance(raw_dof, int) and not isinstance(raw_dof, bool) else 0
+    solver_failed = bool(getattr(sketch, "solveFailed", lambda: False)())
+    empty = geometry_count == 0
+    fully = False if empty else (
+        bool(getattr(sketch, "FullyConstrained", False))
+        if isinstance(getattr(sketch, "FullyConstrained", None), bool)
+        else dof == 0 and not conflicting and not malformed and not redundant
+    )
+    is_closed = False
+    if not empty:
+        try:
+            shape = getattr(sketch, "Shape", None)
+            if shape is not None and not shape.isNull():
+                is_closed = bool(shape.isClosed())
+        except Exception:
+            is_closed = False
+    return {
         "sketch_name": str(getattr(sketch, "Name", sketch_name)),
-        "geometry_count": int(getattr(sketch, "GeometryCount", 0)),
-        "constraint_count": int(getattr(sketch, "ConstraintCount", 0)),
+        "geometry_count": geometry_count,
+        "constraint_count": int(getattr(sketch, "ConstraintCount", 0) or 0),
         "conflict": bool(conflicting)
-        or bool(getattr(sketch, "ConstraintCount", 0) and getattr(sketch, "solveFailed", lambda: False)()),
+        or bool(getattr(sketch, "ConstraintCount", 0) and solver_failed),
         "state": [str(item) for item in getattr(sketch, "State", []) or []],
         "conflicting_constraints": conflicting,
-        "redundant_constraints": _int_list(sketch, "RedundantConstraints"),
-        "malformed_constraints": _int_list(sketch, "MalformedConstraints"),
-        "solver_message": getattr(sketch, "SolverMessage", None),
-        "is_closed": None,
+        "redundant_constraints": redundant,
+        "malformed_constraints": malformed,
+        "solver_message": _solver_message(
+            geometry_count=geometry_count,
+            dof=dof,
+            conflicting=conflicting,
+            malformed=malformed,
+            redundant=redundant,
+            partially_redundant=partially_redundant,
+            solver_failed=solver_failed,
+        ),
+        "is_closed": is_closed,
+        "dof": dof,
+        "fully_constrained": fully,
     }
-    # Only a solved SketchObject has these; never invent a zero DoF.
-    dof = getattr(sketch, "DoF", None)
-    if isinstance(dof, int) and not isinstance(dof, bool):
-        payload["dof"] = dof
-    fully = getattr(sketch, "FullyConstrained", None)
-    if isinstance(fully, bool):
-        payload["fully_constrained"] = fully
-    try:
-        shape = getattr(sketch, "Shape", None)
-        if shape is not None and not shape.isNull():
-            payload["is_closed"] = bool(shape.isClosed())
-    except Exception:
-        pass
-    return payload
 
 
 

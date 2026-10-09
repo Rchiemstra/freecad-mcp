@@ -34,8 +34,19 @@ def run_get_sketch_diagnostics(
     document = lookup_document(app, doc_name)
     if document is None:
         return _failure("DOCUMENT_NOT_FOUND", f"Document not found: {doc_name!r}")
-    if lookup_object(document, sketch_name) is None:
+    sketch = lookup_object(document, sketch_name)
+    if sketch is None:
         return _failure("OBJECT_NOT_FOUND", f"Sketch not found: {sketch_name!r}")
+    type_id = str(getattr(sketch, "TypeId", "") or "")
+    derived = getattr(sketch, "isDerivedFrom", None)
+    is_sketch = type_id.startswith("Sketcher::") or (
+        callable(derived) and bool(derived("Sketcher::SketchObject"))
+    )
+    if not is_sketch:
+        return _failure(
+            "INVALID_ARGUMENT",
+            f"{sketch_name!r} is not a sketch ({type_id or 'unknown type'})",
+        )
     optional_recompute(collaborators, document)
     try:
         payload = diagnostics_io_actions.get_sketch_diagnostics(document, sketch_name)
