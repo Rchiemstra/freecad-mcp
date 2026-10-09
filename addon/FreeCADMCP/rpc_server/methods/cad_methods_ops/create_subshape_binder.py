@@ -54,6 +54,8 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_create_subshape_binder_uncertain,
     )
 from .create_subshape_binder_mutation import CreateSubshapeBinderError, run_create_subshape_binder_native_mutation
+from ...worker_protocol_ops.subelement_validation import validate_subelement_reference
+from ...worker_protocol_types.protocol_error import ProtocolError
 from .typed_runtime import is_derived_from
 
 
@@ -117,6 +119,10 @@ def _boundbox_values(obj: object) -> tuple[float, float, float, float, float, fl
     if box is None:
         box = getattr(obj, "BoundBox", None)
     if box is None:
+        return None
+    is_valid = getattr(box, "isValid", None)
+    if callable(is_valid) and not is_valid():
+        # An empty shape's box holds +/-DBL_MAX sentinels, not coordinates.
         return None
     try:
         return (
@@ -225,6 +231,13 @@ def apply_create_subshape_binder(doc: CreateSubshapeBinderDocument, request: Cre
     owner = _resolve_owner(doc, request)
     source_obj = require_object(doc, request.source_object, missing_code="OBJECT_NOT_FOUND", error=CreateSubshapeBinderError)
     sub_elements = _validate_sub_elements(request.sub_elements)
+    for sub in sub_elements or ():
+        # A missing subelement made a binder with a null shape that still
+        # reported success.
+        try:
+            validate_subelement_reference(source_obj, sub)
+        except ProtocolError as exc:
+            raise CreateSubshapeBinderError("INVALID_ARGUMENT", str(exc)) from exc
     created: object | None = None
     factory = getattr(owner, "newObject", None) if owner is not None else None
     if owner is not None and callable(factory):
