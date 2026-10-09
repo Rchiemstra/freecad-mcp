@@ -120,14 +120,23 @@ def capture_committed_screenshot(
     structured: dict[str, Any],
     *,
     only_text_feedback: bool,
+    document: str | None = None,
 ) -> str | None:
-    """Best-effort view capture after a mutation has already committed."""
+    """Best-effort view capture after a mutation has already committed.
+
+    Pass the changed *document*: otherwise the GUI's active document is
+    captured, which may be another one.
+    """
 
     if only_text_feedback:
         return None
     started = time.monotonic()
     try:
-        screenshot = freecad.get_active_screenshot()
+        screenshot = (
+            freecad.get_active_screenshot(document=document)
+            if document
+            else freecad.get_active_screenshot()
+        )
     except Exception as exc:
         structured["screenshot_ms"] = round((time.monotonic() - started) * 1000.0, 3)
         structured["presentation_warning"] = f"Screenshot capture failed: {exc}"

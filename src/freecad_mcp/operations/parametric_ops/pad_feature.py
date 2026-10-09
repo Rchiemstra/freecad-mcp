@@ -79,7 +79,7 @@ def pad_feature_operation(
             error_code=result["error_code"],
         )
     screenshot = capture_committed_screenshot(
-        freecad, structured, only_text_feedback=only_text_feedback
+        freecad, structured, only_text_feedback=only_text_feedback, document=doc_name
     )
     ok = tool_ok(
         json.dumps(result, ensure_ascii=False, default=str),

@@ -29,17 +29,22 @@ def get_active_screenshot(
     focus_object: str | None = None,
     focus_objects: list[str] | None = None,
     yaw_deg: float | None = None,
+    document: str | None = None,
 ) -> str | None:
+    params: dict[str, Any] = {
+        "view_name": view_name,
+        "width": width,
+        "height": height,
+        "focus_object": focus_object,
+        "focus_objects": focus_objects,
+        "yaw_deg": yaw_deg,
+    }
+    if document:
+        # Render this document's view rather than the GUI's active one.
+        params["document"] = document
     routed = conn._invoke_mutation_v2(
         "get_active_screenshot",
-        {
-            "view_name": view_name,
-            "width": width,
-            "height": height,
-            "focus_object": focus_object,
-            "focus_objects": focus_objects,
-            "yaw_deg": yaw_deg,
-        },
+        params,
         operation_name="Get active screenshot",
     )
     if routed is not None:
@@ -54,6 +59,7 @@ def get_active_screenshot(
             focus_object,
             focus_objects,
             yaw_deg,
+            *((document,) if document else ()),
         )
     except Exception as e:
         logger.error(f"Error getting screenshot: {e}")

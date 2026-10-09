@@ -21,7 +21,7 @@
     "connection_stale_ops": "2acaca31435271e4bebf58ed376e14b8186d52c802c7a54b282e01340dae4bfe",
     "connection_v2_context_helpers": "c5c292607982c0de4b361be08eee86196d0ac86abe5834bb9f4cd3e718fcf784",
     "connection_v2_ops": "82fa1fd40aa29cc67f4ec0701e2815fef50d43918dc2145acba134b221843fbf",
-    "connection_view_ops": "1cde1801542e5ae807a6ae3c435705c548e2ab4c6f7a74d7726580aca019d0a5"
+    "connection_view_ops": "207423f7b3ba076fd149ea0f04ea92229855fdbdb2f6bca4107809257252d24e"
   },
   "register_modules": {
     "tools_advanced_a": "fe5bf57c35d641049bdd2d4e1c0d1cdae30d4e397ef369db438f3d6d400376dc",
