@@ -16,6 +16,8 @@ from .feature_mutate_support import (
     number_value,
     optional_name,
     require_nonempty_shape,
+    require_subelements,
+    require_within_extent,
     set_attr,
     set_tip,
     string_list,
@@ -88,8 +90,10 @@ def apply_chamfer_feature(doc: FeatureDocument, request: ChamferFeatureRequest) 
             doc, request.base_feature, missing="Base feature not found"
         )
         body = resolve_optional_body(doc, base, request.body_name)
-        created = create_feature(doc, body, 'PartDesign::Chamfer', request.chamfer_name)
         edges = list(request.edge_refs)
+        require_subelements(base, edges, "edge_refs")
+        require_within_extent(base, request.size, "size")
+        created = create_feature(doc, body, 'PartDesign::Chamfer', request.chamfer_name)
         if edges:
             set_attr(created, "Base", (base, edges))
             set_attr(created, "UseAllEdges", False)

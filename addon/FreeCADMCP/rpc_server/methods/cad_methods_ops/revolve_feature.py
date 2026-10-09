@@ -164,7 +164,8 @@ def build_revolve_feature_request(
         doc = DocumentName(nonempty_string(doc_name, "doc_name"))
         sketch = FeatureName(nonempty_string(sketch_name, "sketch_name"))
         created = FeatureName(nonempty_string(revolve_name, "revolve_name"))
-        angle_value = number_value(angle, "angle", positive=True)
+        # FreeCAD clamps PropertyAngle to [-360, 360] without an error.
+        angle_value = number_value(angle, "angle", positive=True, maximum=360.0)
         axis_value = nonempty_string(axis, "axis")
         body = optional_name(body_name, "body_name")
         symmetric_value = bool_value(symmetric, "symmetric")
