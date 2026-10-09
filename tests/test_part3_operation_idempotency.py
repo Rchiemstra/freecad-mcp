@@ -12,6 +12,8 @@ from addon.FreeCADMCP.part3_collaboration.checked_edit_fence import (
     clear_begin_fences,
     store_begin_fence,
 )
+from addon.FreeCADMCP._shared.protocol.redo_contract import parse_redo_response
+from addon.FreeCADMCP._shared.protocol.undo_contract import parse_undo_response
 from addon.FreeCADMCP.part3_collaboration.history_head import capture_undo_head
 from addon.FreeCADMCP.part3_collaboration.operation_terminal_store import (
     clear_operation_terminal_store,
@@ -536,3 +538,8 @@ def test_history_action_on_an_empty_stack_is_refused(action) -> None:
     assert f"Nothing to {action}" in result.get("error", "")
     getattr(document, action).assert_not_called()
     document.recompute.assert_not_called()
+    # A proven rejection, not a transport failure the client must reconcile.
+    parse = parse_undo_response if action == "undo" else parse_redo_response
+    parsed = parse(result)
+    assert parsed["outcome"] == "rejected", parsed
+    assert parsed["error_code"] == "EMPTY_HISTORY_STACK"

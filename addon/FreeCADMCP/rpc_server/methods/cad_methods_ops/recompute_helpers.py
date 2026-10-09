@@ -67,6 +67,23 @@ def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
     return payload
 
 
+def _history_rejection(failure: Any) -> Any:
+    """Mark a history failure raised before undo()/redo() as a proven rejection.
+
+    Without these fields the transport turned "Nothing to undo" into an RPC
+    error and the client reported the outcome as uncertain.
+    """
+
+    if not isinstance(failure, dict) or failure.get("success") is not False:
+        return failure
+    rejection = dict(failure)
+    rejection.pop("document_name", None)
+    rejection.setdefault("contract_version", 1)
+    rejection.update(ok=False, outcome="rejected", committed=False)
+    rejection.setdefault("retry_safe", True)
+    return rejection
+
+
 def _selector_dict(selector: Any) -> dict[str, Any] | None:
     if isinstance(selector, dict):
         return selector
@@ -311,7 +328,7 @@ def undo_gui(
             _selector_dict(doc_selector),
         )
         if failure is not None:
-            return failure
+            return _history_rejection(failure)
 
         canonical_payload = {
             "method": "undo",
@@ -334,6 +351,7 @@ def undo_gui(
                 "HISTORY_HEAD_REQUIRED",
                 "expected_undo_count and expected_undo_head are required",
             )
+            failure = _history_rejection(failure)
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
@@ -347,12 +365,14 @@ def undo_gui(
                 current_undo_count=live["undo_count"],
                 current_undo_head=live["undo_head"],
             )
+            failure = _history_rejection(failure)
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
         # FreeCAD's undo() is a silent no-op on an empty stack.
         if capture_undo_head(document)["undo_count"] <= 0:
             failure = _error("EMPTY_HISTORY_STACK", "Nothing to undo")
+            failure = _history_rejection(failure)
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
@@ -360,6 +380,7 @@ def undo_gui(
             document, inflight=current_cad_mutation_inflight()
         )
         if admission_failure is not None:
+            admission_failure = _history_rejection(admission_failure)
             _store_history_terminal(
                 actor_id, operation_id, canonical_payload, document, admission_failure
             )
@@ -417,7 +438,7 @@ def redo_gui(
             _selector_dict(doc_selector),
         )
         if failure is not None:
-            return failure
+            return _history_rejection(failure)
 
         canonical_payload = {
             "method": "redo",
@@ -440,6 +461,7 @@ def redo_gui(
                 "HISTORY_HEAD_REQUIRED",
                 "expected_redo_count and expected_redo_head are required",
             )
+            failure = _history_rejection(failure)
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
@@ -453,12 +475,14 @@ def redo_gui(
                 current_redo_count=live["redo_count"],
                 current_redo_head=live["redo_head"],
             )
+            failure = _history_rejection(failure)
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
         # FreeCAD's redo() is a silent no-op on an empty stack.
         if capture_redo_head(document)["redo_count"] <= 0:
             failure = _error("EMPTY_HISTORY_STACK", "Nothing to redo")
+            failure = _history_rejection(failure)
             _store_history_terminal(actor_id, operation_id, canonical_payload, document, failure)
             return failure
 
@@ -466,6 +490,7 @@ def redo_gui(
             document, inflight=current_cad_mutation_inflight()
         )
         if admission_failure is not None:
+            admission_failure = _history_rejection(admission_failure)
             _store_history_terminal(
                 actor_id, operation_id, canonical_payload, document, admission_failure
             )

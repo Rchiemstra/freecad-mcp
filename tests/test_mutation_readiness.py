@@ -739,6 +739,10 @@ def test_readiness_for_an_unknown_document_is_document_not_found():
 
     assert result == {
         "success": False,
+        "ok": False,
+        "outcome": "rejected",
+        "committed": False,
+        "retry_safe": True,
         "error_code": "DOCUMENT_NOT_FOUND",
         "error": "Document 'NoSuchDoc' not found",
     }
