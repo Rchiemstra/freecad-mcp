@@ -143,6 +143,7 @@ def test_cyclic_spreadsheet_formula_leaves_document_usable(mcp, gui_log):
                       cells=[{"address": "B1", "value": "=B1 + 1"}])
     assert not cyclic.ok
     assert "blocked restoration" not in cyclic.text
+    assert "B1" in cyclic.text, cyclic.text[:600]
 
     assert_ok(mcp.call("spreadsheet_set_cells", doc_name="LiveSheet", sheet_name="Dims",
                        cells=[{"address": "A1", "value": "42"}]))
@@ -150,7 +151,7 @@ def test_cyclic_spreadsheet_formula_leaves_document_usable(mcp, gui_log):
 
     # FreeCAD reports the rejected recompute itself; nothing else may appear.
     assert_clean(gui_log, r"Cyclic dependency detected", r"Failed to recompute",
-                 r"cells failed contains errors")
+                 r"cells failed contains errors", r"Cells with errors")
 
 
 def test_deleting_the_tip_feature_keeps_the_body_solid(mcp, gui_log):
