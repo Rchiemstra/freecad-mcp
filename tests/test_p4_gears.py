@@ -141,6 +141,56 @@ class TestComputeGearGeometryLayerA:
         assert data["pressure_angle"] == 14.5
 
 
+class TestGearCalculatorValidation:
+    """Invalid gear inputs are rejected like create_involute_gear does.
+
+    compute_gear_geometry(teeth=-5, module=0) returned all-zero "geometry", and
+    check_gear_pair(teeth1=0) raised ZeroDivisionError.
+    """
+
+    @pytest.mark.parametrize(
+        "kwargs, fragment",
+        [
+            ({"teeth": -5, "module": 0}, "teeth must be >= 3"),
+            ({"teeth": 2, "module": 1.0}, "teeth must be >= 3"),
+            ({"teeth": 20, "module": 0}, "module must be > 0"),
+            ({"teeth": 20, "module": float("nan")}, "module must be > 0"),
+            ({"teeth": 20, "module": 2.0, "pressure_angle": 0}, "pressure_angle"),
+            ({"teeth": 20, "module": 2.0, "pressure_angle": 50}, "pressure_angle"),
+            ({"teeth": 20, "module": 2.0, "clearance": -1}, "clearance"),
+            ({"teeth": 20, "module": 2.0, "backlash": -0.1}, "backlash"),
+            ({"teeth": 20, "module": 2.0, "helix_angle": 90}, "helix_angle"),
+        ],
+    )
+    def test_compute_rejects_invalid_inputs(self, kwargs, fragment):
+        resp = compute_gear_geometry_operation(MagicMock(), True, **kwargs)
+
+        assert resp.isError
+        assert fragment in _text(resp)
+        assert resp.structuredContent["error_code"] == "INVALID_ARGUMENT"
+
+    @pytest.mark.parametrize(
+        "args, fragment",
+        [
+            ((0, 2.0, 40, 2.0), "teeth1 must be >= 3"),
+            ((20, 2.0, 40, -1.0), "module2 must be > 0"),
+        ],
+    )
+    def test_check_pair_rejects_invalid_inputs(self, args, fragment):
+        resp = check_gear_pair_operation(MagicMock(), True, *args)
+
+        assert resp.isError
+        assert fragment in _text(resp)
+
+    def test_check_pair_rejects_a_negative_center_distance(self):
+        resp = check_gear_pair_operation(
+            MagicMock(), True, 20, 2.0, 40, 2.0, center_distance=-60.0
+        )
+
+        assert resp.isError
+        assert "center_distance must be > 0" in _text(resp)
+
+
 class TestCheckGearPairLayerA:
     def test_same_module_meshes(self):
         conn = MagicMock()

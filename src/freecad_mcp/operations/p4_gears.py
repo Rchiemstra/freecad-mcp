@@ -5,10 +5,45 @@ create_involute_gear uses the correct mathematical involute parametrization.
 """
 from __future__ import annotations
 
+import math
+
 from ..freecad_client import FreeCADConnection
 from ..responses.constants import ToolResponse
 from .parametric_ops.create_helical_gear import create_helical_gear_operation
 from .parametric_ops.create_involute_gear import create_involute_gear_operation
+
+
+def _gear_input_error(
+    *,
+    teeth: object,
+    module: object,
+    suffix: str = "",
+    pressure_angle: float = 20.0,
+    clearance: float = 0.0,
+    backlash: float = 0.0,
+    helix_angle: float = 0.0,
+) -> str | None:
+    """Mirror create_involute_gear's limits; NaN fails every comparison."""
+
+    if isinstance(teeth, bool) or not isinstance(teeth, int) or teeth < 3:
+        return f"teeth{suffix} must be >= 3"
+    if not (isinstance(module, int | float) and math.isfinite(module) and module > 0):
+        return f"module{suffix} must be > 0"
+    if not 0 < pressure_angle < 45:
+        return "pressure_angle must be 1-44 degrees"
+    if not clearance >= 0:
+        return "clearance must be >= 0"
+    if not backlash >= 0:
+        return "backlash must be >= 0"
+    if not -90 < helix_angle < 90:
+        return "helix_angle must be between -90 and 90 degrees"
+    return None
+
+
+def _invalid_argument(message: str) -> ToolResponse:
+    from ..responses.tool_results import tool_fail
+
+    return tool_fail(message, error_code="INVALID_ARGUMENT")
 
 
 def compute_gear_geometry_operation(
@@ -21,9 +56,18 @@ def compute_gear_geometry_operation(
     backlash: float = 0.0,
     helix_angle: float = 0.0,
 ) -> ToolResponse:
-    import math
     from ..responses.tool_results import json_response
 
+    error = _gear_input_error(
+        teeth=teeth,
+        module=module,
+        pressure_angle=pressure_angle,
+        clearance=clearance,
+        backlash=backlash,
+        helix_angle=helix_angle,
+    )
+    if error is not None:
+        return _invalid_argument(error)
     alpha = math.radians(pressure_angle)
     r = module * teeth / 2.0
     r_b = r * math.cos(alpha)
@@ -61,6 +105,13 @@ def check_gear_pair_operation(
 ) -> ToolResponse:
     from ..responses.tool_results import json_response
 
+    error = _gear_input_error(
+        teeth=teeth1, module=module1, suffix="1", pressure_angle=pressure_angle
+    ) or _gear_input_error(teeth=teeth2, module=module2, suffix="2")
+    if error is None and center_distance is not None and not center_distance > 0:
+        error = "center_distance must be > 0"
+    if error is not None:
+        return _invalid_argument(error)
     same_module = abs(module1 - module2) < 1e-6
     r1 = module1 * teeth1 / 2.0
     r2 = module2 * teeth2 / 2.0
