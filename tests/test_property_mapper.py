@@ -189,6 +189,43 @@ def test_set_object_property_resolves_app_link_target_from_name():
     doc.getObject.assert_called_once_with("Source")
 
 
+def test_vector_list_accepts_dicts_and_coordinate_lists():
+    """ScaleList is a vector list; JSON has no tuples, so both forms must assign."""
+
+    class _Link:
+        PropertiesList = ["ScaleList"]
+
+        def __init__(self):
+            self._scale = [_FakeVector(1, 1, 1)]
+
+        def getTypeIdOfProperty(self, prop):
+            return "App::PropertyVectorList" if prop == "ScaleList" else ""
+
+        @property
+        def ScaleList(self):
+            return list(self._scale)
+
+        @ScaleList.setter
+        def ScaleList(self, value):
+            if not isinstance(value, list) or any(
+                not isinstance(item, FreeCAD.Vector) for item in value
+            ):
+                raise TypeError("ScaleList values must be vectors")
+            self._scale = list(value)
+
+    link = _Link()
+    set_object_property(
+        MagicMock(),
+        link,
+        {"ScaleList": [{"x": 2, "y": 3, "z": 4}, [5, 6, 7]]},
+    )
+
+    assert [(item.x, item.y, item.z) for item in link.ScaleList] == [
+        (2.0, 3.0, 4.0),
+        (5.0, 6.0, 7.0),
+    ]
+
+
 def test_set_object_property_rejects_missing_app_link_target():
     doc = MagicMock()
     doc.getObject.return_value = None

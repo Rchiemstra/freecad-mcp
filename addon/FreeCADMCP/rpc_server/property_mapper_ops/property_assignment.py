@@ -70,6 +70,9 @@ def assign_document_property(
     if isinstance(current, FreeCAD.Vector) and isinstance(val, dict):
         setattr(obj, prop, _as_vector(val))
         return True
+    if isinstance(val, list) and _property_type(obj, prop) == "App::PropertyVectorList":
+        setattr(obj, prop, [_as_vector(item) for item in val])
+        return True
     if (
         isinstance(val, str)
         and obj.getTypeIdOfProperty(prop) in {"App::PropertyLink", "App::PropertyXLink"}
