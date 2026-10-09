@@ -146,8 +146,10 @@ def run_repair_references_native_mutation(
     document_name: str,
     apply: Callable[[object], None],
     postcondition: Callable[[object], None],
+    *,
+    recompute: bool,
 ) -> NativeOutcome[Literal[True] | RepairReferencesFailure | RepairReferencesUncertain]:
-    """Apply, recompute, inspect and validate on the same admitted document."""
+    """Apply, optionally recompute, inspect and validate on one admitted document."""
 
     state = _NativeMutationState()
 
@@ -196,6 +198,7 @@ def run_repair_references_native_mutation(
             native_apply,
             native_postcondition,
             structural=True,
+            recompute=recompute,
         )
     except LookupError as exc:
         if state.document is None:

@@ -20,23 +20,91 @@ from tests.typed_rpc_fakes import FakeDocument, collaborators
 pytestmark = pytest.mark.unit
 
 
-def test_repair_references_runs_apply_recompute_validate_then_commits():
-    events: list[str] = []
+def _sketch_on_pad(events):
     document = FakeDocument(events)
     pad = document.addObject('Part::Feature', 'Pad')
+    pad.Shape = SimpleNamespace(
+        isNull=lambda: False,
+        Faces=[object()] * 6,
+        Edges=[object()] * 12,
+        Vertexes=[object()] * 8,
+    )
     sketch = document.addObject('Sketcher::SketchObject', 'Sketch')
     sketch.PropertiesList = ['Support']
     sketch._prop_types['Support'] = 'App::PropertyLinkSubList'
     document.events.clear()
+    return document, pad, sketch
+
+
+def _support_on(*subelements):
+    return [{"object": "Sketch", "property": "Support", "references": [{"object": "Pad", "subelements": list(subelements)}]}]
+
+
+def test_repair_references_defers_recompute_by_default():
+    events: list[str] = []
+    document, _pad, _sketch = _sketch_on_pad(events)
     collab, _api = collaborators(document, events)
 
-    result = run_repair_references(collab, "Doc", [{"object": "Sketch", "property": "Support", "references": [{"object": "Pad", "subelements": ["Face1"]}]}])
+    result = run_repair_references(collab, "Doc", _support_on("Face1"))
 
     assert result["success"] is True
     assert result['repaired_count'] == 1
-    assert "recompute" in events
+    assert "recompute" not in events
     assert "validate" in events
     assert "commit" in events
+
+
+def test_repair_references_recomputes_when_asked():
+    events: list[str] = []
+    document, _pad, _sketch = _sketch_on_pad(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_repair_references(collab, "Doc", _support_on("Face1"), recompute=True)
+
+    assert result["success"] is True
+    assert events.index("recompute") < events.index("commit")
+
+
+def test_unvalidated_repair_writes_a_missing_subelement_without_evaluating_it():
+    events: list[str] = []
+    document, pad, sketch = _sketch_on_pad(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_repair_references(collab, "Doc", _support_on("Edge88888"))
+
+    assert result["success"] is True
+    assert sketch.Support == [(pad, ("Edge88888",))]
+    assert "recompute" not in events
+
+
+@pytest.mark.parametrize("subelement", ["Edge88888", "Face7", "Vertex9", "Edge0"])
+def test_validated_repair_rejects_a_missing_subelement_before_writing(subelement):
+    events: list[str] = []
+    document, _pad, sketch = _sketch_on_pad(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_repair_references(
+        collab, "Doc", _support_on("Face1", subelement), validate=True
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert f"Pad.{subelement}" in result["error"]
+    assert not hasattr(sketch, "Support")
+    assert "commit" not in events
+
+
+def test_validated_repair_accepts_existing_subelements():
+    events: list[str] = []
+    document, pad, sketch = _sketch_on_pad(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_repair_references(
+        collab, "Doc", _support_on("Face6", "Edge12", "Vertex8"), validate=True
+    )
+
+    assert result["success"] is True
+    assert sketch.Support == [(pad, ("Face6", "Edge12", "Vertex8"))]
 
 
 def test_invalid_arguments_abort_without_commit():
@@ -174,3 +242,17 @@ def test_missing_relink_source_is_not_success():
     assert result["success"] is False
     assert result["error_code"] == "OBJECT_NOT_FOUND"
     assert "commit" not in events
+
+
+@pytest.mark.parametrize("recompute, state", [(False, "deferred"), (True, "done")])
+def test_result_names_the_repairs_and_the_recompute_state(recompute, state):
+    """The result held only a count, not what was repaired or recomputed."""
+
+    events: list[str] = []
+    document, _pad, _sketch = _sketch_on_pad(events)
+    collab, _api = collaborators(document, events)
+
+    result = run_repair_references(collab, "Doc", _support_on("Face1"), recompute=recompute)
+
+    assert result["repaired"] == ["Sketch.Support"]
+    assert result["recompute"] == state

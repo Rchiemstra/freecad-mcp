@@ -380,3 +380,62 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _relink_references_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+def test_success_reports_what_was_relinked():
+    """The result named only from/to: a no-op relink looked like a real one."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_relink_references(collaborators, "Doc", "Seed", "Target")
+
+    assert result["relinked"] == ["Owner.Link", "Owner.LinkSub"]
+    assert result["count"] == 2
+
+
+def test_relinking_an_object_to_itself_is_rejected():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_relink_references(collaborators, "Doc", "Seed", "Seed")
+
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert "commit" not in events
+
+
+def test_a_relink_that_matches_nothing_is_not_a_success():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_relink_references(collaborators, "Doc", "Owner", "Target")
+
+    assert result["success"] is False
+    assert result["error_code"] == "RELINK_NOT_APPLIED"
+    assert "'Owner'" in result["error"]
+
+
+def test_the_target_never_links_to_itself():
+    """Target.Base pointing at the source must not be rewritten to Target."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    target = document.objects["Target"]
+    target.PropertiesList = ["Base"]
+    target.Base = document.objects["Seed"]
+    target.getTypeIdOfProperty = lambda prop: "App::PropertyLink"
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_relink_references(collaborators, "Doc", "Seed", "Target")
+
+    assert result["success"] is True
+    assert target.Base is document.objects["Seed"]
+    assert "Target.Base" not in result["relinked"]
