@@ -145,6 +145,8 @@ def build_boolean_union_request(
         doc = DocumentName(nonempty_string(doc_name, "doc_name"))
         first = FeatureName(nonempty_string(shape1, "shape1"))
         second = FeatureName(nonempty_string(shape2, "shape2"))
+        if first == second:
+            raise ValueError(f"shape1 and shape2 must be different objects, got {first!r} twice")
         result = FeatureName(nonempty_string(result_name, "result_name"))
     except ValueError as exc:
         return _failure(BooleanUnionError("INVALID_ARGUMENT", str(exc)))

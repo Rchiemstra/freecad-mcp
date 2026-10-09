@@ -157,6 +157,8 @@ def build_sweep_feature_request(
         doc = DocumentName(nonempty_string(doc_name, "doc_name"))
         profile = FeatureName(nonempty_string(profile_sketch, "profile_sketch"))
         path = FeatureName(nonempty_string(path_sketch, "path_sketch"))
+        if profile == path:
+            raise ValueError(f"profile_sketch and path_sketch must differ, got {path!r} twice")
         created = FeatureName(nonempty_string(sweep_name, "sweep_name"))
         body = optional_name(body_name, "body_name")
         frenet_value = bool_value(frenet, "frenet")
