@@ -63,6 +63,8 @@ class ReloadDocumentSuccess(TypedDict):
     outcome: Literal["verified"]
     retry_safe: Literal[False]
     document_name: DocumentName
+    # FreeCAD names a reopened document after its file.
+    previous_name: NotRequired[str]
 
 
 class ReloadDocumentFailure(TypedDict):
@@ -119,21 +121,27 @@ _CORE_KEYS = frozenset(
         "rollback_failed",
         "diagnostics",
         "document_name",
+        "previous_name",
     }
 )
 
 
-def make_reload_document_success(document_name: DocumentName) -> ReloadDocumentSuccess:
+def make_reload_document_success(
+    document_name: DocumentName, previous_name: str | None = None
+) -> ReloadDocumentSuccess:
     """Construct a complete verified result."""
 
-    return {
+    result: ReloadDocumentSuccess = {
         "contract_version": RELOAD_DOCUMENT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
         "outcome": "verified",
-                "retry_safe": False,
+        "retry_safe": False,
         "document_name": document_name,
     }
+    if previous_name is not None:
+        result["previous_name"] = previous_name
+    return result
 
 
 def make_reload_document_failure(
@@ -347,7 +355,11 @@ def parse_reload_document_response(raw_response: object) -> ReloadDocumentResult
         and isinstance(document_name, str)
         and document_name.strip()
     ):
-        return make_reload_document_success(DocumentName(document_name))
+        previous_name = response.get("previous_name")
+        return make_reload_document_success(
+            DocumentName(document_name),
+            previous_name if isinstance(previous_name, str) else None,
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

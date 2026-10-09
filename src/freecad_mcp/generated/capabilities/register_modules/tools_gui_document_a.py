@@ -156,7 +156,10 @@ def _register_reload_document(
         headless `freecadcmd` script that edited and saved the file. The
         open GUI document is otherwise unaware of on-disk changes; this
         tool closes the stale in-memory copy and reopens the file from
-        disk so the GUI shows current geometry.
+        disk so the GUI shows current geometry. A document with unsaved
+        changes is refused (DOCUMENT_HAS_UNSAVED_CHANGES). FreeCAD names the
+        reopened document after its file: use the returned document_name;
+        previous_name holds the old one.
         
         Args:
             doc_name: The name of the open document to reload. Must match

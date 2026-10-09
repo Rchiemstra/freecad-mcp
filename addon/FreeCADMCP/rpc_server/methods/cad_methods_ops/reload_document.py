@@ -29,6 +29,10 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_reload_document_success,
         make_reload_document_uncertain,
     )
+try:
+    from ....document_state import document_modified_state
+except ImportError:  # pragma: no cover - flat addon import path
+    from document_state import document_modified_state  # type: ignore[import-not-found,no-redef]
 from .policy_runtime import app_from, lookup_document
 from .typed_rpc_document import document_name
 
@@ -68,6 +72,15 @@ def prepare_reload_document(
     if not isinstance(file_name, str) or not file_name.strip():
         return _failure(
             ReloadDocumentError("RELOAD_DOCUMENT_FAILED", "Document has no file path to reload")
+        ), None
+    if document_modified_state(document) is True:
+        # Reloading re-reads the file and silently threw these edits away.
+        return _failure(
+            ReloadDocumentError(
+                "DOCUMENT_HAS_UNSAVED_CHANGES",
+                f"Document {request.doc_name!r} has unsaved changes; save_document first, "
+                "or close_document and open_document to discard them",
+            )
         ), None
     return None, file_name
 
@@ -118,12 +131,14 @@ def perform_reload_document(
     return None, reopened_name
 
 
-def verify_reload_document(app: object, reopened_name: str) -> ReloadDocumentResult | None:
+def verify_reload_document(
+    app: object, reopened_name: str, previous_name: str | None = None
+) -> ReloadDocumentResult | None:
     document = lookup_document(app, reopened_name)
     if document is None:
         return None
     name = document_name(document) or reopened_name
-    return make_reload_document_success(DocumentName(name))
+    return make_reload_document_success(DocumentName(name), previous_name)
 
 
 def run_reload_document(
@@ -148,7 +163,7 @@ def run_reload_document(
             "Reload completed without a reopened document name",
             committed=None,
         )
-    verified = verify_reload_document(app, reopened_name)
+    verified = verify_reload_document(app, reopened_name, str(request.doc_name))
     if verified is not None:
         return verified
     return make_reload_document_uncertain(
