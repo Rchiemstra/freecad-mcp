@@ -658,3 +658,23 @@ def test_exception_after_native_apply_does_not_claim_rollback():
     assert result["outcome"] == "uncertain"
     assert result["committed"] is None
     assert result["retry_safe"] is False
+
+
+@pytest.mark.parametrize("path", [".Constraints.R", "Constraints[0]"])
+def test_a_constraint_driven_by_an_expression_is_not_edited(path):
+    """Editing a datum bound to <<Dims>>.Width failed afterwards with "datum at
+    index 9 was not updated": the expression put its own value back."""
+
+    events = []
+    document = _Document(events)
+    collaborators, _api = _collaborators(document, events)
+    sketch = document.getObject("Sketch")
+    sketch.ExpressionEngine = [(path, "<<Dims>>.Width")]
+    events.clear()
+
+    result = _call(collaborators)
+
+    assert result["success"] is False
+    assert result["error_code"] == "CONSTRAINT_DRIVEN_BY_EXPRESSION"
+    assert "'<<Dims>>.Width'" in result["error"] and "clear_expression" in result["error"]
+    assert "commit" not in events

@@ -118,6 +118,20 @@ def _constraint_datum(sketch: object, index: int) -> float | None:
     return float(value)
 
 
+def _driving_expression(sketch: object, index: int) -> str | None:
+    """The expression bound to constraint *index*, by index or by name."""
+
+    keys = {f"Constraints[{index}]", f".Constraints[{index}]"}
+    constraints = list(getattr(sketch, "Constraints", []) or [])
+    name = getattr(constraints[index], "Name", "") if index < len(constraints) else ""
+    if isinstance(name, str) and name:
+        keys |= {f".Constraints.{name}", f"Constraints.{name}"}
+    for entry in getattr(sketch, "ExpressionEngine", None) or []:
+        if isinstance(entry, (list, tuple)) and len(entry) >= 2 and str(entry[0]) in keys:
+            return str(entry[1])
+    return None
+
+
 def apply_sketch_edit_constraint(
     doc: SketchEditConstraintDocument,
     sketch_name: SketchName,
@@ -138,6 +152,15 @@ def apply_sketch_edit_constraint(
         raise SketchEditConstraintError(
             "NOT_A_SKETCH",
             f"Object {sketch_name!r} is not an editable Sketcher sketch",
+        )
+    expression = _driving_expression(sketch, resolved)
+    if expression is not None:
+        # The expression puts its own value back on the next recompute.
+        raise SketchEditConstraintError(
+            "CONSTRAINT_DRIVEN_BY_EXPRESSION",
+            f"Constraint {constraint_name or resolved!r} is driven by the expression "
+            f"{expression!r}; change what it refers to, or remove it with "
+            "clear_expression first",
         )
     set_datum(resolved, float(value))
     constraints = list(getattr(sketch, "Constraints", []) or [])
