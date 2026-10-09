@@ -71,6 +71,39 @@ def _mapping(raw: object) -> dict[str, object] | None:
     return result
 
 
+def _declared_read_only(obj: object, name: str) -> bool:
+    for flags_of in ("getPropertyStatus", "getTypeOfProperty"):
+        getter = getattr(obj, flags_of, None)
+        if not callable(getter):
+            continue
+        try:
+            flags = getter(name)
+        except Exception:
+            continue
+        if isinstance(flags, (list, tuple)) and "ReadOnly" in flags:
+            return True
+    return False
+
+
+def _refuse_read_only(obj: object, properties: dict[str, object]) -> None:
+    """Refuse the whole edit before any assignment when one target is read-only.
+
+    Assigning in order applied ElementCount and ShowElement on a Link array
+    before ElementList failed; undoing such side effects is the riskiest kind
+    of rollback.
+    """
+
+    names = getattr(obj, "PropertiesList", None)
+    if not isinstance(names, (list, tuple)):
+        return
+    for key in properties:
+        if key in names and _declared_read_only(obj, key):
+            raise EditObjectError(
+                "PROPERTY_READ_ONLY",
+                f"Property {key!r} of {getattr(obj, 'Name', '?')!r} is read-only",
+            )
+
+
 def apply_edit_object(
     doc: object,
     request: EditObjectRequest,
@@ -85,6 +118,7 @@ def apply_edit_object(
             f"Object not found: {request.object_name!r}",
         )
     properties = dict(request.properties)
+    _refuse_read_only(obj, properties)
     if properties:
         if set_object_property is not None:
             set_object_property(doc, obj, properties)

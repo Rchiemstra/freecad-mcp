@@ -171,7 +171,9 @@ def test_set_object_property_surfaces_assignment_failures(_freecad_semantic_type
 
     with pytest.raises(ValueError, match="Failed to set property: Length"):
         set_object_property(MagicMock(), _BoomObj(), {"Length": {"bad": True}})
-    assert _freecad_semantic_types.PrintError.called
+    # The caller gets the failure; an Err line in the Report view would make a
+    # rejected request look like a FreeCAD fault.
+    assert not _freecad_semantic_types.PrintError.called
 
 
 def test_set_object_property_resolves_app_link_target_from_name():

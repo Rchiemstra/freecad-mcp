@@ -173,3 +173,39 @@ def test_inspection_rejects_reverted_label_after_recompute():
     assert result["success"] is False
     assert result["error_code"] == "PROPERTY_NOT_UPDATED"
     assert "commit" not in events
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {"getPropertyStatus": lambda name: ["ReadOnly"] if name == "ElementList" else []},
+        {"getTypeOfProperty": lambda name: ["ReadOnly"] if name == "ElementList" else []},
+    ],
+)
+def test_a_read_only_property_is_refused_before_anything_is_assigned(flags):
+    """edit_object(ElementCount=5, ShowElement=False, ElementList=[]) on a Link
+    array applied the first two, then failed on the read-only list; the
+    rollback could not undo the element objects ShowElement had removed."""
+
+    events: list[str] = []
+    document = FakeDocument(events)
+    link = document.addObject("App::Link", "Link")
+    link.PropertiesList = ["Label", "ElementCount", "ShowElement", "ElementList"]
+    link.ElementCount = 0
+    for name, method in flags.items():
+        setattr(link, name, method)
+    document.events.clear()
+    collab, _api = collaborators(document, events)
+    assigned: list[str] = []
+    collab.set_object_property = lambda _doc, _obj, properties: assigned.extend(properties)
+
+    result = run_edit_object(
+        collab, "Doc", "Link",
+        {"Properties": {"ElementCount": 5, "ShowElement": False, "ElementList": []}},
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "PROPERTY_READ_ONLY"
+    assert "'ElementList'" in result["error"]
+    assert assigned == []
+    assert link.ElementCount == 0
