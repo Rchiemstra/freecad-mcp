@@ -23,9 +23,9 @@ def _positions_from_keyframes(
             return None, {"ok": False, "error": "Each keyframe must be a dict with x/y/z"}
         positions.append({
             "index": index,
-            "x": float(sample["x"]),
-            "y": float(sample["y"]),
-            "z": float(sample["z"]),
+            "x": float(sample.get("x", 0)),
+            "y": float(sample.get("y", 0)),
+            "z": float(sample.get("z", 0)),
             "yaw_deg": float(sample["yaw_deg"]) if "yaw_deg" in sample else None,
         })
     return positions, None
@@ -118,7 +118,7 @@ def _capture_animation_frame(
     focus_names: list[str],
 ) -> dict[str, Any]:
     obj.Placement = _placement_for_sample(original, sample)
-    refresh_active_view(focus_objects=focus_names, fit=True)
+    refresh_active_view(focus_objects=focus_names, fit=False)
     path = os.path.join(out_dir, f"frame_{sample['index']:03d}.png")
     status = save_active_screenshot(
         path,
@@ -126,6 +126,7 @@ def _capture_animation_frame(
         width=width,
         height=height,
         focus_objects=focus_names,
+        fit=False,
     )
     return {
         "index": sample["index"],

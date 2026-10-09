@@ -271,6 +271,20 @@ class TestSaveViewSequenceOperation:
         result = save_view_sequence_operation(conn, frames=[{"view_name": "Front"}])
         assert "no view" in _text(result) or "Failed" in _text(result)
 
+    def test_zero_frames_are_not_reported_as_a_capture(self):
+        from freecad_mcp.operations.core import save_view_sequence_operation
+
+        conn = MagicMock()
+        conn.capture_view_sequence.return_value = {
+            "ok": True,
+            "frame_count": 0,
+            "ok_count": 0,
+            "frames": [],
+        }
+        result = save_view_sequence_operation(conn, orbit={"steps": 0})
+        assert "Zero frames" in _text(result)
+        assert "Captured 8/8" not in _text(result)
+
 
 # ---------------------------------------------------------------------------
 # get_objects_operation

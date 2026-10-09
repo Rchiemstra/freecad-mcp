@@ -17,9 +17,9 @@ def _keyframe_positions(keyframes):
         positions.append(
             {
                 "index": index,
-                "x": float(sample["x"]),
-                "y": float(sample["y"]),
-                "z": float(sample["z"]),
+                "x": float(sample.get("x", 0)),
+                "y": float(sample.get("y", 0)),
+                "z": float(sample.get("z", 0)),
                 "yaw_deg": (float(sample["yaw_deg"]) if "yaw_deg" in sample else None),
             }
         )

@@ -285,6 +285,62 @@ def test_active_marker_update_rolls_back_contexts_and_registry_on_failure():
     )
 
 
+def test_explicit_zero_orbit_steps_capture_no_frames():
+    document = _Document("Model")
+    facade, _saved = _facade([document])
+
+    result = capture_view_sequence(facade, orbit={"steps": 0})
+    negative = capture_view_sequence(facade, orbit={"steps": -1})
+
+    assert result["ok"] is True
+    assert result["frames"] == []
+    assert result["frame_count"] == 0
+    assert negative["ok"] is False
+    assert "steps" in negative["error"]
+
+
+def test_a_keyframe_with_only_z_defaults_the_other_axes():
+    from addon.FreeCADMCP.rpc_server.gui_animation_runtime import _keyframe_positions
+
+    assert _keyframe_positions([{"z": 0}]) == [
+        {"index": 0, "x": 0.0, "y": 0.0, "z": 0.0, "yaw_deg": None}
+    ]
+
+
+def test_animation_frames_do_not_refit_the_camera(monkeypatch):
+    from addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.view_refresh import (
+        _animation_frame_gui,
+    )
+
+    seen: dict = {}
+
+    def render(*_args, **kwargs):
+        seen.update(kwargs)
+        return b"png", {"selection_paths": []}
+
+    monkeypatch.setattr(
+        "addon.FreeCADMCP.rpc_server.methods.gui_methods_ops.view_refresh.render_personal_context_gui",
+        render,
+    )
+    sample = {"index": 0, "x": 10.0, "y": 0.0, "z": 0.0, "yaw_deg": None}
+    _animation_frame_gui(
+        SimpleNamespace(),
+        SimpleNamespace(apply_placement_sample=lambda *_args: None),
+        {},
+        sample,
+        {
+            "doc_name": "Doc",
+            "view_name": "Isometric",
+            "focus_names": ["Box"],
+            "width": None,
+            "height": None,
+        },
+        "actor",
+    )
+
+    assert seen["fit"] is False
+
+
 def test_sequence_rejects_orbit_and_combined_frame_limits_before_rendering():
     document = _Document("Model")
     facade, _ = _facade([document])

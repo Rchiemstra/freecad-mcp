@@ -218,8 +218,14 @@ def save_view_sequence_operation(
             for frame in result.get("frames", [])
         ],
     }
+    frame_count = int(result.get("frame_count") or 0)
+    message = (
+        "Zero frames"
+        if frame_count == 0
+        else f"Captured {result.get('ok_count', 0)}/{frame_count} view frames"
+    )
     return tool_ok(
-        f"Captured {result.get('ok_count', 0)}/{result.get('frame_count', 0)} view frames",
+        message,
         screenshots=None if only_text_feedback else images,
         only_text_feedback=only_text_feedback,
         structured=summary,

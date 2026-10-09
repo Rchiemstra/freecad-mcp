@@ -67,7 +67,15 @@ def _sequence_specs(
     if orbit:
         if not isinstance(orbit, dict):
             raise TypeError("orbit must be a dict")
-        steps = max(2, int(orbit.get("steps") or 8))
+        raw_steps = orbit.get("steps", None)
+        if raw_steps is None or raw_steps == "":
+            steps = 8
+        else:
+            steps = int(raw_steps)
+            if steps < 0:
+                raise ValueError("orbit steps must be >= 0")
+            if steps > 0:
+                steps = max(2, steps)
         if steps > _MAX_SEQUENCE_FRAMES:
             raise ValueError(
                 f"view sequence exceeds maximum of {_MAX_SEQUENCE_FRAMES} frames"
@@ -123,6 +131,8 @@ def capture_view_sequence(
     except Exception as exc:
         return public_error(self, exc, frames=[])
     if not specs:
+        if orbit is not None or frames:
+            return {"ok": True, "frame_count": 0, "ok_count": 0, "frames": []}
         return {"ok": False, "error": "Provide frames and/or orbit", "frames": []}
     results = []
     for index, frame in enumerate(specs):
@@ -179,6 +189,14 @@ def capture_view_sequence_to_disk(
     except Exception as exc:
         return public_error(self, exc, frame_paths=[])
     if not specs:
+        if orbit is not None or frames:
+            return {
+                "ok": True,
+                "frame_count": 0,
+                "ok_count": 0,
+                "frames": [],
+                "frame_paths": [],
+            }
         return {"ok": False, "error": "Provide frames and/or orbit", "frame_paths": []}
     try:
         out_dir = frame_dir or tempfile.mkdtemp(prefix="mcp_view_disk_")
