@@ -249,6 +249,9 @@ def test_post_dispatch_exception_is_process_pinned_and_not_reapplied(monkeypatch
         request_identity.clear_request_identity()
 
     assert first["error"]["code"] == "REQUEST_OUTCOME_UNCERTAIN"
+    assert f"request_id={request_id}" in first["error"]["message"]
+    assert "get_request_status" in first["error"]["message"]
+    assert first["error"]["request_id"] == request_id
     assert second["error"]["code"] == "REQUEST_ALREADY_COMPLETED"
     assert rpc.dispatch_count == 1
 

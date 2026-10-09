@@ -12,6 +12,7 @@ from .feature_lookup_support import (
     resolve_linksub,
 )
 from .feature_mutate_support import (
+    MAX_PATTERN_OCCURRENCES,
     bool_value,
     count_value,
     create_feature,
@@ -162,7 +163,12 @@ def build_linear_pattern_feature_request(
         source = FeatureName(nonempty_string(feature_name, "feature_name"))
         created = FeatureName(nonempty_string(pattern_name, "pattern_name"))
         length_value = number_value(length, "length", positive=True)
-        count = count_value(occurrences, "occurrences", minimum=2)
+        count = count_value(
+            occurrences,
+            "occurrences",
+            minimum=2,
+            maximum=MAX_PATTERN_OCCURRENCES,
+        )
         direction_value = nonempty_string(direction, "direction")
         body = optional_name(body_name, "body_name")
         reversed_value = bool_value(reversed_dir, "reversed_dir")

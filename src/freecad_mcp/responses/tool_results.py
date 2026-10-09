@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -73,6 +74,23 @@ def tool_ok(
     )
 
 
+_POLLABLE_REQUEST_ID = re.compile(
+    r"request_id=([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+)
+
+
+def _surface_pollable_request_id(message: str, structured: dict[str, Any]) -> None:
+    """Copy a lost-request id into the tool payload when the text names one."""
+
+    if structured.get("request_id"):
+        return
+    if "get_request_status" not in message and "outcome is uncertain" not in message:
+        return
+    match = _POLLABLE_REQUEST_ID.search(message)
+    if match:
+        structured["request_id"] = match.group(1)
+
+
 def tool_fail(
     message: str,
     *,
@@ -81,11 +99,13 @@ def tool_fail(
     status: OutcomeStatus | str | None = None,
     transport_status: str | None = None,
 ) -> CallToolResult:
-    code = error_code or extract_error_code(structured)
+    payload = dict(structured or {})
+    _surface_pollable_request_id(message, payload)
+    code = error_code or extract_error_code(payload)
     chosen = status or status_from_error_code(code)
     envelope = build_envelope(
         message=message,
-        structured=structured,
+        structured=payload,
         status=chosen,
         error=message,
         error_code=code,

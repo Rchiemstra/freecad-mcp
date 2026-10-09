@@ -39,11 +39,27 @@ def number_value(
     return number
 
 
-def count_value(value: object, field: str, *, minimum: int) -> int:
+# A 500-occurrence PartDesign pattern boolean-cuts hundreds of tool shapes on
+# the GUI thread (PartDesign::Transformed::execute) and can wedge FreeCAD for
+# tens of minutes. 100 stays interactive.
+MAX_PATTERN_OCCURRENCES = 100
+
+
+def count_value(
+    value: object,
+    field: str,
+    *,
+    minimum: int,
+    maximum: int | None = None,
+) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field} must be an integer")
     if value < minimum:
         raise ValueError(f"{field} must be >= {minimum}")
+    if maximum is not None and value > maximum:
+        raise ValueError(
+            f"{field} must be <= {maximum}; split the pattern or use fewer occurrences"
+        )
     return value
 
 

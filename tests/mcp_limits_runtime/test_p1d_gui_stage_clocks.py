@@ -335,9 +335,16 @@ def test_quarantined_second_request_reports_gui_busy_after_timeout() -> None:
         slow_started.set()
         hold.wait(timeout=5.0)
 
+    inflight_id = "11111111-2222-4333-8444-555555555555"
+
     def slow_runner() -> None:
         try:
-            core.submit(slow, 0.2)
+            core.submit(
+                slow,
+                0.2,
+                request_id=inflight_id,
+                method="linear_pattern_feature",
+            )
         except BaseException as exc:
             slow_errors.append(exc)
 
@@ -365,6 +372,10 @@ def test_quarantined_second_request_reports_gui_busy_after_timeout() -> None:
     assert len(errors) == 1
     assert isinstance(errors[0], GuiBusyAfterTimeout)
     assert errors[0].error_code == "GUI_BUSY_AFTER_TIMEOUT"
+    assert errors[0].request_id == inflight_id
+    assert f"request_id={inflight_id}" in str(errors[0])
+    assert "method=linear_pattern_feature" in str(errors[0])
+    assert "get_request_status" in str(errors[0])
     queued = [
         entry
         for entry in harness.events

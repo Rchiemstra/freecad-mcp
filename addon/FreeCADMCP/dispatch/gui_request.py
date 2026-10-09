@@ -43,6 +43,7 @@ class GuiRequest:
     )
     defer_probe: DeferProbe | None = field(default=None, repr=False)
     document_keys: tuple[str, ...] = ()
+    method: str | None = None
     completion: threading.Event = field(default_factory=threading.Event)
     outcome: GuiOutcome | None = None
     state: str = "pending"

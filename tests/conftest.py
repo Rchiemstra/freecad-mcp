@@ -276,8 +276,9 @@ class _InlineGuiDispatcher:
         request_id=None,
         session_id=None,
         on_complete=None,
+        **_extra,
     ):
-        del timeout
+        del timeout, _extra
         if request_id is not None or session_id is not None or on_complete is not None:
             from addon.FreeCADMCP.dispatch.gui_errors import GuiDispatchError
 

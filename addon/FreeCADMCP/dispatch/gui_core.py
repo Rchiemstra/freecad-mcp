@@ -39,6 +39,20 @@ from .gui_request import (
 from .gui_stage_clock import stage_clock_scope as _stage_clock_scope
 
 
+def _timed_out_occupancy_message(request: GuiRequest) -> str:
+    """Name the request still on the GUI thread so the caller can poll it."""
+
+    detail = f"request_id={request.request_id}"
+    if request.method:
+        detail += f", method={request.method}"
+    return (
+        "FreeCAD GUI is still executing a request that timed out "
+        f"({detail}); new GUI work is rejected until it finishes. "
+        f"Poll get_request_status with request_id={request.request_id} "
+        "to learn what happened."
+    )
+
+
 class GuiDispatchCore:
     """Queue work for exactly one injected GUI owner thread."""
 
@@ -146,6 +160,7 @@ class GuiDispatchCore:
         on_complete: Callable[[str, GuiOutcome], None] | None,
         defer_probe: _DeferProbe | None,
         document_keys: tuple[str, ...],
+        method: str | None,
     ) -> GuiRequest:
         request = GuiRequest(
             callable_,
@@ -154,6 +169,7 @@ class GuiDispatchCore:
             on_complete=on_complete,
             defer_probe=defer_probe,
             document_keys=document_keys,
+            method=method,
         )
         request._emit_telemetry = self._emit_telemetry
         request.stage_clock.submitted_at = request.submitted_at
@@ -170,6 +186,7 @@ class GuiDispatchCore:
         on_complete: Callable[[str, GuiOutcome], None] | None = None,
         defer_probe: _DeferProbe | None = None,
         document_keys: tuple[str, ...] = (),
+        method: str | None = None,
     ) -> Any:
         normalized_document_keys = tuple(
             dict.fromkeys(str(key) for key in document_keys if str(key))
@@ -181,6 +198,7 @@ class GuiDispatchCore:
             on_complete=on_complete,
             defer_probe=defer_probe,
             document_keys=normalized_document_keys,
+            method=method,
         )
         request.deadline_at = (
             None
@@ -280,9 +298,8 @@ class GuiDispatchCore:
                     (_time.monotonic() - request.submitted_at) * 1000.0
                 )
                 raise GuiBusyAfterTimeout(
-                    "FreeCAD GUI is still executing a request that timed out; "
-                    "new GUI work is rejected until it finishes",
-                    request_id=request.request_id,
+                    _timed_out_occupancy_message(timed_out),
+                    request_id=timed_out.request_id,
                     timeout_stage="admission",
                     completion_uncertain=True,
                 )

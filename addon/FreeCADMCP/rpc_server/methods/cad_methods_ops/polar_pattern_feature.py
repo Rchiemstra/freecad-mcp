@@ -12,6 +12,7 @@ from .feature_lookup_support import (
     resolve_linksub,
 )
 from .feature_mutate_support import (
+    MAX_PATTERN_OCCURRENCES,
     bool_value,
     count_value,
     create_feature,
@@ -163,7 +164,12 @@ def build_polar_pattern_feature_request(
         doc = DocumentName(nonempty_string(doc_name, "doc_name"))
         source = FeatureName(nonempty_string(feature_name, "feature_name"))
         created = FeatureName(nonempty_string(pattern_name, "pattern_name"))
-        count = count_value(occurrences, "occurrences", minimum=2)
+        count = count_value(
+            occurrences,
+            "occurrences",
+            minimum=2,
+            maximum=MAX_PATTERN_OCCURRENCES,
+        )
         # FreeCAD clamps PropertyAngle to [-360, 360] without an error.
         angle_value = number_value(angle, "angle", positive=True, maximum=360.0)
         axis_value = nonempty_string(axis, "axis")
