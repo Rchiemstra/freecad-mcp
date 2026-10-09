@@ -523,7 +523,7 @@
       "signature": "(ctx: 'Context') -> 'CallToolResult'"
     },
     "helical_sweep_feature": {
-      "docstring": "Sweep a profile along a helix (PartDesign::AdditiveHelix).\n\nUse this to create springs, screw threads, worm gear blanks, etc.\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    profile_sketch: Name of the cross-section sketch.\n    helix_name: Name for the resulting Helix feature.\n    pitch: Distance between successive turns in mm.\n    height: Total height of the helix in mm.\n    radius: Helix radius in mm.\n    body_name: Optional explicit PartDesign Body name.\n    left_handed: If true, produce a left-handed helix.\n    reversed_dir: If true, reverse the helix direction.\n\nReturns:\n    Success message.",
+      "docstring": "Sweep a profile along a helix (PartDesign::AdditiveHelix).\n\nUse this to create springs, screw threads, worm gear blanks, etc.\n\nArgs:\n    doc_name: Document containing the sketch and body.\n    profile_sketch: Name of the cross-section sketch.\n    helix_name: Name for the resulting Helix feature.\n    pitch: Distance between successive turns in mm.\n    height: Total height of the helix in mm; height/pitch may be at\n        most 150 turns.\n    radius: Helix radius in mm.\n    body_name: Optional explicit PartDesign Body name.\n    left_handed: If true, produce a left-handed helix.\n    reversed_dir: If true, reverse the helix direction.\n\nReturns:\n    Success message.",
       "signature": "(ctx: 'Context', doc_name: 'str', profile_sketch: 'str', helix_name: 'str', pitch: 'float', height: 'float', radius: 'float', body_name: 'str | None' = None, left_handed: 'bool' = False, reversed_dir: 'bool' = False) -> 'CallToolResult'"
     },
     "import_brep": {
