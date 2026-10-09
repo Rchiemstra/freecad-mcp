@@ -97,13 +97,25 @@ def _run_gui_execute_with_native_attribution(  # noqa: C901
 
     def native_exception_result(exc):
         if isinstance(exc, _GuiExecuteRollback):
-            if document is None:
-                return captured["result"]
-            return postflight_cad_mutation(
-                document,
-                captured["result"],
-                include_failure_readiness=True,
-            )
+            # The body already ran inside the commit. Raising rolls that
+            # transaction back, so the caller must see committed false and
+            # the body's error, not a successful commit.
+            result = captured["result"]
+            if document is not None:
+                result = postflight_cad_mutation(
+                    document,
+                    result,
+                    include_failure_readiness=True,
+                )
+            if isinstance(result, dict):
+                result = dict(result)
+                # Match other rolled-back rejections so the JSON-RPC client
+                # returns this failure instead of an unstructured remote error.
+                result["committed"] = False
+                result["outcome"] = "rejected"
+                # Arbitrary code may have acted outside the document.
+                result["retry_safe"] = False
+            return result
         if document is not None:
             rollback_failure = native_rollback_exception_result(document, exc)
             if rollback_failure is not None:

@@ -438,6 +438,8 @@ def test_gui_error_requests_native_rollback_and_preserves_error_envelope(monkeyp
     assert api.callback_failures == 1
     assert api.callback_results == []
     assert result["success"] is False
+    assert result["committed"] is False
+    assert result["outcome"] == "rejected"
     assert result["error"] == (
         "execute_code failed in document 'Model': historical execute failure"
     )
