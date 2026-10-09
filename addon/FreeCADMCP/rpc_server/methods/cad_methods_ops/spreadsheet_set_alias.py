@@ -99,6 +99,20 @@ def apply_spreadsheet_set_alias(doc: SpreadsheetSetAliasDocument, request: Sprea
     if not callable(alias_setter):
         raise SpreadsheetSetAliasError("INVALID_SHEET", "spreadsheet cannot set aliases")
     if is_read_only_property(sheet, request.address):
+        current = None
+        alias_getter = getattr(sheet, "getAlias", None)
+        if callable(alias_getter):
+            try:
+                current = alias_getter(request.address)
+            except Exception:
+                current = None
+        if current:
+            # FreeCAD locks a cell whose alias other objects' expressions use.
+            raise SpreadsheetSetAliasError(
+                "EXPRESSION_ERROR",
+                f"{request.address!r} keeps its alias {current!r}: other objects' "
+                "expressions use it; change those references first",
+            )
         raise SpreadsheetSetAliasError("EXPRESSION_ERROR", f"{request.address!r} is read-only")
     try:
         alias_setter(request.address, request.alias)
