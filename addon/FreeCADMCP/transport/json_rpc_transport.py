@@ -218,5 +218,23 @@ class JsonRpcTransport:
                     "JSON-RPC exception mapper failed (%s)",
                     type(mapper_exc).__name__,
                 )
+        structured = self._structured_failure_error(exc)
+        if structured is not None:
+            return structured
         _logger.error("JSON-RPC dispatch failed (%s)", type(exc).__name__)
         return JsonRpcError(_JSON_RPC_INTERNAL_ERROR, "Internal error")
+
+    def _structured_failure_error(self, exc: BaseException) -> JsonRpcError | None:
+        # Some handlers raise their failure result instead of returning it (GUI
+        # dispatch failures while a timed-out request still runs). Map it like
+        # a returned failure rather than as an opaque "Internal error".
+        result = getattr(exc, "result", None)
+        if self._result_to_error is None or not isinstance(result, _Mapping):
+            return None
+        try:
+            mapped = _validated_error(self._result_to_error(result))
+        except Exception:
+            return None
+        if mapped is None:
+            return None
+        return JsonRpcError(mapped["code"], mapped["message"], mapped.get("data", _MISSING))
