@@ -127,7 +127,7 @@ def check_open_document_missing_path() -> None:
         "/no/such/document.FCStd",
     )
     assert result["success"] is False
-    assert result["error_code"] == "OPEN_DOCUMENT_FAILED"
+    assert result["error_code"] == "FILE_NOT_FOUND"
 
 
 def check_close_document_success() -> None:
