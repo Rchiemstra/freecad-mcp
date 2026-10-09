@@ -48,9 +48,12 @@ def test_solve_assembly_runs_the_solver(freecad_session):
     )
     assert _payload(asm)["ok"] is True
 
-    comp = doc.addObject("Part::Box", "Comp1")
+    # Joints only accept members. The Assembly workbench inserts a part with
+    # newObject so it belongs to the assembly, not the document root.
+    assembly = doc.getObject("Asm")
+    comp = assembly.newObject("Part::Box", "Comp1")
     comp.Length, comp.Width, comp.Height = 5.0, 5.0, 5.0
-    FreeCAD.ActiveDocument.recompute()
+    doc.recompute()
 
     grounded = create_assembly_grounded_joint_operation(
         freecad_session, True, doc.Name, "Asm", "Comp1", recompute=True,

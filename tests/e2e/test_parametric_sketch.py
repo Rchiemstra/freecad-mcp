@@ -306,7 +306,7 @@ def test_native_mutation_lane_recovers_after_open_profile_failure(freecad_sessio
     assert _successful(pad), pad
     assert pad.get("feature") == "Pad", pad
     assert int(doc.UndoCount) == pad_history_before + 1
-    assert str(doc.UndoNames[0]).startswith("Collaborative operation ")
+    assert str(doc.UndoNames[0]) == "MCP: pad_feature"
     _assert_mutation_ready(conn, doc_name)
 
     assert not sketch_create_operation(
