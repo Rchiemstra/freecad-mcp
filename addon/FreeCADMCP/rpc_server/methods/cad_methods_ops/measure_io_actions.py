@@ -7,10 +7,12 @@ transaction; inspect remains read-only.
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Mapping, Sequence
 
 from .typed_runtime import (
     TypedMutationError,
+    is_derived_from,
     load_module,
     module_callable,
     object_name,
@@ -68,6 +70,20 @@ def bounding_box(document: object, obj_name: str) -> dict[str, object]:
     return payload
 
 
+def _weighted_center(
+    parts: Sequence[object], weight: str
+) -> tuple[float, float, float, float]:
+    total = wx = wy = wz = 0.0
+    for part in parts:
+        amount = float(getattr(part, weight, 0.0) or 0.0)
+        center = getattr(part, "CenterOfMass", None)
+        total += amount
+        wx += float(getattr(center, "x", 0.0)) * amount
+        wy += float(getattr(center, "y", 0.0)) * amount
+        wz += float(getattr(center, "z", 0.0)) * amount
+    return total, wx, wy, wz
+
+
 def center_of_mass(document: object, obj_name: str) -> dict[str, object]:
     obj = require_object(document, obj_name)
     shape, meta = resolve_global_shape(obj)
@@ -77,21 +93,23 @@ def center_of_mass(document: object, obj_name: str) -> dict[str, object]:
     if com is not None and solids:
         method = "solid"
     elif solids:
-        total = 0.0
-        wx = 0.0
-        wy = 0.0
-        wz = 0.0
-        for solid in solids:
-            volume = float(getattr(solid, "Volume", 0.0) or 0.0)
-            total += volume
-            center = getattr(solid, "CenterOfMass", None)
-            wx += float(getattr(center, "x", 0.0)) * volume
-            wy += float(getattr(center, "y", 0.0)) * volume
-            wz += float(getattr(center, "z", 0.0)) * volume
+        total, wx, wy, wz = _weighted_center(solids, "Volume")
         if total <= 0:
             raise TypedMutationError("INVALID_SHAPE", "Compound has zero volume")
         com = _vector(wx / total, wy / total, wz / total)
         method = "solid"
+    elif com is None:
+        # The world-frame copy is a generic Part.Shape without CenterOfMass;
+        # its faces and edges carry their own.
+        for kind, weight, method_name in (
+            ("Faces", "Area", "face"),
+            ("Edges", "Length", "edge"),
+        ):
+            total, wx, wy, wz = _weighted_center(getattr(shape, kind, None) or (), weight)
+            if total > 0:
+                com = _vector(wx / total, wy / total, wz / total)
+                method = method_name
+                break
     if com is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no CenterOfMass: {obj_name!r}")
     payload: dict[str, object] = {
@@ -177,11 +195,46 @@ def scale(document: object, obj_name: str, sx: float, sy: float, sz: float) -> d
     return {"object": object_name(obj), "label": str(getattr(obj, "Label", obj_name))}
 
 
+# FreeCAD reports unbounded datum geometry (origin axes and planes) as
+# +/-1e100 boxes, which exporters cannot write.
+_UNBOUNDED_EXTENT = 1e30
+
+
+def _bounded_shape(obj: object) -> bool:
+    shape = getattr(obj, "Shape", None)
+    try:
+        if shape is None or bool(getattr(shape, "isNull", lambda: True)()):
+            return False
+        box = shape.BoundBox
+        if not box.isValid():
+            return False
+        coordinates = [box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax]
+    except Exception:
+        return False
+    return all(math.isfinite(float(c)) and abs(float(c)) < _UNBOUNDED_EXTENT for c in coordinates)
+
+
+def _top_level(obj: object) -> bool:
+    if is_derived_from(obj, "App::Origin") or is_derived_from(obj, "App::DatumElement"):
+        return False
+    owner_of = getattr(obj, "getParentGeoFeatureGroup", None)
+    try:
+        owner = owner_of() if callable(owner_of) else None
+    except Exception:
+        owner = None
+    # Features inside a Body or Part are already part of their container.
+    return owner is None and bool(getattr(obj, "Visibility", True))
+
+
 def _exportable_objects(document: object, obj_names: Sequence[str] | None) -> list[object]:
     if obj_names:
         found = [require_object(document, name) for name in obj_names]
     else:
-        found = list(getattr(document, "Objects", []) or [])
+        found = [
+            obj
+            for obj in list(getattr(document, "Objects", []) or [])
+            if obj is not None and _top_level(obj) and _bounded_shape(obj)
+        ]
     exportable = [obj for obj in found if obj is not None and hasattr(obj, "Shape")]
     if not exportable:
         raise TypedMutationError("OBJECT_NOT_FOUND", "No exportable objects found")
@@ -238,7 +291,13 @@ def export_brep(document: object, obj_name: str, file_path: str) -> dict[str, ob
     return {"path": file_path, "exported": True, "object": object_name(obj)}
 
 
+def _require_file(file_path: str) -> None:
+    if not os.path.isfile(file_path):
+        raise TypedMutationError("FILE_NOT_FOUND", f"File does not exist: {file_path}")
+
+
 def import_step(document: object, file_path: str) -> dict[str, object]:
+    _require_file(file_path)
     inserter = module_callable(load_module("Import"), "insert")
     inserter(file_path, str(getattr(document, "Name", "")))
     return {"path": file_path, "imported": True}
@@ -251,7 +310,13 @@ def import_brep(document: object, file_path: str, obj_name: str) -> dict[str, ob
     importer = getattr(shape, "importBrep", None)
     if not callable(importer):
         raise TypedMutationError("MISSING_DEPENDENCY", "Part.Shape.importBrep is not available")
+    _require_file(file_path)
     importer(file_path)
+    # importBrep does not raise for a file it cannot parse; it leaves the shape null.
+    if not _shape_has_topology(shape):
+        raise TypedMutationError(
+            "INVALID_FILE", f"No BREP shape could be read from {file_path}"
+        )
     adder = getattr(document, "addObject", None)
     if not callable(adder):
         raise TypedMutationError("INVALID_DOCUMENT", "document must provide addObject")
@@ -261,18 +326,23 @@ def import_brep(document: object, file_path: str, obj_name: str) -> dict[str, ob
 
 
 def _parse_edge_ref(document: object, ref: str) -> object:
-    parts = ref.split(":")
-    obj = require_object(document, parts[0])
+    name, _sep, sub = ref.partition(":")
+    obj = require_object(document, name)
     shape, _meta = resolve_global_shape(obj)
-    if len(parts) > 1:
-        sub = parts[1]
-        if sub.startswith("Edge"):
-            index = int(sub[4:]) - 1
-            edges = getattr(shape, "Edges", None) or []
-            if index < 0 or index >= len(edges):
-                raise TypedMutationError("INVALID_ARGUMENT", f"edge index out of range: {ref!r}")
-            return edges[index]
-    return shape
+    edges = getattr(shape, "Edges", None) or []
+    if not sub:
+        if len(edges) != 1:
+            raise TypedMutationError(
+                "INVALID_ARGUMENT",
+                f"{name!r} has {len(edges)} edges; reference one as '{name}:EdgeN'",
+            )
+        return edges[0]
+    if not sub.startswith("Edge") or not sub[4:].isdigit():
+        raise TypedMutationError("INVALID_ARGUMENT", f"{ref!r} is not an edge reference")
+    index = int(sub[4:]) - 1
+    if index < 0 or index >= len(edges):
+        raise TypedMutationError("INVALID_ARGUMENT", f"edge index out of range: {ref!r}")
+    return edges[index]
 
 
 def measure_distance(document: object, shape1_ref: str, shape2_ref: str) -> dict[str, object]:

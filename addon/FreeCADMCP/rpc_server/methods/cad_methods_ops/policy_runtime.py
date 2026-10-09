@@ -62,6 +62,13 @@ def atomic_publish(tmp_path: str, dest_path: str) -> None:
     os.replace(tmp_path, dest_path)
 
 
+def missing_parent_directory(file_path: str) -> str | None:
+    """The destination directory when it does not exist, else ``None``."""
+
+    parent = os.path.dirname(os.path.abspath(file_path))
+    return None if os.path.isdir(parent) else parent
+
+
 def staged_path(file_path: str) -> str:
     root, ext = os.path.splitext(file_path)
     if ext:
@@ -87,6 +94,7 @@ __all__ = [
     "lookup_document",
     "lookup_object",
     "optional_recompute",
+    "missing_parent_directory",
     "staged_path",
     "unlink_quiet",
     "verify_nonempty_file",
