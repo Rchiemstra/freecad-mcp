@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_sketch_add_polyline_uncertain,
     )
 from .sketch_add_polyline_mutation import SketchAddPolylineError, run_sketch_add_polyline_native_mutation
+from .sketch_geometry_kinds import join_segments
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +235,7 @@ def apply_sketch_add_polyline(
                 request.construction,
             )
         )
+    join_segments(sketch, collaborators.sketcher, before_geo, len(pts) - 1, closed=request.closed)
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

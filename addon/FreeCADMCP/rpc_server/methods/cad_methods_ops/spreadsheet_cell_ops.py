@@ -74,7 +74,12 @@ def read_spreadsheet_cell(sheet: object, item: object) -> dict[str, object]:
     try:
         row["value"] = _json_cell_value(_call_named(sheet, "get", str(addr)))
     except Exception as exc:
-        row["value_error"] = str(exc)
+        if row.get("contents") == "":
+            # FreeCAD has no value property for an empty cell.
+            row["value"] = None
+            row["empty"] = True
+        else:
+            row["value_error"] = str(exc)
     return row
 
 

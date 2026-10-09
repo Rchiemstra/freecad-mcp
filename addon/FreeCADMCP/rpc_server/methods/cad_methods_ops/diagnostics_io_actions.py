@@ -82,14 +82,41 @@ def get_recompute_log(document: object) -> dict[str, object]:
     return {"entries": entries, "count": len(entries)}
 
 
+def _int_list(sketch: object, name: str) -> list[int]:
+    value = getattr(sketch, name, None) or []
+    return [int(item) for item in value] if isinstance(value, (list, tuple)) else []
+
+
 def get_sketch_diagnostics(document: object, sketch_name: str) -> dict[str, object]:
     sketch = require_object(document, sketch_name)
-    return {
+    conflicting = _int_list(sketch, "ConflictingConstraints")
+    payload: dict[str, object] = {
         "sketch_name": str(getattr(sketch, "Name", sketch_name)),
         "geometry_count": int(getattr(sketch, "GeometryCount", 0)),
         "constraint_count": int(getattr(sketch, "ConstraintCount", 0)),
-        "conflict": bool(getattr(sketch, "ConstraintCount", 0) and getattr(sketch, "solveFailed", lambda: False)()),
+        "conflict": bool(conflicting)
+        or bool(getattr(sketch, "ConstraintCount", 0) and getattr(sketch, "solveFailed", lambda: False)()),
+        "state": [str(item) for item in getattr(sketch, "State", []) or []],
+        "conflicting_constraints": conflicting,
+        "redundant_constraints": _int_list(sketch, "RedundantConstraints"),
+        "malformed_constraints": _int_list(sketch, "MalformedConstraints"),
+        "solver_message": getattr(sketch, "SolverMessage", None),
+        "is_closed": None,
     }
+    # Only a solved SketchObject has these; never invent a zero DoF.
+    dof = getattr(sketch, "DoF", None)
+    if isinstance(dof, int) and not isinstance(dof, bool):
+        payload["dof"] = dof
+    fully = getattr(sketch, "FullyConstrained", None)
+    if isinstance(fully, bool):
+        payload["fully_constrained"] = fully
+    try:
+        shape = getattr(sketch, "Shape", None)
+        if shape is not None and not shape.isNull():
+            payload["is_closed"] = bool(shape.isClosed())
+    except Exception:
+        pass
+    return payload
 
 
 

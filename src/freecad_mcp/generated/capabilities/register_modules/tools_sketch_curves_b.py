@@ -35,7 +35,7 @@ def _register_sketch_add_regular_polygon(
         angle: float = 0.0,
         construction: bool = False,
     ) -> CallToolResult:
-        """Add a regular polygon to a sketch.
+        """Add a regular polygon to a sketch (edges joined by coincident constraints).
 
         Args:
             doc_name: Document containing the sketch.

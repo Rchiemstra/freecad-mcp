@@ -372,3 +372,66 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _create_subshape_binder_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+def _with_shape(document):
+    source = document.objects["Seed"]
+    source.Shape = SimpleNamespace(
+        isNull=lambda: False,
+        Faces=[object()] * 6,
+        Edges=[object()] * 12,
+        Vertexes=[object()] * 8,
+    )
+    return source
+
+
+@pytest.mark.parametrize("sub", ["Face999", "Edge13", "Vertex9"])
+def test_a_missing_subelement_is_rejected_before_the_binder_exists(sub):
+    """Face999 created a binder with a null shape, reported success, and
+    compared two empty (DBL_MAX) boxes as its placement check."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    _with_shape(document)
+    before = set(document.objects)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_create_subshape_binder(
+        collaborators, "Doc", "Created", "Seed", [sub], None, "Body", False, True, "error"
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert f"Seed.{sub}" in result["error"]
+    assert set(document.objects) == before
+
+
+def test_an_existing_subelement_is_bound():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    _with_shape(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_create_subshape_binder(
+        collaborators, "Doc", "Created", "Seed", ["Face6"], None, "Body", False, True, "error"
+    )
+
+    assert result["success"] is True, result
+
+
+def test_an_empty_bound_box_is_reported_as_null():
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import create_subshape_binder
+
+    huge = 1.7976931348623157e308
+    empty = SimpleNamespace(
+        Shape=SimpleNamespace(
+            BoundBox=SimpleNamespace(
+                isValid=lambda: False,
+                XMin=huge, YMin=huge, ZMin=huge, XMax=-huge, YMax=-huge, ZMax=-huge,
+            )
+        )
+    )
+
+    assert create_subshape_binder._boundbox_values(empty) is None

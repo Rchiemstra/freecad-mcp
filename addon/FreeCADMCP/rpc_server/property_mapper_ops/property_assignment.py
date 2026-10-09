@@ -128,7 +128,8 @@ def set_object_property(
         try:
             assign_single_property(doc, obj, prop, val)
         except Exception as e:
-            FreeCAD.Console.PrintError(f"Property '{prop}' assignment error: {e}\n")
+            # Reported to the caller below; an Err line in the Report view only
+            # looked like a FreeCAD fault for a rejected request.
             failures.append(f"{prop}: {e}")
 
     if failures:

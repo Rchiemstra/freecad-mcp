@@ -32,7 +32,8 @@ def _register_sketch_add_polyline(
         closed: bool = False,
         construction: bool = False,
     ) -> CallToolResult:
-        """Add a polyline (connected line segments) to a sketch.
+        """Add a polyline (line segments joined end to start by coincident constraints)
+        to a sketch.
 
         Args:
             doc_name: Document containing the sketch.

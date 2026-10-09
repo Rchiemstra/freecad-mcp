@@ -31,3 +31,35 @@ def test_missing_document_is_rejected():
 
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
+
+
+def test_a_document_with_unsaved_changes_is_not_reloaded():
+    """reload_document reported success and silently threw the edits away."""
+
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.hasPendingFileChanges = lambda: True
+    collab, api = collaborators(document, events)
+
+    result = run_reload_document(collab, "Doc")
+
+    assert result["success"] is False
+    assert result["error_code"] == "DOCUMENT_HAS_UNSAVED_CHANGES"
+    assert "save_document" in result["error"]
+    assert api.getDocument("Doc") is document
+
+
+def test_a_reload_reports_the_name_it_was_reopened_under():
+    """Reopening names the document after its file; the caller must learn it."""
+
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.FileName = "/tmp/stress_sk.FCStd"
+    document.hasPendingFileChanges = lambda: False
+    collab, _api = collaborators(document, events)
+
+    result = run_reload_document(collab, "Doc")
+
+    assert result["success"] is True
+    assert result["document_name"] == "stress_sk"
+    assert result["previous_name"] == "Doc"

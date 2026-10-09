@@ -215,7 +215,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_polyline",
-            docstring='Add a polyline (connected line segments) to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{"x": …, "y": …}`` dicts.\n    closed: If true, close the polyline back to the first point.\n    construction: If true, add all segments as construction lines.\n\nReturns:\n    Success message with assigned geometry indices.',
+            docstring='Add a polyline (line segments joined end to start by coincident constraints)\nto a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    points: List of ``{"x": …, "y": …}`` dicts.\n    closed: If true, close the polyline back to the first point.\n    construction: If true, add all segments as construction lines.\n\nReturns:\n    Success message with assigned geometry indices.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', points: 'list[dict[str, float]]', closed: 'bool' = False, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_polyline_operation",
             rpc_method="sketch_add_polyline",
@@ -275,7 +275,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_regular_polygon",
-            docstring='Add a regular polygon to a sketch.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the circumscribed circle centre.\n    cy: Y coordinate of the circumscribed circle centre.\n    radius: Circumradius in mm (vertex-to-centre distance).\n    sides: Number of sides (minimum 3).\n    angle: Rotation offset for the first vertex in degrees.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the assigned geometry indices.',
+            docstring='Add a regular polygon to a sketch (edges joined by coincident constraints).\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    cx: X coordinate of the circumscribed circle centre.\n    cy: Y coordinate of the circumscribed circle centre.\n    radius: Circumradius in mm (vertex-to-centre distance).\n    sides: Number of sides (minimum 3).\n    angle: Rotation offset for the first vertex in degrees.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the assigned geometry indices.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', cx: 'float', cy: 'float', radius: 'float', sides: 'int', angle: 'float' = 0.0, construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_regular_polygon_operation",
             rpc_method="sketch_add_regular_polygon",
@@ -419,7 +419,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="sketch_add_rectangle",
-            docstring='Add an axis-aligned rectangle to a sketch (4 connected line segments).\n\nReturns the 4 geometry indices in order: bottom, right, top, left.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the first corner.\n    y1: Y coordinate of the first corner.\n    x2: X coordinate of the opposite corner.\n    y2: Y coordinate of the opposite corner.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the 4 assigned geometry indices.',
+            docstring='Add an axis-aligned rectangle to a sketch (4 line segments joined end to\nstart by coincident constraints, so dimensioning an edge keeps it closed).\n\nReturns the 4 geometry indices in order: bottom, right, top, left.\n\nArgs:\n    doc_name: Document containing the sketch.\n    sketch_name: Name of the target sketch.\n    x1: X coordinate of the first corner.\n    y1: Y coordinate of the first corner.\n    x2: X coordinate of the opposite corner.\n    y2: Y coordinate of the opposite corner.\n    construction: If true, add all edges as construction lines.\n\nReturns:\n    Success message with the 4 assigned geometry indices.',
             signature="(ctx: 'Context', doc_name: 'str', sketch_name: 'str', x1: 'float', y1: 'float', x2: 'float', y2: 'float', construction: 'bool' = False) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.sketch_add_rectangle_operation",
             rpc_method="sketch_add_rectangle",
