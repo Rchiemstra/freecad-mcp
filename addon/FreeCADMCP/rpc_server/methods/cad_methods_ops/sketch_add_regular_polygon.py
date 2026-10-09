@@ -42,6 +42,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_sketch_add_regular_polygon_uncertain,
     )
 from .sketch_add_regular_polygon_mutation import SketchAddRegularPolygonError, run_sketch_add_regular_polygon_native_mutation
+from .sketch_geometry_kinds import join_segments
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +253,7 @@ def apply_sketch_add_regular_polygon(
                 request.construction,
             )
         )
+    join_segments(sketch, collaborators.sketcher, before_geo, request.sides, closed=True)
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

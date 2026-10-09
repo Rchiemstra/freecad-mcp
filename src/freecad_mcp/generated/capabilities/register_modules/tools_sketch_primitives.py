@@ -170,7 +170,8 @@ def _register_sketch_add_rectangle(
         y2: float,
         construction: bool = False,
     ) -> CallToolResult:
-        """Add an axis-aligned rectangle to a sketch (4 connected line segments).
+        """Add an axis-aligned rectangle to a sketch (4 line segments joined end to
+        start by coincident constraints, so dimensioning an edge keeps it closed).
 
         Returns the 4 geometry indices in order: bottom, right, top, left.
 

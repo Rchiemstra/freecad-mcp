@@ -22,4 +22,20 @@ def circular_geometry_error(sketch: object, geo: int, constraint: str) -> str | 
     return f"{constraint} needs a circle or arc, but geometry {geo} is a {type_id}"
 
 
-__all__ = ["circular_geometry_error"]
+def join_segments(sketch: object, sketcher: object, first: int, count: int, *, closed: bool) -> None:
+    """Join consecutive line segments end to start with coincident constraints.
+
+    Segments merely placed end to end come apart as soon as one is dimensioned,
+    and the profile then fails with "Wire is not closed".
+    """
+
+    constraint = getattr(sketcher, "Constraint")
+    add = getattr(sketch, "addConstraint")
+    pairs = [(first + index, first + index + 1) for index in range(count - 1)]
+    if closed and count > 2:
+        pairs.append((first + count - 1, first))
+    for previous, following in pairs:
+        add(constraint("Coincident", previous, 2, following, 1))
+
+
+__all__ = ["circular_geometry_error", "join_segments"]
