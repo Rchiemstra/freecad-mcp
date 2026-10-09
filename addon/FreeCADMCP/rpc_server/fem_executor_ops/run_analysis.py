@@ -11,6 +11,37 @@ from .result_extraction import extract_result_metrics
 from .solver_resolution import resolve_analysis, resolve_solver
 
 
+def _analysis_has_mesh(analysis: object) -> bool:
+    for member in getattr(analysis, "Group", None) or []:
+        if getattr(member, "FemMesh", None) is not None:
+            return True
+        type_id = str(getattr(member, "TypeId", ""))
+        if type_id.startswith("Fem::") and "Mesh" in type_id:
+            return True
+    return False
+
+
+def _drop_created_solver(doc: object, analysis: object, solver: object | None) -> None:
+    if solver is None:
+        return
+    group = getattr(analysis, "Group", None)
+    if isinstance(group, list) and solver in group:
+        group.remove(solver)
+    remover = getattr(analysis, "removeObject", None)
+    if callable(remover):
+        try:
+            remover(solver)
+        except Exception:
+            pass
+    name = getattr(solver, "Name", None)
+    doc_remover = getattr(doc, "removeObject", None)
+    if isinstance(name, str) and callable(doc_remover):
+        try:
+            doc_remover(name)
+        except Exception:
+            pass
+
+
 def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
     """Run the CalculiX solver on an existing FEM analysis container.
 
@@ -19,6 +50,8 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
     """
     work_dir = None
     stage = "initialization"
+    analysis = None
+    created_solver = None
     try:
         stage = "document lookup"
         try:
@@ -30,8 +63,17 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         if error is not None:
             return error
 
+        if not _analysis_has_mesh(analysis):
+            return {
+                "success": False,
+                "error": "Prerequisites failed: FEM: no mesh object found",
+            }
+
         stage = "solver resolution"
+        before = list(getattr(analysis, "Group", None) or [])
         solver = resolve_solver(doc, analysis)
+        if solver not in before:
+            created_solver = solver
 
         stage = "femtools import"
         from femtools import ccxtools
@@ -47,6 +89,8 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         stage = "prerequisite check"
         prereq_msg = fea.check_prerequisites()
         if prereq_msg:
+            _drop_created_solver(doc, analysis, created_solver)
+            created_solver = None
             return {
                 "success": False,
                 "error": f"Prerequisites failed: {prereq_msg}",
@@ -56,6 +100,8 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         stage = "solver execution"
         fea.purge_results()
         if fea.run() is False:
+            _drop_created_solver(doc, analysis, created_solver)
+            created_solver = None
             return {
                 "success": False,
                 "error": (
@@ -72,10 +118,15 @@ def run_fem_analysis(doc_name: str, analysis_name: str) -> dict:
         metrics = extract_result_metrics(doc, analysis)
         if not metrics.get("success"):
             metrics["working_dir"] = work_dir
+            _drop_created_solver(doc, analysis, created_solver)
+            created_solver = None
             return metrics
         metrics["working_dir"] = work_dir
+        created_solver = None
         return metrics
     except Exception as exc:
+        if analysis is not None:
+            _drop_created_solver(doc, analysis, created_solver)
         return {
             "success": False,
             "error": f"FEM analysis failed during {stage}: {type(exc).__name__}: {exc}",

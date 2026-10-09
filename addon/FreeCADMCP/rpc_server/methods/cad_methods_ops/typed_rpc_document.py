@@ -29,8 +29,28 @@ def get_object(document: object, name: str) -> object | None:
     return getter(name)
 
 
+# These names are documented, but FreeCAD registers the C++ type the
+# ObjectsFem factory creates (Fem::FemAnalysis, and so on).
+_FEM_OBJECT_MAKERS = {
+    "Fem::AnalysisPython": "makeAnalysis",
+    "Fem::MaterialCommon": "makeMaterialSolid",
+    "Fem::FemMeshGmsh": "makeMeshGmsh",
+}
+
+
 def add_object(document: object, object_type: str, name: str) -> object:
-    created = require_callable(document, "addObject")(object_type, name)
+    maker_name = _FEM_OBJECT_MAKERS.get(object_type)
+    if maker_name:
+        try:
+            import ObjectsFem
+        except ImportError as exc:
+            raise RuntimeError("ObjectsFem is not available") from exc
+        maker = getattr(ObjectsFem, maker_name, None)
+        if not callable(maker):
+            raise RuntimeError(f"ObjectsFem has no {maker_name}")
+        created = maker(document, name)
+    else:
+        created = require_callable(document, "addObject")(object_type, name)
     if created is None:
         raise RuntimeError(f"addObject returned no object for {name!r}")
     return created

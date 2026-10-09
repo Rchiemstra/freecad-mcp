@@ -44,5 +44,7 @@ def resolve_references(doc: FreeCAD.Document, val: Any) -> list[tuple[Any, Any]]
         ref_obj = doc.getObject(ref_name)
         if ref_obj is None:
             raise ValueError(f"Referenced object '{ref_name}' not found.")
+        if isinstance(face, str):
+            face = (face,)
         refs.append((ref_obj, face))
     return refs
