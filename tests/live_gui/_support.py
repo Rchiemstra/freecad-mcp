@@ -104,7 +104,13 @@ class McpClient:
     async def _call(self, tool: str, args: dict[str, Any]) -> ToolResult:
         result = await self._session.call_tool(tool, args)
         text = " ".join(getattr(item, "text", "") for item in result.content).strip()
-        return ToolResult(tool, bool(result.isError), text, _payload(text))
+        payload = _payload(text)
+        structured = getattr(result, "structuredContent", None)
+        if payload is None and isinstance(structured, dict):
+            # Summary-text tools carry their data in the envelope.
+            data = structured.get("data")
+            payload = data if isinstance(data, dict) else structured
+        return ToolResult(tool, bool(result.isError), text, payload)
 
     def call(self, tool: str, **args: Any) -> ToolResult:
         return self._run(self._call(tool, args))

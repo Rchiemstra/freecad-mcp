@@ -71,9 +71,9 @@ def test_undo_steps_are_named_after_the_mcp_tool(mcp, gui_log):
     assert_ok(mcp.call("create_document", name="LiveUndoName"))
     assert_ok(mcp.call("create_object", doc_name="LiveUndoName", obj_type="Part::Box",
                        obj_name="Box"))
-    readiness = assert_ok(mcp.call("get_mutation_readiness", doc_name="LiveUndoName"))
+    readiness = _payload(assert_ok(mcp.call("get_mutation_readiness", doc_name="LiveUndoName")))
 
-    assert re.search(r'"undo_head":\s*"MCP: create_object"', readiness.text), readiness.text[:800]
+    assert re.search(r"'undo_head': 'MCP: create_object'", repr(readiness)), repr(readiness)[:800]
     assert_ok(mcp.call("close_document", doc_name="LiveUndoName"))
     assert_clean(gui_log)
 
