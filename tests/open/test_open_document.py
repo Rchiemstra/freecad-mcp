@@ -34,3 +34,17 @@ def test_invalid_path_is_rejected():
 
     assert result["success"] is False
     assert result["error_code"] == "INVALID_ARGUMENT"
+
+
+def test_missing_file_is_rejected_before_freecad_opens_it(tmp_path: Path):
+    """FreeCAD raised and logged "<Exception> File ... does not exist!"."""
+
+    events: list[str] = []
+    collab, api = collaborators(None, events)
+
+    result = run_open_document(collab, str(tmp_path / "missing.FCStd"))
+
+    assert result["success"] is False
+    assert result["error_code"] == "FILE_NOT_FOUND"
+    assert "missing.FCStd" in result["error"]
+    assert api.getDocument("missing") is None
