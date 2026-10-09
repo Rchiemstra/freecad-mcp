@@ -12,7 +12,7 @@ from .typed_rpc_container_support import snapshot_ring, snapshot_rings
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 try:
     from ...._shared.protocol.restore_contract import (
@@ -45,6 +45,8 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_restore_uncertain,
     )
 from .restore_mutation import RestoreError, run_restore_native_mutation
+
+GuiExecutor = Callable[[Callable[[], object]], object]
 
 
 
@@ -264,6 +266,7 @@ def build_restore_request(doc_name: object, snapshot_id: object) -> RestoreReque
 class _RestoreExecution:
     collaborators: RestoreCollaborators
     request: RestoreRequest
+    on_gui: GuiExecutor | None = None
     created: RestoreReceipt | None = None
     inspected: RestoreInspection | None = None
 
@@ -307,14 +310,24 @@ class _RestoreExecution:
             receipt = self.created
             if receipt is None or not isinstance(receipt.snapshot_path, str) or not receipt.snapshot_path:
                 return success
-            load_result = _load_snapshot_after_commit(
-                self.collaborators,
-                str(self.request.doc_name),
-                receipt.snapshot_path,
-                receipt.item,
-            )
+            snapshot_path = receipt.snapshot_path
+
+            def load() -> Literal[True] | RestoreUncertain:
+                return _load_snapshot_after_commit(
+                    self.collaborators,
+                    str(self.request.doc_name),
+                    snapshot_path,
+                    receipt.item,
+                )
+
+            # This continuation runs on the RPC thread once the owner thread
+            # has committed. Opening a document restores its view providers,
+            # which only the GUI thread may touch.
+            load_result = load() if self.on_gui is None else self.on_gui(load)
+            if isinstance(load_result, str):
+                return make_restore_uncertain("RESTORE_FAILED", load_result, committed=True)
             if load_result is not True:
-                return load_result
+                return cast(RestoreUncertain, load_result)
             return success
 
         return settle_native_commit(result, _finish_native_commit)
@@ -322,13 +335,19 @@ class _RestoreExecution:
 def run_restore(
     collaborators: RestoreCollaborators,
     doc_name: object, snapshot_id: object,
+    *,
+    on_gui: GuiExecutor | None = None,
 ) -> NativeOutcome[RestoreResult]:
-    """Run the mutation through apply, recompute, inspection, and commit."""
+    """Run the mutation through apply, recompute, inspection, and commit.
+
+    ``on_gui`` runs a callable on the GUI thread and returns its result, or a
+    dispatch error string; the snapshot reload goes through it.
+    """
 
     request = build_restore_request(doc_name, snapshot_id)
     if isinstance(request, dict):
         return request
-    return _RestoreExecution(collaborators, request).run()
+    return _RestoreExecution(collaborators, request, on_gui).run()
 
 
 class _RestoreRpcFacade(Protocol):
@@ -336,13 +355,16 @@ class _RestoreRpcFacade(Protocol):
 
     def _dispatch_gui(self, callback: Callable[[], object], timeout: int | None = None) -> object: ...
 
+    def _dispatch_snapshot_gui(self, task: Callable[[], object]) -> object: ...
+
 
 def rpc_restore(
     self: _RestoreRpcFacade, doc_name: str, snapshot_id: str | None = None,
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
+    on_gui = self._dispatch_snapshot_gui
     res = self._dispatch_gui(
-        lambda: run_restore(collaborators, doc_name, snapshot_id)
+        lambda: run_restore(collaborators, doc_name, snapshot_id, on_gui=on_gui)
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
