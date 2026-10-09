@@ -436,11 +436,25 @@ def _finish_sketch(
     sketch: object,
     points: list[object],
     *,
+    pitch: float,
+    base: float,
+    root: float,
+    outer: float,
     bore_diameter: float,
     min_length: float,
 ) -> None:
     _close_points(points, min_length)
     _profile_to_sketch(sketch, points, min_length)
+    # Reference circles documented on the gear sketch: root, base, pitch, outer.
+    _construction_circles(
+        sketch,
+        (
+            ("RootRadius", root),
+            ("BaseRadius", base),
+            ("PitchRadius", pitch),
+            ("OuterRadius", outer),
+        ),
+    )
     _maybe_bore(sketch, bore_diameter)
 
 
@@ -485,6 +499,10 @@ def create_involute_gear(
     _finish_sketch(
         sketch,
         points,
+        pitch=pitch,
+        base=base,
+        root=root,
+        outer=outer,
         bore_diameter=bore_diameter,
         min_length=1e-8,
     )
@@ -504,25 +522,6 @@ def create_involute_gear(
         "pitch_dia": 2.0 * pitch,
         "tooth_profile": "involute",
     }
-
-
-def _helical_profile_to_sketch(
-    sketch: object,
-    *,
-    pitch_radius: float,
-    module: float,
-    bore_diameter: float,
-) -> None:
-    part = _part()
-    add_geometry = getattr(sketch, "addGeometry", None)
-    if not callable(add_geometry):
-        raise TypedMutationError("INVALID_SKETCH", "sketch must provide addGeometry")
-    circle = module_callable(part, "Circle")
-    add_geometry(
-        circle(_vector(pitch_radius, 0.0, 0.0), _vector(0.0, 0.0, 1.0), module),
-        False,
-    )
-    _maybe_bore(sketch, bore_diameter)
 
 
 def create_helical_gear(
@@ -549,17 +548,33 @@ def create_helical_gear(
         clearance=clearance,
         backlash=backlash,
     )
-    del angle, base, outer, root, samples_per_flank
+    samples = max(2, min(samples_per_flank, 2))
     body = _ensure_body(document, body_name, gear_name)
     sketch = _new_sketch(body, gear_name + "_Sketch")
-    _helical_profile_to_sketch(
-        sketch,
-        pitch_radius=pitch,
-        module=module,
-        bore_diameter=bore_diameter,
+    points = _involute_points(
+        teeth=teeth,
+        pitch=pitch,
+        base=base,
+        outer=outer,
+        root=root,
+        pressure_angle=angle,
+        backlash=backlash,
+        samples=samples,
+        min_length=1e-8,
     )
-    helix = math.radians(helix_angle)
-    pitch_len = width / math.tan(helix) if abs(math.tan(helix)) > 1e-9 else 1e6
+    _finish_sketch(
+        sketch,
+        points,
+        pitch=pitch,
+        base=base,
+        root=root,
+        outer=outer,
+        bore_diameter=bore_diameter,
+        min_length=1e-8,
+    )
+    helix = abs(math.radians(helix_angle))
+    # Lead is the advance per revolution: pi * pitch diameter / tan(|helix|).
+    pitch_len = math.pi * (2.0 * pitch) / math.tan(helix) if abs(math.tan(helix)) > 1e-9 else 1e6
     factory = getattr(body, "newObject", None)
     if not callable(factory):
         raise TypedMutationError("INVALID_BODY", "Body must provide newObject")
@@ -568,6 +583,7 @@ def create_helical_gear(
     setattr(feature, "ReferenceAxis", (sketch, ["V_Axis"]))
     setattr(feature, "Mode", 0)
     setattr(feature, "Pitch", pitch_len)
+    setattr(feature, "Reversed", helix_angle < 0)
     setattr(feature, "Height", width)
     setattr(feature, "Angle", 0)
     setattr(feature, "Growth", 0)
@@ -647,6 +663,10 @@ def create_spur_gear(
     _finish_sketch(
         sketch,
         points,
+        pitch=pitch,
+        base=base,
+        root=root,
+        outer=outer,
         bore_diameter=bore_diameter,
         min_length=1e-7,
     )

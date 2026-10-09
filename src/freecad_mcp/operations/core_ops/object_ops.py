@@ -72,7 +72,9 @@ def get_objects_operation(
             structured=structured,
             only_text_feedback=True,
         )
-    screenshot = None if only_text_feedback else freecad.get_active_screenshot()
+    screenshot = (
+        None if only_text_feedback else freecad.get_active_screenshot(document=doc_name)
+    )
     return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 
@@ -106,7 +108,9 @@ def get_object_operation(
             structured=structured,
             only_text_feedback=True,
         )
-    screenshot = None if only_text_feedback else freecad.get_active_screenshot()
+    screenshot = (
+        None if only_text_feedback else freecad.get_active_screenshot(document=doc_name)
+    )
     return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 

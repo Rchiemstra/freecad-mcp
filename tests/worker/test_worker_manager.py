@@ -349,3 +349,28 @@ def test_cancelling_an_unknown_job_says_why(tmp_path):
     assert result["success"] is False
     assert result["error_code"] == "worker_job_not_found"
     assert "bogus-job-id" in result["error"]
+
+
+@pytest.mark.unit
+def test_invalid_timeout_returns_a_protocol_error_and_keeps_the_worker_alive(tmp_path):
+    """A timeout outside 1–900 must be rejected without killing the manager thread."""
+
+    manager = WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=tmp_path / "workers",
+    )
+    try:
+        workspace = manager.create_workspace()
+        result = manager.execute(
+            "print(1)",
+            {"timeout_seconds": -5},
+            {"primary_document": "Doc", "documents": {}},
+            workspace,
+        )
+        assert result["success"] is False
+        assert "timeout_seconds" in result["error"]
+        assert manager._worker_thread.is_alive()
+        assert manager.status()["queue_depth"] == 0
+    finally:
+        manager.stop()

@@ -45,6 +45,33 @@ _NAMED_VIEW_ALIASES = {
     "sideright": "right",
     "sideleft": "left",
 }
+# Coin writes NaN after a clipping-plane camera update. That string does not
+# match _ORIENTATION, so a later named view or fit dies until the GUI restarts.
+_FALLBACK_ORTHOGRAPHIC_CAMERA = (
+    "OrthographicCamera {\n"
+    "  viewportMapping ADJUST_CAMERA\n"
+    "  position 0 0 1\n"
+    "  orientation 0 0 1  0\n"
+    "  nearDistance 0.1\n"
+    "  farDistance 1000\n"
+    "  aspectRatio 1\n"
+    "  focalDistance 5\n"
+    "  height 10\n"
+    "}\n"
+)
+
+
+def _camera_orientation_usable(camera: object) -> bool:
+    if not isinstance(camera, str) or not camera.strip():
+        return False
+    match = _ORIENTATION.search(camera)
+    if match is None:
+        return False
+    try:
+        values = [float(match.group(index)) for index in range(2, 6)]
+    except ValueError:
+        return False
+    return all(math.isfinite(value) for value in values)
 
 
 def normalize_focus_paths(
@@ -448,7 +475,18 @@ def build_view_context(
     if remembered is not None and not isinstance(remembered, Mapping):
         raise TypeError("stored personal view context must be a mapping")
     source = dict(baseline or {})
-    source.update(remembered or {})
+    if isinstance(remembered, Mapping):
+        remembered_fields = dict(remembered)
+        remembered_camera = remembered_fields.get("camera")
+        if remembered_camera and not _camera_orientation_usable(remembered_camera):
+            remembered_fields.pop("camera", None)
+        source.update(remembered_fields)
+    camera = source.get("camera")
+    needs_camera = bool(view_name) or yaw_deg is not None or bool(fit)
+    if (camera and not _camera_orientation_usable(camera)) or (
+        needs_camera and not _camera_orientation_usable(camera)
+    ):
+        source["camera"] = _FALLBACK_ORTHOGRAPHIC_CAMERA
     context = _native_context_schema(source, document_name)
     registry = _member(collabs, "personal_view_registry")
     registry.remember(

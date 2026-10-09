@@ -8,7 +8,7 @@ import FreeCAD
 import FreeCADGui
 
 from ..gui_dispatch import _flush_gui_events
-from .selection_parse import parse_selection_entry
+from .selection_parse import parse_selection_entry, subshape_missing
 
 
 def select_subshapes(
@@ -46,6 +46,9 @@ def select_subshapes(
         obj = doc.getObject(obj_name)
         if obj is None:
             errors.append(f"Object not found: {obj_name}")
+            continue
+        if sub and subshape_missing(obj, sub):
+            errors.append(f"Subobject not found: {obj_name}.{sub}")
             continue
         try:
             if sub:

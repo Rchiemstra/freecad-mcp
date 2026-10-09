@@ -358,3 +358,49 @@ def test_owned_adapters_have_no_runtime_locator_or_direct_gui_imports() -> None:
                 isinstance(node, (ast.Import, ast.ImportFrom))
                 for node in ast.walk(function)
             ), (path, function.name)
+
+
+def test_select_subshapes_rejects_a_face_the_shape_does_not_contain() -> None:
+    """getSubObject('Face99') returns the owner; the face is still missing."""
+
+    class Obj:
+        Name = "Box"
+
+        def getSubObject(self, _sub):
+            return self
+
+        class Shape:
+            @staticmethod
+            def getElement(name):
+                return SimpleNamespace(Name=name) if name == "Face1" else None
+
+    obj = Obj()
+    document = SimpleNamespace(
+        Name="Model",
+        Label="Model",
+        Objects=[obj],
+        getObject=lambda name: obj if name == "Box" else None,
+    )
+    stored: dict = {}
+    collaborators = _collaborators(
+        freecad=SimpleNamespace(listDocuments=lambda: {"Model": document}),
+        dispatch_gui=lambda _facade, callback, **_kwargs: callback(),
+        snapshot_view_context=lambda name: {"active_document": name},
+        snapshot_personal_view_context=lambda name, actor: stored.get((name, actor)),
+        store_personal_view_context=lambda name, actor, context: stored.__setitem__(
+            (name, actor), dict(context)
+        ),
+    )
+    facade = SimpleNamespace(_gui_collaborators=collaborators)
+
+    missing = select_subshapes(
+        facade, "Model", [{"object": "Box", "sub": "Face99"}], True
+    )
+    present = select_subshapes(
+        facade, "Model", [{"object": "Box", "sub": "Face1"}], True
+    )
+
+    assert missing["ok"] is False
+    assert missing["selected"] == []
+    assert any("Face99" in error for error in missing["errors"])
+    assert present["selected"] == [{"object": "Box", "sub": "Face1"}]

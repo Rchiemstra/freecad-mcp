@@ -52,7 +52,7 @@ def _animation_frame_gui(self, collabs, plan, sample, options, actor):
         hint=options["doc_name"],
         view_name=options["view_name"],
         focus_objects=options["focus_names"],
-        fit=True,
+        fit=False,
         width=options["width"],
         height=options["height"],
     )

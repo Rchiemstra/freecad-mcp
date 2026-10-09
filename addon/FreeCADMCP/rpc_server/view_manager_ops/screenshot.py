@@ -49,6 +49,7 @@ def save_active_screenshot(
     focus_object: str | None = None,
     focus_objects: Sequence[str] | None = None,
     yaw_deg: float | None = None,
+    fit: bool = True,
 ):
     """Save a PNG of the active view to ``save_path``.
 
@@ -69,13 +70,13 @@ def save_active_screenshot(
         if focused_selection:
             FreeCADGui.Selection.clearSelection()
 
-        if focused_selection:
+        if fit and focused_selection:
             FreeCADGui.Selection.clearSelection()
             for obj in targets:
                 FreeCADGui.Selection.addSelection(obj)
             FreeCADGui.SendMsgToActiveView("ViewSelection")
             FreeCADGui.Selection.clearSelection()
-        else:
+        elif fit:
             view.fitAll()
 
         apply_yaw(view, yaw_deg)

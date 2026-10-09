@@ -259,7 +259,14 @@ class TestCreateInvoluteGearLayerB:
         assert_code_contains(_GEAR_ACTIONS, "LineSegment", "Coincident")
 
     def test_construction_circles_present(self):
-        assert_code_contains(_GEAR_ACTIONS, "_construction_circles", "pitch_radius", "add_constraint")
+        assert_code_contains(
+            _GEAR_ACTIONS,
+            "_construction_circles",
+            '("RootRadius", root)',
+            '("BaseRadius", base)',
+            '("PitchRadius", pitch)',
+            "add_constraint",
+        )
 
     def test_pad_feature_created(self):
         assert_code_contains(_GEAR_ACTIONS, "PartDesign::Pad")

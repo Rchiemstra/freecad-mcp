@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import zipfile
+
 import pytest
 
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.reload_document import run_reload_document
@@ -63,3 +65,25 @@ def test_a_reload_reports_the_name_it_was_reopened_under():
     assert result["success"] is True
     assert result["document_name"] == "stress_sk"
     assert result["previous_name"] == "Doc"
+
+
+def test_malformed_document_xml_is_rejected_before_the_document_is_closed(tmp_path):
+    """A broken Document.xml must fail the reload and leave the open document."""
+
+    events: list[str] = []
+    document = FakeDocument(events)
+    path = tmp_path / "broken.FCStd"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "Document.xml",
+            '<Document><Float value="7.5"42.0000000000000000"/></Document>',
+        )
+    document.FileName = str(path)
+    collab, api = collaborators(document, events)
+
+    result = run_reload_document(collab, "Doc")
+
+    assert result["success"] is False
+    assert result["error_code"] == "RELOAD_DOCUMENT_FAILED"
+    assert "Document.xml" in result["error"]
+    assert api.getDocument("Doc") is document

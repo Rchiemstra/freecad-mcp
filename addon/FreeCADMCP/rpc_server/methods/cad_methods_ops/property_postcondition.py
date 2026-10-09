@@ -102,9 +102,32 @@ def kept_property(obj: object, key: str) -> object:
     return value
 
 
+def _reference_kept(_doc: object, expected: object, actual: object) -> bool | None:
+    """A References entry is JSON in and a ``(object, subnames)`` pair out."""
+
+    if not isinstance(expected, Mapping) or not isinstance(actual, (list, tuple)) or not actual:
+        return None
+    name = expected.get("object_name", expected.get("Object"))
+    if not isinstance(name, str):
+        return None
+    target = actual[0]
+    if getattr(target, "Name", None) != name:
+        return False
+    face = expected.get("face", expected.get("Face"))
+    if face is None:
+        return True
+    sub = actual[1] if len(actual) > 1 else ""
+    if isinstance(sub, (list, tuple)):
+        return str(face) in {str(item) for item in sub}
+    return str(sub) == str(face)
+
+
 def property_kept_value(doc: object, expected: object, actual: object) -> bool:
     if isinstance(actual, IncludedFile):
         return _included_file_kept(expected, actual)
+    reference = _reference_kept(doc, expected, actual)
+    if reference is not None:
+        return reference
     if isinstance(expected, list) and isinstance(actual, (list, tuple)):
         # List properties (e.g. PlacementList) are converted element by element.
         return len(expected) == len(actual) and all(

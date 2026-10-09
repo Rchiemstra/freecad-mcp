@@ -95,6 +95,19 @@ def render_personal_context(
     return dispatch_gui(facade, render)
 
 
+def _hint_targets_other_document(facade: Any, hint: Any, document: Any) -> bool:
+    """A blank personal render must not be replaced by a different document."""
+
+    if hint is None or (isinstance(hint, str) and not hint.strip()):
+        return False
+    requested = _document_name(document)
+    try:
+        active = getattr(collaborators(facade).freecad, "ActiveDocument", None)
+    except Exception:
+        return True
+    return getattr(active, "Name", None) != requested
+
+
 def render_personal_context_gui(
     facade: Any,
     *,
@@ -138,7 +151,9 @@ def render_personal_context_gui(
         background,
         int(samples),
     )
-    if is_near_blank_png(image):
+    if is_near_blank_png(image) and not _hint_targets_other_document(
+        facade, hint, document
+    ):
         fallback, fallback_error = capture_active_view_png_bytes(
             view_name=view_name or "Isometric",
             width=width,

@@ -109,10 +109,16 @@ def apply_create_object(
     assigned = getattr(created, "Name", str(request.object_name))
     if not isinstance(assigned, str) or not assigned.strip():
         raise CreateObjectError("CREATE_OBJECT_FAILED", "Created object has no name")
+    actual_type = getattr(created, "TypeId", None)
+    object_type = (
+        actual_type
+        if isinstance(actual_type, str) and actual_type.strip()
+        else str(request.object_type)
+    )
     return CreateObjectReceipt(
         name=assigned,
         obj=created,
-        object_type=str(request.object_type),
+        object_type=object_type,
         properties=tuple(
             (key, value)
             for key, value in properties.items()

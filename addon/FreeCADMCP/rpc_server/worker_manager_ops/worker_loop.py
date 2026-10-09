@@ -41,7 +41,15 @@ def worker_loop(manager) -> None:
                     "worker_job_started",
                     worker_job_id=invocation.job_id,
                 )
-                invocation.result = manager._execute_now(invocation)
+                try:
+                    invocation.result = manager._execute_now(invocation)
+                except Exception as exc:
+                    if invocation.result is None:
+                        invocation.result = build_worker_error(
+                            "worker_unavailable",
+                            str(exc),
+                            job_id=invocation.job_id,
+                        )
         finally:
             with manager._state_lock:
                 manager._invocations.pop(invocation.job_id, None)

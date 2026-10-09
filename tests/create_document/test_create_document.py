@@ -45,6 +45,19 @@ def test_invalid_arguments_are_rejected():
     assert result["error_code"] == "INVALID_ARGUMENT"
 
 
+def test_a_name_freecad_would_rewrite_creates_nothing():
+    """FreeCAD rewrites '.' and '/' to '_', then the lookup misses the new doc."""
+
+    events: list[str] = []
+    collab, api = collaborators(None, events)
+
+    result = run_create_document(collab, "QA../odd")
+
+    assert result["success"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert api.documents == {}
+
+
 def test_missing_freecad_is_rejected():
     from types import SimpleNamespace
 
