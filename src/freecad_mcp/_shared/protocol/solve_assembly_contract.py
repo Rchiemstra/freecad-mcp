@@ -98,6 +98,8 @@ class SolveAssemblySuccess(TypedDict):
     assembly: str
     method: str
     status: str | None
+    # ``status`` is reserved in the MCP envelope; this copy stays visible there.
+    solver_status: str | None
 
 
 class SolveAssemblyFailure(TypedDict):
@@ -156,6 +158,7 @@ _CORE_KEYS = frozenset(
         "assembly",
         "method",
         "status",
+        "solver_status",
     }
 )
 
@@ -173,6 +176,7 @@ def make_solve_assembly_success(assembly: str, method: str, status: str | None) 
         "assembly": assembly,
         "method": method,
         "status": status,
+        "solver_status": status,
     }
 
 
@@ -392,7 +396,7 @@ def parse_solve_assembly_response(raw_response: object) -> SolveAssemblyResult:
 
     error_code = response.get("error_code")
     error = response.get("error")
-    success_keys = {'assembly', 'method', 'status'}
+    success_keys = {'assembly', 'method', 'status', 'solver_status'}
     if (
         response.get("success") is False
         and response.get("ok") is False

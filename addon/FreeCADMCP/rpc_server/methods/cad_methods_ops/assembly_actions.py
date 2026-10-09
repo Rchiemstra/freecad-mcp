@@ -23,6 +23,14 @@ def _assembly_api() -> object:
     return load_module("Assembly")
 
 
+def _invalid_api_argument(exc: Exception) -> TypedMutationError | None:
+    # Assembly.JointCreationError marks an argument the API refused, such as a
+    # component outside the assembly; anything else is a genuine failure.
+    if type(exc).__name__ == "JointCreationError":
+        return TypedMutationError("INVALID_ARGUMENT", str(exc))
+    return None
+
+
 def require_assembly(document: object, name: str) -> object:
     assembly = require_object(document, name, code="ASSEMBLY_NOT_FOUND")
     if not is_derived_from(assembly, "Assembly::AssemblyObject"):
@@ -105,7 +113,10 @@ def create_grounded_joint(
     assembly = require_assembly(document, assembly_name)
     component = require_object(document, component_name, code="COMPONENT_NOT_FOUND")
     create = module_callable(_assembly_api(), "createGroundedJoint")
-    joint = create(assembly, component, label=label, recompute=False)
+    try:
+        joint = create(assembly, component, label=label, recompute=False)
+    except Exception as exc:
+        raise (_invalid_api_argument(exc) or exc) from exc
     grounded = getattr(joint, "ObjectToGround", None)
     return {
         "joint": object_name(joint),
@@ -138,25 +149,35 @@ def create_joint(
     api = _assembly_api()
     make_ref = module_callable(api, "makeJointReference")
     create = module_callable(api, "createJoint")
-    ref1 = make_ref(ref1_obj, ref1_element, ref1_vertex)
-    ref2 = make_ref(ref2_obj, ref2_element, ref2_vertex)
-    joint = create(
-        assembly,
-        joint_type,
-        ref1,
-        ref2,
-        label=label,
-        solve=solve,
-        presolve=presolve,
-        recompute=False,
-        **dict(properties),
-    )
+    try:
+        ref1 = make_ref(ref1_obj, ref1_element, ref1_vertex)
+        ref2 = make_ref(ref2_obj, ref2_element, ref2_vertex)
+        joint = create(
+            assembly,
+            joint_type,
+            ref1,
+            ref2,
+            label=label,
+            solve=solve,
+            presolve=presolve,
+            recompute=False,
+            **dict(properties),
+        )
+    except Exception as exc:
+        raise (_invalid_api_argument(exc) or exc) from exc
     return {
         "joint": object_name(joint),
         "label": object_label(joint),
         "joint_type": str(getattr(joint, "JointType", joint_type)),
         "assembly": object_name(assembly),
     }
+
+
+_SOLVE_FAILURES = {
+    # The assembly Origin always counts as grounded, so -6 is rare in practice.
+    -6: "the assembly has no grounded component; ground one with create_assembly_grounded_joint",
+    -1: "the solver could not satisfy the joints; see the report view",
+}
 
 
 def solve_assembly(document: object, assembly_name: str) -> dict[str, str | None]:
@@ -166,13 +187,22 @@ def solve_assembly(document: object, assembly_name: str) -> dict[str, str | None
     if callable(solver):
         try:
             status = solver()
+        except Exception as exc:
+            error = str(exc)
+        else:
+            # AssemblyObject::solve returns 0 on success and a negative code
+            # when nothing was solved.
+            if isinstance(status, int) and not isinstance(status, bool) and status != 0:
+                reason = _SOLVE_FAILURES.get(status, "the solver reported a failure")
+                raise TypedMutationError(
+                    "ASSEMBLY_SOLVE_FAILED",
+                    f"Solving {object_name(assembly)!r} failed (status {status}): {reason}",
+                )
             return {
                 "assembly": object_name(assembly),
                 "method": "assembly.solve()",
                 "status": str(status) if status is not None else None,
             }
-        except Exception as exc:
-            error = str(exc)
     try:
         joint_object = load_module("JointObject")
         allowed = module_callable(joint_object, "solveIfAllowed")
