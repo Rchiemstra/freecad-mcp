@@ -2,6 +2,8 @@
 """Typed ``set_expression`` mutation."""
 from __future__ import annotations
 
+import re
+
 from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
@@ -176,66 +178,28 @@ def _is_expression_engine_path(prop_path: str) -> bool:
 def _has_expression_property(item: object, prop_path: str) -> bool:
     if _is_expression_engine_path(prop_path):
         return True
+    # FreeCAD binds sub-paths such as "Placement.Base.x" or "Constraints[9]";
+    # the property they start from must exist.
+    root = re.split(r"[.\[]", prop_path.strip().lstrip("."), maxsplit=1)[0]
     properties = getattr(item, "PropertiesList", None)
-    if isinstance(properties, (list, tuple)) and prop_path in properties:
-        return True
-    return hasattr(item, prop_path)
-
-
-def _expression_helper_name(object_name: str, prop_path: str) -> str:
-    return f"__mcp_expr_{object_name}_{prop_path}"
-
-
-class _ExpressionBindingProxy:
-    """Provision a writable property on a helper object created during apply."""
-
-    def __init__(self, obj: object, prop_path: str) -> None:
-        properties = getattr(obj, "PropertiesList", None)
-        if isinstance(properties, (list, tuple)) and prop_path in properties:
-            return
-        add_property = getattr(obj, "addProperty", None)
-        if not callable(add_property):
-            raise SetExpressionError(
-                "EXPRESSION_ERROR",
-                f"Property {prop_path!r} not found",
-            )
-        add_property("App::PropertyFloat", prop_path)
-
-
-def _resolve_expression_binding(
-    doc: SetExpressionDocument,
-    item: object,
-    object_name: str,
-    prop_path: str,
-) -> tuple[object, str | None]:
-    if _has_expression_property(item, prop_path):
-        return item, None
-    add_object = getattr(doc, "addObject", None)
-    get_object = getattr(doc, "getObject", None)
-    if not callable(add_object) or not callable(get_object):
-        raise SetExpressionError("EXPRESSION_ERROR", f"Property {prop_path!r} not found")
-    helper_name = _expression_helper_name(object_name, prop_path)
-    helper = get_object(helper_name)
-    if helper is None:
-        helper = add_object("App::FeaturePython", helper_name)
-        helper.Proxy = _ExpressionBindingProxy(helper, prop_path)
-    return helper, helper_name
+    if isinstance(properties, (list, tuple)):
+        return root in properties
+    return hasattr(item, root)
 
 
 def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionRequest) -> SetExpressionReceipt:
     """Bind an expression without recomputing."""
 
     item = require_object(doc, request.object_name, missing_code="OBJECT_NOT_FOUND", error=SetExpressionError)
-    binding_target, helper_name = _resolve_expression_binding(
-        doc,
-        item,
-        request.object_name,
-        request.prop_path,
-    )
-    setter = getattr(binding_target, "setExpression", None)
+    if not _has_expression_property(item, request.prop_path):
+        raise SetExpressionError(
+            "PROPERTY_NOT_FOUND",
+            f"Object {request.object_name!r} has no property {request.prop_path!r}",
+        )
+    setter = getattr(item, "setExpression", None)
     if not callable(setter):
         raise SetExpressionError("INVALID_OBJECT", "object cannot set expressions")
-    if is_read_only_property(binding_target, request.prop_path):
+    if is_read_only_property(item, request.prop_path):
         raise SetExpressionError("EXPRESSION_ERROR", f"{request.prop_path!r} is read-only")
     try:
         setter(request.prop_path, request.expression)
@@ -247,7 +211,6 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
         prop_path=request.prop_path,
         expression=request.expression,
         skipped=False,
-        extra=helper_name,
     )
 
 
@@ -259,18 +222,7 @@ def read_set_expression_result(doc: SetExpressionReadDocument, receipt: SetExpre
         raise SetExpressionError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
     if receipt.item is not None and located is not receipt.item:
         raise SetExpressionError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-    binding_target = located
-    if isinstance(receipt.extra, str) and receipt.extra.strip():
-        helper = doc.getObject(receipt.extra)
-        if helper is None:
-            raise SetExpressionError(
-                "CREATED_OBJECT_MISSING",
-                f"Expression helper is missing: {receipt.extra!r}",
-            )
-        binding_target = helper
-    bound = _expression_bound(binding_target, receipt.prop_path)
-    if not _expression_matches(bound, receipt.expression) and binding_target is not located:
-        bound = _expression_bound(located, receipt.prop_path)
+    bound = _expression_bound(located, receipt.prop_path)
     if not _expression_matches(bound, receipt.expression):
         raise SetExpressionError(
             "EXPRESSION_ERROR",

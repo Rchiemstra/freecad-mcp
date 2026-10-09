@@ -385,3 +385,22 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _set_expression_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+def test_a_missing_property_is_rejected_without_creating_objects():
+    """set_expression on Pad.NoSuchProperty reported success and left a
+    FeaturePython "__mcp_expr_Pad_NoSuchProperty" in the user's document."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    before = set(document.objects)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_set_expression(collaborators, "Doc", "Seed", "NoSuchProperty", "1+1")
+
+    assert result["success"] is False
+    assert result["error_code"] == "PROPERTY_NOT_FOUND"
+    assert "'NoSuchProperty'" in result["error"] and "'Seed'" in result["error"]
+    assert set(document.objects) == before
+    assert "commit" not in events
