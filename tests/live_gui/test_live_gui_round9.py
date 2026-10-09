@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from tests.live_gui._support import assert_clean, assert_ok
@@ -14,6 +16,28 @@ pytestmark = pytest.mark.live_gui
 def _names(mcp, doc_name: str) -> set[str]:
     listed = _payload(assert_ok(mcp.call("get_objects", doc_name=doc_name)))
     return {item["Name"] for item in listed["objects"]}
+
+
+def _tip(mcp, doc_name: str) -> str:
+    result = assert_ok(mcp.call(
+        "execute_code",
+        document=doc_name,
+        execution_mode="worker",
+        read_only=True,
+        code=(
+            "import FreeCAD as App\n"
+            f"body = App.getDocument({doc_name!r}).getObject('Body')\n"
+            "print(body.Tip.Name if body is not None and body.Tip else '')\n"
+        ),
+    ))
+    output = ""
+    if result.payload:
+        output = str(result.payload.get("output") or "")
+    if not output.strip():
+        output = result.text
+    names = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_]*)$", output)
+    assert names, result.text[:600]
+    return names[-1]
 
 
 def test_a_pattern_over_the_cap_is_refused_and_a_small_one_commits(mcp, gui_log):
@@ -46,4 +70,39 @@ def test_a_pattern_over_the_cap_is_refused_and_a_small_one_commits(mcp, gui_log)
     )
     assert "Row" in _names(mcp, "LivePat")
     assert_ok(mcp.call("close_document", doc_name="LivePat"))
+    assert_clean(gui_log)
+
+
+def test_polar_pattern_of_a_pattern_is_refused_and_the_tip_stays(mcp, gui_log):
+    """A LinearPattern is not a FeatureAddSub, so it cannot be patterned."""
+
+    _part_body(mcp, "LiveSrc", length=10)
+    assert_ok(
+        mcp.call(
+            "linear_pattern_feature",
+            doc_name="LiveSrc",
+            feature_name="Pad",
+            pattern_name="Row",
+            length=20,
+            occurrences=4,
+            body_name="Body",
+        )
+    )
+    assert _tip(mcp, "LiveSrc") == "Row"
+    _rejected(
+        mcp.call(
+            "polar_pattern_feature",
+            doc_name="LiveSrc",
+            feature_name="Row",
+            pattern_name="HolePolar",
+            occurrences=4,
+            angle=360,
+            axis="Z_Axis",
+            body_name="Body",
+        ),
+        "Only additive and subtractive features can be transformed",
+    )
+    assert "HolePolar" not in _names(mcp, "LiveSrc")
+    assert _tip(mcp, "LiveSrc") == "Row"
+    assert_ok(mcp.call("close_document", doc_name="LiveSrc"))
     assert_clean(gui_log)

@@ -8,6 +8,19 @@ from typing import Any
 from addon.FreeCADMCP.collaboration_api import CollaborationAPI
 
 
+# PartDesign::FeatureAddSub subclasses. Patterns (LinearPattern, PolarPattern,
+# Mirrored, MultiTransform) are PartDesign::Transformed and must stay false.
+_ADD_SUB_TYPE_PREFIXES = (
+    "PartDesign::Additive",
+    "PartDesign::Groove",
+    "PartDesign::Hole",
+    "PartDesign::Pad",
+    "PartDesign::Pocket",
+    "PartDesign::Revolution",
+    "PartDesign::Subtractive",
+)
+
+
 class FeatureObj:
     def __init__(self, name: str, type_id: str, document: FeatureDocument | None = None) -> None:
         self.Name = name
@@ -48,7 +61,11 @@ class FeatureObj:
         self._document = document
 
     def isDerivedFrom(self, type_name: str) -> bool:
-        return self.TypeId == type_name or self.TypeId.startswith(type_name)
+        if self.TypeId == type_name or self.TypeId.startswith(type_name):
+            return True
+        if type_name == "PartDesign::FeatureAddSub":
+            return self.TypeId.startswith(_ADD_SUB_TYPE_PREFIXES)
+        return False
 
     def newObject(self, object_type: str, name: str) -> FeatureObj:
         assert self._document is not None

@@ -1,0 +1,67 @@
+"""mirror_feature only transforms additive or subtractive features.
+
+The same PartDesign rule as linear and polar patterns: the source must be
+a FeatureAddSub, checked before the Mirrored object is created.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.mirror_feature import (
+    run_mirror_feature,
+)
+from tests.typed_feature_fakes import FeatureDocument, FeatureObj, collaborators, prepare_document
+
+pytestmark = pytest.mark.unit
+
+
+def _document():
+    events: list[str] = []
+    document = FeatureDocument(events)
+    prepare_document("pattern", document)
+    return events, document, collaborators(document, events)[0]
+
+
+def _run(collab, feature_name: str, mirror_name: str):
+    return run_mirror_feature(
+        collab,
+        "Doc",
+        feature_name,
+        mirror_name,
+        "YZ_Plane",
+        "Body",
+    )
+
+
+def test_pad_source_commits_and_becomes_the_tip():
+    events, document, collab = _document()
+
+    result = _run(collab, "Pad", "Mirror")
+
+    assert result["success"] is True
+    assert result["committed"] is True
+    assert "Mirror" in document.objects
+    assert document.objects["Body"].Tip is document.objects["Mirror"]
+    assert "commit" in events
+
+
+def test_pattern_source_is_rejected_before_create_and_the_tip_stays():
+    events, document, collab = _document()
+    body = document.objects["Body"]
+    source = FeatureObj("Row", "PartDesign::PolarPattern", document)
+    document.objects["Row"] = source
+    body.Group.append(source)
+    body.Tip = source
+
+    result = _run(collab, "Row", "MirroredRow")
+
+    assert result["success"] is False
+    assert result["outcome"] == "rejected"
+    assert result["committed"] is False
+    assert result["error_code"] == "INVALID_ARGUMENT"
+    assert "Only additive and subtractive features can be transformed" in result["error"]
+    assert "MirroredRow" not in document.objects
+    assert body.Tip is source
+    assert events == ["abort"]
+    assert document.add_calls == 0
