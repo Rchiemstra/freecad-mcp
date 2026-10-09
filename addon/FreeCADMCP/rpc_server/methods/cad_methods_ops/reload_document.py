@@ -32,7 +32,7 @@ except ImportError:  # pragma: no cover - flat addon import path
 try:
     from ....document_state import document_modified_state
 except ImportError:  # pragma: no cover - flat addon import path
-    from document_state import document_modified_state  # type: ignore[import-not-found,no-redef]
+    from document_state import document_modified_state
 from .policy_runtime import app_from, lookup_document
 from .typed_rpc_document import document_name
 

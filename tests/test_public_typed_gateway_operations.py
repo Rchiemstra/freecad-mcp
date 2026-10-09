@@ -285,7 +285,7 @@ def test_typed_visual_mutations_preserve_screenshot_feedback(
     response = operation(connection, False, *operation_args)
 
     assert any(isinstance(item, ImageContent) for item in response.content)
-    connection.get_active_screenshot.assert_called_once_with()
+    connection.get_active_screenshot.assert_called_once_with(document=operation_args[0])
     connection.execute_code.assert_not_called()
 
 
