@@ -196,10 +196,14 @@ def find_subshapes(
         direction = _global_direction(gp, _subshape_direction(sub))
         if nv is not None and direction is not None:
             try:
-                dot = abs(float(direction.dot(nv)))  # type: ignore[attr-defined]
+                alignment = float(direction.dot(nv))  # type: ignore[attr-defined]
             except Exception:
-                dot = 0.0
-            if dot < 1.0 - float(tol):
+                alignment = 0.0
+            # Face normals are oriented, so +Z must not also return the
+            # bottom face. Edge directions are not, so either sense matches.
+            if kind != "Faces":
+                alignment = abs(alignment)
+            if alignment < 1.0 - float(tol):
                 continue
         if cv is not None and _vector_length(_vector_sub(center, cv)) > center_tol:
             continue

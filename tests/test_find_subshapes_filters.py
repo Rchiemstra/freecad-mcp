@@ -59,11 +59,22 @@ def test_top_face_by_type_and_normal():
     payload = find_subshapes(
         _seat(), "Seat", "Faces", type_filter="plane", normal_approx={"x": 0, "y": 0, "z": 1}
     )
-    # A box has exactly two faces whose normal is parallel to Z: top and bottom.
-    assert payload["count"] == 2
-    assert {round(row["global_center"]["z"], 6) for row in payload["results"]} == {430.0, 450.0}
-    assert all(row["type"] == "Plane" for row in payload["results"])
-    assert all(abs(abs(row["global_normal"]["z"]) - 1.0) < 1e-9 for row in payload["results"])
+    # +Z keeps the top face only. The bottom face points the other way.
+    assert payload["count"] == 1
+    top = payload["results"][0]
+    assert round(top["global_center"]["z"], 6) == 450.0
+    assert top["type"] == "Plane"
+    assert top["global_normal"]["z"] > 0
+
+
+def test_bottom_face_by_opposite_normal():
+    payload = find_subshapes(
+        _seat(), "Seat", "Faces", type_filter="plane", normal_approx={"x": 0, "y": 0, "z": -1}
+    )
+    assert payload["count"] == 1
+    bottom = payload["results"][0]
+    assert round(bottom["global_center"]["z"], 6) == 430.0
+    assert bottom["global_normal"]["z"] < 0
 
 
 def test_center_ranks_the_top_face_first():

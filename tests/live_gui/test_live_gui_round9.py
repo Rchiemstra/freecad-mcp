@@ -106,3 +106,24 @@ def test_polar_pattern_of_a_pattern_is_refused_and_the_tip_stays(mcp, gui_log):
     assert _tip(mcp, "LiveSrc") == "Row"
     assert_ok(mcp.call("close_document", doc_name="LiveSrc"))
     assert_clean(gui_log)
+
+
+def test_find_faces_positive_z_returns_only_the_top_face(mcp, gui_log):
+    """+Z used to return the bottom face first because parallel included -Z."""
+
+    _part_body(mcp, "LiveFace", length=10)
+    found = _payload(assert_ok(mcp.call(
+        "find_faces",
+        doc_name="LiveFace",
+        object_name="Pad",
+        type="Plane",
+        normal_approx={"x": 0, "y": 0, "z": 1},
+    )))
+    results = found["results"]
+    assert found["count"] == 1
+    assert len(results) == 1
+    face = results[0]
+    assert face["global_normal"]["z"] > 0
+    assert face["global_center"]["z"] == pytest.approx(10.0)
+    assert_ok(mcp.call("close_document", doc_name="LiveFace"))
+    assert_clean(gui_log)
