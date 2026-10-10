@@ -8,7 +8,14 @@ from .world_shape_actions import read_global_placement
 
 
 def _children(obj: object) -> list[object]:
-    return list(getattr(obj, "Group", None) or [])
+    children = list(getattr(obj, "Group", None) or [])
+    origin = getattr(obj, "Origin", None)
+    if origin is not None and origin not in children:
+        children.append(origin)
+    for feature in getattr(obj, "OriginFeatures", None) or []:
+        if feature not in children:
+            children.append(feature)
+    return children
 
 
 def _field(obj: object, name: str) -> object:
