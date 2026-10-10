@@ -81,6 +81,17 @@ def _failure(error: SweepFeatureError, *, retry_safe: bool = True) -> SweepFeatu
     return make_sweep_feature_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _set_frenet(feature: object, frenet: bool) -> None:
+    """PartDesign::AdditivePipe stores Frenet on the Mode enumeration."""
+
+    properties = set(getattr(feature, "PropertiesList", []))
+    if "Mode" in properties and "Frenet" not in properties:
+        if frenet:
+            set_attr(feature, "Mode", "Frenet")
+        return
+    set_feature_bool(feature, ("Frenet",), frenet)
+
+
 def apply_sweep_feature(doc: FeatureDocument, request: SweepFeatureRequest) -> SweepFeatureReceipt:
     """Apply the mutation without recomputing or managing a transaction."""
 
@@ -94,7 +105,7 @@ def apply_sweep_feature(doc: FeatureDocument, request: SweepFeatureRequest) -> S
         created = create_feature(doc, body, 'PartDesign::AdditivePipe', request.sweep_name)
         set_attr(created, "Profile", (profile, [""]))
         set_attr(created, "Spine", (path, [""]))
-        set_feature_bool(created, ("Frenet",), request.frenet)
+        _set_frenet(created, request.frenet)
         if body is not None:
             set_tip(body, created)
         return SweepFeatureReceipt(name=str(created.Name), feature=created)

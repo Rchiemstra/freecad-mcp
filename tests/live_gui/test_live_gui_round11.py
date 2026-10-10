@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from tests.live_gui._support import assert_clean, assert_ok
@@ -111,6 +113,64 @@ def test_preview_attachment_reports_the_face_offset(mcp, gui_log):
     assert entry["center"]["z"] == pytest.approx(30.0)
     assert entry["normal"]["z"] == pytest.approx(1.0, abs=1e-6)
     assert_ok(mcp.call("close_document", doc_name="LiveAttach"))
+    assert_clean(gui_log)
+
+
+def test_sweep_frenet_uses_the_pipe_mode(mcp, gui_log):
+    """frenet=true selects AdditivePipe Mode Frenet."""
+
+    assert_ok(mcp.call("create_document", name="LiveSweep"))
+    assert_ok(mcp.call("body_create", doc_name="LiveSweep", body_name="SweepBody"))
+    assert_ok(mcp.call(
+        "sketch_create",
+        doc_name="LiveSweep",
+        sketch_name="SweepProfile",
+        body_name="SweepBody",
+        attach_to="XY_Plane",
+    ))
+    assert_ok(mcp.call(
+        "sketch_create",
+        doc_name="LiveSweep",
+        sketch_name="SweepPath",
+        body_name="SweepBody",
+        attach_to="XZ_Plane",
+    ))
+    assert_ok(mcp.call(
+        "sketch_add_circle",
+        doc_name="LiveSweep",
+        sketch_name="SweepProfile",
+        cx=0, cy=0, radius=3,
+    ))
+    assert_ok(mcp.call(
+        "sketch_add_line",
+        doc_name="LiveSweep",
+        sketch_name="SweepPath",
+        x1=0, y1=0, x2=0, y2=40,
+    ))
+    assert_ok(mcp.call(
+        "sweep_feature",
+        doc_name="LiveSweep",
+        profile_sketch="SweepProfile",
+        path_sketch="SweepPath",
+        sweep_name="Sweep",
+        body_name="SweepBody",
+        frenet=True,
+    ))
+    printed = assert_ok(mcp.call(
+        "execute_code",
+        document="LiveSweep",
+        execution_mode="worker",
+        read_only=True,
+        code=(
+            "import FreeCAD as App\n"
+            "pipe = App.getDocument('LiveSweep').getObject('Sweep')\n"
+            "print(pipe.Mode)\n"
+        ),
+    ))
+    match = re.search(r"Output:\s*(.+)", printed.text)
+    assert match, printed.text[:600]
+    assert match.group(1).strip() == "Frenet"
+    assert_ok(mcp.call("close_document", doc_name="LiveSweep"))
     assert_clean(gui_log)
 
 
