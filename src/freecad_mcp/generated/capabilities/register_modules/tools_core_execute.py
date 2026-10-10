@@ -111,14 +111,20 @@ def _register_execute_code(
         until the authoritative recompute after the body returns. Create or mutate in
         one call and inspect geometry in a second call. Signed typed feature tools may
         use their post-recompute continuation to verify geometry in one operation.
-        A live mutation body runs inside the document's commit, not on the Qt main
-        thread, so FreeCADGui, ViewObject access, the active view and selection, and
-        document lifecycle calls (``newDocument``, ``setActiveDocument``,
-        ``closeDocument``) are rejected there. Use ``get_view``, ``select_subshapes``,
-        ``get_selection``, ``create_document``, ``close_document``, or
-        ``activate_document=true`` instead. GUI mutations are non-preemptible, so
-        ``timeout_seconds`` applies only to worker execution and is deliberately
-        rejected for GUI mode.
+        LIVE VENUE — a live body that resolves a document, including
+        ``recompute="none"``, runs inside that document's commit callback on the
+        document owner thread, not on the Qt main thread. ``recompute="none"`` still
+        enters the commit and only skips the recompute. A live body with no document
+        runs on the Qt main thread, outside a commit. ``read_only=true`` always runs
+        in the worker. Reading ``FreeCADGui.ActiveDocument`` or a GUI document's
+        ``ActiveView`` is allowed off the Qt main thread. Calls that require that
+        thread raise there, including ``FreeCADGui.activeDocument()``,
+        ``activeView()``, ``getDocument()``, ``setActiveDocument()``,
+        ``getMainWindow()``, ``runCommand()``, ``show``/``hide``, and ``ViewObject``
+        access. Use ``get_view``, ``get_selection``, and ``activate_document=true``
+        (applied on the Qt main thread before the commit) for those. GUI mutations
+        are non-preemptible, so ``timeout_seconds`` applies only to worker execution
+        and is deliberately rejected for GUI mode.
 
         Args:
             code: The Python code to execute.
@@ -134,8 +140,7 @@ def _register_execute_code(
             activate_document: Activate ``document`` before running code.
             capture_view: Include a viewport screenshot (default false).
             execution_mode: Conservative ``auto`` (default), explicit ``gui``, or
-                isolated ``worker``. A live ``gui`` body cannot use FreeCADGui
-                (see LIVE MUTATION RECOMPUTE). ``read_only=True`` always selects the
+                isolated ``worker``. See LIVE VENUE for which thread a live body uses. ``read_only=True`` always selects the
                 worker, even if ``gui`` is requested.
             timeout_seconds: Hard worker timeout from 1 to 900 seconds.
             link_policy: Worker snapshot policy for broken joint/link refs. ``strict``
