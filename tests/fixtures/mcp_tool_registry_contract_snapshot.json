@@ -591,7 +591,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str', feature_name: 'str', mirror_name: 'str', plane: 'str' = 'YZ_Plane', body_name: 'str | None' = None) -> 'CallToolResult'"
     },
     "move_object": {
-      "docstring": "Move an object into a PartDesign Body or App::Part container.",
+      "docstring": "Move an object into a PartDesign Body or App::Part container.\n\nApp::Part is a GeoFeatureGroup and also moves every object that shares the\nmoved object's coordinate system. Those extra objects are returned in\n``also_moved``. Which objects move is FreeCAD's behavior and is left unchanged.",
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', target_container: 'str', remove_from_old_parent: 'bool' = True) -> 'CallToolResult'"
     },
     "open_document": {

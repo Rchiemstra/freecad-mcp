@@ -116,6 +116,50 @@ def test_preview_attachment_reports_the_face_offset(mcp, gui_log):
     assert_clean(gui_log)
 
 
+def test_move_into_a_part_reports_linked_companions(mcp, gui_log):
+    """A Part move reports the other objects FreeCAD pulls into the group."""
+
+    assert_ok(mcp.call("create_document", name="LiveMove"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveMove",
+        obj_type="Part::Box",
+        obj_name="Box",
+        obj_properties={"Length": 10, "Width": 10, "Height": 10},
+    ))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveMove",
+        obj_type="Part::Box",
+        obj_name="Cyl",
+        obj_properties={"Placement": {"Base": {"x": 20, "y": 0, "z": 0}}},
+    ))
+    assert_ok(mcp.call(
+        "boolean_union",
+        doc_name="LiveMove",
+        shape1="Box",
+        shape2="Cyl",
+        result_name="Fused",
+    ))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveMove",
+        obj_type="App::Part",
+        obj_name="Part",
+    ))
+    moved = _payload(assert_ok(mcp.call(
+        "move_object",
+        doc_name="LiveMove",
+        obj_name="Fused",
+        target_container="Part",
+    )))
+    assert moved["object_name"] == "Fused"
+    assert set(moved["also_moved"]) >= {"Box", "Cyl"}
+    assert "Fused" not in moved["also_moved"]
+    assert_ok(mcp.call("close_document", doc_name="LiveMove"))
+    assert_clean(gui_log)
+
+
 def test_unknown_selection_names_the_object(mcp, gui_log):
     """An unknown name fails in the tool result and does not clear the selection."""
 

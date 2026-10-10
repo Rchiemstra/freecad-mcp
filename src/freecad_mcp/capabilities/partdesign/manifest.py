@@ -47,7 +47,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="move_object",
-            docstring='Move an object into a PartDesign Body or App::Part container.',
+            docstring='Move an object into a PartDesign Body or App::Part container.\n\nApp::Part is a GeoFeatureGroup and also moves every object that shares the\nmoved object\'s coordinate system. Those extra objects are returned in\n``also_moved``. Which objects move is FreeCAD\'s behavior and is left unchanged.',
             signature="(ctx: 'Context', doc_name: 'str', obj_name: 'str', target_container: 'str', remove_from_old_parent: 'bool' = True) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.move_object_operation",
             rpc_method="move_object",

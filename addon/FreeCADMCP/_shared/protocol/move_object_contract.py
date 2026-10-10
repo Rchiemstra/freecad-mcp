@@ -95,6 +95,7 @@ class MoveObjectSuccess(TypedDict):
     retry_safe: Literal[False]
     object_name: str
     target_container: str
+    also_moved: NotRequired[list[str]]
 
 
 class MoveObjectFailure(TypedDict):
@@ -137,15 +138,34 @@ MoveObjectResult = MoveObjectSuccess | MoveObjectFailure | MoveObjectUncertain
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'object_name', 'target_container', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version",
+        "success",
+        "ok",
+        "outcome",
+        "committed",
+        "retry_safe",
+        "object_name",
+        "target_container",
+        "also_moved",
+        "error_code",
+        "error",
+        "native_status",
+        "native_message",
+        "rollback_succeeded",
+        "rollback_failed",
+        "diagnostics",
     }
 )
 
 
-def make_move_object_success(object_name: str, target_container: str) -> MoveObjectSuccess:
+def make_move_object_success(
+    object_name: str,
+    target_container: str,
+    also_moved: list[str] | None = None,
+) -> MoveObjectSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: MoveObjectSuccess = {
         "contract_version": MOVE_OBJECT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -155,6 +175,9 @@ def make_move_object_success(object_name: str, target_container: str) -> MoveObj
         "object_name": object_name,
         "target_container": target_container,
     }
+    if also_moved is not None:
+        result["also_moved"] = also_moved
+    return result
 
 
 def make_move_object_failure(

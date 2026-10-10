@@ -56,7 +56,11 @@ def _register_move_object(
         target_container: str,
         remove_from_old_parent: bool = True,
     ) -> CallToolResult:
-        """Move an object into a PartDesign Body or App::Part container."""
+        """Move an object into a PartDesign Body or App::Part container.
+
+        App::Part is a GeoFeatureGroup and also moves every object that shares the
+        moved object's coordinate system. Those extra objects are returned in
+        ``also_moved``. Which objects move is FreeCAD's behavior and is left unchanged."""
         return move_object_operation(
             server_connection(),
             server_state().only_text_feedback,
