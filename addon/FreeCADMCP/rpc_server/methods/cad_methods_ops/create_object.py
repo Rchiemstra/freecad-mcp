@@ -95,7 +95,16 @@ def apply_create_object(
             "OBJECT_ALREADY_EXISTS",
             f"Object already exists: {request.object_name!r}",
         )
-    created = add_object(doc, str(request.object_type), str(request.object_name))
+    try:
+        created = add_object(doc, str(request.object_type), str(request.object_name))
+    except Exception as exc:
+        # FreeCAD may try importing the namespace as a Python module before
+        # rejecting an unregistered C++ type. Do not expose that implementation.
+        if isinstance(exc, ModuleNotFoundError) or "unknown type" in str(exc).lower():
+            raise CreateObjectError(
+                "UNKNOWN_OBJECT_TYPE", f"Unknown object type: {request.object_type}"
+            ) from exc
+        raise
     properties = _resolve_link_properties(doc, dict(request.properties))
     app_properties, view_properties = split_view_properties(properties)
     if app_properties:

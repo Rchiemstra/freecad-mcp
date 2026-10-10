@@ -75,3 +75,14 @@ def test_trim_without_an_intersection_is_clear(mcp, gui_log):
     assert_ok(mcp.call("close_document", doc_name="R12Trim"))
     assert_clean(gui_log, "Standard_NullValue", "Edge too small")
 
+
+
+def test_unknown_object_type_is_clear(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="R12Unknown"))
+    failed = mcp.call("create_object", doc_name="R12Unknown", obj_name="Nope", obj_type="Not::AType")
+    assert not failed.ok
+    assert "Unknown object type: Not::AType" in failed.text
+    assert_ok(mcp.call("get_objects", doc_name="R12Unknown"))
+    assert_ok(mcp.call("close_document", doc_name="R12Unknown"))
+    assert_clean(gui_log, "No module named 'Not'", "ModuleNotFoundError")
+
