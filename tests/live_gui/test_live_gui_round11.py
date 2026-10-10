@@ -337,12 +337,20 @@ def test_recompute_reports_a_missing_expression_source(mcp, gui_log, live_gui):
         destination=str(live_gui.workdir / "QADst.FCStd"),
         overwrite=True,
     ))
+    # Binding through set_expression recomputes inside the collaborative
+    # commit, which this FreeCAD rejects for a cross-document expression.
+    # Store the binding without that recompute, then recompute_document.
     assert_ok(mcp.call(
-        "set_expression",
-        doc_name="QADst",
-        object_name="Box",
-        prop_path="Length",
-        expression="QASrc#SrcBox.Length",
+        "execute_code",
+        document="QADst",
+        execution_mode="gui",
+        recompute="none",
+        code=(
+            "import FreeCAD as App\n"
+            "box = App.getDocument('QADst').getObject('Box')\n"
+            "box.setExpression('Length', 'QASrc#SrcBox.Length')\n"
+            "print(box.ExpressionEngine)\n"
+        ),
     ))
     assert_ok(mcp.call("close_document", doc_name="QASrc"))
     failed = mcp.call("recompute_document", doc_name="QADst")
