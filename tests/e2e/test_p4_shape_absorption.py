@@ -16,6 +16,8 @@ import pytest
 FreeCAD = pytest.importorskip("FreeCAD")
 Part = pytest.importorskip("Part")
 
+from tests.e2e._helpers import global_placement  # noqa: E402
+
 pytestmark = [
     pytest.mark.core,
     pytest.mark.xfail(
@@ -34,7 +36,7 @@ def test_can_hold_global_geometry_with_identity_placement(freecad_session):
     doc.recompute()
 
     solid = src.Shape.copy()
-    solid.transformFreeCAD(src.getGlobalPlacement().toMatrix())  # bake to global
+    solid.transformFreeCAD(global_placement(src).toMatrix())  # bake to global
 
     clean = doc.addObject("Part::Feature", "Clean")
     clean.Shape = solid

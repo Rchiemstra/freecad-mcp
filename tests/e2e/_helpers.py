@@ -65,13 +65,22 @@ def make_padded_circle(body, radius=2.0, length=1.0, plane_label="XY_Plane",
     return sk, pad
 
 
+def global_placement(obj):
+    """World placement via ``GeoFeature.getGlobalPlacementOf``."""
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.world_shape_actions import (
+        read_global_placement,
+    )
+
+    return read_global_placement(obj)
+
+
 def face_global_normal(obj, face_name: str):
     """Global normal of a face of *obj* (face_name like ``'Face3'``)."""
     FreeCAD = _fc()
     idx = int(face_name[4:]) - 1
     face = obj.Shape.Faces[idx]
     local_axis = face.Surface.Axis
-    gp = obj.getGlobalPlacement()
+    gp = global_placement(obj)
     return gp.Rotation * FreeCAD.Vector(local_axis.x, local_axis.y, local_axis.z)
 
 
@@ -80,7 +89,7 @@ def face_global_center(obj, face_name: str):
     FreeCAD = _fc()
     idx = int(face_name[4:]) - 1
     face = obj.Shape.Faces[idx]
-    return obj.getGlobalPlacement() * face.CenterOfMass
+    return global_placement(obj) * face.CenterOfMass
 
 
 def find_face(obj, *, normal=None, center=None, radius=None, kind=None,
@@ -94,7 +103,7 @@ def find_face(obj, *, normal=None, center=None, radius=None, kind=None,
       * ``radius``   - cylinder face radius match within *tol*.
     """
     FreeCAD = _fc()
-    gp = obj.getGlobalPlacement()
+    gp = global_placement(obj)
     for i, face in enumerate(obj.Shape.Faces, start=1):
         surf = face.Surface
         sname = type(surf).__name__
@@ -118,13 +127,13 @@ def find_face(obj, *, normal=None, center=None, radius=None, kind=None,
 def plane_global_normal(datum):
     """Global normal of a PartDesign::Plane datum (its Z axis in world space)."""
     FreeCAD = _fc()
-    gp = datum.getGlobalPlacement()
+    gp = global_placement(datum)
     return gp.Rotation * FreeCAD.Vector(0, 0, 1)
 
 
 def plane_global_base(datum):
     """Global base point of a PartDesign::Plane datum."""
-    return datum.getGlobalPlacement().Base
+    return global_placement(datum).Base
 
 
 def distance_point_to_plane(point, plane_base, plane_normal) -> float:

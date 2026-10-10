@@ -191,7 +191,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="placement_audit",
-            docstring="Audit placements per Body/Part (M3).\n\nLists each Body/Part's ``Placement``, ``getGlobalPlacement()`` base, and the\ncross-body datums that reference it. Use to spot P1 risk concentrations and\nplacement/geometry disagreements. Returns JSON\n``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,\nglobal_placement_base, cross_body_datums}]}``.\n\nArgs:\n    doc_name: The document to audit.",
+            docstring="Audit placements per Body/Part (M3).\n\nLists each Body/Part's ``Placement``, global placement base, and the\ncross-body datums that reference it. Use to spot P1 risk concentrations and\nplacement/geometry disagreements. Returns JSON\n``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,\nglobal_placement_base, cross_body_datums}]}``.\n\nArgs:\n    doc_name: The document to audit.",
             signature="(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.placement_audit_operation",
             rpc_method="placement_audit",

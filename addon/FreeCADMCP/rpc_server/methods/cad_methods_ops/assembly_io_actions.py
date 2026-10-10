@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from .typed_runtime import TypedMutationError, require_object
+from .world_shape_actions import read_global_placement
 
 
 def _children(obj: object) -> list[object]:
@@ -106,12 +107,10 @@ def get_sketch_geometry(
     def maybe_global(vector: object) -> object:
         if not global_coords:
             return vector
-        getter = getattr(sketch, "getGlobalPlacement", None)
-        if callable(getter):
-            try:
-                return getter().multVec(vector)
-            except Exception:
-                pass
+        try:
+            return read_global_placement(sketch).multVec(vector)
+        except Exception:
+            pass
         placement = getattr(sketch, "Placement", None)
         if placement is not None and hasattr(placement, "multVec"):
             return placement.multVec(vector)
