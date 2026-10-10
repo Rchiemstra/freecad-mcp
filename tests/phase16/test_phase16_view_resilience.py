@@ -215,6 +215,50 @@ def test_fit_with_only_unbounded_datums_has_no_renderable_bounds():
         build_view_context(facade, document, "actor-a", fit=True)
 
 
+def test_a_solid_still_frames_beside_a_techdraw_page():
+    pad = SimpleNamespace(
+        Name="Pad",
+        TypeId="PartDesign::Pad",
+        Shape=SimpleNamespace(BoundBox=_bound(0, 20, 0, 10, 0, 5)),
+    )
+    page = SimpleNamespace(Name="Page", TypeId="TechDraw::DrawPage")
+    document = _Document("Model", [pad, page])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    context = build_view_context(facade, document, "actor-a", fit=True)
+
+    assert 0 < _float_field(context["camera"], "height") < 1e6
+
+
+def test_focusing_a_techdraw_page_says_it_is_not_in_the_3d_view():
+    pad = SimpleNamespace(
+        Name="Pad",
+        TypeId="PartDesign::Pad",
+        Shape=SimpleNamespace(BoundBox=_bound(0, 20, 0, 10, 0, 5)),
+    )
+    page = SimpleNamespace(Name="Page", TypeId="TechDraw::DrawPage")
+    document = _Document("Model", [pad, page])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    with pytest.raises(ValueError, match="TechDraw pages are not in the 3D view"):
+        build_view_context(
+            facade, document, "actor-a", focus_object="Page", fit=True
+        )
+
+
+def test_a_page_only_document_is_not_captured_as_an_empty_3d_view():
+    page = SimpleNamespace(
+        Name="Page",
+        TypeId="TechDraw::DrawPage",
+        BoundBox=_bound(0, 297, 0, 210, 0, 0),
+    )
+    document = _Document("Sheet", [page])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    with pytest.raises(ValueError, match="TechDraw pages are not in the 3D view"):
+        build_view_context(facade, document, "actor-a", fit=True)
+
+
 def test_resolve_document_uses_freecad_active_document_when_unambiguous():
     model = _Document("Model")
     other = _Document("Other")

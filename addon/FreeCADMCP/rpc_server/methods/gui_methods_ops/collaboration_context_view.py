@@ -308,10 +308,63 @@ def _bound_box(value: Any) -> Any:
     return bound
 
 
+def _is_techdraw(candidate: Any) -> bool:
+    type_id = str(getattr(candidate, "TypeId", "") or "")
+    if type_id.startswith("TechDraw::"):
+        return True
+    derived = getattr(candidate, "isDerivedFrom", None)
+    if not callable(derived):
+        return False
+    try:
+        return bool(derived("TechDraw::DrawPage"))
+    except Exception:
+        return False
+
+
+def _is_draw_page(candidate: Any) -> bool:
+    type_id = str(getattr(candidate, "TypeId", "") or "")
+    if type_id.startswith("TechDraw::DrawPage"):
+        return True
+    derived = getattr(candidate, "isDerivedFrom", None)
+    if not callable(derived):
+        return False
+    try:
+        return bool(derived("TechDraw::DrawPage"))
+    except Exception:
+        return False
+
+
+def _techdraw_pages_are_not_in_the_3d_view(document: Any, paths: list[str]) -> str | None:
+    """Name TechDraw pages the 3D camera cannot show, when nothing else can be framed."""
+
+    if paths:
+        names: list[str] = []
+        other = False
+        for path in paths:
+            obj = document.getObject(path.partition(".")[0])
+            if _is_techdraw(obj):
+                names.append(str(getattr(obj, "Name", path)))
+            elif obj is not None:
+                other = True
+        if names and not other:
+            return "TechDraw pages are not in the 3D view: " + ", ".join(names)
+        return None
+    pages = [
+        str(getattr(obj, "Name", "?"))
+        for obj in (getattr(document, "Objects", ()) or ())
+        if _is_draw_page(obj)
+    ]
+    if pages:
+        return "TechDraw pages are not in the 3D view: " + ", ".join(pages)
+    return None
+
+
 def _candidate_bounds(candidate: Any, seen: set[int]) -> list[Any]:
     if candidate is None or id(candidate) in seen:
         return []
     seen.add(id(candidate))
+    if _is_techdraw(candidate):
+        return []
     bounds = [
         bound
         for value in (
@@ -375,6 +428,9 @@ def _fit_personal_camera(
 ) -> str:
     bounds = _bounds_for_paths(document, paths, fit_all)
     if not bounds:
+        page_error = _techdraw_pages_are_not_in_the_3d_view(document, paths)
+        if page_error:
+            raise ValueError(page_error)
         raise ValueError("personal view focus has no renderable bounds")
     minimum = (
         min(float(bound.XMin) for bound in bounds),

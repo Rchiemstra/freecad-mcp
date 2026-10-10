@@ -343,3 +343,30 @@ def test_chamfer_and_fillet_name_a_non_c0_edge(mcp, gui_log):
     ))
     assert_ok(mcp.call("close_document", doc_name="LiveC0"))
     assert_clean(gui_log)
+
+
+def test_a_techdraw_page_is_not_captured_as_an_empty_3d_view(mcp, gui_log):
+    """A drawing sheet is not a 3D shape, so the 3D camera must say so."""
+
+    assert_ok(mcp.call("create_document", name="LiveSheet"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveSheet",
+        obj_type="TechDraw::DrawPage",
+        obj_name="Page",
+    ))
+    _rejected(
+        mcp.call(
+            "get_view",
+            view_name="Isometric",
+            document="LiveSheet",
+            focus_object="Page",
+        ),
+        "TechDraw pages are not in the 3D view",
+    )
+    _rejected(
+        mcp.call("get_view", view_name="Isometric", document="LiveSheet"),
+        "TechDraw pages are not in the 3D view",
+    )
+    assert_ok(mcp.call("close_document", doc_name="LiveSheet"))
+    assert_clean(gui_log)
