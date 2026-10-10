@@ -335,7 +335,6 @@ __all__ = [
     "nonempty_string",
     "number_value",
     "optional_name",
-    "require_nonempty_boolean_shape",
     "require_nonempty_shape",
     "require_subelements",
     "require_within_extent",
