@@ -218,6 +218,12 @@ def resolve_document(facade: Any, actor: str, hint: Any = None) -> Any:
         raise ValueError("no open documents are available")
     if hint is not None and str(hint):
         return _hinted_document(documents, hint)
+    # activate_document updates FreeCAD.ActiveDocument and leaves the actor's
+    # personal-view target on whichever document was touched last. GUI state
+    # and screenshots follow the active document unless the caller names one.
+    freecad_active = _freecad_active_document(facade, documents)
+    if freecad_active is not None:
+        return freecad_active
     active = _active_actor_document(facade, actor, documents)
     if active is not None:
         return active
@@ -231,9 +237,6 @@ def resolve_document(facade: Any, actor: str, hint: Any = None) -> Any:
         raise ValueError("actor has view state in multiple open documents")
     if len(documents) == 1:
         return documents[0]
-    freecad_active = _freecad_active_document(facade, documents)
-    if freecad_active is not None:
-        return freecad_active
     raise ValueError("document hint is required when multiple documents are open")
 
 

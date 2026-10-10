@@ -398,6 +398,12 @@ def measure_area(document: object, obj_name: str) -> dict[str, object]:
 def measure_volume(document: object, obj_name: str) -> dict[str, object]:
     obj = require_object(document, obj_name)
     shape, meta = resolve_global_shape(obj)
+    solids = getattr(shape, "Solids", None)
+    if solids is not None and len(solids) == 0:
+        raise TypedMutationError(
+            "SHAPE_HAS_NO_SOLID",
+            f"{object_name(obj)} has no solids",
+        )
     volume = float(getattr(shape, "Volume", 0.0) or 0.0)
     payload: dict[str, object] = {
         "object": object_name(obj),

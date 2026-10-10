@@ -38,6 +38,23 @@ def _run(collab, **overrides):
     return run_fillet_feature(collab, **payload)
 
 
+def test_fillet_names_a_non_c0_edge():
+    events: list[str] = []
+    document = FeatureDocument(events)
+    prepare_document("edge_feature", document)
+    document.objects["Pad"].Shape = SimpleNamespace(
+        Edges=[SimpleNamespace(face_continuity="G1")],
+        isNull=lambda: False,
+    )
+    collab, _api = collaborators(document, events)
+
+    result = _run(collab, edge_refs=["Edge1"], fillet_name="Smooth")
+
+    assert result["success"] is False
+    assert "Edge1 is not C0 continuous" in result["error"]
+    assert "Smooth" not in document.objects
+
+
 def test_fillet_feature_runs_apply_recompute_inspect_validate_then_commits():
     events: list[str] = []
     document = FeatureDocument(events)

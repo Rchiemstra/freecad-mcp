@@ -365,3 +365,83 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _create_datum_plane_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+def _plane_document() -> _Document:
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    document.objects["Pad"] = _item("Pad", type_id="PartDesign::Pad")
+
+    def maker(type_id, name):
+        plane = document.addObject(type_id, name)
+        plane.AttachmentOffset = SimpleNamespace(Base=SimpleNamespace(x=0.0, y=0.0, z=0.0))
+        return plane
+
+    document.objects["Body"].newObject = maker
+    return document
+
+
+def _apply_plane(document: _Document, **overrides):
+    from addon.FreeCADMCP._shared.protocol.create_datum_plane_contract import (
+        CreateDatumPlaneRequest,
+    )
+
+    fields = {
+        "doc_name": "Doc",
+        "plane_name": "Datum",
+        "body_name": "Body",
+        "mode": "offset_from_face",
+        "source_ref": "Pad:Face1",
+        "face_a": None,
+        "face_b": None,
+        "offset_along_normal": None,
+        "map_mode": "FlatFace",
+        "if_exists": "error",
+    }
+    fields.update(overrides)
+    subject.apply_create_datum_plane(document, CreateDatumPlaneRequest(**fields))
+    return document.getObject(fields["plane_name"])
+
+
+def test_a_z_offset_stays_along_the_attachment_normal():
+    document = _plane_document()
+    plane = _apply_plane(document, offset_along_normal=[0, 0, -0.55])
+    base = plane.AttachmentOffset.Base
+    assert (base.x, base.y, base.z) == (0.0, 0.0, -0.55)
+    assert plane.MapMode == "FlatFace"
+
+
+def test_midpoint_modes_place_the_bisector_of_both_faces():
+    document = _plane_document()
+    pad = document.getObject("Pad")
+    for mode in ("midpoint_between_faces", "between_parallel_planes"):
+        plane = _apply_plane(
+            document,
+            plane_name=mode,
+            mode=mode,
+            source_ref=None,
+            face_a="Pad:Face1",
+            face_b="Pad:Face2",
+        )
+        assert plane.MapMode == "MidPlane"
+        assert plane.AttachmentSupport == [(pad, "Face1"), (pad, "Face2")]
+
+
+def test_normal_offsets_leave_the_support_face():
+    document = _plane_document()
+    short = _apply_plane(document, plane_name="Short", offset_along_normal=[20])
+    assert short.AttachmentOffset.Base.z == 20.0
+    assert short.AttachmentOffset.Base.x == 0.0
+    axis = _apply_plane(document, plane_name="Axis", offset_along_normal=[0, 0, 20])
+    assert axis.AttachmentOffset.Base.z == 20.0
+    assert axis.AttachmentOffset.Base.x == 0.0
+
+
+def test_a_three_number_offset_is_the_raw_attachment_base():
+    """X and Y slide the datum in the face plane; only Z leaves the face."""
+
+    document = _plane_document()
+    plane = _apply_plane(document, plane_name="Slide", offset_along_normal=[20, 0, 0])
+    base = plane.AttachmentOffset.Base
+    assert (base.x, base.y, base.z) == (20.0, 0.0, 0.0)

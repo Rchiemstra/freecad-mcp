@@ -87,3 +87,45 @@ def test_malformed_document_xml_is_rejected_before_the_document_is_closed(tmp_pa
     assert result["error_code"] == "RELOAD_DOCUMENT_FAILED"
     assert "Document.xml" in result["error"]
     assert api.getDocument("Doc") is document
+
+
+def _valid_fcstd(path) -> None:
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("Document.xml", "<Document/>")
+
+
+def test_a_valid_fcstd_still_reloads(tmp_path):
+    """A real zip with well-formed Document.xml reloads and reports the new name."""
+
+    events: list[str] = []
+    document = FakeDocument(events)
+    path = tmp_path / "kept.FCStd"
+    _valid_fcstd(path)
+    document.FileName = str(path)
+    collab, _api = collaborators(document, events)
+
+    result = run_reload_document(collab, "Doc")
+
+    assert result["success"] is True
+    assert result["outcome"] == "verified"
+    assert result["document_name"] == "kept"
+    assert result["previous_name"] == "Doc"
+
+
+def test_a_non_zip_file_is_refused_before_the_document_is_closed(tmp_path):
+    """Bytes that only start with a zip local header are not an FCStd."""
+
+    events: list[str] = []
+    document = FakeDocument(events)
+    path = tmp_path / "not-a-valid.FCStd"
+    path.write_bytes(b"PK\x03\x04not-a-valid-fcstd")
+    document.FileName = str(path)
+    collab, api = collaborators(document, events)
+
+    result = run_reload_document(collab, "Doc")
+
+    assert result["success"] is False
+    assert result["outcome"] == "rejected"
+    assert result["error_code"] == "RELOAD_DOCUMENT_FAILED"
+    assert "not a FreeCAD document" in result["error"]
+    assert api.getDocument("Doc") is document

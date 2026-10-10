@@ -38,6 +38,43 @@ def _run(collab, **overrides):
     return run_chamfer_feature(collab, **payload)
 
 
+def _edges(*continuities: str):
+    return SimpleNamespace(
+        Edges=[SimpleNamespace(face_continuity=value) for value in continuities],
+        isNull=lambda: False,
+        BoundBox=SimpleNamespace(XLength=10, YLength=10, ZLength=10),
+    )
+
+
+def test_a_sharp_edge_can_still_be_chamfered():
+    events: list[str] = []
+    document = FeatureDocument(events)
+    prepare_document("edge_feature", document)
+    document.objects["Pad"].Shape = _edges("C0", "C0")
+    collab, _api = collaborators(document, events)
+
+    result = _run(collab, edge_refs=["Edge1"])
+
+    assert result["success"] is True
+    assert "Chamfer" in document.objects
+
+
+def test_a_non_c0_edge_is_named_instead_of_no_edges_specified():
+    events: list[str] = []
+    document = FeatureDocument(events)
+    prepare_document("edge_feature", document)
+    document.objects["Pad"].Shape = _edges("C0", "G1")
+    collab, _api = collaborators(document, events)
+
+    result = _run(collab, edge_refs=["Edge2"], chamfer_name="EdgeChamfer")
+
+    assert result["success"] is False
+    assert "Edge2" in result["error"]
+    assert "not C0 continuous" in result["error"]
+    assert "No edges specified" not in result["error"]
+    assert "EdgeChamfer" not in document.objects
+
+
 def test_chamfer_feature_runs_apply_recompute_inspect_validate_then_commits():
     events: list[str] = []
     document = FeatureDocument(events)

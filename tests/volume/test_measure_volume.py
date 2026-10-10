@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -9,6 +10,10 @@ import pytest
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import measure_io_actions
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.measure_volume import run_measure_volume
 from tests.typed_rpc_fakes import FakeDocument, FakeObject, collaborators
+
+
+def _shape(*, solids: list[object], volume: float):
+    return SimpleNamespace(Solids=solids, Volume=volume)
 
 pytestmark = pytest.mark.unit
 
@@ -40,6 +45,44 @@ def test_missing_document_is_rejected():
 
     assert result["success"] is False
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
+
+
+def test_a_solid_volume_is_observed():
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.objects["Pad"] = FakeObject("Pad")
+    collab, _api = collaborators(document, events)
+    shape = _shape(solids=[object()], volume=1000.0)
+
+    with patch.object(
+        measure_io_actions,
+        "resolve_global_shape",
+        return_value=(shape, {"used_linked_object": False}),
+    ):
+        result = run_measure_volume(collab, "Doc", "Pad")
+
+    assert result["success"] is True
+    assert result["outcome"] == "observed"
+    assert result["volume_mm3"] == 1000.0
+
+
+def test_a_shape_with_no_solids_is_rejected():
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.objects["LargeSketch"] = FakeObject("LargeSketch", "Sketcher::SketchObject")
+    collab, _api = collaborators(document, events)
+    shape = _shape(solids=[], volume=0.0)
+
+    with patch.object(
+        measure_io_actions,
+        "resolve_global_shape",
+        return_value=(shape, {"used_linked_object": False}),
+    ):
+        result = run_measure_volume(collab, "Doc", "LargeSketch")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SHAPE_HAS_NO_SOLID"
+    assert "no solids" in result["error"]
 
 
 def test_missing_object_is_rejected():

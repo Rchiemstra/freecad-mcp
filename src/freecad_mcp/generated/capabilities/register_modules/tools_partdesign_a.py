@@ -142,6 +142,10 @@ def _register_create_datum_plane(
             body). FreeCAD's attacher can drop a non-identity source-body placement
             (P1). Use ``preview_attachment`` to confirm, and ``placement_audit`` to
             find risk concentrations.
+
+        ``offset_along_normal``: one number is the distance along the face normal;
+        three numbers are the ``AttachmentOffset`` base (X and Y slide the plane in
+        the face, Z is along the normal).
         """
         return create_datum_plane_operation(
             server_connection(),

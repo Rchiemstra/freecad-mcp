@@ -592,6 +592,15 @@ def _save_as_gui(
         return quarantine
     if not destination:
         return _error("DESTINATION_REQUIRED", "destination is required")
+    # FreeCAD treats a Save As onto the already adopted FileName as a plain
+    # save, so overwrite=false still replaces that file. Refuse any existing
+    # destination here before the native call.
+    destination_real = os.path.realpath(str(destination))
+    if not overwrite and os.path.isfile(destination_real):
+        return _error(
+            "DESTINATION_EXISTS",
+            "Save As refuses to clobber an existing destination when overwrite=False",
+        )
     save_with_outcome = getattr(document, "saveAsWithOutcome", None)
     if not callable(save_with_outcome):
         return _error(

@@ -45,6 +45,7 @@ def _register_get_view(
         focus_object: str | None = None,
         focus_objects: list[str] | None = None,
         yaw_deg: float | None = None,
+        document: str | None = None,
     ) -> CallToolResult:
         """Get a screenshot of the active view.
 
@@ -59,6 +60,7 @@ def _register_get_view(
             focus_objects: Optional list of object names to frame together (preferred for
                 stations/assemblies).
             yaw_deg: Optional extra camera yaw in degrees after framing.
+            document: Optional document to frame. When omitted, the active document is used.
 
         Returns:
             A screenshot of the active view.
@@ -71,6 +73,7 @@ def _register_get_view(
             focus_object=focus_object,
             focus_objects=focus_objects,
             yaw_deg=yaw_deg,
+            document=document,
         )
 
     exports['get_view'] = get_view

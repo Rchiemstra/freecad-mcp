@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -362,6 +363,33 @@ def test_apply_and_inspect_use_the_native_admitted_document():
     result = run_preview_attachment(collaborators, "Doc", "Target")
     assert lookups == ["Doc"]
     assert result["success"] is True or result["outcome"] in {"rejected", "uncertain"}
+
+
+def test_preview_without_a_support_still_returns_diagnostics():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    document.objects["Target"].AttachmentSupport = None
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_preview_attachment(collaborators, "Doc", "Target")
+
+    assert result["success"] is True
+    json.dumps(result)
+
+
+def test_preview_attachment_names_the_support_without_the_live_object():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_preview_attachment(collaborators, "Doc", "Target")
+
+    assert result["success"] is True
+    support = result["support"]
+    assert support == [{"object": "Seed", "sub": "Face1"}]
+    json.dumps(result)
 
 
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():

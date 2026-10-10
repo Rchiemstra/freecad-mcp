@@ -64,16 +64,22 @@ def build_reload_document_request(
 
 
 def _document_xml_error(file_name: str) -> str | None:
-    """Reject a saved FCStd whose Document.xml will not parse.
+    """Reject a saved path FreeCAD cannot open before the document is closed.
 
-    FreeCAD's openDocument prints a fatal XML error and still returns a partial
-    document, which this handler would report as a successful reload. Missing
-    files and non-zip paths stay on the existing open path.
+    FreeCAD's openDocument closes the live document first. A file that is not a
+    zip, or a zip whose Document.xml will not parse, then leaves that document
+    gone and the RPC outcome uncertain. Missing paths stay on the open path.
     """
 
     path = Path(file_name)
-    if not path.is_file() or not zipfile.is_zipfile(path):
+    if not path.is_file():
         return None
+    try:
+        too_small = path.stat().st_size < 22
+    except OSError as exc:
+        return f"{file_name} is not a FreeCAD document: {exc}"
+    if too_small or not zipfile.is_zipfile(path):
+        return f"{file_name} is not a FreeCAD document"
     try:
         with zipfile.ZipFile(path) as archive:
             try:
@@ -81,7 +87,7 @@ def _document_xml_error(file_name: str) -> str | None:
             except KeyError:
                 return f"{file_name} has no Document.xml"
     except zipfile.BadZipFile:
-        return None
+        return f"{file_name} is not a FreeCAD document"
     try:
         ElementTree.fromstring(payload)
     except ElementTree.ParseError as exc:

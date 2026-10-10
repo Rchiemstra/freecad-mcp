@@ -732,3 +732,79 @@ def test_canonical_save_ignores_quarantined_unrelated_open_document() -> None:
     assert result.get("blocking_document") is None
     assert document.dependency_sort_arguments == [False]
     assert document.calls == [("save_outcome", "/work/Model.FCStd")]
+
+
+def _written_outcome(path: str) -> dict[str, object]:
+    return {
+        "success": True,
+        "save_disposition": "written",
+        "file_written": True,
+        "unchanged": False,
+        "canonical_path": path,
+        "resulting_clean": True,
+        "durability_verified": True,
+        "warnings": [],
+        "message": f"Saved document to '{path}'.",
+    }
+
+
+def test_save_as_to_a_new_path_still_writes(tmp_path) -> None:
+    destination = tmp_path / "fresh.FCStd"
+    document = _Document()
+    document.FileName = str(tmp_path / "source.FCStd")
+    calls: list[tuple[str, bool]] = []
+
+    def save_as(dest, overwrite=False, expected=""):
+        calls.append((str(dest), bool(overwrite)))
+        document.FileName = str(dest)
+        return _written_outcome(str(dest))
+
+    document.saveAsWithOutcome = save_as
+    result = native_lifecycle_methods.save_document_as(
+        _facade(document),
+        {"document_name": "Model"},
+        str(destination),
+        overwrite=False,
+    )
+
+    assert result["success"] is True
+    assert result["file_written"] is True
+    assert calls == [(str(destination), False)]
+
+
+def test_save_as_refuses_an_existing_destination_unless_overwrite_is_true(tmp_path) -> None:
+    destination = tmp_path / "adopted.FCStd"
+    destination.write_bytes(b"previous")
+    document = _Document()
+    document.FileName = str(destination)
+    calls: list[bool] = []
+
+    def save_as(dest, overwrite=False, expected=""):
+        # FreeCAD treats the already adopted canonical path as replaceable.
+        calls.append(bool(overwrite))
+        destination.write_bytes(b"replaced")
+        return _written_outcome(str(dest))
+
+    document.saveAsWithOutcome = save_as
+    refused = native_lifecycle_methods.save_document_as(
+        _facade(document),
+        {"document_name": "Model"},
+        str(destination),
+        overwrite=False,
+    )
+
+    assert refused["success"] is False
+    assert refused["error_code"] == "DESTINATION_EXISTS"
+    assert calls == []
+    assert destination.read_bytes() == b"previous"
+
+    replaced = native_lifecycle_methods.save_document_as(
+        _facade(document),
+        {"document_name": "Model"},
+        str(destination),
+        overwrite=True,
+    )
+
+    assert replaced["success"] is True
+    assert calls == [True]
+    assert destination.read_bytes() == b"replaced"

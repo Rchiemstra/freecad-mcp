@@ -215,6 +215,50 @@ def test_fit_with_only_unbounded_datums_has_no_renderable_bounds():
         build_view_context(facade, document, "actor-a", fit=True)
 
 
+def test_a_solid_still_frames_beside_a_techdraw_page():
+    pad = SimpleNamespace(
+        Name="Pad",
+        TypeId="PartDesign::Pad",
+        Shape=SimpleNamespace(BoundBox=_bound(0, 20, 0, 10, 0, 5)),
+    )
+    page = SimpleNamespace(Name="Page", TypeId="TechDraw::DrawPage")
+    document = _Document("Model", [pad, page])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    context = build_view_context(facade, document, "actor-a", fit=True)
+
+    assert 0 < _float_field(context["camera"], "height") < 1e6
+
+
+def test_focusing_a_techdraw_page_says_it_is_not_in_the_3d_view():
+    pad = SimpleNamespace(
+        Name="Pad",
+        TypeId="PartDesign::Pad",
+        Shape=SimpleNamespace(BoundBox=_bound(0, 20, 0, 10, 0, 5)),
+    )
+    page = SimpleNamespace(Name="Page", TypeId="TechDraw::DrawPage")
+    document = _Document("Model", [pad, page])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    with pytest.raises(ValueError, match="TechDraw pages are not in the 3D view"):
+        build_view_context(
+            facade, document, "actor-a", focus_object="Page", fit=True
+        )
+
+
+def test_a_page_only_document_is_not_captured_as_an_empty_3d_view():
+    page = SimpleNamespace(
+        Name="Page",
+        TypeId="TechDraw::DrawPage",
+        BoundBox=_bound(0, 297, 0, 210, 0, 0),
+    )
+    document = _Document("Sheet", [page])
+    facade, _ = _facade([document], viewport_size=(100, 100))
+
+    with pytest.raises(ValueError, match="TechDraw pages are not in the 3D view"):
+        build_view_context(facade, document, "actor-a", fit=True)
+
+
 def test_resolve_document_uses_freecad_active_document_when_unambiguous():
     model = _Document("Model")
     other = _Document("Other")
@@ -238,6 +282,38 @@ def test_explicit_document_hint_wins_over_freecad_active_document():
     facade, _ = _facade([model, other], active_document=model)
 
     assert resolve_document(facade, "actor-a", hint="Other").Name == "Other"
+
+
+def test_a_named_document_wins_over_a_stale_personal_target_and_the_active_document():
+    model = _Document("Model")
+    other = _Document("Other")
+    third = _Document("Third")
+    facade, _ = _facade([model, other, third], active_document=model)
+    update_personal_view(facade, "Other", lambda _document, _context: None)
+
+    assert resolve_document(facade, "actor-a", hint="Third").Name == "Third"
+
+
+def test_the_active_document_wins_over_a_stale_personal_target():
+    model = _Document("Model")
+    other = _Document("Other")
+    facade, _ = _facade([model, other], active_document=model)
+    update_personal_view(facade, "Other", lambda _document, _context: None)
+
+    assert resolve_document(facade, "actor-a").Name == "Model"
+
+
+def test_get_view_forwards_the_requested_document():
+    from unittest.mock import MagicMock
+
+    from freecad_mcp.operations.core_ops.execute_ops import get_view_operation
+
+    connection = MagicMock()
+    connection.get_active_screenshot.return_value = "png"
+    get_view_operation(connection, "Isometric", focus_object="Box", document="Other")
+
+    assert connection.get_active_screenshot.call_args.kwargs["document"] == "Other"
+    assert connection.get_active_screenshot.call_args.kwargs["focus_object"] == "Box"
 
 
 def test_native_active_marker_recovers_actor_target_in_a_fresh_registry():

@@ -162,10 +162,18 @@ def _validate_offset_along_normal(offset_along_normal: object) -> float | list[f
     if isinstance(offset_along_normal, (int, float)) and not isinstance(offset_along_normal, bool):
         return float(offset_along_normal)
     if isinstance(offset_along_normal, Sequence) and not isinstance(offset_along_normal, (str, bytes)):
+        if len(offset_along_normal) == 1:
+            item = offset_along_normal[0]
+            if not isinstance(item, (int, float)) or isinstance(item, bool):
+                raise CreateDatumPlaneError(
+                    "INVALID_ARGUMENT",
+                    "offset_along_normal[0] must be a number",
+                )
+            return float(item)
         if len(offset_along_normal) != 3:
             raise CreateDatumPlaneError(
                 "INVALID_ARGUMENT",
-                "offset_along_normal must be None, a number, or a sequence of 3 numbers",
+                "offset_along_normal must be None, a number, or a sequence of 1 or 3 numbers",
             )
         values: list[float] = []
         for index, item in enumerate(offset_along_normal):
@@ -178,25 +186,46 @@ def _validate_offset_along_normal(offset_along_normal: object) -> float | list[f
         return values
     raise CreateDatumPlaneError(
         "INVALID_ARGUMENT",
-        "offset_along_normal must be None, a number, or a sequence of 3 numbers",
+        "offset_along_normal must be None, a number, or a sequence of 1 or 3 numbers",
     )
 
 
-def _apply_offset_along_normal(plane: object, offset: float | list[float] | None) -> None:
-    if offset is None:
-        return
+def _store_attachment_base(plane: object, x_value: float, y_value: float, z_value: float) -> None:
+    """Write AttachmentOffset.Base and assign the placement back.
+
+    FreeCAD returns a copy of the placement vector. Component writes on that
+    copy are dropped unless the placement is stored again.
+    """
+
     attachment_offset = getattr(plane, "AttachmentOffset", None)
     if attachment_offset is None:
         return
     base = getattr(attachment_offset, "Base", None)
     if base is None:
         return
+    base.x = x_value
+    base.y = y_value
+    base.z = z_value
+    try:
+        attachment_offset.Base = base
+    except Exception:
+        pass
+    try:
+        setattr(plane, "AttachmentOffset", attachment_offset)
+    except Exception:
+        pass
+
+
+def _apply_offset_along_normal(plane: object, offset: float | list[float] | None) -> None:
+    if offset is None:
+        return
     if isinstance(offset, list):
-        base.x = offset[0]
-        base.y = offset[1]
-        base.z = offset[2]
-    else:
-        base.z = offset
+        # Three numbers are the AttachmentOffset base: X and Y slide the datum
+        # in the face plane, Z is the distance along the face normal.
+        x_value, y_value, z_value = offset
+        _store_attachment_base(plane, x_value, y_value, z_value)
+        return
+    _store_attachment_base(plane, 0.0, 0.0, float(offset))
 
 
 def _attach_support(plane: object, doc: CreateDatumPlaneDocument, ref: str) -> None:
@@ -243,10 +272,15 @@ def apply_create_datum_plane(doc: CreateDatumPlaneDocument, request: CreateDatum
         obj_b, sub_b = parse_ref(doc, request.face_b, CreateDatumPlaneError)
         try:
             assign_attr(plane, "AttachmentSupport", [(obj_a, sub_a), (obj_b, sub_b)])
-        except Exception:
-            assign_attr(plane, "AttachmentSupport", [(obj_a, sub_a)])
-            _apply_offset_along_normal(plane, offset)
-        assign_attr(plane, "MapMode", request.map_mode)
+        except Exception as exc:
+            raise CreateDatumPlaneError(
+                "CREATE_DATUM_PLANE_FAILED",
+                f"{request.mode} could not attach to both faces: {exc}",
+            ) from exc
+        # FlatFace on two faces keeps the first face. The bisector mode is MidPlane.
+        map_mode = request.map_mode if request.map_mode not in {"", "FlatFace"} else "MidPlane"
+        assign_attr(plane, "MapMode", map_mode)
+        _apply_offset_along_normal(plane, offset)
     elif request.mode == "through_point":
         if request.source_ref:
             _attach_support(plane, doc, request.source_ref)
