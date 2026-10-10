@@ -392,7 +392,18 @@ def parse_move_object_response(raw_response: object) -> MoveObjectResult:
         and isinstance(object_name, str) and object_name.strip()
         and isinstance(target_container, str) and target_container.strip()
     ):
-        return make_move_object_success(str(object_name), str(target_container))
+        also_raw = response.get("also_moved")
+        also_moved: list[str] | None = None
+        if "also_moved" in response:
+            if (
+                not isinstance(also_raw, list)
+                or any(not isinstance(name, str) or not name.strip() for name in also_raw)
+            ):
+                return _invalid_response(response)
+            also_moved = [str(name) for name in also_raw]
+        return make_move_object_success(
+            str(object_name), str(target_container), also_moved
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

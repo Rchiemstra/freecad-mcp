@@ -306,7 +306,7 @@ def test_sweep_frenet_uses_the_pipe_mode(mcp, gui_log):
     assert_clean(gui_log)
 
 
-def test_recompute_reports_a_missing_expression_source(mcp, gui_log):
+def test_recompute_reports_a_missing_expression_source(mcp, gui_log, live_gui):
     """Closing the expression source must surface that document in the tool error."""
 
     assert_ok(mcp.call("create_document", name="QASrc"))
@@ -324,6 +324,18 @@ def test_recompute_reports_a_missing_expression_source(mcp, gui_log):
         obj_type="Part::Box",
         obj_name="Box",
         obj_properties={"Length": 10, "Width": 10, "Height": 10},
+    ))
+    assert_ok(mcp.call(
+        "save_document_as",
+        selector={"document_name": "QASrc"},
+        destination=str(live_gui.workdir / "QASrc.FCStd"),
+        overwrite=True,
+    ))
+    assert_ok(mcp.call(
+        "save_document_as",
+        selector={"document_name": "QADst"},
+        destination=str(live_gui.workdir / "QADst.FCStd"),
+        overwrite=True,
     ))
     assert_ok(mcp.call(
         "set_expression",

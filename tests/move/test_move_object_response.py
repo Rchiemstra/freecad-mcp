@@ -59,6 +59,18 @@ def test_valid_success_round_trips():
     assert parse_move_object_response(raw) == raw
 
 
+def test_also_moved_round_trips():
+    raw = make_move_object_success("Seed", "Part", also_moved=["Box", "Cyl"])
+    assert parse_move_object_response(raw)["also_moved"] == ["Box", "Cyl"]
+
+
+def test_malformed_also_moved_is_not_a_success():
+    raw = dict(_success(), also_moved="Box")
+    result = parse_move_object_response(raw)
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"
+
+
 def test_transport_failure_preserves_unknown_model_state():
     class _Conn:
         def _invoke_mutation_v2(self, *args, **kwargs):
