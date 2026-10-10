@@ -186,17 +186,20 @@ def require_subelements(source: object, refs: Sequence[str], field: str) -> None
 
 
 def _abs_dot(left: object, right: object) -> float | None:
-    try:
-        return abs(float(left.dot(right)))  # type: ignore[attr-defined]
-    except Exception:
+    dot = getattr(left, "dot", None)
+    if callable(dot):
         try:
-            return abs(
-                float(left.x) * float(right.x)
-                + float(left.y) * float(right.y)
-                + float(left.z) * float(right.z)
-            )
+            return abs(float(dot(right)))
         except Exception:
             return None
+    try:
+        return abs(
+            float(getattr(left, "x")) * float(getattr(right, "x"))
+            + float(getattr(left, "y")) * float(getattr(right, "y"))
+            + float(getattr(left, "z")) * float(getattr(right, "z"))
+        )
+    except Exception:
+        return None
 
 
 def _normal_on_edge(face: object, edge: object) -> object | None:
@@ -209,10 +212,11 @@ def _normal_on_edge(face: object, edge: object) -> object | None:
     if not callable(value) or parameter is None or not callable(parameter_of) or not callable(normal_at):
         return None
     try:
-        start, end = parameter[0], parameter[1]
-        point = value((float(start) + float(end)) / 2.0)
+        start = float(parameter[0])
+        end = float(parameter[1])
+        point = value((start + end) / 2.0)
         u_value, v_value = parameter_of(point)
-        return normal_at(u_value, v_value)
+        return cast(object, normal_at(u_value, v_value))
     except Exception:
         return None
 
@@ -239,7 +243,8 @@ def _edge_not_c0(shape: object, edge_name: str) -> str | None:
         try:
             import Part
 
-            faces = list(finder(edge, Part.Face) or [])
+            face_type = getattr(Part, "Face", None)
+            faces = list(finder(edge, face_type) or []) if face_type is not None else []
         except Exception:
             faces = []
     if len(faces) < 2:
@@ -265,7 +270,11 @@ def require_c0_edges(source: object, refs: Sequence[str]) -> None:
     """
 
     shape = getattr(source, "Shape", None)
-    problems = [problem for ref in refs if (problem := _edge_not_c0(shape, ref))]
+    problems: list[str] = []
+    for ref in refs:
+        problem = _edge_not_c0(shape, ref)
+        if problem:
+            problems.append(problem)
     if problems:
         raise ValueError("Cannot dress this edge: " + "; ".join(problems))
 
@@ -313,7 +322,6 @@ __all__ = [
     "nonempty_string",
     "number_value",
     "optional_name",
-    "require_c0_edges",
     "require_nonempty_shape",
     "require_subelements",
     "require_within_extent",
