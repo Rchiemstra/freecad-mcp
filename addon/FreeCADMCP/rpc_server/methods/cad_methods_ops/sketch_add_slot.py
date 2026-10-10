@@ -207,6 +207,8 @@ def build_sketch_add_slot_request(doc_name: object, sketch_name: object, x1: obj
     width_value = _require_float(width, 'width')
     if isinstance(width_value, dict):
         return width_value
+    if width_value <= 0:
+        return _failure(SketchAddSlotError("INVALID_ARGUMENT", "width must be greater than zero"))
     construction_value = _require_bool(construction, 'construction', default=False)
     if isinstance(construction_value, dict):
         return construction_value
@@ -270,6 +272,14 @@ def apply_sketch_add_slot(
         radius,
     )
     last = int(sketch.addGeometry(collaborators.part.ArcOfCircle(c2, a1_r, a2_r), request.construction))
+    # Geometry order is top line, bottom line, left arc, right arc.
+    for left, left_pos, right, right_pos in (
+        (0, 1, 2, 1), (2, 2, 1, 2), (1, 1, 3, 1), (3, 2, 0, 2),
+    ):
+        a, b = before_geo + left, before_geo + right
+        # Endpoint tangent also enforces coincidence. Separate Coincident
+        # constraints make these joins redundant in the Sketcher solver.
+        sketch.addConstraint(collaborators.sketcher.Constraint("Tangent", a, left_pos, b, right_pos))
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

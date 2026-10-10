@@ -36,3 +36,21 @@ def test_part_and_body_origins_have_owners(mcp, gui_log):
     assert_ok(mcp.call("close_document", doc_name="R12Tree"))
     assert_clean(gui_log)
 
+
+
+def test_slot_rejects_zero_width_and_constrains_joins(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="R12Slot"))
+    assert_ok(mcp.call("sketch_create", doc_name="R12Slot", sketch_name="Sk"))
+    failed = mcp.call("sketch_add_slot", doc_name="R12Slot", sketch_name="Sk",
+                      x1=0, y1=0, x2=20, y2=0, width=0)
+    assert not failed.ok
+    assert "width must be greater than zero" in failed.text
+    assert_ok(mcp.call("sketch_add_slot", doc_name="R12Slot", sketch_name="Sk",
+                       x1=0, y1=0, x2=20, y2=0, width=6))
+    geo = _payload(assert_ok(mcp.call("get_sketch_geometry", doc_name="R12Slot",
+                                     sketch_name="Sk", include_constraints=True)))
+    types = [c["type"] for c in geo["constraints"]]
+    assert types.count("Tangent") == 4
+    assert_ok(mcp.call("close_document", doc_name="R12Slot"))
+    assert_clean(gui_log)
+
