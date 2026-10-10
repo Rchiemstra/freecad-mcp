@@ -53,6 +53,67 @@ def test_viewobject_color_and_visibility_apply_after_the_app_commit(mcp, gui_log
     assert_clean(gui_log)
 
 
+def test_preview_attachment_reports_the_face_offset(mcp, gui_log):
+    """Distance is the face-to-plane offset, and the support names that face."""
+
+    assert_ok(mcp.call("create_document", name="LiveAttach"))
+    assert_ok(mcp.call("body_create", doc_name="LiveAttach", body_name="Body"))
+    assert_ok(mcp.call(
+        "sketch_create",
+        doc_name="LiveAttach",
+        sketch_name="Sk",
+        body_name="Body",
+        attach_to="XY_Plane",
+    ))
+    assert_ok(mcp.call(
+        "sketch_add_rectangle",
+        doc_name="LiveAttach",
+        sketch_name="Sk",
+        x1=0, y1=0, x2=40, y2=20,
+    ))
+    assert_ok(mcp.call(
+        "pad_feature",
+        doc_name="LiveAttach",
+        sketch_name="Sk",
+        pad_name="Pad",
+        length=30,
+        body_name="Body",
+    ))
+    found = _payload(assert_ok(mcp.call(
+        "find_faces",
+        doc_name="LiveAttach",
+        object_name="Pad",
+        type="Plane",
+        normal_approx={"x": 0, "y": 0, "z": 1},
+    )))
+    face = found["results"][0]
+    assert face["global_center"]["z"] == pytest.approx(30.0)
+    sub = str(face["sub"])
+    assert_ok(mcp.call(
+        "create_datum_plane",
+        doc_name="LiveAttach",
+        plane_name="OffsetPlane",
+        body_name="Body",
+        mode="offset_from_face",
+        face_a=f"Pad:{sub}",
+        offset_along_normal=[20],
+    ))
+    preview = _payload(assert_ok(mcp.call(
+        "preview_attachment",
+        doc_name="LiveAttach",
+        datum_name="OffsetPlane",
+    )))
+    assert preview["distance"] == pytest.approx(20.0)
+    assert preview["diff"]["signed_distance_mm"] == pytest.approx(20.0)
+    assert preview["diff"]["angle_deg"] == pytest.approx(0.0, abs=1.0)
+    entry = next(item for item in preview["support"] if item.get("object") == "Pad")
+    assert entry["sub"] == sub
+    assert entry["center"]["z"] == pytest.approx(30.0)
+    assert entry["normal"]["z"] == pytest.approx(1.0, abs=1e-6)
+    assert_ok(mcp.call("close_document", doc_name="LiveAttach"))
+    assert_clean(gui_log)
+
+
 def test_an_empty_document_listing_survives_a_missing_screenshot(mcp, gui_log):
     """get_objects must return the empty page when the view has nothing to frame."""
 
