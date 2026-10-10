@@ -185,6 +185,91 @@ def require_subelements(source: object, refs: Sequence[str], field: str) -> None
             )
 
 
+def _abs_dot(left: object, right: object) -> float | None:
+    try:
+        return abs(float(left.dot(right)))  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            return abs(
+                float(left.x) * float(right.x)
+                + float(left.y) * float(right.y)
+                + float(left.z) * float(right.z)
+            )
+        except Exception:
+            return None
+
+
+def _normal_on_edge(face: object, edge: object) -> object | None:
+    curve = getattr(edge, "Curve", None)
+    value = getattr(curve, "value", None)
+    parameter = getattr(edge, "ParameterRange", None)
+    surface = getattr(face, "Surface", None)
+    parameter_of = getattr(surface, "parameter", None)
+    normal_at = getattr(face, "normalAt", None)
+    if not callable(value) or parameter is None or not callable(parameter_of) or not callable(normal_at):
+        return None
+    try:
+        start, end = parameter[0], parameter[1]
+        point = value((float(start) + float(end)) / 2.0)
+        u_value, v_value = parameter_of(point)
+        return normal_at(u_value, v_value)
+    except Exception:
+        return None
+
+
+def _edge_not_c0(shape: object, edge_name: str) -> str | None:
+    """Return why a dress-up would skip *edge_name*, or None when it is sharp."""
+
+    match = _SUBELEMENT_REF.fullmatch(edge_name)
+    if match is None or match.group(1) != "Edge" or shape is None:
+        return None
+    edges = getattr(shape, "Edges", None)
+    if not edges:
+        return None
+    index = int(match.group(2)) - 1
+    if not 0 <= index < len(edges):
+        return None
+    edge = edges[index]
+    reported = getattr(edge, "face_continuity", None)
+    if isinstance(reported, str) and reported != "C0":
+        return f"{edge_name} is not C0 continuous"
+    faces: list[object] = []
+    finder = getattr(shape, "ancestorsOfType", None)
+    if callable(finder):
+        try:
+            import Part
+
+            faces = list(finder(edge, Part.Face) or [])
+        except Exception:
+            faces = []
+    if len(faces) < 2:
+        attached = getattr(edge, "Faces", None)
+        if attached:
+            faces = list(attached)
+    if len(faces) < 2:
+        return None
+    first = _normal_on_edge(faces[0], edge)
+    second = _normal_on_edge(faces[1], edge)
+    if first is None or second is None:
+        return None
+    dot = _abs_dot(first, second)
+    if dot is not None and dot > 0.999:
+        return f"{edge_name} is not C0 continuous"
+    return None
+
+
+def require_c0_edges(source: object, refs: Sequence[str]) -> None:
+    """Reject edges FreeCAD's chamfer and fillet would skip as not C0.
+
+    Those edges otherwise disappear and the recompute says "No edges specified".
+    """
+
+    shape = getattr(source, "Shape", None)
+    problems = [problem for ref in refs if (problem := _edge_not_c0(shape, ref))]
+    if problems:
+        raise ValueError("Cannot dress this edge: " + "; ".join(problems))
+
+
 def require_within_extent(source: object, value: float, field: str) -> None:
     """Reject a dress-up size no smaller than the whole *source* shape.
 
@@ -228,6 +313,7 @@ __all__ = [
     "nonempty_string",
     "number_value",
     "optional_name",
+    "require_c0_edges",
     "require_nonempty_shape",
     "require_subelements",
     "require_within_extent",

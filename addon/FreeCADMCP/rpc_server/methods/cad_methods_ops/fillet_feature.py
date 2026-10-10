@@ -15,6 +15,7 @@ from .feature_mutate_support import (
     nonempty_string,
     number_value,
     optional_name,
+    require_c0_edges,
     require_nonempty_shape,
     require_subelements,
     require_within_extent,
@@ -92,6 +93,7 @@ def apply_fillet_feature(doc: FeatureDocument, request: FilletFeatureRequest) ->
         body = resolve_optional_body(doc, base, request.body_name)
         edges = list(request.edge_refs)
         require_subelements(base, edges, "edge_refs")
+        require_c0_edges(base, edges)
         require_within_extent(base, request.radius, "radius")
         created = create_feature(doc, body, 'PartDesign::Fillet', request.fillet_name)
         if edges:

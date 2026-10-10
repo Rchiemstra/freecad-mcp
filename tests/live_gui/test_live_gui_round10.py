@@ -10,6 +10,7 @@ import pytest
 
 from tests.live_gui._support import assert_clean, assert_ok
 from tests.live_gui.test_live_gui_round5 import _payload, _rejected
+from tests.live_gui.test_live_gui_stress import _part_body
 
 pytestmark = pytest.mark.live_gui
 
@@ -283,4 +284,62 @@ def test_delete_names_link_dependents(mcp, gui_log):
         "Body", "BodyLink", "BodyArray", "BodyArray_i0",
     }
     assert_ok(mcp.call("close_document", doc_name="LiveLinks"))
+    assert_clean(gui_log)
+
+
+def test_chamfer_and_fillet_name_a_non_c0_edge(mcp, gui_log):
+    """A smooth edge must say which edge is not C0, and a sharp edge still dresses."""
+
+    _part_body(mcp, "LiveC0", length=10)
+    assert_ok(mcp.call(
+        "fillet_feature",
+        doc_name="LiveC0",
+        base_feature="Pad",
+        fillet_name="Fillet",
+        radius=1,
+        edge_refs=["Edge1"],
+        body_name="Body",
+    ))
+    smooth = None
+    sharp = None
+    for index in range(1, 18):
+        edge = f"Edge{index}"
+        chamfer = mcp.call(
+            "chamfer_feature",
+            doc_name="LiveC0",
+            base_feature="Fillet",
+            chamfer_name="Probe",
+            size=0.4,
+            edge_refs=[edge],
+            body_name="Body",
+        )
+        if chamfer.ok:
+            sharp = edge
+            assert_ok(mcp.call("undo", doc_name="LiveC0"))
+        elif "not C0 continuous" in chamfer.text and edge in chamfer.text:
+            smooth = edge
+            break
+    assert smooth, "no edge reported as not C0 continuous"
+    fillet = mcp.call(
+        "fillet_feature",
+        doc_name="LiveC0",
+        base_feature="Fillet",
+        fillet_name="Again",
+        radius=0.4,
+        edge_refs=[smooth],
+        body_name="Body",
+    )
+    assert not fillet.ok
+    assert smooth in fillet.text and "not C0 continuous" in fillet.text
+    assert sharp
+    assert_ok(mcp.call(
+        "chamfer_feature",
+        doc_name="LiveC0",
+        base_feature="Fillet",
+        chamfer_name="Sharp",
+        size=0.4,
+        edge_refs=[sharp],
+        body_name="Body",
+    ))
+    assert_ok(mcp.call("close_document", doc_name="LiveC0"))
     assert_clean(gui_log)
