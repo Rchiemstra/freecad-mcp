@@ -54,3 +54,24 @@ def test_slot_rejects_zero_width_and_constrains_joins(mcp, gui_log):
     assert_ok(mcp.call("close_document", doc_name="R12Slot"))
     assert_clean(gui_log)
 
+
+
+def test_trim_without_an_intersection_is_clear(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="R12Trim"))
+    assert_ok(mcp.call("sketch_create", doc_name="R12Trim", sketch_name="Sk"))
+    assert_ok(mcp.call("sketch_add_line", doc_name="R12Trim", sketch_name="Sk",
+                       x1=0, y1=0, x2=20, y2=0))
+    # The original failure used the collapsed zero-width slot. FreeCAD's
+    # normal trim of an isolated curve deletes it successfully.
+    assert_ok(mcp.call("execute_code", document="R12Trim", recompute="none",
+                       code="import FreeCAD as App, Part\n"
+                            "sk = App.getDocument('R12Trim').getObject('Sk')\n"
+                            "sk.addGeometry(Part.LineSegment(App.Vector(20,0,0), App.Vector(0,0,0)), False)\n"
+                            "sk.addGeometry(Part.ArcOfCircle(Part.Circle(App.Vector(0,0,0), App.Vector(0,0,1),0),1.57079632679,4.71238898038),False)"))
+    failed = mcp.call("sketch_trim", doc_name="R12Trim", sketch_name="Sk",
+                      geo_index=0, point_x=5, point_y=5)
+    assert not failed.ok
+    assert "no intersection near the trim point" in failed.text
+    assert_ok(mcp.call("close_document", doc_name="R12Trim"))
+    assert_clean(gui_log, "Standard_NullValue", "Edge too small")
+
