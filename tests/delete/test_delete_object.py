@@ -9,6 +9,7 @@ import pytest
 from addon.FreeCADMCP.collaboration_api import CollaborationAPI
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.delete_object import (
     apply_delete_object,
+    object_dependents,
     run_delete_object,
 )
 from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.delete_object_mutation import (
@@ -280,3 +281,49 @@ def test_recursive_delete_leaves_no_orphans():
     assert sorted(result["deleted"]) == ["Hole", "Mirror", "Pattern"]
     assert "orphans_left" not in result
     assert document.objects == {}
+
+
+def _named(name: str, type_id: str) -> SimpleNamespace:
+    item = SimpleNamespace(
+        Name=name,
+        TypeId=type_id,
+        Group=[],
+        InList=[],
+        OutList=[],
+    )
+    item.isDerivedFrom = lambda wanted, type_id=type_id: wanted == type_id
+    return item
+
+
+def test_a_body_lists_its_features_and_not_the_assembly_that_owns_it():
+    assembly = _named("Asm", "App::Part")
+    body = _named("Body", "PartDesign::Body")
+    pad = _named("Pad", "PartDesign::Pad")
+    assembly.Group = [body]
+    body.Group = [pad]
+    body.InList = [assembly]
+    pad.InList = [body]
+
+    names = [item.Name for item in object_dependents(body)]
+
+    assert names == ["Pad"]
+
+
+def test_body_dependents_include_link_arrays_that_would_dangle():
+    body = _named("Body", "PartDesign::Body")
+    pad = _named("Pad", "PartDesign::Pad")
+    link = _named("BodyLink", "App::Link")
+    array = _named("BodyArray", "App::Link")
+    elements = [_named(f"BodyArray_i{index}", "App::LinkElement") for index in range(3)]
+    body.Group = [pad]
+    pad.InList = [body]
+    link.OutList = [body]
+    array.OutList = [body]
+    for element in elements:
+        element.OutList = [body]
+        element.InList = [array]
+    body.InList = [link, array, *elements]
+
+    names = {item.Name for item in object_dependents(body)}
+
+    assert names == {"Pad", "BodyLink", "BodyArray", "BodyArray_i0", "BodyArray_i1", "BodyArray_i2"}

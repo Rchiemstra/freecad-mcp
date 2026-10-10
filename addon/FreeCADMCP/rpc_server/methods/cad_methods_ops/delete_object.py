@@ -156,6 +156,13 @@ def _object_dependents(root: object) -> list[object]:
         allowed = {id(item) for item in payload}
         for item in payload:
             visit_downstream(item, allowed)
+        # Links and link-array elements reference the body from outside Group.
+        # They would be left dangling, so the refusal has to name them too.
+        for dependent in _links(root, "InList"):
+            if _owns(dependent, root):
+                seen.add(id(dependent))
+                continue
+            visit_downstream(dependent)
     else:
         seen.remove(id(root))
         visit_downstream(root)

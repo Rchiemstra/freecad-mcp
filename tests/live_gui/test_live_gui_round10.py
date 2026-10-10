@@ -253,3 +253,34 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     assert any(entry.get("object") == "Pad" for entry in preview["support"])
     assert_ok(mcp.call("close_document", doc_name="LiveDatum"))
     assert_clean(gui_log)
+
+
+def test_delete_names_link_dependents(mcp, gui_log):
+    """A body refusal must name links and link-array elements, not only features."""
+
+    assert_ok(mcp.call("create_document", name="LiveLinks"))
+    assert_ok(mcp.call("body_create", doc_name="LiveLinks", body_name="Body"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveLinks",
+        obj_type="App::Link",
+        obj_name="BodyLink",
+        obj_properties={"LinkedObject": "Body"},
+    ))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveLinks",
+        obj_type="App::Link",
+        obj_name="BodyArray",
+        obj_properties={"LinkedObject": "Body", "ElementCount": 3, "ShowElement": True},
+    ))
+    refused = mcp.call("delete_object", doc_name="LiveLinks", obj_name="Body")
+    assert not refused.ok, refused.text[:600]
+    for name in ("BodyLink", "BodyArray", "BodyArray_i0", "BodyArray_i1", "BodyArray_i2"):
+        assert name in refused.text, refused.text[:800]
+    listed = _payload(assert_ok(mcp.call("get_objects", doc_name="LiveLinks")))
+    assert {item["Name"] for item in listed["objects"]} >= {
+        "Body", "BodyLink", "BodyArray", "BodyArray_i0",
+    }
+    assert_ok(mcp.call("close_document", doc_name="LiveLinks"))
+    assert_clean(gui_log)
