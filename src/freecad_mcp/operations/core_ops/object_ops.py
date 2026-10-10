@@ -18,6 +18,7 @@ from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.tool_results import (
     add_screenshot_if_available,
+    capture_read_screenshot,
     json_response,
     tool_fail,
     tool_ok,
@@ -60,6 +61,7 @@ def get_objects_operation(
         )
     result = parse_get_objects_response(raw_result)
     structured = dict(result)
+    screenshot = _read_screenshot(freecad, structured, only_text_feedback, doc_name)
     if result["success"] is False:
         response = tool_fail(
             f"Failed to get objects: {result['error']}",
@@ -68,13 +70,10 @@ def get_objects_operation(
         )
     else:
         response = tool_ok(
-            json.dumps(result, ensure_ascii=False, default=str),
+            json.dumps(structured, ensure_ascii=False, default=str),
             structured=structured,
             only_text_feedback=True,
         )
-    screenshot = (
-        None if only_text_feedback else freecad.get_active_screenshot(document=doc_name)
-    )
     return add_screenshot_if_available(response, screenshot, only_text_feedback)
 
 
@@ -96,6 +95,7 @@ def get_object_operation(
         )
     result = parse_get_object_response(raw_result)
     structured = dict(result)
+    screenshot = _read_screenshot(freecad, structured, only_text_feedback, doc_name)
     if result["success"] is False:
         response = tool_fail(
             f"Failed to get object: {result['error']}",
@@ -104,14 +104,27 @@ def get_object_operation(
         )
     else:
         response = tool_ok(
-            json.dumps(result, ensure_ascii=False, default=str),
+            json.dumps(structured, ensure_ascii=False, default=str),
             structured=structured,
             only_text_feedback=True,
         )
-    screenshot = (
-        None if only_text_feedback else freecad.get_active_screenshot(document=doc_name)
-    )
     return add_screenshot_if_available(response, screenshot, only_text_feedback)
+
+
+def _read_screenshot(
+    freecad: FreeCADConnection,
+    structured: dict[str, object],
+    only_text_feedback: bool,
+    doc_name: str,
+) -> str | None:
+    if structured.get("success") is False:
+        return None
+    return capture_read_screenshot(
+        freecad,
+        structured,
+        only_text_feedback=only_text_feedback,
+        document=doc_name,
+    )
 
 
 def get_parts_list_operation(freecad: FreeCADConnection) -> ToolResponse:
