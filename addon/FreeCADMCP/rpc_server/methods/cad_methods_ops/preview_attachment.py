@@ -14,7 +14,7 @@ from .typed_rpc_support import (
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 try:
     from ...._shared.protocol.preview_attachment_contract import (
@@ -405,7 +405,7 @@ def _indexed_subshape(shape: object, name: str) -> object | None:
         return None
     if index < 0 or index >= len(items):
         return None
-    return items[index]
+    return cast(object, items[index])
 
 
 def _shape_center(sub: object) -> tuple[float, float, float] | None:
@@ -475,7 +475,7 @@ def _support_object(datum: object, entry: Mapping[str, object]) -> object | None
     if callable(get_object) and name:
         found = get_object(name)
         if found is not None:
-            return found
+            return cast(object, found)
     return None
 
 

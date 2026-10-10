@@ -67,7 +67,11 @@ def apply_view_properties_after_commit(
                 raise ValueError(f"Unsupported view property {key!r}")
 
     try:
-        result = assign() if on_gui is None else on_gui(assign)
+        if on_gui is None:
+            assign()
+            result: object = None
+        else:
+            result = on_gui(assign)
     except Exception as exc:
         detail = str(exc) or type(exc).__name__
         return f"View properties were not applied on {object_name!r}: {detail}"
