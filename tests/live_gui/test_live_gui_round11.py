@@ -116,6 +116,38 @@ def test_preview_attachment_reports_the_face_offset(mcp, gui_log):
     assert_clean(gui_log)
 
 
+def test_unknown_selection_names_the_object(mcp, gui_log):
+    """An unknown name fails in the tool result and does not clear the selection."""
+
+    assert_ok(mcp.call("create_document", name="LiveSelect"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveSelect",
+        obj_type="Part::Box",
+        obj_name="Box",
+    ))
+    assert_ok(mcp.call(
+        "select_subshapes",
+        doc_name="LiveSelect",
+        selections=["Box"],
+        clear=True,
+    ))
+    failed = mcp.call(
+        "select_subshapes",
+        doc_name="LiveSelect",
+        selections=["MissingBox"],
+        clear=True,
+    )
+    assert not failed.ok, failed.text[:400]
+    assert "MissingBox" in failed.text
+    assert "RPC failed" not in failed.text
+    selected = _payload(assert_ok(mcp.call("get_selection")))
+    names = [item.get("object") for item in selected.get("selection", [])]
+    assert "Box" in names
+    assert_ok(mcp.call("close_document", doc_name="LiveSelect"))
+    assert_clean(gui_log)
+
+
 def test_sweep_frenet_uses_the_pipe_mode(mcp, gui_log):
     """frenet=true selects AdditivePipe Mode Frenet."""
 

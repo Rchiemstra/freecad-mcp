@@ -403,4 +403,53 @@ def test_select_subshapes_rejects_a_face_the_shape_does_not_contain() -> None:
     assert missing["ok"] is False
     assert missing["selected"] == []
     assert any("Face99" in error for error in missing["errors"])
+    assert "Face99" in missing["error"]
     assert present["selected"] == [{"object": "Box", "sub": "Face1"}]
+
+
+def _selection_facade(stored: dict):
+    obj = SimpleNamespace(Name="Box", Shape=SimpleNamespace(getElement=lambda name: object()))
+
+    def get_object(name):
+        return obj if name == "Box" else None
+
+    document = SimpleNamespace(
+        Name="Model",
+        Label="Model",
+        Objects=[obj],
+        getObject=get_object,
+    )
+    collaborators = _collaborators(
+        freecad=SimpleNamespace(listDocuments=lambda: {"Model": document}),
+        dispatch_gui=lambda _facade, callback, **_kwargs: callback(),
+        snapshot_view_context=lambda name: {"active_document": name},
+        snapshot_personal_view_context=lambda name, actor: stored.get((name, actor)),
+        store_personal_view_context=lambda name, actor, context: stored.__setitem__(
+            (name, actor), dict(context)
+        ),
+    )
+    return SimpleNamespace(_gui_collaborators=collaborators)
+
+
+def test_select_subshapes_selects_a_known_object():
+    stored: dict = {}
+    facade = _selection_facade(stored)
+    result = select_subshapes(facade, "Model", ["Box"], True)
+    assert result["ok"] is True
+    assert result["selected"] == [{"object": "Box", "sub": ""}]
+    assert stored[("Model", "actor")]["selection_paths"] == ["Box"]
+
+
+def test_unknown_selection_names_the_object_and_keeps_the_previous_selection():
+    stored: dict = {}
+    facade = _selection_facade(stored)
+    assert select_subshapes(facade, "Model", ["Box"], True)["ok"] is True
+
+    failed = select_subshapes(facade, "Model", ["MissingBox"], True)
+
+    assert failed["ok"] is False
+    assert failed["error_code"] == "OBJECT_NOT_FOUND"
+    assert failed["unknown"] == ["MissingBox"]
+    assert failed["error"] == "Object not found: MissingBox"
+    assert failed["selected"] == []
+    assert stored[("Model", "actor")]["selection_paths"] == ["Box"]
