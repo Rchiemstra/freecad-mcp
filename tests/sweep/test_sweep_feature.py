@@ -300,6 +300,41 @@ def test_exception_after_native_apply_does_not_claim_rollback():
     assert result["retry_safe"] is False
 
 
+class _ModePipeDocument(FeatureDocument):
+    def register_object(self, object_type: str, name: str, *, event: str | None = "apply"):
+        obj = super().register_object(object_type, name, event=event)
+        if object_type == "PartDesign::AdditivePipe":
+            obj.PropertiesList = ["Profile", "Spine", "Mode"]
+            obj.Mode = "Standard"
+        return obj
+
+
+def test_frenet_false_leaves_the_pipe_mode_standard():
+    """A modern pipe defaults to Standard when Frenet is not requested."""
+
+    events: list[str] = []
+    document = _ModePipeDocument(events)
+    prepare_document("sweep", document)
+    collab, _api = collaborators(document, events)
+
+    result = _run(collab, frenet=False)
+
+    assert result["success"] is True
+    assert document.objects["Sweep"].Mode == "Standard"
+
+
+def test_frenet_true_selects_the_pipe_mode_enumeration():
+    events: list[str] = []
+    document = _ModePipeDocument(events)
+    prepare_document("sweep", document)
+    collab, _api = collaborators(document, events)
+
+    result = _run(collab, frenet=True)
+
+    assert result["success"] is True, result.get("error")
+    assert document.objects["Sweep"].Mode == "Frenet"
+
+
 def test_typed_rpc_handler_is_registered():
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.typed_rpc_discovery import (
         discover_typed_rpc_handlers,

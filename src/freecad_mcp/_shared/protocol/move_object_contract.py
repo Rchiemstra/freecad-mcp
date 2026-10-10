@@ -95,6 +95,7 @@ class MoveObjectSuccess(TypedDict):
     retry_safe: Literal[False]
     object_name: str
     target_container: str
+    also_moved: NotRequired[list[str]]
 
 
 class MoveObjectFailure(TypedDict):
@@ -137,15 +138,34 @@ MoveObjectResult = MoveObjectSuccess | MoveObjectFailure | MoveObjectUncertain
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'object_name', 'target_container', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version",
+        "success",
+        "ok",
+        "outcome",
+        "committed",
+        "retry_safe",
+        "object_name",
+        "target_container",
+        "also_moved",
+        "error_code",
+        "error",
+        "native_status",
+        "native_message",
+        "rollback_succeeded",
+        "rollback_failed",
+        "diagnostics",
     }
 )
 
 
-def make_move_object_success(object_name: str, target_container: str) -> MoveObjectSuccess:
+def make_move_object_success(
+    object_name: str,
+    target_container: str,
+    also_moved: list[str] | None = None,
+) -> MoveObjectSuccess:
     """Construct a complete committed result."""
 
-    return {
+    result: MoveObjectSuccess = {
         "contract_version": MOVE_OBJECT_CONTRACT_VERSION,
         "success": True,
         "ok": True,
@@ -155,6 +175,9 @@ def make_move_object_success(object_name: str, target_container: str) -> MoveObj
         "object_name": object_name,
         "target_container": target_container,
     }
+    if also_moved is not None:
+        result["also_moved"] = also_moved
+    return result
 
 
 def make_move_object_failure(
@@ -369,7 +392,18 @@ def parse_move_object_response(raw_response: object) -> MoveObjectResult:
         and isinstance(object_name, str) and object_name.strip()
         and isinstance(target_container, str) and target_container.strip()
     ):
-        return make_move_object_success(str(object_name), str(target_container))
+        also_raw = response.get("also_moved")
+        also_moved: list[str] | None = None
+        if "also_moved" in response:
+            if (
+                not isinstance(also_raw, list)
+                or any(not isinstance(name, str) or not name.strip() for name in also_raw)
+            ):
+                return _invalid_response(response)
+            also_moved = [str(name) for name in also_raw]
+        return make_move_object_success(
+            str(object_name), str(target_container), also_moved
+        )
 
     error_code = response.get("error_code")
     error = response.get("error")

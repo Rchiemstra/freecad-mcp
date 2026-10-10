@@ -7,7 +7,7 @@ from ...execute_options import ExecuteOptions
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.execute_result import from_execute_result
-from ...responses.tool_results import tool_fail, tool_ok
+from ...responses.tool_results import capture_read_screenshot, tool_fail, tool_ok
 from ..parametric_ops.capture_state import capture_state_operation
 
 logger = logging.getLogger("FreeCADMCPserver")
@@ -45,9 +45,19 @@ def execute_code_operation(
     )
     try:
         res = freecad.execute_code(code, opts)
-        screenshot = (
-            freecad.get_active_screenshot(view_name=None) if capture_view else None
-        )
+        screenshot = None
+        if capture_view and isinstance(res, dict) and res.get("success"):
+            notes: dict[str, object] = {}
+            screenshot = capture_read_screenshot(
+                freecad,
+                notes,
+                only_text_feedback=only_text_feedback,
+                view_name=None,
+            )
+            warning = notes.get("screenshot_warning")
+            if isinstance(warning, str):
+                res = dict(res)
+                res["screenshot_warning"] = warning
         if res["success"]:
             return from_execute_result(
                 res,

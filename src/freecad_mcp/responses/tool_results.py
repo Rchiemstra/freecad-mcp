@@ -135,6 +135,34 @@ def add_screenshot_if_available(
     )
 
 
+def capture_read_screenshot(
+    freecad: Any,
+    structured: dict[str, Any],
+    *,
+    only_text_feedback: bool,
+    **screenshot_args: Any,
+) -> str | None:
+    """Best-effort view capture for a read that already has its data.
+
+    A blank view or a capture error is reported on ``screenshot_warning`` and
+    does not fail the read.
+    """
+
+    if only_text_feedback:
+        return None
+    try:
+        screenshot = freecad.get_active_screenshot(**screenshot_args)
+    except Exception as exc:
+        structured["screenshot_warning"] = f"Screenshot unavailable: {exc}"
+        return None
+    if isinstance(screenshot, str) and screenshot:
+        return screenshot
+    structured["screenshot_warning"] = (
+        "Screenshot unavailable: the view did not return an image"
+    )
+    return None
+
+
 def capture_committed_screenshot(
     freecad: Any,
     structured: dict[str, Any],

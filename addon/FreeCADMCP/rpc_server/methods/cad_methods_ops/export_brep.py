@@ -35,7 +35,7 @@ from .policy_runtime import (
     atomic_publish,
     lookup_document,
     lookup_object,
-    missing_parent_directory,
+    export_path_problem,
     staged_path,
     unlink_quiet,
     verify_nonempty_file,
@@ -83,9 +83,9 @@ def run_export_brep(
         return _failure(ExportBrepError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
     if lookup_object(document, str(request.obj_name)) is None:
         return _failure(ExportBrepError("OBJECT_NOT_FOUND", f"Object not found: {request.obj_name!r}"))
-    missing = missing_parent_directory(str(request.file_path))
-    if missing is not None:
-        return _failure(ExportBrepError("DIRECTORY_NOT_FOUND", f"Directory does not exist: {missing}"))
+    problem = export_path_problem(str(request.file_path))
+    if problem is not None:
+        return _failure(ExportBrepError(problem[0], problem[1]))
     tmp_path = staged_path(str(request.file_path))
     try:
         payload = measure_io_actions.export_brep(document, str(request.obj_name), tmp_path)

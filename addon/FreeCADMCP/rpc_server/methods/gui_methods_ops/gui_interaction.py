@@ -137,6 +137,53 @@ def set_tree_expanded(
         return public_error(self, exc)
 
 
+def _gather_selection(
+    document: Any,
+    selections: list | None,
+    paths: list[str],
+) -> tuple[list[dict[str, str]], list[str], list[str]]:
+    selected: list[dict[str, str]] = []
+    errors: list[str] = []
+    unknown: list[str] = []
+    for item in selections or []:
+        obj_name, sub, error = _selection_entry(item)
+        if error:
+            errors.append(error)
+            continue
+        obj = document.getObject(obj_name) if obj_name else None
+        if obj is None:
+            errors.append(f"Object not found: {obj_name}")
+            unknown.append(str(obj_name))
+            continue
+        if sub and subshape_missing(obj, sub):
+            errors.append(f"Subobject not found: {obj_name}.{sub}")
+            continue
+        path = f"{obj_name}.{sub}" if sub else obj_name
+        if path not in paths:
+            paths.append(path)
+        selected.append({"object": str(obj.Name), "sub": sub})
+    return selected, errors, unknown
+
+
+def _rejected_selection(errors: list[str], unknown: list[str]) -> dict[str, Any]:
+    if unknown:
+        error_code = "OBJECT_NOT_FOUND"
+    elif any(error.startswith("Subobject not found") for error in errors):
+        error_code = "SUBSHAPE_NOT_FOUND"
+    else:
+        error_code = "INVALID_ARGUMENT"
+    return {
+        "ok": False,
+        "success": False,
+        "error_code": error_code,
+        "error": "; ".join(errors),
+        "errors": errors,
+        "unknown": unknown,
+        "selected": [],
+        "count": 0,
+    }
+
+
 def select_subshapes(
     self,
     doc_name: str,
@@ -148,31 +195,19 @@ def select_subshapes(
     try:
 
         def update(document, context):
-            paths = [] if clear else list(context["selection_paths"])
-            selected: list[dict[str, str]] = []
-            errors: list[str] = []
-            for item in selections or []:
-                obj_name, sub, error = _selection_entry(item)
-                if error:
-                    errors.append(error)
-                    continue
-                obj = document.getObject(obj_name) if obj_name else None
-                if obj is None:
-                    errors.append(f"Object not found: {obj_name}")
-                    continue
-                if sub and subshape_missing(obj, sub):
-                    errors.append(f"Subobject not found: {obj_name}.{sub}")
-                    continue
-                path = f"{obj_name}.{sub}" if sub else obj_name
-                if path not in paths:
-                    paths.append(path)
-                selected.append({"object": str(obj.Name), "sub": sub})
+            existing = list(context.get("selection_paths") or [])
+            paths = [] if clear else list(existing)
+            selected, errors, unknown = _gather_selection(document, selections, paths)
+            if errors:
+                return [], errors, unknown
             context["selection_paths"] = paths
-            return selected, errors
+            return selected, [], []
 
-        _, _, (selected, errors) = update_personal_view(self, doc_name, update)
+        _, _, (selected, errors, unknown) = update_personal_view(self, doc_name, update)
+        if errors:
+            return _rejected_selection(errors, unknown)
         return {
-            "ok": not errors or bool(selected),
+            "ok": True,
             "selected": selected,
             "errors": errors,
             "count": len(selected),

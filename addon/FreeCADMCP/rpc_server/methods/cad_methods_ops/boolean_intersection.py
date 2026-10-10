@@ -12,7 +12,7 @@ from .feature_lookup_support import (
 from .feature_mutate_support import (
     create_feature,
     nonempty_string,
-    require_nonempty_shape,
+    require_nonempty_boolean_shape,
     set_attr,
 )
 
@@ -123,12 +123,12 @@ def read_boolean_intersection_result(doc: FeatureReadDocument, receipt: BooleanI
             f"Created object is not Part::Common: {receipt.name!r}",
         )
     try:
-        require_nonempty_shape(
+        require_nonempty_boolean_shape(
             feature,
-            missing=f"Created object has empty Shape: {receipt.name!r}",
+            missing=f"Boolean result is empty: {receipt.name!r}",
         )
     except LookupError as exc:
-        raise BooleanIntersectionError("CREATED_OBJECT_INVALID", str(exc)) from exc
+        raise BooleanIntersectionError("EMPTY_BOOLEAN_RESULT", str(exc)) from exc
     return BooleanIntersectionInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),

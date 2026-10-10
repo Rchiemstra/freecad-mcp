@@ -75,6 +75,15 @@ def _failure(error: MoveObjectError, *, retry_safe: bool = True) -> MoveObjectFa
     return make_move_object_failure(error.code, str(error), retry_safe=retry_safe)
 
 
+def _group_names(container: object) -> list[str]:
+    names: list[str] = []
+    for item in list(getattr(container, "Group", None) or []):
+        name = object_name(item)
+        if name:
+            names.append(name)
+    return names
+
+
 def _object_in_owner(located: object, owner: object) -> bool:
     group = list(getattr(owner, "Group", None) or [])
     if located in group:
@@ -95,12 +104,16 @@ def apply_move_object(doc: MoveObjectDocument, request: MoveObjectRequest) -> Mo
             group = getattr(parent, "Group", None)
             if isinstance(group, (list, tuple)) and item in group:
                 remove_from_container(parent, item)
+    group_before = _group_names(target)
     add_to_container(target, item)
     return MoveObjectReceipt(
         name=object_name(item) or request.obj_name,
         item=item,
         skipped=False,
-        extra={"target_container": request.target_container},
+        extra={
+            "target_container": request.target_container,
+            "group_before": group_before,
+        },
     )
 
 
@@ -126,10 +139,18 @@ def read_move_object_result(doc: MoveObjectReadDocument, receipt: MoveObjectRece
                 f"Object is not grouped under target container: {target_name!r}",
             )
 
+    extra = dict(receipt.extra) if isinstance(receipt.extra, dict) else {}
+    before = extra.get("group_before")
+    before_names = set(before) if isinstance(before, list) else set()
+    target_for_names = doc.getObject(str(extra.get("target_container") or ""))
+    after = _group_names(target_for_names) if target_for_names is not None else []
+    extra["also_moved"] = [
+        name for name in after if name not in before_names and name != receipt.name
+    ]
     return MoveObjectInspection(
         name=MoveObjectName(receipt.name),
         label=object_label(located),
-        extra=receipt.extra,
+        extra=extra,
     )
 
 
@@ -186,7 +207,14 @@ class _MoveObjectExecution:
                     "Native commit completed without an inspected result",
                     committed=True,
                 )
-            return make_move_object_success(object_name=self.inspected.name, target_container=self.request.target_container)
+            extra = self.inspected.extra if isinstance(self.inspected.extra, dict) else {}
+            also_moved = extra.get("also_moved")
+            names = [str(name) for name in also_moved] if isinstance(also_moved, list) else []
+            return make_move_object_success(
+                object_name=self.inspected.name,
+                target_container=self.request.target_container,
+                also_moved=names,
+            )
 
         return continue_after_native_commit(result, _finish_native_commit)
 

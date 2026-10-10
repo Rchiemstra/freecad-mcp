@@ -392,6 +392,88 @@ def test_preview_attachment_names_the_support_without_the_live_object():
     json.dumps(result)
 
 
+class _Vec:
+    def __init__(self, x: float, y: float, z: float) -> None:
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def __sub__(self, other: _Vec) -> _Vec:
+        return _Vec(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    @property
+    def Length(self) -> float:
+        return (self.x**2 + self.y**2 + self.z**2) ** 0.5
+
+
+def _offset_face() -> SimpleNamespace:
+    face = SimpleNamespace(
+        CenterOfMass=_Vec(20.0, 10.0, 30.0),
+        ParameterRange=(0.0, 1.0, 0.0, 1.0),
+    )
+    face.normalAt = lambda _u, _v: _Vec(0.0, 0.0, 1.0)
+    return face
+
+
+def test_string_support_keeps_the_placement_separation():
+    """A named support without face geometry still reports that placement delta."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    document.objects["Seed"].Placement = SimpleNamespace(Base=_Vec(0.0, 0.0, 0.0))
+    document.objects["Target"].Placement = SimpleNamespace(
+        Base=_Vec(0.0, 0.0, 1.0),
+        Rotation=SimpleNamespace(Angle=0.0, Axis=_Vec(0.0, 0.0, 1.0)),
+    )
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_preview_attachment(collaborators, "Doc", "Target")
+
+    assert result["success"] is True
+    assert result["support"] == [{"object": "Seed", "sub": "Face1"}]
+    assert result["distance"] == pytest.approx(1.0)
+    assert result["diff"]["signed_distance_mm"] == pytest.approx(1.0)
+
+
+def test_preview_attachment_distance_follows_the_support_face_normal():
+    """A plane 20 mm off a face at z=30 must report that offset, not |origin|."""
+
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    pad = _item("Pad", type_id="PartDesign::Pad")
+    pad.Placement = SimpleNamespace(
+        Base=_Vec(0.0, 0.0, 0.0),
+        Rotation=SimpleNamespace(Angle=0.0, Axis=_Vec(0.0, 0.0, 1.0)),
+    )
+    pad.Shape = SimpleNamespace(Faces=[SimpleNamespace() for _ in range(5)] + [_offset_face()])
+    document.objects["Pad"] = pad
+    target = document.objects["Target"]
+    target.AttachmentSupport = [(pad, ("Face6",))]
+    target.Placement = SimpleNamespace(
+        Base=_Vec(0.0, 0.0, 50.0),
+        # Angle 0 leaves local +Z as the plane normal. Axis is the rotation
+        # axis, not that normal, and must not be used for the angle.
+        Rotation=SimpleNamespace(Angle=0.0, Axis=_Vec(1.0, 0.0, 0.0)),
+    )
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_preview_attachment(collaborators, "Doc", "Target")
+
+    assert result["success"] is True
+    assert result["distance"] == pytest.approx(20.0)
+    assert result["diff"]["signed_distance_mm"] == pytest.approx(20.0)
+    assert result["diff"]["angle_deg"] == pytest.approx(0.0)
+    entry = result["support"][0]
+    assert entry == {
+        "object": "Pad",
+        "sub": "Face6",
+        "center": {"x": 20.0, "y": 10.0, "z": 30.0},
+        "normal": {"x": 0.0, "y": 0.0, "z": 1.0},
+    }
+
+
 def test_unknown_or_contradictory_native_evidence_cannot_release_success():
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.preview_attachment_mutation import (
         _preview_attachment_native_result,

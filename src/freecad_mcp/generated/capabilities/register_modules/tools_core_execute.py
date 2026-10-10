@@ -103,7 +103,10 @@ def _register_execute_code(
         override. Split large sweeps into small batches, and after a GUI timeout do not
         resubmit GUI work until a liveness check (e.g. ``get_worker_status``) passes.
         ``read_only=true`` may temporarily rotate/recompute geometry in the worker
-        snapshot; it only forbids modifying the live GUI documents.
+        snapshot of ``document`` (the active document when ``document`` is omitted)
+        and that document's open linked documents. Other open documents are not
+        copied, so ``App.listDocuments()`` lists only that set. It only forbids
+        modifying the live GUI documents.
 
         LIVE MUTATION RECOMPUTE — with ``recompute="target"``, the Python body runs
         under a deferred-recompute fence. Calling ``doc.recompute()`` in that body does

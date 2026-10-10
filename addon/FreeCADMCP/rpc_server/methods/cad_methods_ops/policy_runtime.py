@@ -69,6 +69,17 @@ def missing_parent_directory(file_path: str) -> str | None:
     return None if os.path.isdir(parent) else parent
 
 
+def export_path_problem(file_path: str) -> tuple[str, str] | None:
+    """Reject a directory destination before checking that its parent exists."""
+
+    if os.path.isdir(file_path):
+        return ("DESTINATION_IS_DIRECTORY", f"Destination is a directory: {file_path}")
+    missing = missing_parent_directory(file_path)
+    if missing is not None:
+        return ("DIRECTORY_NOT_FOUND", f"Directory does not exist: {missing}")
+    return None
+
+
 def staged_path(file_path: str) -> str:
     root, ext = os.path.splitext(file_path)
     if ext:
@@ -91,6 +102,7 @@ __all__ = [
     "app_from",
     "atomic_publish",
     "document_id",
+    "export_path_problem",
     "lookup_document",
     "lookup_object",
     "optional_recompute",

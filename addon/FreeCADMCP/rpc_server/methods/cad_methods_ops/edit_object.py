@@ -35,6 +35,11 @@ except ImportError:  # pragma: no cover - flat addon import path
 from .edit_object_mutation import EditObjectError, run_edit_object_native_mutation
 from .property_postcondition import kept_property, property_kept_value
 from .typed_rpc_document import assign_properties, get_object
+from .view_properties import (
+    GuiExecutor,
+    apply_view_properties_after_commit,
+    split_view_properties,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +49,7 @@ class EditObjectReceipt:
     name: str
     obj: object
     properties: tuple[tuple[str, object], ...]
+    view_properties: tuple[tuple[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,20 +125,17 @@ def apply_edit_object(
         )
     properties = dict(request.properties)
     _refuse_read_only(obj, properties)
-    if properties:
+    app_properties, view_properties = split_view_properties(properties)
+    if app_properties:
         if set_object_property is not None:
-            set_object_property(doc, obj, properties)
+            set_object_property(doc, obj, app_properties)
         else:
-            assign_properties(obj, properties)
-    assigned = [
-        (key, value)
-        for key, value in properties.items()
-        if key not in {"ShapeColor", "ViewObject"}
-    ]
+            assign_properties(obj, app_properties)
     return EditObjectReceipt(
         name=str(getattr(obj, "Name", request.object_name)),
         obj=obj,
-        properties=tuple(assigned),
+        properties=tuple(app_properties.items()),
+        view_properties=tuple(view_properties.items()),
     )
 
 
@@ -199,13 +202,16 @@ class _EditObjectExecution:
     collaborators: EditObjectCollaborators
     request: EditObjectRequest
     set_object_property: Callable[[object, object, dict[str, object]], object] | None
+    on_gui: GuiExecutor | None = None
     created: EditObjectReceipt | None = None
     inspected: EditObjectInspection | None = None
+    document: object | None = None
 
     def apply(self, doc: object) -> None:
         self.created = apply_edit_object(doc, self.request, self.set_object_property)
 
     def inspect(self, doc: object) -> None:
+        self.document = doc
         if self.created is None:
             raise EditObjectError(
                 "INVALID_EDIT_OBJECT_RESULT",
@@ -227,9 +233,33 @@ class _EditObjectExecution:
                     "Native commit completed without an inspected edit result",
                     committed=True,
                 )
+            view_error = self._apply_deferred_view_properties()
+            if view_error is not None:
+                return make_edit_object_uncertain(
+                    "VIEW_PROPERTY_FAILED",
+                    view_error,
+                    committed=True,
+                )
             return make_edit_object_success(self.inspected.name, self.inspected.label)
 
         return continue_after_native_commit(result, _finish_native_commit)
+
+    def _apply_deferred_view_properties(self) -> str | None:
+        receipt = self.created
+        if receipt is None or not receipt.view_properties:
+            return None
+        if self.document is None:
+            return (
+                f"View properties were not applied on {receipt.name!r}: "
+                "the committed document is missing"
+            )
+        return apply_view_properties_after_commit(
+            self.document,
+            receipt.name,
+            dict(receipt.view_properties),
+            self.set_object_property,
+            self.on_gui,
+        )
 
 def run_edit_object(
     collaborators: EditObjectCollaborators,
@@ -237,19 +267,29 @@ def run_edit_object(
     obj_name: object,
     properties: object,
     set_object_property: Callable[[object, object, dict[str, object]], object] | None = None,
+    *,
+    on_gui: GuiExecutor | None = None,
 ) -> NativeOutcome[EditObjectResult]:
-    """Run object editing through apply, recompute, inspection, and commit."""
+    """Run object editing through apply, recompute, inspection, and commit.
+
+    ``on_gui`` runs ViewObject assignment on the Qt main thread after the App
+    commit. App properties stay inside the atomic commit.
+    """
 
     request = build_edit_object_request(doc_name, obj_name, properties)
     if isinstance(request, dict):
         return request
-    return _EditObjectExecution(collaborators, request, set_object_property).run()
+    return _EditObjectExecution(
+        collaborators, request, set_object_property, on_gui
+    ).run()
 
 
 class _EditObjectRpcFacade(Protocol):
     _cad_collaborators: EditObjectCollaborators
 
     def _dispatch_gui(self, callback: Callable[[], object]) -> object: ...
+
+    def _dispatch_snapshot_gui(self, task: Callable[[], object]) -> object: ...
 
 
 def _property_setter(
@@ -273,8 +313,11 @@ def rpc_edit_object(
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     setter = _property_setter(collaborators)
+    on_gui = self._dispatch_snapshot_gui
     res = self._dispatch_gui(
-        lambda: run_edit_object(collaborators, doc_name, obj_name, properties, setter)
+        lambda: run_edit_object(
+            collaborators, doc_name, obj_name, properties, setter, on_gui=on_gui
+        )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 

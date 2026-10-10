@@ -228,6 +228,42 @@ def _collaborators(document: _Document | None, events: list[str], *, validator=N
     return collaborators, api
 
 
+def test_a_solo_move_groups_only_the_requested_object():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_move_object(collaborators, "Doc", "Seed", "Body", True)
+
+    assert result["success"] is True
+    assert result["also_moved"] == []
+    assert document.objects["Body"].Group == [document.objects["Seed"]]
+
+
+def test_move_object_reports_companions_pulled_into_the_part():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    box = _item("Box", type_id="Part::Box")
+    document.objects["Box"] = box
+    part = document.objects["Body"]
+
+    def add(other):
+        part.Group.append(other)
+        if getattr(other, "Name", "") == "Seed" and box not in part.Group:
+            part.Group.append(box)
+
+    part.addObject = add
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_move_object(collaborators, "Doc", "Seed", "Body", True)
+
+    assert result["success"] is True
+    assert result["also_moved"] == ["Box"]
+    assert document.objects["Body"].Group == [document.objects["Seed"], box]
+
+
 def test_move_object_runs_apply_recompute_inspect_validate_then_commits():
     events: list[str] = []
     document = _Document(events)
