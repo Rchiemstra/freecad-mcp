@@ -370,3 +370,38 @@ def test_a_techdraw_page_is_not_captured_as_an_empty_3d_view(mcp, gui_log):
     )
     assert_ok(mcp.call("close_document", doc_name="LiveSheet"))
     assert_clean(gui_log)
+
+
+def test_measure_volume_rejects_a_wire_sketch(mcp, gui_log):
+    """A sketch is a wire, so volume must say it has no solids."""
+
+    assert_ok(mcp.call("create_document", name="LiveVol"))
+    assert_ok(mcp.call("body_create", doc_name="LiveVol", body_name="Body"))
+    assert_ok(mcp.call(
+        "sketch_create", doc_name="LiveVol", sketch_name="Sk", body_name="Body"
+    ))
+    assert_ok(mcp.call(
+        "sketch_add_rectangle",
+        doc_name="LiveVol",
+        sketch_name="Sk",
+        x1=0,
+        y1=0,
+        x2=20,
+        y2=10,
+    ))
+    _rejected(
+        mcp.call("measure_volume", doc_name="LiveVol", obj_name="Sk"),
+        "no solids",
+    )
+    assert_ok(mcp.call(
+        "pad_feature",
+        doc_name="LiveVol",
+        sketch_name="Sk",
+        pad_name="Pad",
+        length=5,
+        body_name="Body",
+    ))
+    volume = assert_ok(mcp.call("measure_volume", doc_name="LiveVol", obj_name="Pad"))
+    assert volume.payload["volume_mm3"] == pytest.approx(20 * 10 * 5)
+    assert_ok(mcp.call("close_document", doc_name="LiveVol"))
+    assert_clean(gui_log)
