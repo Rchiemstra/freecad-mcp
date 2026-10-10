@@ -190,14 +190,34 @@ def _validate_offset_along_normal(offset_along_normal: object) -> float | list[f
     )
 
 
-def _apply_offset_along_normal(plane: object, offset: float | list[float] | None) -> None:
-    if offset is None:
-        return
+def _store_attachment_base(plane: object, x_value: float, y_value: float, z_value: float) -> None:
+    """Write AttachmentOffset.Base and assign the placement back.
+
+    FreeCAD returns a copy of the placement vector. Component writes on that
+    copy are dropped unless the placement is stored again.
+    """
+
     attachment_offset = getattr(plane, "AttachmentOffset", None)
     if attachment_offset is None:
         return
     base = getattr(attachment_offset, "Base", None)
     if base is None:
+        return
+    base.x = x_value
+    base.y = y_value
+    base.z = z_value
+    try:
+        attachment_offset.Base = base
+    except Exception:
+        pass
+    try:
+        setattr(plane, "AttachmentOffset", attachment_offset)
+    except Exception:
+        pass
+
+
+def _apply_offset_along_normal(plane: object, offset: float | list[float] | None) -> None:
+    if offset is None:
         return
     if isinstance(offset, list):
         x_value, y_value, z_value = offset
@@ -207,15 +227,11 @@ def _apply_offset_along_normal(plane: object, offset: float | list[float] | None
             value for value in (x_value, y_value, z_value) if abs(value) > 1.0e-12
         ]
         if len(nonzero) <= 1:
-            base.x = 0.0
-            base.y = 0.0
-            base.z = nonzero[0] if nonzero else 0.0
+            _store_attachment_base(plane, 0.0, 0.0, nonzero[0] if nonzero else 0.0)
         else:
-            base.x = x_value
-            base.y = y_value
-            base.z = z_value
-    else:
-        base.z = offset
+            _store_attachment_base(plane, x_value, y_value, z_value)
+        return
+    _store_attachment_base(plane, 0.0, 0.0, float(offset))
 
 
 def _attach_support(plane: object, doc: CreateDatumPlaneDocument, ref: str) -> None:

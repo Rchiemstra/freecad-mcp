@@ -139,24 +139,24 @@ def _printed(mcp, doc_name: str, code: str) -> str:
 def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     """A two-face datum sits on the bisector, and preview returns that support."""
 
-    assert_ok(mcp.call("create_document", name="LiveDatum"))
-    assert_ok(mcp.call("body_create", doc_name="LiveDatum", body_name="Body"))
+    assert_ok(mcp.call("create_document", name="LiveMid"))
+    assert_ok(mcp.call("body_create", doc_name="LiveMid", body_name="Body"))
     assert_ok(mcp.call(
         "sketch_create",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         sketch_name="BaseSketch",
         body_name="Body",
         attach_to="XY_Plane",
     ))
     assert_ok(mcp.call(
         "sketch_add_rectangle",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         sketch_name="BaseSketch",
         x1=0, y1=0, x2=40, y2=20,
     ))
     assert_ok(mcp.call(
         "pad_feature",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         sketch_name="BaseSketch",
         pad_name="Pad",
         length=10,
@@ -165,10 +165,10 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     ))
     faces = _printed(
         mcp,
-        "LiveDatum",
+        "LiveMid",
         (
             "import FreeCAD as App\n"
-            "pad = App.getDocument('LiveDatum').getObject('Pad')\n"
+            "pad = App.getDocument('LiveMid').getObject('Pad')\n"
             "names = []\n"
             "for index, face in enumerate(pad.Shape.Faces, 1):\n"
             "    u0, u1, v0, v1 = face.ParameterRange\n"
@@ -181,7 +181,7 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     face_a, face_b = faces.split(",")
     assert_ok(mcp.call(
         "create_datum_plane",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         plane_name="MidX",
         body_name="Body",
         mode="midpoint_between_faces",
@@ -190,15 +190,15 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     ))
     midpoint = float(_printed(
         mcp,
-        "LiveDatum",
+        "LiveMid",
         "import FreeCAD as App\n"
-        "plane = App.getDocument('LiveDatum').getObject('MidX')\n"
+        "plane = App.getDocument('LiveMid').getObject('MidX')\n"
         "print('%.3f %s' % (plane.Placement.Base.x, plane.MapMode))\n",
     ).split()[0])
     assert abs(midpoint - 20.0) < 1.0
     assert_ok(mcp.call(
         "create_datum_plane",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         plane_name="Between",
         body_name="Body",
         mode="between_parallel_planes",
@@ -207,15 +207,15 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     ))
     between = float(_printed(
         mcp,
-        "LiveDatum",
+        "LiveMid",
         "import FreeCAD as App\n"
-        "plane = App.getDocument('LiveDatum').getObject('Between')\n"
+        "plane = App.getDocument('LiveMid').getObject('Between')\n"
         "print('%.3f %s' % (plane.Placement.Base.x, plane.MapMode))\n",
     ).split()[0])
     assert abs(between - 20.0) < 1.0
     assert_ok(mcp.call(
         "create_datum_plane",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         plane_name="OffShort",
         body_name="Body",
         mode="offset_from_face",
@@ -224,7 +224,7 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     ))
     assert_ok(mcp.call(
         "create_datum_plane",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         plane_name="OffAxis",
         body_name="Body",
         mode="offset_from_face",
@@ -233,10 +233,10 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     ))
     offsets = _printed(
         mcp,
-        "LiveDatum",
+        "LiveMid",
         (
             "import FreeCAD as App\n"
-            "doc = App.getDocument('LiveDatum')\n"
+            "doc = App.getDocument('LiveMid')\n"
             "values = []\n"
             "for name in ('OffShort', 'OffAxis'):\n"
             "    base = doc.getObject(name).AttachmentOffset.Base\n"
@@ -247,12 +247,12 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
     assert [float(item) for item in offsets.split()] == [20.0, 20.0]
     preview = _payload(assert_ok(mcp.call(
         "preview_attachment",
-        doc_name="LiveDatum",
+        doc_name="LiveMid",
         datum_name="MidX",
     )))
     assert preview["success"] is True
     assert any(entry.get("object") == "Pad" for entry in preview["support"])
-    assert_ok(mcp.call("close_document", doc_name="LiveDatum"))
+    assert_ok(mcp.call("close_document", doc_name="LiveMid"))
     assert_clean(gui_log)
 
 
@@ -348,10 +348,10 @@ def test_chamfer_and_fillet_name_a_non_c0_edge(mcp, gui_log):
 def test_a_techdraw_page_is_not_captured_as_an_empty_3d_view(mcp, gui_log):
     """A drawing sheet is not a 3D shape, so the 3D camera must say so."""
 
-    assert_ok(mcp.call("create_document", name="LiveSheet"))
+    assert_ok(mcp.call("create_document", name="LivePage"))
     assert_ok(mcp.call(
         "create_object",
-        doc_name="LiveSheet",
+        doc_name="LivePage",
         obj_type="TechDraw::DrawPage",
         obj_name="Page",
     ))
@@ -359,16 +359,16 @@ def test_a_techdraw_page_is_not_captured_as_an_empty_3d_view(mcp, gui_log):
         mcp.call(
             "get_view",
             view_name="Isometric",
-            document="LiveSheet",
+            document="LivePage",
             focus_object="Page",
         ),
         "TechDraw pages are not in the 3D view",
     )
     _rejected(
-        mcp.call("get_view", view_name="Isometric", document="LiveSheet"),
+        mcp.call("get_view", view_name="Isometric", document="LivePage"),
         "TechDraw pages are not in the 3D view",
     )
-    assert_ok(mcp.call("close_document", doc_name="LiveSheet"))
+    assert_ok(mcp.call("close_document", doc_name="LivePage"))
     assert_clean(gui_log)
 
 
