@@ -83,10 +83,69 @@ def _compose_global_from_parents(obj: object) -> object | None:
     return result
 
 
+def _placement_root_and_subname(obj: object) -> tuple[object, str] | None:
+    """Top-level ancestor plus the dotted path beneath it.
+
+    ``GeoFeature.getGlobalPlacementOf(target, root, subname)`` matches the
+    deprecated getter: a plain object uses itself and ``""``, a feature in a
+    Body uses the Body and the feature name, and a Body inside an App::Part
+    uses the Part and ``Body.Feature``.
+    """
+
+    chain: list[object] = []
+    cursor: object | None = obj
+    seen: set[int] = set()
+    while cursor is not None:
+        cursor_id = id(cursor)
+        if cursor_id in seen:
+            break
+        seen.add(cursor_id)
+        chain.append(cursor)
+        getter = getattr(cursor, "getParentGeoFeatureGroup", None)
+        parent = getter() if callable(getter) else None
+        cursor = parent
+    if not chain:
+        return None
+    chain.reverse()
+    root = chain[0]
+    if root is obj:
+        return root, ""
+    names: list[str] = []
+    for item in chain[1:]:
+        name = getattr(item, "Name", None)
+        if not isinstance(name, str) or not name:
+            return None
+        names.append(name)
+    return root, ".".join(names)
+
+
+def _placement_of(obj: object) -> object | None:
+    try:
+        freecad = _freecad()
+    except Exception:
+        return None
+    static = getattr(getattr(freecad, "GeoFeature", None), "getGlobalPlacementOf", None)
+    if not callable(static):
+        return None
+    context = _placement_root_and_subname(obj)
+    if context is None:
+        return None
+    root, subname = context
+    try:
+        return cast(object, static(obj, root, subname))
+    except Exception:
+        return None
+
+
 def read_global_placement(obj: object) -> object:
+    placement = _placement_of(obj)
+    if placement is not None:
+        return placement
+    # Unit-test fakes have no GeoFeature.getGlobalPlacementOf. Keep their
+    # instance getter, which is not the deprecated FreeCAD method.
     getter = getattr(obj, "getGlobalPlacement", None)
     if callable(getter):
-        placement: object | None = None
+        placement = None
         try:
             placement = getter()
         except Exception:

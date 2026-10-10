@@ -45,6 +45,22 @@ def is_derived_from(obj: object, type_name: str) -> bool:
     return getattr(obj, "TypeId", None) == type_name
 
 
+def require_add_sub_feature(feature: object) -> None:
+    """Reject a pattern or mirror source FreeCAD cannot transform.
+
+    ``PartDesign::Transformed::execute`` only accepts
+    ``PartDesign::FeatureAddSub`` originals. A pattern of a pattern fails
+    there, after the feature already exists.
+    """
+
+    if is_derived_from(feature, "PartDesign::FeatureAddSub"):
+        return
+    name = getattr(feature, "Name", None) or "feature"
+    raise ValueError(
+        f"{name} (Only additive and subtractive features can be transformed)"
+    )
+
+
 def lookup_object(document: object, name: str) -> object | None:
     getter = getattr(document, "getObject", None)
     if not callable(getter):
@@ -165,6 +181,7 @@ __all__ = [
     "is_derived_from",
     "lookup_object",
     "require_absent",
+    "require_add_sub_feature",
     "require_body",
     "require_object",
     "resolve_linksub",

@@ -176,7 +176,8 @@ def _register_linear_pattern_feature(
             feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.
             pattern_name: Name for the resulting LinearPattern feature.
             length: Total pattern length in mm.
-            occurrences: Number of repeated instances, including the original.
+            occurrences: Number of repeated instances, including the original,
+                at most 100. Split the pattern or use fewer occurrences.
             direction: Axis or reference edge. Examples: `X_Axis`, `Y_Axis`,
                 `Z_Axis`, or `ObjectName:Edge1`.
             body_name: Optional explicit PartDesign Body name.

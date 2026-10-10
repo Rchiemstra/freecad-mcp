@@ -348,6 +348,7 @@ class GuiDispatcher(QtCore.QObject):
         on_complete: Callable[[str, GuiOutcome], None] | None = None,
         defer_probe: _DeferProbe | None = None,
         document_keys: tuple[str, ...] = (),
+        method: str | None = None,
     ) -> Any:
         return self._core.submit(
             callable_,
@@ -357,6 +358,7 @@ class GuiDispatcher(QtCore.QObject):
             on_complete=on_complete,
             defer_probe=defer_probe,
             document_keys=document_keys,
+            method=method,
         )
 
     def cancel_request(self, session_id: str, request_id: str) -> str:

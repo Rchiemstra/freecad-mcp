@@ -7,11 +7,13 @@ from .native_commit_wait import NativeOutcome, settle_native_commit
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
+    require_add_sub_feature,
     require_body,
     require_object,
     resolve_linksub,
 )
 from .feature_mutate_support import (
+    MAX_PATTERN_OCCURRENCES,
     bool_value,
     count_value,
     create_feature,
@@ -94,6 +96,7 @@ def apply_polar_pattern_feature(doc: FeatureDocument, request: PolarPatternFeatu
             doc, request.feature_name, missing="Source feature not found"
         )
         body = require_body(doc, source, request.body_name)
+        require_add_sub_feature(source)
         created = create_feature(doc, body, 'PartDesign::PolarPattern', request.pattern_name)
         set_originals(created, source)
         set_named_property(created, ("Angle",), request.angle)
@@ -163,7 +166,12 @@ def build_polar_pattern_feature_request(
         doc = DocumentName(nonempty_string(doc_name, "doc_name"))
         source = FeatureName(nonempty_string(feature_name, "feature_name"))
         created = FeatureName(nonempty_string(pattern_name, "pattern_name"))
-        count = count_value(occurrences, "occurrences", minimum=2)
+        count = count_value(
+            occurrences,
+            "occurrences",
+            minimum=2,
+            maximum=MAX_PATTERN_OCCURRENCES,
+        )
         # FreeCAD clamps PropertyAngle to [-360, 360] without an error.
         angle_value = number_value(angle, "angle", positive=True, maximum=360.0)
         axis_value = nonempty_string(axis, "axis")

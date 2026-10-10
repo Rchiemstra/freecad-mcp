@@ -9,6 +9,18 @@ except ImportError:  # pragma: no cover - flat addon import path
 from .invoke_v2_finalize import finalize_invoke_v2_response
 
 
+def uncertain_outcome_message(request_id: object) -> str:
+    """Tell the caller which request to poll after a lost dispatch."""
+
+    shown = request_id if isinstance(request_id, str) and request_id.strip() else "unknown"
+    return (
+        "The authenticated request outcome is uncertain; "
+        "the same request ID will not be dispatched again. "
+        f"Poll get_request_status with request_id={shown} "
+        "to learn what happened."
+    )
+
+
 def register_invoke_v2_inflight(
     *,
     collaborators,
@@ -183,10 +195,8 @@ def run_invoke_v2_dispatch(
                 "addon_runtime_id": invocation_runtime_id,
                 "error": {
                     "code": "REQUEST_OUTCOME_UNCERTAIN",
-                    "message": (
-                        "The authenticated request outcome is uncertain; "
-                        "the same request ID will not be dispatched again"
-                    ),
+                    "message": uncertain_outcome_message(envelope.request_id),
+                    "request_id": envelope.request_id,
                 },
             }
             handler_status = "uncertain"

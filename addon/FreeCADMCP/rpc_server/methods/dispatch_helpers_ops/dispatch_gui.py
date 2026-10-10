@@ -172,9 +172,15 @@ def dispatch_gui(
             with cad_mutation_inflight(inflight), cad_mutation_rpc_method(rpc_method):
                 return task()
 
+        method_name = None
+        if context and context.get("method"):
+            method_name = str(context["method"])
+        elif rpc_method:
+            method_name = str(rpc_method)
         submit_options = {
             "request_id": request_id,
             "session_id": session_id,
+            "method": method_name,
             "on_complete": (
                 on_complete
                 if (

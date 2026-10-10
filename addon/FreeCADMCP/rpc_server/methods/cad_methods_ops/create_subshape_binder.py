@@ -20,6 +20,7 @@ from .typed_rpc_container_support import (
     add_named_object,
     add_to_container,
 )
+from .world_shape_actions import read_global_placement
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -281,12 +282,10 @@ def apply_create_subshape_binder(doc: CreateSubshapeBinderDocument, request: Cre
                 except Exception:
                     placement = None
             if placement is None:
-                getter = getattr(source_obj, "getGlobalPlacement", None)
-                if callable(getter):
-                    try:
-                        assign_attr(created, "Placement", getter())
-                    except Exception:
-                        pass
+                try:
+                    assign_attr(created, "Placement", read_global_placement(source_obj))
+                except Exception:
+                    pass
     except CreateSubshapeBinderError:
         raise
     except Exception as exc:

@@ -7,6 +7,7 @@ from .native_commit_wait import NativeOutcome, continue_after_native_commit
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
+    require_add_sub_feature,
     require_body,
     require_object,
     resolve_linksub,
@@ -88,6 +89,7 @@ def apply_mirror_feature(doc: FeatureDocument, request: MirrorFeatureRequest) ->
             doc, request.feature_name, missing="Source feature not found"
         )
         body = require_body(doc, source, request.body_name)
+        require_add_sub_feature(source)
         created = create_feature(doc, body, 'PartDesign::Mirrored', request.mirror_name)
         set_originals(created, source)
         set_named_property(

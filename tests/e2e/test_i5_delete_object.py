@@ -2,7 +2,8 @@
 recursive=True, removes them too — against a live FreeCAD (P6 guardrail).
 
 A PartDesign Body with a padded circle has the sketch and pad as dependents.
-  * Bare delete  -> refused, dependents listed (no orphaning).
+  * Bare delete  -> refused as a failure (``OBJECT_HAS_DEPENDENTS``), dependents
+    listed in the structured payload (nothing deleted).
   * recursive    -> sketch, pad and body all removed.
 """
 
@@ -43,17 +44,30 @@ def _payload(response) -> dict:
     raise AssertionError(f"no JSON payload line in response text: {text!r}")
 
 
+def _structured_payload(response) -> dict:
+    """Read the machine payload, which a refusal no longer prints as JSON text."""
+    structured = getattr(response, "structuredContent", None)
+    if isinstance(structured, dict):
+        data = structured.get("data")
+        if isinstance(data, dict):
+            return data
+        return structured
+    raise AssertionError(f"response has no structured content: {response!r}")
+
+
 def test_delete_refuses_and_lists_dependents(freecad_session):
     doc = freecad_session.doc
     body = doc.addObject("PartDesign::Body", "Horn")
     sk, pad = make_padded_circle(body, radius=2, length=1, plane_label="XY_Plane")
 
     resp = delete_object_operation(freecad_session, True, doc.Name, body.Name)
-    payload = _payload(resp)
+    payload = _structured_payload(resp)
 
-    assert payload["ok"] is True
-    assert payload["refused"] is True
-    dep_names = {d["name"] for d in payload["dependents"]}
+    assert payload["success"] is False
+    assert payload["error_code"] == "OBJECT_HAS_DEPENDENTS"
+    diagnostics = payload["diagnostics"]
+    assert diagnostics["refused"] is True
+    dep_names = {d["name"] for d in diagnostics["dependents"]}
     assert sk.Name in dep_names
     assert pad.Name in dep_names
     # Nothing was actually deleted.

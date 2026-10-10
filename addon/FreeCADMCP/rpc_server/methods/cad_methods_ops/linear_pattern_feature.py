@@ -7,11 +7,13 @@ from .native_commit_wait import NativeOutcome, continue_after_native_commit
 from .feature_lookup_support import (
     is_derived_from,
     require_absent,
+    require_add_sub_feature,
     require_body,
     require_object,
     resolve_linksub,
 )
 from .feature_mutate_support import (
+    MAX_PATTERN_OCCURRENCES,
     bool_value,
     count_value,
     create_feature,
@@ -92,6 +94,7 @@ def apply_linear_pattern_feature(doc: FeatureDocument, request: LinearPatternFea
             doc, request.feature_name, missing="Source feature not found"
         )
         body = require_body(doc, source, request.body_name)
+        require_add_sub_feature(source)
         created = create_feature(doc, body, 'PartDesign::LinearPattern', request.pattern_name)
         set_originals(created, source)
         set_named_property(created, ("Length",), request.length)
@@ -162,7 +165,12 @@ def build_linear_pattern_feature_request(
         source = FeatureName(nonempty_string(feature_name, "feature_name"))
         created = FeatureName(nonempty_string(pattern_name, "pattern_name"))
         length_value = number_value(length, "length", positive=True)
-        count = count_value(occurrences, "occurrences", minimum=2)
+        count = count_value(
+            occurrences,
+            "occurrences",
+            minimum=2,
+            maximum=MAX_PATTERN_OCCURRENCES,
+        )
         direction_value = nonempty_string(direction, "direction")
         body = optional_name(body_name, "body_name")
         reversed_value = bool_value(reversed_dir, "reversed_dir")

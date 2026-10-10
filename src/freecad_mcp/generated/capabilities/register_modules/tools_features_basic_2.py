@@ -42,7 +42,8 @@ def _register_polar_pattern_feature(
             doc_name: The document containing the body and source feature.
             feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.
             pattern_name: Name for the resulting PolarPattern feature.
-            occurrences: Number of repeated instances, including the original.
+            occurrences: Number of repeated instances, including the original,
+                at most 100. Split the pattern or use fewer occurrences.
             angle: Total angular span in degrees, in (0, 360]. Defaults to 360.
             axis: Axis or reference edge. Examples: `Z_Axis`, `X_Axis`, or
                 `ObjectName:Edge1`.

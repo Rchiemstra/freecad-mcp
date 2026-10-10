@@ -82,7 +82,7 @@ def _register_find_faces(
             type: Optional surface type filter: 'Plane', 'Cylinder', 'Cone',
                 'Sphere', 'Toroid'.
             normal_approx: Optional {'x','y','z'} (or [x,y,z]) vector; faces whose
-                normal is parallel to this within ``tol`` are kept.
+                normal points along this within ``tol`` are kept.
             center_approx: Optional point; faces whose global centre is within
                 ``center_tol`` mm of it are kept, and results are ranked by closeness.
             radius: Optional radius; cylindrical/spherical faces within ``tol`` are kept.

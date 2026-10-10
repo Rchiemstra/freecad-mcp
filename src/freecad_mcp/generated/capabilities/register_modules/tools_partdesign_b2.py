@@ -57,7 +57,7 @@ def _register_placement_audit(
     def placement_audit(ctx: Context, doc_name: str) -> CallToolResult:
         """Audit placements per Body/Part (M3).
 
-        Lists each Body/Part's ``Placement``, ``getGlobalPlacement()`` base, and the
+        Lists each Body/Part's ``Placement``, global placement base, and the
         cross-body datums that reference it. Use to spot P1 risk concentrations and
         placement/geometry disagreements. Returns JSON
         ``{ok, doc, bodies: [{name, type, placement_base, placement_rotation,
