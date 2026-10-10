@@ -283,8 +283,12 @@ def _attachment_diagnostics(datum: object) -> dict[str, object]:
                 "angle_deg": normal_angle_deg,
             },
         }
+    public_support = [
+        {"object": str(entry.get("object", "")), "sub": str(entry.get("sub", ""))}
+        for entry in support
+    ]
     return {
-        "support": support,
+        "support": public_support,
         "placement": placement,
         "distance": distance,
         "normal_angle_deg": normal_angle_deg,

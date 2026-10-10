@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 import zipfile
 
@@ -118,4 +119,137 @@ def test_gui_state_and_view_follow_the_active_document(mcp, gui_log):
     ))
     assert_ok(mcp.call("close_document", doc_name="LiveViewA"))
     assert_ok(mcp.call("close_document", doc_name="LiveViewB"))
+    assert_clean(gui_log)
+
+
+def _printed(mcp, doc_name: str, code: str) -> str:
+    result = assert_ok(mcp.call(
+        "execute_code",
+        document=doc_name,
+        execution_mode="worker",
+        read_only=True,
+        code=code,
+    ))
+    match = re.search(r"Output:\s*(.+)", result.text)
+    assert match, result.text[:600]
+    return match.group(1).strip()
+
+
+def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
+    """A two-face datum sits on the bisector, and preview returns that support."""
+
+    assert_ok(mcp.call("create_document", name="LiveDatum"))
+    assert_ok(mcp.call("body_create", doc_name="LiveDatum", body_name="Body"))
+    assert_ok(mcp.call(
+        "sketch_create",
+        doc_name="LiveDatum",
+        sketch_name="BaseSketch",
+        body_name="Body",
+        attach_to="XY_Plane",
+    ))
+    assert_ok(mcp.call(
+        "sketch_add_rectangle",
+        doc_name="LiveDatum",
+        sketch_name="BaseSketch",
+        x1=0, y1=0, x2=40, y2=20,
+    ))
+    assert_ok(mcp.call(
+        "pad_feature",
+        doc_name="LiveDatum",
+        sketch_name="BaseSketch",
+        pad_name="Pad",
+        length=10,
+        body_name="Body",
+        strict=True,
+    ))
+    faces = _printed(
+        mcp,
+        "LiveDatum",
+        (
+            "import FreeCAD as App\n"
+            "pad = App.getDocument('LiveDatum').getObject('Pad')\n"
+            "names = []\n"
+            "for index, face in enumerate(pad.Shape.Faces, 1):\n"
+            "    u0, u1, v0, v1 = face.ParameterRange\n"
+            "    normal = face.normalAt((u0 + u1) / 2, (v0 + v1) / 2)\n"
+            "    if abs(normal.x) > 0.9:\n"
+            "        names.append('Pad:Face%d' % index)\n"
+            "print(','.join(names))\n"
+        ),
+    )
+    face_a, face_b = faces.split(",")
+    assert_ok(mcp.call(
+        "create_datum_plane",
+        doc_name="LiveDatum",
+        plane_name="MidX",
+        body_name="Body",
+        mode="midpoint_between_faces",
+        face_a=face_a,
+        face_b=face_b,
+    ))
+    midpoint = float(_printed(
+        mcp,
+        "LiveDatum",
+        "import FreeCAD as App\n"
+        "plane = App.getDocument('LiveDatum').getObject('MidX')\n"
+        "print('%.3f %s' % (plane.Placement.Base.x, plane.MapMode))\n",
+    ).split()[0])
+    assert abs(midpoint - 20.0) < 1.0
+    assert_ok(mcp.call(
+        "create_datum_plane",
+        doc_name="LiveDatum",
+        plane_name="Between",
+        body_name="Body",
+        mode="between_parallel_planes",
+        face_a=face_a,
+        face_b=face_b,
+    ))
+    between = float(_printed(
+        mcp,
+        "LiveDatum",
+        "import FreeCAD as App\n"
+        "plane = App.getDocument('LiveDatum').getObject('Between')\n"
+        "print('%.3f %s' % (plane.Placement.Base.x, plane.MapMode))\n",
+    ).split()[0])
+    assert abs(between - 20.0) < 1.0
+    assert_ok(mcp.call(
+        "create_datum_plane",
+        doc_name="LiveDatum",
+        plane_name="OffShort",
+        body_name="Body",
+        mode="offset_from_face",
+        face_a=face_a,
+        offset_along_normal=[20],
+    ))
+    assert_ok(mcp.call(
+        "create_datum_plane",
+        doc_name="LiveDatum",
+        plane_name="OffAxis",
+        body_name="Body",
+        mode="offset_from_face",
+        face_a=face_a,
+        offset_along_normal=[20, 0, 0],
+    ))
+    offsets = _printed(
+        mcp,
+        "LiveDatum",
+        (
+            "import FreeCAD as App\n"
+            "doc = App.getDocument('LiveDatum')\n"
+            "values = []\n"
+            "for name in ('OffShort', 'OffAxis'):\n"
+            "    base = doc.getObject(name).AttachmentOffset.Base\n"
+            "    values.append('%.3f' % base.z)\n"
+            "print(' '.join(values))\n"
+        ),
+    )
+    assert [float(item) for item in offsets.split()] == [20.0, 20.0]
+    preview = _payload(assert_ok(mcp.call(
+        "preview_attachment",
+        doc_name="LiveDatum",
+        datum_name="MidX",
+    )))
+    assert preview["success"] is True
+    assert any(entry.get("object") == "Pad" for entry in preview["support"])
+    assert_ok(mcp.call("close_document", doc_name="LiveDatum"))
     assert_clean(gui_log)
