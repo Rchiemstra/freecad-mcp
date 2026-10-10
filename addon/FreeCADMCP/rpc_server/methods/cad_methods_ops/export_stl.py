@@ -34,7 +34,7 @@ from .policy_runtime import (
     app_from,
     atomic_publish,
     lookup_document,
-    missing_parent_directory,
+    export_path_problem,
     staged_path,
     unlink_quiet,
     verify_nonempty_file,
@@ -99,9 +99,9 @@ def run_export_stl(
     document = lookup_document(app, str(request.doc_name))
     if document is None:
         return _failure(ExportStlError("DOCUMENT_NOT_FOUND", f"Document not found: {request.doc_name!r}"))
-    missing = missing_parent_directory(str(request.file_path))
-    if missing is not None:
-        return _failure(ExportStlError("DIRECTORY_NOT_FOUND", f"Directory does not exist: {missing}"))
+    problem = export_path_problem(str(request.file_path))
+    if problem is not None:
+        return _failure(ExportStlError(problem[0], problem[1]))
     tmp_path = staged_path(str(request.file_path))
     try:
         payload = measure_io_actions.export_stl(

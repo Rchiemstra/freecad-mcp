@@ -160,6 +160,29 @@ def test_move_into_a_part_reports_linked_companions(mcp, gui_log):
     assert_clean(gui_log)
 
 
+def test_export_step_to_a_directory_says_so(mcp, gui_log):
+    """A directory path is rejected before STEP export starts."""
+
+    assert_ok(mcp.call("create_document", name="LiveExport"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveExport",
+        obj_type="Part::Box",
+        obj_name="Box",
+    ))
+    failed = mcp.call(
+        "export_step",
+        doc_name="LiveExport",
+        file_path="/tmp",
+        obj_names=["Box"],
+    )
+    assert not failed.ok, failed.text[:400]
+    assert "directory" in failed.text.lower()
+    assert "Staged export" not in failed.text
+    assert_ok(mcp.call("close_document", doc_name="LiveExport"))
+    assert_clean(gui_log)
+
+
 def test_a_disjoint_intersection_is_rolled_back(mcp, gui_log):
     """Two solids that do not overlap must not leave an empty Common behind."""
 

@@ -42,3 +42,56 @@ def test_a_missing_destination_directory_is_named(tmp_path: Path, action, run):
     assert result["error_code"] == "DIRECTORY_NOT_FOUND"
     assert f"Directory does not exist: {missing}" in result["error"]
     exporter.assert_not_called()
+
+
+def _write_staged(*args, **_kwargs):
+    for arg in args:
+        if isinstance(arg, str) and ".tmp" in arg:
+            Path(arg).write_text("ok", encoding="utf-8")
+    return {"exported": 1, "faces": 1}
+
+
+@pytest.mark.parametrize(
+    "action, run",
+    [
+        ("export_step", lambda collab, path: run_export_step(collab, "Doc", path)),
+        ("export_stl", lambda collab, path: run_export_stl(collab, "Doc", path)),
+        ("export_brep", lambda collab, path: run_export_brep(collab, "Doc", "Box", path)),
+    ],
+)
+def test_a_file_destination_is_exported(tmp_path: Path, action, run):
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.objects["Box"] = FakeObject("Box")
+    collab, _api = collaborators(document, events)
+    dest = tmp_path / "part.out"
+
+    with patch.object(measure_io_actions, action, side_effect=_write_staged):
+        result = run(collab, str(dest))
+
+    assert result["success"] is True
+    assert dest.is_file()
+
+
+@pytest.mark.parametrize(
+    "action, run",
+    [
+        ("export_step", lambda collab, path: run_export_step(collab, "Doc", path)),
+        ("export_stl", lambda collab, path: run_export_stl(collab, "Doc", path)),
+        ("export_brep", lambda collab, path: run_export_brep(collab, "Doc", "Box", path)),
+    ],
+)
+def test_a_directory_destination_is_named_before_export(tmp_path: Path, action, run):
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.objects["Box"] = FakeObject("Box")
+    collab, _api = collaborators(document, events)
+
+    with patch.object(measure_io_actions, action) as exporter:
+        result = run(collab, str(tmp_path))
+
+    assert result["success"] is False
+    assert result["error_code"] == "DESTINATION_IS_DIRECTORY"
+    assert f"Destination is a directory: {tmp_path}" in result["error"]
+    assert "Staged export" not in result["error"]
+    exporter.assert_not_called()
