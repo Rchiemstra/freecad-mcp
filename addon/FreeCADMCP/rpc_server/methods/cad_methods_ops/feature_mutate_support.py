@@ -158,6 +158,19 @@ def require_nonempty_shape(feature: object, *, missing: str) -> None:
         raise LookupError(missing)
 
 
+def require_nonempty_boolean_shape(feature: object, *, missing: str) -> None:
+    """Reject a null shape or a shape with no faces.
+
+    Part::Common of disjoint solids is not null; it is an empty shape whose
+    face list is empty. That result must not be committed.
+    """
+
+    require_nonempty_shape(feature, missing=missing)
+    faces = getattr(getattr(feature, "Shape", None), "Faces", None)
+    if faces is not None and len(faces) == 0:
+        raise LookupError(missing)
+
+
 _SUBELEMENT_REF = re.compile(r"(Edge|Face|Vertex)(\d+)")
 _SUBELEMENT_LISTS = {"Edge": "Edges", "Face": "Faces", "Vertex": "Vertexes"}
 
@@ -322,6 +335,7 @@ __all__ = [
     "nonempty_string",
     "number_value",
     "optional_name",
+    "require_nonempty_boolean_shape",
     "require_nonempty_shape",
     "require_subelements",
     "require_within_extent",

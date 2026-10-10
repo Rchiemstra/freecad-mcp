@@ -160,6 +160,39 @@ def test_move_into_a_part_reports_linked_companions(mcp, gui_log):
     assert_clean(gui_log)
 
 
+def test_a_disjoint_intersection_is_rolled_back(mcp, gui_log):
+    """Two solids that do not overlap must not leave an empty Common behind."""
+
+    assert_ok(mcp.call("create_document", name="LiveBool"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveBool",
+        obj_type="Part::Box",
+        obj_name="Box",
+        obj_properties={"Length": 10, "Width": 10, "Height": 10},
+    ))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveBool",
+        obj_type="Part::Box",
+        obj_name="Other",
+        obj_properties={"Placement": {"Base": {"x": 50}}},
+    ))
+    failed = mcp.call(
+        "boolean_intersection",
+        doc_name="LiveBool",
+        shape1="Box",
+        shape2="Other",
+        result_name="Common",
+    )
+    assert not failed.ok, failed.text[:400]
+    assert "empty" in failed.text.lower()
+    listed = _payload(assert_ok(mcp.call("get_objects", doc_name="LiveBool")))
+    assert "Common" not in {item["Name"] for item in listed["objects"]}
+    assert_ok(mcp.call("close_document", doc_name="LiveBool"))
+    assert_clean(gui_log)
+
+
 def test_unknown_selection_names_the_object(mcp, gui_log):
     """An unknown name fails in the tool result and does not clear the selection."""
 

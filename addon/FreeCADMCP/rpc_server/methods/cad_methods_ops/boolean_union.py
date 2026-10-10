@@ -12,7 +12,7 @@ from .feature_lookup_support import (
 from .feature_mutate_support import (
     create_feature,
     nonempty_string,
-    require_nonempty_shape,
+    require_nonempty_boolean_shape,
     set_attr,
 )
 
@@ -124,12 +124,12 @@ def read_boolean_union_result(doc: FeatureReadDocument, receipt: BooleanUnionRec
             f"Created object is not Part::Fuse: {receipt.name!r}",
         )
     try:
-        require_nonempty_shape(
+        require_nonempty_boolean_shape(
             feature,
-            missing=f"Created object has empty Shape: {receipt.name!r}",
+            missing=f"Boolean result is empty: {receipt.name!r}",
         )
     except LookupError as exc:
-        raise BooleanUnionError("CREATED_OBJECT_INVALID", str(exc)) from exc
+        raise BooleanUnionError("EMPTY_BOOLEAN_RESULT", str(exc)) from exc
     return BooleanUnionInspection(
         name=FeatureName(receipt.name),
         label=str(feature.Label),
