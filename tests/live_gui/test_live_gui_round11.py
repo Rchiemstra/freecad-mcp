@@ -114,6 +114,47 @@ def test_preview_attachment_reports_the_face_offset(mcp, gui_log):
     assert_clean(gui_log)
 
 
+def test_recompute_reports_a_missing_expression_source(mcp, gui_log):
+    """Closing the expression source must surface that document in the tool error."""
+
+    assert_ok(mcp.call("create_document", name="QASrc"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="QASrc",
+        obj_type="Part::Box",
+        obj_name="SrcBox",
+        obj_properties={"Length": 12, "Width": 10, "Height": 8},
+    ))
+    assert_ok(mcp.call("create_document", name="QADst"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="QADst",
+        obj_type="Part::Box",
+        obj_name="Box",
+        obj_properties={"Length": 10, "Width": 10, "Height": 10},
+    ))
+    assert_ok(mcp.call(
+        "set_expression",
+        doc_name="QADst",
+        object_name="Box",
+        prop_path="Length",
+        expression="QASrc#SrcBox.Length",
+    ))
+    assert_ok(mcp.call("close_document", doc_name="QASrc"))
+    failed = mcp.call("recompute_document", doc_name="QADst")
+    assert not failed.ok, failed.text[:600]
+    assert "QASrc" in failed.text
+    assert "Box.Length" in failed.text
+    assert_ok(mcp.call("close_document", doc_name="QADst"))
+    assert_clean(
+        gui_log,
+        r"QASrc",
+        r"property binding",
+        r"Failed to recompute",
+        r"postflight",
+    )
+
+
 def test_an_empty_document_listing_survives_a_missing_screenshot(mcp, gui_log):
     """get_objects must return the empty page when the view has nothing to frame."""
 
