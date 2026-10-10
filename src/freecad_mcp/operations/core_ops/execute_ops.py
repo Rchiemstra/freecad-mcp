@@ -136,6 +136,7 @@ def get_view_operation(
     focus_object: str | None = None,
     focus_objects: list[str] | None = None,
     yaw_deg: float | None = None,
+    document: str | None = None,
 ) -> ToolResponse:
     from ..interactive import normalize_view_name
 
@@ -148,6 +149,7 @@ def get_view_operation(
             focus_object=focus_object,
             focus_objects=focus_objects,
             yaw_deg=yaw_deg,
+            document=document,
         )
     except Exception as e:
         logger.error(f"Failed to get view: {e!s}")

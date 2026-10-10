@@ -81,3 +81,41 @@ def test_save_as_refuses_an_existing_destination(mcp, gui_log, live_gui):
     ))
     assert_ok(mcp.call("close_document", doc_name="LiveNoClobber"))
     assert_clean(gui_log)
+
+
+def test_gui_state_and_view_follow_the_active_document(mcp, gui_log):
+    """activate_document must win over the document that was created last."""
+
+    assert_ok(mcp.call("create_document", name="LiveViewA"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveViewA",
+        obj_type="Part::Box",
+        obj_name="BoxA",
+    ))
+    assert_ok(mcp.call("create_document", name="LiveViewB"))
+    assert_ok(mcp.call(
+        "create_object",
+        doc_name="LiveViewB",
+        obj_type="Part::Box",
+        obj_name="BoxB",
+    ))
+    assert_ok(mcp.call("activate_document", doc_name="LiveViewA"))
+
+    state = _payload(assert_ok(mcp.call("get_gui_state")))
+    assert state["active_document"] == "LiveViewA"
+    assert_ok(mcp.call("get_view", view_name="Isometric", focus_object="BoxA"))
+    assert_ok(mcp.call("get_view", view_name="Isometric"))
+    _rejected(
+        mcp.call("get_view", view_name="Isometric", focus_object="BoxB"),
+        "not present",
+    )
+    assert_ok(mcp.call(
+        "get_view",
+        view_name="Isometric",
+        focus_object="BoxB",
+        document="LiveViewB",
+    ))
+    assert_ok(mcp.call("close_document", doc_name="LiveViewA"))
+    assert_ok(mcp.call("close_document", doc_name="LiveViewB"))
+    assert_clean(gui_log)
