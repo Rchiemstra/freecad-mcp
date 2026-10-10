@@ -96,6 +96,8 @@ def project_listing_object(
     if include_properties:
         properties: dict[str, object] = {}
         for prop in include_properties:
+            if prop not in obj.PropertiesList:
+                continue
             try:
                 properties[prop] = _serialize_property_value(obj, prop)
             except Exception as exc:
