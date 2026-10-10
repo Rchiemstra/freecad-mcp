@@ -39,6 +39,11 @@ except ImportError:  # pragma: no cover - flat addon import path
 from .create_object_mutation import CreateObjectError, run_create_object_native_mutation
 from .property_postcondition import kept_property, property_kept_value
 from .typed_rpc_document import add_object, assign_properties, get_object
+from .view_properties import (
+    GuiExecutor,
+    apply_view_properties_after_commit,
+    split_view_properties,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +54,7 @@ class CreateObjectReceipt:
     obj: object
     object_type: str
     properties: tuple[tuple[str, object], ...]
+    view_properties: tuple[tuple[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,11 +97,12 @@ def apply_create_object(
         )
     created = add_object(doc, str(request.object_type), str(request.object_name))
     properties = _resolve_link_properties(doc, dict(request.properties))
-    if properties:
+    app_properties, view_properties = split_view_properties(properties)
+    if app_properties:
         if set_object_property is not None:
-            set_object_property(doc, created, properties)
+            set_object_property(doc, created, app_properties)
         else:
-            assign_properties(created, properties)
+            assign_properties(created, app_properties)
     if request.analysis_name:
         analysis = get_object(doc, request.analysis_name)
         if analysis is None:
@@ -119,11 +126,8 @@ def apply_create_object(
         name=assigned,
         obj=created,
         object_type=object_type,
-        properties=tuple(
-            (key, value)
-            for key, value in properties.items()
-            if key not in {"ShapeColor", "ViewObject"}
-        ),
+        properties=tuple(app_properties.items()),
+        view_properties=tuple(view_properties.items()),
     )
 
 
@@ -239,13 +243,16 @@ class _CreateObjectExecution:
     collaborators: CreateObjectCollaborators
     request: CreateObjectRequest
     set_object_property: Callable[[object, object, dict[str, object]], object] | None
+    on_gui: GuiExecutor | None = None
     created: CreateObjectReceipt | None = None
     inspected: CreateObjectInspection | None = None
+    document: object | None = None
 
     def apply(self, doc: object) -> None:
         self.created = apply_create_object(doc, self.request, self.set_object_property)
 
     def inspect(self, doc: object) -> None:
+        self.document = doc
         if self.created is None:
             raise CreateObjectError(
                 "INVALID_CREATE_OBJECT_RESULT",
@@ -267,30 +274,64 @@ class _CreateObjectExecution:
                     "Native commit completed without an inspected object result",
                     committed=True,
                 )
+            view_error = self._apply_deferred_view_properties()
+            if view_error is not None:
+                return make_create_object_uncertain(
+                    "VIEW_PROPERTY_FAILED",
+                    view_error,
+                    committed=True,
+                )
             return make_create_object_success(
                 self.inspected.name, self.inspected.object_type, self.inspected.label
             )
 
         return continue_after_native_commit(result, _finish_native_commit)
 
+    def _apply_deferred_view_properties(self) -> str | None:
+        receipt = self.created
+        if receipt is None or not receipt.view_properties:
+            return None
+        if self.document is None:
+            return (
+                f"View properties were not applied on {receipt.name!r}: "
+                "the committed document is missing"
+            )
+        return apply_view_properties_after_commit(
+            self.document,
+            receipt.name,
+            dict(receipt.view_properties),
+            self.set_object_property,
+            self.on_gui,
+        )
+
 def run_create_object(
     collaborators: CreateObjectCollaborators,
     doc_name: object,
     obj_data: object,
     set_object_property: Callable[[object, object, dict[str, object]], object] | None = None,
+    *,
+    on_gui: GuiExecutor | None = None,
 ) -> NativeOutcome[CreateObjectResult]:
-    """Run object creation through apply, recompute, inspection, and commit."""
+    """Run object creation through apply, recompute, inspection, and commit.
+
+    ``on_gui`` runs ViewObject assignment on the Qt main thread after the App
+    commit. App properties stay inside the atomic commit.
+    """
 
     request = build_create_object_request(doc_name, obj_data)
     if isinstance(request, dict):
         return request
-    return _CreateObjectExecution(collaborators, request, set_object_property).run()
+    return _CreateObjectExecution(
+        collaborators, request, set_object_property, on_gui
+    ).run()
 
 
 class _CreateObjectRpcFacade(Protocol):
     _cad_collaborators: CreateObjectCollaborators
 
     def _dispatch_gui(self, callback: Callable[[], object]) -> object: ...
+
+    def _dispatch_snapshot_gui(self, task: Callable[[], object]) -> object: ...
 
 
 def _property_setter(
@@ -313,8 +354,11 @@ def rpc_create_object(
 ) -> dict[str, object]:
     collaborators = self._cad_collaborators
     setter = _property_setter(collaborators)
+    on_gui = self._dispatch_snapshot_gui
     res = self._dispatch_gui(
-        lambda: run_create_object(collaborators, doc_name, obj_data, setter)
+        lambda: run_create_object(
+            collaborators, doc_name, obj_data, setter, on_gui=on_gui
+        )
     )
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
