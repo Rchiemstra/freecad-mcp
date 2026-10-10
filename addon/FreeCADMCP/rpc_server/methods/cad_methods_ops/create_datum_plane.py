@@ -220,16 +220,10 @@ def _apply_offset_along_normal(plane: object, offset: float | list[float] | None
     if offset is None:
         return
     if isinstance(offset, list):
+        # Three numbers are the AttachmentOffset base: X and Y slide the datum
+        # in the face plane, Z is the distance along the face normal.
         x_value, y_value, z_value = offset
-        # AttachmentOffset Z is the face normal. A single nonzero component is
-        # that distance; storing it in X or Y only slides the datum on the face.
-        nonzero = [
-            value for value in (x_value, y_value, z_value) if abs(value) > 1.0e-12
-        ]
-        if len(nonzero) <= 1:
-            _store_attachment_base(plane, 0.0, 0.0, nonzero[0] if nonzero else 0.0)
-        else:
-            _store_attachment_base(plane, x_value, y_value, z_value)
+        _store_attachment_base(plane, x_value, y_value, z_value)
         return
     _store_attachment_base(plane, 0.0, 0.0, float(offset))
 

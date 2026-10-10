@@ -433,6 +433,15 @@ def test_normal_offsets_leave_the_support_face():
     short = _apply_plane(document, plane_name="Short", offset_along_normal=[20])
     assert short.AttachmentOffset.Base.z == 20.0
     assert short.AttachmentOffset.Base.x == 0.0
-    axis = _apply_plane(document, plane_name="Axis", offset_along_normal=[20, 0, 0])
+    axis = _apply_plane(document, plane_name="Axis", offset_along_normal=[0, 0, 20])
     assert axis.AttachmentOffset.Base.z == 20.0
     assert axis.AttachmentOffset.Base.x == 0.0
+
+
+def test_a_three_number_offset_is_the_raw_attachment_base():
+    """X and Y slide the datum in the face plane; only Z leaves the face."""
+
+    document = _plane_document()
+    plane = _apply_plane(document, plane_name="Slide", offset_along_normal=[20, 0, 0])
+    base = plane.AttachmentOffset.Base
+    assert (base.x, base.y, base.z) == (20.0, 0.0, 0.0)

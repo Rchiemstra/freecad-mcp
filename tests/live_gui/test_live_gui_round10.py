@@ -229,7 +229,7 @@ def test_midpoint_datums_offsets_and_attachment_preview(mcp, gui_log):
         body_name="Body",
         mode="offset_from_face",
         face_a=face_a,
-        offset_along_normal=[20, 0, 0],
+        offset_along_normal=[0, 0, 20],
     ))
     offsets = _printed(
         mcp,
