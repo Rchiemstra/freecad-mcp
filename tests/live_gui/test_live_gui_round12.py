@@ -334,3 +334,19 @@ def test_registered_import_module_opens_on_gui_thread(mcp, gui_log, live_gui):
     assert_ok(mcp.call('close_document', doc_name='R12Imported'))
     assert_clean(gui_log)
 
+
+
+def test_touched_feature_is_not_a_recompute_error(mcp, gui_log):
+    assert_ok(mcp.call('create_document', name='R12Touched'))
+    result = mcp.call('execute_code', document='R12Touched', execution_mode='gui', recompute='none',
+                      code="import FreeCAD as App, Part\n"
+                           "doc = App.getDocument('R12Touched')\n"
+                           "obj = doc.addObject('Part::Feature','Feature')\n"
+                           "obj.Shape = Part.makeBox(10,10,10)\ndoc.recompute()")
+    assert_ok(result)
+    assert '"recompute_errors": []' in result.text or not result.payload.get('recompute_errors')
+    assert 'deferred' in result.payload['note'].lower()
+    assert_ok(mcp.call('recompute_document', doc_name='R12Touched'))
+    assert_ok(mcp.call('close_document', doc_name='R12Touched'))
+    assert_clean(gui_log)
+

@@ -24,6 +24,7 @@ def finalize_gui_execute_response(
                 "session": session,
                 "structured": session,
                 "execution": {"mode": "gui"},
+                **({"note": res["note"]} if "note" in res else {}),
             }
         )
     tb = res.get("traceback")

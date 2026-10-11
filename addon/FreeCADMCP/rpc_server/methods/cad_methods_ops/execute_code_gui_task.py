@@ -8,7 +8,7 @@ from typing import Any
 
 from ...gui_dispatch import _flush_gui_events
 from ._common import require_document_modified
-from .execute_code_gui_exec import run_python_on_gui_thread
+from .execute_code_gui_exec import run_python_on_gui_thread, observe_recompute_calls
 from .execute_code_gui_hooks import (
     install_read_only_save_hooks,
     recompute_documents,
@@ -121,9 +121,10 @@ def run_execute_code_gui_task(  # noqa: C901
     ok = False
     tb_info = None
     try:
-        ok, tb_info = run_python_on_gui_thread(
-            apply_code, output_buffer, freecad=freecad
-        )
+        with observe_recompute_calls() as recompute_calls:
+            ok, tb_info = run_python_on_gui_thread(
+                apply_code, output_buffer, freecad=freecad
+            )
     finally:
         restore_save_hooks(saved_hooks)
         if not native_boundary:
@@ -159,6 +160,11 @@ def run_execute_code_gui_task(  # noqa: C901
         stdout = output_buffer.getvalue()
         if ok:
             finalized_result = {"ok": True, "session": session, "stdout": stdout}
+            if native_boundary and recompute_calls:
+                finalized_result["note"] = (
+                    "The collaborative commit fence deferred the body's doc.recompute(). "
+                    "Use recompute_document after execute_code with recompute=\"none\"."
+                )
         else:
             finalized_result = {
                 "ok": False,
