@@ -396,3 +396,25 @@ def test_dropped_read_only_transport_retries_against_live_freecad(mcp, live_gui,
         assert_ok(mcp.call('close_document', doc_name='R12Retry'))
     assert_clean(gui_log)
 
+
+
+def test_parallel_sketch_constraints_queue_or_reject_retry_safely(mcp, gui_log):
+    from concurrent.futures import ThreadPoolExecutor
+    assert_ok(mcp.call('create_document', name='R12Parallel'))
+    assert_ok(mcp.call('body_create', doc_name='R12Parallel', body_name='Body'))
+    assert_ok(mcp.call('sketch_create', doc_name='R12Parallel', sketch_name='Profile', body_name='Body'))
+    assert_ok(mcp.call('sketch_add_polyline', doc_name='R12Parallel', sketch_name='Profile', closed=True,
+                       points=[{'x':0,'y':0},{'x':20,'y':0},{'x':20,'y':10},{'x':0,'y':10}]))
+    def constrain(index):
+        return mcp.call('sketch_constrain_horizontal' if index % 2 == 0 else 'sketch_constrain_vertical',
+                        doc_name='R12Parallel', sketch_name='Profile', geo=index)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(constrain, range(4)))
+    for result in results:
+        if not result.ok:
+            assert 'document busy' in result.text.lower() and 'retry' in result.text.lower()
+            assert result.payload.get('retry_safe') is True
+    assert_ok(mcp.call('recompute_document', doc_name='R12Parallel'))
+    assert_ok(mcp.call('close_document', doc_name='R12Parallel'))
+    assert_clean(gui_log)
+
