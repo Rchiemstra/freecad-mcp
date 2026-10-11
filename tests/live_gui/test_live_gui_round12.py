@@ -193,3 +193,40 @@ def test_worker_error_keeps_traceback_and_last_error(mcp, gui_log):
     assert_ok(mcp.call('close_document', doc_name='R12Worker'))
     assert_clean(gui_log, 'worker.*failed', 'qa boom')
 
+
+
+def _red_box(mcp, document):
+    assert_ok(mcp.call("create_document", name=document))
+    assert_ok(mcp.call("create_object", doc_name=document, obj_name="Box", obj_type="Part::Box",
+                       obj_properties={"Length": 10, "Width": 10, "Height": 10,
+                                       "ViewObject": {"ShapeColor": [1, 0, 0, 1]}}))
+
+
+
+def _box_view(mcp, document):
+    rows = _payload(assert_ok(mcp.call("get_objects", doc_name=document, include_view=True)))
+    return next(row["ViewObject"] for row in rows["objects"] if row["Name"] == "Box")
+
+
+
+def test_red_box_creation(mcp, gui_log):
+    _red_box(mcp, "R12RedHappy")
+    assert _box_view(mcp, "R12RedHappy")["ShapeColor"][:3] == pytest.approx([1, 0, 0])
+    assert_ok(mcp.call("close_document", doc_name="R12RedHappy"))
+    assert_clean(gui_log)
+
+
+
+def test_visibility_edits_preserve_color(mcp, gui_log):
+    _red_box(mcp, "R12RedDefect")
+    try:
+        for visibility in [False, True]:
+            assert_ok(mcp.call("edit_object", doc_name="R12RedDefect", obj_name="Box",
+                               obj_properties={"ViewObject": {"Visibility": visibility}}))
+            view = _box_view(mcp, "R12RedDefect")
+            assert view["Visibility"] is visibility
+            assert view["ShapeColor"][:3] == pytest.approx([1, 0, 0])
+    finally:
+        assert_ok(mcp.call("close_document", doc_name="R12RedDefect"))
+    assert_clean(gui_log)
+
