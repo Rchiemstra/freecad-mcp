@@ -218,10 +218,17 @@ def apply_sketch_trim(
     sketch = _require_sketch(doc, request.sketch_name)
     before_geo = sketch.GeometryCount
     before_con = sketch.ConstraintCount
-    sketch.trim(
-        request.geo_index,
-        collaborators.freecad.Vector(request.point_x, request.point_y, 0.0),
-    )
+    try:
+        sketch.trim(
+            request.geo_index,
+            collaborators.freecad.Vector(request.point_x, request.point_y, 0.0),
+        )
+    except Exception as exc:
+        if "Standard_NullValue" not in str(exc):
+            raise
+        raise SketchTrimError(
+            "TRIM_NO_INTERSECTION", "Curve has no intersection near the trim point"
+        ) from exc
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

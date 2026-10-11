@@ -16790,6 +16790,18 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "module",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
         }
       ],
       "result_examples": [
@@ -32440,7 +32452,10 @@
         "git_dirty": null,
         "available": false
       },
-      "freecad_git_commit": "unknown"
+      "freecad_git_commit": "unknown",
+      "gui": {
+        "modal_dialog": null
+      }
     },
     "get_object": {
       "contract_version": 1,

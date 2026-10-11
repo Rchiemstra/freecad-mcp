@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import socket
 import threading
+import time
 import urllib.parse
 from collections.abc import Iterable, Mapping
 from contextlib import suppress
@@ -66,22 +67,31 @@ def _declared_response_length(
     return declared
 
 
+def _deadline_reached(
+    expired: threading.Event, deadline_at: float | None
+) -> bool:
+    return expired.is_set() or (
+        deadline_at is not None and time.monotonic() >= deadline_at
+    )
+
+
 def _read_bounded_response(
     response: http.client.HTTPResponse,
     *,
     maximum: int,
     declared: int | None,
     deadline_expired: threading.Event,
+    deadline_at: float,
 ) -> bytes:
     try:
         body = response.read(maximum + 1)
     except http.client.IncompleteRead as exc:
-        if deadline_expired.is_set():
+        if _deadline_reached(deadline_expired, deadline_at):
             raise TimeoutError("FreeCAD JSON-RPC response deadline exceeded") from exc
         raise _JsonRpcHttpResponseError(
             "JSON-RPC response body was shorter than Content-Length"
         ) from exc
-    if deadline_expired.is_set():
+    if _deadline_reached(deadline_expired, deadline_at):
         raise TimeoutError("FreeCAD JSON-RPC response deadline exceeded")
     if len(body) > maximum:
         raise _JsonRpcHttpResponseError(
@@ -148,6 +158,7 @@ class JsonRpcHttpTransport:
             request_headers[str(name)] = str(value)
         deadline_expired = threading.Event()
         deadline_timer: threading.Timer | None = None
+        deadline_at: float | None = None
         try:
             connection.connect()
             wire_socket = connection.sock
@@ -161,6 +172,9 @@ class JsonRpcHttpTransport:
                 deadline_expired.set()
                 _abort_socket(wire_socket)
 
+            # The socket timeout can fire before the timer thread gets CPU.
+            # Keep the absolute boundary so both wakeups classify identically.
+            deadline_at = time.monotonic() + self._timeout
             deadline_timer = threading.Timer(self._timeout, expire_deadline)
             deadline_timer.daemon = True
             deadline_timer.start()
@@ -176,10 +190,11 @@ class JsonRpcHttpTransport:
                 maximum=self._max_response_bytes,
                 declared=declared_length,
                 deadline_expired=deadline_expired,
+                deadline_at=deadline_at,
             )
             return response.status, response_headers, body
         except (OSError, http.client.HTTPException):
-            if deadline_expired.is_set():
+            if _deadline_reached(deadline_expired, deadline_at):
                 raise TimeoutError(
                     "FreeCAD JSON-RPC response deadline exceeded"
                 ) from None

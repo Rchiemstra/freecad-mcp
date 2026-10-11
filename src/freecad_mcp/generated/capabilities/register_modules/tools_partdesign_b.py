@@ -173,7 +173,7 @@ def _register_face_normal(
         """Return the global normal (and centre) of a face (M6 / P8 guard).
 
         Derives the vector from the face geometry via ``normalAt`` rotated by the
-        object's global placement, avoiding the Direction-vs-Axis trap. Returns JSON
+        parent chain's placement; Shape already includes the object's own Placement. Returns JSON
         ``{ok, object, subshape, type, global_center, global_normal, radius}``.
 
         Args:

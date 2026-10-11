@@ -161,7 +161,7 @@ def collect_invalid_objects(freecad) -> dict[str, list[dict[str, Any]]]:
         for obj in doc.Objects:
             try:
                 state = list(getattr(obj, "State", []))
-                if any(s in ("Invalid", "Error", "Touched") for s in state):
+                if any(s in ("Invalid", "Error") for s in state):
                     entries.append(
                         {
                             "name": obj.Name,

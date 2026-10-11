@@ -68,6 +68,7 @@ class SetExpressionCollaborators(Protocol):
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Run the mutation through the fixed native transaction policy."""
 
@@ -96,6 +97,7 @@ class SetExpressionSuccess(TypedDict):
     object: str
     prop_path: str
     expression: str
+    bound_value: NotRequired[str]
 
 
 class SetExpressionFailure(TypedDict):
@@ -138,7 +140,7 @@ SetExpressionResult = SetExpressionSuccess | SetExpressionFailure | SetExpressio
 
 _CORE_KEYS = frozenset(
     {
-        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'object', 'prop_path', 'expression', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics"
+        "contract_version", "success", "ok", "outcome", "committed", "retry_safe", 'object', 'prop_path', 'expression', "error_code", "error", "native_status", "native_message", "rollback_succeeded", "rollback_failed", "diagnostics", "bound_value"
     }
 )
 
@@ -373,7 +375,12 @@ def parse_set_expression_response(raw_response: object) -> SetExpressionResult:
         and isinstance(prop_path, str) and prop_path.strip()
         and isinstance(expression, str) and expression.strip()
     ):
-        return make_set_expression_success(str(object), str(prop_path), str(expression))
+        success = make_set_expression_success(str(object), str(prop_path), str(expression))
+        if "bound_value" in response:
+            if not isinstance(response["bound_value"], str):
+                return _invalid_response(response)
+            success["bound_value"] = response["bound_value"]
+        return success
 
     error_code = response.get("error_code")
     error = response.get("error")

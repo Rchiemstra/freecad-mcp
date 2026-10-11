@@ -95,7 +95,16 @@ def apply_create_object(
             "OBJECT_ALREADY_EXISTS",
             f"Object already exists: {request.object_name!r}",
         )
-    created = add_object(doc, str(request.object_type), str(request.object_name))
+    try:
+        created = add_object(doc, str(request.object_type), str(request.object_name))
+    except Exception as exc:
+        # FreeCAD may try importing the namespace as a Python module before
+        # rejecting an unregistered C++ type. Do not expose that implementation.
+        if isinstance(exc, ModuleNotFoundError) or "unknown type" in str(exc).lower():
+            raise CreateObjectError(
+                "UNKNOWN_OBJECT_TYPE", f"Unknown object type: {request.object_type}"
+            ) from exc
+        raise
     properties = _resolve_link_properties(doc, dict(request.properties))
     app_properties, view_properties = split_view_properties(properties)
     if app_properties:
@@ -192,9 +201,15 @@ def read_create_object_result(
                 f"Created object is missing property {key!r}",
             )
         if not property_kept_value(doc, expected, kept_property(created, key)):
+            detail = ""
+            if key == "Base" and receipt.object_type.startswith("PartDesign::"):
+                detail = (
+                    "; FreeCAD rejected the Base because links are out of scope. "
+                    "PartDesign features must be created inside the body"
+                )
             raise CreateObjectError(
                 "PROPERTY_NOT_UPDATED",
-                f"Created object property {key!r} did not keep the assigned value",
+                f"Created object property {key!r} did not keep the assigned value{detail}",
             )
     label = getattr(created, "Label", receipt.name)
     type_id = getattr(created, "TypeId", receipt.object_type)

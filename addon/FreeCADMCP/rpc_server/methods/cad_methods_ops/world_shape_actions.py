@@ -161,6 +161,21 @@ def read_global_placement(obj: object) -> object:
     return placement
 
 
+def read_shape_placement(obj: object) -> object:
+    """Transform obj.Shape coordinates to world coordinates.
+
+    Shape already contains the object's own placement. Geometry (including
+    Sketch.Geometry) and placement metadata still need read_global_placement.
+    """
+    global_placement = read_global_placement(obj)
+    local = getattr(obj, "Placement", None)
+    inverse = getattr(local, "inverse", None)
+    if callable(inverse):
+        return cast(object, global_placement * inverse())
+    # Objects without a local Placement use the available global transform.
+    return global_placement
+
+
 def _scale_factors(obj: object) -> tuple[float, float, float]:
     scale_vector = getattr(obj, "ScaleVector", None)
     if scale_vector is not None:
@@ -321,5 +336,6 @@ def resolve_global_shape(obj: object) -> tuple[object, dict[str, object]]:
 
 __all__ = [
     "read_global_placement",
+    "read_shape_placement",
     "resolve_global_shape",
 ]

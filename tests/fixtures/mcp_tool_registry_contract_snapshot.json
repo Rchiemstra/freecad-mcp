@@ -395,7 +395,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str', pocket_name: 'str') -> 'CallToolResult'"
     },
     "edge_axis": {
-      "docstring": "Return the global axis/direction (and centre) of an edge (M6 / P8 guard).\n\nDerives the vector from the curve geometry rotated by the object's global\nplacement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose edge to inspect.\n    edge: The edge name, e.g. ``\"Edge2\"``.",
+      "docstring": "Return the global axis/direction (and centre) of an edge (M6 / P8 guard).\n\nDerives the vector from the curve geometry rotated by the parent chain's\nplacement; Shape already includes the object's own Placement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose edge to inspect.\n    edge: The edge name, e.g. ``\"Edge2\"``.",
       "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', edge: 'str') -> 'CallToolResult'"
     },
     "edit_object": {
@@ -427,7 +427,7 @@
       "signature": "(ctx: 'Context', doc_name: 'str', file_path: 'str', obj_names: 'list[str] | None' = None, mesh_deviation: 'float' = 0.1) -> 'CallToolResult'"
     },
     "face_normal": {
-      "docstring": "Return the global normal (and centre) of a face (M6 / P8 guard).\n\nDerives the vector from the face geometry via ``normalAt`` rotated by the\nobject's global placement, avoiding the Direction-vs-Axis trap. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose face to inspect.\n    face: The face name, e.g. ``\"Face3\"``.",
+      "docstring": "Return the global normal (and centre) of a face (M6 / P8 guard).\n\nDerives the vector from the face geometry via ``normalAt`` rotated by the\nparent chain's placement; Shape already includes the object's own Placement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose face to inspect.\n    face: The face name, e.g. ``\"Face3\"``.",
       "signature": "(ctx: 'Context', doc_name: 'str', object_name: 'str', face: 'str') -> 'CallToolResult'"
     },
     "fillet_feature": {
@@ -595,8 +595,8 @@
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', target_container: 'str', remove_from_old_parent: 'bool' = True) -> 'CallToolResult'"
     },
     "open_document": {
-      "docstring": "Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.\n\nUse this to load V7 and V8 into the same FreeCAD session for comparison.",
-      "signature": "(ctx: 'Context', path: 'str') -> 'CallToolResult'"
+      "docstring": "Open a ``.FCStd`` project or a file handled by a registered FreeCAD import module.\n\nImport modules run on the Qt main thread, as in File > Open. If several modules\nhandle the extension, pass ``module`` to choose one from the listed candidates.\nUse this to load V7 and V8 into the same FreeCAD session for comparison.",
+      "signature": "(ctx: 'Context', path: 'str', module: 'str | None' = None) -> 'CallToolResult'"
     },
     "pad_feature": {
       "docstring": "Extrude (pad) a closed sketch profile into a 3-D solid (PartDesign::Pad).\n\nStrict PartDesign: the Pad is always created inside a PartDesign Body. If\n`body_name` is given it must resolve; otherwise the Body that owns the sketch\nis auto-detected. If no owning Body can be found the tool FAILS -- it never\nfalls back to a loose, non-parametric feature in the document. Before building,\nthe sketch is checked for conflicting/malformed constraints and a closed\nprofile; after building, Body membership, Body.Tip, and a non-null solid are\nverified. The whole build is wrapped in a transaction, so a failed check leaves\nno partial feature behind.\n\nArgs:\n    doc_name: The document containing the sketch and body.\n    sketch_name: Name of the sketch to extrude.\n    pad_name: Name for the resulting Pad feature.\n    length: Extrusion distance in mm.\n    body_name: Optional explicit PartDesign Body name.\n    symmetric: If true, extrude equally in both directions (length/2 each).\n    reversed_dir: If true, reverse the extrusion direction.\n    strict: If true, require an explicit `body_name` (owning-Body auto-detect\n        is disabled). Recommended for a deterministic PartDesign history.\n\nReturns:\n    JSON ``{pad, feature, label}`` plus an isometric screenshot, or a\n    failure whose ``diagnostics`` explain a profile that is not pad-ready.\n    Use get_object or validate_geometry for the resulting solid.\n\nExamples:\n    Pad \"Sketch\" by 15 mm inside \"Body\":\n    ```json\n    {\"doc_name\": \"Part\", \"sketch_name\": \"Sketch\", \"pad_name\": \"Pad\", \"length\": 15,\n     \"body_name\": \"Body\"}\n    ```",

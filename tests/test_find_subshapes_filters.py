@@ -40,6 +40,7 @@ FILTERS = {
 
 def _document(shape, *, base=(0, 0, 0)):
     placement = FreeCAD.Placement(FreeCAD.Vector(*base), FreeCAD.Rotation())
+    shape.Placement = placement
     obj = SimpleNamespace(Name="Seat", Shape=shape, Placement=placement, getGlobalPlacement=lambda: placement)
     return SimpleNamespace(getObject={"Seat": obj}.get)
 

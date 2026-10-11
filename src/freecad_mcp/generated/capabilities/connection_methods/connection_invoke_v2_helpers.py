@@ -194,12 +194,13 @@ def invoke_v2_transport(
     envelope = context.to_envelope(method, wire_params)
     transport_method = "invoke_v2_control" if control else "invoke_v2"
     try:
-        return conn.invoke_rpc(
-            transport_method,
-            envelope,
-            control=control,
-            timeout=timeout,
+        from freecad_mcp.freecad_client_ops.read_transport_retry import invoke_with_read_retry
+        return invoke_with_read_retry(
+            conn, method, params, transport_method, envelope,
+            control=control, timeout=timeout,
         )
+    except RpcInvocationError:
+        raise
     except JsonRpcRemoteError as exc:
         raise _redact_native_remote_error(conn, exc, context) from None
     except Exception as exc:

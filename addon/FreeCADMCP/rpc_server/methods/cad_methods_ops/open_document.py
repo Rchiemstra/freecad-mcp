@@ -65,7 +65,40 @@ def prepare_open_document(_app: object, request: OpenDocumentRequest) -> OpenDoc
     return None
 
 
-def perform_open_document(app: object, request: OpenDocumentRequest) -> tuple[OpenDocumentFailure | None, str | None]:
+def perform_open_document(app: object, request: OpenDocumentRequest, module: str | None = None) -> tuple[OpenDocumentResult | None, str | None]:
+    extension = os.path.splitext(str(request.path))[1].lower()
+    if extension != ".fcstd":
+        registry = getattr(app, "getImportType", None)
+        modules = list(dict.fromkeys(registry(extension.lstrip(".")) if callable(registry) else []))
+        if not modules:
+            return _failure(OpenDocumentError("NO_IMPORT_MODULE", f"no import module handles {extension}")), None
+        if module is not None and module not in modules:
+            return _failure(OpenDocumentError("INVALID_IMPORT_MODULE", f"Choose an import module for {extension}: {', '.join(modules)}")), None
+        if module is None and len(modules) != 1:
+            return _failure(OpenDocumentError("AMBIGUOUS_IMPORT_MODULE", f"Several import modules handle {extension}: {', '.join(modules)}; pass module to choose")), None
+        list_documents = getattr(app, "listDocuments")
+        before = set(list_documents())
+        try:
+            # Module names have been checked against FreeCAD's import registry.
+            # Use the external importer entry point, as File > Open does.
+            opened = __import__(module or modules[0], fromlist=['open']).open(str(request.path))
+        except Exception as exc:
+            # An importer can leave live documents behind before raising.
+            return make_open_document_uncertain(
+                "IMPORT_OPEN_FAILED", f"{type(exc).__name__}: {exc}", committed=None,
+            ), None
+        created = set(list_documents()) - before
+        name = getattr(opened, "Name", None)
+        if isinstance(name, str) and name:
+            return None, name
+        if len(created) == 1:
+            return None, created.pop()
+        return make_open_document_uncertain(
+            "IMPORT_DOCUMENT_UNRESOLVED",
+            "Import module did not return or create exactly one document",
+            committed=None,
+            diagnostics={"created_documents": sorted(created)},
+        ), None
     opener = getattr(app, "openDocument", None)
     if not callable(opener):
         return _failure(OpenDocumentError("FREECAD_UNAVAILABLE", "FreeCAD cannot open documents")), None
@@ -121,7 +154,10 @@ def compensate_open_document(app: object, opened_name: str) -> OpenDocumentResul
 def run_open_document(
     collaborators: OpenDocumentCollaborators,
     path: object,
+    module: str | None = None,
 ) -> OpenDocumentResult:
+    if module is not None and (not isinstance(module, str) or not module.strip()):
+        return _failure(OpenDocumentError("INVALID_ARGUMENT", "module must be a nonempty string"))
     request = build_open_document_request(path)
     if isinstance(request, dict):
         return request
@@ -131,7 +167,7 @@ def run_open_document(
     prep = prepare_open_document(app, request)
     if prep is not None:
         return prep
-    perf, opened_name = perform_open_document(app, request)
+    perf, opened_name = perform_open_document(app, request, module)
     if perf is not None or opened_name is None:
         return perf if perf is not None else _failure(OpenDocumentError("OPEN_DOCUMENT_FAILED", "Open failed"))
     verified = verify_open_document(app, request, opened_name)
@@ -144,11 +180,13 @@ class _OpenDocumentRpcFacade(Protocol):
     _cad_collaborators: OpenDocumentCollaborators
 
     def _dispatch_gui(self, callback: Callable[[], object]) -> object: ...
+    def _dispatch_snapshot_gui(self, callback: Callable[[], object]) -> object: ...
 
 
-def rpc_open_document(self: _OpenDocumentRpcFacade, path: str) -> dict[str, object]:
+def rpc_open_document(self: _OpenDocumentRpcFacade, path: str, module: str | None = None) -> dict[str, object]:
     collaborators = self._cad_collaborators
-    res = self._dispatch_gui(lambda: run_open_document(collaborators, path))
+    dispatch = self._dispatch_gui if os.path.splitext(path)[1].lower() == ".fcstd" else self._dispatch_snapshot_gui
+    res = dispatch(lambda: run_open_document(collaborators, path, module))
     return res if isinstance(res, dict) else {"success": False, "error": res}
 
 

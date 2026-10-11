@@ -203,13 +203,15 @@ def _register_open_document(
     exports: dict[str, object],
 ) -> None:
     @mcp.tool()
-    def open_document(ctx: Context, path: str) -> CallToolResult:
+    def open_document(ctx: Context, path: str, module: str | None = None) -> CallToolResult:
         """
-        Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.
-        
+        Open a ``.FCStd`` project or a file handled by a registered FreeCAD import module.
+
+        Import modules run on the Qt main thread, as in File > Open. If several modules
+        handle the extension, pass ``module`` to choose one from the listed candidates.
         Use this to load V7 and V8 into the same FreeCAD session for comparison.
         """
-        return open_document_operation(server_connection(), path)
+        return open_document_operation(server_connection(), path, module)
 
     exports['open_document'] = open_document
 

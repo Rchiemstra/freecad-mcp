@@ -46,6 +46,23 @@ class GuiDispatchTimeout(GuiDispatchError):
     """The GUI did not complete a request before its caller timed out."""
 
 
+class GuiModalDialogTimeout(GuiDispatchTimeout):
+    """A modal-blocked timeout retaining phase and recovery evidence."""
+
+    error_code = "GUI_BLOCKED_BY_MODAL_DIALOG"
+
+    def __init__(self, title: str, timeout: GuiDispatchTimeout) -> None:
+        self.modal_dialog = title
+        super().__init__(
+            f"GUI blocked by modal dialog: {title}",
+            request_id=timeout.request_id,
+            timeout_stage=timeout.timeout_stage,
+            execution_started=timeout.execution_started,
+            mutation_started=timeout.mutation_started,
+            completion_uncertain=timeout.completion_uncertain,
+        )
+
+
 class GuiBusyAfterTimeout(GuiDispatchError):
     """A timed-out request is still occupying the GUI owner thread."""
 

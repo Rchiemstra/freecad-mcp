@@ -29,8 +29,8 @@ def _register_edge_axis(
     ) -> CallToolResult:
         """Return the global axis/direction (and centre) of an edge (M6 / P8 guard).
 
-        Derives the vector from the curve geometry rotated by the object's global
-        placement. Returns JSON
+        Derives the vector from the curve geometry rotated by the parent chain's
+        placement; Shape already includes the object's own Placement. Returns JSON
         ``{ok, object, subshape, type, global_center, global_normal, radius}``.
 
         Args:

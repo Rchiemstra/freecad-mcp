@@ -16,10 +16,10 @@ from ...responses.tool_results import tool_fail, tool_ok
 
 
 def open_document_operation(
-    freecad: FreeCADConnection, path: str,
+    freecad: FreeCADConnection, path: str, module: str | None = None,
 ) -> CallToolResult:
     try:
-        raw_result: object = freecad.open_document(PathName(path))
+        raw_result: object = freecad.open_document(PathName(path), **({"module": module} if module is not None else {}))
     except Exception as exc:
         raw_result = make_open_document_uncertain(
             "OPEN_DOCUMENT_TRANSPORT_UNCERTAIN",

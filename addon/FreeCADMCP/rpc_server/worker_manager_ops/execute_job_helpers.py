@@ -152,6 +152,11 @@ def build_worker_failure_payload(
         "snapshot_duration_ms": snapshot.get("snapshot_duration_ms", 0.0),
     }
     error = result.get("error") or {}
+    exception_type = str(error.get("type") or "Exception")
+    detail = f"{exception_type}: {error.get('message', f'Worker exited {return_code}')}"
+    trace = str(result.get("traceback") or "")
+    if trace:
+        detail += "\n" + "\n".join(trace.splitlines()[-8:])
     error_code = worker_error_code(error)
     console_message(
         f"FreeCADMCP: worker IDLE job={job_id} failed error_code={error_code}"
@@ -167,9 +172,10 @@ def build_worker_failure_payload(
             if error_code == "worker_execution_error"
             else {}
         ),
-        "error": error.get("message", f"Worker exited {return_code}"),
+        "error": detail,
         "traceback": result.get("traceback"),
-        "message": result.get("stdout", ""),
+        "message": detail,
+        "stdout": result.get("stdout", ""),
         "session": result.get("session", {}),
         "execution": {**execution, "stage": "failed"},
     }

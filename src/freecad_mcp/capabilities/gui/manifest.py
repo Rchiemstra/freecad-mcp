@@ -77,8 +77,8 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="open_document",
-            docstring='Open a ``.FCStd`` (or other FreeCAD-supported) file in the running GUI.\n\nUse this to load V7 and V8 into the same FreeCAD session for comparison.',
-            signature="(ctx: 'Context', path: 'str') -> 'CallToolResult'",
+            docstring='Open a ``.FCStd`` project or a file handled by a registered FreeCAD import module.\n\nImport modules run on the Qt main thread, as in File > Open. If several modules\nhandle the extension, pass ``module`` to choose one from the listed candidates.\nUse this to load V7 and V8 into the same FreeCAD session for comparison.',
+            signature="(ctx: 'Context', path: 'str', module: 'str | None' = None) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.open_document_operation",
             rpc_method="open_document",
             execution_mode=ExecutionMode.TYPED_GATEWAY,

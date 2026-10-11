@@ -107,7 +107,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="face_normal",
-            docstring='Return the global normal (and centre) of a face (M6 / P8 guard).\n\nDerives the vector from the face geometry via ``normalAt`` rotated by the\nobject\'s global placement, avoiding the Direction-vs-Axis trap. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose face to inspect.\n    face: The face name, e.g. ``"Face3"``.',
+            docstring='Return the global normal (and centre) of a face (M6 / P8 guard).\n\nDerives the vector from the face geometry via ``normalAt`` rotated by the\nparent chain\'s placement; Shape already includes the object\'s own Placement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose face to inspect.\n    face: The face name, e.g. ``"Face3"``.',
             signature="(ctx: 'Context', doc_name: 'str', object_name: 'str', face: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.face_normal_operation",
             rpc_method="face_normal",
@@ -179,7 +179,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="edge_axis",
-            docstring='Return the global axis/direction (and centre) of an edge (M6 / P8 guard).\n\nDerives the vector from the curve geometry rotated by the object\'s global\nplacement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose edge to inspect.\n    edge: The edge name, e.g. ``"Edge2"``.',
+            docstring='Return the global axis/direction (and centre) of an edge (M6 / P8 guard).\n\nDerives the vector from the curve geometry rotated by the parent chain\'s\nplacement; Shape already includes the object\'s own Placement. Returns JSON\n``{ok, object, subshape, type, global_center, global_normal, radius}``.\n\nArgs:\n    doc_name: The document containing the object.\n    object_name: The object whose edge to inspect.\n    edge: The edge name, e.g. ``"Edge2"``.',
             signature="(ctx: 'Context', doc_name: 'str', object_name: 'str', edge: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.edge_axis_operation",
             rpc_method="edge_axis",

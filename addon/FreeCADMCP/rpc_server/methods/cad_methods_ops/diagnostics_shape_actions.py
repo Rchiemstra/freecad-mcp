@@ -12,7 +12,7 @@ from .typed_runtime import (
     require_object,
 )
 from .delete_object import object_dependents
-from .world_shape_actions import read_global_placement, resolve_global_shape
+from .world_shape_actions import read_global_placement, read_shape_placement, resolve_global_shape
 
 
 def _vector(x: float, y: float, z: float = 0.0) -> object:
@@ -164,7 +164,7 @@ def find_subshapes(
     shape = getattr(obj, "Shape", None)
     if shape is None or getattr(shape, "isNull", lambda: True)():
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no shape: {object_name}")
-    gp = read_global_placement(obj)
+    gp = read_shape_placement(obj)
     kind_singular = "Face" if kind == "Faces" else "Edge"
 
     def to_vec(point: object) -> object | None:
@@ -354,7 +354,7 @@ def subshape_pose(document: object, object_name: str, subshape: str) -> dict[str
     sub_obj = _subshape_object(obj, subshape)
     if sub_obj is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Subshape not found: {subshape}")
-    gp = read_global_placement(obj)
+    gp = read_shape_placement(obj)
     center = None
     try:
         center = _transform_point(gp, getattr(sub_obj, "CenterOfMass"))
@@ -664,7 +664,7 @@ def match_subshape(
             if face is not None:
                 param_range = getattr(face, "ParameterRange", None)
                 normal_at = getattr(face, "normalAt", None)
-                global_pl = read_global_placement(src)
+                global_pl = read_shape_placement(src)
                 rotation = getattr(global_pl, "Rotation", None)
                 mult_vec = getattr(rotation, "multVec", None) if rotation is not None else None
                 if (

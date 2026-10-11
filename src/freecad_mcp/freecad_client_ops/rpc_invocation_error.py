@@ -14,6 +14,7 @@ class RpcInvocationError(RuntimeError):
         request_id: str | None = None,
         protocol_code: str | None = None,
         lane: str | None = None,
+        freecad_alive: bool = False,
     ) -> None:
         self.method = method
         self.request_id = str(request_id or "") or None
@@ -28,4 +29,6 @@ class RpcInvocationError(RuntimeError):
             detail = f"{detail}; lane={self.lane}"
         if self.request_id:
             detail = f"{detail}; request_id={self.request_id}"
+        if freecad_alive:
+            detail += "; transport dropped; FreeCAD is still running"
         super().__init__(detail)

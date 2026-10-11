@@ -192,8 +192,7 @@ def _has_expression_property(item: object, prop_path: str) -> bool:
 _POSITIVE_DATUMS = frozenset({"Distance", "Radius", "Diameter", "Weight"})
 
 
-def _sketch_constraint(item: object, prop_path: str) -> object | None:
-    constraints = getattr(item, "Constraints", None)
+def _sketch_constraint_index(constraints: object, prop_path: str) -> int | None:
     if not isinstance(constraints, (list, tuple)):
         return None
     path = prop_path.strip().lstrip(".")
@@ -202,13 +201,21 @@ def _sketch_constraint(item: object, prop_path: str) -> object | None:
             index = int(path[len("Constraints[") : -1])
         except ValueError:
             return None
-        return constraints[index] if 0 <= index < len(constraints) else None
+        return index if 0 <= index < len(constraints) else None
     if path.startswith("Constraints."):
         name = path[len("Constraints.") :]
         return next(
-            (item for item in constraints if getattr(item, "Name", None) == name), None
+            (index for index, item in enumerate(constraints) if getattr(item, "Name", None) == name), None
         )
     return None
+
+
+def _sketch_constraint(item: object, prop_path: str) -> object | None:
+    constraints = getattr(item, "Constraints", None)
+    if not isinstance(constraints, (list, tuple)):
+        return None
+    index = _sketch_constraint_index(constraints, prop_path)
+    return constraints[index] if index is not None else None
 
 
 def _datum_error(item: object, prop_path: str, expression: str) -> str | None:
@@ -250,10 +257,33 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
         raise SetExpressionError("INVALID_ARGUMENT", datum_error)
     if is_read_only_property(item, request.prop_path):
         raise SetExpressionError("EXPRESSION_ERROR", f"{request.prop_path!r} is read-only")
+    # Quantity properties can silently adopt the expression's dimensions in
+    # FreeCAD. Check before setExpression changes either the binding or value.
+    value = item
+    try:
+        for part in request.prop_path.strip().lstrip(".").split("."):
+            value = getattr(value, part)
+    except AttributeError:
+        value = None
+    expected = getattr(getattr(value, "Unit", None), "Signature", None)
+    if expected is not None:
+        evaluated = call_named(item, "evalExpression", request.expression)
+        actual = getattr(getattr(evaluated, "Unit", None), "Signature", None)
+        if actual is not None and any(actual) and tuple(actual) != tuple(expected):
+            raise SetExpressionError(
+                "EXPRESSION_UNIT_MISMATCH",
+                f"Unit mismatch for {request.object_name}.{request.prop_path}: "
+                f"expected {getattr(value, 'Unit', '')}, expression has {getattr(evaluated, 'Unit', '')}",
+            )
     try:
         setter(request.prop_path, request.expression)
     except Exception as exc:
-        raise SetExpressionError("EXPRESSION_ERROR", str(exc) or type(exc).__name__) from exc
+        message = str(exc) or type(exc).__name__
+        if "Linked document not saved" in message:
+            sources = re.findall(r"(?:<<([^>]+)>>|([A-Za-z_][\w]*))#", request.expression)
+            names = ", ".join(a or b for a, b in sources) or str(request.doc_name)
+            message += f"; save linked document {names!r} with save_document_as first"
+        raise SetExpressionError("EXPRESSION_ERROR", message) from exc
     return SetExpressionReceipt(
         name=object_name(item) or request.object_name,
         item=item,
@@ -314,8 +344,10 @@ class _SetExpressionExecution:
     request: SetExpressionRequest
     created: SetExpressionReceipt | None = None
     inspected: SetExpressionInspection | None = None
+    document: SetExpressionDocument | None = None
 
     def apply(self, doc: SetExpressionDocument) -> None:
+        self.document = doc
         self.created = apply_set_expression(doc, self.request)
 
     def inspect(self, doc: SetExpressionReadDocument) -> None:
@@ -326,17 +358,28 @@ class _SetExpressionExecution:
             )
         self.inspected = read_set_expression_result(doc, self.created)
 
-    def run(self) -> NativeOutcome[SetExpressionResult]:
+    def run(self, *, recompute: bool = True) -> NativeOutcome[SetExpressionResult]:
         result = run_set_expression_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
+            recompute=recompute,
         )
         def _finish_native_commit(
             result: Literal[True] | SetExpressionFailure | SetExpressionUncertain,
         ) -> SetExpressionResult:
             if result is not True:
+                if (
+                    recompute
+                    and result.get("committed") is False
+                    and result.get("rollback_succeeded") is True
+                    and "generic recompute has an unresolved cross-document dependency" in result.get("error", "")
+                ):
+                    fallback = self.run(recompute=False)
+                    if isinstance(fallback, dict):
+                        return fallback
+                    return fallback.await_result()
                 return result
             if self.inspected is None:
                 return make_set_expression_uncertain(
@@ -344,7 +387,29 @@ class _SetExpressionExecution:
                     "Native commit completed without an inspected result",
                     committed=True,
                 )
-            return make_set_expression_success(object=self.inspected.name, prop_path=self.request.prop_path, expression=self.request.expression)
+            success = make_set_expression_success(object=self.inspected.name, prop_path=self.request.prop_path, expression=self.request.expression)
+            if not recompute:
+                try:
+                    call_named(self.document, "recompute")
+                    if self.document is None or self.created is None:
+                        raise RuntimeError("Missing expression target after commit")
+                    self.collaborators.validate_document_invariants(self.document)
+                    constraints = getattr(self.created.item, "Constraints", None)
+                    index = _sketch_constraint_index(constraints, self.request.prop_path)
+                    if index is not None:
+                        bound_value = call_named(self.created.item, "getDatum", index)
+                    else:
+                        bound_value = self.created.item
+                        for part in self.request.prop_path.strip().lstrip(".").split("."):
+                            bound_value = getattr(bound_value, part)
+                    success["bound_value"] = str(bound_value)
+                except Exception as exc:
+                    return make_set_expression_uncertain(
+                        "EXPRESSION_RECOMPUTE_FAILED",
+                        f"Expression is bound; direct recompute failed: {exc}",
+                        committed=True,
+                    )
+            return success
 
         return settle_native_commit(result, _finish_native_commit)
 

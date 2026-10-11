@@ -8,6 +8,28 @@ import sys
 import traceback
 
 
+@contextlib.contextmanager
+def observe_recompute_calls():
+    """Observe calls without replacing native Document methods or running them."""
+    calls = []
+    previous = sys.getprofile()
+
+    def profile(frame, event, arg):
+        name = getattr(arg, "__name__", None) if event == "c_call" else (
+            frame.f_code.co_name if event == "call" else None
+        )
+        if name == "recompute" and not calls:
+            calls.append("recompute")
+        if previous is not None:
+            previous(frame, event, arg)
+
+    sys.setprofile(profile)
+    try:
+        yield calls
+    finally:
+        sys.setprofile(previous)
+
+
 def run_python_on_gui_thread(
     code: str, output_buffer: io.StringIO, *, freecad
 ) -> tuple[bool, dict | None]:
