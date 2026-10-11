@@ -176,3 +176,20 @@ def test_cross_document_expression_binds_and_recomputes(mcp, gui_log, live_gui):
     assert_ok(mcp.call('close_document', doc_name='R12Src'))
     assert_clean(gui_log, 'unresolved cross-document dependency')
 
+
+
+def test_worker_error_keeps_traceback_and_last_error(mcp, gui_log):
+    assert_ok(mcp.call('create_document', name='R12Worker'))
+    failed = mcp.call('execute_code', document='R12Worker', read_only=True, execution_mode='worker',
+                      code="print('misleading stdout')\nraise RuntimeError('qa boom')", timeout_seconds=15)
+    assert not failed.ok
+    assert 'RuntimeError: qa boom' in failed.text
+    assert 'Traceback' in failed.text or 'line 2' in failed.text
+    status = _payload(assert_ok(mcp.call('get_worker_status')))
+    assert 'qa boom' in status['last_error']
+    assert_ok(mcp.call('execute_code', document='R12Worker', read_only=True, execution_mode='worker',
+                       code='print(2)', timeout_seconds=15))
+    assert _payload(assert_ok(mcp.call('get_worker_status')))['last_error'] is None
+    assert_ok(mcp.call('close_document', doc_name='R12Worker'))
+    assert_clean(gui_log, 'worker.*failed', 'qa boom')
+

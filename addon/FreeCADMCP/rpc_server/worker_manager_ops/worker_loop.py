@@ -36,6 +36,7 @@ def worker_loop(manager) -> None:
             else:
                 with manager._state_lock:
                     manager._active_invocation = invocation
+                    manager._last_error = None
                 emit_telemetry(
                     "worker_manager",
                     "worker_job_started",
@@ -52,6 +53,8 @@ def worker_loop(manager) -> None:
                         )
         finally:
             with manager._state_lock:
+                if invocation.result and not invocation.result.get("success"):
+                    manager._last_error = str(invocation.result.get("error") or "Worker job failed")
                 manager._invocations.pop(invocation.job_id, None)
                 if manager._active_invocation is invocation:
                     manager._active_invocation = None
