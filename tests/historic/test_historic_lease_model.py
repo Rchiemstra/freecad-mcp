@@ -5,12 +5,13 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+import subprocess
+import sys
 import uuid
 from dataclasses import FrozenInstanceError
 
 import pytest
 
-from addon.FreeCADMCP import document_lease as document_lease_root
 from addon.FreeCADMCP.document_lease import model as model_mod
 from addon.FreeCADMCP.document_lease.model import (
     DocumentIdentity,
@@ -21,7 +22,7 @@ from addon.FreeCADMCP.document_lease.model import (
     decode_historic_lease_record,
 )
 from addon.FreeCADMCP.document_lease.types.transitions import ALLOWED_TRANSITIONS
-from tests.helpers.architecture_baseline import load_manifest
+from tests.helpers.architecture_baseline import ROOT, load_manifest
 
 
 def _uuid() -> str:
@@ -61,8 +62,9 @@ def _historic_sidecar() -> dict[str, object]:
     return payload
 
 
-@pytest.mark.unit
-def test_package_root_retains_only_recorded_safe_compatibility_exports() -> None:
+def _assert_package_root_compatibility_exports() -> None:
+    from addon.FreeCADMCP import document_lease as document_lease_root
+
     surface = next(
         item
         for item in load_manifest()["retained_compatibility_surfaces"]
@@ -77,6 +79,26 @@ def test_package_root_retains_only_recorded_safe_compatibility_exports() -> None
         hasattr(document_lease_root, name)
         for name in surface["planned_removed_authority_symbols"]
     )
+
+
+@pytest.mark.unit
+def test_package_root_retains_only_recorded_safe_compatibility_exports() -> None:
+    # Importing a child module attaches it to its package. Inspect a fresh
+    # package root so earlier authority-corpse tests cannot change this surface.
+    script = (
+        "import sys; sys.path.insert(0, sys.argv[1]); "
+        "from tests.historic.test_historic_lease_model import "
+        "_assert_package_root_compatibility_exports; "
+        "_assert_package_root_compatibility_exports()"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", script, str(ROOT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 @pytest.mark.unit
