@@ -250,10 +250,29 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
         raise SetExpressionError("INVALID_ARGUMENT", datum_error)
     if is_read_only_property(item, request.prop_path):
         raise SetExpressionError("EXPRESSION_ERROR", f"{request.prop_path!r} is read-only")
+    # Quantity properties can silently adopt the expression's dimensions in
+    # FreeCAD. Check before setExpression changes either the binding or value.
+    value = item
+    try:
+        for part in request.prop_path.strip().lstrip(".").split("."):
+            value = getattr(value, part)
+    except AttributeError:
+        value = None
+    expected = getattr(getattr(value, "Unit", None), "Signature", None)
+    if expected is not None:
+        evaluated = call_named(item, "evalExpression", request.expression)
+        actual = getattr(getattr(evaluated, "Unit", None), "Signature", None)
+        if actual is not None and any(actual) and tuple(actual) != tuple(expected):
+            raise SetExpressionError(
+                "EXPRESSION_UNIT_MISMATCH",
+                f"Unit mismatch for {request.object_name}.{request.prop_path}: "
+                f"expected {getattr(value, 'Unit', '')}, expression has {getattr(evaluated, 'Unit', '')}",
+            )
     try:
         setter(request.prop_path, request.expression)
     except Exception as exc:
-        raise SetExpressionError("EXPRESSION_ERROR", str(exc) or type(exc).__name__) from exc
+        message = str(exc) or type(exc).__name__
+        raise SetExpressionError("EXPRESSION_ERROR", message) from exc
     return SetExpressionReceipt(
         name=object_name(item) or request.object_name,
         item=item,
@@ -261,6 +280,7 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
         expression=request.expression,
         skipped=False,
     )
+
 
 
 def read_set_expression_result(doc: SetExpressionReadDocument, receipt: SetExpressionReceipt) -> SetExpressionInspection:

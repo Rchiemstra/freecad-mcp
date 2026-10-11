@@ -86,3 +86,20 @@ def test_unknown_object_type_is_clear(mcp, gui_log):
     assert_ok(mcp.call("close_document", doc_name="R12Unknown"))
     assert_clean(gui_log, "No module named 'Not'", "ModuleNotFoundError")
 
+
+
+def test_area_expression_cannot_bind_length(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="R12Units"))
+    assert_ok(mcp.call("create_object", doc_name="R12Units", obj_type="Part::Box", obj_name="Box"))
+    assert_ok(mcp.call("set_expression", doc_name="R12Units", object_name="Box",
+                       prop_path="Width", expression="40 mm"))
+    failed = mcp.call("set_expression", doc_name="R12Units", object_name="Box",
+                      prop_path="Width", expression="40 mm * 30 mm")
+    assert not failed.ok
+    assert "EXPRESSION_UNIT_MISMATCH" in failed.text or "Unit mismatch" in failed.text
+    listed = _payload(assert_ok(mcp.call("list_expressions", doc_name="R12Units", object_name="Box")))
+    assert "40 mm" in str(listed)
+    assert "30 mm" not in str(listed)
+    assert_ok(mcp.call("close_document", doc_name="R12Units"))
+    assert_clean(gui_log)
+
