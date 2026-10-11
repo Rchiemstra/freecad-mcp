@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
@@ -10,12 +11,12 @@ from typing import Any
 from PySide import QtCore, QtWidgets
 
 try:  # Installed add-on package.
-    from ..dispatch.gui_errors import GuiDispatchTimeout
+    from ..dispatch.gui_errors import GuiDispatchTimeout, GuiModalDialogTimeout
     from ..dispatch.gui_core import GuiDispatchCore
     from ..dispatch.gui_outcome import GuiOutcome
     from ..dispatch.gui_request import DeferProbe as _DeferProbe
 except ImportError:  # Flat FreeCAD add-on import (``import rpc_server``).
-    from dispatch.gui_errors import GuiDispatchTimeout
+    from dispatch.gui_errors import GuiDispatchTimeout, GuiModalDialogTimeout
     from dispatch.gui_core import GuiDispatchCore
     from dispatch.gui_outcome import GuiOutcome
     from dispatch.gui_request import DeferProbe as _DeferProbe
@@ -375,7 +376,12 @@ class GuiDispatcher(QtCore.QObject):
     ) -> Any:
         title = self._modal_title
         if title:
-            return _modal_failure(title)
+            failure = _modal_failure(title)
+            if on_complete is not None:
+                # Match core completion even though no GUI task was queued.
+                with suppress(Exception):
+                    on_complete(request_id or str(uuid.uuid4()), GuiOutcome(ok=True, value=failure))
+            return failure
 
         def guarded():
             self._sample_modal_dialog()
@@ -399,15 +405,9 @@ class GuiDispatcher(QtCore.QObject):
             )
         except GuiDispatchTimeout as exc:
             if self._modal_title:
-                failure = _modal_failure(self._modal_title)
-                failure.update(exc.to_public_dict())
-                failure['error_code'] = 'GUI_BLOCKED_BY_MODAL_DIALOG'
-                failure['retry_safe'] = not exc.execution_started
-                failure['retryable'] = not exc.execution_started
-                if exc.execution_started:
-                    failure['committed'] = None
-                    failure['outcome'] = 'uncertain'
-                return failure
+                # Keep timeout handling responsible for phase finalization and
+                # recovery; a returned dict bypasses that machinery.
+                raise GuiModalDialogTimeout(self._modal_title, exc) from exc
             raise
 
     @property
