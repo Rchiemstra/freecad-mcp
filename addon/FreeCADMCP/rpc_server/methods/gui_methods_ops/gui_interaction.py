@@ -226,6 +226,9 @@ def get_selection(self) -> dict[str, Any]:
 
 
 def get_gui_state(self) -> dict[str, Any]:
+    title = getattr(getattr(getattr(self, "_execution_collaborators", None), "gui_dispatcher", None), "modal_dialog_title", None)
+    if isinstance(title, str) and title:
+        return {"ok": True, "modal_dialog": title, "gui_blocked": True}
     try:
         document, context = snapshot_personal_view(self)
         selection = _selection_items(document, context["selection_paths"])

@@ -282,3 +282,36 @@ def test_execute_code_document_lifecycle_survives(mcp, gui_log, variant):
             assert_ok(mcp.call('close_document', doc_name=name))
     assert_clean(gui_log, 'lifecycle', 'unavailable', 'newDocument', 'Error executing Python', 'postflight')
 
+
+
+def test_modal_dialog_is_reported_without_dispatching_gui_work(mcp, gui_log):
+    # With no open document this body runs on the Qt main thread.
+    docs = assert_ok(mcp.call('list_documents'))
+    assert 'R12' not in docs.text
+    assert_ok(mcp.call('execute_code', execution_mode='gui', recompute='none',
+                       code="from PySide import QtCore, QtWidgets\n"
+                            "r12_dialog = QtWidgets.QMessageBox()\n"
+                            "r12_dialog.setWindowTitle('Round 12 modal')\n"
+                            "r12_dialog.setText('Test dialog')\n"
+                            "r12_dialog.setModal(True)\nr12_dialog.show()\n"
+                            "QtCore.QTimer.singleShot(8000, r12_dialog.close)"))
+    try:
+        failed = mcp.call('get_report_view')
+        assert not failed.ok
+        assert 'GUI_BLOCKED_BY_MODAL_DIALOG' in failed.text
+        assert 'Round 12 modal' in failed.text
+        state = _payload(assert_ok(mcp.call('get_gui_state')))
+        assert state['modal_dialog'] == 'Round 12 modal'
+        runtime = _payload(assert_ok(mcp.call('get_runtime_info')))
+        assert runtime['gui']['modal_dialog'] == 'Round 12 modal'
+    finally:
+        import time
+        deadline = time.monotonic() + 12
+        while time.monotonic() < deadline:
+            state = _payload(assert_ok(mcp.call('get_runtime_info')))
+            if not state.get('gui', {}).get('modal_dialog'):
+                break
+            time.sleep(.1)
+    assert_ok(mcp.call('get_report_view'))
+    assert_clean(gui_log)
+

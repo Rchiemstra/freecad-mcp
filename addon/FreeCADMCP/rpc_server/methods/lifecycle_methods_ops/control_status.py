@@ -138,6 +138,7 @@ def get_instance_info(self):
         "host": endpoint.get("host"),
         "port": endpoint.get("port"),
         "actual_endpoint": endpoint,
+        "gui": {"modal_dialog": getattr(getattr(collaborators, "gui_dispatcher", None), "modal_dialog_title", None)},
         "profile_path": profile_path,
         "protocol_versions": [1, 2],
         "protocol_version": 2 if collaborators.session_manager is not None else 1,

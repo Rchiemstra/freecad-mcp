@@ -77,7 +77,7 @@ def get_report_view_operation(
     result = freecad.get_report_view(max_lines=max_lines, clear=clear)
     if result.get("ok"):
         return json_response(result)
-        return tool_fail(json.dumps(result), structured=result)
+    return tool_fail(json.dumps(result), structured=result)
 
 
 def set_section_view_operation(

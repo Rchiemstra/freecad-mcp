@@ -7,13 +7,15 @@ from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
 
-from PySide import QtCore
+from PySide import QtCore, QtWidgets
 
 try:  # Installed add-on package.
+    from ..dispatch.gui_errors import GuiDispatchTimeout
     from ..dispatch.gui_core import GuiDispatchCore
     from ..dispatch.gui_outcome import GuiOutcome
     from ..dispatch.gui_request import DeferProbe as _DeferProbe
 except ImportError:  # Flat FreeCAD add-on import (``import rpc_server``).
+    from dispatch.gui_errors import GuiDispatchTimeout
     from dispatch.gui_core import GuiDispatchCore
     from dispatch.gui_outcome import GuiOutcome
     from dispatch.gui_request import DeferProbe as _DeferProbe
@@ -21,6 +23,18 @@ from .gui_dispatcher_ops.navigation_guards import gui_busy_for_3d_navigation
 from .telemetry import emit as emit_telemetry
 
 __all__ = ["GuiDispatcher"]
+
+
+def _modal_failure(title: str) -> dict[str, Any]:
+    return {
+        "contract_version": 1, "success": False, "ok": False,
+        "error_code": "GUI_BLOCKED_BY_MODAL_DIALOG",
+        "error": f"GUI blocked by modal dialog: {title}",
+        "modal_dialog": title, "retry_safe": True, "retryable": True,
+        "committed": False, "outcome": "rejected",
+        "execution_started": False, "mutation_started": False,
+        "completion_uncertain": False,
+    }
 
 
 class _MutationReadinessObserver:
@@ -269,6 +283,15 @@ class GuiDispatcher(QtCore.QObject):
     def __init__(self, parent: QtCore.QObject | None = None):
         super().__init__(parent)
         self._owner_thread_ident = threading.get_ident()
+        self._modal_title: str | None = None
+        self._sample_modal_dialog()
+        self._modal_timer = None
+        application = QtWidgets.QApplication.instance()
+        if isinstance(QtWidgets.QApplication, type) and isinstance(application, QtWidgets.QApplication):
+            self._modal_timer = QtCore.QTimer(self)
+            self._modal_timer.setInterval(100)
+            self._modal_timer.timeout.connect(self._sample_modal_dialog)
+            self._modal_timer.start()
         self._core = GuiDispatchCore(
             is_gui_thread=lambda: QtCore.QThread.currentThread() == self.thread(),
             wake_gui=self.wake_requested.emit,
@@ -350,22 +373,67 @@ class GuiDispatcher(QtCore.QObject):
         document_keys: tuple[str, ...] = (),
         method: str | None = None,
     ) -> Any:
-        return self._core.submit(
-            callable_,
-            timeout,
-            request_id=request_id,
-            session_id=session_id,
-            on_complete=on_complete,
-            defer_probe=defer_probe,
-            document_keys=document_keys,
-            method=method,
-        )
+        title = self._modal_title
+        if title:
+            return _modal_failure(title)
+
+        def guarded():
+            self._sample_modal_dialog()
+            if self._modal_title:
+                return _modal_failure(self._modal_title)
+            try:
+                return callable_()
+            finally:
+                self._sample_modal_dialog()
+
+        try:
+            return self._core.submit(
+                guarded,
+                timeout,
+                request_id=request_id,
+                session_id=session_id,
+                on_complete=on_complete,
+                defer_probe=defer_probe,
+                document_keys=document_keys,
+                method=method,
+            )
+        except GuiDispatchTimeout as exc:
+            if self._modal_title:
+                failure = _modal_failure(self._modal_title)
+                failure.update(exc.to_public_dict())
+                failure['error_code'] = 'GUI_BLOCKED_BY_MODAL_DIALOG'
+                failure['retry_safe'] = not exc.execution_started
+                failure['retryable'] = not exc.execution_started
+                if exc.execution_started:
+                    failure['committed'] = None
+                    failure['outcome'] = 'uncertain'
+                return failure
+            raise
+
+    @property
+    def modal_dialog_title(self) -> str | None:
+        """An immutable sample; never reads a widget from the caller's thread."""
+        return self._modal_title
+
+    def _sample_modal_dialog(self) -> None:
+        if threading.get_ident() != self._owner_thread_ident:
+            return
+        title = None
+        application = QtWidgets.QApplication.instance()
+        if isinstance(QtWidgets.QApplication, type) and isinstance(application, QtWidgets.QApplication):
+            widget = application.activeModalWidget()
+            if widget is not None:
+                visible = getattr(widget, "isVisible", None)
+                if not callable(visible) or visible():
+                    title = str(widget.windowTitle() or widget.objectName() or "Untitled dialog")
+        self._modal_title = title
 
     def cancel_request(self, session_id: str, request_id: str) -> str:
         return self._core.cancel_request(session_id, request_id)
 
     @QtCore.Slot()
     def _drain_one(self) -> None:
+        self._sample_modal_dialog()
         self._core.drain_one()
 
     @QtCore.Slot()

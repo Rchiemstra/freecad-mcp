@@ -255,6 +255,7 @@ def _runtime_info_payload() -> dict[str, Any]:
         "addon": addon,
         "freecad": freecad,
         "rpc": rpc,
+        "gui": info.get("gui", {}),
         "profile": {
             "instance_id": profile_instance or server_state().instance_id or "unknown",
             "path_fingerprint": profile_fingerprint or "unknown",
