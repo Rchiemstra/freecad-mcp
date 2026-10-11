@@ -534,6 +534,20 @@ def test_response_deadline_maps_stalled_chunked_body_to_timeout():
         _stop_adversarial_server(server, loop, lane)
 
 
+def test_response_deadline_survives_a_delayed_timer_callback(monkeypatch):
+    # A busy interpreter may deliver the socket timeout before the deadline
+    # thread runs. The deadline still elapsed; its Event is only a wakeup aid.
+    monkeypatch.setattr(threading.Timer, "start", lambda self: None)
+    server, loop, lane, _started = _start_adversarial_server(
+        "chunked_stall", timeout=0.15
+    )
+    try:
+        with pytest.raises(TimeoutError, match="deadline"):
+            lane.call("ping")
+    finally:
+        _stop_adversarial_server(server, loop, lane)
+
+
 def test_immediate_incomplete_chunked_body_remains_protocol_mismatch():
     server, loop, lane, _started = _start_adversarial_server(
         "chunked_short", timeout=2
