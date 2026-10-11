@@ -16790,6 +16790,18 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "module",
+          "kind": "positional_or_keyword",
+          "required": false,
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "default": null
         }
       ],
       "result_examples": [

@@ -272,10 +272,10 @@ def list_documents(conn) -> list[str]:
     return conn.server.list_documents()
 
 
-def open_document(conn, path: str) -> dict[str, Any]:
+def open_document(conn, path: str, module: str | None = None) -> dict[str, Any]:
     routed = conn._invoke_mutation_v2(
         "open_document",
-        {"path": path},
+        {"path": path, **({"module": module} if module is not None else {})},
         operation_name="Open document",
     )
     if routed is not None:

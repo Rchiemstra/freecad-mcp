@@ -315,3 +315,22 @@ def test_modal_dialog_is_reported_without_dispatching_gui_work(mcp, gui_log):
     assert_ok(mcp.call('get_report_view'))
     assert_clean(gui_log)
 
+
+
+def test_registered_import_module_opens_on_gui_thread(mcp, gui_log, live_gui):
+    path = live_gui.workdir / 'import.r12import'
+    path.write_text('tiny import')
+    assert_ok(mcp.call('execute_code', execution_mode='gui', recompute='none',
+                       code="import FreeCAD as App, types, sys\n"
+                            "from PySide import QtCore, QtWidgets\n"
+                            "mod = types.ModuleType('R12Importer')\n"
+                            "def r12_open(filename):\n"
+                            "    assert QtCore.QThread.currentThread() == QtWidgets.QApplication.instance().thread()\n"
+                            "    App.newDocument('R12Imported')\n"
+                            "mod.open = r12_open\nsys.modules[mod.__name__] = mod\n"
+                            "App.addImportType('Round 12 (*.r12import)', mod.__name__)"))
+    opened = _payload(assert_ok(mcp.call('open_document', path=str(path))))
+    assert opened['document_name'] == 'R12Imported'
+    assert_ok(mcp.call('close_document', doc_name='R12Imported'))
+    assert_clean(gui_log)
+
