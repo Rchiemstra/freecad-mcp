@@ -52,3 +52,46 @@ def test_unregistered_extension_is_clear(tmp_path):
     runtime.getImportType = lambda ext: []
     p = tmp_path / 'x.r12'; p.write_text('import')
     assert run_open_document(NS(freecad=runtime), str(p))['error'] == 'no import module handles .r12'
+
+
+def test_importer_creates_document_then_raises_reports_uncertain(tmp_path, monkeypatch):
+    runtime, docs = app()
+    module = ModuleType('R12Importer')
+
+    def partial_open(path):
+        docs['PartialImport'] = NS(Name='PartialImport')
+        raise RuntimeError('unsupported entity after document creation')
+
+    module.open = partial_open
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    path = tmp_path / 'partial.r12'
+    path.write_text('import')
+    result = run_open_document(NS(freecad=runtime), str(path))
+
+    assert 'PartialImport' in docs
+    assert result['error_code'] == 'IMPORT_OPEN_FAILED'
+    assert 'unsupported entity' in result['error']
+    assert result['outcome'] == 'uncertain', result
+    assert result['committed'] is None
+    assert result['retry_safe'] is False
+
+
+def test_importer_creates_multiple_unresolved_documents_reports_uncertain(tmp_path, monkeypatch):
+    runtime, docs = app()
+    module = ModuleType('R12Importer')
+
+    def multiple_open(path):
+        docs['ImportedOne'] = NS(Name='ImportedOne')
+        docs['ImportedTwo'] = NS(Name='ImportedTwo')
+
+    module.open = multiple_open
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    path = tmp_path / 'multiple.r12'
+    path.write_text('import')
+    result = run_open_document(NS(freecad=runtime), str(path))
+
+    assert set(docs) == {'ImportedOne', 'ImportedTwo'}
+    assert result['error_code'] == 'IMPORT_DOCUMENT_UNRESOLVED'
+    assert result['outcome'] == 'uncertain', result
+    assert result['committed'] is None
+    assert result['retry_safe'] is False

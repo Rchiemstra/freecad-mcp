@@ -65,7 +65,7 @@ def prepare_open_document(_app: object, request: OpenDocumentRequest) -> OpenDoc
     return None
 
 
-def perform_open_document(app: object, request: OpenDocumentRequest, module: str | None = None) -> tuple[OpenDocumentFailure | None, str | None]:
+def perform_open_document(app: object, request: OpenDocumentRequest, module: str | None = None) -> tuple[OpenDocumentResult | None, str | None]:
     extension = os.path.splitext(str(request.path))[1].lower()
     if extension != ".fcstd":
         registry = getattr(app, "getImportType", None)
@@ -83,14 +83,22 @@ def perform_open_document(app: object, request: OpenDocumentRequest, module: str
             # Use the external importer entry point, as File > Open does.
             opened = __import__(module or modules[0], fromlist=['open']).open(str(request.path))
         except Exception as exc:
-            return _failure(OpenDocumentError("IMPORT_OPEN_FAILED", f"{type(exc).__name__}: {exc}"), retry_safe=False), None
+            # An importer can leave live documents behind before raising.
+            return make_open_document_uncertain(
+                "IMPORT_OPEN_FAILED", f"{type(exc).__name__}: {exc}", committed=None,
+            ), None
         created = set(list_documents()) - before
         name = getattr(opened, "Name", None)
         if isinstance(name, str) and name:
             return None, name
         if len(created) == 1:
             return None, created.pop()
-        return _failure(OpenDocumentError("IMPORT_DOCUMENT_UNRESOLVED", "Import module did not return or create exactly one document"), retry_safe=False), None
+        return make_open_document_uncertain(
+            "IMPORT_DOCUMENT_UNRESOLVED",
+            "Import module did not return or create exactly one document",
+            committed=None,
+            diagnostics={"created_documents": sorted(created)},
+        ), None
     opener = getattr(app, "openDocument", None)
     if not callable(opener):
         return _failure(OpenDocumentError("FREECAD_UNAVAILABLE", "FreeCAD cannot open documents")), None
