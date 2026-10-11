@@ -201,9 +201,15 @@ def read_create_object_result(
                 f"Created object is missing property {key!r}",
             )
         if not property_kept_value(doc, expected, kept_property(created, key)):
+            detail = ""
+            if key == "Base" and receipt.object_type.startswith("PartDesign::"):
+                detail = (
+                    "; FreeCAD rejected the Base because links are out of scope. "
+                    "PartDesign features must be created inside the body"
+                )
             raise CreateObjectError(
                 "PROPERTY_NOT_UPDATED",
-                f"Created object property {key!r} did not keep the assigned value",
+                f"Created object property {key!r} did not keep the assigned value{detail}",
             )
     label = getattr(created, "Label", receipt.name)
     type_id = getattr(created, "TypeId", receipt.object_type)

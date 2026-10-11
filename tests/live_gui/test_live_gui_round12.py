@@ -103,3 +103,16 @@ def test_area_expression_cannot_bind_length(mcp, gui_log):
     assert_ok(mcp.call("close_document", doc_name="R12Units"))
     assert_clean(gui_log)
 
+
+
+def test_partdesign_base_scope_error_explains_body(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="R12Scope"))
+    assert_ok(mcp.call("create_object", doc_name="R12Scope", obj_type="Part::Box", obj_name="Base"))
+    failed = mcp.call("create_object", doc_name="R12Scope", obj_type="PartDesign::Thickness",
+                      obj_name="Thickness", obj_properties={"Base": "Base"})
+    assert not failed.ok
+    assert "links are out of scope" in failed.text
+    assert "inside the body" in failed.text
+    assert_ok(mcp.call("close_document", doc_name="R12Scope"))
+    assert_clean(gui_log, "out of scope", "No Base object linked")
+
