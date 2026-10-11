@@ -92,3 +92,38 @@ def test_cross_document_sketch_datum_reports_bound_value():
                                 'Dst','Sketch','Constraints[0]','Src#Box.Length')
     assert result['success']
     assert result['bound_value'] == '25'
+
+
+@pytest.mark.parametrize('prop_path', ['Constraints[0]', '.Constraints.Height'])
+def test_cross_document_sketch_datum_with_copied_constraint_wrappers(prop_path):
+    class Sketch(NS):
+        @property
+        def Constraints(self):
+            # PropertyConstraintList and Constraint::getPyObject create fresh
+            # copied wrappers on every property read in real FreeCAD.
+            return [NS(Type='Distance', Name='Height')]
+
+    obj = Sketch(**vars(_item('Sketch')))
+    obj.PropertiesList = ['Constraints']
+    obj.getDatum = lambda index: 25 if index == 0 else pytest.fail('wrong datum index')
+    assert obj.Constraints[0] is not obj.Constraints[0]
+    doc = NS(getObject=lambda name: obj, recompute=lambda: None)
+    calls = []
+
+    def commit(name, apply, post, *, structural=True, recompute=True):
+        calls.append(recompute)
+        apply(doc)
+        if recompute:
+            obj.clearExpression(prop_path)
+            return dict(status='RecomputeFailed', committed=False, message=REFUSAL)
+        assert post(doc)
+        return dict(status='Committed', committed=True)
+
+    result = run_set_expression(
+        NS(commit_native_mutation=commit, validate_document_invariants=lambda doc: None),
+        'Dst', 'Sketch', prop_path, 'Src#Box.Length',
+    )
+    assert result['success'], result
+    assert result['bound_value'] == '25'
+    assert obj.getExpression(prop_path) == 'Src#Box.Length'
+    assert calls == [True, False]

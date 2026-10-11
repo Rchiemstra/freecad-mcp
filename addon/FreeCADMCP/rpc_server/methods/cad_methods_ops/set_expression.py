@@ -192,8 +192,7 @@ def _has_expression_property(item: object, prop_path: str) -> bool:
 _POSITIVE_DATUMS = frozenset({"Distance", "Radius", "Diameter", "Weight"})
 
 
-def _sketch_constraint(item: object, prop_path: str) -> object | None:
-    constraints = getattr(item, "Constraints", None)
+def _sketch_constraint_index(constraints: object, prop_path: str) -> int | None:
     if not isinstance(constraints, (list, tuple)):
         return None
     path = prop_path.strip().lstrip(".")
@@ -202,13 +201,21 @@ def _sketch_constraint(item: object, prop_path: str) -> object | None:
             index = int(path[len("Constraints[") : -1])
         except ValueError:
             return None
-        return constraints[index] if 0 <= index < len(constraints) else None
+        return index if 0 <= index < len(constraints) else None
     if path.startswith("Constraints."):
         name = path[len("Constraints.") :]
         return next(
-            (item for item in constraints if getattr(item, "Name", None) == name), None
+            (index for index, item in enumerate(constraints) if getattr(item, "Name", None) == name), None
         )
     return None
+
+
+def _sketch_constraint(item: object, prop_path: str) -> object | None:
+    constraints = getattr(item, "Constraints", None)
+    if not isinstance(constraints, (list, tuple)):
+        return None
+    index = _sketch_constraint_index(constraints, prop_path)
+    return constraints[index] if index is not None else None
 
 
 def _datum_error(item: object, prop_path: str, expression: str) -> str | None:
@@ -387,10 +394,9 @@ class _SetExpressionExecution:
                     if self.document is None or self.created is None:
                         raise RuntimeError("Missing expression target after commit")
                     self.collaborators.validate_document_invariants(self.document)
-                    constraint = _sketch_constraint(self.created.item, self.request.prop_path)
-                    if constraint is not None:
-                        constraints = getattr(self.created.item, "Constraints", [])
-                        index = next(i for i, value in enumerate(constraints) if value is constraint)
+                    constraints = getattr(self.created.item, "Constraints", None)
+                    index = _sketch_constraint_index(constraints, self.request.prop_path)
+                    if index is not None:
                         bound_value = call_named(self.created.item, "getDatum", index)
                     else:
                         bound_value = self.created.item

@@ -177,6 +177,37 @@ def test_cross_document_expression_binds_and_recomputes(mcp, gui_log, live_gui):
     assert_clean(gui_log, 'unresolved cross-document dependency')
 
 
+@pytest.mark.parametrize('prop_path', ['Constraints[0]', '.Constraints.Height'])
+def test_cross_document_sketch_expression_reports_bound_datum(mcp, gui_log, live_gui, prop_path):
+    source, destination = 'R12SketchSrc', 'R12SketchDst'
+    assert_ok(mcp.call('create_document', name=source))
+    assert_ok(mcp.call('create_document', name=destination))
+    try:
+        assert_ok(mcp.call('create_object', doc_name=source, obj_name='Box',
+                           obj_type='Part::Box', obj_properties={'Length': 25}))
+        assert_ok(mcp.call('sketch_create', doc_name=destination, sketch_name='Sketch'))
+        assert_ok(mcp.call('sketch_add_line', doc_name=destination, sketch_name='Sketch',
+                           x1=0, y1=0, x2=10, y2=0))
+        assert_ok(mcp.call('sketch_constrain_distance', doc_name=destination,
+                           sketch_name='Sketch', geo=0, value=10, name='Height'))
+        for name in (source, destination):
+            assert_ok(mcp.call('save_document_as', selector={'document_name': name},
+                               destination=str(live_gui.workdir / (name + '.FCStd')), overwrite=True))
+        result = _payload(assert_ok(mcp.call(
+            'set_expression', doc_name=destination, object_name='Sketch',
+            prop_path=prop_path, expression=source + '#Box.Length',
+        )))
+        assert '25' in result['bound_value'], result
+        expressions = _payload(assert_ok(mcp.call(
+            'list_expressions', doc_name=destination, object_name='Sketch',
+        )))
+        assert source + '#Box.Length' in str(expressions)
+    finally:
+        assert_ok(mcp.call('close_document', doc_name=destination))
+        assert_ok(mcp.call('close_document', doc_name=source))
+    assert_clean(gui_log, 'unresolved cross-document dependency')
+
+
 
 def test_worker_error_keeps_traceback_and_last_error(mcp, gui_log):
     assert_ok(mcp.call('create_document', name='R12Worker'))
