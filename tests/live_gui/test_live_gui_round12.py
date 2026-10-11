@@ -230,3 +230,14 @@ def test_visibility_edits_preserve_color(mcp, gui_log):
         assert_ok(mcp.call("close_document", doc_name="R12RedDefect"))
     assert_clean(gui_log)
 
+
+
+def test_report_view_returns_newest_lines(mcp, gui_log):
+    assert_ok(mcp.call("get_report_view", clear=True))
+    assert_ok(mcp.call("execute_code", execution_mode="gui", recompute="none",
+                       code="import FreeCAD as App\nApp.Console.PrintMessage('r12-old\\nr12-middle\\nr12-new\\n')"))
+    result = _payload(assert_ok(mcp.call("get_report_view", max_lines=2)))
+    assert "r12-new" in result["text"]
+    assert "r12-old" not in result["text"]
+    assert_clean(gui_log)
+
