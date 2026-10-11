@@ -241,3 +241,19 @@ def test_report_view_returns_newest_lines(mcp, gui_log):
     assert "r12-old" not in result["text"]
     assert_clean(gui_log)
 
+
+
+def test_plain_offset_geometry_survives_repeated_recomputes(mcp, gui_log):
+    assert_ok(mcp.call('create_document', name='R12Offset'))
+    assert_ok(mcp.call('sketch_create', doc_name='R12Offset', sketch_name='Sk'))
+    for args in [dict(x1=0,y1=0,x2=10,y2=0),dict(x1=10,y1=0,x2=10,y2=10)]:
+        assert_ok(mcp.call('sketch_add_line', doc_name='R12Offset', sketch_name='Sk', **args))
+    assert_ok(mcp.call('sketch_offset', doc_name='R12Offset', sketch_name='Sk', geo_indices=[0,1], offset=1.5, copy=True))
+    for _ in range(2):
+        assert_ok(mcp.call('recompute_document', doc_name='R12Offset'))
+    result = _payload(assert_ok(mcp.call('get_sketch_geometry', doc_name='R12Offset', sketch_name='Sk')))
+    assert result['geometry_count'] == 4
+    assert_ok(mcp.call('close_document', doc_name='R12Offset'))
+    # scripts/reproduce_round12_offset.py produces the same warning without MCP.
+    assert_clean(gui_log, 'Cannot find SKF modified Edge')
+
