@@ -29,6 +29,12 @@ def finalize_gui_execute_response(
     tb = res.get("traceback")
     document_name = str(options.get("document") or "")
     error = str(res.get("error", "Unknown error"))
+    if "generic recompute has an unresolved cross-document dependency" in error:
+        error += (
+            '; run execute_code with recompute="none", then call '
+            f'recompute_document(doc_name={document_name!r}). The body was rolled back; '
+            'it has not been rerun.'
+        )
     if document_name and f"document {document_name!r}" not in error:
         error = f"execute_code failed in document {document_name!r}: {error}"
     failure = {

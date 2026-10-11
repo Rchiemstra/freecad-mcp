@@ -160,3 +160,19 @@ def test_rotated_shape_and_relative_binder_use_each_frame_once(mcp, gui_log):
     assert_ok(mcp.call('close_document', doc_name='R12Frames'))
     assert_clean(gui_log)
 
+
+
+def test_cross_document_expression_binds_and_recomputes(mcp, gui_log, live_gui):
+    for name in ['R12Src', 'R12Dst']:
+        assert_ok(mcp.call('create_document', name=name))
+        assert_ok(mcp.call('create_object', doc_name=name, obj_name='Box', obj_type='Part::Box',
+                           obj_properties={'Length': 25 if name == 'R12Src' else 10}))
+        assert_ok(mcp.call('save_document_as', selector={'document_name': name},
+                           destination=str(live_gui.workdir / (name + '.FCStd')), overwrite=True))
+    result = _payload(assert_ok(mcp.call('set_expression', doc_name='R12Dst', object_name='Box',
+                                        prop_path='Length', expression='R12Src#Box.Length')))
+    assert '25' in result['bound_value']
+    assert_ok(mcp.call('close_document', doc_name='R12Dst'))
+    assert_ok(mcp.call('close_document', doc_name='R12Src'))
+    assert_clean(gui_log, 'unresolved cross-document dependency')
+
