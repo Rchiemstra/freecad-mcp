@@ -20,7 +20,7 @@ from .typed_rpc_container_support import (
     add_named_object,
     add_to_container,
 )
-from .world_shape_actions import read_global_placement
+from .world_shape_actions import read_global_placement, read_shape_placement
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -275,17 +275,16 @@ def apply_create_subshape_binder(doc: CreateSubshapeBinderDocument, request: Cre
         if hasattr(created, "TraceSupport"):
             assign_attr(created, "TraceSupport", request.sync_placement)
         if request.sync_placement:
-            placement = getattr(source_obj, "Placement", None)
-            if placement is not None:
-                try:
-                    assign_attr(created, "Placement", placement)
-                except Exception:
-                    placement = None
-            if placement is None:
-                try:
-                    assign_attr(created, "Placement", read_global_placement(source_obj))
-                except Exception:
-                    pass
+            # Relative Support shapes already carry the source's own placement.
+            # Add only its parent chain, relative to the destination's parents.
+            # Non-relative Support shapes need the complete source transform.
+            placement = (read_shape_placement(source_obj) if request.relative
+                         else read_global_placement(source_obj))
+            parent = read_shape_placement(created)
+            inverse = getattr(parent, "inverse", None)
+            if callable(inverse):
+                placement = inverse() * placement
+            assign_attr(created, "Placement", placement)
     except CreateSubshapeBinderError:
         raise
     except Exception as exc:

@@ -116,3 +116,47 @@ def test_partdesign_base_scope_error_explains_body(mcp, gui_log):
     assert_ok(mcp.call("close_document", doc_name="R12Scope"))
     assert_clean(gui_log, "out of scope", "No Base object linked")
 
+
+
+def test_shape_coordinates_apply_placement_once(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="R12Placement"))
+    assert_ok(mcp.call("create_part_container", doc_name="R12Placement", part_name="Part"))
+    assert_ok(mcp.call("create_object", doc_name="R12Placement", obj_type="Part::Box", obj_name="Box",
+                       obj_properties={"Length": 10, "Width": 10, "Height": 10,
+                                       "Placement": {"Base": {"x": 20, "y": 0, "z": 0}}}))
+    assert_ok(mcp.call("move_object", doc_name="R12Placement", obj_name="Box", target_container="Part"))
+    faces = _payload(assert_ok(mcp.call("find_faces", doc_name="R12Placement", object_name="Box",
+                                       normal_approx={"x": 0, "y": 0, "z": 1})))
+    assert faces["results"][0]["global_center"]["x"] == pytest.approx(25)
+    assert_ok(mcp.call("close_document", doc_name="R12Placement"))
+    assert_clean(gui_log)
+
+
+
+def test_rotated_shape_and_relative_binder_use_each_frame_once(mcp, gui_log):
+    import math
+    assert_ok(mcp.call('create_document', name='R12Frames'))
+    assert_ok(mcp.call('create_part_container', doc_name='R12Frames', part_name='Part'))
+    assert_ok(mcp.call('edit_object', doc_name='R12Frames', obj_name='Part', obj_properties={
+        'Placement': {'Base':{'x':100,'y':0,'z':0}, 'Rotation':{'Axis':{'x':0,'y':1,'z':0},'Angle':30}}}))
+    assert_ok(mcp.call('create_object', doc_name='R12Frames', obj_name='Box', obj_type='Part::Box', obj_properties={
+        'Length':10,'Width':10,'Height':10,
+        'Placement':{'Base':{'x':20,'y':0,'z':0},'Rotation':{'Axis':{'x':0,'y':1,'z':0},'Angle':15}}}))
+    assert_ok(mcp.call('move_object', doc_name='R12Frames', obj_name='Box', target_container='Part'))
+    root = math.sqrt(.5)
+    faces = _payload(assert_ok(mcp.call('find_faces', doc_name='R12Frames', object_name='Box',
+                                       normal_approx={'x':root,'y':0,'z':root})))
+    top = faces['results'][0]
+    assert top['global_normal'] == pytest.approx({'x':root,'y':0,'z':root}, abs=1e-5)
+    assert top['global_center']['x'] == pytest.approx(100 + 20 * math.cos(math.pi/6) + 15 * root, abs=1e-5)
+    normal = _payload(assert_ok(mcp.call('face_normal', doc_name='R12Frames', object_name='Box', face=top['sub'])))
+    assert normal['global_normal'] == pytest.approx(top['global_normal'])
+    assert_ok(mcp.call('body_create', doc_name='R12Frames', body_name='Body'))
+    assert_ok(mcp.call('create_subshape_binder', doc_name='R12Frames', binder_name='Binder',
+                       source_object='Box', target_body='Body', relative=True))
+    source = _payload(assert_ok(mcp.call('inspect_geometry', doc_name='R12Frames', object_name='Box')))
+    binder = _payload(assert_ok(mcp.call('inspect_geometry', doc_name='R12Frames', object_name='Binder')))
+    assert binder['global_bbox'] == pytest.approx(source['global_bbox'])
+    assert_ok(mcp.call('close_document', doc_name='R12Frames'))
+    assert_clean(gui_log)
+

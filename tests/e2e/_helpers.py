@@ -80,7 +80,7 @@ def face_global_normal(obj, face_name: str):
     idx = int(face_name[4:]) - 1
     face = obj.Shape.Faces[idx]
     local_axis = face.Surface.Axis
-    gp = global_placement(obj)
+    gp = shape_placement(obj)
     return gp.Rotation * FreeCAD.Vector(local_axis.x, local_axis.y, local_axis.z)
 
 
@@ -89,7 +89,13 @@ def face_global_center(obj, face_name: str):
     FreeCAD = _fc()
     idx = int(face_name[4:]) - 1
     face = obj.Shape.Faces[idx]
-    return global_placement(obj) * face.CenterOfMass
+    return shape_placement(obj) * face.CenterOfMass
+
+
+def shape_placement(obj):
+    """Parent transform; obj.Shape already includes obj.Placement."""
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.world_shape_actions import read_shape_placement
+    return read_shape_placement(obj)
 
 
 def find_face(obj, *, normal=None, center=None, radius=None, kind=None,
@@ -103,7 +109,7 @@ def find_face(obj, *, normal=None, center=None, radius=None, kind=None,
       * ``radius``   - cylinder face radius match within *tol*.
     """
     FreeCAD = _fc()
-    gp = global_placement(obj)
+    gp = shape_placement(obj)
     for i, face in enumerate(obj.Shape.Faces, start=1):
         surf = face.Surface
         sname = type(surf).__name__
