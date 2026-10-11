@@ -84,9 +84,8 @@ def _weighted_center(
     return total, wx, wy, wz
 
 
-def center_of_mass(document: object, obj_name: str) -> dict[str, object]:
-    obj = require_object(document, obj_name)
-    shape, meta = resolve_global_shape(obj)
+def _shape_center_of_mass(shape: object, obj_name: str) -> tuple[object, str]:
+    """Read a center from an already resolved world shape and its topology."""
     solids = getattr(shape, "Solids", None)
     com = getattr(shape, "CenterOfMass", None)
     method = "shape"
@@ -112,6 +111,13 @@ def center_of_mass(document: object, obj_name: str) -> dict[str, object]:
                 break
     if com is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no CenterOfMass: {obj_name!r}")
+    return com, method
+
+
+def center_of_mass(document: object, obj_name: str) -> dict[str, object]:
+    obj = require_object(document, obj_name)
+    shape, meta = resolve_global_shape(obj)
+    com, method = _shape_center_of_mass(shape, obj_name)
     payload: dict[str, object] = {
         "object": object_name(obj),
         "x": round(float(getattr(com, "x", 0.0)), 6),
@@ -421,14 +427,12 @@ def get_global_shape(document: object, obj_name: str) -> dict[str, object]:
     box = getattr(shape, "BoundBox", None)
     if box is None:
         raise TypedMutationError("SHAPE_NOT_FOUND", f"Object has no BoundBox: {obj_name!r}")
-    com = None
-    center = getattr(shape, "CenterOfMass", None)
-    if center is not None:
-        com = [
-            round(float(getattr(center, "x", 0.0)), 6),
-            round(float(getattr(center, "y", 0.0)), 6),
-            round(float(getattr(center, "z", 0.0)), 6),
-        ]
+    center, _method = _shape_center_of_mass(shape, obj_name)
+    com = [
+        round(float(getattr(center, "x", 0.0)), 6),
+        round(float(getattr(center, "y", 0.0)), 6),
+        round(float(getattr(center, "z", 0.0)), 6),
+    ]
     payload: dict[str, object] = {
         "object": object_name(obj),
         "frame": "world",
