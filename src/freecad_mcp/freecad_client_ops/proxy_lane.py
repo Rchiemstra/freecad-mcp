@@ -156,10 +156,11 @@ class ProxyLane:
             self.transport.extra_headers = list(request_headers)
             try:
                 try:
-                    status, response_headers, response = self.transport.request(
-                        JSON_RPC_HTTP_PATH,
-                        payload,
-                        request_headers,
+                    from .read_transport_retry import invoke_direct_read_retry
+                    status, response_headers, response = invoke_direct_read_retry(
+                        self, method, args,
+                        lambda: self.transport.request(JSON_RPC_HTTP_PATH, payload, request_headers),
+                        notification=notification,
                     )
                 except _JsonRpcHttpResponseError as exc:
                     raise JsonRpcProtocolMismatchError(

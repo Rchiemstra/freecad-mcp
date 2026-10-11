@@ -350,3 +350,49 @@ def test_touched_feature_is_not_a_recompute_error(mcp, gui_log):
     assert_ok(mcp.call('close_document', doc_name='R12Touched'))
     assert_clean(gui_log)
 
+
+
+def test_dropped_read_only_transport_retries_against_live_freecad(mcp, live_gui, gui_log, monkeypatch):
+    import uuid
+    from http.client import RemoteDisconnected
+    from freecad_mcp.freecad_client import FreeCADConnection
+    from freecad_mcp._shared.protocol.manifest import load_instance_manifest, make_mcp_runtime_identity
+    from freecad_mcp._shared.protocol.profile_secret import load_profile_secret
+    from freecad_mcp._shared.protocol.handshake_request import build_handshake_request_from_manifest
+    from freecad_mcp._shared.protocol.handshake_response import verify_handshake_response_from_manifest
+    from freecad_mcp.generated.capabilities.connection_methods.connection_invoke_v2_helpers import invoke_v2_transport
+    from freecad_mcp.rpc_session import RpcAuthenticationContext
+    from freecad_mcp.build_info import build_id
+    manifest = load_instance_manifest(live_gui.manifest)
+    identity = make_mcp_runtime_identity(client_build_id=build_id)
+    secret = load_profile_secret(manifest.auth_secret_file)
+    conn = FreeCADConnection(host=manifest.rpc_host, port=manifest.rpc_port)
+    request = build_handshake_request_from_manifest(secret=secret, mcp=identity, manifest=manifest)
+    raw = conn.invoke_rpc('handshake_v2', request, control=True)
+    verified = verify_handshake_response_from_manifest(raw, secret=secret,
+                expected_client_nonce=request['client_nonce'], manifest=manifest)
+    assert_ok(mcp.call('create_document', name='R12Retry'))
+    original = conn.invoke_rpc
+    calls = []
+    def dropped_once(*args, **kwargs):
+        calls.append(args[0])
+        if len(calls) == 1:
+            raise RemoteDisconnected('injected response drop')
+        return original(*args, **kwargs)
+    monkeypatch.setattr(conn, 'invoke_rpc', dropped_once)
+    try:
+        for method, params in [('get_objects', {'doc_name':'R12Retry'}),
+                               ('execute_code', {'code':'print(42)', 'options':{
+                                   'document':'R12Retry','read_only':True,'execution_mode':'worker','timeout_seconds':15}})]:
+            calls.clear()
+            context = RpcAuthenticationContext(request_id=str(uuid.uuid4()), session_token=verified.session_token,
+                                                mcp_runtime_id=identity.runtime_id)
+            result = invoke_v2_transport(conn, method, params, context, control=False, timeout=30)
+            assert result.get('success') is not False, result
+            assert len(calls) == 2
+    finally:
+        conn.server.close()
+        conn.control_server.close()
+        assert_ok(mcp.call('close_document', doc_name='R12Retry'))
+    assert_clean(gui_log)
+
