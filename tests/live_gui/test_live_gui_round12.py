@@ -257,3 +257,28 @@ def test_plain_offset_geometry_survives_repeated_recomputes(mcp, gui_log):
     # scripts/reproduce_round12_offset.py produces the same warning without MCP.
     assert_clean(gui_log, 'Cannot find SKF modified Edge')
 
+
+
+@pytest.mark.parametrize('variant', ['none', 'target', 'no_document', 'import_open'])
+def test_execute_code_document_lifecycle_survives(mcp, gui_log, variant):
+    assert_ok(mcp.call('create_document', name='R12Lifecycle'))
+    kwargs = {'execution_mode': 'gui', 'recompute': 'target' if variant == 'target' else 'none'}
+    if variant != 'no_document':
+        kwargs['document'] = 'R12Lifecycle'
+    code = "import FreeCAD as App\nApp.newDocument('R12Created')"
+    if variant == 'import_open':
+        code = ("import FreeCAD as App, types, sys\n"
+                "mod = types.ModuleType('R12LifecycleImport')\n"
+                "mod.open = lambda filename: App.newDocument('R12Created')\n"
+                "sys.modules[mod.__name__] = mod\nmod.open('/tmp/qa.r12')")
+    result = mcp.call('execute_code', code=code, **kwargs)
+    if not result.ok:
+        assert 'lifecycle' in result.text.lower() and 'unavailable' in result.text.lower()
+        assert 'create_document' in result.text and 'open_document' in result.text
+    docs = _payload(assert_ok(mcp.call('list_documents')))
+    # A successful variant may create a document; always verify the next tool answers.
+    for name in ['R12Created', 'R12Lifecycle']:
+        if name in str(docs):
+            assert_ok(mcp.call('close_document', doc_name=name))
+    assert_clean(gui_log, 'lifecycle', 'unavailable', 'newDocument', 'Error executing Python', 'postflight')
+

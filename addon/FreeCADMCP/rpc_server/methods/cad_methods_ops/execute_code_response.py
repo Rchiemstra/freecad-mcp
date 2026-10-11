@@ -29,6 +29,8 @@ def finalize_gui_execute_response(
     tb = res.get("traceback")
     document_name = str(options.get("document") or "")
     error = str(res.get("error", "Unknown error"))
+    if "lifecycle" in error.lower() and "unavailable" in error.lower():
+        error += "; use create_document / open_document first, then run execute_code in that document"
     if "generic recompute has an unresolved cross-document dependency" in error:
         error += (
             '; run execute_code with recompute="none", then call '
