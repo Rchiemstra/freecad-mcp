@@ -247,6 +247,10 @@ class _RecomputeFailureDocument(_Document):
 
 
 class _NativeBridgeDocument(_Document):
+    def __init__(self, events: list[str], **kwargs) -> None:
+        super().__init__(events, **kwargs)
+        self.ModelRevision = 0
+
     def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None, recompute=True):
         assert structural is True
         before_objects = dict(self.objects)
@@ -263,8 +267,10 @@ class _NativeBridgeDocument(_Document):
             self.objects = before_objects
             self.recomputed = before_recomputed
             self.events.append("abort")
-            return {"status": "ApplyFailed", "committed": False}
+            # The native binding rethrows the callback exception after rollback.
+            raise
         self.events.append("commit")
+        self.ModelRevision += 1
         return {"status": "Committed", "committed": True}
 
 
@@ -453,6 +459,76 @@ def test_missing_body_aborts_without_recompute_or_commit():
     assert result["error_code"] == "BODY_NOT_FOUND"
     assert "recompute" not in events
     assert "commit" not in events
+
+
+@pytest.mark.parametrize("owner", [None, "OtherBody"], ids=["orphan", "other_body"])
+@pytest.mark.parametrize("strict", [False, True], ids=["non_strict", "strict"])
+def test_supplied_body_rejects_nonmember_sketch_before_mutation(owner, strict):
+    events = []
+    document = _NativeBridgeDocument(events)
+    sketch = document.objects["Sketch"]
+    body = document.objects["Body"]
+    body.Group.remove(sketch)
+    bodies = [body]
+    if owner is not None:
+        other_body = _Body(document, owner)
+        other_body.Group.append(sketch)
+        other_body.Tip = sketch
+        document.objects[owner] = other_body
+        bodies.append(other_body)
+    before_objects = dict(document.objects)
+    before_bodies = [(item, list(item.Group), item.Tip) for item in bodies]
+    before_revision = document.ModelRevision
+    collaborators, _api = _collaborators(document, events)
+    bridge = CollaborationAPI(document_lookup=lambda _name: document)
+    collaborators.commit_native_mutation = bridge.commit_native_mutation
+
+    result = run_pad_feature(
+        collaborators, "Doc", "Sketch", "Pad", 10.0, "Body", strict=strict
+    )
+
+    assert result["success"] is False
+    assert result["ok"] is False
+    assert result["outcome"] == "rejected"
+    assert result["error_code"] == "SKETCH_NOT_IN_BODY"
+    assert "Sketch" in result["error"] and "Body" in result["error"]
+    assert result["committed"] is False
+    assert result["native_status"] == "ApplyFailed"
+    assert result["rollback_succeeded"] is True
+    assert document.add_calls == 0
+    assert document.ModelRevision == before_revision
+    assert document.objects == before_objects
+    for item, group, tip in before_bodies:
+        assert item.Group == group
+        assert item.Tip is tip
+    assert not hasattr(sketch, "Profile")
+    assert not document.recomputed
+    assert events == ["abort"]
+
+
+@pytest.mark.parametrize("body_name, strict", [("Body", True), (None, False)])
+def test_owning_body_pad_commits_and_advances_revision(body_name, strict):
+    events = []
+    document = _NativeBridgeDocument(events)
+    collaborators, _api = _collaborators(document, events)
+    bridge = CollaborationAPI(document_lookup=lambda _name: document)
+    collaborators.commit_native_mutation = bridge.commit_native_mutation
+    before_revision = document.ModelRevision
+
+    result = run_pad_feature(
+        collaborators, "Doc", "Sketch", "Pad", 10.0, body_name, strict=strict
+    )
+
+    assert result["success"] is True
+    assert result["committed"] is True
+    assert document.ModelRevision == before_revision + 1
+    pad = document.objects["Pad"]
+    body = document.objects["Body"]
+    assert body.Group == [document.objects["Sketch"], pad]
+    assert body.Tip is pad
+    assert pad.Profile == (document.objects["Sketch"], [""])
+    assert document.add_calls == 1
+    assert events == ["apply", "recompute", "inspect", "validate", "commit"]
 
 
 def test_creation_that_changes_then_raises_is_rolled_back():
