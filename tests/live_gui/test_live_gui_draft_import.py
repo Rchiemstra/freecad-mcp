@@ -10,7 +10,8 @@ pytestmark = pytest.mark.live_gui
 
 
 def test_draft_hatch_import_freecad_tests(mcp, gui_log):
-    assert_ok(mcp.call("create_document", name="R14DraftCore"))
+    # No target document: these compatibility controls must run on Qt's main
+    # thread, and explicitly exercise owner-thread imports themselves.
     code = """import importlib.util, unittest, io
 spec=importlib.util.spec_from_file_location('r14_import_gui', '/workspace/src/Mod/Draft/drafttests/test_import_gui.py')
 module=importlib.util.module_from_spec(spec)
@@ -20,8 +21,7 @@ result=unittest.TextTestRunner(stream=output, verbosity=2).run(unittest.defaultT
 assert result.wasSuccessful(), output.getvalue()
 print(output.getvalue())
 """
-    assert_ok(mcp.call("execute_code", document="R14DraftCore", execution_mode="gui", recompute="none", code=code))
-    assert_ok(mcp.call("close_document", doc_name="R14DraftCore"))
+    assert_ok(mcp.call("execute_code", execution_mode="gui", recompute="none", code=code))
     assert_clean(gui_log)
 
 
@@ -37,6 +37,22 @@ def test_draft_factory_import_and_rectangle(mcp, gui_log):
     # Separate intermittent renderer finding seen during the combined round-14
     # checks; keep import/API failures fatal and permit only its exact line.
     assert_clean(gui_log, r"Coin warning in \[faceset\]::GLRender\(\): Erroneous polygon detected\. Ignoring \(offset: 4, \[-1 2 3\]\)\. Should be within  \[0, 7\] This message will only be shown once, but more errors might be present")
+
+
+def test_draft_all_factory_thread_controls(mcp, gui_log):
+    code = """import importlib.util, unittest, io
+spec=importlib.util.spec_from_file_location('draft_owner_controls', '/workspace/src/Mod/Draft/drafttests/test_owner_thread_gui.py')
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+output=io.StringIO()
+result=unittest.TextTestRunner(stream=output, verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(module.DraftOwnerThreadFactories))
+assert result.wasSuccessful(), output.getvalue()
+print(output.getvalue())
+"""
+    assert_ok(mcp.call("execute_code", execution_mode="gui", recompute="none", code=code))
+    # The unmodified main-thread controls also emit this exact Coin diagnostic
+    # when their fixture documents close. Owner-thread API errors remain fatal.
+    assert_clean(gui_log, r"Coin error in SoGroup::removeChild\(\): tried to remove non-existent child 0x[0-9a-f]+ \((?:Switch|Separator)\)$")
 
 
 def test_draft_pseudo_type_has_actionable_rejection(mcp, gui_log):
