@@ -166,3 +166,17 @@ def test_inspection_rejects_wrong_type_after_recompute():
     assert result["success"] is False
     assert result["error_code"] == "CREATED_OBJECT_WRONG_TYPE"
     assert "commit" not in events
+
+
+def test_draft_pseudo_type_rejected_before_import_or_mutation():
+    events = []
+    document = FakeDocument(events)
+    collab, _api = collaborators(document, events)
+    result = run_create_object(collab, "Doc", {"Name": "Rectangle", "Type": "Draft::Rectangle"})
+    assert result["success"] is False
+    assert result["error_code"] == "UNSUPPORTED_DRAFT_TYPE"
+    assert "Draft.make_rectangle" in result["error"]
+    assert result["committed"] is False
+    assert "apply" not in events
+    assert "recompute" not in events
+    assert "commit" not in events

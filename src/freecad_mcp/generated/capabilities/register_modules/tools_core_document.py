@@ -58,7 +58,11 @@ def _register_create_object(
         obj_properties: dict[str, Any] | None = None,
     ) -> CallToolResult:
         """Create a new object in FreeCAD.
-        Object type is starts with "Part::" or "Draft::" or "PartDesign::" or "Fem::".
+        Use registered document object types such as "Part::", "PartDesign::", or "Fem::".
+        Draft::* names are not registered object types and return UNSUPPORTED_DRAFT_TYPE
+        without importing Draft or changing the document. For Draft geometry use
+        execute_code with import Draft and a factory such as Draft.make_rectangle(20, 10)
+        for model geometry. Draft view customization and selection require the main thread.
 
         NOTE: For mechanical parts the default workflow is a parametric PartDesign feature
         history (body_create -> sketch_create/sketch_attach -> constraints ->
@@ -70,7 +74,7 @@ def _register_create_object(
         Args:
             doc_name: The name of the document to create the object in.
             obj_type: The type of the object to create (e.g. 'Part::Box', 'Part::Cylinder',
-                'Draft::Circle', 'PartDesign::Body', etc.).
+                'PartDesign::Body', etc.).
             obj_name: The name of the object to create.
             obj_properties: The properties of the object to create.
 
@@ -109,15 +113,6 @@ def _register_create_object(
                         "ShapeColor": [0.5, 0.5, 0.5, 1.0]
                     }
                 }
-            }
-            ```
-
-            If you want to create a circle with a radius of 10, you can use the following data.
-            ```json
-            {
-                "doc_name": "MyCircle",
-                "obj_name": "Circle",
-                "obj_type": "Draft::Circle",
             }
             ```
 
