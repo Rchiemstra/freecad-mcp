@@ -385,3 +385,27 @@ def test_unknown_or_contradictory_native_evidence_cannot_release_success():
         result = _clear_expression_native_result(native_result, _NativeMutationState(postcondition_passed=True))
         assert result["success"] is False
         assert result["outcome"] == "uncertain"
+
+
+@pytest.mark.parametrize("path", ["Constraints.LenDim", "Constraints[0]", ".Constraints.LenDim", "Placement.Base.x"])
+def test_clear_expression_accepts_existing_property_subpaths(path):
+    item = _item("Sketch")
+    item.PropertiesList = ["Constraints", "Placement"]
+    item.Constraints = [SimpleNamespace(Name="LenDim")]
+    item.setExpression(path, "12 mm")
+    doc = SimpleNamespace(getObject=lambda _name: item)
+    request = subject.build_clear_expression_request("Doc", "Sketch", path)
+    receipt = subject.apply_clear_expression(doc, request)
+    assert item.getExpression(path) is None
+    assert subject.read_clear_expression_result(doc, receipt).name == "Sketch"
+
+
+def test_inspection_rejects_remaining_constraint_engine_binding_without_getter():
+    item = _item("Sketch")
+    del item.getExpression
+    item.Constraints = [SimpleNamespace(Name="LenDim")]
+    item.ExpressionEngine = [(".Constraints.LenDim", "12 mm")]
+    doc = SimpleNamespace(getObject=lambda _name: item)
+    receipt = subject.ClearExpressionReceipt("Sketch", item, "Constraints[0]")
+    with pytest.raises(subject.ClearExpressionError, match="not cleared"):
+        subject.read_clear_expression_result(doc, receipt)

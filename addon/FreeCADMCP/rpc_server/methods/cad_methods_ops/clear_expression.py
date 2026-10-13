@@ -2,6 +2,8 @@
 """Typed ``clear_expression`` mutation."""
 from __future__ import annotations
 
+import re
+
 from .native_commit_wait import NativeOutcome, continue_after_native_commit
 
 from .typed_rpc_support import (
@@ -70,10 +72,37 @@ def _failure(error: ClearExpressionError, *, retry_safe: bool = True) -> ClearEx
 
 
 def _has_property(item: object, prop_path: str) -> bool:
+    # Expression paths address a property or one of its components. Let
+    # FreeCAD validate the component after checking that its root exists.
+    root = re.split(r"[.\[]", prop_path.strip().lstrip("."), maxsplit=1)[0]
     props = getattr(item, "PropertiesList", None)
-    if isinstance(props, (list, tuple)) and prop_path in props:
-        return True
-    return hasattr(item, prop_path)
+    if isinstance(props, (list, tuple)):
+        return root in props
+    return hasattr(item, root)
+
+
+def _expression_remaining(item: object, prop_path: str) -> bool:
+    path = prop_path.lstrip(".")
+    keys = {path}
+    indexed = re.fullmatch(r"Constraints\[(\d+)\]", path)
+    constraints = getattr(item, "Constraints", ())
+    if indexed and isinstance(constraints, (list, tuple)):
+        index = int(indexed[1])
+        if index < len(constraints):
+            name = getattr(constraints[index], "Name", "")
+            if name:
+                keys.add(f"Constraints.{name}")
+    getter = getattr(item, "getExpression", None)
+    if callable(getter):
+        for key in keys:
+            if getter(key) not in (None, ""):
+                return True
+    # Native sketches expose canonical named paths through ExpressionEngine;
+    # getExpression is unavailable on some FreeCAD object types.
+    for key, expression in getattr(item, "ExpressionEngine", ()) or ():
+        if key.lstrip(".") in keys and expression not in (None, ""):
+            return True
+    return False
 
 
 def apply_clear_expression(doc: ClearExpressionDocument, request: ClearExpressionRequest) -> ClearExpressionReceipt:
@@ -114,14 +143,11 @@ def read_clear_expression_result(doc: ClearExpressionReadDocument, receipt: Clea
         raise ClearExpressionError("CREATED_OBJECT_MISSING", f"Target is missing: {receipt.name!r}")
     if receipt.item is not None and located is not receipt.item:
         raise ClearExpressionError("CREATED_OBJECT_REPLACED", f"Target was replaced before commit: {receipt.name!r}")
-    getter = getattr(located, "getExpression", None)
-    if callable(getter):
-        expression = getter(receipt.prop_path)
-        if expression not in (None, ""):
-            raise ClearExpressionError(
-                "EXPRESSION_ERROR",
-                f"Expression was not cleared on {receipt.prop_path!r}",
-            )
+    if _expression_remaining(located, receipt.prop_path):
+        raise ClearExpressionError(
+            "EXPRESSION_ERROR",
+            f"Expression was not cleared on {receipt.prop_path!r}",
+        )
     return ClearExpressionInspection(
         name=ClearExpressionName(receipt.name),
         label=object_label(located),
