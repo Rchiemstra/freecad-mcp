@@ -152,6 +152,8 @@ def run_clear_expression_native_mutation(
     document_name: DocumentName,
     apply: Callable[[ClearExpressionDocument], None],
     postcondition: Callable[[ClearExpressionReadDocument], None],
+    *,
+    recompute: bool = True,
 ) -> NativeOutcome[Literal[True] | ClearExpressionFailure | ClearExpressionUncertain]:
     """Apply, recompute, inspect and validate on the same admitted document."""
 
@@ -204,6 +206,7 @@ def run_clear_expression_native_mutation(
             native_apply,
             native_postcondition,
             structural=True,
+            **({"recompute": False} if not recompute else {}),
         )
     except LookupError as exc:
         if state.document is None:

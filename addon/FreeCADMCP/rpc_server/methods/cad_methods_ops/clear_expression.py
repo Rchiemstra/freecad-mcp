@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 
-from .native_commit_wait import NativeOutcome, continue_after_native_commit
+from .native_commit_wait import NativeOutcome, settle_native_commit
 
 from .typed_rpc_support import (
+    call_named,
     nonempty_string,
     object_label,
     object_name,
@@ -15,7 +16,7 @@ from .typed_rpc_support import (
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 try:
     from ...._shared.protocol.clear_expression_contract import (
@@ -26,6 +27,7 @@ try:
         ClearExpressionReadDocument,
         ClearExpressionRequest,
         ClearExpressionResult,
+        ClearExpressionUncertain,
         DocumentName,
         make_clear_expression_failure,
         make_clear_expression_success,
@@ -40,6 +42,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         ClearExpressionReadDocument,
         ClearExpressionRequest,
         ClearExpressionResult,
+        ClearExpressionUncertain,
         DocumentName,
         make_clear_expression_failure,
         make_clear_expression_success,
@@ -177,8 +180,10 @@ class _ClearExpressionExecution:
     request: ClearExpressionRequest
     created: ClearExpressionReceipt | None = None
     inspected: ClearExpressionInspection | None = None
+    document: ClearExpressionDocument | None = None
 
     def apply(self, doc: ClearExpressionDocument) -> None:
+        self.document = doc
         self.created = apply_clear_expression(doc, self.request)
 
     def inspect(self, doc: ClearExpressionReadDocument) -> None:
@@ -189,23 +194,53 @@ class _ClearExpressionExecution:
             )
         self.inspected = read_clear_expression_result(doc, self.created)
 
-    def run(self) -> NativeOutcome[ClearExpressionResult]:
+    def run(self, *, recompute: bool = True) -> NativeOutcome[ClearExpressionResult]:
         result = run_clear_expression_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
+            recompute=recompute,
         )
-        def _finish_native_commit() -> ClearExpressionResult:
+        def _finish_native_commit(
+            result: Literal[True] | ClearExpressionFailure | ClearExpressionUncertain,
+        ) -> ClearExpressionResult:
+            if result is not True:
+                if (
+                    recompute
+                    and result.get("committed") is False
+                    and result.get("rollback_succeeded") is True
+                    and result.get("rollback_failed") is not True
+                    and "generic recompute has an unresolved cross-document dependency" in result.get("error", "")
+                ):
+                    # The coordinator cannot isolate the retained external
+                    # dependencies. Only confirmed rollback permits reapply.
+                    fallback = self.run(recompute=False)
+                    return fallback if isinstance(fallback, dict) else fallback.await_result()
+                return result
             if self.inspected is None:
                 return make_clear_expression_uncertain(
                     "CLEAR_EXPRESSION_COMMITTED_RESPONSE_INVALID",
                     "Native commit completed without an inspected result",
                     committed=True,
                 )
-            return make_clear_expression_success(object=self.inspected.name, prop_path=self.request.prop_path)
+            success = make_clear_expression_success(object=self.inspected.name, prop_path=self.request.prop_path)
+            if not recompute:
+                try:
+                    if self.document is None or self.created is None:
+                        raise RuntimeError("Missing expression target after commit")
+                    call_named(self.document, "recompute")
+                    self.collaborators.validate_document_invariants(self.document)
+                    read_clear_expression_result(self.document, self.created)
+                except Exception as exc:
+                    return make_clear_expression_uncertain(
+                        "EXPRESSION_RECOMPUTE_FAILED",
+                        f"Expression is cleared; direct recompute failed: {exc}",
+                        committed=True,
+                    )
+            return success
 
-        return continue_after_native_commit(result, _finish_native_commit)
+        return settle_native_commit(result, _finish_native_commit)
 
 def run_clear_expression(
     collaborators: ClearExpressionCollaborators,
