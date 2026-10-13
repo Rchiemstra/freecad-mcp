@@ -670,3 +670,14 @@ def test_exception_after_native_apply_does_not_claim_rollback():
     assert result["outcome"] == "uncertain"
     assert result["committed"] is None
     assert result["retry_safe"] is False
+
+
+def test_origin_plane_uses_role_when_nested_body_planes_have_suffixed_names():
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_create import _find_origin_plane
+    outer_plane = SimpleNamespace(Name="XY_Plane", Label="XY-plane", Role="XY_Plane")
+    body_plane = SimpleNamespace(Name="XY_Plane001", Label="XY-plane", Role="XY_Plane")
+    outer_origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[outer_plane])
+    body_origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[body_plane])
+    doc = SimpleNamespace(Objects=[outer_origin, body_origin])
+    body = SimpleNamespace(Origin=body_origin)
+    assert _find_origin_plane(doc, body, "XY_Plane") is body_plane

@@ -97,7 +97,11 @@ def _find_origin_plane(doc: object, body: object | None, plane_name: str) -> obj
             origins.append(origin)
     for origin in origins:
         for feat in getattr(origin, "OriginFeatures", []) or []:
-            if getattr(feat, "Label", "") == plane_name or getattr(feat, "Name", "") == plane_name:
+            # Names gain suffixes in later containers, and labels can be
+            # translated or renamed. Role identifies the owning origin plane.
+            if (getattr(feat, "Role", "") == plane_name
+                    or getattr(feat, "Label", "") == plane_name
+                    or getattr(feat, "Name", "") == plane_name):
                 found: object = feat
                 return found
         if hasattr(origin, plane_name):
