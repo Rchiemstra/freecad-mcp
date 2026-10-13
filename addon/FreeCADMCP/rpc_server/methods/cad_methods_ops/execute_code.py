@@ -288,8 +288,8 @@ def _prepare_native_gui_execution(options, collaborators):
     primary_document = _resolve_primary_document(collaborators, options)
     if primary_document and options.get("document") != primary_document:
         # Stamp so session and native recompute attribution resolve the same
-        # document; omission no longer means "no document".
-        options = {**options, "document": primary_document}
+        # document, and report that omission selected the active document.
+        options = {**options, "document": primary_document, "_document_source": "active"}
     native_recompute, failure = _native_recompute_policy(options, primary_document)
     return options, primary_document, native_recompute, failure
 

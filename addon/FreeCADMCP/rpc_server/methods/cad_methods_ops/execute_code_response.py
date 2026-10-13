@@ -13,6 +13,13 @@ def finalize_gui_execute_response(
     res: dict[str, Any],
     options: dict[str, Any],
 ) -> dict[str, Any]:
+    document = options.get("document") or None
+    execution = {
+        "mode": "gui",
+        "venue": "document_owner_thread" if document else "qt_main_thread",
+        "document": document,
+        "document_source": options.get("_document_source", "explicit" if document else "none"),
+    }
     if res.get("ok"):
         session = res.get("session", {})
         return annotate(
@@ -23,13 +30,18 @@ def finalize_gui_execute_response(
                 "recompute_errors": flatten_recompute_errors(session, options),
                 "session": session,
                 "structured": session,
-                "execution": {"mode": "gui"},
+                "execution": execution,
                 **({"note": res["note"]} if "note" in res else {}),
             }
         )
     tb = res.get("traceback")
     document_name = str(options.get("document") or "")
     error = str(res.get("error", "Unknown error"))
+    if execution["document_source"] == "active":
+        error += (
+            f"; omitted document resolved to active document {document!r}, so the body "
+            "is scoped to its owner thread. Use a typed GUI tool such as get_gui_state for Qt access."
+        )
     if "lifecycle" in error.lower() and "unavailable" in error.lower():
         error += "; use create_document / open_document first, then run execute_code in that document"
     if "generic recompute has an unresolved cross-document dependency" in error:
@@ -48,6 +60,7 @@ def finalize_gui_execute_response(
         "session": res.get("session", {}),
         "message": res.get("stdout", ""),
         "is_error": True,
+        "execution": execution,
     }
     for key in (
         "error_code",

@@ -126,7 +126,8 @@ def test_async_success_waits_for_native_commit_and_preserves_session(monkeypatch
 
     assert result["success"] is True
     assert "model-created" in result["message"]
-    assert result["execution"] == {"mode": "gui"}
+    assert result["execution"] == {"mode": "gui", "venue": "document_owner_thread",
+                                    "document": "Target", "document_source": "explicit"}
     assert result["session"]["active_document_before"] == "Original"
     assert result["session"]["active_document_after"] == "Original"
     assert freecad.ActiveDocument.Name == "Original"
