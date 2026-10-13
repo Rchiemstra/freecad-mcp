@@ -51,6 +51,29 @@ def test_sketch_trim_runs_apply_recompute_inspect_validate_then_commits():
     assert api.calls == [("Doc", True, True, True)]
 
 
+def test_trim_that_deletes_a_whole_element_is_rejected_and_rolled_back():
+    events = []
+    document = FakeDocument(events)
+    _prepare(document, events)
+    before = list(document.sketch.Geometry)
+
+    def delete_instead_of_trim(geo_index, point):
+        events.append("apply")
+        document.sketch.Geometry.pop(geo_index)
+
+    document.sketch.trim = delete_instead_of_trim
+    collab, _api = collaborators(document, events)
+    result = run_sketch_trim(collab, "Doc", "Sketch", 0, 5.0, 0.0)
+
+    assert result["success"] is False
+    assert result["error_code"] == "TRIM_NO_INTERSECTION"
+    assert result["outcome"] == "rejected"
+    assert result["committed"] is False
+    assert result["rollback_succeeded"] is True
+    assert document.sketch.Geometry == before
+    assert "commit" not in events
+
+
 @pytest.mark.parametrize("sketch_name", [None, 42, [], {}, "", " ", "\t"])
 def test_invalid_names_abort_without_recompute_or_commit(sketch_name):
     events = []
