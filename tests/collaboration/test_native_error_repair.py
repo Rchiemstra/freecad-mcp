@@ -80,3 +80,19 @@ def test_explicit_recompute_still_reports_existing_error(method):
         result = _commit(document)
     assert result["status"] == "PostconditionFailed", result
     assert result["committed"] is False, result
+
+
+@pytest.mark.parametrize("pending", ["Touched", "Dirty", "cells"])
+def test_native_repair_rejects_unsettled_existing_error(pending):
+    original = _object()
+    document = _Document([original])
+
+    def mutate(_doc):
+        if pending == "cells":
+            original.getDirtyCells = lambda: ["B1"]
+        else:
+            original.State.append(pending)
+
+    result = _commit(document, mutate)
+    assert result["status"] == "PostconditionFailed", result
+    assert result["committed"] is False, result

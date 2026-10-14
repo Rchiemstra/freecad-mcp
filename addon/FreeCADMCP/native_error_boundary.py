@@ -65,10 +65,25 @@ def native_error_validation_scope(document: object, baseline: NativeErrorBaselin
         _ACTIVE_ERRORS.reset(token)
 
 
+def _native_work_settled(obj: Any) -> bool:
+    state = {str(item).lower() for item in getattr(obj, "State", ())}
+    if state.intersection({"touched", "dirty", "recompute", "recompute2"}):
+        return False
+    # Sheet.MustExecute also includes settled cell errors. Read the native
+    # dirty cache separately so terminal diagnostics cannot hide fresh cells.
+    dirty_cells = getattr(obj, "getDirtyCells", None)
+    if callable(dirty_cells):
+        try:
+            return not bool(dirty_cells())
+        except Exception:
+            return False
+    return True
+
+
 def existing_native_error_unchanged(document: object, obj: Any) -> bool:
     active = _ACTIVE_ERRORS.get()
     if active is None or active[0] is not document or hasattr(obj, "Proxy"):
         return False
     baseline = active[1].get(id(obj))
-    return (baseline is not None and baseline[0] is obj
+    return (baseline is not None and baseline[0] is obj and _native_work_settled(obj)
             and baseline[1] == _object_error_detail(obj) and baseline[2] == _error_state(obj))
