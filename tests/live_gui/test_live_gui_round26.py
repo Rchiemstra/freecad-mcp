@@ -64,6 +64,10 @@ def test_round26_label_expression(mcp, gui_log, live_gui, cross_document, mode):
         for doc in opened:
             assert_ok(mcp.call("save_document_as", selector={"document_name": doc},
                                destination=str(live_gui.workdir / (doc + ".FCStd")), overwrite=True))
+        histories = {
+            doc: _payload(assert_ok(mcp.call("get_mutation_readiness", doc_name=doc)))["documents"][0]
+            for doc in opened
+        }
         if mode == "typed":
             assert_ok(mcp.call("edit_object", doc_name="SrcDoc", obj_name="Dims",
                                obj_properties={"Label": "DimsRenamed"}))
@@ -75,13 +79,24 @@ def test_round26_label_expression(mcp, gui_log, live_gui, cross_document, mode):
         cells = _payload(assert_ok(mcp.call("spreadsheet_get_cells", doc_name=dep,
                                            sheet_name="Bridge", addresses=["A1"])))
         assert "DimsRenamed" in str(cells), cells
-        if not cross_document:
-            assert_ok(mcp.call("undo", doc_name="SrcDoc"))
+        for action, label, undo_delta, redo_delta in (
+            ("undo", "Dims", 0, 1), ("redo", "DimsRenamed", 1, 0)
+        ):
+            assert_ok(mcp.call(action, doc_name="SrcDoc"))
+            assert label in str(_label(mcp, "SrcDoc", "Dims"))
+            if action == "undo":
+                assert "DimsRenamed" not in str(_label(mcp, "SrcDoc", "Dims"))
             expressions = _payload(assert_ok(mcp.call("list_expressions", doc_name=dep, object_name="Box")))
-            assert "<<Dims>>.Size" in str(expressions), expressions
-            assert_ok(mcp.call("redo", doc_name="SrcDoc"))
-            expressions = _payload(assert_ok(mcp.call("list_expressions", doc_name=dep, object_name="Box")))
-            assert "<<DimsRenamed>>.Size" in str(expressions), expressions
+            assert "<<" + label + ">>.Size" in str(expressions), expressions
+            cells = _payload(assert_ok(mcp.call("spreadsheet_get_cells", doc_name=dep,
+                                               sheet_name="Bridge", addresses=["A1"])))
+            assert label in str(cells), cells
+            if action == "undo":
+                assert "DimsRenamed" not in str(cells), cells
+            for doc in opened:
+                history = _payload(assert_ok(mcp.call("get_mutation_readiness", doc_name=doc)))["documents"][0]
+                assert history["undo_count"] == histories[doc]["undo_count"] + undo_delta, history
+                assert history["redo_count"] == histories[doc]["redo_count"] + redo_delta, history
         assert_ok(mcp.call("spreadsheet_set_cells", doc_name="SrcDoc", sheet_name="Dims",
                            cells=[{"address": "A1", "value": 18}]))
         assert_ok(mcp.call("recompute_document", doc_name=dep))
