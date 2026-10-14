@@ -272,6 +272,11 @@ def read_delete_object_result(
 ) -> DeleteObjectInspection:
     """Build the public result after the shared mutation recompute."""
 
+    if not receipt.deleted or receipt.name not in receipt.deleted or get_object(doc, receipt.name) is not None:
+        raise DeleteObjectError(
+            "OBJECT_NOT_DELETED",
+            f"Object {receipt.name!r} was not removed; native removeObject returned without deleting it",
+        )
     remaining = [name for name in receipt.deleted if get_object(doc, name) is not None]
     if remaining:
         raise DeleteObjectError(

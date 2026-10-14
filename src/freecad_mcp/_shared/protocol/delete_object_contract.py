@@ -385,7 +385,7 @@ def parse_delete_object_response(raw_response: object) -> DeleteObjectResult:
         and isinstance(deleted, list)
     ):
         deleted_names = [item for item in deleted if isinstance(item, str) and item.strip()]
-        if len(deleted_names) == len(deleted):
+        if len(deleted_names) == len(deleted) and object_name in deleted_names:
             refused_raw = response.get("refused")
             dependents_raw = response.get("dependents")
             orphans_raw = response.get("orphans_left")

@@ -97,3 +97,10 @@ def test_transport_failure_preserves_unknown_model_state():
     data = response.structuredContent["data"]
     assert data["outcome"] == "uncertain"
     assert data["retry_safe"] is False
+
+
+@pytest.mark.parametrize("deleted", [[], ["Other"]])
+def test_success_must_include_requested_object(deleted):
+    result = parse_delete_object_response(dict(_success(), deleted=deleted))
+    assert result["success"] is False
+    assert result["outcome"] == "uncertain"

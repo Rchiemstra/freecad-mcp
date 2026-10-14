@@ -327,3 +327,19 @@ def test_body_dependents_include_link_arrays_that_would_dangle():
     names = {item.Name for item in object_dependents(body)}
 
     assert names == {"Pad", "BodyLink", "BodyArray", "BodyArray_i0", "BodyArray_i1", "BodyArray_i2"}
+
+
+def test_silent_native_noop_cannot_report_success():
+    events: list[str] = []
+    document = FakeDocument(events)
+    document.addObject("Part::Feature", "Box")
+    document.removeObject = lambda _name: None
+    document.events.clear()
+    collab, _api = collaborators(document, events)
+
+    result = run_delete_object(collab, "Doc", "Box", False, True)
+
+    assert result["success"] is False
+    assert "Box" in result["error"]
+    assert document.getObject("Box") is not None
+    assert "commit" not in events
