@@ -270,7 +270,17 @@ class _SpreadsheetSetCellsExecution:
                 try:
                     if self.document is None or self.created is None:
                         raise RuntimeError("Missing spreadsheet target after commit")
-                    call_named(self.document, "recompute")
+                    sheet = self.created.item
+                    if sheet is None:
+                        raise RuntimeError("Missing spreadsheet target after commit")
+                    # Force this sheet even when Document::SkipRecompute is set.
+                    # A no-op recompute can otherwise leave a readable stale value.
+                    call_named(self.document, "recompute", [sheet], True)
+                    if getattr(sheet, "MustExecute", False) or any(
+                        state in {"Touched", "Recompute", "Recompute2"}
+                        for state in getattr(sheet, "State", ())
+                    ):
+                        raise RuntimeError("Spreadsheet recompute did not settle")
                     self.collaborators.validate_document_invariants(self.document)
                     self.inspected = read_spreadsheet_set_cells_result(self.document, self.created)
                     if isinstance(self.inspected.extra, list) and any(

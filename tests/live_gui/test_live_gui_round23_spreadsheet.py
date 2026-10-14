@@ -60,7 +60,7 @@ def test_round23_existing_cell_external_formula_with_skip_recompute(mcp, gui_log
         assert cells["cells"][0]["contents"] == formula, cells
         assert float(cells["cells"][0]["value"]) == pytest.approx(25), cells
         assert_ok(mcp.call("execute_code", document="MidDoc", recompute="none", execution_mode="gui",
-                           code="doc = FreeCAD.getDocument('MidDoc')\nassert doc.RecomputesFrozen\nassert not doc.Bridge.isTouched()"))
+                           code="doc = FreeCAD.getDocument('MidDoc')\nassert doc.RecomputesFrozen\nassert 'Touched' not in doc.Bridge.State\nassert not doc.Bridge.MustExecute"))
     finally:
         for doc in reversed(opened):
             assert_ok(mcp.call("close_document", doc_name=doc))
