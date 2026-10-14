@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 try:
     from .document_recompute_settlement import settle_document_must_execute
     from .rpc_method_context import current_rpc_method
+    from .native_error_boundary import (
+        NativeErrorBaseline, capture_native_error_baseline, native_error_validation_scope,
+    )
 except ImportError:  # pragma: no cover - flat addon import path
+    from native_error_boundary import (  # type: ignore[import-not-found,no-redef]
+        NativeErrorBaseline, capture_native_error_baseline, native_error_validation_scope,
+    )
     from document_recompute_settlement import (  # type: ignore[import-not-found]
         settle_document_must_execute,
     )
@@ -62,6 +68,13 @@ class _NativeMutationDocument(Protocol):
     ) -> object: ...
 
 __all__ = ["CollaborationAPI"]
+
+# Repairs may leave unrelated native errors intact. Health/measurement RPCs
+# still validate the complete document and report any existing model error.
+_NATIVE_ERROR_REPAIR_METHODS = frozenset({
+    "clear_expression", "set_expression", "edit_object", "translate", "rotate",
+    "spreadsheet_set_cells", "delete_object",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -323,10 +336,16 @@ class CollaborationAPI:
 
         _settle_pending_recompute(document)
         refusals = _CallbackRefusals()
+        baseline: NativeErrorBaseline = {}
+        allow_existing_errors = current_rpc_method() in _NATIVE_ERROR_REPAIR_METHODS
 
         def invoke_callback() -> object:
             refusals.started = True
             try:
+                # Capture on the native owner after settlement, before apply.
+                baseline.clear()
+                if allow_existing_errors:
+                    baseline.update(capture_native_error_baseline(document))
                 return callback(document)
             except Exception as exc:
                 refusals.record("ApplyFailed", exc)
@@ -334,7 +353,8 @@ class CollaborationAPI:
 
         def invoke_postcondition() -> object:
             try:
-                return postcondition(document)
+                with native_error_validation_scope(document, baseline):
+                    return postcondition(document)
             except Exception as exc:
                 refusals.record("PostconditionFailed", exc)
                 raise
@@ -387,10 +407,16 @@ class CollaborationAPI:
         if recompute:
             _settle_pending_recompute(document)
         refusals = _CallbackRefusals()
+        baseline: NativeErrorBaseline = {}
+        allow_existing_errors = current_rpc_method() in _NATIVE_ERROR_REPAIR_METHODS
 
         def invoke_callback() -> object:
             refusals.started = True
             try:
+                # Capture on the native owner after settlement, before apply.
+                baseline.clear()
+                if allow_existing_errors:
+                    baseline.update(capture_native_error_baseline(document))
                 return callback(document)
             except Exception as exc:
                 refusals.record("ApplyFailed", exc)
@@ -398,7 +424,8 @@ class CollaborationAPI:
 
         def invoke_postcondition() -> object:
             try:
-                return postcondition(document)
+                with native_error_validation_scope(document, baseline):
+                    return postcondition(document)
             except Exception as exc:
                 refusals.record("PostconditionFailed", exc)
                 raise
