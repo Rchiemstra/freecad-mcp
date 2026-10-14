@@ -187,16 +187,45 @@ def _load_snapshot_after_commit(
                 live_doc = None
     if live_doc is None:
         live_doc = stub_doc
+
+    def validate_reload(document: object) -> None:
+        recompute = getattr(document, "recompute", None)
+        if callable(recompute):
+            recompute()
+        validation = collaborators.validate_document_invariants(cast(RestoreReadDocument, document))
+        if isinstance(validation, dict) and validation.get("ok") is False:
+            raise RestoreError("DOCUMENT_HEALTH_DEGRADED", "snapshot post-restore validation failed")
+
     if live_doc is not None:
+        loader = getattr(live_doc, "load", None)
+        if callable(loader):
+            from ...snapshot_service_ops.restore_snapshot import restore_snapshot_in_place_gui
+
+            try:
+                restore_snapshot_in_place_gui(
+                    live_doc,
+                    snapshot_path,
+                    expected_document_name=doc_name,
+                    expected_source_path=str(getattr(live_doc, "FileName", "") or "") or None,
+                    validator=collaborators.validate_document_invariants,
+                )
+            except Exception as exc:
+                return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+            return True
         restorer = getattr(live_doc, "restore", None)
         if callable(restorer):
             try:
                 restorer(snapshot_path)
-                return True
             except TypeError:
                 pass
-            except Exception:
-                pass
+            except Exception as exc:
+                return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+            else:
+                try:
+                    validate_reload(live_doc)
+                except Exception as exc:
+                    return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+                return True
     if app is not None:
         closer = getattr(app, "closeDocument", None)
         opener = getattr(app, "openDocument", None)
@@ -233,6 +262,10 @@ def _load_snapshot_after_commit(
                     f"FreeCAD did not reopen {named_path!r}",
                     committed=True,
                 )
+            try:
+                validate_reload(reopened)
+            except Exception as exc:
+                return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
             return True
     if live_doc is None:
         return True
@@ -241,6 +274,10 @@ def _load_snapshot_after_commit(
     if load_result is not True:
         return load_result
     if callable(restorer):
+        try:
+            validate_reload(live_doc)
+        except Exception as exc:
+            return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
         return True
     loader = getattr(live_doc, "load", None)
     return _try_document_reload(loader, snapshot_path)

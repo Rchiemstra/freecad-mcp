@@ -111,7 +111,8 @@ class _NativeBridgeDocument(_Document):
         before_recomputed = self.recomputed
         try:
             callback()
-            self.recompute()
+            if recompute:
+                self.recompute()
             if postcondition is not None and not postcondition():
                 self.objects = before_objects
                 self.recomputed = before_recomputed
@@ -147,6 +148,7 @@ class _CompatibilityAPI:
         postcondition=None,
         bind_document=False,
         require_native=False,
+        recompute=True,
     ):
         self.calls.append((document_name, structural, bind_document, require_native))
         if self.document is None:
@@ -159,7 +161,8 @@ class _CompatibilityAPI:
             self._restore(before_objects, before_recomputed)
             return {"status": "ApplyFailed", "committed": False, "message": str(exc)}
         try:
-            self.document.recompute()
+            if recompute:
+                self.document.recompute()
         except Exception as exc:
             self._restore(before_objects, before_recomputed)
             return {
@@ -185,7 +188,8 @@ class _CompatibilityAPI:
         self.document.events.append("commit")
         return {"status": "Committed", "committed": True}
 
-    def commit_native_mutation(self, document_name, callback, postcondition, *, structural=True):
+    def commit_native_mutation(self, document_name, callback, postcondition, *, structural=True, recompute=True):
+        assert recompute is False
         return self.commit_compatibility_mutation(
             document_name,
             callback,
@@ -193,6 +197,7 @@ class _CompatibilityAPI:
             postcondition=postcondition,
             bind_document=True,
             require_native=True,
+            recompute=recompute,
         )
 
 
@@ -272,17 +277,18 @@ def test_creation_that_changes_then_raises_is_rolled_back(monkeypatch):
     assert "abort" in events
 
 
-def test_recompute_failure_is_rolled_back():
+def test_recompute_failure_after_reload_is_uncertain():
     events: list[str] = []
     document = _RecomputeFailureDocument(events)
     _seed(document)
     collaborators, _api = _collaborators(document, events)
     result = run_restore(collaborators, "Doc", "snap-test")
     assert result["success"] is False
-    assert result.get("native_status") == "RecomputeFailed"
+    assert result["outcome"] == "uncertain"
+    assert "FreeCAD recompute failed" in result["error"]
 
 
-def test_failed_validation_aborts_before_commit():
+def test_failed_snapshot_validation_never_returns_success():
     events: list[str] = []
     document = _Document(events)
     _seed(document)
@@ -294,7 +300,8 @@ def test_failed_validation_aborts_before_commit():
     collaborators, _api = _collaborators(document, events, validator=fail_validation)
     result = run_restore(collaborators, "Doc", "snap-test")
     assert result["success"] is False
-    assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
+    assert result["outcome"] == "uncertain"
+    assert "document health degraded" in result["error"]
 
 
 def test_native_rejection_never_returns_cached_success():
@@ -421,3 +428,29 @@ def test_a_failed_gui_dispatch_leaves_the_restore_uncertain():
     assert result["success"] is False
     assert result["outcome"] == "uncertain"
     assert "GUI dispatcher stopped" in result["error"]
+
+
+def test_broken_live_state_is_validated_only_after_snapshot_reload():
+    events: list[str] = []
+    document = _Document(events)
+    _seed(document)
+    document.objects["Hole1"] = _item("Hole1", type_id="PartDesign::Hole")
+
+    def reload(path):
+        document.restored_paths.append(path)
+        document.objects.pop("Hole1", None)
+
+    document.restore = reload
+
+    def validate(doc):
+        events.append("validate")
+        if "Hole1" in doc.objects:
+            raise RuntimeError("Hole1: Linked shape object is empty")
+
+    collaborators, _api = _collaborators(document, events, validator=validate)
+    result = run_restore(collaborators, "Doc", "snap-test")
+
+    assert result["success"] is True, result
+    assert document.restored_paths
+    assert "Hole1" not in document.objects
+    assert events.count("validate") == 1

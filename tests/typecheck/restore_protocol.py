@@ -38,6 +38,7 @@ class CompleteRestoreDouble:
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         return None
 
