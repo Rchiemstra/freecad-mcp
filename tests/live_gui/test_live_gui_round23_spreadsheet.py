@@ -33,3 +33,35 @@ def test_round23_spreadsheet_formula(mcp, gui_log, live_gui, cross_document):
         for doc in reversed(opened):
             assert_ok(mcp.call("close_document", doc_name=doc))
     assert_clean(gui_log, "unresolved cross-document dependency")
+
+
+def test_round23_existing_cell_external_formula_with_skip_recompute(mcp, gui_log, live_gui):
+    opened = []
+    try:
+        for doc, sheet in (("SrcDoc", "Dims"), ("MidDoc", "Bridge")):
+            assert_ok(mcp.call("create_document", name=doc))
+            opened.append(doc)
+            assert_ok(mcp.call("spreadsheet_create", doc_name=doc, sheet_name=sheet))
+            _save(mcp, live_gui, doc)
+        assert_ok(mcp.call("spreadsheet_set_cells", doc_name="SrcDoc", sheet_name="Dims",
+                           cells=[{"address": "A1", "value": 25, "alias": "PadLen"}]))
+        initial = _payload(assert_ok(mcp.call("spreadsheet_set_cells", doc_name="MidDoc", sheet_name="Bridge",
+                                              cells=[{"address": "B1", "value": 7}])))
+        assert float(initial["updated"][0]["value"]) == pytest.approx(7), initial
+        # RecomputesFrozen sets Document::SkipRecompute through the Python API.
+        assert_ok(mcp.call("execute_code", document="MidDoc", recompute="none", execution_mode="gui",
+                           code="FreeCAD.getDocument('MidDoc').RecomputesFrozen = True"))
+        formula = "=SrcDoc#<<Dims>>.PadLen"
+        result = _payload(assert_ok(mcp.call("spreadsheet_set_cells", doc_name="MidDoc", sheet_name="Bridge",
+                                             cells=[{"address": "B1", "value": formula}])))
+        # Check the mutation response before another RPC can settle dirty work.
+        assert float(result["updated"][0]["value"]) == pytest.approx(25), result
+        cells = _payload(assert_ok(mcp.call("spreadsheet_get_cells", doc_name="MidDoc", sheet_name="Bridge", addresses=["B1"])))
+        assert cells["cells"][0]["contents"] == formula, cells
+        assert float(cells["cells"][0]["value"]) == pytest.approx(25), cells
+        assert_ok(mcp.call("execute_code", document="MidDoc", recompute="none", execution_mode="gui",
+                           code="doc = FreeCAD.getDocument('MidDoc')\nassert doc.RecomputesFrozen\nassert not doc.Bridge.isTouched()"))
+    finally:
+        for doc in reversed(opened):
+            assert_ok(mcp.call("close_document", doc_name=doc))
+    assert_clean(gui_log, "unresolved cross-document dependency")
