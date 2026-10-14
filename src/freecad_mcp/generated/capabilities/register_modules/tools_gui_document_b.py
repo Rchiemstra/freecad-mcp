@@ -71,11 +71,13 @@ def _register_select_subshapes(
         selections: list[Any],
         clear: bool = True,
     ) -> CallToolResult:
-        """Select GUI-visible objects or sub-shapes (FaceN/EdgeN/VertexN).
+        """Select objects or sub-shapes (FaceN/EdgeN/VertexN) in this MCP actor's personal selection.
 
         Each selection may be ``\"Box\"``, ``\"Box:Face1\"``, or
         ``{\"object\": \"Box\", \"sub\": \"Face1\"}``. Prefer ``find_faces`` to
-        discover indices, then this tool to highlight them in the GUI.
+        discover indices. This selection is used by the actor's personal views;
+        native ``Gui.Selection`` is unchanged. Results identify
+        ``selection_scope: "actor_personal"`` and ``native_selection_included: false``.
         """
         return select_subshapes_operation(
             server_connection(), doc_name, selections, clear
@@ -90,7 +92,11 @@ def _register_get_selection(
 ) -> None:
     @mcp.tool()
     def get_selection(ctx: Context) -> CallToolResult:
-        """Return the current FreeCADGui selection (document/object/sub)."""
+        """Return this MCP actor's personal selection (document/object/sub).
+
+        Results identify ``selection_scope: "actor_personal"`` and
+        ``native_selection_included: false``. Native ``Gui.Selection`` is not shown;
+        changes to the human's native selection do not change this personal selection."""
         return get_selection_operation(server_connection())
 
     exports['get_selection'] = get_selection
@@ -102,12 +108,13 @@ def _register_get_gui_state(
 ) -> None:
     @mcp.tool()
     def get_gui_state(ctx: Context) -> CallToolResult:
-        """Report the active GUI context (read-only).
+        """Report this MCP actor's personal GUI context (read-only).
 
-        Returns JSON with the active document, active PartDesign Body, active
-        workbench, the object currently in edit-mode, and the current selection.
-        Use it to orient before editing -- e.g. confirm the right Body is active
-        before adding a sketch/feature, or check whether a Sketch is open for edit.
+        Returns JSON with the actor's active document, active PartDesign Body,
+        workbench, edit focus, and personal selection. Results identify
+        ``selection_scope: "actor_personal"`` and ``native_selection_included: false``.
+        Native ``Gui.Selection`` and the human's active GUI context are not shown.
+        Use this context to orient before adding a sketch or feature.
         """
         return get_gui_state_operation(server_connection())
 
