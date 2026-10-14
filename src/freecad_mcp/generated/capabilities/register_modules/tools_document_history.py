@@ -65,6 +65,11 @@ def _register_undo(
     def undo(ctx: Context, doc_name: str) -> CallToolResult:
         """Undo the last operation in a FreeCAD document.
 
+        Requires a mutation-ready live document. Pending recompute work rejects undo;
+        run recompute_document before retrying. An empty live history reports Nothing
+        to undo. Use get_mutation_readiness for live readiness and history counts;
+        read-only execute_code workers inspect snapshot copies, not live undo history.
+
         Args:
             doc_name: The document to undo in.
 

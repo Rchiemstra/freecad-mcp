@@ -40,10 +40,27 @@ def _prepare_history_mutation(conn, doc_name: str, *, undo: bool) -> dict[str, A
     if not readiness.get("success"):
         return _history_rejection(readiness)
     if not readiness.get("ready"):
+        method = "undo" if undo else "redo"
+        message = f"Document '{doc_name}' is not ready for mutation"
+        documents = readiness.get("documents") or []
+        entry = documents[0] if documents else {}
+        diagnostic = entry.get("diagnostic")
+        if diagnostic:
+            message += f": {diagnostic}"
+        reasons = readiness.get("reasons") or entry.get("reasons") or []
+        if reasons:
+            message += "; blockers: " + ", ".join(str(reason) for reason in reasons)
+        count = entry.get("undo_count" if undo else "redo_count")
+        if isinstance(count, int) and not isinstance(count, bool):
+            message += f". Live {method} count: {count}"
+        if "pending_recompute" in reasons and set(reasons) <= {
+            "pending_recompute", "native_not_ready"
+        }:
+            message += f". Run recompute_document for this document before retrying {method}"
         failure: dict[str, Any] = {
             "success": False,
             "error_code": "MUTATION_NOT_READY",
-            "error": f"Document '{doc_name}' is not ready for mutation",
+            "error": message,
         }
         for key in ("documents", "reasons", "automation_pause", "mutation_readiness"):
             if key in readiness:

@@ -71,7 +71,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="undo",
-            docstring='Undo the last operation in a FreeCAD document.\n\nArgs:\n    doc_name: The document to undo in.\n\nReturns:\n    A message indicating success or failure.',
+            docstring='Undo the last operation in a FreeCAD document.\n\nRequires a mutation-ready live document. Pending recompute work rejects undo;\nrun recompute_document before retrying. An empty live history reports Nothing\nto undo. Use get_mutation_readiness for live readiness and history counts;\nread-only execute_code workers inspect snapshot copies, not live undo history.\n\nArgs:\n    doc_name: The document to undo in.\n\nReturns:\n    A message indicating success or failure.',
             signature="(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.undo_operation",
             rpc_method="undo",
