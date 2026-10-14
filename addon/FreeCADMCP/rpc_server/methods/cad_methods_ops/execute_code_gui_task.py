@@ -161,10 +161,16 @@ def run_execute_code_gui_task(  # noqa: C901
         if ok:
             finalized_result = {"ok": True, "session": session, "stdout": stdout}
             if native_boundary and recompute_calls:
-                finalized_result["note"] = (
-                    "The collaborative commit fence deferred the body's doc.recompute(). "
-                    "Use recompute_document after execute_code with recompute=\"none\"."
-                )
+                if recompute_mode == "target":
+                    finalized_result["note"] = (
+                        "The body's doc.recompute() was deferred to the target recompute "
+                        "after the Python body returned."
+                    )
+                else:
+                    finalized_result["note"] = (
+                        "The collaborative commit fence deferred the body's doc.recompute(). "
+                        "Use recompute_document after execute_code with recompute=\"none\"."
+                    )
         else:
             finalized_result = {
                 "ok": False,
