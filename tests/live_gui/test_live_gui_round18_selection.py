@@ -28,7 +28,7 @@ def test_round18_draft_inline_selection_keeps_process_alive(mcp, gui_log):
     )
     assert result.is_error, result.text
     assert "main thread" in result.text, result.text
-    assert "FreeCADGui.Selection." in result.text, result.text
+    assert "FreeCADGui.Selection.clearSelection" in result.text, result.text
     # A Python error must roll back creation, keep the document, and leave the
     # process usable (the original failure returned RemoteDisconnected).
     assert_ok(mcp.call("get_runtime_info"))
@@ -38,4 +38,8 @@ def test_round18_draft_inline_selection_keeps_process_alive(mcp, gui_log):
     assert undo.is_error, undo.text
     assert _payload(undo)["error_code"] == "EMPTY_HISTORY_STACK", undo.text
     assert_ok(mcp.call("close_document", doc_name="R18_Draft"))
-    assert_clean(gui_log)
+    assert_clean(
+        gui_log,
+        r"Error executing Python code: GUI API 'FreeCADGui\.Selection\.clearSelection' "
+        r"may only be used from the main thread$",
+    )
