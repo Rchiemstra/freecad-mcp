@@ -49,7 +49,8 @@ result=unittest.TextTestRunner(stream=output, verbosity=2).run(unittest.defaultT
 assert result.wasSuccessful(), output.getvalue()
 print(output.getvalue())
 """
-    assert_ok(mcp.call("execute_code", execution_mode="gui", recompute="none", code=code))
+    result = mcp.call("execute_code", execution_mode="gui", recompute="none", code=code)
+    assert result.ok, result.text
     # The unmodified main-thread controls also emit this exact Coin diagnostic
     # when their fixture documents close. Owner-thread API errors remain fatal.
     assert_clean(gui_log, r"Coin error in SoGroup::removeChild\(\): tried to remove non-existent child 0x[0-9a-f]+ \((?:Switch|Separator)\)$")
@@ -68,4 +69,47 @@ def test_draft_pseudo_type_has_actionable_rejection(mcp, gui_log):
     assert "Draft.make_rectangle" in payload["error"]
     assert payload["committed"] is False
     assert_ok(mcp.call("close_document", doc_name=doc))
+    assert_clean(gui_log)
+
+
+def test_owner_draft_text_presentation(mcp, gui_log):
+    # With no document resolved this harness runs on Qt's main thread. Submit
+    # the factory to a document owner, then inspect Coin after GUI catch-up.
+    code = """import threading, Draft, FreeCAD as App
+from Test.GuiRecompute import _pump_gui_until, recompute_document, close_document
+from draftutils import gui_utils
+doc=App.newDocument('DraftOwnerVisibleText')
+errors=[]
+def create_text():
+    assert not gui_utils.on_gui_thread()
+    Draft.make_text('Owner visible', height=17, screen=False)
+def worker():
+    try:
+        result=doc.commitCompatibilityMutation(create_text, structural=True, recompute=False)
+        assert result['committed'], result
+    except BaseException as exc:
+        errors.append(exc)
+try:
+    thread=threading.Thread(target=worker)
+    thread.start()
+    _pump_gui_until(lambda: not thread.is_alive(), 60)
+    thread.join()
+    assert not errors, errors
+    recompute_document(doc)
+    text=doc.getObject('Text')
+    assert gui_utils.on_gui_thread()
+    assert type(text.ViewObject.Proxy).__name__ == 'ViewProviderText'
+    assert text.ViewObject.Visibility
+    assert text.ViewObject.isVisible()
+    assert text.ViewObject.DisplayMode == 'World'
+    assert text.ViewObject.FontSize.Value == 17
+    assert text.ViewObject.Proxy.text_wld.string.getValues() == ['Owner visible']
+    assert text.ViewObject.Proxy.font.size.getValue() == 17 * text.ViewObject.ScaleMultiplier
+    print('owner text visible, height=17')
+finally:
+    close_document(doc)
+"""
+    result = mcp.call("execute_code", execution_mode="gui", recompute="none", code=code)
+    assert result.ok, result.text
+    assert "owner text visible, height=17" in result.text
     assert_clean(gui_log)
