@@ -543,3 +543,30 @@ def test_history_action_on_an_empty_stack_is_refused(action) -> None:
     parsed = parse(result)
     assert parsed["outcome"] == "rejected", parsed
     assert parsed["error_code"] == "EMPTY_HISTORY_STACK"
+
+@pytest.mark.parametrize("action", ["undo", "redo"])
+def test_grouped_history_recomputes_every_replayed_document(action):
+    document = _mock_document(UndoCount=1, RedoCount=1, UndoNames=["Rename"], RedoNames=["Rename"])
+    dependent = _mock_document(Name="Dependent", Uid=SimpleNamespace(Value="uid-2"), UndoCount=1, RedoCount=1)
+    unrelated = _mock_document(Name="Unrelated", Uid=SimpleNamespace(Value="uid-3"), UndoCount=1, RedoCount=1)
+    rpc = _mock_rpc(document)
+    freecad = rpc._execution_collaborators.freecad
+    freecad.listDocuments.return_value = {"Model": document, "Dependent": dependent, "Unrelated": unrelated}
+
+    def replay_group():
+        for participant in (document, dependent):
+            participant.UndoCount += -1 if action == "undo" else 1
+            participant.RedoCount += 1 if action == "undo" else -1
+
+    getattr(document, action).side_effect = replay_group
+    result = getattr(recompute_helpers, action + "_gui")(
+        {"document_uid": "uid-1", "document_instance_id": 5,
+         "lifecycle_epoch": 1, "document_name": "Model"},
+        operation_id="group-" + action,
+        **{f"expected_{action}_count": 1, f"expected_{action}_head": "Rename"},
+        freecad=freecad, rpc=rpc,
+    )
+    assert result.get("success") is True, result
+    document.recompute.assert_called_once()
+    dependent.recompute.assert_called_once()
+    unrelated.recompute.assert_not_called()
