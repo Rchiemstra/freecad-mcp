@@ -117,7 +117,13 @@ def _register_create_assembly_joint(
 
         Both components must be inside the assembly: create them there or move them
         in with move_object(target_container=<assembly>). Other objects are rejected
-        with INVALID_ARGUMENT because the solver ignores them."""
+        with INVALID_ARGUMENT because the solver ignores them.
+
+        With solve=True, creation uses the solve_assembly solver and status validation.
+        An unsatisfied joint returns ASSEMBLY_SOLVE_FAILED naming the joint and the
+        conflict. The native transaction rolls back the new joint and solver placement
+        changes; committed is false after confirmed rollback. With solve=False, creation
+        skips this explicit solve validation."""
         return create_assembly_joint_operation(
             server_connection(),
             server_state().only_text_feedback,

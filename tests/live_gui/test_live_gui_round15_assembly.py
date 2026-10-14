@@ -32,7 +32,7 @@ def test_fixed_distance_contradiction_is_rejected(mcp, gui_log):
     _assembly(mcp, doc)
     assert_ok(mcp.call('create_assembly_joint', doc_name=doc, assembly_name='Asm', joint_type='Distance',
                        ref1_component='A', ref2_component='B', ref1_element='Face1', ref2_element='Face1',
-                       properties={'Distance': 100}))
+                       properties={'Distance': 100}, solve=False))
     result = mcp.call('solve_assembly', doc_name=doc, assembly_name='Asm')
     assert_ok(mcp.call('get_objects', doc_name=doc, fields=['Name']))
     assert result.is_error, result.text
