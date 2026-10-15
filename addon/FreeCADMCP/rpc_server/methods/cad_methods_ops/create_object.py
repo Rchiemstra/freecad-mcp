@@ -236,6 +236,13 @@ def build_create_object_request(
         return _failure(CreateObjectError("INVALID_ARGUMENT", "Name must be a nonempty string"))
     if not isinstance(raw_type, str) or not raw_type.strip():
         return _failure(CreateObjectError("INVALID_ARGUMENT", "Type must be a nonempty string"))
+    if raw_type.startswith("Draft::"):
+        return _failure(CreateObjectError(
+            "UNSUPPORTED_DRAFT_TYPE",
+            f"{raw_type!r} is not a registered document object type. "
+            "Use execute_code with import Draft and a Draft factory such as "
+            "Draft.make_rectangle(20, 10).",
+        ))
     properties_raw = payload.get("Properties", {})
     properties = _mapping(properties_raw)
     if properties is None:

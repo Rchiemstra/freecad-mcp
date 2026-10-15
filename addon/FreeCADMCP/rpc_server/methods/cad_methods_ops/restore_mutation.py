@@ -187,14 +187,8 @@ def run_restore_native_mutation(
                 else RestoreError("RESTORE_RESULT_FAILED", str(exc) or type(exc).__name__)
             )
             return False
-        try:
-            collaborators.validate_document_invariants(typed)
-        except Exception as exc:
-            state.failure = RestoreError(
-                "DOCUMENT_HEALTH_DEGRADED",
-                str(exc) or type(exc).__name__,
-            )
-            return False
+        # This commit only resolves the snapshot. The current model can be
+        # broken: validate the replacement after its GUI-thread load instead.
         state.postcondition_passed = True
         return True
 
@@ -204,6 +198,7 @@ def run_restore_native_mutation(
             native_apply,
             native_postcondition,
             structural=True,
+            recompute=False,
         )
     except LookupError as exc:
         if state.document is None:

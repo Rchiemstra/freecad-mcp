@@ -68,6 +68,7 @@ class ClearExpressionCollaborators(Protocol):
         postcondition: Callable[[object], object],
         *,
         structural: bool = True,
+        recompute: bool = True,
     ) -> object:
         """Run the mutation through the fixed native transaction policy."""
 

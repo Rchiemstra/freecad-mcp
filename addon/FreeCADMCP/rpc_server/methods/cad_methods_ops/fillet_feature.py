@@ -91,6 +91,16 @@ def apply_fillet_feature(doc: FeatureDocument, request: FilletFeatureRequest) ->
             doc, request.base_feature, missing="Base feature not found"
         )
         body = resolve_optional_body(doc, base, request.body_name)
+        if body is not None:
+            if not is_derived_from(body, "PartDesign::Body"):
+                raise FilletFeatureError(
+                    "BODY_WRONG_TYPE", f"Object is not a PartDesign::Body: {request.body_name!r}"
+                )
+            if base not in getattr(body, "Group", ()):
+                raise FilletFeatureError(
+                    "BASE_NOT_IN_BODY",
+                    f"Base feature {request.base_feature!r} is not a member of Body {getattr(body, 'Name', '')!r}",
+                )
         edges = list(request.edge_refs)
         require_subelements(base, edges, "edge_refs")
         require_c0_edges(base, edges)

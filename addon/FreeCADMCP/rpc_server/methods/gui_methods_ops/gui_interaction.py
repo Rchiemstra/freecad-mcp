@@ -179,6 +179,8 @@ def _rejected_selection(errors: list[str], unknown: list[str]) -> dict[str, Any]
         "error": "; ".join(errors),
         "errors": errors,
         "unknown": unknown,
+        "selection_scope": "actor_personal",
+        "native_selection_included": False,
         "selected": [],
         "count": 0,
     }
@@ -190,7 +192,7 @@ def select_subshapes(
     selections: list | None = None,
     clear: bool = True,
 ) -> dict[str, Any]:
-    """Persist only this actor's object/subshape selection paths."""
+    """Persist actor-personal paths; leave native Gui.Selection unchanged."""
 
     try:
 
@@ -208,6 +210,8 @@ def select_subshapes(
             return _rejected_selection(errors, unknown)
         return {
             "ok": True,
+            "selection_scope": "actor_personal",
+            "native_selection_included": False,
             "selected": selected,
             "errors": errors,
             "count": len(selected),
@@ -217,15 +221,23 @@ def select_subshapes(
 
 
 def get_selection(self) -> dict[str, Any]:
+    """Return actor-personal selection only; native Gui.Selection is not shown."""
     try:
         document, context = snapshot_personal_view(self)
         items = _selection_items(document, context["selection_paths"])
-        return {"ok": True, "selection": items, "count": len(items)}
+        return {
+            "ok": True,
+            "selection_scope": "actor_personal",
+            "native_selection_included": False,
+            "selection": items,
+            "count": len(items),
+        }
     except Exception as exc:
         return public_error(self, exc)
 
 
 def get_gui_state(self) -> dict[str, Any]:
+    """Return actor-personal GUI state; native Gui.Selection is not shown."""
     title = getattr(getattr(getattr(self, "_execution_collaborators", None), "gui_dispatcher", None), "modal_dialog_title", None)
     if isinstance(title, str) and title:
         return {"ok": True, "modal_dialog": title, "gui_blocked": True}
@@ -243,6 +255,8 @@ def get_gui_state(self) -> dict[str, Any]:
             "active_workbench": context["active_workbench"] or None,
             "edit_mode_object": context["edit_focus"] or None,
             "active_body": metadata.get("active_body") or None,
+            "selection_scope": "actor_personal",
+            "native_selection_included": False,
             "selection": selection,
             "selection_count": len(selection),
         }

@@ -98,6 +98,11 @@ def _resolve_body(doc: PadFeatureDocument, sketch: object, body_name: str | None
                 "BODY_WRONG_TYPE",
                 f"Object is not a PartDesign::Body: {body_name!r}",
             )
+        if sketch not in getattr(body, "Group", ()):
+            raise PadFeatureError(
+                "SKETCH_NOT_IN_BODY",
+                f"Sketch {getattr(sketch, 'Name', '')!r} is not a member of Body {body_name!r}",
+            )
         return body
     for obj in getattr(doc, "Objects", ()):
         if _is_type(obj, "PartDesign::Body") and sketch in getattr(obj, "Group", ()):

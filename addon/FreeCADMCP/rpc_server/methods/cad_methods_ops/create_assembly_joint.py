@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_create_assembly_joint_success,
         make_create_assembly_joint_uncertain,
     )
-from .typed_runtime import as_float, as_int, as_str
+from .typed_runtime import TypedMutationError, as_float, as_int, as_str
 from . import assembly_actions
 from .create_assembly_joint_mutation import CreateAssemblyJointError, run_create_assembly_joint_native_mutation
 
@@ -203,6 +203,14 @@ def apply_create_assembly_joint(doc: MutationDocument, request: CreateAssemblyJo
         presolve=False,
         properties=request.properties or {},
     )
+    if request.solve:
+        try:
+            assembly_actions.solve_assembly(doc, request.assembly_name)
+        except TypedMutationError as exc:
+            joint_label = request.label or payload.get("label") or payload.get("joint")
+            raise CreateAssemblyJointError(
+                exc.code, f"Creating joint {joint_label!r}: {exc}"
+            ) from exc
     target = payload.get("joint")
     found = doc.getObject(str(target)) if isinstance(target, str) else None
     return CreateAssemblyJointReceipt(payload=dict(payload), obj=found)

@@ -43,7 +43,8 @@ def test_a_clean_solve_reports_its_status():
 
 @pytest.mark.parametrize(
     "status, fragment",
-    [(-6, "no grounded component"), (-1, "solver could not satisfy the joints")],
+    [(-6, "no grounded component"), (-1, "solver could not satisfy the joints"),
+     (-3, "conflicting constraints")],
 )
 def test_a_failed_solve_is_an_error(status, fragment):
     with pytest.raises(TypedMutationError) as caught:

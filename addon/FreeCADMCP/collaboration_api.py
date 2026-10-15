@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import inspect
 import threading
+from dataclasses import dataclass
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 try:
     from .document_recompute_settlement import settle_document_must_execute
     from .rpc_method_context import current_rpc_method
+    from .native_error_boundary import (
+        NativeErrorBaseline, MissingSourceRepair, capture_native_error_baseline, native_error_validation_scope,
+    )
 except ImportError:  # pragma: no cover - flat addon import path
+    from native_error_boundary import (  # type: ignore[import-not-found,no-redef]
+        NativeErrorBaseline, MissingSourceRepair, capture_native_error_baseline, native_error_validation_scope,
+    )
     from document_recompute_settlement import (  # type: ignore[import-not-found]
         settle_document_must_execute,
     )
@@ -62,6 +69,13 @@ class _NativeMutationDocument(Protocol):
     ) -> object: ...
 
 __all__ = ["CollaborationAPI"]
+
+# Repairs may leave unrelated native errors intact. Health/measurement RPCs
+# still validate the complete document and report any existing model error.
+_NATIVE_ERROR_REPAIR_METHODS = frozenset({
+    "clear_expression", "set_expression", "edit_object", "translate", "rotate",
+    "spreadsheet_set_cells", "delete_object", "sketch_edit_constraint",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +301,12 @@ class _CallbackRefusals:
         return None
 
 
+@dataclass
+class _NativeRepairState:
+    active: bool = False
+    repair: MissingSourceRepair | None = None
+
+
 class CollaborationAPI:
     """Resolve a document and invoke its native compatibility commit binding."""
 
@@ -323,10 +343,16 @@ class CollaborationAPI:
 
         _settle_pending_recompute(document)
         refusals = _CallbackRefusals()
+        baseline: NativeErrorBaseline = {}
+        allow_existing_errors = current_rpc_method() in _NATIVE_ERROR_REPAIR_METHODS
 
         def invoke_callback() -> object:
             refusals.started = True
             try:
+                # Capture on the native owner after settlement, before apply.
+                baseline.clear()
+                if allow_existing_errors:
+                    baseline.update(capture_native_error_baseline(document))
                 return callback(document)
             except Exception as exc:
                 refusals.record("ApplyFailed", exc)
@@ -334,7 +360,8 @@ class CollaborationAPI:
 
         def invoke_postcondition() -> object:
             try:
-                return postcondition(document)
+                with native_error_validation_scope(document, baseline):
+                    return postcondition(document)
             except Exception as exc:
                 refusals.record("PostconditionFailed", exc)
                 raise
@@ -387,10 +414,18 @@ class CollaborationAPI:
         if recompute:
             _settle_pending_recompute(document)
         refusals = _CallbackRefusals()
+        baseline: NativeErrorBaseline = {}
+        repair_state = _NativeRepairState()
+        allow_existing_errors = current_rpc_method() in _NATIVE_ERROR_REPAIR_METHODS
 
         def invoke_callback() -> object:
             refusals.started = True
             try:
+                # Capture on the native owner after settlement, before apply.
+                baseline.clear()
+                if allow_existing_errors:
+                    baseline.update(capture_native_error_baseline(document))
+                    repair_state.repair = MissingSourceRepair(document, baseline)
                 return callback(document)
             except Exception as exc:
                 refusals.record("ApplyFailed", exc)
@@ -398,14 +433,39 @@ class CollaborationAPI:
 
         def invoke_postcondition() -> object:
             try:
-                return postcondition(document)
+                if repair_state.active and (repair_state.repair is None
+                        or not repair_state.repair.bindings_preserved()):
+                    return False
+                with native_error_validation_scope(document, baseline, deferred=repair_state.active):
+                    return postcondition(document)
             except Exception as exc:
                 refusals.record("PostconditionFailed", exc)
                 raise
 
+        def commit(requested_recompute: bool) -> object:
+            return document.commitCompatibilityMutation(
+                invoke_callback, structural=structural,
+                postcondition=invoke_postcondition, recompute=requested_recompute,
+                **_label_kwargs(document.commitCompatibilityMutation),
+            )
+
+        def finish(result: object) -> object:
+            repair = repair_state.repair
+            if not recompute or repair is None or not repair.accepts_failure(result):
+                return result
+            # A confirmed ordinary rollback permits one deferred reapply. The
+            # typed postcondition still runs inside that commit; native missing
+            # sources are then reported by a direct recompute outside it.
+            repair_state.active = True
+            result = commit(False)
+            if isinstance(result, dict) and result.get("committed") is True:
+                assert repair_state.repair is not None
+                repair_state.repair.settle(postcondition)
+            return result
+
         if _is_freecad_gui_thread():
             # B4: Never call the blocking sync variant on the GUI thread.
-            return _commit_async_on_gui_thread(
+            pending = _commit_async_on_gui_thread(
                 document,
                 invoke_callback,
                 {
@@ -415,15 +475,12 @@ class CollaborationAPI:
                 },
                 refusals,
             )
+            return _AsyncMutationWaiter(
+                lambda timeout: finish(pending.await_result(timeout)), refusals,
+            )
 
         try:
-            return document.commitCompatibilityMutation(
-                invoke_callback,
-                structural=structural,
-                postcondition=invoke_postcondition,
-                recompute=recompute,
-                **_label_kwargs(document.commitCompatibilityMutation),
-            )
+            return finish(commit(recompute))
         except Exception as exc:
             rejection = refusals.proven_rejection(exc)
             if rejection is not None:

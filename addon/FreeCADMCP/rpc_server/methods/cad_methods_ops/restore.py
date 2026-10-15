@@ -2,7 +2,7 @@
 """Typed ``restore`` mutation."""
 from __future__ import annotations
 
-from .native_commit_wait import NativeOutcome, settle_native_commit
+from .native_commit_wait import NativeOutcome, PendingNativeResult, settle_native_commit
 
 from .typed_rpc_support import (
     nonempty_string,
@@ -167,7 +167,7 @@ def _load_snapshot_after_commit(
     doc_name: str,
     snapshot_path: str,
     stub_doc: object | None,
-) -> Literal[True] | RestoreUncertain:
+) -> NativeOutcome[Literal[True] | RestoreUncertain]:
     import os
 
     if not os.path.isfile(snapshot_path):
@@ -187,16 +187,57 @@ def _load_snapshot_after_commit(
                 live_doc = None
     if live_doc is None:
         live_doc = stub_doc
+
+    def validate_reload(document: object) -> None:
+        recompute = getattr(document, "recompute", None)
+        if callable(recompute):
+            recompute()
+        validation = collaborators.validate_document_invariants(cast(RestoreReadDocument, document))
+        if isinstance(validation, dict) and validation.get("ok") is False:
+            raise RestoreError("DOCUMENT_HEALTH_DEGRADED", "snapshot post-restore validation failed")
+
     if live_doc is not None:
+        loader = getattr(live_doc, "load", None)
+        if callable(loader):
+            from ...snapshot_service_ops.restore_snapshot import restore_snapshot_in_place_gui
+
+            try:
+                restored = restore_snapshot_in_place_gui(
+                    live_doc,
+                    snapshot_path,
+                    expected_document_name=doc_name,
+                    expected_source_path=str(getattr(live_doc, "FileName", "") or "") or None,
+                    validator=collaborators.validate_document_invariants,
+                )
+            except Exception as exc:
+                return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+            if not isinstance(restored, dict):
+                pending_restore = restored
+
+                class _PendingReload:
+                    def await_result(self, timeout: float = 60.0) -> Literal[True] | RestoreUncertain:
+                        try:
+                            pending_restore.await_result(timeout)
+                        except Exception as exc:
+                            return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+                        return True
+
+                return _PendingReload()
+            return True
         restorer = getattr(live_doc, "restore", None)
         if callable(restorer):
             try:
                 restorer(snapshot_path)
-                return True
             except TypeError:
                 pass
-            except Exception:
-                pass
+            except Exception as exc:
+                return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+            else:
+                try:
+                    validate_reload(live_doc)
+                except Exception as exc:
+                    return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
+                return True
     if app is not None:
         closer = getattr(app, "closeDocument", None)
         opener = getattr(app, "openDocument", None)
@@ -233,6 +274,10 @@ def _load_snapshot_after_commit(
                     f"FreeCAD did not reopen {named_path!r}",
                     committed=True,
                 )
+            try:
+                validate_reload(reopened)
+            except Exception as exc:
+                return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
             return True
     if live_doc is None:
         return True
@@ -241,6 +286,10 @@ def _load_snapshot_after_commit(
     if load_result is not True:
         return load_result
     if callable(restorer):
+        try:
+            validate_reload(live_doc)
+        except Exception as exc:
+            return make_restore_uncertain("RESTORE_FAILED", str(exc), committed=True)
         return True
     loader = getattr(live_doc, "load", None)
     return _try_document_reload(loader, snapshot_path)
@@ -312,7 +361,7 @@ class _RestoreExecution:
                 return success
             snapshot_path = receipt.snapshot_path
 
-            def load() -> Literal[True] | RestoreUncertain:
+            def load() -> NativeOutcome[Literal[True] | RestoreUncertain]:
                 return _load_snapshot_after_commit(
                     self.collaborators,
                     str(self.request.doc_name),
@@ -324,6 +373,11 @@ class _RestoreExecution:
             # has committed. Opening a document restores its view providers,
             # which only the GUI thread may touch.
             load_result = load() if self.on_gui is None else self.on_gui(load)
+            if callable(getattr(load_result, "await_result", None)):
+                # The GUI load returned before its read-only validation commit;
+                # this continuation waits on the RPC thread, outside Qt.
+                pending_load = cast(PendingNativeResult[Literal[True] | RestoreUncertain], load_result)
+                load_result = pending_load.await_result()
             if isinstance(load_result, str):
                 return make_restore_uncertain("RESTORE_FAILED", load_result, committed=True)
             if load_result is not True:

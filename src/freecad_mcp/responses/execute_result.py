@@ -52,7 +52,9 @@ def _augment_success_structured(structured: dict[str, Any], res: dict[str, Any])
 def _success_execute_message(res: dict[str, Any], success_prefix: str, banner: str) -> str:
     output = res.get("message", "")
     prefix = f"{success_prefix}\n{banner}".strip() if banner else success_prefix
-    return f"{prefix}\n{output}".strip() if output else prefix
+    message = f"{prefix}\n{output}".strip() if output else prefix
+    note = res.get("note")
+    return f"{message}\n{note}" if note else message
 
 
 def _failure_execute_body(

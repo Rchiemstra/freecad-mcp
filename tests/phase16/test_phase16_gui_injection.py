@@ -286,12 +286,16 @@ def test_gui_interaction_routes_presentation_calls_through_injected_dispatcher()
         facade, "Model", [{"object": "Body", "sub": "Face1"}], True
     ) == {
         "ok": True,
+        "selection_scope": "actor_personal",
+        "native_selection_included": False,
         "selected": [{"object": "Body", "sub": "Face1"}],
         "errors": [],
         "count": 1,
     }
     assert get_selection(facade) == {
         "ok": True,
+        "selection_scope": "actor_personal",
+        "native_selection_included": False,
         "selection": [{"document": "Model", "object": "Body", "sub": "Face1"}],
         "count": 1,
     }
@@ -453,3 +457,15 @@ def test_unknown_selection_names_the_object_and_keeps_the_previous_selection():
     assert failed["error"] == "Object not found: MissingBox"
     assert failed["selected"] == []
     assert stored[("Model", "actor")]["selection_paths"] == ["Box"]
+
+
+@pytest.mark.parametrize("tool", [select_subshapes, get_selection, get_gui_state])
+def test_selection_result_declares_personal_scope(tool):
+    facade = _selection_facade({})
+    if tool is select_subshapes:
+        result = tool(facade, "Model", ["Box"], True)
+    else:
+        select_subshapes(facade, "Model", ["Box"], True)
+        result = tool(facade)
+    assert result["selection_scope"] == "actor_personal"
+    assert result["native_selection_included"] is False

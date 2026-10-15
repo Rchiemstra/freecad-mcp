@@ -265,7 +265,18 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
             value = getattr(value, part)
     except AttributeError:
         value = None
+    # Attribute access exposes vector/placement coordinates as bare floats.
+    # Expression-path reads preserve the native component's quantity unit.
+    evaluate = getattr(item, "evalExpression", None)
+    if (getattr(getattr(value, "Unit", None), "Signature", None) is None
+            and callable(evaluate)):
+        try:
+            value = evaluate(request.prop_path)
+        except Exception:
+            pass  # Native setExpression diagnoses paths that cannot be read.
     expected = getattr(getattr(value, "Unit", None), "Signature", None)
+    if expected is None and callable(evaluate) and isinstance(value, (int, float)):
+        expected = (0,) * 8
     if expected is not None:
         evaluated = call_named(item, "evalExpression", request.expression)
         actual = getattr(getattr(evaluated, "Unit", None), "Signature", None)
@@ -273,7 +284,7 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
             raise SetExpressionError(
                 "EXPRESSION_UNIT_MISMATCH",
                 f"Unit mismatch for {request.object_name}.{request.prop_path}: "
-                f"expected {getattr(value, 'Unit', '')}, expression has {getattr(evaluated, 'Unit', '')}",
+                f"expected {getattr(value, 'Unit', 'dimensionless')}, expression has {getattr(evaluated, 'Unit', '')}",
             )
     try:
         setter(request.prop_path, request.expression)

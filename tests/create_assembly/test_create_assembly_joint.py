@@ -24,7 +24,7 @@ class _Document:
             "Box": SimpleNamespace(Name="Box", Label="Box", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
             "Mover": SimpleNamespace(Name="Mover", Label="Mover", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
             "Wall": SimpleNamespace(Name="Wall", Label="Wall", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
-            "Assembly": SimpleNamespace(Name="Assembly", Label="Assembly", TypeId="Assembly::AssemblyObject", isDerivedFrom=lambda t: t == "Assembly::AssemblyObject"),
+            "Assembly": SimpleNamespace(Name="Assembly", Label="Assembly", TypeId="Assembly::AssemblyObject", isDerivedFrom=lambda t: t == "Assembly::AssemblyObject", solve=lambda: 0),
             "Base": SimpleNamespace(Name="Base", Label="Base", TypeId="Part::Box", isDerivedFrom=lambda t: t == "Part::Box"),
         }
         self.recomputed = False
@@ -219,6 +219,44 @@ def test_create_assembly_joint_runs_apply_recompute_inspect_validate_then_commit
     assert "apply" in events
     assert events[-4:] == ["recompute", "inspect", "validate", "commit"] or "commit" in events
     assert api.calls == [("Doc", True, True, True)]
+
+
+@pytest.mark.parametrize("status", [0, -3], ids=["valid", "conflict"])
+def test_requested_joint_solve_is_validated_before_commit(monkeypatch, status):
+    events = []
+    document = _Document(events)
+    collaborators, _api = _collaborators(document, events, monkeypatch=monkeypatch)
+
+    def solve():
+        events.append("solve")
+        return status
+
+    document.objects["Assembly"].solve = solve
+    result = run_create_assembly_joint(collaborators, "Doc", "Assembly", "Fixed", "Box", "Base",
+                                      label="BadDist", solve=True)
+    if status == 0:
+        assert result["success"] is True
+        assert "Created" in document.objects
+        assert events.index("validate") < events.index("commit")
+    else:
+        assert result["success"] is False
+        assert result["error_code"] == "ASSEMBLY_SOLVE_FAILED"
+        assert "conflicting constraints" in result["error"]
+        assert "BadDist" in result["error"]
+        assert result["committed"] is False
+        assert result["rollback_succeeded"] is True
+        assert "Created" not in document.objects
+        assert "commit" not in events
+
+
+def test_joint_with_solve_false_skips_explicit_solver(monkeypatch):
+    events = []
+    document = _Document(events)
+    collaborators, _api = _collaborators(document, events, monkeypatch=monkeypatch)
+    document.objects["Assembly"].solve = lambda: pytest.fail("solve=False called the solver")
+    result = run_create_assembly_joint(collaborators, "Doc", "Assembly", "Fixed", "Box", "Base",
+                                      solve=False)
+    assert result["success"] is True
 
 
 def test_invalid_names_abort_without_recompute_or_commit(monkeypatch):

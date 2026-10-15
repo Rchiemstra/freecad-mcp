@@ -117,8 +117,12 @@ def _register_execute_code(
         LIVE VENUE — a live body that resolves a document, including
         ``recompute="none"``, runs inside that document's commit callback on the
         document owner thread, not on the Qt main thread. ``recompute="none"`` still
-        enters the commit and only skips the recompute. A live body with no document
-        runs on the Qt main thread, outside a commit. ``read_only=true`` always runs
+        enters the commit and only skips the recompute. Document resolution prefers
+        explicit ``document`` and otherwise uses the active document. Omitting
+        ``document`` does not request the Qt main thread. A live body with no document
+        resolved (no explicit target and no active document) runs on the Qt main
+        thread, outside a commit. Results report ``execution.venue``, ``document``,
+        and ``document_source`` (``explicit``, ``active``, or ``none``). ``read_only=true`` always runs
         in the worker. Reading ``FreeCADGui.ActiveDocument`` or a GUI document's
         ``ActiveView`` is allowed off the Qt main thread. Calls that require that
         thread raise there, including ``FreeCADGui.activeDocument()``,

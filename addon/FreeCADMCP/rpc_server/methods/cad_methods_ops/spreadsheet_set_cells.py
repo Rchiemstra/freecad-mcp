@@ -45,6 +45,7 @@ from .spreadsheet_set_cells_mutation import (
     run_spreadsheet_set_cells_native_mutation,
 )
 from .typed_rpc_support import (
+    call_named,
     nonempty_string,
     object_label,
     object_name,
@@ -225,8 +226,10 @@ class _SpreadsheetSetCellsExecution:
     request: SpreadsheetSetCellsRequest
     created: SpreadsheetSetCellsReceipt | None = None
     inspected: SpreadsheetSetCellsInspection | None = None
+    document: SpreadsheetSetCellsDocument | None = None
 
     def apply(self, doc: SpreadsheetSetCellsDocument) -> None:
+        self.document = doc
         self.created = apply_spreadsheet_set_cells(doc, self.request)
 
     def inspect(self, doc: SpreadsheetSetCellsReadDocument) -> None:
@@ -237,18 +240,60 @@ class _SpreadsheetSetCellsExecution:
             )
         self.inspected = read_spreadsheet_set_cells_result(doc, self.created)
 
-    def run(self) -> NativeOutcome[SpreadsheetSetCellsResult]:
+    def run(self, *, recompute: bool = True) -> NativeOutcome[SpreadsheetSetCellsResult]:
         result = run_spreadsheet_set_cells_native_mutation(
             self.collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
+            recompute=recompute,
         )
         def _finish_native_commit(
             result: Literal[True] | SpreadsheetSetCellsFailure | SpreadsheetSetCellsUncertain,
         ) -> SpreadsheetSetCellsResult:
             if result is not True:
+                if (
+                    recompute
+                    and result.get("native_status") == "RecomputeFailed"
+                    and result.get("committed") is False
+                    and result.get("rollback_succeeded") is True
+                    and result.get("rollback_failed") is not True
+                    and "generic recompute has an unresolved cross-document dependency" in result.get("error", "")
+                ):
+                    # Reapply only after the native coordinator proves rollback.
+                    # Like property expressions, cell formulas bind in a deferred
+                    # transaction and then evaluate on the document owner thread.
+                    fallback = self.run(recompute=False)
+                    return fallback if isinstance(fallback, dict) else fallback.await_result()
                 return result
+            if not recompute:
+                try:
+                    if self.document is None or self.created is None:
+                        raise RuntimeError("Missing spreadsheet target after commit")
+                    sheet = self.created.item
+                    if sheet is None:
+                        raise RuntimeError("Missing spreadsheet target after commit")
+                    # Force this sheet even when Document::SkipRecompute is set.
+                    # A no-op recompute can otherwise leave a readable stale value.
+                    call_named(self.document, "recompute", [sheet], True)
+                    if getattr(sheet, "MustExecute", False) or any(
+                        state in {"Touched", "Recompute", "Recompute2"}
+                        for state in getattr(sheet, "State", ())
+                    ):
+                        raise RuntimeError("Spreadsheet recompute did not settle")
+                    self.collaborators.validate_document_invariants(self.document)
+                    self.inspected = read_spreadsheet_set_cells_result(self.document, self.created)
+                    if isinstance(self.inspected.extra, list) and any(
+                        isinstance(row, dict) and "value_error" in row
+                        for row in self.inspected.extra
+                    ):
+                        raise RuntimeError("Spreadsheet formula did not evaluate")
+                except Exception as exc:
+                    return make_spreadsheet_set_cells_uncertain(
+                        "SPREADSHEET_RECOMPUTE_FAILED",
+                        f"Cells are bound; direct recompute failed: {exc}",
+                        committed=True,
+                    )
             if self.inspected is None:
                 return make_spreadsheet_set_cells_uncertain(
                     "SPREADSHEET_SET_CELLS_COMMITTED_RESPONSE_INVALID",

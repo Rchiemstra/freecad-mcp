@@ -33,9 +33,28 @@ def _idle_sketch(FreeCAD, Part, name: str):
     body = document.addObject("PartDesign::Body", "Body")
     sketch = body.newObject("Sketcher::SketchObject", "Sketch")
     sketch.addGeometry(Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(10, 0, 0)), False)
-    sketch.addGeometry(Part.LineSegment(FreeCAD.Vector(10, 0, 0), FreeCAD.Vector(10, 10, 0)), False)
+    sketch.addGeometry(Part.LineSegment(FreeCAD.Vector(7, -5, 0), FreeCAD.Vector(7, 5, 0)), False)
     document.recompute()
     return document, sketch
+
+
+def _sketch_state(sketch):
+    endpoints = tuple(
+        (tuple(line.StartPoint), tuple(line.EndPoint)) for line in sketch.Geometry
+    )
+    constraints = tuple(
+        (c.Type, c.Name, c.First, c.FirstPos, c.Second, c.SecondPos,
+         c.Third, c.ThirdPos, c.Value)
+        for c in sketch.Constraints
+    )
+    return endpoints, constraints, tuple(obj.Name for obj in sketch.Document.Objects)
+
+
+def _constrain_sketch(sketch, Sketcher):
+    sketch.addConstraint(Sketcher.Constraint("Horizontal", 0))
+    sketch.renameConstraint(0, "BaselineHorizontal")
+    sketch.addConstraint(Sketcher.Constraint("Vertical", 1))
+    sketch.Document.recompute()
 
 
 def test_sketch_trim_native_success_on_idle_sketch():
@@ -56,12 +75,14 @@ def test_sketch_trim_native_success_on_idle_sketch():
         assert result["success"] is True
         assert result["committed"] is True
         assert result["sketch"] == sketch.Name
-        assert (sketch.GeometryCount, sketch.ConstraintCount) != before or result["success"] is True
+        assert sketch.GeometryCount == before[0]
+        assert sketch.Geometry[0].length() == pytest.approx(3.0)
+        assert sketch.Geometry[1].length() == pytest.approx(10.0)
     finally:
         FreeCAD.closeDocument(document.Name)
 
 
-def test_sketch_trim_native_validation_failure_restores_geometry_counts():
+def test_sketch_trim_native_validation_failure_restores_geometry_and_constraints():
     _require_native_collaboration()
     import FreeCAD
     import Part
@@ -70,7 +91,8 @@ def test_sketch_trim_native_validation_failure_restores_geometry_counts():
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_trim import run_sketch_trim
 
     document, sketch = _idle_sketch(FreeCAD, Part, "MCPSketchTrimNativeValidation")
-    before = sketch.GeometryCount, sketch.ConstraintCount, tuple(obj.Name for obj in document.Objects)
+    _constrain_sketch(sketch, Sketcher)
+    before = _sketch_state(sketch)
 
     def fail(_document):
         raise RuntimeError("forced sketch validation failure")
@@ -80,7 +102,7 @@ def test_sketch_trim_native_validation_failure_restores_geometry_counts():
         assert result["success"] is False
         assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
         assert result["rollback_succeeded"] is True
-        assert (sketch.GeometryCount, sketch.ConstraintCount, tuple(obj.Name for obj in document.Objects)) == before
+        assert _sketch_state(sketch) == before
     finally:
         FreeCAD.closeDocument(document.Name)
 
@@ -139,7 +161,8 @@ def test_sketch_trim_native_postcondition_cannot_write():
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_trim import run_sketch_trim
 
     document, sketch = _idle_sketch(FreeCAD, Part, "MCPSketchTrimReadOnlyPostcondition")
-    before = sketch.GeometryCount, tuple(obj.Name for obj in document.Objects)
+    _constrain_sketch(sketch, Sketcher)
+    before = _sketch_state(sketch)
 
     def validate(admitted):
         admitted.addObject("Part::Feature", "UnvalidatedObject")
@@ -152,6 +175,6 @@ def test_sketch_trim_native_postcondition_cannot_write():
         )
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
-        assert (sketch.GeometryCount, tuple(obj.Name for obj in document.Objects)) == before
+        assert _sketch_state(sketch) == before
     finally:
         FreeCAD.closeDocument(document.Name)

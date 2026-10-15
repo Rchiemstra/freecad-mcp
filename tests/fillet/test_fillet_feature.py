@@ -324,3 +324,33 @@ def test_typed_rpc_handler_is_registered():
 
     assert "fillet_feature" in discover_typed_rpc_handlers()
     assert subject.TYPED_RPC_HANDLER[0] == "fillet_feature"
+
+
+@pytest.mark.parametrize("owner", [None, "Other"], ids=["external", "other_body"])
+def test_requested_body_rejects_external_base_before_mutation(owner):
+    events = []
+    document = FeatureDocument(events)
+    prepare_document("edge_feature", document)
+    body = document.objects["Body"]
+    base = document.objects["Pad"]
+    body.Tip = base
+    body.Group.remove(base)
+    if owner:
+        other = document.register_object("PartDesign::Body", owner, event=None)
+        other.Group.append(base)
+        other.Tip = base
+    before = dict(document.objects)
+    add_calls = document.add_calls
+    collab, _api = collaborators(document, events)
+
+    result = _run(collab, body_name="Body")
+
+    assert result["success"] is False
+    assert result["error_code"] == "BASE_NOT_IN_BODY"
+    assert result["committed"] is False
+    assert result["rollback_succeeded"] is True
+    assert document.objects == before
+    assert document.add_calls == add_calls
+    assert body.Tip is base
+    assert body.Group == []
+    assert events == ["abort"]

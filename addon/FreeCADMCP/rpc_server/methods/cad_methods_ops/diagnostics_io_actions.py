@@ -194,7 +194,10 @@ def diagnose_parametric(document: object, object_name: str | None) -> dict[str, 
             try:
                 prop = str(item[0]) if isinstance(item, (list, tuple)) and item else "?"
                 expr = str(item[1]) if isinstance(item, (list, tuple)) and len(item) >= 2 else str(item)
-                bound = obj.getExpression(prop) if hasattr(obj, "getExpression") else None
+                # ExpressionEngine itself is the native binding table; the
+                # optional Python getter is absent on native SketchObjects.
+                getter = getattr(obj, "getExpression", None)
+                bound = getter(prop) if callable(getter) else expr
                 if bound is None and expr:
                     expression_issues.append({"object": str(getattr(obj, "Name", "")), "prop": prop, "expression": expr, "issue": "missing_binding"})
             except Exception as exc:

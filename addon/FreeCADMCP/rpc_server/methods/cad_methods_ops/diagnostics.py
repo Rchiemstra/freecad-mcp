@@ -49,7 +49,7 @@ def diagnose_parametric_gui(doc_name, object_name=None, *, freecad):
                     bound = (
                         obj.getExpression(prop)
                         if hasattr(obj, "getExpression")
-                        else None
+                        else expr
                     )
                     if bound is None and expr:
                         expression_issues.append(

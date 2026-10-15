@@ -670,3 +670,32 @@ def test_exception_after_native_apply_does_not_claim_rollback():
     assert result["outcome"] == "uncertain"
     assert result["committed"] is None
     assert result["retry_safe"] is False
+
+
+def test_origin_plane_uses_role_when_nested_body_planes_have_suffixed_names():
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.sketch_create import _find_origin_plane
+    outer_plane = SimpleNamespace(Name="XY_Plane", Label="XY-plane", Role="XY_Plane")
+    body_plane = SimpleNamespace(Name="XY_Plane001", Label="XY-plane", Role="XY_Plane")
+    outer_origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[outer_plane])
+    body_origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[body_plane])
+    doc = SimpleNamespace(Objects=[outer_origin, body_origin])
+    body = SimpleNamespace(Origin=body_origin)
+    assert _find_origin_plane(doc, body, "XY_Plane") is body_plane
+
+
+@pytest.mark.parametrize("with_root", [False, True])
+def test_origin_plane_standalone_excludes_container_origins(with_root):
+    foreign_plane = SimpleNamespace(Name="XY_Plane", Role="XY_Plane")
+    foreign_origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[foreign_plane])
+    part = SimpleNamespace(TypeId="App::Part", Origin=foreign_origin)
+    foreign_origin.InList = [part]
+    root_plane = SimpleNamespace(Name="XY_Plane001", Role="XY_Plane")
+    root_origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[root_plane], InList=[])
+    doc = SimpleNamespace(Objects=[part, foreign_origin] + ([root_origin] if with_root else []))
+    assert subject._find_origin_plane(doc, None, "XY_Plane") is (root_plane if with_root else None)
+
+
+def test_origin_plane_standalone_root_happy_path():
+    plane = SimpleNamespace(Name="XY_Plane", Role="XY_Plane")
+    origin = SimpleNamespace(TypeId="App::Origin", OriginFeatures=[plane], InList=[])
+    assert subject._find_origin_plane(SimpleNamespace(Objects=[origin]), None, "XY_Plane") is plane

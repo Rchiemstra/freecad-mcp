@@ -177,6 +177,7 @@ _SOLVE_FAILURES = {
     # The assembly Origin always counts as grounded, so -6 is rare in practice.
     -6: "the assembly has no grounded component; ground one with create_assembly_grounded_joint",
     -1: "the solver could not satisfy the joints; see the report view",
+    -3: "the assembly has conflicting constraints; see the report view for unsatisfied joints",
 }
 
 

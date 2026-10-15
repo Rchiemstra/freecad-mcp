@@ -113,7 +113,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="get_gui_state",
-            docstring='Report the active GUI context (read-only).\n\nReturns JSON with the active document, active PartDesign Body, active\nworkbench, the object currently in edit-mode, and the current selection.\nUse it to orient before editing -- e.g. confirm the right Body is active\nbefore adding a sketch/feature, or check whether a Sketch is open for edit.',
+            docstring='Report this MCP actor\'s personal GUI context (read-only).\n\nReturns JSON with the actor\'s active document, active PartDesign Body,\nworkbench, edit focus, and personal selection. Results identify\n``selection_scope: "actor_personal"`` and ``native_selection_included: false``.\nNative ``Gui.Selection`` and the human\'s active GUI context are not shown.\nUse this context to orient before adding a sketch or feature.',
             signature="(ctx: 'Context') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.get_gui_state_operation",
             rpc_method="get_gui_state",
@@ -137,7 +137,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="get_selection",
-            docstring='Return the current FreeCADGui selection (document/object/sub).',
+            docstring='Return this MCP actor\'s personal selection (document/object/sub).\n\nResults identify ``selection_scope: "actor_personal"`` and\n``native_selection_included: false``. Native ``Gui.Selection`` is not shown;\nchanges to the human\'s native selection do not change this personal selection.',
             signature="(ctx: 'Context') -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.get_selection_operation",
             rpc_method="get_selection",
@@ -161,7 +161,7 @@ MANIFEST = SubjectManifest(
         ),
         ToolEntry(
             name="select_subshapes",
-            docstring='Select GUI-visible objects or sub-shapes (FaceN/EdgeN/VertexN).\n\nEach selection may be ``"Box"``, ``"Box:Face1"``, or\n``{"object": "Box", "sub": "Face1"}``. Prefer ``find_faces`` to\ndiscover indices, then this tool to highlight them in the GUI.',
+            docstring='Select objects or sub-shapes (FaceN/EdgeN/VertexN) in this MCP actor\'s personal selection.\n\nEach selection may be ``"Box"``, ``"Box:Face1"``, or\n``{"object": "Box", "sub": "Face1"}``. Prefer ``find_faces`` to\ndiscover indices. This selection is used by the actor\'s personal views;\nnative ``Gui.Selection`` is unchanged. Results identify\n``selection_scope: "actor_personal"`` and ``native_selection_included: false``.',
             signature="(ctx: 'Context', doc_name: 'str', selections: 'list[Any]', clear: 'bool' = True) -> 'CallToolResult'",
             operation_path="freecad_mcp.operations.select_subshapes_operation",
             rpc_method="select_subshapes",

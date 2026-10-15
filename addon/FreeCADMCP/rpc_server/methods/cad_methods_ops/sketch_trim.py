@@ -229,6 +229,14 @@ def apply_sketch_trim(
         raise SketchTrimError(
             "TRIM_NO_INTERSECTION", "Curve has no intersection near the trim point"
         ) from exc
+    # FreeCAD intentionally deletes the whole curve when it finds no trim
+    # points. This tool promises an intersection trim; reject that deletion
+    # inside the native transaction so the original geometry is restored.
+    if sketch.GeometryCount < before_geo:
+        raise SketchTrimError(
+            "TRIM_NO_INTERSECTION",
+            "Trim would delete the whole element; no suitable intersection was found",
+        )
     return SketchExecReceipt(
         name=sketch.Name,
         sketch=sketch,

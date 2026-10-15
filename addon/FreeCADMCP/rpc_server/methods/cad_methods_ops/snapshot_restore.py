@@ -10,6 +10,7 @@ import FreeCAD
 from ...mutation_guard import validate_document_invariants
 from ...snapshot_service_ops.restore_snapshot import restore_snapshot_in_place_gui
 from .snapshot_restore_target import resolve_restore_target, validate_restore_target
+from .native_commit_wait import settle_native_commit
 
 
 def snapshot(self, doc_name: str) -> dict:
@@ -110,10 +111,13 @@ def _restore_unleased_snapshot(doc, target, snaps):
         expected_source_path=str(getattr(doc, "FileName", "") or "") or None,
         validator=validate_document_invariants,
     )
-    return {
-        **result,
-        "restored_id": target["id"],
-        "doc": cur,
-        "new_doc": cur,
-        "count": len(snaps),
-    }
+    def finish(restored):
+        return {
+            **restored,
+            "restored_id": target["id"],
+            "doc": cur,
+            "new_doc": cur,
+            "count": len(snaps),
+        }
+
+    return settle_native_commit(result, finish)
