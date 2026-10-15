@@ -70,10 +70,17 @@ def live_gui(tmp_path_factory) -> Iterator[LiveGui]:
     )
     launcher_log = workdir / "freecad_output.log"
     freecad_log = workdir / "freecad.log"
+    launcher = [sys.executable, str(MCP_ROOT / "scripts" / "start_freecad_isolated.py"),
+                "--log-file", str(freecad_log)]
+    if sys.platform.startswith("linux"):
+        # FreeCAD's C stdout can retain messages across several tests, even
+        # with PYTHONUNBUFFERED. Apply line buffering to the launcher and its
+        # children so an expected worker failure cannot arrive in a later
+        # test's log window. The native log and stderr remain checked too.
+        launcher = ["stdbuf", "-oL", *launcher]
     with launcher_log.open("w", encoding="utf-8") as output:
         launched = subprocess.run(
-            [sys.executable, str(MCP_ROOT / "scripts" / "start_freecad_isolated.py"),
-             "--log-file", str(freecad_log)],
+            launcher,
             cwd=MCP_ROOT, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=600,
         )
     text = launcher_log.read_text(encoding="utf-8", errors="replace")
