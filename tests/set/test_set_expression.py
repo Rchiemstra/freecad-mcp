@@ -443,3 +443,25 @@ def test_sketch_datums_driven_out_of_range_are_rejected(ctype, value, accepted, 
         assert result["error_code"] == "INVALID_ARGUMENT"
         assert f"{ctype} constraint" in result["error"] and "must be > 0" in result["error"]
         assert "commit" not in events
+
+
+@pytest.mark.parametrize("path", ["Placement.Base.x", "Placement.Base.y", ".Placement.Base.z", "Position.x", "Direction.y"])
+@pytest.mark.parametrize("actual,accepted", [((1, 0, 0, 0, 0, 0, 0, 0), True), ((0, 0, 0, 0, 0, 0, 0, 1), False), ((0,) * 8, True)])
+def test_component_units_are_checked_before_binding(path, actual, accepted):
+    events = []
+    document = _Document(events)
+    _seed(document)
+    item = document.objects["Seed"]
+    item.PropertiesList += ["Placement", "Position", "Direction"]
+    def evaluate(expression):
+        signature = (1, 0, 0, 0, 0, 0, 0, 0) if expression == path else actual
+        return SimpleNamespace(Value=1.0, Unit=SimpleNamespace(Signature=signature))
+    item.evalExpression = evaluate
+    collaborators, _api = _collaborators(document, events)
+    result = run_set_expression(collaborators, "Doc", "Seed", path, "Dims.Angle")
+    if accepted:
+        assert result["success"], result
+    else:
+        assert result["error_code"] == "EXPRESSION_UNIT_MISMATCH", result
+        assert item.getExpression(path) is None
+        assert "commit" not in events
