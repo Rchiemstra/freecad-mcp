@@ -9,11 +9,12 @@ from tests.live_gui.test_live_gui_round5 import _payload
 pytestmark = pytest.mark.live_gui
 
 
-def test_draft_hatch_import_freecad_tests(mcp, gui_log):
+def test_draft_hatch_import_freecad_tests(mcp, gui_log, freecad_source_root):
     # No target document: these compatibility controls must run on Qt's main
     # thread, and explicitly exercise owner-thread imports themselves.
-    code = """import importlib.util, unittest, io
-spec=importlib.util.spec_from_file_location('r14_import_gui', '/workspace/src/Mod/Draft/drafttests/test_import_gui.py')
+    source = freecad_source_root / "src/Mod/Draft/drafttests/test_import_gui.py"
+    code = f"""import importlib.util, unittest, io
+spec=importlib.util.spec_from_file_location('r14_import_gui', {str(source)!r})
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 output=io.StringIO()
@@ -39,9 +40,10 @@ def test_draft_factory_import_and_rectangle(mcp, gui_log):
     assert_clean(gui_log, r"Coin warning in \[faceset\]::GLRender\(\): Erroneous polygon detected\. Ignoring \(offset: 4, \[-1 2 3\]\)\. Should be within  \[0, 7\] This message will only be shown once, but more errors might be present")
 
 
-def test_draft_all_factory_thread_controls(mcp, gui_log):
-    code = """import importlib.util, unittest, io
-spec=importlib.util.spec_from_file_location('draft_owner_controls', '/workspace/src/Mod/Draft/drafttests/test_owner_thread_gui.py')
+def test_draft_all_factory_thread_controls(mcp, gui_log, freecad_source_root):
+    source = freecad_source_root / "src/Mod/Draft/drafttests/test_owner_thread_gui.py"
+    code = f"""import importlib.util, unittest, io
+spec=importlib.util.spec_from_file_location('draft_owner_controls', {str(source)!r})
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 output=io.StringIO()

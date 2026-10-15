@@ -34,6 +34,16 @@ class LiveGui:
     logs: list[Path]
 
 
+@pytest.fixture(scope="session")
+def freecad_source_root() -> Path:
+    """Use the CI checkout override or the repo containing this MCP submodule."""
+    override = os.environ.get("CI_WORKSPACE")
+    root = (Path(override) if override else MCP_ROOT.parents[2]).resolve()
+    if not (root / "src" / "Mod").is_dir():
+        pytest.fail(f"FreeCAD source tree not found at {root}")
+    return root
+
+
 def _require_environment() -> Path:
     executable = os.environ.get("FREECAD_MCP_ISOLATED_FREECAD", "").strip()
     if not executable or not Path(executable).is_file():
