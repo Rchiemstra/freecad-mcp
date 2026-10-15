@@ -419,7 +419,12 @@ def test_dropped_read_only_transport_retries_against_live_freecad(mcp, live_gui,
             context = RpcAuthenticationContext(request_id=str(uuid.uuid4()), session_token=verified.session_token,
                                                 mcp_runtime_id=identity.runtime_id)
             result = invoke_v2_transport(conn, method, params, context, control=False, timeout=30)
-            assert result.get('success') is not False, result
+            assert result.get('ok') is True, result
+            payload = result['result']
+            assert payload.get('success') is not False, result
+            if method == 'execute_code':
+                assert payload['execution']['stage'] == 'completed', result
+                assert '42' in payload['message'], result
             assert len(calls) == 2
     finally:
         conn.server.close()
