@@ -91,3 +91,19 @@ def test_transaction_blocker_does_not_suggest_recompute_as_recovery():
     assert result["error_code"] == "MUTATION_NOT_READY"
     assert "native_transaction_in_progress" in result["error"]
     assert "recompute_document" not in result["error"]
+
+
+@pytest.mark.parametrize("undo", [False, True])
+@pytest.mark.parametrize("extra", [None, "native_transaction_in_progress", "automation_paused"])
+def test_terminal_missing_source_history_preparation(undo, extra):
+    readiness = _live_history_readiness(pending_recompute=True)
+    entry = readiness["documents"][0]
+    entry.update(terminal_missing_source=True, redo_count=1, redo_head="Clear expression")
+    if extra:
+        readiness["reasons"].append(extra)
+    prepared = connection_model_ops._prepare_history_mutation(_connection(readiness), "Drawing", undo=undo)
+    if extra:
+        assert prepared["error_code"] == "MUTATION_NOT_READY"
+    else:
+        assert "doc_selector" in prepared, prepared
+        assert prepared["expected_count"] == (2 if undo else 1)

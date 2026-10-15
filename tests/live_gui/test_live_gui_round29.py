@@ -48,17 +48,18 @@ def test_round29_incremental_source_repair(mcp, gui_log, live_gui, mode):
             assert_ok(mcp.call("undo", doc_name="DepDoc"))
             bindings = _payload(assert_ok(mcp.call("list_expressions", doc_name="DepDoc", object_name="Sketch")))
             assert bindings["count"] == 2, bindings
-            assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.W"))
+            assert_ok(mcp.call("redo", doc_name="DepDoc"))
             assert_ok(mcp.call("sketch_edit_constraint", doc_name="DepDoc", sketch_name="Sketch", index=8, value=35))
             _width(mcp, 35)
             assert_ok(mcp.call("undo", doc_name="DepDoc"))
-            assert_ok(mcp.call("sketch_edit_constraint", doc_name="DepDoc", sketch_name="Sketch", index=8, value=35))
+            _width(mcp, 30)
+            assert_ok(mcp.call("redo", doc_name="DepDoc"))
             _width(mcp, 35)
         assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.H"))
         assert_ok(mcp.call("undo", doc_name="DepDoc"))
         bindings = _payload(assert_ok(mcp.call("list_expressions", doc_name="DepDoc", object_name="Sketch")))
         assert bindings["count"] == 1, bindings
-        assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.H"))
+        assert_ok(mcp.call("redo", doc_name="DepDoc"))
         if mode != "open":
             unresolved = mcp.call("recompute_document", doc_name="DepDoc")
             assert not unresolved.ok and "SrcDoc" in unresolved.text, unresolved
@@ -91,6 +92,60 @@ b.addProperty('App::PropertyPlacement', 'Mount')
                 bindings = _payload(assert_ok(mcp.call("list_expressions", doc_name="UDoc", object_name="B")))
                 assert bindings["count"] == 1 and "2 mm" in str(bindings), bindings
                 assert_ok(mcp.call("clear_expression", doc_name="UDoc", object_name="B", prop_path=path))
+    finally:
+        assert_ok(mcp.call("close_document", doc_name="UDoc"))
+    assert_clean(gui_log)
+
+
+@pytest.mark.parametrize("path", ["Placement.Rotation.Axis.x", "Rotation.Axis.y"])
+@pytest.mark.parametrize("expression,accepted", [("2", True), ("1mm", False), ("1deg", False)])
+def test_round29_real_dimensionless_components(mcp, gui_log, path, expression, accepted):
+    assert_ok(mcp.call("create_document", name="UDoc"))
+    try:
+        assert_ok(mcp.call("execute_code", document="UDoc", recompute="none", execution_mode="gui", code="""
+b = FreeCAD.getDocument('UDoc').addObject('Part::Box', 'B')
+b.addProperty('App::PropertyRotation', 'Rotation')
+assert isinstance(b.evalExpression('Placement.Rotation.Axis.x'), float)
+assert isinstance(b.evalExpression('Rotation.Axis.y'), float)
+assert isinstance(b.evalExpression('Placement.Base.x'), FreeCAD.Units.Quantity)
+"""))
+        result = mcp.call("set_expression", doc_name="UDoc", object_name="B", prop_path=path, expression=expression)
+        if accepted:
+            assert_ok(result)
+        else:
+            assert result.is_error and "EXPRESSION_UNIT_MISMATCH" in str(result), result
+        bindings = _payload(assert_ok(mcp.call("list_expressions", doc_name="UDoc", object_name="B")))
+        assert bindings["count"] == int(accepted), bindings
+    finally:
+        assert_ok(mcp.call("close_document", doc_name="UDoc"))
+    assert_clean(gui_log)
+
+
+def test_round29_real_unitful_alias_preserves_units(mcp, gui_log):
+    assert_ok(mcp.call("create_document", name="UDoc"))
+    try:
+        assert_ok(mcp.call("execute_code", document="UDoc", recompute="none", execution_mode="gui", code="""
+d = FreeCAD.getDocument('UDoc')
+b = d.addObject('Part::Box', 'B')
+s = d.addObject('Spreadsheet::Sheet', 'Dims')
+s.set('A1', '7 mm')
+s.setAlias('A1', 'Len')
+s.set('A2', '30 deg')
+s.setAlias('A2', 'Angle')
+"""))
+        assert_ok(mcp.call("recompute_document", doc_name="UDoc"))
+        assert_ok(mcp.call("execute_code", document="UDoc", recompute="none", code="""
+b = FreeCAD.getDocument('UDoc').B
+assert isinstance(b.evalExpression('Dims.Len'), FreeCAD.Units.Quantity)
+assert b.evalExpression('Dims.Len').Unit.Signature == FreeCAD.Units.Quantity('1mm').Unit.Signature
+"""))
+        for expression, accepted in (("Dims.Len", True), ("Dims.Angle", False), ("3", True)):
+            result = mcp.call("set_expression", doc_name="UDoc", object_name="B", prop_path="Placement.Base.x", expression=expression)
+            if accepted:
+                assert_ok(result)
+            else:
+                assert result.is_error and "EXPRESSION_UNIT_MISMATCH" in str(result), result
+                assert_ok(mcp.call("execute_code", document="UDoc", recompute="none", code="assert FreeCAD.getDocument('UDoc').B.Placement.Base.x == 7"))
     finally:
         assert_ok(mcp.call("close_document", doc_name="UDoc"))
     assert_clean(gui_log)

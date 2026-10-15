@@ -746,3 +746,23 @@ def test_readiness_for_an_unknown_document_is_document_not_found():
         "error_code": "DOCUMENT_NOT_FOUND",
         "error": "Document 'NoSuchDoc' not found",
     }
+
+
+@pytest.mark.parametrize("dirty", [None, "same_object", "other_object", "cells", "proxy"])
+def test_history_readiness_distinguishes_terminal_missing_source_from_fresh_work(dirty):
+    document = _Document(readiness={"ready": False, "must_execute": True})
+    broken = SimpleNamespace(Name="Broken", State=["Invalid"], OutList=[],
+                             getStatusString=lambda: "Document 'SrcDoc' not found in 'SrcDoc'")
+    other = SimpleNamespace(Name="Other", State=[], OutList=[])
+    document.Objects = [broken, other]
+    if dirty == "same_object":
+        broken.State.append("Touched")
+    elif dirty == "other_object":
+        other.State.append("Touched")
+    elif dirty == "cells":
+        broken.getDirtyCells = lambda: ["A1"]
+    elif dirty == "proxy":
+        broken.Proxy = object()
+    readiness = mutation_readiness.document_readiness(document)
+    assert readiness.get("terminal_missing_source", False) is (dirty is None), readiness
+    assert readiness["ready"] is False # Ordinary writes still require their own admission.
