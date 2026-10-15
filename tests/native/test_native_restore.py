@@ -84,17 +84,26 @@ def _prepare(document):
     return body
 
 
-def test_restore_native_success_inspects_after_recompute(monkeypatch):
+class RecomputeProbe:
+    # FreeCAD reloads proxies by module/class name. Function-local classes and
+    # object references captured before Document.load cannot probe the reload.
+    events = []
+    failure = None
+
+    def execute(self, _object):
+        self.events.append("recompute")
+        if self.failure:
+            raise RuntimeError(self.failure)
+
+
+def test_restore_native_success_validates_reloaded_state(monkeypatch):
     _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
     document = FreeCAD.newDocument("MCPRestoreNativeSuccess")
     events = []
-
-    class RecomputeProbe:
-        def execute(self, _object):
-            events.append("recompute")
+    monkeypatch.setattr(RecomputeProbe, "events", events)
 
     probe = document.addObject("App::FeaturePython", "RecomputeProbe")
     probe.Proxy = RecomputeProbe()
@@ -105,7 +114,6 @@ def test_restore_native_success_inspects_after_recompute(monkeypatch):
 
     def tracked_apply(admitted, request):
         events.append("apply")
-        probe.touch()
         return original_apply(admitted, request)
 
     def tracked_read(admitted, receipt):
@@ -117,13 +125,14 @@ def test_restore_native_success_inspects_after_recompute(monkeypatch):
     try:
         result = subject.run_restore(_collaborators(FreeCAD, lambda _d: events.append("validate")), document.Name, "snap-test")
         assert result["success"] is True
-        assert events == ["apply", "recompute", "inspect", "validate"]
+        assert events == ["apply", "inspect", "recompute", "validate"]
+        assert isinstance(document.getObject("RecomputeProbe").Proxy, RecomputeProbe)
     finally:
         for name in list(_documents(FreeCAD)):
             _close_named(FreeCAD, name)
 
 
-def test_restore_native_validation_failure_restores_complete_state():
+def test_restore_native_validation_failure_after_load_is_uncertain():
     _require_native_collaboration()
     import FreeCAD
     from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
@@ -137,8 +146,13 @@ def test_restore_native_validation_failure_restores_complete_state():
             document.Name, "snap-test",
         )
         assert result["success"] is False
-        assert result["error_code"] == "DOCUMENT_HEALTH_DEGRADED"
-        assert result["rollback_succeeded"] is True
+        # Loading is a GUI lifecycle operation after native admission. A
+        # validation failure cannot prove that the old model was rolled back.
+        assert result["error_code"] == "RESTORE_FAILED"
+        assert result["outcome"] == "uncertain"
+        assert result["committed"] is True
+        assert "forced validation failure" in result["error"]
+        assert "rollback_succeeded" not in result
         assert _model_state(document) == state_before
     finally:
         FreeCAD.closeDocument(document.Name)
@@ -170,81 +184,52 @@ def test_restore_native_apply_failure_restores(monkeypatch):
         FreeCAD.closeDocument(document.Name)
 
 
-def test_restore_native_recompute_failure_rolls_back(monkeypatch):
+def test_restore_native_recompute_failure_after_load_is_uncertain(monkeypatch):
     _require_native_collaboration()
     import FreeCAD
-    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
+    from addon.FreeCADMCP.rpc_server.mutation_guard_ops.validate_invariants import validate_document_invariants
 
     document = FreeCAD.newDocument("MCPRestoreNativeRecomputeFailure")
-
-    class FailingRecomputeProbe:
-        armed = False
-
-        def execute(self, _object):
-            if self.armed:
-                self.armed = False
-                raise RuntimeError("forced native recompute failure")
-
-    proxy = FailingRecomputeProbe()
     probe = document.addObject("App::FeaturePython", "FailingRecomputeProbe")
-    probe.Proxy = proxy
+    probe.Proxy = RecomputeProbe()
     _prepare(document)
-    state_before = _model_state(document)
-    original = subject.apply_restore
-
-    def arm(admitted, request):
-        receipt = original(admitted, request)
-        proxy.armed = True
-        probe.touch()
-        return receipt
-
-    monkeypatch.setattr(subject, "apply_restore", arm)
+    monkeypatch.setattr(RecomputeProbe, "failure", "forced native recompute failure")
     try:
-        result = subject.run_restore(_collaborators(FreeCAD, lambda _d: None), document.Name, "snap-test")
+        result = run_restore(_collaborators(FreeCAD, validate_document_invariants), document.Name, "snap-test")
         assert result["success"] is False
-        assert result["native_status"] == "RecomputeFailed"
-        assert _model_state(document) == state_before
+        assert result["outcome"] == "uncertain"
+        assert result["error_code"] == "RESTORE_FAILED"
+        assert "FailingRecomputeProbe" in result["error"]
+        assert "rollback_succeeded" not in result
+        assert "Invalid" in document.getObject("FailingRecomputeProbe").State
     finally:
-        proxy.armed = False
         FreeCAD.closeDocument(document.Name)
 
 
-def test_restore_native_rollback_failure_is_uncertain_and_fences(monkeypatch):
+def test_restore_native_failed_reload_remains_uncertain_on_retry():
     _require_native_collaboration()
     import FreeCAD
-    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
 
-    document = FreeCAD.newDocument("MCPRestoreNativeRollbackFailure")
-
-    class PersistentFailureProbe:
-        armed = False
-
-        def execute(self, _object):
-            if self.armed:
-                raise RuntimeError("persistent recompute failure blocks restoration")
-
-    proxy = PersistentFailureProbe()
-    probe = document.addObject("App::FeaturePython", "PersistentFailureProbe")
-    probe.Proxy = proxy
+    document = FreeCAD.newDocument("MCPRestoreNativeReloadFailure")
     _prepare(document)
-    original = subject.apply_restore
+    calls = []
 
-    def arm(admitted, request):
-        receipt = original(admitted, request)
-        proxy.armed = True
-        probe.touch()
-        return receipt
+    def fail_validation(admitted):
+        calls.append(admitted)
+        raise RuntimeError("persistent post-load validation failure")
 
-    monkeypatch.setattr(subject, "apply_restore", arm)
-    collaborators = _collaborators(FreeCAD, lambda _d: None)
+    collaborators = _collaborators(FreeCAD, fail_validation)
     try:
-        result = subject.run_restore(collaborators, document.Name, "snap-test")
-        proxy.armed = False
-        fenced = subject.run_restore(collaborators, document.Name, "snap-test")
-        assert result["outcome"] == "uncertain"
-        assert fenced["success"] is False
+        for _ in range(2):
+            result = run_restore(collaborators, document.Name, "snap-test")
+            assert result["outcome"] == "uncertain"
+            assert result["error_code"] == "RESTORE_FAILED"
+            assert "persistent post-load validation failure" in result["error"]
+            assert "rollback_succeeded" not in result
+        assert calls == [document, document]
     finally:
-        proxy.armed = False
         FreeCAD.closeDocument(document.Name)
 
 
@@ -291,21 +276,26 @@ def test_restore_native_reloads_snapshot_after_mutation(monkeypatch):
             _close_named(FreeCAD, name)
 
 
-def test_restore_native_postcondition_cannot_write():
+def test_restore_native_postcondition_cannot_write(monkeypatch):
     _require_native_collaboration()
     import FreeCAD
-    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops import restore as subject
 
     document = FreeCAD.newDocument("MCPRestoreReadOnlyPostcondition")
     anchor = document.addObject("App::FeaturePython", "Anchor")
     _prepare(document)
     state_before = _model_state(document)
 
-    def validate(_admitted):
-        anchor.Label = "Unvalidated change"
+    original_read = subject.read_restore_result
 
+    def mutate_postcondition(admitted, receipt):
+        # Inspection is native/read-only; health validation happens after load.
+        anchor.Label = "Unvalidated change"
+        return original_read(admitted, receipt)
+
+    monkeypatch.setattr(subject, "read_restore_result", mutate_postcondition)
     try:
-        result = run_restore(_collaborators(FreeCAD, validate), document.Name, "snap-test")
+        result = subject.run_restore(_collaborators(FreeCAD, lambda _d: None), document.Name, "snap-test")
         assert result["outcome"] == "rejected"
         assert result["native_status"] == "PostconditionFailed"
         assert _model_state(document) == state_before

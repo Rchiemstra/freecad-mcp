@@ -33,7 +33,7 @@ def _idle_sketch(FreeCAD, Part, name: str):
     body = document.addObject("PartDesign::Body", "Body")
     sketch = body.newObject("Sketcher::SketchObject", "Sketch")
     sketch.addGeometry(Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(10, 0, 0)), False)
-    sketch.addGeometry(Part.LineSegment(FreeCAD.Vector(10, 0, 0), FreeCAD.Vector(10, 10, 0)), False)
+    sketch.addGeometry(Part.LineSegment(FreeCAD.Vector(7, -5, 0), FreeCAD.Vector(7, 5, 0)), False)
     document.recompute()
     return document, sketch
 
@@ -56,7 +56,9 @@ def test_sketch_trim_native_success_on_idle_sketch():
         assert result["success"] is True
         assert result["committed"] is True
         assert result["sketch"] == sketch.Name
-        assert (sketch.GeometryCount, sketch.ConstraintCount) != before or result["success"] is True
+        assert sketch.GeometryCount == before[0]
+        assert sketch.Geometry[0].length() == pytest.approx(3.0)
+        assert sketch.Geometry[1].length() == pytest.approx(10.0)
     finally:
         FreeCAD.closeDocument(document.Name)
 
