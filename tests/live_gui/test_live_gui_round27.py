@@ -101,16 +101,20 @@ run_gui_setup(FreeCAD.getDocument('R27_Src').getObject('Dims'), install_history_
                     native_request.write_text(action)
                     deadline = time.monotonic() + 30
                     while time.monotonic() < deadline:
-                        h = _history(mcp, "R27_Src")
-                        if h["undo_count"] == before["R27_Src"]["undo_count"] + ud:
+                        current = {doc: _history(mcp, doc) for doc in opened}
+                        h = current["R27_Src"]
+                        if (h["undo_count"] == before["R27_Src"]["undo_count"] + ud
+                                and all(not item["collaboration_blocked"]
+                                        and not item["pending_transaction"]
+                                        and not item["recomputing"] for item in current.values())):
                             break
                         time.sleep(0.05)
                     else:
                         pytest.fail(f"Native GUI {action} did not move source history: {h}")
+            time.sleep(1)  # Let GUI catch-up and delayed recomputes finish, as in stress.
             if action == "undo" and diagnostic:
                 assert_ok(mcp.call("execute_code", document="R27_Dep", recompute="none",
                                    execution_mode="gui", code="import FreeCAD\ns = FreeCAD.getDocument('R27_Src'); d = FreeCAD.getDocument('R27_Dep')\nprint('SRC undo', s.UndoCount, 'redo', s.RedoCount)\nprint('DEP undo', d.UndoCount, 'redo', d.RedoCount)\nprint('DepPad expr', d.getObject('DepPad').ExpressionEngine)\nprint('DepSheet A1', d.getObject('DepSheet').getContents('A1'))"))
-            time.sleep(1)  # Let GUI catch-up and delayed recomputes finish, as in stress.
             for doc, obj in ([("R27_Src", "Pad")] if local and action == "redo" else []) + [("R27_Dep", "DepPad")]:
                 expr = _payload(assert_ok(mcp.call("list_expressions", doc_name=doc, object_name=obj)))
                 assert f"<<{label}>>.PadLen" in str(expr), expr

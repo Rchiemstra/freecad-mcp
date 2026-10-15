@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from tests.live_gui._support import assert_clean, assert_ok
+from tests.live_gui.test_live_gui_round5 import _payload
 
 pytestmark = pytest.mark.live_gui
 
@@ -30,6 +31,10 @@ def test_techdraw_template_redraws_quietly(mcp, gui_log, configured):
 def test_techdraw_core_gui_regressions(mcp, gui_log):
     # With no active document execute_code uses the GUI thread. The FreeCAD
     # test owns its documents and uses the standard asynchronous GUI helpers.
+    # Other stress cases intentionally retain their modeling document.
+    # Establish the lifecycle test's unscoped execution precondition explicitly.
+    for name in _payload(assert_ok(mcp.call("list_documents")))["value"]:
+        assert_ok(mcp.call("close_document", doc_name=name))
     code = """import importlib.util, unittest, io
 spec=importlib.util.spec_from_file_location('r14_td_gui', '/workspace/src/Mod/TechDraw/TestTechDrawGui.py')
 module=importlib.util.module_from_spec(spec)

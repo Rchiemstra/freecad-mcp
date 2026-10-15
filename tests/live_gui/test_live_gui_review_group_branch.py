@@ -50,9 +50,23 @@ def install_review_driver():
     timer.start(50)
 run_gui_setup(FreeCAD.getDocument('ReviewDep').getObject('Box'), install_review_driver)
 '''))
+        before_rename = _history(mcp, "ReviewSrc")["undo_count"]
         assert_ok(mcp.call("edit_object", doc_name="ReviewSrc", obj_name="Box",
                            obj_properties={"Label": "RenamedBox"}))
-        assert_ok(mcp.call("undo", doc_name="ReviewSrc"))
+        if history_path == "mcp":
+            assert_ok(mcp.call("undo", doc_name="ReviewSrc"))
+        else:
+            request.write_text("undo")
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                histories = {doc: _history(mcp, doc) for doc in opened}
+                if (histories["ReviewSrc"]["undo_count"] == before_rename
+                        and all(not h["collaboration_blocked"] and not h["pending_transaction"]
+                                and not h["recomputing"] for h in histories.values())):
+                    break
+                time.sleep(0.05)
+            else:
+                pytest.fail("Native grouped undo did not move the source history")
         assert_ok(mcp.call("edit_object", doc_name=branch_doc, obj_name="Box",
                            obj_properties={"Height": 17}))
         if history_path == "mcp":
