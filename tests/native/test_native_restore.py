@@ -301,3 +301,36 @@ def test_restore_native_postcondition_cannot_write(monkeypatch):
         assert _model_state(document) == state_before
     finally:
         FreeCAD.closeDocument(document.Name)
+
+
+def test_restore_native_validator_cannot_write_reloaded_object():
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
+
+    document = FreeCAD.newDocument("MCPRestoreReadOnlyValidator")
+    document.addObject("App::FeaturePython", "Anchor")
+    _prepare(document)
+    loaded_state = _model_state(document)
+    document.getObject("Anchor").Label = "Change after snapshot"
+    document.addObject("App::FeaturePython", "Transient")
+    document.recompute()
+    calls = []
+
+    def mutate_validator(admitted):
+        # Document.load replaces object proxies: reacquire the loaded object.
+        calls.append(admitted.getObject("Anchor").Label)
+        admitted.getObject("Anchor").Label = "Unvalidated change"
+        return {"ok": True}
+
+    try:
+        result = run_restore(_collaborators(FreeCAD, mutate_validator), document.Name, "snap-test")
+        assert calls == ["Anchor"]
+        assert result["success"] is False
+        assert result["error_code"] == "RESTORE_FAILED"
+        assert result["outcome"] == "uncertain"
+        assert result["committed"] is True
+        assert "rollback_succeeded" not in result
+        assert _model_state(document) == loaded_state
+    finally:
+        FreeCAD.closeDocument(document.Name)
