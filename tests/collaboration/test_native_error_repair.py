@@ -107,3 +107,73 @@ def test_native_repair_ignores_tree_presentation_state(expanded):
             original.State.append("Expanded")
     result = _commit(document, mutate)
     assert result["committed"] is True, result
+
+
+@pytest.mark.parametrize("status,detail,accepted", [
+    ("RecomputeFailed", "Document 'SrcDoc' not found in 'SrcDoc'", True),
+    ("RollbackFailed", "Document 'SrcDoc' not found in 'SrcDoc'", False),
+    ("RecomputeFailed", "new solver failure", False),
+])
+def test_missing_source_typed_edit_retries_only_proven_native_failure(status, detail, accepted):
+    original = _object(error="Document 'SrcDoc' not found in 'SrcDoc'")
+    original.ExpressionEngine = [("Length", "SrcDoc#Dims.Len")]
+    original.value = 1
+    original.purgeTouched = lambda: original.State.remove("Touched") if "Touched" in original.State else None
+    class Document(_Document):
+        commits = 0
+        attempts = 0
+        def recompute(self):
+            original.State = ["Invalid", "Touched"]
+        def commitCompatibilityMutation(self, callback, *, structural=False, postcondition=None, recompute=True):
+            self.attempts += 1
+            previous = original.value
+            callback()
+            if recompute:
+                original.value = previous
+                return {"status": status, "committed": False,
+                        "message": "document recompute reported an object error: Bridge (" + detail + ")"}
+            assert postcondition()
+            self.commits += 1
+            return {"status": "Committed", "committed": True}
+    document = Document([original])
+    with rpc_method_scope("sketch_edit_constraint"):
+        result = _commit(document, lambda _doc: setattr(original, "value", 35))
+    assert result["committed"] is accepted, result
+    assert document.commits == int(accepted)
+    assert original.value == (35 if accepted else 1)
+    assert document.attempts == (2 if accepted else 1)
+
+
+def test_missing_source_repair_cannot_admit_new_bindings_or_new_failed_objects():
+    from addon.FreeCADMCP.native_error_boundary import (
+        MissingSourceRepair, capture_native_error_baseline,
+    )
+    original = _object(error="Document 'SrcDoc' not found in 'SrcDoc'")
+    original.ExpressionEngine = [("Length", "SrcDoc#Dims.Len")]
+    document = _Document([original])
+    repair = MissingSourceRepair(document, capture_native_error_baseline(document))
+    original.ExpressionEngine.append(("Width", "SrcDoc#Dims.Width"))
+    assert not repair.bindings_preserved()
+    original.ExpressionEngine.pop()
+    assert repair.bindings_preserved()
+    extra = _object("New", "dependency did not commit: Bridge")
+    extra.OutList = [original]
+    document.Objects.append(extra)
+    document.recompute = lambda: None
+    with pytest.raises(RuntimeError, match="New"):
+        repair.settle(validate_document_invariants)
+
+
+def test_missing_source_repair_rejects_overwriting_a_surviving_bound_value():
+    from addon.FreeCADMCP.native_error_boundary import MissingSourceRepair, capture_native_error_baseline
+    original = _object(error="Document 'SrcDoc' not found in 'SrcDoc'")
+    original.ExpressionEngine = [("Length", "SrcDoc#Dims.Len")]
+    original.value = 15
+    original.evalExpression = lambda _path: original.value
+    document = _Document([original])
+    repair = MissingSourceRepair(document, capture_native_error_baseline(document))
+    assert repair.bindings_preserved()
+    original.value = 12
+    assert not repair.bindings_preserved()
+    original.ExpressionEngine = []
+    assert repair.bindings_preserved()

@@ -1,6 +1,8 @@
 """Existing native errors admitted only within a native repair postcondition."""
 from __future__ import annotations
 
+import re
+
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -91,3 +93,101 @@ def existing_native_error_unchanged(document: object, obj: Any) -> bool:
     return (baseline is not None and baseline[0] is obj
             and (active[2] or _native_work_settled(obj))
             and baseline[1] == _object_error_detail(obj) and baseline[2] == _error_state(obj))
+
+
+class MissingSourceRepair:
+    def __init__(self, document: Any, baseline: NativeErrorBaseline) -> None:
+        self.document = document
+        self.baseline = baseline
+        self.sources = {
+            match.group(0)
+            for _, detail, _ in baseline.values()
+            for match in re.finditer(r"Document '[^']+' not found in '[^']+'", detail)
+        }
+        self.bindings = {
+            id(obj): (obj, tuple(getattr(obj, "ExpressionEngine", ()) or ()))
+            for obj in getattr(document, "Objects", ())
+        }
+
+        self.values = {
+            key: {path: self._bound_value(obj, path) for path, _ in bindings}
+            for key, (obj, bindings) in self.bindings.items()
+        }
+
+    @staticmethod
+    def _bound_value(obj: Any, path: str) -> str | None:
+        evaluate = getattr(obj, "evalExpression", None)
+        if callable(evaluate):
+            try:
+                return str(evaluate(path))
+            except Exception:
+                pass
+        return None
+
+    def bindings_preserved(self) -> bool:
+        for obj in getattr(self.document, "Objects", ()):
+            bindings = tuple(getattr(obj, "ExpressionEngine", ()) or ())
+            previous = self.bindings.get(id(obj))
+            if bindings and (previous is None or previous[0] is not obj
+                             or any(binding not in previous[1] for binding in bindings)):
+                return False
+            # A typed edit may change a cleared datum, but must not overwrite
+            # a value still driven by a surviving unresolved binding.
+            if any(self._bound_value(obj, path) != self.values[id(obj)].get(path)
+                   for path, _ in bindings):
+                return False
+        return True
+
+    def accepts_failure(self, result: Any) -> bool:
+        if not self.sources or not isinstance(result, dict):
+            return False
+        if result.get("status") != "RecomputeFailed" or result.get("committed") is not False:
+            return False
+        detail = str(result.get("message", ""))
+        prefix = "document recompute reported an object error: "
+        if not detail.startswith(prefix):
+            return False
+        # Every failed node must be explained by the same absent sources or
+        # by a dependency that already failed at the captured native boundary.
+        errors = re.split(r", [A-Za-z_][\w]* \(", detail[len(prefix):])
+        known_names = {str(getattr(obj, "Name", "")) for obj, _, _ in self.baseline.values()}
+        return all(any(source in error for source in self.sources)
+                   or any("dependency did not commit: " + name in error for name in known_names)
+                   for error in errors)
+
+    def settle(self, validate: Any) -> None:
+        self.document.recompute()
+        current = capture_native_error_baseline(self.document)
+        for key, (obj, detail, state) in current.items():
+            previous = self.bindings.get(key)
+            bindings = tuple(getattr(obj, "ExpressionEngine", ()) or ())
+            if (previous is not None and previous[0] is obj
+                    and all(binding in previous[1] for binding in bindings)
+                    and any(source in detail for source in self.sources)):
+                # Removing one failed ancestor can expose another existing
+                # binding's missing-source diagnostic on the same native node.
+                self.baseline[key] = (obj, detail, state)
+        with native_error_validation_scope(self.document, self.baseline, deferred=True):
+            known = {key for key, (obj, _, _) in current.items()
+                     if existing_native_error_unchanged(self.document, obj)}
+            pending = dict(current)
+            while pending:
+                admitted = []
+                for key, (obj, detail, state) in pending.items():
+                    if key in known or (key in self.bindings and any(id(source) in known and detail ==
+                            "dependency did not commit: " + str(getattr(source, "Name", ""))
+                            for source in getattr(obj, "OutList", ()))):
+                        self.baseline[key] = (obj, detail, state)
+                        known.add(key)
+                        admitted.append(key)
+                if not admitted:
+                    break
+                for key in admitted:
+                    del pending[key]
+            for key in known:
+                purge = getattr(current[key][0], "purgeTouched", None)
+                if callable(purge):
+                    purge()
+        with native_error_validation_scope(self.document, self.baseline):
+            if validate(self.document) is False:
+                raise RuntimeError("Missing-source repair postcondition failed after recompute")

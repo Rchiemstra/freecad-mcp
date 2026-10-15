@@ -265,6 +265,15 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
             value = getattr(value, part)
     except AttributeError:
         value = None
+    # Attribute access exposes vector/placement coordinates as bare floats.
+    # Expression-path reads preserve the native component's quantity unit.
+    evaluate = getattr(item, "evalExpression", None)
+    if (getattr(getattr(value, "Unit", None), "Signature", None) is None
+            and callable(evaluate)):
+        try:
+            value = evaluate(request.prop_path)
+        except Exception:
+            pass  # Native setExpression diagnoses paths that cannot be read.
     expected = getattr(getattr(value, "Unit", None), "Signature", None)
     if expected is not None:
         evaluated = call_named(item, "evalExpression", request.expression)
