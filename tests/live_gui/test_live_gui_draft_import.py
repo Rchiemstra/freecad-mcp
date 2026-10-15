@@ -40,14 +40,43 @@ def test_draft_factory_import_and_rectangle(mcp, gui_log):
     assert_clean(gui_log, r"Coin warning in \[faceset\]::GLRender\(\): Erroneous polygon detected\. Ignoring \(offset: 4, \[-1 2 3\]\)\. Should be within  \[0, 7\] This message will only be shown once, but more errors might be present")
 
 
-def test_draft_all_factory_thread_controls(mcp, gui_log, freecad_source_root):
+_DRAFT_FACTORY_CONTROLS = (
+    "test_annotation_presentation_after_commit_without_recompute",
+    "test_default_copies_on_document_owner_thread",
+    "test_factories_on_document_owner_thread",
+    "test_factories_on_main_thread",
+)
+
+
+@pytest.mark.parametrize("control,factory_half", [
+    pytest.param(control, half, id=control + (f"_half_{half + 1}" if half is not None else ""))
+    for control in _DRAFT_FACTORY_CONTROLS
+    for half in ((0, 1) if control == "test_factories_on_document_owner_thread" else (None,))
+])
+def test_draft_all_factory_thread_controls(mcp, gui_log, freecad_source_root, control, factory_half):
+    # The combined suite opens over 100 fixture documents and exceeds the
+    # 120s GUI request deadline on a constrained software-rendering CI worker.
+    # The owner factory method alone took 112s with one CPU; divide its cases
+    # into disjoint halves too, retaining the same deadline for every call.
     source = freecad_source_root / "src/Mod/Draft/drafttests/test_owner_thread_gui.py"
     code = f"""import importlib.util, unittest, io
 spec=importlib.util.spec_from_file_location('draft_owner_controls', {str(source)!r})
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+controls=unittest.defaultTestLoader.getTestCaseNames(module.DraftOwnerThreadFactories)
+assert set(controls) == set({_DRAFT_FACTORY_CONTROLS!r}), 'Update live Draft control list: ' + repr(controls)
 output=io.StringIO()
-result=unittest.TextTestRunner(stream=output, verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(module.DraftOwnerThreadFactories))
+case=module.DraftOwnerThreadFactories({control!r})
+factory_half={factory_half!r}
+if factory_half is not None:
+    all_cases=case._cases
+    def half_cases(*args, **kwargs):
+        cases=all_cases(*args, **kwargs)
+        middle=(len(cases) + 1) // 2
+        return cases[:middle] if factory_half == 0 else cases[middle:]
+    case._cases=half_cases
+suite=unittest.TestSuite([case])
+result=unittest.TextTestRunner(stream=output, verbosity=2).run(suite)
 assert result.wasSuccessful(), output.getvalue()
 print(output.getvalue())
 """

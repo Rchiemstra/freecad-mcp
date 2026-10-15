@@ -58,6 +58,7 @@ class McpClient:
     def __init__(self, manifest: Path, workdir: Path) -> None:
         from mcp import StdioServerParameters
 
+        self.gui_request_timed_out = False
         env = dict(os.environ)
         env["PYTHONPATH"] = os.pathsep.join(
             [str(MCP_ROOT / "src"), *filter(None, [env.get("PYTHONPATH")])]
@@ -113,13 +114,33 @@ class McpClient:
         return ToolResult(tool, bool(result.isError), text, payload)
 
     def call(self, tool: str, **args: Any) -> ToolResult:
-        return self._run(self._call(tool, args))
+        try:
+            result = self._run(self._call(tool, args))
+        except TimeoutError:
+            self.gui_request_timed_out = True
+            raise
+        self._observe_timeout(result)
+        return result
+
+    def _observe_timeout(self, result: ToolResult) -> None:
+        if not result.ok and (
+            ("Timed out after" in result.text and "waiting for FreeCAD GUI response" in result.text)
+            or "FreeCAD GUI is still executing a request that timed out" in result.text
+        ):
+            self.gui_request_timed_out = True
 
     def parallel(self, calls: Iterable[tuple[str, dict[str, Any]]]) -> list[ToolResult]:
         async def gather():
             return await asyncio.gather(*(self._call(tool, args) for tool, args in calls))
 
-        return self._run(gather())
+        try:
+            results = self._run(gather())
+        except TimeoutError:
+            self.gui_request_timed_out = True
+            raise
+        for result in results:
+            self._observe_timeout(result)
+        return results
 
     def close(self) -> None:
         if self._stop is not None:

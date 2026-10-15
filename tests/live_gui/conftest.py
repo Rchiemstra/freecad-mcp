@@ -14,10 +14,12 @@ from __future__ import annotations
 import os
 import re
 import signal
+import socket
 import subprocess
 import sys
 import time
 from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,14 +70,20 @@ def _stop(pid: int) -> None:
             time.sleep(0.2)
 
 
-@pytest.fixture(scope="session")
-def live_gui(tmp_path_factory) -> Iterator[LiveGui]:
+@contextmanager
+def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
     _require_environment()
     workdir = tmp_path_factory.mktemp("live_gui")
     profile = workdir / "profile"
     env = dict(os.environ, FREECAD_MCP_PROFILE_DIR=str(profile), PYTHONDONTWRITEBYTECODE="1")
+    # The launcher's strict endpoint reservation also rejects an old socket
+    # in TIME_WAIT. Each replacement profile needs its own unused endpoint.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
     subprocess.run(
-        [sys.executable, str(MCP_ROOT / "scripts" / "setup_isolated_profile.py")],
+        [sys.executable, str(MCP_ROOT / "scripts" / "setup_isolated_profile.py"),
+         "--port", str(port)],
         cwd=MCP_ROOT, env=env, check=True, capture_output=True, timeout=120,
     )
     launcher_log = workdir / "freecad_output.log"
@@ -105,13 +113,61 @@ def live_gui(tmp_path_factory) -> Iterator[LiveGui]:
         _stop(gui.pid)
 
 
+class _LiveGuiSession:
+    """Reuse healthy processes, but retire uncertain work after its scenario."""
+
+    def __init__(self, tmp_path_factory):
+        self.tmp_path_factory = tmp_path_factory
+        self.stack = ExitStack()
+        self.gui: LiveGui | None = None
+        self.client: McpClient | None = None
+
+    def start(self) -> None:
+        if self.gui is not None:
+            return
+        with ExitStack() as stack:
+            gui = stack.enter_context(_launch_live_gui(self.tmp_path_factory))
+            client = McpClient(gui.manifest, gui.workdir)
+            stack.callback(client.close)
+            self.stack = stack.pop_all()
+            self.gui, self.client = gui, client
+
+    def close(self) -> None:
+        try:
+            self.stack.close()
+        finally:
+            self.gui = None
+            self.client = None
+
+
 @pytest.fixture(scope="session")
-def mcp(live_gui: LiveGui) -> Iterator[McpClient]:
-    client = McpClient(live_gui.manifest, live_gui.workdir)
+def _live_gui_session(tmp_path_factory) -> Iterator[_LiveGuiSession]:
+    session = _LiveGuiSession(tmp_path_factory)
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def live_gui(_live_gui_session) -> LiveGui:
+    _live_gui_session.start()
+    assert _live_gui_session.gui is not None
+    return _live_gui_session.gui
+
+
+@pytest.fixture
+def mcp(live_gui: LiveGui, _live_gui_session) -> Iterator[McpClient]:
+    client = _live_gui_session.client
+    assert client is not None
     try:
         yield client
     finally:
-        client.close()
+        # Keep the offending result/failure intact. A fresh profile and MCP
+        # connection on the next test prevent timeout occupancy, leases, or
+        # delayed log lines from contaminating unrelated scenarios.
+        if client.gui_request_timed_out:
+            _live_gui_session.close()
 
 
 @pytest.fixture
