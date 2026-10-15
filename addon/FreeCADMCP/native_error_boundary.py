@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from typing import Any
 
 NativeErrorBaseline = dict[int, tuple[object, str, tuple[str, ...]]]
-_ACTIVE_ERRORS: ContextVar[tuple[object, NativeErrorBaseline] | None] = ContextVar(
+_ACTIVE_ERRORS: ContextVar[tuple[object, NativeErrorBaseline, bool] | None] = ContextVar(
     "native_error_validation_boundary", default=None,
 )
 
@@ -40,8 +40,9 @@ def _object_error_detail(obj: Any) -> str:
 
 
 def _error_state(obj: Any) -> tuple[str, ...]:
+    # Expanded is tree presentation, independent of the native model error.
     return tuple(sorted(str(item).lower() for item in getattr(obj, "State", ())
-                        if str(item).lower() != "touched"))
+                        if str(item).lower() not in {"touched", "expanded"}))
 
 
 def capture_native_error_baseline(document: Any) -> NativeErrorBaseline:
@@ -57,8 +58,10 @@ def capture_native_error_baseline(document: Any) -> NativeErrorBaseline:
 
 
 @contextmanager
-def native_error_validation_scope(document: object, baseline: NativeErrorBaseline) -> Iterator[None]:
-    token = _ACTIVE_ERRORS.set((document, baseline))
+def native_error_validation_scope(
+    document: object, baseline: NativeErrorBaseline, *, deferred: bool = False,
+) -> Iterator[None]:
+    token = _ACTIVE_ERRORS.set((document, baseline, deferred))
     try:
         yield
     finally:
@@ -85,5 +88,6 @@ def existing_native_error_unchanged(document: object, obj: Any) -> bool:
     if active is None or active[0] is not document or hasattr(obj, "Proxy"):
         return False
     baseline = active[1].get(id(obj))
-    return (baseline is not None and baseline[0] is obj and _native_work_settled(obj)
+    return (baseline is not None and baseline[0] is obj
+            and (active[2] or _native_work_settled(obj))
             and baseline[1] == _object_error_detail(obj) and baseline[2] == _error_state(obj))

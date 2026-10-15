@@ -91,8 +91,15 @@ def _constraint_repair(monkeypatch, failure=None):
         item.State = ["Invalid", "Touched"]
     item.clearExpression = clear
     doc.objects["Sketch"] = item
+    if failure == "blocked":
+        downstream = _item("Pad", type_id="PartDesign::Pad")
+        downstream.OutList = [item]
+        downstream.getStatusString = lambda: "dependency did not commit: Sketch"
+        doc.objects["Pad"] = downstream
     def recompute():
         item.State = ["Invalid"]
+        if failure == "blocked":
+            downstream.State = ["Invalid"]
         if failure == "changed_error":
             item.error = "a different solver failure"
         elif failure == "new_error":
@@ -138,3 +145,9 @@ def test_constraint_repair_reports_new_post_commit_failures(monkeypatch, failure
     assert result["outcome"] == "uncertain", result
     assert result["committed"] is True
     assert result["retry_safe"] is False
+
+
+def test_constraint_repair_retains_only_explained_native_downstream_errors(monkeypatch):
+    result, calls, _ = _constraint_repair(monkeypatch, "blocked")
+    assert result["success"] is True, result
+    assert calls == [True, False]

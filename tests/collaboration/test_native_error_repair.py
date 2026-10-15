@@ -96,3 +96,14 @@ def test_native_repair_rejects_unsettled_existing_error(pending):
     result = _commit(document, mutate)
     assert result["status"] == "PostconditionFailed", result
     assert result["committed"] is False, result
+
+
+@pytest.mark.parametrize("expanded", [False, True], ids=["happy_unchanged", "defect_tree_expanded"])
+def test_native_repair_ignores_tree_presentation_state(expanded):
+    original = _object()
+    document = _Document([original])
+    def mutate(_doc):
+        if expanded:
+            original.State.append("Expanded")
+    result = _commit(document, mutate)
+    assert result["committed"] is True, result

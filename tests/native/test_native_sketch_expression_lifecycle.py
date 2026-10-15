@@ -55,6 +55,14 @@ def test_native_constraint_source_repair(tmp_path, mode):
         assert len(sk.ExpressionEngine) == 2
         dependent.redo()
         assert [p for p, _ in sk.ExpressionEngine] == [".Constraints.H"]
+        if mode == "closed":
+            source = App.openDocument(str(tmp_path / "SrcDoc.FCStd"))
+            dependent.recompute()
+            source.Dims.set("A1", "18")
+            source.recompute()
+            dependent.recompute()
+            assert sk.getDatum(1).Value == 18
+            assert "Invalid" not in sk.State
     finally:
         App.closeDocument("DepDoc")
         if "SrcDoc" in App.listDocuments():

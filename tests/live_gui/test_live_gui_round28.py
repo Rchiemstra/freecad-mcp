@@ -51,13 +51,19 @@ def test_round28_constraint_source_lifecycle(mcp, gui_log, live_gui, mode):
     opened = []
     try:
         _setup(mcp, live_gui, opened)
+        if mode == "closed":
+            # Isolate closed-source sketch repair from the Pad's independent
+            # missing Length binding. The reopen case retains the exact repro.
+            assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Pad", prop_path="Length"))
         if mode != "open":
             assert_ok(mcp.call("close_document", doc_name="SrcDoc"))
             opened.remove("SrcDoc")
         if mode == "reopen":
             assert_ok(mcp.call("open_document", path=str(live_gui.workdir / "SrcDoc.FCStd")))
             opened.append("SrcDoc")
-            assert_ok(mcp.call("recompute_document", doc_name="DepDoc"))
+            diagnosis = _payload(assert_ok(mcp.call("diagnose_parametric", doc_name="DepDoc")))
+            assert not diagnosis["expression_issues"], diagnosis
+            assert not diagnosis["invalid_objects"], diagnosis
             _width(mcp, 30)
             assert_ok(mcp.call("spreadsheet_set_cells", doc_name="SrcDoc", sheet_name="Dims",
                                cells=[{"address": "A2", "value": 42}]))
@@ -66,16 +72,31 @@ def test_round28_constraint_source_lifecycle(mcp, gui_log, live_gui, mode):
         if mode != "closed":
             diagnosis = _payload(assert_ok(mcp.call("diagnose_parametric", doc_name="DepDoc")))
             assert not diagnosis["expression_issues"], diagnosis
+            assert not diagnosis["invalid_objects"], diagnosis
         # W and H share a property. Clearing W must work while H is unresolved,
         # and one undo must restore W without changing H.
         assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.W"))
         assert_ok(mcp.call("undo", doc_name="DepDoc"))
-        assert_ok(mcp.call("execute_code", document="DepDoc", recompute="none",
-            code="assert any(p.lstrip('.') == 'Constraints.W' for p, e in FreeCAD.getDocument('DepDoc').Sketch.ExpressionEngine)"))
-        assert_ok(mcp.call("redo", doc_name="DepDoc"))
-        assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.H"))
+        bindings = _payload(assert_ok(mcp.call("list_expressions", doc_name="DepDoc", object_name="Sketch")))
+        assert bindings["count"] == 2 and "Constraints.W" in str(bindings) and "Constraints.H" in str(bindings), bindings
         if mode == "closed":
-            assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Pad", prop_path="Length"))
+            # Undo leaves closed-source recompute work; clear is the repair path.
+            assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.W"))
+        else:
+            assert_ok(mcp.call("redo", doc_name="DepDoc"))
+        if mode == "closed":
+            # The retained H binding must reattach after the partial repair.
+            assert_ok(mcp.call("open_document", path=str(live_gui.workdir / "SrcDoc.FCStd")))
+            opened.append("SrcDoc")
+            assert_ok(mcp.call("recompute_document", doc_name="DepDoc"))
+            assert_ok(mcp.call("spreadsheet_set_cells", doc_name="SrcDoc", sheet_name="Dims",
+                               cells=[{"address": "A1", "value": 18}]))
+            assert_ok(mcp.call("recompute_document", doc_name="DepDoc"))
+            assert_ok(mcp.call("execute_code", document="DepDoc", recompute="none",
+                code="assert abs(FreeCAD.getDocument('DepDoc').Sketch.getDatum(9).Value - 18) < 1e-7"))
+            assert_ok(mcp.call("close_document", doc_name="SrcDoc"))
+            opened.remove("SrcDoc")
+        assert_ok(mcp.call("clear_expression", doc_name="DepDoc", object_name="Sketch", prop_path="Constraints.H"))
         assert_ok(mcp.call("sketch_edit_constraint", doc_name="DepDoc", sketch_name="Sketch", index=8, value=35))
         _width(mcp, 35)
     finally:

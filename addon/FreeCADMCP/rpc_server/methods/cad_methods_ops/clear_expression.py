@@ -15,7 +15,7 @@ from .typed_rpc_support import (
 )
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 try:
@@ -49,6 +49,17 @@ except ImportError:  # pragma: no cover - flat addon import path
         make_clear_expression_uncertain,
     )
 from .clear_expression_mutation import ClearExpressionError, run_clear_expression_native_mutation
+
+try:
+    from ....native_error_boundary import (
+        NativeErrorBaseline, capture_native_error_baseline, native_error_validation_scope,
+        existing_native_error_unchanged,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from native_error_boundary import (
+        NativeErrorBaseline, capture_native_error_baseline, native_error_validation_scope,
+        existing_native_error_unchanged,
+    )
 
 
 
@@ -175,16 +186,59 @@ def build_clear_expression_request(doc_name: object, object_name: object, prop_p
 
 
 @dataclass(slots=True)
+class _ConstraintRepairCollaborators:
+    original: ClearExpressionCollaborators
+    baseline: NativeErrorBaseline
+
+    def commit_native_mutation(
+        self,
+        document_name: str,
+        callback: Callable[[object], object],
+        postcondition: Callable[[object], object],
+        *,
+        structural: bool = True,
+        recompute: bool = True,
+    ) -> object:
+        return self.original.commit_native_mutation(
+            document_name, callback, postcondition, structural=structural, recompute=recompute,
+        )
+
+    def validate_document_invariants(self, document: ClearExpressionReadDocument) -> object:
+        # Only the exact pre-apply native errors may await deferred recompute.
+        with native_error_validation_scope(document, self.baseline, deferred=True):
+            return self.original.validate_document_invariants(document)
+
+
+@dataclass(slots=True)
 class _ClearExpressionExecution:
     collaborators: ClearExpressionCollaborators
     request: ClearExpressionRequest
     created: ClearExpressionReceipt | None = None
     inspected: ClearExpressionInspection | None = None
     document: ClearExpressionDocument | None = None
+    baseline: NativeErrorBaseline = field(default_factory=dict)
+    retained: tuple[tuple[str, str], ...] | None = None
+    constraint_repair: bool = False
+    original_objects: tuple[object, ...] = ()
 
     def apply(self, doc: ClearExpressionDocument) -> None:
         self.document = doc
-        self.created = apply_clear_expression(doc, self.request)
+        self.original_objects = tuple(getattr(doc, "Objects", ()))
+        self.baseline.clear()
+        self.baseline.update(capture_native_error_baseline(doc))
+        item = doc.getObject(self.request.object_name)
+        self.retained = None
+        if (getattr(item, "TypeId", "") == "Sketcher::SketchObject"
+                and not hasattr(item, "Proxy")
+                and self.request.prop_path.lstrip(".").startswith("Constraints")):
+            before = tuple(getattr(item, "ExpressionEngine", ()) or ())
+            self.created = apply_clear_expression(doc, self.request)
+            after = tuple(getattr(item, "ExpressionEngine", ()) or ())
+            if (len(after) == len(before) - 1 and after
+                    and all(binding in before for binding in after)):
+                self.retained = after
+        else:
+            self.created = apply_clear_expression(doc, self.request)
 
     def inspect(self, doc: ClearExpressionReadDocument) -> None:
         if self.created is None:
@@ -193,10 +247,53 @@ class _ClearExpressionExecution:
                 "clear_expression did not return an identity receipt",
             )
         self.inspected = read_clear_expression_result(doc, self.created)
+        if self.constraint_repair and self.retained is not None:
+            if tuple(getattr(self.created.item, "ExpressionEngine", ()) or ()) != self.retained:
+                raise ClearExpressionError("EXPRESSION_ERROR", "Retained constraint bindings changed")
+
+    def retain_blocked_native_errors(self) -> None:
+        if self.document is None:
+            return
+        # A previously healthy downstream Pad/Body may now report that the
+        # unchanged, already-failed sketch did not commit. Admit only that exact
+        # native dependency diagnostic on objects present before apply.
+        current = capture_native_error_baseline(self.document)
+        original_ids = {id(obj) for obj in self.original_objects}
+        with native_error_validation_scope(self.document, self.baseline, deferred=True):
+            known = {key for key, (obj, _, _) in self.baseline.items()
+                     if existing_native_error_unchanged(self.document, obj)}
+            pending = {key: value for key, value in current.items()
+                       if key in original_ids and key not in self.baseline}
+            while pending:
+                admitted = []
+                for key, (obj, detail, state) in pending.items():
+                    if any(id(source) in known
+                           and detail == "dependency did not commit: " + str(getattr(source, "Name", ""))
+                           for source in getattr(obj, "OutList", ())):
+                        self.baseline[key] = (obj, detail, state)
+                        known.add(key)
+                        admitted.append(key)
+                if not admitted:
+                    break
+                for key in admitted:
+                    del pending[key]
+
+    def _missing_constraint_source(self, result: ClearExpressionFailure | ClearExpressionUncertain) -> bool:
+        if self.retained is None or self.created is None or result.get("native_status") != "RecomputeFailed":
+            return False
+        baseline = self.baseline.get(id(self.created.item))
+        if baseline is None:
+            return False
+        detail = baseline[1]
+        return ("Document '" in detail and "not found" in detail
+                and ".Constraints'" in detail
+                and detail in result.get("error", ""))
 
     def run(self, *, recompute: bool = True) -> NativeOutcome[ClearExpressionResult]:
+        collaborators = (_ConstraintRepairCollaborators(self.collaborators, self.baseline)
+                         if self.constraint_repair else self.collaborators)
         result = run_clear_expression_native_mutation(
-            self.collaborators,
+            collaborators,
             self.request.doc_name,
             self.apply,
             self.inspect,
@@ -211,10 +308,12 @@ class _ClearExpressionExecution:
                     and result.get("committed") is False
                     and result.get("rollback_succeeded") is True
                     and result.get("rollback_failed") is not True
-                    and "generic recompute has an unresolved cross-document dependency" in result.get("error", "")
+                    and ("generic recompute has an unresolved cross-document dependency" in result.get("error", "")
+                         or self._missing_constraint_source(result))
                 ):
                     # The coordinator cannot isolate the retained external
                     # dependencies. Only confirmed rollback permits reapply.
+                    self.constraint_repair = self._missing_constraint_source(result)
                     fallback = self.run(recompute=False)
                     return fallback if isinstance(fallback, dict) else fallback.await_result()
                 return result
@@ -230,8 +329,21 @@ class _ClearExpressionExecution:
                     if self.document is None or self.created is None:
                         raise RuntimeError("Missing expression target after commit")
                     call_named(self.document, "recompute")
-                    self.collaborators.validate_document_invariants(self.document)
-                    read_clear_expression_result(self.document, self.created)
+                    if self.constraint_repair:
+                        self.retain_blocked_native_errors()
+                        # Native failed recomputes retain Touch as a retry hint.
+                        # Consume it only for the exact errors known before clear.
+                        with native_error_validation_scope(self.document, self.baseline, deferred=True):
+                            for obj, _, _ in self.baseline.values():
+                                if existing_native_error_unchanged(self.document, obj):
+                                    purge = getattr(obj, "purgeTouched", None)
+                                    if callable(purge):
+                                        purge()
+                    with native_error_validation_scope(
+                        self.document, self.baseline if self.constraint_repair else {},
+                    ):
+                        self.collaborators.validate_document_invariants(self.document)
+                    self.inspect(self.document)
                 except Exception as exc:
                     return make_clear_expression_uncertain(
                         "EXPRESSION_RECOMPUTE_FAILED",
