@@ -23,9 +23,10 @@ def _pad(mcp, doc, body, sketch, pad, length):
                        pad_name=pad, length=length, strict=True))
 
 
+@pytest.mark.parametrize("diagnostic", [False, True], ids=["direct", "diagnostic_between"])
 @pytest.mark.parametrize("local", [False, True], ids=["external_only", "mixed_references"])
 @pytest.mark.parametrize("history_path", ["mcp", "native_gui"])
-def test_round27_saved_label_redo(mcp, live_gui, gui_log, local, history_path):
+def test_round27_saved_label_redo(mcp, live_gui, gui_log, local, history_path, diagnostic):
     opened = []
     native_request = live_gui.workdir / f"native_history_{local}.txt"
     try:
@@ -61,8 +62,8 @@ def test_round27_saved_label_redo(mcp, live_gui, gui_log, local, history_path):
                            cells=[{"address": "A1", "value": "=R27_Src#<<Dims>>.PadLen"}]))
         if history_path == "native_gui":
             native_request.write_text("")
-            # Install before the rename: execute_code itself opens a model
-            # transaction, so using it to request redo would discard redo.
+            # Issue native commands directly on the GUI thread, without
+            # routing the history request through another compatibility commit.
             code = f"""import FreeCAD, FreeCADGui as Gui
 from pathlib import Path
 from draftutils.gui_utils import run_gui_setup
@@ -106,6 +107,9 @@ run_gui_setup(FreeCAD.getDocument('R27_Src').getObject('Dims'), install_history_
                         time.sleep(0.05)
                     else:
                         pytest.fail(f"Native GUI {action} did not move source history: {h}")
+            if action == "undo" and diagnostic:
+                assert_ok(mcp.call("execute_code", document="R27_Dep", recompute="none",
+                                   execution_mode="gui", code="import FreeCAD\ns = FreeCAD.getDocument('R27_Src'); d = FreeCAD.getDocument('R27_Dep')\nprint('SRC undo', s.UndoCount, 'redo', s.RedoCount)\nprint('DEP undo', d.UndoCount, 'redo', d.RedoCount)\nprint('DepPad expr', d.getObject('DepPad').ExpressionEngine)\nprint('DepSheet A1', d.getObject('DepSheet').getContents('A1'))"))
             time.sleep(1)  # Let GUI catch-up and delayed recomputes finish, as in stress.
             for doc, obj in ([("R27_Src", "Pad")] if local and action == "redo" else []) + [("R27_Dep", "DepPad")]:
                 expr = _payload(assert_ok(mcp.call("list_expressions", doc_name=doc, object_name=obj)))
