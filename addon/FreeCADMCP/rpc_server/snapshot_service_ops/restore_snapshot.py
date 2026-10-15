@@ -7,6 +7,11 @@ import stat
 from pathlib import Path
 from typing import Any
 
+try:
+    from ...collaboration_api import CollaborationAPI
+except ImportError:  # pragma: no cover - flat addon import path
+    from collaboration_api import CollaborationAPI
+from ..methods.cad_methods_ops.native_commit_wait import NativeOutcome, defer_native_result
 from .snapshot_restore_error import SnapshotRestoreError
 
 
@@ -135,7 +140,7 @@ def restore_snapshot_in_place_gui(
     expected_document_name: str,
     expected_source_path: str | None,
     validator=None,
-) -> dict[str, Any]:
+) -> NativeOutcome[dict[str, Any]]:
     """Restore through ``Document.load`` while retaining the live proxy.
 
     Closing and reopening a leased document creates an unlocked identity gap.
@@ -159,14 +164,49 @@ def restore_snapshot_in_place_gui(
     recompute = getattr(document, "recompute", None)
     if callable(recompute):
         recompute()
-    validation = validator(document) if validator is not None else {"ok": True}
-    if isinstance(validation, dict) and validation.get("ok") is False:
-        raise SnapshotRestoreError("snapshot post-restore validation failed")
     force_document_dirty(document)
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "document_name": original_name,
         "source_path": original_path or None,
         "dirty": True,
-        "validation": validation,
+        "validation": {"ok": True},
     }
+    if validator is None:
+        return result
+
+    failure: list[Exception] = []
+
+    def validate_loaded(admitted):
+        try:
+            validation = validator(admitted)
+            if isinstance(validation, dict) and validation.get("ok") is False:
+                raise SnapshotRestoreError("snapshot post-restore validation failed")
+            result["validation"] = validation
+            return True
+        except Exception as exc:
+            failure.append(exc)
+            return False
+
+    # Reuse inspection's native postcondition fence. The empty apply preserves
+    # the loaded model as the rollback baseline; recompute already ran above.
+    bridge = CollaborationAPI(document_lookup=lambda _name: document)
+    native_result = bridge.commit_native_mutation(
+        original_name, lambda _admitted: None, validate_loaded,
+        structural=False, recompute=False,
+    )
+
+    def finish_validation(outcome):
+        if (
+            not isinstance(outcome, dict)
+            or outcome.get("status") != "Committed"
+            or outcome.get("committed") is not True
+        ):
+            if failure:
+                raise SnapshotRestoreError(str(failure[0])) from failure[0]
+            message = outcome.get("message") if isinstance(outcome, dict) else None
+            raise SnapshotRestoreError(message or "snapshot post-restore validation failed")
+        return result
+
+    # GUI callers return the waiter to the RPC thread, which waits outside Qt.
+    return defer_native_result(native_result, finish_validation)
