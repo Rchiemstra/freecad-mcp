@@ -5,13 +5,14 @@ from tests.live_gui._support import assert_clean, assert_ok
 pytestmark = pytest.mark.live_gui
 
 
-def _fixture(mcp, doc, drawing):
+def _fixture(mcp, doc, drawing, freecad_source_root):
     assert_ok(mcp.call('create_document', name=doc))
     code = "import FreeCAD\ndoc=FreeCAD.getDocument(%r)\nbox=doc.addObject('Part::Box','Box')\nbox.Length=40;box.Width=20;box.Height=10\n" % doc
     if drawing:
-        code += """page=doc.addObject('TechDraw::DrawPage','Page')
+        template = freecad_source_root / "src/Mod/TechDraw/Templates/Default_Template_A4_Landscape.svg"
+        code += f"""page=doc.addObject('TechDraw::DrawPage','Page')
 tpl=doc.addObject('TechDraw::DrawSVGTemplate','Template')
-tpl.Template='/workspace/build/debug/share/Mod/TechDraw/Templates/Default_Template_A4_Landscape.svg'
+tpl.Template={str(template)!r}
 page.Template=tpl
 view=doc.addObject('TechDraw::DrawViewPart','View');view.Source=[box];page.addView(view)
 pg=doc.addObject('TechDraw::DrawProjGroup','ProjGroup');pg.Source=[box];page.addView(pg)
@@ -26,14 +27,14 @@ doc.recompute()
     assert 'mutation is unavailable from a non-owner thread during an atomic presentation callback' not in report.text, report.text
 
 
-def test_step_import_without_drawing(mcp, gui_log):
+def test_step_import_without_drawing(mcp, gui_log, freecad_source_root):
     assert_ok(mcp.call('get_report_view', clear=True))
-    _fixture(mcp, 'R15PlainStep', False)
+    _fixture(mcp, 'R15PlainStep', False, freecad_source_root)
     assert_clean(gui_log)
 
 
-def test_techdraw_step_import_has_no_admission_errors(mcp, gui_log):
+def test_techdraw_step_import_has_no_admission_errors(mcp, gui_log, freecad_source_root):
     assert_ok(mcp.call('get_report_view', clear=True))
-    _fixture(mcp, 'R15DrawingStep', True)
+    _fixture(mcp, 'R15DrawingStep', True, freecad_source_root)
     assert_clean(gui_log)
 
