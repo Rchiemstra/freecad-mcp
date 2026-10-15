@@ -88,13 +88,21 @@ def _is_body(obj: object) -> bool:
 
 
 def _find_origin_plane(doc: object, body: object | None, plane_name: str) -> object | None:
-    origins: list[object] = []
-    origin_obj = getattr(body, "Origin", None) if body is not None else None
-    if origin_obj is not None:
-        origins.append(origin_obj)
-    for origin in getattr(doc, "Objects", ()):
-        if getattr(origin, "TypeId", "") == "App::Origin" and origin not in origins:
-            origins.append(origin)
+    # Resolve within the explicit Body, or an unowned document origin. A
+    # document-wide name lookup can return another Part/Body's XY_Plane.
+    origins: list[object]
+    if body is not None:
+        origin_obj = getattr(body, "Origin", None)
+        origins = [] if origin_obj is None else [origin_obj]
+    else:
+        objects = tuple(getattr(doc, "Objects", ()))
+        origins = [
+            origin for origin in objects
+            if getattr(origin, "TypeId", "") == "App::Origin"
+            and not any(getattr(owner, "Origin", None) is origin for owner in objects)
+        ]
+        if len(origins) != 1:
+            return None
     for origin in origins:
         for feat in getattr(origin, "OriginFeatures", []) or []:
             # Names gain suffixes in later containers, and labels can be
@@ -119,7 +127,11 @@ def _attach_origin_plane(
         sketch.MapMode = "FlatFace"  # type: ignore[attr-defined]
         return
     if plane_name in ("XY_Plane", "XZ_Plane", "YZ_Plane"):
-        raise SketchCreateError("SUPPORT_NOT_FOUND", f"Origin plane not found: {plane_name}")
+        raise SketchCreateError(
+            "SUPPORT_NOT_FOUND",
+            f"Origin plane not found: {plane_name}; "
+            "specify body_name or provide a unique document root origin",
+        )
     raise SketchCreateError("INVALID_ARGUMENT", f"Unsupported attach_to: {plane_name!r}")
 
 
