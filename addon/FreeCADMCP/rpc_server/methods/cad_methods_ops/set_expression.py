@@ -275,6 +275,8 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
         except Exception:
             pass  # Native setExpression diagnoses paths that cannot be read.
     expected = getattr(getattr(value, "Unit", None), "Signature", None)
+    if expected is None and callable(evaluate) and isinstance(value, (int, float)):
+        expected = (0,) * 8
     if expected is not None:
         evaluated = call_named(item, "evalExpression", request.expression)
         actual = getattr(getattr(evaluated, "Unit", None), "Signature", None)
@@ -282,7 +284,7 @@ def apply_set_expression(doc: SetExpressionDocument, request: SetExpressionReque
             raise SetExpressionError(
                 "EXPRESSION_UNIT_MISMATCH",
                 f"Unit mismatch for {request.object_name}.{request.prop_path}: "
-                f"expected {getattr(value, 'Unit', '')}, expression has {getattr(evaluated, 'Unit', '')}",
+                f"expected {getattr(value, 'Unit', 'dimensionless')}, expression has {getattr(evaluated, 'Unit', '')}",
             )
     try:
         setter(request.prop_path, request.expression)

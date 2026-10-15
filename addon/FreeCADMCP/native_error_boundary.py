@@ -191,3 +191,67 @@ class MissingSourceRepair:
         with native_error_validation_scope(self.document, self.baseline):
             if validate(self.document) is False:
                 raise RuntimeError("Missing-source repair postcondition failed after recompute")
+
+
+def _missing_source_error_objects(document: Any) -> tuple[Any, ...]:
+    errors = capture_native_error_baseline(document)
+    known = {key for key, (_, detail, _) in errors.items()
+             if re.search(r"Document '[^']+' not found in '[^']+'", detail)}
+    if not known:
+        return ()
+    while True:
+        added = {key for key, (obj, detail, _) in errors.items() if key not in known
+                 and any(id(source) in known and detail ==
+                         "dependency did not commit: " + str(getattr(source, "Name", ""))
+                         for source in getattr(obj, "OutList", ()))}
+        if not added:
+            break
+        known.update(added)
+    if known != errors.keys():
+        return ()
+    return tuple(errors[key][0] for key in known)
+
+
+def terminal_missing_source_state(document: Any) -> bool:
+    errors = _missing_source_error_objects(document)
+    if not errors:
+        return False
+    known = {id(obj) for obj in errors}
+    pending = list(getattr(document, "Objects", ()))
+    visited: set[int] = set()
+    while pending:
+        obj = pending.pop()
+        if id(obj) in visited:
+            continue
+        visited.add(id(obj))
+        if not _native_work_settled(obj):
+            return False
+        if id(obj) not in known:
+            state = _error_state(obj)
+            execute = getattr(obj, "MustExecute", False)
+            if (any("invalid" in item or "error" in item for item in state)
+                    or bool(execute)):
+                return False
+        pending.extend(getattr(obj, "OutList", ()))
+    return True
+
+
+def settle_missing_source_history(document: Any) -> None:
+    # Called only immediately after the authoritative history recompute.
+    # Retire retry touches on proven native source failures, never unrelated
+    # work or dirty spreadsheet cells. Later fresh touches block history again.
+    errors = _missing_source_error_objects(document)
+    if not errors:
+        return
+    known = {id(obj) for obj in errors}
+    for obj in getattr(document, "Objects", ()):
+        if id(obj) not in known and (not _native_work_settled(obj)
+                                    or bool(getattr(obj, "MustExecute", False))):
+            return
+        dirty = getattr(obj, "getDirtyCells", None)
+        if callable(dirty) and dirty():
+            return
+    for obj in errors:
+        purge = getattr(obj, "purgeTouched", None)
+        if callable(purge):
+            purge()

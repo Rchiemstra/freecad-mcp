@@ -3,6 +3,15 @@
 from typing import Any
 
 try:
+    from ....native_error_boundary import (
+        settle_missing_source_history, terminal_missing_source_state,
+    )
+except ImportError:  # pragma: no cover - flat addon import path
+    from native_error_boundary import (
+        settle_missing_source_history, terminal_missing_source_state,
+    )
+
+try:
     from part3_collaboration.admission import (
         actor_from_session,
         replay_or_protocol_error,
@@ -127,6 +136,13 @@ def _history_replay_result(
     return replay_or_protocol_error(replay)
 
 
+def _history_terminal_missing_source(document: Any) -> bool:
+    try:
+        return terminal_missing_source_state(document)
+    except Exception:
+        return False
+
+
 def _finish_history_mutation(
     document: Any,
     *,
@@ -147,6 +163,7 @@ def _finish_history_mutation(
     result: Any = True
     for participant in participants:
         participant.recompute()
+        settle_missing_source_history(participant)
         current = postflight_cad_mutation(participant, True)
         if not isinstance(current, dict):
             continue
@@ -399,7 +416,8 @@ def undo_gui(
             return failure
 
         admission_failure = admit_cad_mutation(
-            document, inflight=current_cad_mutation_inflight()
+            document, inflight=current_cad_mutation_inflight(),
+            allow_pending_recompute=_history_terminal_missing_source(document),
         )
         if admission_failure is not None:
             admission_failure = _history_rejection(admission_failure)
@@ -517,7 +535,8 @@ def redo_gui(
             return failure
 
         admission_failure = admit_cad_mutation(
-            document, inflight=current_cad_mutation_inflight()
+            document, inflight=current_cad_mutation_inflight(),
+            allow_pending_recompute=_history_terminal_missing_source(document),
         )
         if admission_failure is not None:
             admission_failure = _history_rejection(admission_failure)

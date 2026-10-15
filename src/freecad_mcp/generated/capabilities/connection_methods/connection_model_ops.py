@@ -39,7 +39,15 @@ def _prepare_history_mutation(conn, doc_name: str, *, undo: bool) -> dict[str, A
     readiness = get_mutation_readiness(conn, doc_name)
     if not readiness.get("success"):
         return _history_rejection(readiness)
-    if not readiness.get("ready"):
+    documents = readiness.get("documents") or []
+    terminal_source_errors = bool(documents) and all(
+        entry.get("terminal_missing_source") is True
+        and set(entry.get("reasons") or readiness.get("reasons") or ()) <= {
+            "pending_recompute", "native_not_ready"
+        }
+        for entry in documents
+    )
+    if not readiness.get("ready") and not terminal_source_errors:
         method = "undo" if undo else "redo"
         message = f"Document '{doc_name}' is not ready for mutation"
         documents = readiness.get("documents") or []

@@ -7,6 +7,11 @@ from contextlib import suppress
 from typing import Any
 
 try:
+    from ....native_error_boundary import terminal_missing_source_state
+except ImportError:  # pragma: no cover - flat addon import path
+    from native_error_boundary import terminal_missing_source_state
+
+try:
     from automation_pause import status as automation_pause_status
 except ImportError:  # pragma: no cover - package test layout
     from addon.FreeCADMCP.automation_pause import status as automation_pause_status
@@ -233,6 +238,13 @@ def _unavailable_readiness(
     }
 
 
+def _terminal_missing_source(document: Any) -> bool:
+    try:
+        return terminal_missing_source_state(document)
+    except Exception:
+        return False
+
+
 def document_readiness(document: Any) -> dict[str, Any]:  # noqa: C901
     name = str(getattr(document, "Name", "") or "")
     lifecycle_key = _lifecycle_key(document)
@@ -310,6 +322,7 @@ def document_readiness(document: Any) -> dict[str, Any]:  # noqa: C901
         "booked_transaction_id": booked,
         "transaction_locked": locked,
         "must_execute": must_execute,
+        "terminal_missing_source": must_execute and _terminal_missing_source(document),
         "pending_removal": pending_removal,
         "recomputing": recomputing,
         "collaboration_blocked": barrier or commit_barrier,

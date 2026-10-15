@@ -748,7 +748,7 @@ def test_readiness_for_an_unknown_document_is_document_not_found():
     }
 
 
-@pytest.mark.parametrize("dirty", [None, "same_object", "other_object", "cells", "proxy"])
+@pytest.mark.parametrize("dirty", [None, "same_object", "other_object", "must_execute", "cells", "proxy"])
 def test_history_readiness_distinguishes_terminal_missing_source_from_fresh_work(dirty):
     document = _Document(readiness={"ready": False, "must_execute": True})
     broken = SimpleNamespace(Name="Broken", State=["Invalid"], OutList=[],
@@ -759,6 +759,8 @@ def test_history_readiness_distinguishes_terminal_missing_source_from_fresh_work
         broken.State.append("Touched")
     elif dirty == "other_object":
         other.State.append("Touched")
+    elif dirty == "must_execute":
+        other.MustExecute = True
     elif dirty == "cells":
         broken.getDirtyCells = lambda: ["A1"]
     elif dirty == "proxy":
