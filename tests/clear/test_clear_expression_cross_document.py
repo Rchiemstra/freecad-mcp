@@ -71,3 +71,70 @@ def test_direct_recompute_failure_reports_committed_clear_as_uncertain(monkeypat
     assert result["committed"] is True
     assert result["error_code"] == "EXPRESSION_RECOMPUTE_FAILED"
     assert item.getExpression("Length") is None
+
+
+def _constraint_repair(monkeypatch, failure=None):
+    from addon.FreeCADMCP.rpc_server.mutation_guard_ops.validate_invariants import validate_document_invariants
+
+    events = []
+    doc = _Document(events)
+    detail = "Document 'SrcDoc' not found in 'SrcDoc'\nin property binding 'Doc#Sketch.Constraints'"
+    item = _item("Sketch", type_id="Sketcher::SketchObject")
+    item.PropertiesList = ["Constraints"]
+    item.State = ["Invalid"]
+    item.error = detail
+    item.getStatusString = lambda: item.error
+    item.ExpressionEngine = [(".Constraints.W", "SrcDoc#<<Dims>>.Wall"),
+                             (".Constraints.H", "SrcDoc#<<Dims>>.PadLen")]
+    def clear(path):
+        item.ExpressionEngine = [(p, e) for p, e in item.ExpressionEngine if p.lstrip(".") != path]
+        item.State = ["Invalid", "Touched"]
+    item.clearExpression = clear
+    doc.objects["Sketch"] = item
+    def recompute():
+        item.State = ["Invalid"]
+        if failure == "changed_error":
+            item.error = "a different solver failure"
+        elif failure == "new_error":
+            other = _item("Other", type_id="Part::Feature")
+            other.State = ["Invalid"]
+            other.getStatusString = lambda: "new failure"
+            doc.objects["Other"] = other
+        elif failure == "retained_binding":
+            item.ExpressionEngine.append((".Constraints.New", "99 mm"))
+    doc.recompute = recompute
+    calls = []
+    def native(_collaborators, _name, apply, inspect, **kwargs):
+        calls.append(kwargs.get("recompute", True))
+        apply(doc)
+        if len(calls) == 1:
+            # The native coordinator restored the pre-apply expression list.
+            item.ExpressionEngine = [(".Constraints.W", "SrcDoc#<<Dims>>.Wall"),
+                                     (".Constraints.H", "SrcDoc#<<Dims>>.PadLen")]
+            item.State = ["Invalid"]
+            return make_clear_expression_failure("NATIVE_COMPATIBILITY_MUTATION_REJECTED",
+                "document recompute reported an object error: Sketch (" + detail + ")",
+                native_status="RecomputeFailed", rollback_succeeded=True, rollback_failed=False)
+        inspect(doc)
+        _collaborators.validate_document_invariants(doc)
+        return True
+    monkeypatch.setattr(subject, "run_clear_expression_native_mutation", native)
+    result = subject.run_clear_expression(SimpleNamespace(validate_document_invariants=validate_document_invariants),
+                                          "Doc", "Sketch", "Constraints.W")
+    return result, calls, item
+
+
+def test_clear_constraint_retaining_missing_source_can_commit_after_confirmed_rollback(monkeypatch):
+    result, calls, item = _constraint_repair(monkeypatch)
+    assert result["success"] is True, result
+    assert calls == [True, False]
+    assert item.ExpressionEngine == [(".Constraints.H", "SrcDoc#<<Dims>>.PadLen")]
+
+
+@pytest.mark.parametrize("failure", ["changed_error", "new_error", "retained_binding"])
+def test_constraint_repair_reports_new_post_commit_failures(monkeypatch, failure):
+    result, calls, _ = _constraint_repair(monkeypatch, failure)
+    assert calls == [True, False]
+    assert result["outcome"] == "uncertain", result
+    assert result["committed"] is True
+    assert result["retry_safe"] is False
