@@ -133,11 +133,33 @@ def _finish_history_mutation(
     actor_id: str,
     operation_id: str,
     canonical_payload: dict[str, Any],
+    history_before: tuple[tuple[Any, int, int], ...] = (),
 ) -> Any:
-    """Target recompute after undo/redo, then postflight (ADR §11.1 target policy)."""
+    """Recompute every document replayed by native grouped undo/redo, then postflight."""
 
-    document.recompute()
-    result = postflight_cad_mutation(document, True)
+    participants = [document]
+    for candidate, undos, redos in history_before:
+        if candidate is not document and (
+            int(getattr(candidate, "UndoCount", 0) or 0) != undos
+            or int(getattr(candidate, "RedoCount", 0) or 0) != redos
+        ):
+            participants.append(candidate)
+    result: Any = True
+    for participant in participants:
+        participant.recompute()
+        current = postflight_cad_mutation(participant, True)
+        if not isinstance(current, dict):
+            continue
+        if current.get("success") is False or current.get("ok") is False:
+            result = current
+            break
+        if isinstance(result, dict):
+            result["mutation_readiness"] = [
+                *(result.get("mutation_readiness") or []),
+                *(current.get("mutation_readiness") or []),
+            ]
+        else:
+            result = dict(current)
     if isinstance(result, dict) and (
         result.get("success") is False or result.get("ok") is False
     ):
@@ -386,12 +408,20 @@ def undo_gui(
             )
             return admission_failure
 
+        # Native history replay admits the shared transaction group before
+        # changing any participant. Recompute each document whose history moved.
+        history_before = tuple(
+            (candidate, int(getattr(candidate, "UndoCount", 0) or 0),
+             int(getattr(candidate, "RedoCount", 0) or 0))
+            for candidate in freecad.listDocuments().values()
+        )
         document.undo()
         return _finish_history_mutation(
             document,
             actor_id=actor_id,
             operation_id=operation_id,
             canonical_payload=canonical_payload,
+            history_before=history_before,
         )
     except Exception as e:
         return str(e)
@@ -496,12 +526,20 @@ def redo_gui(
             )
             return admission_failure
 
+        # Native history replay admits the shared transaction group before
+        # changing any participant. Recompute each document whose history moved.
+        history_before = tuple(
+            (candidate, int(getattr(candidate, "UndoCount", 0) or 0),
+             int(getattr(candidate, "RedoCount", 0) or 0))
+            for candidate in freecad.listDocuments().values()
+        )
         document.redo()
         return _finish_history_mutation(
             document,
             actor_id=actor_id,
             operation_id=operation_id,
             canonical_payload=canonical_payload,
+            history_before=history_before,
         )
     except Exception as e:
         return str(e)
