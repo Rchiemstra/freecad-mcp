@@ -545,7 +545,8 @@ def test_history_action_on_an_empty_stack_is_refused(action) -> None:
     assert parsed["error_code"] == "EMPTY_HISTORY_STACK"
 
 @pytest.mark.parametrize("action", ["undo", "redo"])
-def test_grouped_history_recomputes_every_replayed_document(action):
+@pytest.mark.parametrize("unready", [(), ("Model",), ("Dependent",), ("Model", "Dependent")])
+def test_grouped_history_recomputes_every_replayed_document(action, unready, monkeypatch):
     document = _mock_document(UndoCount=1, RedoCount=1, UndoNames=["Rename"], RedoNames=["Rename"])
     dependent = _mock_document(Name="Dependent", Uid=SimpleNamespace(Value="uid-2"), UndoCount=1, RedoCount=1)
     unrelated = _mock_document(Name="Unrelated", Uid=SimpleNamespace(Value="uid-3"), UndoCount=1, RedoCount=1)
@@ -558,6 +559,14 @@ def test_grouped_history_recomputes_every_replayed_document(action):
             participant.UndoCount += -1 if action == "undo" else 1
             participant.RedoCount += 1 if action == "undo" else -1
 
+    def postflight(participant, result):
+        if participant.Name in unready:
+            return {"success": True, "ready_for_next_mutation": False,
+                    "readiness_warning": {"code": "MUTATION_NOT_READY_AFTER_COMMIT"},
+                    "mutation_readiness": [{"document_name": participant.Name}]}
+        return result
+
+    monkeypatch.setattr(recompute_helpers, "postflight_cad_mutation", postflight)
     getattr(document, action).side_effect = replay_group
     result = getattr(recompute_helpers, action + "_gui")(
         {"document_uid": "uid-1", "document_instance_id": 5,
@@ -570,3 +579,8 @@ def test_grouped_history_recomputes_every_replayed_document(action):
     document.recompute.assert_called_once()
     dependent.recompute.assert_called_once()
     unrelated.recompute.assert_not_called()
+    if unready:
+        assert result.get("ready_for_next_mutation") is False, result
+        assert {item["document_name"] for item in result["mutation_readiness"]} == set(unready)
+    else:
+        assert "readiness_warning" not in result
