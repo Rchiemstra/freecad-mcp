@@ -11,9 +11,10 @@ pytestmark = pytest.mark.live_gui
 
 
 def _rectangle(mcp, doc, sketch, body=None):
-    args = dict(doc_name=doc, sketch_name=sketch, attach_to="XY_Plane")
+    args = dict(doc_name=doc, sketch_name=sketch)
     if body is not None:
         args["body_name"] = body
+        args["attach_to"] = "XY_Plane"
     assert_ok(mcp.call("sketch_create", **args))
     assert_ok(mcp.call("sketch_add_rectangle", doc_name=doc, sketch_name=sketch,
                        x1=0, y1=0, x2=12, y2=12))
@@ -42,8 +43,8 @@ def test_orphan_pad_is_rejected_and_gui_stays_usable(mcp, gui_log):
     doc = "R13OrphanPad"
     assert_ok(mcp.call("create_document", name=doc))
     assert_ok(mcp.call("body_create", doc_name=doc, body_name="Body"))
-    # Omitting body_name creates a document-level sketch, even though its
-    # attachment support is the Body's origin plane.
+    # Keep the orphan at document level and unattached. A standalone sketch
+    # must not borrow the unrelated Body's origin plane.
     _rectangle(mcp, doc, "OrphanSketch")
     before = _payload(assert_ok(mcp.call("get_document_tree", doc_name=doc, max_depth=3)))
     assert {row["Name"] for row in before["roots"]} == {"Body", "OrphanSketch"}
