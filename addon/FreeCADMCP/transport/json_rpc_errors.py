@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from typing import Any
 
 try:
-    from .._shared.protocol.redaction import redact_sensitive
+    from .._shared.protocol.execution_diagnostics import execution_diagnostics
 except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
-    from _shared.protocol.redaction import redact_sensitive
+    from _shared.protocol.execution_diagnostics import execution_diagnostics
 
 __all__ = ["json_rpc_error_from_result"]
 
@@ -118,16 +118,10 @@ def _application_code(semantic_code: str, details: Mapping[str, Any]) -> int:
 
 
 def _error_message(result: Mapping[str, Any]) -> str:
-    if result.get("message"):
-        return str(result["message"])
     nested = _nested_error(result)
-    if nested.get("message"):
-        return str(nested["message"])
-    if isinstance(result.get("error"), str) and result.get("error"):
-        return str(result["error"])
-    # Python exceptions such as AssertionError and TimeoutError commonly have
-    # no message. execute_code still captured their type and failing frame;
-    # keep that evidence visible even to clients displaying only the message.
+    detail = result.get("message") or nested.get("message")
+    if not detail and isinstance(result.get("error"), str):
+        detail = result["error"]
     trace = result.get("traceback")
     if isinstance(trace, Mapping) and trace.get("exception_type"):
         message = str(trace["exception_type"])
@@ -135,9 +129,12 @@ def _error_message(result: Mapping[str, Any]) -> str:
         if isinstance(frames, list) and frames and isinstance(frames[-1], Mapping):
             frame = frames[-1]
             message += f" at {frame.get('file', '?')}:{frame.get('line', '?')}"
-            if frame.get("code"):
-                message += f": {frame['code']}"
+        detail = detail or trace.get("message")
+        if detail:
+            message += f": {detail}"
         return message
+    if detail:
+        return str(detail)
     if nested.get("type"):
         return str(nested["type"])
     return "RPC failed"
@@ -164,7 +161,7 @@ def _error_data(result: Mapping[str, Any], semantic_code: str) -> dict[str, Any]
         if key not in _CONTROL_FIELDS:
             data.setdefault(key, value)
     data["error_code"] = semantic_code
-    return redact_sensitive(data)
+    return data
 
 
 def json_rpc_error_from_result(result: object) -> dict[str, Any] | None:
@@ -178,8 +175,8 @@ def json_rpc_error_from_result(result: object) -> dict[str, Any] | None:
     failure = _unwrap_invoke_v2_failure(result)
     semantic_code = _semantic_code(failure)
     details = _error_details(failure)
-    return {
+    return execution_diagnostics({
         "code": _application_code(semantic_code, details),
         "message": _error_message(failure),
         "data": _error_data(failure, semantic_code),
-    }
+    })

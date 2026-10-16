@@ -7,6 +7,11 @@ import io
 import sys
 import traceback
 
+try:
+    from ...._shared.protocol.execution_diagnostics import execution_diagnostics
+except ImportError:  # pragma: no cover - flat FreeCAD add-on import path
+    from _shared.protocol.execution_diagnostics import execution_diagnostics
+
 
 @contextlib.contextmanager
 def observe_recompute_calls():
@@ -61,5 +66,6 @@ def run_python_on_gui_thread(
             "line_code": last.line if last else None,
             "stdout": output_buffer.getvalue(),
         }
-        freecad.Console.PrintError(f"Error executing Python code: {exc}\n")
+        diagnostic = execution_diagnostics({"message": str(exc), "traceback": tb_info})
+        freecad.Console.PrintError(f"Error executing Python code: {diagnostic['message']}\n")
         return False, tb_info
