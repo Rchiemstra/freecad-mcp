@@ -125,6 +125,21 @@ def _error_message(result: Mapping[str, Any]) -> str:
         return str(nested["message"])
     if isinstance(result.get("error"), str) and result.get("error"):
         return str(result["error"])
+    # Python exceptions such as AssertionError and TimeoutError commonly have
+    # no message. execute_code still captured their type and failing frame;
+    # keep that evidence visible even to clients displaying only the message.
+    trace = result.get("traceback")
+    if isinstance(trace, Mapping) and trace.get("exception_type"):
+        message = str(trace["exception_type"])
+        frames = trace.get("frames")
+        if isinstance(frames, list) and frames and isinstance(frames[-1], Mapping):
+            frame = frames[-1]
+            message += f" at {frame.get('file', '?')}:{frame.get('line', '?')}"
+            if frame.get("code"):
+                message += f": {frame['code']}"
+        return message
+    if nested.get("type"):
+        return str(nested["type"])
     return "RPC failed"
 
 
