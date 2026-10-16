@@ -941,8 +941,10 @@ def test_launcher_rejects_authenticated_wrong_profile_path(tmp_path):
         )
 
 
+@pytest.mark.parametrize("monitor", [False, True])
+@pytest.mark.parametrize("authenticated", [False, True])
 def test_launcher_does_not_write_readiness_before_handshake_verifies(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, monitor, authenticated
 ):
     launcher = _load_script("start_freecad_isolated.py")
     profile = tmp_path / launcher.PROFILE_NAME
@@ -959,6 +961,7 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     (profile / launcher.MANIFEST_FILENAME).write_text(
         json.dumps(manifest), encoding="utf-8"
     )
+    status_file = tmp_path / "exit.json"
 
     class Process:
         pid = 4321
@@ -972,8 +975,16 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
             self.terminated = True
             self.returncode = 0
 
-        def wait(self, *, timeout):
-            del timeout
+        def wait(self, *, timeout=None):
+            if timeout is None:
+                assert authenticated and monitor
+                assert Connection.disconnected
+                assert len(writes) == 1
+                assert json.loads(status_file.read_text()) == {
+                    "pid": self.pid, "returncode": None,
+                }
+                self.returncode = -11
+                return self.returncode
             if not self.terminated:
                 raise launcher.subprocess.TimeoutExpired("FreeCAD", 1)
             return self.returncode
@@ -982,13 +993,18 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
             self.terminated = True
             self.returncode = -9
 
+    runtime_info = _runtime_info(profile)
+    authenticated_proxy = _authenticated_proxy(launcher, profile, runtime_info, b"s" * 32)
+
     class Proxy:
         @staticmethod
         def get_instance_info():
-            return _runtime_info(profile)
+            return runtime_info
 
         @staticmethod
         def handshake_v2(request):
+            if authenticated:
+                return authenticated_proxy.handshake_v2(request)
             return {"client_nonce": request["client_nonce"], "proof": "not-a-proof"}
 
     writes = []
@@ -1020,22 +1036,31 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
 
     monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
     class Connection:
+        disconnected = False
+
         def __init__(self, *args, **kwargs):
             self.server = Proxy()
 
         @staticmethod
         def disconnect():
-            return None
+            Connection.disconnected = True
 
     monkeypatch.setattr(launcher, "FreeCADConnection", Connection)
     monkeypatch.setattr(
         launcher, "_write_manifest", lambda profile_path, value: writes.append(value)
     )
-    monkeypatch.setattr(sys, "argv", ["start_freecad_isolated.py"])
+    args = ["start_freecad_isolated.py"]
+    if monitor:
+        args += ["--exit-status-file", str(status_file)]
+    monkeypatch.setattr(sys, "argv", args)
 
-    assert launcher.main() == 1
-    assert writes == []
-    assert spawned[0].terminated is True
+    assert launcher.main() == (0 if authenticated else 1)
+    assert len(writes) == int(authenticated)
+    assert spawned[0].terminated is (not authenticated)
+    if authenticated and monitor:
+        assert json.loads(status_file.read_text()) == {"pid": 4321, "returncode": -11}
+    else:
+        assert not status_file.exists()
     assert not (profile / launcher.LAUNCH_STATE_FILENAME).exists()
 
 

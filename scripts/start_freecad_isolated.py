@@ -132,6 +132,31 @@ def _consume_supervision_flag(argv: list[str]) -> tuple[bool, list[str]]:
     return supervise, remainder
 
 
+def _consume_exit_status_file(argv: list[str]) -> tuple[Path | None, list[str]]:
+    """Opt-in live-suite monitoring; ordinary launches still detach."""
+    status_file = None
+    remainder = []
+    args = iter(argv)
+    for arg in args:
+        if arg == "--exit-status-file" or arg.startswith("--exit-status-file="):
+            value = next(args, "") if arg == "--exit-status-file" else arg.split("=", 1)[1]
+            if not value or status_file is not None:
+                raise SystemExit("--exit-status-file requires one path, specified once")
+            status_file = Path(value)
+        else:
+            remainder.append(arg)
+    return status_file, remainder
+
+
+def _wait_for_exit(process, status_file: Path) -> int:
+    """Keep ownership so even SIGSEGV and exit 0 have an exact durable status."""
+    # Published only after authenticated readiness and client disconnect.
+    _write_json_atomic(status_file, {"pid": process.pid, "returncode": None})
+    code = process.wait()
+    _write_json_atomic(status_file, {"pid": process.pid, "returncode": code})
+    return 0
+
+
 class InstanceValidationError(RuntimeError):
     """The endpoint answered, but it is not the launched isolated runtime."""
 
@@ -1263,6 +1288,9 @@ def _load_parent_start_freecad():
 def main() -> int:  # noqa: C901
     repo = _repo_root()
     supervise, launcher_argv = _consume_supervision_flag(sys.argv[1:])
+    exit_status_file, launcher_argv = _consume_exit_status_file(launcher_argv)
+    if supervise and exit_status_file is not None:
+        raise SystemExit("--exit-status-file cannot be combined with --supervise")
     profile_name, freecad_argv = _consume_launcher_args(launcher_argv)
     profile = _resolve_profile(repo, profile_name=profile_name)
     freecad = _resolve_freecad_executable(repo)
@@ -1450,6 +1478,13 @@ def main() -> int:  # noqa: C901
                     supervised_owner,
                     supervisor_control,
                 )
+            if exit_status_file is not None:
+                # End the readiness client's connection just as a detached
+                # launch does, before the test client starts using FreeCAD.
+                with suppress(Exception):
+                    connection.disconnect()
+                connection = None
+                return _wait_for_exit(process, exit_status_file)
             return 0
     finally:
         if supervised_owner is None and process is not None and not readiness_published:
