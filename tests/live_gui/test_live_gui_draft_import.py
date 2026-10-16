@@ -128,6 +128,22 @@ try:
     assert not errors, errors
     recompute_document(doc)
     text=doc.getObject('Text')
+    # Model readiness can precede queued Draft presentation setup. Observe
+    # the live Coin state instead of assuming worker completion or recompute
+    # flushed the setup; a missing callback still fails at this deadline.
+    def text_presented():
+        view=text.ViewObject
+        return (type(view.Proxy).__name__ == 'ViewProviderText'
+                and view.Proxy.text_wld.string.getValues() == ['Owner visible']
+                and view.Proxy.font.size.getValue() == 17 * view.ScaleMultiplier)
+    def presentation_state():
+        view=text.ViewObject
+        font=getattr(view.Proxy, 'font', None)
+        return {'provider': type(view.Proxy).__name__,
+                'font_size': getattr(view, 'FontSize', None),
+                'coin_font_size': font.size.getValue() if font else None,
+                'scale': getattr(view, 'ScaleMultiplier', None)}
+    _pump_gui_until(text_presented, 10, presentation_state)
     assert gui_utils.on_gui_thread()
     assert type(text.ViewObject.Proxy).__name__ == 'ViewProviderText'
     assert text.ViewObject.Visibility
