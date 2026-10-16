@@ -358,7 +358,7 @@ The `--host` value is validated on startup — it must be a valid IPv4/IPv6 addr
 ### FEM Analysis
 * `run_fem_analysis` — runs the CalculiX solver on an existing `Fem::FemAnalysis` and returns summary results (max von Mises stress, max displacement, node count, working directory). Auto-creates a `SolverCcxTools` if the analysis has none. See [`examples/cantilever_fem.py`](examples/cantilever_fem.py) for an end-to-end usage example.
 
-### Diagnostics (read-only guards for the silent FreeCAD behaviours in `doc/mcp-feedback-status.md`)
+### Diagnostics (read-only guards for silent FreeCAD behaviours)
 * `get_runtime_info` — exact MCP package, addon, FreeCAD, RPC protocol, profile, and compatibility identity. Run this first when diagnosing the wrong checkout or a stale addon copy.
 * `check_rpc_sync` — round-trip a unique nonce through the GUI queue. Run it after an `execute_code` timeout or before trusting follow-up model checks; a timeout or nonce mismatch means work should stop until the RPC queue is healthy.
 * `get_request_status`, `cancel_request` — query and cooperatively cancel the exact authenticated request after a timeout. Heavy calls also support negotiated MCP Tasks; clients without that extension keep the synchronous behavior.
