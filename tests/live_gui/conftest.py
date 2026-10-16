@@ -11,8 +11,8 @@ and every test fails on new warning or error lines unless it allows them.
 
 from __future__ import annotations
 
+import json
 import os
-import re
 import signal
 import socket
 import subprocess
@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.live_gui._process import ProcessMonitor, recover_if_dead, tail
 from tests.live_gui._support import MCP_ROOT, GuiLog, McpClient
 
 
@@ -34,6 +35,7 @@ class LiveGui:
     manifest: Path
     workdir: Path
     logs: list[Path]
+    process: ProcessMonitor | None = None
 
 
 @pytest.fixture(scope="session")
@@ -88,8 +90,9 @@ def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
     )
     launcher_log = workdir / "freecad_output.log"
     freecad_log = workdir / "freecad.log"
-    launcher = [sys.executable, str(MCP_ROOT / "scripts" / "start_freecad_isolated.py"),
-                "--log-file", str(freecad_log)]
+    exit_status = workdir / "freecad_exit.json"
+    launcher = [sys.executable, "-u", str(MCP_ROOT / "scripts" / "start_freecad_isolated.py"),
+                "--exit-status-file", str(exit_status), "--log-file", str(freecad_log)]
     if sys.platform.startswith("linux"):
         # FreeCAD's C stdout can retain messages across several tests, even
         # with PYTHONUNBUFFERED. Apply line buffering to the launcher and its
@@ -97,20 +100,47 @@ def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
         # test's log window. The native log and stderr remain checked too.
         launcher = ["stdbuf", "-oL", *launcher]
     with launcher_log.open("w", encoding="utf-8") as output:
-        launched = subprocess.run(
+        launched = subprocess.Popen(
             launcher,
-            cwd=MCP_ROOT, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=600,
+            cwd=MCP_ROOT, env=env, stdout=output, stderr=subprocess.STDOUT,
         )
-    text = launcher_log.read_text(encoding="utf-8", errors="replace")
-    match = re.search(r"authenticated on \S+ \(pid=(\d+)", text)
-    if launched.returncode != 0 or match is None:
-        pytest.fail(f"FreeCAD GUI did not start:\n{text[-4000:]}")
-    gui = LiveGui(int(match.group(1)), profile / "instance-manifest.json", workdir,
-                  [launcher_log, freecad_log])
+    gui = None
     try:
+        deadline = time.monotonic() + 600
+        while True:
+            # The launcher publishes this only after proving RPC identity and
+            # closing its readiness connection. Logs may be arbitrarily noisy.
+            if exit_status.is_file():
+                pid = int(json.loads(exit_status.read_text())["pid"])
+                break
+            if launched.poll() is not None or time.monotonic() >= deadline:
+                text = tail(launcher_log, 200)
+                pytest.fail(f"FreeCAD GUI did not start:\n{text[-4000:]}")
+            time.sleep(0.2)
+        gui = LiveGui(pid, profile / "instance-manifest.json", workdir,
+                      [launcher_log, freecad_log], ProcessMonitor(launched, exit_status, pid))
         yield gui
     finally:
-        _stop(gui.pid)
+        try:
+            if gui is not None:
+                try:
+                    exited = gui.process.poll() is not None
+                except (OSError, ValueError, RuntimeError):
+                    exited = False
+                if not exited:
+                    _stop(gui.pid)
+        finally:
+            if gui is not None:
+                gui.process.close()
+            try:
+                launched.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                launched.terminate()
+                try:
+                    launched.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    launched.kill()
+                    launched.wait(timeout=5)
 
 
 class _LiveGuiSession:
@@ -121,6 +151,7 @@ class _LiveGuiSession:
         self.stack = ExitStack()
         self.gui: LiveGui | None = None
         self.client: McpClient | None = None
+        self.abort_message: str | None = None
 
     def start(self) -> None:
         if self.gui is not None:
@@ -139,6 +170,47 @@ class _LiveGuiSession:
             self.gui = None
             self.client = None
 
+    def recover(self, nodeid: str) -> bool:
+        if self.gui is None or self.gui.process is None:
+            return False
+
+        def restart():
+            try:
+                self.close()
+                self.start()
+            except (Exception, pytest.fail.Exception, pytest.skip.Exception) as exc:
+                # Fixture teardown can combine pytest.exit with another error
+                # into an ExceptionGroup. Exit from makereport instead.
+                self.abort_message = f"FreeCAD restart failed after {nodeid}: {exc}"
+
+        try:
+            return recover_if_dead(self.gui.process, self.gui.workdir, nodeid, restart)
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.abort_message = f"FreeCAD process monitoring failed during {nodeid}: {exc}"
+            return False
+
+
+def _check_for_death(session, item) -> bool:
+    # sys.__stderr__ alone still points into pytest's fd capture. Suspend it
+    # here so diagnostics are printed even for setup/teardown failures in CI.
+    capture = item.config.pluginmanager.getplugin("capturemanager")
+    with capture.global_and_fixture_disabled():
+        return session.recover(item.nodeid)
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+    session = item.funcargs.get("_live_gui_session")
+    if session is not None:
+        died = _check_for_death(session, item)
+        if session.abort_message:
+            pytest.exit(session.abort_message, returncode=2)
+        if died and report.passed:
+            report.outcome = "failed"
+            report.longrepr = f"FreeCAD died during {item.nodeid} ({report.when}); see stderr diagnostics"
+    return report
+
 
 @pytest.fixture(scope="session")
 def _live_gui_session(tmp_path_factory) -> Iterator[_LiveGuiSession]:
@@ -150,14 +222,20 @@ def _live_gui_session(tmp_path_factory) -> Iterator[_LiveGuiSession]:
 
 
 @pytest.fixture
-def live_gui(_live_gui_session) -> LiveGui:
+def live_gui(_live_gui_session, request) -> Iterator[LiveGui]:
     _live_gui_session.start()
     assert _live_gui_session.gui is not None
-    return _live_gui_session.gui
+    try:
+        yield _live_gui_session.gui
+    finally:
+        # Run before the session finalizer stops the process, including on
+        # the last test and when another fixture fails during teardown.
+        if _check_for_death(_live_gui_session, request.node):
+            pytest.fail("FreeCAD died during teardown; see stderr diagnostics")
 
 
 @pytest.fixture
-def mcp(live_gui: LiveGui, _live_gui_session) -> Iterator[McpClient]:
+def mcp(live_gui: LiveGui, _live_gui_session, request) -> Iterator[McpClient]:
     client = _live_gui_session.client
     assert client is not None
     try:
@@ -166,7 +244,9 @@ def mcp(live_gui: LiveGui, _live_gui_session) -> Iterator[McpClient]:
         # Keep the offending result/failure intact. A fresh profile and MCP
         # connection on the next test prevent timeout occupancy, leases, or
         # delayed log lines from contaminating unrelated scenarios.
-        if client.gui_request_timed_out:
+        if client.gui_request_timed_out and _live_gui_session.client is client:
+            if _check_for_death(_live_gui_session, request.node):
+                pytest.fail("FreeCAD died during teardown; see stderr diagnostics")
             _live_gui_session.close()
 
 

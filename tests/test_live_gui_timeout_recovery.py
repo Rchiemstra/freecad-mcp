@@ -19,13 +19,14 @@ def test_timeout_fails_only_its_scenario(pytester, monkeypatch, failure):
     pytester.makeconftest(
         f"""
 import asyncio
+import json
 import socket
 from pathlib import Path
 from types import SimpleNamespace
 from tests.live_gui import conftest as live
 from tests.live_gui._support import McpClient, ToolResult
 
-for name in ('live_gui', 'mcp', 'gui_log', '_live_gui_session'):
+for name in ('live_gui', 'mcp', 'gui_log', '_live_gui_session', 'pytest_runtest_makereport'):
     if hasattr(live, name):
         globals()[name] = getattr(live, name)
 
@@ -53,9 +54,17 @@ def run(command, **kwargs):
         pid = 100 + len(starts)
         starts.append(pid)
         kwargs['stdout'].write(f'authenticated on loopback (pid={{pid}})')
+        kwargs['stdout'].flush()
+        status = Path(command[command.index('--exit-status-file') + 1])
+        status.write_text(json.dumps({{'pid': pid, 'returncode': None}}))
         record(f'start {{pid}}')
     return SimpleNamespace(returncode=0)
 live.subprocess.run = run
+def popen(command, **kwargs):
+    run(command, **kwargs)
+    return SimpleNamespace(poll=lambda: None, wait=lambda **kwargs: 0)
+live.subprocess.Popen = popen
+live.ProcessMonitor = lambda *args: SimpleNamespace(poll=lambda: None, close=lambda: None)
 live._stop = lambda pid: record(f'stop {{pid}}')
 
 class Client(McpClient):
