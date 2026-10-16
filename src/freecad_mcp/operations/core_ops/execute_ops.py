@@ -4,6 +4,8 @@ import json
 import logging
 
 from ...execute_options import ExecuteOptions
+from ..._shared.protocol.execution_diagnostics import execution_diagnostics
+from ..._shared.protocol.json_rpc_client import JsonRpcRemoteError
 from ...freecad_client import FreeCADConnection
 from ...responses.constants import ToolResponse
 from ...responses.execute_result import from_execute_result
@@ -75,9 +77,21 @@ def execute_code_operation(
             only_text_feedback=only_text_feedback,
             capture_view=False,
         )
+    except JsonRpcRemoteError as e:
+        safe = execution_diagnostics({
+            "message": str(e), "data": e.data, "error_code": e.semantic_code,
+        })
+        detail = safe["message"]
+        logger.error("Failed to execute code: %s", detail)
+        return tool_fail(
+            f"Failed to execute code: {detail}",
+            structured=safe["data"] if isinstance(safe["data"], dict) else None,
+            error_code=safe["error_code"],
+        )
     except Exception as e:
-        logger.error(f"Failed to execute code: {e!s}")
-        return tool_fail(f"Failed to execute code: {e!s}")
+        detail = execution_diagnostics(str(e) or type(e).__name__)
+        logger.error("Failed to execute code: %s", detail)
+        return tool_fail(f"Failed to execute code: {detail}")
 
 def execute_code_async_operation(
     freecad: FreeCADConnection,
