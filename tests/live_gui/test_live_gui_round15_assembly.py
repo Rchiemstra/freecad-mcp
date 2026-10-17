@@ -30,12 +30,23 @@ def test_fixed_assembly_solves(mcp, gui_log):
 def test_fixed_distance_contradiction_is_rejected(mcp, gui_log):
     doc = 'R15FixedConflict'
     _assembly(mcp, doc)
-    assert_ok(mcp.call('create_assembly_joint', doc_name=doc, assembly_name='Asm', joint_type='Distance',
-                       ref1_component='A', ref2_component='B', ref1_element='Face1', ref2_element='Face1',
-                       properties={'Distance': 100}, solve=False))
-    result = mcp.call('solve_assembly', doc_name=doc, assembly_name='Asm')
-    assert_ok(mcp.call('get_objects', doc_name=doc, fields=['Name']))
+    before = _payload(assert_ok(mcp.call('get_objects', doc_name=doc, fields=['Name', 'Placement'])))
+    result = mcp.call('create_assembly_joint', doc_name=doc, assembly_name='Asm', joint_type='Distance',
+                      ref1_component='A', ref2_component='B', ref1_element='Face1', ref2_element='Face1',
+                      properties={'Distance': 100}, solve=False)
+    # solve=False defers the explicit solve, but native commit still recomputes.
+    # execute() now rejects the contradiction there, before the joint can commit.
     assert result.is_error, result.text
-    assert _payload(result)['error_code'] == 'ASSEMBLY_SOLVE_FAILED'
+    payload = _payload(result)
+    assert payload['error_code'] == 'NATIVE_COMPATIBILITY_MUTATION_REJECTED', result.text
+    assert payload['native_status'] == 'RecomputeFailed', result.text
+    assert payload['committed'] is False
+    assert payload['rollback_succeeded'] is True
+    assert 'conflicting constraints' in payload['error']
+    after = _payload(assert_ok(mcp.call('get_objects', doc_name=doc, fields=['Name', 'Placement'])))
+    assert after == before
+    solved = _payload(assert_ok(mcp.call('solve_assembly', doc_name=doc, assembly_name='Asm')))
+    assert solved['solver_status'] == '0'
     assert_ok(mcp.call('close_document', doc_name=doc))
-    assert_clean(gui_log, r"Assembly solve: joint '.*' does not hold")
+    assert_clean(gui_log, r"Assembly solve: joint '.*' does not hold",
+                 r"document recompute reported an object error: Asm .*conflicting constraints")
