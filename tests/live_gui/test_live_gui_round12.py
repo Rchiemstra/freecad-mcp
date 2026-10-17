@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from tests.live_gui._support import assert_clean, assert_ok
+from tests.live_gui._support import assert_clean, assert_ok, close_documents, document_names
 from tests.live_gui.test_live_gui_round5 import _payload
 
 pytestmark = pytest.mark.live_gui
@@ -316,17 +316,27 @@ def test_execute_code_document_lifecycle_survives(mcp, gui_log, variant):
 
 
 def test_modal_dialog_is_reported_without_dispatching_gui_work(mcp, gui_log):
-    # With no open document this body runs on the Qt main thread.
-    docs = assert_ok(mcp.call('list_documents'))
-    assert 'R12' not in docs.text
-    assert_ok(mcp.call('execute_code', execution_mode='gui', recompute='none',
-                       code="from PySide import QtCore, QtWidgets\n"
-                            "r12_dialog = QtWidgets.QMessageBox()\n"
-                            "r12_dialog.setWindowTitle('Round 12 modal')\n"
-                            "r12_dialog.setText('Test dialog')\n"
-                            "r12_dialog.setModal(True)\nr12_dialog.show()\n"
-                            "QtCore.QTimer.singleShot(8000, r12_dialog.close)"))
+    # execution_mode='gui' alone can select a document's owner lane. Only
+    # an empty document set guarantees the Qt main thread for this body.
+    close_documents(mcp)
+    assert document_names(mcp) == []
     try:
+        setup = assert_ok(mcp.call(
+            'execute_code', document=None, execution_mode='gui', recompute='none',
+            code="from PySide import QtCore, QtWidgets\n"
+                 "assert QtCore.QThread.currentThread() == QtWidgets.QApplication.instance().thread()\n"
+                 "r12_dialog = QtWidgets.QMessageBox()\n"
+                 "r12_dialog.setWindowTitle('Round 12 modal')\n"
+                 "r12_dialog.setText('Test dialog')\n"
+                 # Arm cleanup before showing the modal: even a blocked setup
+                 # response or a later assertion failure must close it.
+                 "QtCore.QTimer.singleShot(8000, r12_dialog.close)\n"
+                 "r12_dialog.setModal(True)\nr12_dialog.show()",
+        ))
+        assert _payload(setup)['execution'] == {
+            'mode': 'gui', 'venue': 'qt_main_thread',
+            'document': None, 'document_source': 'none',
+        }
         failed = mcp.call('get_report_view')
         assert not failed.ok
         assert 'GUI_BLOCKED_BY_MODAL_DIALOG' in failed.text
@@ -343,7 +353,8 @@ def test_modal_dialog_is_reported_without_dispatching_gui_work(mcp, gui_log):
             if not state.get('gui', {}).get('modal_dialog'):
                 break
             time.sleep(.1)
-    assert_ok(mcp.call('get_report_view'))
+        assert not state.get('gui', {}).get('modal_dialog'), state
+        assert_ok(mcp.call('get_report_view'))
     assert_clean(gui_log)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -120,6 +121,18 @@ class McpClient:
             self.gui_request_timed_out = True
             raise
         self._observe_timeout(result)
+        if tool == "preview_attachment" and _preapply_preview_conflict(result):
+            logging.getLogger(__name__).warning(
+                "preview_attachment: retrying once after pre-apply Conflict: %s", result.text,
+            )
+            # Native Conflict rejects before apply. Never retry a second
+            # rejection, an uncertain outcome, or any other tool/error.
+            try:
+                result = self._run(self._call(tool, args))
+            except TimeoutError:
+                self.gui_request_timed_out = True
+                raise
+            self._observe_timeout(result)
         return result
 
     def _observe_timeout(self, result: ToolResult) -> None:
@@ -189,6 +202,40 @@ class GuiLog:
 def assert_ok(result: ToolResult) -> ToolResult:
     assert result.ok, f"{result.tool} failed: {result.text[:600]}"
     return result
+
+
+def _preapply_preview_conflict(result: ToolResult) -> bool:
+    payload = result.payload or {}
+    return (
+        not result.ok
+        and payload.get("contract_version") == 1
+        and payload.get("success") is False
+        and payload.get("ok") is False
+        and payload.get("outcome") == "rejected"
+        and payload.get("committed") is False
+        and payload.get("retry_safe") is True
+        and payload.get("error_code") == "NATIVE_COMPATIBILITY_MUTATION_REJECTED"
+        and payload.get("native_status") == "Conflict"
+        and payload.get("native_message") == "one or more semantic revisions changed before commit"
+    )
+
+
+def document_names(mcp: McpClient) -> list[str]:
+    result = assert_ok(mcp.call("list_documents"))
+    names = json.loads(result.text)
+    assert isinstance(names, list) and all(isinstance(name, str) for name in names), result.text
+    return names
+
+
+def close_documents(mcp: McpClient) -> None:
+    """Clean the shared session, including documents created before a failure."""
+    failures = []
+    for name in document_names(mcp):
+        result = mcp.call("close_document", doc_name=name)
+        if not result.ok:
+            failures.append(f"{name}: {result.text}")
+    assert not failures, "Document cleanup failed:\n" + "\n".join(failures)
+    assert document_names(mcp) == []
 
 
 def assert_clean(gui_log: GuiLog, *allowed: str) -> None:
