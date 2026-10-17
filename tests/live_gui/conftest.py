@@ -26,7 +26,9 @@ from pathlib import Path
 import pytest
 
 from tests.live_gui._process import ProcessMonitor, recover_if_dead, tail
-from tests.live_gui._support import MCP_ROOT, GuiLog, McpClient
+from tests.live_gui._support import MCP_ROOT, GuiLog, McpClient, close_documents
+
+_TEST_FAILED = pytest.StashKey[bool]()
 
 
 @dataclass
@@ -209,6 +211,8 @@ def pytest_runtest_makereport(item, call):
         if died and report.passed:
             report.outcome = "failed"
             report.longrepr = f"FreeCAD died during {item.nodeid} ({report.when}); see stderr diagnostics"
+    if report.failed:
+        item.stash[_TEST_FAILED] = True
     return report
 
 
@@ -238,16 +242,35 @@ def live_gui(_live_gui_session, request) -> Iterator[LiveGui]:
 def mcp(live_gui: LiveGui, _live_gui_session, request) -> Iterator[McpClient]:
     client = _live_gui_session.client
     assert client is not None
+    failed = False
     try:
         yield client
+    except BaseException:
+        failed = True
+        raise
     finally:
-        # Keep the offending result/failure intact. A fresh profile and MCP
-        # connection on the next test prevent timeout occupancy, leases, or
-        # delayed log lines from contaminating unrelated scenarios.
-        if client.gui_request_timed_out and _live_gui_session.client is client:
-            if _check_for_death(_live_gui_session, request.node):
-                pytest.fail("FreeCAD died during teardown; see stderr diagnostics")
-            _live_gui_session.close()
+        # Ordinary assertion/setup failures keep the same healthy GUI session.
+        # Clean every leftover, even when the scenario missed its own finally.
+        try:
+            if (
+                (failed or request.node.stash.get(_TEST_FAILED, False))
+                and _live_gui_session.client is client
+                and not client.gui_request_timed_out
+            ):
+                if not _check_for_death(_live_gui_session, request.node):
+                    close_documents(client)
+        finally:
+            _retire_timed_out_client(client, _live_gui_session, request)
+
+
+def _retire_timed_out_client(client, session, request) -> None:
+    # Keep the offending result/failure intact. A fresh profile and MCP
+    # connection on the next test prevent timeout occupancy, leases, or
+    # delayed log lines from contaminating unrelated scenarios.
+    if client.gui_request_timed_out and session.client is client:
+        if _check_for_death(session, request.node):
+            pytest.fail("FreeCAD died during teardown; see stderr diagnostics")
+        session.close()
 
 
 @pytest.fixture
