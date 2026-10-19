@@ -1,5 +1,8 @@
 # Documentation
 
+- [Tool reference](tools.md) — Every registered MCP tool, grouped with source links.
+- [Advanced setup and testing](advanced.md) — Leases, remote access, headless checks, Git sidecars and test commands.
+
 ## Contracts
 
 - [document-lease-sidecar-v2.md](document-lease-sidecar-v2.md) — Document lease sidecar schema and identity fields.

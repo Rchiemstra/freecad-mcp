@@ -9,8 +9,6 @@ python -m pip install -e .
 ```
 
 Copy `addon/FreeCADMCP` from that checkout into the active FreeCAD profile.
-The original upstream is `neka-nat/freecad-mcp`; it is not the checkout used by
-the commands above.
 
 `freecad_mcp.build_info` is the package authority for `version`, `build_id`,
 Git commit/dirty state, build timestamp, RPC protocol, and telemetry schema.
