@@ -117,12 +117,6 @@ Native FreeCAD projects can also be opened and saved.
 **Tools:** `import_step`, `import_brep`, `get_view`, `save_view_sequence`, `set_color`,
 `export_step`, `export_brep`, `export_stl`, `open_document`, `save_document`.
 
-<details>
-<summary>More modelling and view feedback</summary>
-
-![FreeCAD modelling feedback](assets/freecad_mcp4.gif)
-
-</details>
 
 ### Keep checkpoints and coordinate assistants
 
@@ -164,6 +158,19 @@ Results below are rounded from the retained evidence.
 | 6. Check the jaw | Solve the changed jaw with a fixed M3 bore and a 10 N pad load. | 1.367 MPa stress; 0.016613 mm displacement; 367 nodes / 1,063 elements. |
 | 7. Ready for a bench test | Estimate mass, list parts and export files. | 83.84 g at the retained fill convention; 130.38 g all-solid envelope; assembly STEP and ten part STEP/STL pairs. |
 
+**Prompts in the replay**, word for word:
+
+1. Build a small head that picks strawberries by the stem. Use a spreadsheet for its dimensions.
+2. Can it grip with 10 N and cut with 15 N? Show the force budget.
+3. Show approach, clamp, cut, withdraw, then move the fruit to the tray.
+4. Measure the gaps and check whether any parts overlap the neighbouring fruit.
+5. The berries are only 10 mm apart. Show the clash, reshape the nose and check again.
+6. Run a strength check on the jaw with a 10 N load at the pad.
+7. What does it weigh? List the parts and export files I can inspect and print.
+
+Each prompt maps to recorded MCP tool calls; the arguments and results are in
+[verification.json](examples/strawberry-picker/verification.json).
+
 **What the replay shows:** real MCP calls on the companion FreeCAD fork, with no
 language model during replay. It regenerates a retained checkpoint rather than
 designing from a fresh conversation. GUI takes are joined at fixed poses and chapter
@@ -183,8 +190,8 @@ coarse remesh gave 1.379 MPa and 0.016680 mm. Neither establishes mesh convergen
 printed layer strength or fatigue life. Sliced mass and cable strain relief remain
 unresolved; the controller and rear connector are outside the modelled head.
 
-The local replay lasts **3:51.0**. GIF previews are 960 px wide at 10 fps:
-overview 2.36 MB; motion 1.43 MB; tight cluster 0.56 MB; FEM 0.37 MB.
+The local replay lasts **3:51.3**. GIF previews are 960 px wide at 10 fps:
+overview 2.17 MB; motion 1.71 MB; tight cluster 0.24 MB; FEM 0.20 MB.
 
 [Design, print notes, remaining gaps and bench test plan](examples/strawberry-picker/README.md) ·
 [Prompts](examples/strawberry-picker/prompts.md) ·
