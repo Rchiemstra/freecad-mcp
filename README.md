@@ -260,9 +260,9 @@ cp -r addon/FreeCADMCP ~/Library/Application\ Support/FreeCAD/v1-1/Mod/
 Restart FreeCAD. Select **MCP Addon** in the workbench list, then click
 **Start RPC Server** in the **FreeCAD MCP** toolbar.
 
-![MCP Addon workbench selection](assets/workbench_list.png)
+![Select MCP Addon and start the RPC server](assets/start-rpc-server.gif)
 
-![Start RPC Server command](assets/start_rpc_server.png)
+Report view confirms: `RPC Server started at 127.0.0.1:9875.`
 
 Optional: enable **FreeCAD MCP → Auto-Start Server** to start it on future launches.
 The default RPC endpoint is `127.0.0.1:9875`.
