@@ -477,6 +477,59 @@ def test_boot_identity_non_empty():
     assert rpc_server._boot_identity().startswith("host-")
 
 
+@pytest.mark.parametrize(
+    ("command_name", "setting_key"),
+    [
+        ("ToggleAutoStartCommand", "auto_start_rpc"),
+        ("ToggleRemoteConnectionsCommand", "remote_enabled"),
+    ],
+)
+@pytest.mark.parametrize("enabled", [None, False, True], ids=["default", "off", "on"])
+def test_toggle_resources_reflect_saved_settings(
+    tmp_path, monkeypatch, command_name, setting_key, enabled
+):
+    from addon.FreeCADMCP.rpc_server import commands
+
+    settings, _console = _load_settings(tmp_path, monkeypatch)
+    if enabled is not None:
+        _write(tmp_path, {setting_key: enabled})
+    dependencies = commands.CommandDependencies(
+        freecad=commands.FreeCAD,
+        load_settings=settings.load_settings,
+        save_settings=settings.save_settings,
+        start_rpc_server=lambda: "",
+        stop_rpc_server=lambda: "",
+        runtime_running=lambda: False,
+    )
+
+    resources = getattr(commands, command_name)(dependencies).GetResources()
+
+    assert resources["Checkable"] is (enabled is True)
+
+
+@pytest.mark.parametrize(
+    "command_name", ["ToggleAutoStartCommand", "ToggleRemoteConnectionsCommand"]
+)
+def test_toggle_resources_default_off_when_settings_unreadable(command_name):
+    from addon.FreeCADMCP.rpc_server import commands
+
+    def unreadable_settings():
+        raise OSError("settings unavailable")
+
+    dependencies = commands.CommandDependencies(
+        freecad=commands.FreeCAD,
+        load_settings=unreadable_settings,
+        save_settings=lambda _settings: None,
+        start_rpc_server=lambda: "",
+        stop_rpc_server=lambda: "",
+        runtime_running=lambda: False,
+    )
+
+    resources = getattr(commands, command_name)(dependencies).GetResources()
+
+    assert resources["Checkable"] is False
+
+
 def test_remote_gui_toggle_refuses_plain_transport_in_enforce_mode(monkeypatch):
     from addon.FreeCADMCP.rpc_server import commands
 
