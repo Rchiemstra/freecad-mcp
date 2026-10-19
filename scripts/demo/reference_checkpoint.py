@@ -1,4 +1,4 @@
-"""Persist only the wrist reference bindings in a clean native checkpoint.
+"""Persist wrist bindings and the closeup helpers' scope in a clean checkpoint.
 Close the unsaved replay first, then reopen a copy of the packaged input so
 presentation layouts and temporary replay edits never enter the checkpoint.
 """
@@ -31,7 +31,7 @@ if __name__=='__main__':
    info=call('open_document',path=str(source));d.DOC=info['document_name'];j.c.DOC=d.DOC
   import stage2_support
   stage2_support.MODEL_DOC=d.DOC
-  wait_ready();before=snapshot();bind_wrist();wait_ready();after=snapshot()
+  wait_ready();before=snapshot();j.contact_detail_setup();bind_wrist();wait_ready();after=snapshot()
   assert before==after,'Wrist bindings changed manufacturing geometry or spreadsheet contents'
   refs=j.ec("""import FreeCAD as App,json
 D=App.getDocument('StrawberryHead')

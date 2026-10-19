@@ -371,6 +371,10 @@ D=App.getDocument('StrawberryHead')
 if not D.getObject('CloseupAnvil'):
  window=D.addObject('Part::Box','CloseupContactWindow');window.Length=6;window.Width=8;window.Height=6.6;window.Placement.Base=App.Vector(-7.5,-4,0)
  detail=D.addObject('Part::Common','CloseupAnvil');detail.Base=D.NoseFrameReady;detail.Tool=window
+# Boolean operands must share NoseFrameReady's geometric scope (PickingHead).
+# Also migrate the presentation helpers already present in saved checkpoints.
+D.PickingHead.addObject(D.CloseupContactWindow)
+D.PickingHead.addObject(D.CloseupAnvil)
 print(json.dumps({'detail':'Unmodified anvil geometry cropped to the contact region for the section view; excluded from BOM and exports'}))
 """)
 
