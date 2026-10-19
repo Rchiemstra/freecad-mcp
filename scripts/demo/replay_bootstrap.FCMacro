@@ -1,0 +1,11 @@
+import FreeCAD as App, FreeCADGui as Gui
+from PySide import QtWidgets
+from pathlib import Path
+Gui.activateWorkbench('PartWorkbench')
+m=Gui.getMainWindow();m.showMaximized()
+for w in m.findChildren(QtWidgets.QDockWidget)+m.findChildren(QtWidgets.QToolBar):w.hide()
+p=App.ParamGet('User parameter:BaseApp/Preferences/View')
+for k in ('BackgroundColor','BackgroundColor2','BackgroundColor3'):p.SetUnsigned(k,0xf0f2f3ff)
+p.SetBool('ShowAxisCross',False)
+p.SetBool('UseNavigationAnimations',False);p.SetBool('Simple',True);p.SetBool('ShowNaviCube',False);p.SetBool('ShowAxisCross',False)
+Path('/demo/demo-out/stage3/ready').write_text('ready')

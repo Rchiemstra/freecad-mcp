@@ -6,28 +6,28 @@ This is the `Rchiemstra/freecad-mcp` fork, which controls FreeCAD through MCP.
 The original upstream project is
 [`neka-nat/freecad-mcp`](https://github.com/neka-nat/freecad-mcp).
 
-## Demo
+## Demo: a strawberry picker
 
-### Design a flange
+![Strawberry picker story](assets/strawberry-picker.gif)
 
-![demo](./assets/freecad_mcp4.gif)
+A small head holds the stem, cuts above the pad, and withdraws the fruit.<br>
+A tight cluster reveals a clash; a shorter nose clears the checked samples.<br>
+Force estimates, jaw FEM and print files make the next bench test concrete.
 
-### Design a toy car
+Scripted replay: real MCP tools on the companion FreeCAD fork, with no language
+model during replay. Forces from datasheets + FEM, not measured. Tray transfer is
+an unvalidated placement preview; idle waiting is trimmed. Caption/readback panels
+are restored in post; CAD viewport pixels come from the real GUI capture.
 
-![demo](./assets/make_toycar4.gif)
+| Chapter | Preview | MCP tool and what it proved |
+|---|---|---|
+| 3 · Pick motion | ![Pick motion](assets/strawberry-picker-03-motion.gif) | `spreadsheet_set_cells`: spreadsheet poses move the parts through the scripted pick poses; tray transfer is a preview. |
+| 5 · Tight cluster | ![Tight cluster](assets/strawberry-picker-05-clearance.gif) | `measure_volume`, `common_volume_along_path`: yellow original clash, then 0 mm³ common in the checked samples. |
+| 6 · Jaw strength | ![Jaw FEM](assets/strawberry-picker-06-fem.gif) | `execute_code`: real solver replay on the retained mesh, 1.367 MPa at a 10 N pad load. |
 
-### Design a part from 2D drawing
+[Model, parts, prompts, results and bench test plan](examples/strawberry-picker/)
 
-#### Input 2D drawing
-
-![input](./assets/b9-1.png)
-
-#### Demo
-
-![demo](./assets/from_2ddrawing.gif)
-
-This is the conversation history.
-https://claude.ai/share/7b48fd60-68ba-46fb-bb21-2fbb17399b48
+Local video: **3:51.0**, seven chapters. GIFs: overview **2.36 MB**; motion **1.43 MB**; tight cluster **0.56 MB**; FEM **0.37 MB**. All GIFs are 960 px at 10 fps.
 
 ## Install addon
 
