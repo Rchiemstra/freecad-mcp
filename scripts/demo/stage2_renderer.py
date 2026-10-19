@@ -16,6 +16,10 @@ class Stage2Renderer(QtCore.QObject):
   try:self.prepare()
   except Exception:self.ack(False,traceback.format_exc())
  def prepare(self):
+  previous=getattr(self,'clash_overlay',None)
+  if previous is not None:
+   if self.clash_root.findChild(previous)>=0:self.clash_root.removeChild(previous)
+   self.clash_overlay=None
   c=self.cmd;d=App.getDocument(c.get('document','StrawberryHead'));App.setActiveDocument(d.Name);Gui.ActiveDocument=Gui.getDocument(d.Name)
   for o in d.Objects:
    if o.TypeId=='App::Part' or o.Name=='PickingHead':o.ViewObject.Visibility=True
@@ -68,7 +72,21 @@ class Stage2Renderer(QtCore.QObject):
   elif c.get('view')=='viewFront':q=App.Rotation(App.Vector(1,0,0),90)
   self.q=q;center=App.Vector(*c['center']);direction=q.multVec(App.Vector(0,0,-1));pos=center-direction*500;a=q.Axis
   view.setCamera('OrthographicCamera { position %s %s %s orientation %s %s %s %s nearDistance 0.1 farDistance 3000 focalDistance 500 height %s }'%(pos.x,pos.y,pos.z,a.x,a.y,a.z,q.Angle,c['height']))
+  self.highlight_clashes(c,d,view)
   view.redraw();QtCore.QTimer.singleShot(600,self.capture)
+ # Draw actual intersection BReps through solid context in the native viewport.
+ def highlight_clashes(self,c,d,view):
+  clashes=[p for p in c['parts'] if p.get('clash')]
+  if not clashes:return
+  root=view.getSceneGraph();previous=getattr(self,'clash_overlay',None)
+  if previous is not None and root.findChild(previous)>=0:return
+  from pivy import coin
+  overlay=coin.SoSeparator();overlay.setName('OriginalCommonHighlight')
+  depth=coin.SoDepthBuffer();depth.test=True;depth.write=False;depth.function=coin.SoDepthBuffer.ALWAYS;depth.setOverride(True)
+  material=coin.SoMaterial();material.diffuseColor=(1,.79,.01);material.transparency=0;material.setOverride(True)
+  overlay.addChild(depth);overlay.addChild(material)
+  for p in clashes:overlay.addChild(d.getObject(p['name']).ViewObject.RootNode.copy(False))
+  root.addChild(overlay);self.clash_root=root;self.clash_overlay=overlay
  def capture(self):
   try:
    c=self.cmd;path='/demo/demo-out/'+c.get('output_dir','stills2')+'/'+c['file'];v=Gui.activeDocument().activeView();Gui.Selection.clearSelection();v.saveImage(path,1600,1000,'Current')

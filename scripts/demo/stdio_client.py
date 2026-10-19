@@ -15,7 +15,7 @@ class Client:
         self.workdir = Path(workdir)
         self.params = StdioServerParameters(
             command=sys.executable,
-            args=['-m', 'freecad_mcp.server', '--only-text-feedback', '--instance-manifest', str(self.workdir / 'profile/instance-manifest.json')],
+            args=[str(Path(__file__).with_name('capture_server.py')), '--only-text-feedback', '--instance-manifest', str(self.workdir / 'profile/instance-manifest.json')],
             cwd=str(ROOT), env=dict(os.environ, PYTHONPATH=str(ROOT / 'src')),
         )
         self.errlog = (self.workdir / 'mcp-stderr.log').open('a')

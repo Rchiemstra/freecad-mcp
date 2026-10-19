@@ -18,7 +18,7 @@ PROMPTS=[
  ('Check the jaw','Run a strength check on the jaw with a 10 N load at the pad.','The coarse FEM checks the changed jaw under the stated load.'),
  ('Ready for a bench test','What does it weigh? List the parts and export files I can inspect and print.','The model supplies a mass estimate, parts list and separate print files.')]
 OPENING='--retake-opening' in sys.argv
-MOTION_PHASE='tray' if '--motion-tray' in sys.argv else ('cut' if '--motion-cut' in sys.argv else None)
+MOTION_PHASE='clamp' if '--motion-clamp' in sys.argv else ('tray' if '--motion-tray' in sys.argv else ('cut' if '--motion-cut' in sys.argv else None))
 OLD_TIMELINE=json.loads((OUT/'timeline.json').read_text()) if (OUT/'timeline.json').exists() else []
 OLD_MOTION=next((c for c in OLD_TIMELINE if c['number']==3),None)
 ONLY={int(n) for n in sys.argv[sys.argv.index('--only-chapters')+1].split(',')} if '--only-chapters' in sys.argv else set()
@@ -27,7 +27,7 @@ CURRENT_DOC=['strawberry_head_v2']
 PRESENTATION_RECOMPUTE=True
 CHAPTERS=[c for c in json.loads((OUT/'timeline.json').read_text()) if c['number']<START] if START>1 else []
 SOURCE=('raw-motion-'+MOTION_PHASE+'.mp4') if MOTION_PHASE else ('raw-opening.mp4' if OPENING else ('raw.mp4' if START==1 else 'raw-start-%02d.mp4'%START))
-SOURCE='raw-static-rework.mp4' if ONLY else SOURCE
+SOURCE='raw-selected-'+ '-'.join(map(str,sorted(ONLY)))+'.mp4' if ONLY and not MOTION_PHASE else SOURCE
 TIMELINE='timeline-static.json' if ONLY else ('timeline-opening.json' if OPENING else 'timeline.json')
 if ONLY:CHAPTERS=[]
 record=None;origin=0
@@ -64,6 +64,10 @@ def ui(_settle=True,**kw):
   time.sleep(.1)
  raise TimeoutError('prompt director')
 def take(seconds):
+ # Disabled toasts must never conceal a broken capture transport.
+ log=(OUT/'freecad.log').read_text(errors='replace')
+ for bad in ['BrokenPipeError','Failed to auto-save document','Too many opened non-intrusive']:
+  if bad in log:raise RuntimeError('Capture health failure: '+bad)
  t=time.monotonic()-origin;time.sleep(seconds);CHAPTERS[-1]['intervals'].append([t,time.monotonic()-origin]);persist()
 def persist(): (OUT/TIMELINE).write_text(json.dumps(CHAPTERS,indent=2))
 def say(activity,detail='',seconds=4):ui(activity=activity,detail=detail);take(seconds)
@@ -72,6 +76,7 @@ def shot(name,**kw):
 SCENE=shot('01_scene.png',**CAMERAS['scene'])
 BUILD=shot('01_scene.png',**CAMERAS['build'])
 NOSE=shot('07_narrow_fixed.png',**CAMERAS['nose'])
+NOSE['parts']=[{**p,'transparency':0,'mode':'Shaded'} for p in NOSE['parts']]
 
 def begin(n,view):
  title,prompt,proof=PROMPTS[n-1]
@@ -96,6 +101,15 @@ def move(a,b,steps=32):
   frame({k:a[k]+(v-a[k])*t for k,v in b.items()})
 def ec(s):return j.ec(s)
 
+def clash_pose_readback():
+ value=ec("""import FreeCAD as App,json
+D=App.getDocument('StrawberryHead')
+print(json.dumps({'head_mm':list(D.PickingHead.getGlobalPlacement().Base),'target_mm':list(D.Target.getGlobalPlacement().Base),'jaw_deg':float(D.Motion.get('JawAngle')),'cut_deg':float(D.Motion.get('CutAngle'))}))
+""")
+ assert all(abs(x)<1e-6 for key in ['head_mm','target_mm'] for x in value[key]),value
+ assert abs(value['jaw_deg'])<1e-6 and abs(value['cut_deg']-13)<1e-6,value
+ return value
+
 def run():
  global origin,record,PRESENTATION_RECOMPUTE
  d.DOC='strawberry_head_v2';j.c.DOC=d.DOC
@@ -117,7 +131,8 @@ def run():
  call('close_document',doc_name='fem',required=False)
  j.c.setcells({'NeighbourGap':15})
  call('spreadsheet_set_cells',sheet_name='Motion',cells=[{'address':'B1','value':'0'}])
- if MOTION_PHASE=='tray':j.c.pose('withdraw',0,-13,20,-25,True)
+ if MOTION_PHASE=='clamp':j.c.pose('approach',-18,13,0,0)
+ elif MOTION_PHASE=='tray':j.c.pose('withdraw',0,-13,20,-25,True)
  elif MOTION_PHASE:j.c.pose('clamp',0,13,0,0)
  else:j.c.pose('approach',-18,13,15,0)
  ui(shot=SCENE,chapter='freecad-mcp',prompt='A strawberry picker, from dimensions to checks',proof='A scripted replay in the real companion FreeCAD fork GUI.',activity='Starting the seven-chapter story',detail='Saved parametric checkpoint · no language model during replay',card='')
@@ -129,7 +144,7 @@ def run():
   # The mounting reference is a seated wrist/adapter pair even before the
   # rest of the head is revealed.
   scene={**BUILD,'parts':[p for p in j.M['parts'] if p['kind']=='scene' or p['name']=='WristAdapter']}
-  begin(1,scene)
+  begin(1,BUILD)
   dims=cellread('Dims',['BerryWidth','BerryLength','StemDia','HornRadius','InputArm','JawOutputArm','CutOutputArm'])
   ui(card='MCP cell readback · Dims\n\nNominal berry: 30 × 35 mm\nStem: 3 mm\nHorn radius: 6 mm\nInput arm: 24 mm\nJaw arm: 15 mm\nCutter arm: 10.5 mm')
   say('spreadsheet_get_cells','The native checkpoint retains the spreadsheet, sketches and expressions.',5)
@@ -156,32 +171,49 @@ def run():
   say('Forces from datasheets + FEM, not measured','Stem strength, friction and real servo performance still need bench tests.',5);end()
  if OPENING:return
  if START<=3 and (not ONLY or 3 in ONLY):
-  # 3: small eased sheet updates; one fixed camera throughout.
-  if MOTION_PHASE:
-   keep=67 if MOTION_PHASE=='tray' else 59
-   assert OLD_MOTION and len(OLD_MOTION['intervals'])>=keep
-   prior=OLD_MOTION.get('prior_takes',[])+[{'source':OLD_MOTION.get('source','raw.mp4'),'intervals':OLD_MOTION['intervals'][:keep]}]
+  if MOTION_PHASE=='clamp':
+   # Re-record the complete clamp after a legacy auto-save timer failure;
+   # retain the clean approach and following motion at the same fixed poses.
+   assert OLD_MOTION and len(OLD_MOTION['intervals'])==177 and not OLD_MOTION.get('prior_takes')
    title,prompt,proof=PROMPTS[2]
-   CHAPTERS.append({'number':3,'title':title,'prompt':prompt,'proof':proof,'source':SOURCE,'intervals':[],'prior_takes':prior,'start':time.monotonic()-origin})
-   ui(shot=SCENE,chapter='03 / 07   '+title,prompt='You: '+prompt,proof='What this proves: '+proof,activity='Cut',detail='',card='')
-  else:
-   j.c.pose('approach',-18,13,15,0)
-   ui(card='');begin(3,SCENE)
-   say('spreadsheet_set_cells · approach','Move down toward the stem while the jaw is open.',3)
-   move({'HeadZ':15},{'HeadZ':0},28)
+   src=OLD_MOTION.get('source','raw.mp4')
+   CHAPTERS.append({'number':3,'title':title,'prompt':prompt,'proof':proof,'source':SOURCE,'intervals':[],
+    'prior_takes':[{'source':src,'intervals':OLD_MOTION['intervals'][:30]}],
+    'following_takes':[{'source':src,'intervals':OLD_MOTION['intervals'][59:]}],
+    'camera_cuts_intervals':OLD_MOTION.get('camera_cuts_intervals',[126]),'start':time.monotonic()-origin})
+   ui(shot=SCENE,chapter='03 / 07   '+title,prompt='You: '+prompt,proof='What this proves: '+proof,activity='Clamp',detail='',card='')
    say('Clamp','The pads close around the stem.',3)
    move({'JawAngle':-18},{'JawAngle':0},28)
-  if MOTION_PHASE!='tray':
-   say('Cut','The blade passes above the pad. This is a placement preview, without contact physics.',3)
-   move({'CutAngle':13},{'CutAngle':-13},32)
-   frame({'TargetStemLength':12.7})
-   say('Withdraw','The cut fruit moves with the head along the checked withdrawal direction.',3)
-   move({'HeadY':0,'HeadZ':0,'TargetY':0,'TargetZ':0},{'HeadY':-25,'HeadZ':20,'TargetY':-25,'TargetZ':20},32)
-  say('Tray transfer · preview only','The relocated-tray transfer was not included in the collision checks.',4)
-  # The tray is beside the head; add a temporary expression for target X only.
-  call('set_expression',object_name='Target',prop_path='Placement.Base.x',expression='Motion.HeadX')
-  move({'HeadX':0,'HeadY':-25,'TargetY':-25},{'HeadX':-125,'HeadY':22.5,'TargetY':22.5},48)
-  say('At the tray · preview only','No drop, gravity, contact or tray-transfer collision result is claimed.',4);end()
+   CHAPTERS[-1]['end']=time.monotonic()-origin;persist()
+  else:
+   # 3: small eased sheet updates; one fixed camera throughout.
+   if MOTION_PHASE:
+    keep=67 if MOTION_PHASE=='tray' else 59
+    assert OLD_MOTION and len(OLD_MOTION['intervals'])>=keep
+    prior=OLD_MOTION.get('prior_takes',[])+[{'source':OLD_MOTION.get('source','raw.mp4'),'intervals':OLD_MOTION['intervals'][:keep]}]
+    title,prompt,proof=PROMPTS[2]
+    CHAPTERS.append({'number':3,'title':title,'prompt':prompt,'proof':proof,'source':SOURCE,'intervals':[],'prior_takes':prior,'start':time.monotonic()-origin})
+    ui(shot=SCENE,chapter='03 / 07   '+title,prompt='You: '+prompt,proof='What this proves: '+proof,activity='Cut',detail='',card='')
+   else:
+    j.c.pose('approach',-18,13,15,0)
+    ui(card='');begin(3,SCENE)
+    say('spreadsheet_set_cells · approach','Move down toward the stem while the jaw is open.',3)
+    move({'HeadZ':15},{'HeadZ':0},28)
+    say('Clamp','The pads close around the stem.',3)
+    move({'JawAngle':-18},{'JawAngle':0},28)
+   if MOTION_PHASE!='tray':
+    say('Cut','The blade passes above the pad. This is a placement preview, without contact physics.',3)
+    move({'CutAngle':13},{'CutAngle':-13},32)
+    frame({'TargetStemLength':12.7})
+    say('Withdraw','The cut fruit moves with the head along the checked withdrawal direction.',3)
+    move({'HeadY':0,'HeadZ':0,'TargetY':0,'TargetZ':0},{'HeadY':-25,'HeadZ':20,'TargetY':-25,'TargetZ':20},32)
+   CHAPTERS[-1]['camera_cuts_intervals']=[sum(len(t['intervals']) for t in CHAPTERS[-1].get('prior_takes',[]))+len(CHAPTERS[-1]['intervals'])]
+   ui(shot=shot('01_scene.png',**CAMERAS['tray']))
+   say('Tray transfer · preview only','The relocated-tray transfer was not included in the collision checks.',4)
+   # The tray is beside the head; add a temporary expression for target X only.
+   call('set_expression',object_name='Target',prop_path='Placement.Base.x',expression='Motion.HeadX')
+   move({'HeadX':0,'HeadY':-25,'TargetY':-25},{'HeadX':-125,'HeadY':22.5,'TargetY':22.5},48)
+   say('At the tray · preview only','No drop, gravity, contact or tray-transfer collision result is claimed.',4);end()
  if START<=4 and (not ONLY or 4 in ONLY):
   # Reset out of the edited story, then chapter 4 holds a fixed nose camera.
   frame({'HeadX':0},False);call('set_expression',object_name='Target',prop_path='Placement.Base.x',expression='0')
@@ -195,21 +227,31 @@ def run():
   say('common_volume_along_path · 0 mm³','Both neighbouring fruit, calyces and stems are included.',5)
   say('The check has a defined scope','Eight poses and 24 approach/withdrawal samples passed in Stage 2a; sampling is not a continuous certificate.',5);end()
  if START<=5 and (not ONLY or 5 in ONLY):
-  # 5: real archived original BReps, followed by actual retained fix.
+  # Reset explicitly: selected-chapter retakes may skip chapter 4's reset.
+  # Direct motion writes bypass the helper cache, so invalidate it too.
+  j.c._cell_cache.clear()
+  frame({'HeadX':0},False)
+  call('set_expression',object_name='Target',prop_path='Placement.Base.x',expression='0')
+  # 5: original solid head followed by the retained fix, at the same camera.
   j.c.setcells({'NeighbourGap':10});j.c.pose('clamp')
   call('spreadsheet_set_cells',sheet_name='V2Dims',cells=[{'address':'B1','value':'-28'},{'address':'B2','value':'37'},{'address':'B3','value':'-30'}])
-  baseline=shot('05_narrow_gap.png',**CAMERAS['nose'])
+  baseline_pose=clash_pose_readback()
+  # Show the actual original parameterised head as solid, with archival
+  # common volumes highlighted. No validation envelopes or wireframe proxies.
+  archived={p['name'].removeprefix('BaselineDisplay_'):p['name'] for p in SHOTS['05_narrow_gap.png']['parts'] if p['name'].startswith('BaselineDisplay_')}
+  baseline={**NOSE,'parts':[{**p,'name':archived.get(p['name'],p['name']),'mode':'Shaded','transparency':0} for p in NOSE['parts']]+[p for p in SHOTS['05_narrow_gap.png']['parts'] if p.get('clash')]}
   begin(5,baseline)
   ui(card='MCP narrow-cluster readback\n\n10 mm nominal spacing\nOriginal common volumes:\nFruit: 583.615 / 583.602 mm³\nStem: 3.195 mm³\n\nRetained fix:\nMinimum pose gap: 0.693 mm\nSampled common: 0 mm³')
   values={n:call('measure_volume',obj_name=n) for n in ['BaselineYellow_NeighbourLBerry','BaselineYellow_NeighbourRBerry','BaselineYellow_NeighbourLStem']}
   say('measure_volume · original clash in yellow','Original overlaps: 583.615 / 583.602 mm³ in fruit; 3.195 mm³ at a neighbouring stem.',6)
   call('spreadsheet_set_cells',sheet_name='V2Dims',cells=[{'address':'B1','value':'-4'},{'address':'B2','value':'13'},{'address':'B3','value':'-26'}])
   j.c.pose('clamp')
+  fixed_pose=clash_pose_readback()
   ui(shot=NOSE)
   say('Retained nose fix · same camera','Lower cheek extensions removed; carrier shortened 4 mm. Pad and blade stay functional.',6)
   fixed=call('common_volume_along_path',moving_object='HeadEnvelope',obstacle_objects=['World_NeighbourLBerry','World_NeighbourLCap','World_NeighbourLStem','World_NeighbourRBerry','World_NeighbourRCap','World_NeighbourRStem'],samples=[{'x':0,'y':0,'z':0}])
   say('common_volume_along_path · re-check 0 mm³','Minimum retained pose clearance: 0.693 mm. The fruit shape makes the actual gap about 9.802 mm.',6)
-  (OUT/'replay-narrow.json').write_text(json.dumps({'original':values,'fixed':fixed},indent=2));end()
+  (OUT/'replay-narrow.json').write_text(json.dumps({'original':values,'fixed':fixed,'original_pose':baseline_pose,'fixed_pose':fixed_pose},indent=2));end()
  if START<=6 and (not ONLY or 6 in ONLY):
   # 6: rerun the actual coarse FEM; save the live result readback.
   call('open_document',path='/demo/demo-out/stage2/fem.FCStd')
@@ -249,5 +291,9 @@ if __name__=='__main__':
  try:run()
  finally:
   if record:
+   clock_path=OUT/'capture-clocks.json'
+   clocks=json.loads(clock_path.read_text()) if clock_path.exists() else {}
+   clocks[SOURCE]={'end_seconds':time.monotonic()-origin,'basis':'recorder stop clock'}
+   clock_path.write_text(json.dumps(clocks,indent=2))
    record.stdin.write(b'q\n');record.stdin.flush();record.wait(timeout=30)
   d.C.close()

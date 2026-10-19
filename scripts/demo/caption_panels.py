@@ -1,12 +1,13 @@
 """Repaint scripted caption/readback panels; leave every CAD viewport pixel intact."""
-import os
+import os,math
 os.environ["QT_QPA_PLATFORM"]="offscreen"
 from pathlib import Path
 from PySide6 import QtCore,QtGui,QtWidgets
+from stress_legend import legend
 O=Path(__file__).resolve().parents[2]/'demo-out/stage3'
 INITIAL=('freecad-mcp · real MCP tools','')
 EASE='spreadsheet_set_cells · eased pose'
-DISC='Scripted replay · real MCP tools on the companion FreeCAD fork · no language model during replay · waits trimmed · joined GUI takes · caption panels restored in post'
+DISC='Scripted MCP replay · no live AI · waits trimmed · joined takes\nCAD capture · captions restored · forces estimated, not measured'
 CARDS={
 1:'MCP cell readback · Dims\n\nNominal berry: 30 × 35 mm\nStem: 3 mm\nHorn radius: 6 mm\nInput arm: 24 mm\nJaw arm: 15 mm\nCutter arm: 10.5 mm',
 2:'MCP cell readback · Dims\n\nStall torque: 176 N mm\nWorking torque: 88 N mm\nIdeal clamp: 23.47 N\nIdeal cut: 33.52 N\n\nNeed: 10 N grip / 15 N cut',
@@ -38,22 +39,34 @@ class Panels:
    p=QtWidgets.QFrame(self.main);p.setGeometry(x,y,w,h);p.setStyleSheet('background:#f0f2f3;');p.show();return p
   def label(parent,x,y,w,h,size,color='#263d46',bold=False):
    l=QtWidgets.QLabel(parent);l.setGeometry(x,y,w,h);l.setWordWrap(True);l.setStyleSheet('color:%s;font:%s %dpx "DejaVu Sans";background:transparent;'%(color,'bold' if bold else '',size));l.show();return l
-  top=panel(0,26,1600,190);bottom=panel(0,802,1600,156);self.card=panel(1030,230,545,550)
+  top=panel(0,26,1600,190);bottom=panel(0,790,1600,168);self.card=panel(1030,230,545,550)
+  self.legend=legend(self.main);self.legend.hide()
   self.chapter=label(top,40,4,1520,30,21,'#19717c',True);self.prompt=label(top,40,40,1520,74,29,'#263d46',True);self.proof=label(top,40,120,1520,55,25)
-  self.activity=label(bottom,40,5,1520,42,25,'#19717c',True);self.detail=label(bottom,40,48,1520,54,22)
-  label(bottom,40,110,1520,40,18).setText(DISC);self.cardlabel=label(self.card,20,10,505,530,23)
+  self.activity=label(bottom,40,5,1520,42,25,'#19717c',True);self.detail=label(bottom,40,44,1520,54,23)
+  label(bottom,40,100,1520,68,28).setText(DISC);self.cardlabel=label(self.card,20,10,505,530,23)
  def save(self,ch,i,path):
-  n=ch['number'];self.chapter.setText('%02d / 07   %s'%(n,ch['title']));self.prompt.setText('You: '+ch['prompt']);self.proof.setText('What this proves: '+ch['proof'])
+  n=ch['number'];self.legend.setVisible(n==6);self.chapter.setText('%02d / 07   %s'%(n,ch['title']));self.prompt.setText('You: '+ch['prompt']);self.proof.setText('What this proves: '+ch['proof'])
   a,d=cue(n,i);self.activity.setText(a);self.detail.setText(d)
   text=CARDS.get(n,'') if i>0 and (n!=1 or i==1) else '';self.cardlabel.setText(text);self.card.setVisible(bool(text))
-  APP.processEvents();im=QtGui.QImage(1600,1000,QtGui.QImage.Format_ARGB32);im.fill(QtCore.Qt.transparent)
+  APP.processEvents()
+  for label in self.main.findChildren(QtWidgets.QLabel):
+   if not label.isVisibleTo(self.main) or not label.text():continue
+   bounds=label.fontMetrics().boundingRect(QtCore.QRect(0,0,label.width(),10000),QtCore.Qt.TextWordWrap,label.text())
+   assert bounds.height()<=label.height(),('Clipped caption',label.text(),bounds.height(),label.height())
+   origin=label.mapTo(self.main,QtCore.QPoint(0,0))
+   assert origin.x()>=0 and origin.x()+label.width()<=1600 and origin.y()>=26 and origin.y()+label.height()<=958,('Caption outside delivery crop',label.text())
+  im=QtGui.QImage(1600,1000,QtGui.QImage.Format_ARGB32);im.fill(QtCore.Qt.transparent)
   p=QtGui.QPainter(im);self.main.render(p,QtCore.QPoint(),QtGui.QRegion(),QtWidgets.QWidget.DrawChildren);p.end()
   assert im.pixelColor(500,500).alpha()==0,'Caption renderer touched CAD pixels'
   assert im.save(str(path))
+def interval_frames(a,b):
+ """Keep only complete capture periods inside a settled interval."""
+ return max(0,math.floor((b-a)*10+1e-6))
+
 def sequence(ch,frame_count):
  """Match the selected real GUI intervals, correcting only end-of-file allowance."""
- intervals=[z for src in ch.get('prior_takes',[]) for z in src['intervals']]+ch['intervals']
- counts=[round((b-a)*10) for a,b in intervals];counts[-1]+=frame_count-sum(counts);assert counts[-1]>=30
+ intervals=[z for src in ch.get('prior_takes',[]) for z in src['intervals']]+ch['intervals']+[z for src in ch.get('following_takes',[]) for z in src['intervals']]
+ counts=[interval_frames(a,b) for a,b in intervals];counts[-1]+=frame_count-sum(counts);assert counts[-1]>=30
  folder=O/'caption-panels';folder.mkdir(exist_ok=True);painter=Panels();files=[];cache={}
  for i,count in enumerate(counts):
   key=(cue(ch['number'],i),CARDS.get(ch['number'],'') if i>0 and (ch['number']!=1 or i==1) else '')

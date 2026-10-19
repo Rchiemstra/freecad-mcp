@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Validate delivered artifacts and retained engineering evidence; never start CAD."""
-import hashlib,json,re,struct,subprocess,zipfile
+import hashlib,json,re,struct,subprocess,zipfile,sys
 from collections import Counter
 from fractions import Fraction
 from pathlib import Path
@@ -54,12 +54,16 @@ for live,retained in [('stress_MPa','max_von_mises_MPa'),('displacement_mm','max
 live_clearance=json.loads((S/'replay-clearance.json').read_text())
 assert live_clearance['distance']['distance']>0 and live_clearance['common']['max_common_volume_mm3']==0
 live_narrow=json.loads((S/'replay-narrow.json').read_text());assert live_narrow['fixed']['max_common_volume_mm3']==0
+for key in ['original_pose','fixed_pose']:
+ pose=live_narrow[key]
+ assert all(abs(x)<1e-6 for vector in ['head_mm','target_mm'] for x in pose[vector]),pose
+ assert abs(pose['jaw_deg'])<1e-6 and abs(pose['cut_deg']-13)<1e-6,pose
 for name,expected in [('BaselineYellow_NeighbourLBerry',583.615),('BaselineYellow_NeighbourRBerry',583.602),('BaselineYellow_NeighbourLStem',3.195)]:
  assert abs(live_narrow['original'][name]['volume_mm3']-expected)<.001
 
 v=probe(O/'strawberry-picker.mp4');duration=float(v['format']['duration'])
 assert 180<=duration<=300,duration;assert len(v['chapters'])==7
-assert (v['streams'][0]['width'],v['streams'][0]['height'])==(1600,1000)
+assert (v['streams'][0]['width'],v['streams'][0]['height'])==(1600,932)
 assert Fraction(v['streams'][0]['avg_frame_rate'])==10
 media=json.loads((S/'media-report.json').read_text());assert len(media['chapters'])==7
 for ch in media['chapters']:
@@ -80,12 +84,26 @@ for n in range(1,8):
  for moment in ['start','one-third','middle','two-thirds','end']:
   name=f'{n:02d}-{moment}.png';assert hashlib.sha256((S/'qc'/name).read_bytes()).hexdigest()==review['chapter_samples_sha256'][name]
 gifs={}
-for name,budget in [('strawberry-picker.gif',5_000_000),('strawberry-picker-03-motion.gif',3_000_000),('strawberry-picker-05-clearance.gif',3_000_000),('strawberry-picker-06-fem.gif',3_000_000)]:
+for name,budget in [('strawberry-picker.gif',2_500_000),('strawberry-picker-03-motion.gif',2_500_000),('strawberry-picker-05-clearance.gif',2_500_000),('strawberry-picker-06-fem.gif',2_500_000)]:
  p=R/'assets'/name;q=probe(p);s=q['streams'][0]
  assert s['width']==960 and Fraction(s['avg_frame_rate'])==10,(name,s)
  assert p.stat().st_size<=budget,(name,p.stat().st_size);gifs[name]=p.stat().st_size
- for i in range(3):
-  sample=p.stem+'-'+str(i)+'.png';assert hashlib.sha256((S/'qc'/sample).read_bytes()).hexdigest()==review['gif_samples_sha256'][sample]
+profile=json.loads((S/'capture-profile.json').read_text())
+assert not profile['auto_save'] and not profile['popup_notifications'],profile
+assert profile['auto_saver_objects']>=1 and not profile['auto_save_timer_intervals_ms'],profile
+capture_log=(S/'freecad.log').read_text(errors='replace')
+for bad in ['BrokenPipeError','Failed to auto-save document','Too many opened non-intrusive']:
+ assert bad not in capture_log,'Capture transport/profile failure: '+bad
+# Always rerun the exhaustive gate; cached review receipts alone cannot pass.
+subprocess.run([sys.executable,str(R/'scripts/demo/verify_frames.py'),'--video'],check=True)
+audit=json.loads((S/'frame-audit/report.json').read_text())
+assert audit['result']=='PASS' and len(audit['files'])==5
+for file in audit['files']:
+ assert hashlib.sha256((R/file['name']).read_bytes()).hexdigest()==file['sha256']
+ assert file['frames_checked']>0 and not file['failures']
+ if file['name'].endswith('.gif'):
+  assert file['sample_frames'][0]==0 and len(file['sample_frames'])>=6
+  assert review['reviewed_gif_sha256'][Path(file['name']).name]==file['sha256']
 # The exact stage list deliberately excludes all runtime artifacts and the MP4.
 paths=['README.md']+[str(p.relative_to(R)) for p in sorted((R/'assets').glob('strawberry-picker*.gif'))]+[str(p.relative_to(R)) for base in [E,R/'scripts/demo'] for p in sorted(base.rglob('*')) if p.is_file() and '__pycache__' not in p.parts]
 assert all(not p.startswith('demo-out/') and not p.endswith('.mp4') for p in paths)
@@ -94,5 +112,5 @@ handoff=S/'handoff';handoff.mkdir(exist_ok=True)
 Path('/tmp/strawberry-demo-paths.txt').write_text('\n'.join(paths)+'\n')
 Path('/tmp/strawberry-demo-commit-msg.txt').write_text('docs: add strawberry picker MCP replay and verified print files\n\nReplace the demo section with a seven-chapter strawberry picker story.\nInclude condensed GIFs, retained Stage 2a geometry, native wrist bindings and print\nexports, per-check evidence, print notes and a practical bench test plan.\nRetain bounded replay scripts and disclose checkpoint regeneration,\nscripted motion, estimated forces and remaining engineering gaps.\nBind the visual wrist reference to every head pose, suppress the cursor,\nfit chapter cameras, shorten still label leaders and review four moments\nper chapter. Regenerate the video and all four bounded previews.\nRestore caption/readback panels in post and disclose that restoration.\n')
 (handoff/'strawberry-demo-commit-msg.txt').write_text(Path('/tmp/strawberry-demo-commit-msg.txt').read_text())
-report={'result':'PASS','video_seconds':duration,'chapters':7,'example_bytes':size,'gif_bytes':gifs,'stl_triangles':triangles,'stage_paths':len(paths),'review':{'result':review['result'],'video_samples':len(review['chapter_samples_sha256']),'stills':len(review['stills_sha256']),'gif_samples':len(review['gif_samples_sha256'])}}
+report={'result':'PASS','video_seconds':duration,'chapters':7,'example_bytes':size,'gif_bytes':gifs,'stl_triangles':triangles,'stage_paths':len(paths),'decoded_frames':{f['name']:f['frames_checked'] for f in audit['files']},'review':{'result':review['result'],'video_samples':len(review['chapter_samples_sha256']),'stills':len(review['stills_sha256']),'gif_samples':len(review['gif_frame_samples'])}}
 (S/'delivery-checks.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))

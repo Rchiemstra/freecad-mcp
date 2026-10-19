@@ -15,11 +15,12 @@ export FREECAD_MCP_ISOLATED_FREECAD=/workspace/build/debug/bin/FreeCAD
 export QT_QPA_PLATFORM=xcb PYTHONDONTWRITEBYTECODE=1 DISPLAY=:99
 export PYTHONPATH=/mcpfix/src DEMO_STAGE=stage3
 export FREECAD_MCP_FFMPEG=/demo/scripts/demo/ffmpeg-bounded.sh
-if ! command -v ffmpeg >/dev/null; then
+if ! command -v ffmpeg >/dev/null || ! command -v tesseract >/dev/null || ! python3 -c "import cv2,PIL" 2>/dev/null; then
  apt-get update -qq
- apt-get install -y -qq ffmpeg fonts-dejavu-core > /tmp/strawberry-apt.log 2>&1
+ apt-get install -y -qq ffmpeg fonts-dejavu-core tesseract-ocr python3-opencv python3-pil > /tmp/strawberry-apt.log 2>&1
 fi
 python3 scripts/demo/stage2_runtime.py setup --port 19879 > demo-out/stage3/setup.log 2>&1
+python3 scripts/demo/capture_profile.py "$FREECAD_MCP_PROFILE_DIR"
 Xvfb :99 -screen 0 1600x1000x24 > demo-out/stage3/xvfb.log 2>&1 &
 xpid=$!
 python3 scripts/demo/stage2_runtime.py launch --exit-status-file /demo/demo-out/stage3/exit.json --log-file /demo/demo-out/stage3/freecad.log /demo/scripts/demo/replay_bootstrap.FCMacro > demo-out/stage3/launcher.log 2>&1 &

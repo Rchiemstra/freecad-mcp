@@ -5,6 +5,9 @@ import json,traceback
 from pathlib import Path
 import FreeCAD as App,FreeCADGui as Gui
 from PySide import QtCore,QtGui,QtWidgets
+import sys
+sys.path.insert(0,"/demo/scripts/demo")
+from stress_legend import legend
 OUT=Path('/demo/demo-out/stage3')
 class ReplayDirector(QtCore.QObject):
  @QtCore.Slot()
@@ -16,6 +19,7 @@ class ReplayDirector(QtCore.QObject):
   for bar in self.main.findChildren(QtWidgets.QToolBar):bar.hide()
   for old in getattr(App,'_replay_directors',[])[:-1]:
    old.timer.stop();old.top.hide();old.bottom.hide();old.card.hide()
+   if hasattr(old,"legend"):old.legend.hide()
   def panel(x,y,w,h):
    p=QtWidgets.QFrame(self.main);p.setGeometry(x,y,w,h);p.setStyleSheet('background:#f0f2f3;');p.show();p.raise_();return p
   def label(parent,x,y,w,h,size,color='#263d46',bold=False):
@@ -25,11 +29,12 @@ class ReplayDirector(QtCore.QObject):
   self.chapter=label(self.top,40,4,1520,30,21,'#19717c',True)
   self.prompt=label(self.top,40,40,1520,74,29,'#263d46',True)
   self.proof=label(self.top,40,120,1520,55,25)
-  self.bottom=panel(0,802,1600,156)
+  self.bottom=panel(0,790,1600,168)
   self.activity=label(self.bottom,40,5,1520,42,25,'#19717c',True)
-  self.detail=label(self.bottom,40,48,1520,54,22)
-  self.disclosure=label(self.bottom,40,110,1520,40,18)
-  self.disclosure.setText('Scripted replay · real MCP tools on the companion FreeCAD fork · no language model during replay · waits trimmed · joined GUI takes · caption panels restored in post')
+  self.detail=label(self.bottom,40,44,1520,54,23)
+  self.disclosure=label(self.bottom,40,100,1520,68,28)
+  self.disclosure.setText('Scripted MCP replay · no live AI · waits trimmed · joined takes\nCAD capture · captions restored · forces estimated, not measured')
+  self.legend=legend(self.main);self.legend.hide()
   self.card=panel(1030,230,545,550);self.card.hide()
   self.cardlabel=label(self.card,20,10,505,530,23)
   self.timer=QtCore.QTimer(self);self.timer.timeout.connect(self.poll);self.timer.start(150)
@@ -72,6 +77,7 @@ class ReplayDirector(QtCore.QObject):
    assert pilot.Length<1e-6,'Wrist pilot detached from adapter'
    with (OUT/'wrist-poses.jsonl').open('a') as log:
     log.write(json.dumps({'head_mm':[float(d.Motion.get('Head'+a)) for a in 'XYZ'],'jaw_deg':float(d.Motion.get('JawAngle')),'cut_deg':float(d.Motion.get('CutAngle')),'wrist_mm':list(wrist.Base),'adapter_mm':list(adapter.Base),'offset_mm':delta.Length,'pilot_error_mm':pilot.Length,'rotation_error_rad':angle})+'\n')
+  if any(p.get('clash') for p in c['parts']):App._stage2_renderers[-1].highlight_clashes(c,d,v)
   v.redraw()
  def poll(self):
   path=OUT/'ui-command.json'
@@ -80,6 +86,7 @@ class ReplayDirector(QtCore.QObject):
   path.unlink()
   try:
    if c.get('shot'):
+    self.legend.setVisible(bool(c['shot'].get('fem')))
     area=self.main.findChild(QtWidgets.QMdiArea)
     (OUT/'mdi-windows.json').write_text(json.dumps({'target':c['shot']['document'],'label':App.getDocument(c['shot']['document']).Label,'windows':[w.windowTitle() for w in area.subWindowList()]}))
     actor=App._stage2_renderers[-1];actor.capture=lambda:None;actor.cmd=c['shot'];actor.prepare();self.current_shot=c['shot'];self.calm()

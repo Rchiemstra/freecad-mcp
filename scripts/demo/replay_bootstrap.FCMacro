@@ -1,6 +1,9 @@
 import FreeCAD as App, FreeCADGui as Gui
 from PySide import QtWidgets
 from pathlib import Path
+# Capture profile only: never interrupt a take with recovery saves or toasts.
+App.ParamGet('User parameter:BaseApp/Preferences/Document').SetBool('AutoSaveEnabled',False)
+App.ParamGet('User parameter:BaseApp/Preferences/NotificationArea').SetBool('NonIntrusiveNotificationsEnabled',False)
 Gui.activateWorkbench('PartWorkbench')
 m=Gui.getMainWindow();m.showMaximized()
 for w in m.findChildren(QtWidgets.QDockWidget)+m.findChildren(QtWidgets.QToolBar):w.hide()
@@ -8,4 +11,10 @@ p=App.ParamGet('User parameter:BaseApp/Preferences/View')
 for k in ('BackgroundColor','BackgroundColor2','BackgroundColor3'):p.SetUnsigned(k,0xf0f2f3ff)
 p.SetBool('ShowAxisCross',False)
 p.SetBool('UseNavigationAnimations',False);p.SetBool('Simple',True);p.SetBool('ShowNaviCube',False);p.SetBool('ShowAxisCross',False)
+import sys,json
+sys.path.insert(0,'/demo/scripts/demo')
+from capture_profile import capture_status
+status=capture_status()
+assert not status['auto_save'] and not status['popup_notifications'] and not status['auto_save_timer_intervals_ms'],status
+Path('/demo/demo-out/stage3/capture-profile.json').write_text(json.dumps(status))
 Path('/demo/demo-out/stage3/ready').write_text('ready')
