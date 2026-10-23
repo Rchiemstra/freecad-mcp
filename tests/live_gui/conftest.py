@@ -94,7 +94,8 @@ def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
     freecad_log = workdir / "freecad.log"
     exit_status = workdir / "freecad_exit.json"
     launcher = [sys.executable, "-u", str(MCP_ROOT / "scripts" / "start_freecad_isolated.py"),
-                "--exit-status-file", str(exit_status), "--log-file", str(freecad_log)]
+                "--rpc-wait-timeout", "180", "--exit-status-file", str(exit_status),
+                "--log-file", str(freecad_log)]
     if sys.platform.startswith("linux"):
         # FreeCAD's C stdout can retain messages across several tests, even
         # with PYTHONUNBUFFERED. Apply line buffering to the launcher and its

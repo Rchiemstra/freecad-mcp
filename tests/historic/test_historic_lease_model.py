@@ -87,16 +87,17 @@ def test_package_root_retains_only_recorded_safe_compatibility_exports() -> None
     # package root so earlier authority-corpse tests cannot change this surface.
     script = (
         "import sys; sys.path.insert(0, sys.argv[1]); "
-        "from tests.historic.test_historic_lease_model import "
-        "_assert_package_root_compatibility_exports; "
-        "_assert_package_root_compatibility_exports()"
+        "from tests.helpers.architecture_baseline import load_manifest\n"
+        + inspect.getsource(_assert_package_root_compatibility_exports)
+        + "\n_assert_package_root_compatibility_exports()"
     )
     completed = subprocess.run(
         [sys.executable, "-I", "-c", script, str(ROOT)],
         check=False,
         capture_output=True,
         text=True,
-        timeout=30,
+        # This is an isolation check, not an import-performance deadline.
+        timeout=180,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
