@@ -8,10 +8,16 @@ class ToggleAutoStartCommand:
         self._dependencies = dependencies or current_command_dependencies()
 
     def GetResources(self):
+        try:
+            checked = bool(
+                self._dependencies.load_settings().get("auto_start_rpc", False)
+            )
+        except Exception:  # noqa: BLE001 - keep commands available if settings fail
+            checked = False
         return {
             "MenuText": "Auto-Start Server",
             "ToolTip": "Automatically start the RPC server when FreeCAD launches.",
-            "Checkable": True,
+            "Checkable": checked,
         }
 
     def Activated(self, checked=0):

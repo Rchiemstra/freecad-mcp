@@ -1,228 +1,277 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/neka-nat-freecad-mcp-badge.png)](https://mseep.ai/app/neka-nat-freecad-mcp)
-
 # FreeCAD MCP
 
-This is the `Rchiemstra/freecad-mcp` fork, which controls FreeCAD through MCP.
-The original upstream project is
-[`neka-nat/freecad-mcp`](https://github.com/neka-nat/freecad-mcp).
+Let an AI assistant design, check and export real parametric FreeCAD models through
+MCP, the protocol that connects assistants to tools. Change a dimension and the
+linked features update. FreeCAD itself builds the geometry, measures it and
+verifies the result.
 
-## Demo
+![Strawberry picker: build, move, check and export](assets/strawberry-picker.gif)
 
-### Design a flange
+A small head holds a strawberry stem, cuts above the pad and withdraws the fruit.<br>
+A tight cluster reveals a clash; a shorter nose clears the checked samples.<br>
+Force estimates, a jaw strength check and print files prepare the next bench test.
 
-![demo](./assets/freecad_mcp4.gif)
+[See the seven demo chapters, evidence and limits](#the-strawberry-picker-demo).
 
-### Design a toy car
+## What it can do
 
-![demo](./assets/make_toycar4.gif)
+These are example requests for a connected assistant. Each combines several tools;
+the assistant chooses the calls and reads their results.
 
-### Design a part from 2D drawing
+### Model parts with sketches and constraints
 
-#### Input 2D drawing
+Build editable parts from outlines, dimensions, holes, rounded edges and patterns.
 
-![input](./assets/b9-1.png)
+> Make a mounting plate 60 × 40 × 5 mm, with four mounting holes and rounded edges.
 
-#### Demo
+**Comes back:** a FreeCAD Body with sketches, constraints and a feature history,
+plus sketch diagnostics and solid validation.
+**Tools:** `body_create`, `sketch_create`, `sketch_add_rectangle`, `sketch_add_circle`,
+`sketch_add_constraint`, `get_sketch_diagnostics`, `pad_feature`, `pocket_feature`,
+`fillet_feature`, `validate_geometry`.
 
-![demo](./assets/from_2ddrawing.gif)
+<details>
+<summary>Drawing and toy-car modelling examples</summary>
 
-This is the conversation history.
-https://claude.ai/share/7b48fd60-68ba-46fb-bb21-2fbb17399b48
+![Modelling from a drawing](assets/from_2ddrawing.gif)
 
-## Install addon
+![Toy car modelling](assets/make_toycar4.gif)
 
-FreeCAD Addon directory is
-* Windows: `%APPDATA%\FreeCAD\Mod\`
-* Mac:
-  * FreeCAD 1.1: `~/Library/Application\ Support/FreeCAD/v1-1/Mod/`
-  * FreeCAD 1.0: `~/Library/Application\ Support/FreeCAD/v1-0/Mod/`
-* Linux:
-  * Ubuntu: `~/.FreeCAD/Mod/` or `~/snap/freecad/common/Mod/` (if you install FreeCAD from snap)
-  * Debian: `~/.local/share/FreeCAD/Mod`
-  * Arch / CachyOS (FreeCAD 1.1 from `extra/freecad`): `~/.local/share/FreeCAD/v1-1/Mod/`
+</details>
 
-Please put `addon/FreeCADMCP` directory to the addon directory.
+### Change dimensions from a spreadsheet
+
+Link dimensions to named spreadsheet cells so one edit updates related features.
+
+> Put the plate width and hole spacing in a spreadsheet, then make the plate wider.
+
+**Comes back:** cell values, named parameters and expression bindings that remain
+in the editable model.
+**Tools:** `spreadsheet_create`, `spreadsheet_set_cells`, `spreadsheet_set_alias`,
+`set_expression`, `spreadsheet_get_cells`, `list_expressions`, `recompute_document`.
+
+![Spreadsheet-driven pick motion](assets/strawberry-picker-03-motion.gif)
+
+The picker's pick motion is a series of spreadsheet poses. It is a scripted
+preview, not a solved assembly or a dynamics simulation.
+
+### Assemble parts and connect joints
+
+Group components, fix a base in place and connect moving parts with joints.
+
+> Ground the bracket and connect the lever to its pivot with a revolute joint.
+
+**Comes back:** assembly components, a grounded joint, a revolute joint and solver
+status; an unsatisfied solve returns an error.
+**Tools:** `create_assembly`, `move_object`, `create_assembly_grounded_joint`,
+`create_assembly_joint`, `solve_assembly`.
+
+### Measure fit, clearance and estimated mass
+
+Measure gaps and overlaps, and use model volumes with material inputs to estimate mass.
+
+> Check the head against neighbouring fruit at these poses, then estimate its mass.
+
+**Comes back:** distances, volumes, centres of mass and overlap flags for each
+sampled pose; a calculated mass depends on the supplied densities and fill assumptions.
+Sampled clearance does not prove a collision-free continuous path.
+**Tools:** `measure_distance`, `measure_volume`, `bounding_box`, `center_of_mass`,
+`common_volume_along_path`, `spreadsheet_get_cells`, `execute_code`.
+
+![Original clash and shorter nose](assets/strawberry-picker-05-clearance.gif)
+
+### Check strength with FEM
+
+Use finite element analysis (FEM) to estimate stress and bending under a stated load.
+
+> Fix the jaw at its pivot bore and check a 10 N load on the pad backing.
+
+**Comes back:** maximum von Mises stress, displacement, node count and solver files,
+or a setup or solver error. The analysis needs geometry, material, mesh, supports,
+a load and an available CalculiX solver; see the [setup example](examples/cantilever_fem.py).
+**Tools:** `create_object`, `run_fem_analysis`, `execute_code`.
+
+![Jaw FEM result](assets/strawberry-picker-06-fem.gif)
+
+### Catch edits that look successful but failed
+
+Check for empty features, cuts that removed no material, broken expressions and misplaced references.
+
+> This pocket says it is up to date, but the hole is missing. Find what went wrong.
+
+**Comes back:** feature direction and geometry diagnostics, recompute errors and
+shape validity. Feature checks reject zero material change and the wrong sign of
+material change; see the [regression tests](tests/test_feature_material_delta.py).
+**Tools:** `diagnose_pocket`, `get_recompute_log`, `diagnose_parametric`,
+`preview_attachment`, `placement_audit`, `validate_geometry`, `pad_feature`, `pocket_feature`.
+
+### Inspect, import and export models
+
+Show the model from useful angles, bring in existing parts and write files for CAD or printing.
+
+> Import the wrist STEP, show the head beside it, then export the head as STEP and STL.
+
+**Comes back:** imported objects, viewport images or view-sequence frames, and
+exported files. STEP and BREP import and export are available; STL is an export tool.
+Native FreeCAD projects can also be opened and saved.
+**Tools:** `import_step`, `import_brep`, `get_view`, `save_view_sequence`, `set_color`,
+`export_step`, `export_brep`, `export_stl`, `open_document`, `save_document`.
+
+
+### Keep checkpoints and coordinate assistants
+
+Save a checkpoint before an experiment, undo edits and use document leases to coordinate writers.
+
+> Take a snapshot before changing the jaw. Keep this document leased until it is checked and saved.
+
+**Comes back:** a snapshot ID, restore or undo results, lease ownership and final
+save/validation status. Leases coordinate cooperative MCP writers; they do not
+sandbox Python or macros. Document rollback does not undo exported files.
+**Tools:** `snapshot`, `restore`, `undo`, `redo`, `acquire_document_lock`,
+`get_document_lock`, `finalize_document_edit`.
+
+### Work remotely and run checks without a window
+
+Connect to FreeCAD on another machine and run read-only checks in a separate headless FreeCADCmd process.
+
+> On my remote workstation, check these poses in the read-only worker and report overlaps.
+
+**Comes back:** runtime identity, worker availability and analysis results from a
+snapshot of the model. The live document is not changed by worker analysis.
+Viewport capture needs a GUI; remote setup is in [Advanced](#advanced).
+**Tools:** `get_runtime_info`, `get_worker_status`, `execute_code`,
+`common_volume_along_path`, `cancel_worker_job`.
+
+## The strawberry picker demo
+
+The head has ten printed parts, two servo drives and a replaceable 39 mm blade.
+The retained native model includes the wrist reference, fruit cluster and tray.
+Results below are rounded from the retained evidence.
+
+| Chapter | What happens | Retained result |
+| --- | --- | --- |
+| 1. Build from a spreadsheet | Regenerate the saved parametric design. | 530 dimension expression readbacks; 0 empty bindings. |
+| 2. Enough force? | Compare calculated force with 10 N grip and 15 N cut targets. | Minimum clamp 23.138 N; cut 33.417 N. |
+| 3. One pick, slowly | Approach, clamp, cut, withdraw and move toward the tray. | Spreadsheet-driven poses; tray transfer is an unvalidated placement preview. |
+| 4. Check the space | Check the nominal 15 mm cluster. | Minimum gaps: 5.624 mm on approach; 4.073 mm at clamp, cut and withdrawal; sampled overlap 0 mm³. |
+| 5. Tighter berries | Expose the original clash at nominal 10 mm spacing, then shorten the nose by 4 mm. | Original fruit overlaps 583.615 / 583.602 mm³; revised minimum gap 0.693 mm and sampled overlap 0 mm³. |
+| 6. Check the jaw | Solve the changed jaw with a fixed M3 bore and a 10 N pad load. | 1.367 MPa stress; 0.016613 mm displacement; 367 nodes / 1,063 elements. |
+| 7. Ready for a bench test | Estimate mass, list parts and export files. | 83.84 g at the retained fill convention; 130.38 g all-solid envelope; assembly STEP and ten part STEP/STL pairs. |
+
+**Prompts in the replay**, word for word:
+
+1. Build a small head that picks strawberries by the stem. Use a spreadsheet for its dimensions.
+2. Can it grip with 10 N and cut with 15 N? Show the force budget.
+3. Show approach, clamp, cut, withdraw, then move the fruit to the tray.
+4. Measure the gaps and check whether any parts overlap the neighbouring fruit.
+5. The berries are only 10 mm apart. Show the clash, reshape the nose and check again.
+6. Run a strength check on the jaw with a 10 N load at the pad.
+7. What does it weigh? List the parts and export files I can inspect and print.
+
+Each prompt maps to recorded MCP tool calls; the arguments and results are in
+[verification.json](examples/strawberry-picker/verification.json).
+
+**What the replay shows:** real MCP calls on the companion FreeCAD fork, with no
+language model during replay. It regenerates a retained checkpoint rather than
+designing from a fresh conversation. GUI takes are joined at fixed poses and chapter
+boundaries; idle waiting is trimmed. Caption/readback panels are restored in post;
+CAD viewport pixels come from the real GUI capture.
+
+**What remains to test:** forces come from datasheets and FEM, not measurements.
+No physical grip or cutting test has been done. There are 24 approach/withdrawal
+samples across the 15/10 mm settings and eight mechanism poses; pin contacts are
+excluded from unintended-overlap checks. They do not prove continuous clearance.
+The nominal 10 mm setting gives about 9.802 mm actual fruit spacing.
+Tray transfer does not simulate contact, dropping or gravity.
+
+The jaw analysis uses coarse isotropic PLA, E = 3500 MPa, Poisson ratio 0.36 and
+50 MPa yield strength. The retained mesh is re-solved for the shown result; a fresh
+coarse remesh gave 1.379 MPa and 0.016680 mm. Neither establishes mesh convergence,
+printed layer strength or fatigue life. Sliced mass and cable strain relief remain
+unresolved; the controller and rear connector are outside the modelled head.
+
+The local replay lasts **3:51.3**. GIF previews are 960 px wide at 10 fps:
+overview 2.17 MB; motion 1.71 MB; tight cluster 0.24 MB; FEM 0.20 MB.
+
+[Design, print notes, remaining gaps and bench test plan](examples/strawberry-picker/README.md) ·
+[Prompts](examples/strawberry-picker/prompts.md) ·
+[Tool arguments and results](examples/strawberry-picker/verification.json) ·
+[Stage checks](examples/strawberry-picker/evidence/stage2-checks.json) ·
+[FEM evidence](examples/strawberry-picker/evidence/fem.json) ·
+[Replay chapter record](examples/strawberry-picker/evidence/replay-media.json) ·
+[Native model](examples/strawberry-picker/strawberry-head.FCStd) ·
+[Assembly STEP](examples/strawberry-picker/assembly.step) ·
+[Part files](examples/strawberry-picker/parts/) ·
+[Replay instructions](scripts/demo/README.md).
+
+## Quick start
+
+### 1. Install the package and matching addon
+
+Use Python 3.12 or newer, FreeCAD and an MCP client. The client configuration below
+also needs `uv` on your PATH. Typed modelling requires the native mutation APIs used
+by this checkout; a build without them is refused. See the
+[native API qualification notes](doc/body-create-reference.md).
+
+Install the package and copy the addon from the same checkout so their build IDs match:
 
 ```bash
 git clone https://github.com/Rchiemstra/freecad-mcp.git
 cd freecad-mcp
+python -m pip install -e .
+```
 
-# For Linux (Ubuntu/Debian)
+Copy the entire `addon/FreeCADMCP` directory into your active FreeCAD addon directory.
+The paths below are the platform locations listed for this project:
+
+| Platform / package | Addon directory |
+| --- | --- |
+| Windows | `%APPDATA%\FreeCAD\Mod\` |
+| macOS, FreeCAD 1.1 | `~/Library/Application Support/FreeCAD/v1-1/Mod/` |
+| macOS, FreeCAD 1.0 | `~/Library/Application Support/FreeCAD/v1-0/Mod/` |
+| Ubuntu | `~/.FreeCAD/Mod/` |
+| Ubuntu Snap | `~/snap/freecad/common/Mod/` |
+| Debian | `~/.local/share/FreeCAD/Mod/` |
+| Arch / CachyOS, FreeCAD 1.1 from `extra/freecad` | `~/.local/share/FreeCAD/v1-1/Mod/` |
+
+For example, on Ubuntu:
+
+```bash
+mkdir -p ~/.FreeCAD/Mod/
 cp -r addon/FreeCADMCP ~/.FreeCAD/Mod/
+```
 
-# For Linux (Arch/CachyOS, FreeCAD 1.1 from extra/freecad)
+On Arch / CachyOS with that FreeCAD 1.1 package:
+
+```bash
 mkdir -p ~/.local/share/FreeCAD/v1-1/Mod/
 cp -r addon/FreeCADMCP ~/.local/share/FreeCAD/v1-1/Mod/
+```
 
-# For macOS (FreeCAD 1.1)
+On macOS with FreeCAD 1.1:
+
+```bash
+mkdir -p ~/Library/Application\ Support/FreeCAD/v1-1/Mod/
 cp -r addon/FreeCADMCP ~/Library/Application\ Support/FreeCAD/v1-1/Mod/
 ```
 
-Install the Python package and copy the addon from this same checkout so their
-build IDs match:
+### 2. Start the FreeCAD RPC server
 
-```bash
-python -m pip install -e .
-```
+Restart FreeCAD. Select **MCP Addon** in the workbench list, then click
+**Start RPC Server** in the **FreeCAD MCP** toolbar.
 
-When you install addon, you need to restart FreeCAD.
-You can select "MCP Addon" from Workbench list and use it.
+![Select MCP Addon and start the RPC server](assets/start-rpc-server.gif)
 
-![workbench_list](./assets/workbench_list.png)
+Report view confirms: `RPC Server started at 127.0.0.1:9875.`
 
-And you can start RPC server by "Start RPC Server" command in "FreeCAD MCP" toolbar.
+Optional: enable **FreeCAD MCP → Auto-Start Server** to start it on future launches.
+The default RPC endpoint is `127.0.0.1:9875`.
 
-![start_rpc_server](./assets/start_rpc_server.png)
+### 3. Connect your assistant
 
-### Auto-Start RPC Server
-
-By default, the RPC server must be started manually each time FreeCAD opens. To start it automatically:
-
-1. Open the **FreeCAD MCP** menu (switch to the MCP Addon workbench first)
-2. Check **Auto-Start Server**
-
-The setting is saved to `freecad_mcp_settings.json` and persists across sessions. On the next FreeCAD launch, the RPC server will start automatically once the application finishes loading.
-
-You can disable it at any time by unchecking **Auto-Start Server** in the same menu.
-
-## Per-document agent leases and isolated development
-
-FreeCAD MCP supports renewable per-document write leases. In `enforce` mode,
-each cooperative mutation must belong to the authenticated MCP runtime, name an
-explicit live document, carry that document's unguessable lease credential,
-and pass authorization again on FreeCAD's GUI thread. Ownership, current
-operation, heartbeat age, dirty state, and recovery errors remain visible in
-FreeCAD between MCP calls.
-
-The addon setting `document_lease_mode` has three compatibility levels:
-
-- `off` preserves an existing profile whose two legacy lock booleans were
-  both false. Recognized active v2 foreign sidecars still block writes.
-- `observe` is the default for a newly created ordinary profile. It displays
-  lease state and warnings without requiring legacy callers to acquire a
-  lease.
-- `enforce` requires a UUID profile identity, an owner-only authentication
-  secret, protocol v2, and exact lease credentials for every mutation.
-
-Existing settings are migrated explicitly: both legacy booleans true becomes
-`enforce`, lock enabled without enforcement becomes `observe`, and all other
-legacy combinations remain `off`. Malformed or unknown policy values prevent
-the RPC server from starting instead of silently selecting a weaker mode.
-
-Task descriptions stay in the addon's process-local status registry by
-default; schema-v2 sidecars write an empty `task_summary`. Administrators who
-accept the metadata exposure may set `persist_task_summary_in_sidecar=true`;
-only a sanitized, single-line summary of at most 256 characters is then
-persisted. Raw lease tokens and token fingerprints are never exposed through
-public status.
-
-A normal agent workflow acquires once, performs typed modelling calls against
-the returned document session, then uses typed finalization instead of raw
-Python save code:
-
-```text
-acquire_document_lock({document_name: "Bracket"}, "Body → Sketch → Pad", agent_id)
-create_object(PartDesign::Body) / sketch_create / sketch_add_constraint / pad_feature
-finalize_document_edit(
-  {document_session_uuid: "<acquired session UUID>"},
-  save_mode="save",
-  validation_profile="default"
-)
-```
-
-The MCP process keeps the one-time token in memory, renews it automatically,
-and attaches the exact credential to each scoped mutation. A failed mutation
-or save retains the lease in a visible error state for retry or local recovery;
-it is never reported as a clean release.
-
-For development beside an existing FreeCAD/MCP session, create the private
-manifest-driven instance:
-
-```powershell
-python scripts/setup_isolated_profile.py
-python scripts/setup_cursor_mcp_isolated.py
-python scripts/start_freecad_isolated.py
-```
-
-These scripts add or update only Cursor's `freecad-isolated` entry. They do not
-modify, connect to, stop, or reuse the existing `freecad` entry or default
-`:9875` listener. The private profile uses a persistent random identity, a
-separate owner-only 256-bit authentication secret, RPC port 9876, and
-`document_lease_mode=enforce`. The launcher accepts readiness only after the
-profile-secret-authenticated v2 handshake proves the exact launched PID,
-profile, runtime UUID, endpoint, protocol, process start, version, and build—not
-merely a successful `ping` or an unauthenticated status response.
-
-> **Security boundary:** leases prevent accidental cooperative MCP conflicts;
-> they are not a FreeCAD or Python sandbox. Python console code, macros,
-> third-party C++ commands, or a malicious process running as the same OS user
-> can bypass pre-mutation checks. Unexpected changes are detected and fence the
-> agent, but absolute in-process immutability requires a FreeCAD core API. Keep
-> RPC on loopback or use an encrypted tunnel/TLS proxy for remote access.
-
-Documentation:
-
-- [Runtime and build identity](doc/runtime-identity.md)
-- [Structured MCP results](doc/structured-results.md)
-- [Telemetry](doc/telemetry.md)
-- [Document health](doc/document-health.md)
-- [Transactions and rollback](doc/transactions-and-rollback.md)
-- [Request lifecycle and MCP Tasks](doc/request-lifecycle.md)
-- [Benchmarking](doc/benchmarking.md)
-- [Execute-code migration](doc/execute-code-migration.md)
-- [Lease lifecycle and GUI behavior](doc/document-leases.md)
-- [Sidecar schema v2](doc/document-lease-sidecar-v2.md)
-- [Isolated instance setup and manifest](doc/isolated-instance.md)
-- [Crash and stale-lock recovery](doc/lease-recovery.md)
-- [Lease client scenarios and sequence diagrams](doc/lease-client-scenarios.md)
-- [Security model and limitations](doc/lease-security.md)
-
-## Setting up Claude Desktop
-
-Pre-installation of the [uvx](https://docs.astral.sh/uv/guides/tools/) is required.
-
-And you need to edit Claude Desktop config file, `claude_desktop_config.json`.
-
-For user.
-
-```json
-{
-  "mcpServers": {
-    "freecad": {
-      "command": "uvx",
-      "args": [
-        "freecad-mcp"
-      ]
-    }
-  }
-}
-```
-
-If you want to save token, you can set `only_text_feedback` to `true` and use only text feedback.
-
-```json
-{
-  "mcpServers": {
-    "freecad": {
-      "command": "uvx",
-      "args": [
-        "freecad-mcp",
-        "--only-text-feedback"
-      ]
-    }
-  }
-}
-```
-
-
-For developer.
-First, you need clone this repository.
-
-```bash
-git clone https://github.com/Rchiemstra/freecad-mcp.git
-cd freecad-mcp
-python -m pip install -e .
-```
+For Claude Desktop, add this entry to `claude_desktop_config.json`. Replace the
+example directory with the absolute path to your checkout. Other clients that
+accept an `mcpServers` configuration can use the same command and arguments.
 
 ```json
 {
@@ -240,175 +289,44 @@ python -m pip install -e .
 }
 ```
 
-## Remote Connections
+This runs the checked-out package beside the matching addon. Add
+`--only-text-feedback` after `freecad-mcp` to request text feedback only.
+For a profile in lease `enforce` mode, use its authentication/manifest settings;
+see [isolated instance setup](doc/isolated-instance.md).
 
-By default the RPC server does not accept remote connections and listens on
-loopback. HMAC authenticates protocol-v2 messages but does not encrypt session
-or lease credentials. In `enforce` mode, a plain non-loopback bind is rejected
-by default. Keep FreeCAD bound to loopback and expose it through an SSH tunnel
-or TLS proxy.
+Ask the assistant to call `get_runtime_info` first, then try:
 
-The legacy direct-network workflow below is available only for `off`/`observe`
-profiles (or an administrator's explicit unsafe transport override). It should
-be used only on a trusted, isolated network:
+> Create a document called Plate. Make a 60 × 40 × 5 mm plate with a constrained sketch. Check that the solid is valid and show an isometric view.
 
-### 1. Enable remote connections in FreeCAD
+## Full tool reference
 
-In the **FreeCAD MCP** toolbar for an `off`/`observe` profile:
+[All 174 registered tools, grouped with descriptions and source links](doc/tools.md).
+The reference includes deprecated and retired entries and labels their limits.
+For mechanical parts, use Body → sketch → constraints → feature → recompute →
+validate, keeping an editable PartDesign history. Use primitives for reference
+geometry or when the request calls for them.
 
-1. Check **Remote Connections** — the RPC server will bind to `0.0.0.0` (all interfaces) on the next restart. For security reasons, it only accepts connections from the IP addresses or CIDR subnets specified in the **Allowed IPs** field. By default this is `127.0.0.1`.
-2. Click **Configure Allowed IPs** and enter a comma-separated list of IP addresses or CIDR subnets that are allowed to connect, e.g.:
+## Advanced
 
-   ```
-   192.168.1.100, 10.0.0.0/24
-   ```
+- **Several assistants:** renewable per-document leases coordinate writes. New ordinary
+  profiles default to `observe`; `enforce` requires authenticated credentials.
+  [Lease lifecycle](doc/document-leases.md) · [Isolated profiles](doc/isolated-instance.md).
+- **Remote and headless:** use a tunnel to the loopback RPC endpoint. Read-only
+  worker checks use FreeCADCmd snapshots; images need a GUI.
+  [Connection and worker setup](doc/advanced.md#remote-connections-and-headless-checks).
+- **Git sidecars:** optionally invoke the separately installed `freecad-git` exporter
+  after a successful save. [Sidecar setup](doc/advanced.md#git-sidecar).
+- **Contributing and testing:** run the Docker test lanes and use native qualification
+  for branch-specific APIs. [Test commands and scope](doc/advanced.md#testing).
 
-   `127.0.0.1` is always the default. Invalid entries are rejected with an error dialog. Restart the RPC server after changing these settings.
+[Documentation index](doc/README.md) covers runtime identity, structured results,
+document health, rollback, recovery, telemetry and benchmarks.
 
-### 2. Point the MCP server at the remote host
+## Acknowledgements
 
-Pass the canonical `--rpc-host` option with the IP address or hostname of the
-machine running FreeCAD (`--host` remains a deprecated alias):
+This fork started from [neka-nat/freecad-mcp](https://github.com/neka-nat/freecad-mcp).
+Thank you to that project and its contributors for the foundation.
 
-```json
-{
-  "mcpServers": {
-    "freecad": {
-      "command": "uvx",
-      "args": [
-        "freecad-mcp",
-        "--rpc-host", "192.168.1.100"
-      ]
-    }
-  }
-}
-```
+## License
 
-The `--host` value is validated on startup — it must be a valid IPv4/IPv6 address or hostname.
-
-## Tools
-
-> **Default modelling workflow.** For mechanical parts, build a real PartDesign feature
-> history — `body_create` → `sketch_create`/`sketch_attach` → geometry → constraints →
-> `get_sketch_diagnostics` → `pad_feature`/`pocket_feature` (pass `body_name`) →
-> `recompute_document` → verify. The parts library and `create_object` primitives
-> (`Part::Box`/`Cylinder`/`Cut`/`Fuse`) are for reference/non-parametric geometry, imported
-> assets, temporary validation solids, or an explicitly requested primitive — not the
-> default. See the `asset_creation_strategy` prompt.
-
-### Documents & objects
-* `create_document`, `list_documents`, `close_document`
-* `get_document_tree` for lightweight structure; `get_objects` for paginated Name/Label/TypeId listing; `get_object` for a detailed single-object dump
-* `create_object`, `edit_object`
-* `delete_object` — deletes without silently orphaning dependents (P6): `recursive=True` removes dependents first, `force=True` deletes only the object and reports the orphans left, otherwise it refuses and lists them.
-* `execute_code`, `execute_code_async`, `recompute_document`, `undo`, `redo`, `reload_document`
-* `get_recompute_log` — per-object recompute state (read-only); includes expression bindings when present.
-
-### Parametric (Spreadsheet + expressions)
-* `spreadsheet_create`, `spreadsheet_set_cells`, `spreadsheet_get_cells`, `spreadsheet_set_alias`, `spreadsheet_list_aliases`
-* `set_expression`, `clear_expression`, `list_expressions` — bind props like `Constraints[i]` / `Length` to `<<Sheet>>.Alias`
-* `body_create`, `body_set_tip`, `sketch_attach` — Body → Sketch on `XY_Plane` → Pad/Pocket recipe
-* `sketch_edit_constraint` — edit dimensional constraints by stable `name` (preferred) or index
-* `diagnose_parametric` — invalid objects, expression issues, sketch constraint summaries
-* `sketch_constrain_distance` / `sketch_constrain_radius` / `sketch_add_constraint` accept optional `name` for stable identity after trim/fillet
-
-### Sketching
-* `sketch_create`, `sketch_add_geometry`, `sketch_add_constraint`
-* `sketch_delete_constraint` — delete a validated batch by index and/or stable
-  name in one transaction; useful for removing multiple Block constraints
-  without index-shift errors.
-* `sketch_delete_geometry` — delete a validated batch of geometry indices and
-  report dependent constraints removed by FreeCAD.
-* `sketch_add_line`, `sketch_add_circle`, `sketch_add_arc`, `sketch_add_rectangle`
-* `sketch_add_polyline`, `sketch_add_bspline`, `sketch_add_bspline_through_points`, `sketch_add_bezier`, `sketch_add_ellipse`, `sketch_add_arc_of_ellipse`, `sketch_add_slot`, `sketch_add_regular_polygon`, `sketch_add_parametric_curve`, `sketch_import_points`, `sketch_toggle_construction`
-* `sketch_trim`, `sketch_extend`, `sketch_split`, `sketch_fillet`, `sketch_offset`, `sketch_symmetry`
-* `sketch_constrain_*` — coincident, horizontal, vertical, distance, radius, equal, parallel, perpendicular, tangent.
-* `get_sketch_geometry`, `get_sketch_diagnostics`
-
-### PartDesign features
-* `pad_feature`, `pocket_feature`, `revolve_feature`, `loft_feature`, `sweep_feature`, `helical_sweep_feature`
-* `fillet_feature`, `chamfer_feature`
-* `linear_pattern_feature`, `polar_pattern_feature`, `mirror_feature`
-* `create_spur_gear`
-* Pad/pocket/loft/sweep append a silent-build assertion (I2) so a wrong-direction or misplaced build surfaces as a clear failure instead of being marked "Up-to-date".
-
-### Booleans
-* `boolean_union`, `boolean_difference`, `boolean_intersection`
-
-### Gears
-* `create_involute_gear`, `create_helical_gear`, `compute_gear_geometry`, `check_gear_pair`
-
-### Measurement & transforms
-* `measure_distance`, `measure_angle`, `measure_area`, `measure_volume`
-* `bounding_box`, `center_of_mass`, `validate_geometry`
-* `translate`, `rotate`, `scale`
-
-### IO
-* `export_step`, `import_step`, `export_stl`, `export_brep`, `import_brep`, `set_color`
-
-### Assembly
-* `create_assembly`, `create_assembly_joint`, `create_assembly_grounded_joint`, `solve_assembly`
-* `build_path_wire`, `sweep_pipe`
-* `create_part_container`, `create_subshape_binder`, `create_datum_plane`, `move_object`
-* `get_document_tree`, `sketch_add_external_projection` — pass
-  `allow_gui_geometry_loop=true` to explicitly admit its bounded
-  assembly-aware preflight on the GUI thread.
-* `create_assembly_joint` warns when a referenced component's body has cross-body datums attached (M4 / P5 guardrail).
-
-### FEM Analysis
-* `run_fem_analysis` — runs the CalculiX solver on an existing `Fem::FemAnalysis` and returns summary results (max von Mises stress, max displacement, node count, working directory). Auto-creates a `SolverCcxTools` if the analysis has none. See [`examples/cantilever_fem.py`](examples/cantilever_fem.py) for an end-to-end usage example.
-
-### Diagnostics (read-only guards for silent FreeCAD behaviours)
-* `get_runtime_info` — exact MCP package, addon, FreeCAD, RPC protocol, profile, and compatibility identity. Run this first when diagnosing the wrong checkout or a stale addon copy.
-* `check_rpc_sync` — round-trip a unique nonce through the GUI queue. Run it after an `execute_code` timeout or before trusting follow-up model checks; a timeout or nonce mismatch means work should stop until the RPC queue is healthy.
-* `get_request_status`, `cancel_request` — query and cooperatively cancel the exact authenticated request after a timeout. Heavy calls also support negotiated MCP Tasks; clients without that extension keep the synchronous behavior.
-* `preview_attachment` — inspect a datum's attachment and the cross-body placement-drop risk (P1).
-* `find_faces`, `find_edges` — locate sub-shapes by geometry (type / normal / centre / radius), removing face/edge-index fragility.
-* `face_normal`, `edge_axis` — global normal/axis of a single sub-shape, avoiding the Direction-vs-Axis trap (P8).
-* `placement_audit` — per Body/Part placement + `getGlobalPlacement()` + cross-body datums referencing it (M3).
-* `relink_references` — re-point every reference from one object to another, making rebuilds non-destructive (M5).
-* `capture_state`, `geometric_diff` — structured geometric diff as a text-only fallback when a viewable image can't be returned (I10 / P10).
-* Every mutating tool appends a compact recompute log (I3) so orphaned/Invalid objects surface immediately.
-
-### Snapshot / restore
-* `snapshot` — save the current document into a ring buffer of the last 5 states.
-* `restore` — restore a snapshot in place (latest, or by id). A bad step is one call to undo (I7 / P12).
-
-### Views & parts library
-* `get_view` — returns an `ImageContent` screenshot when available; otherwise a compact geometric state of the focus object (P10 / I10 fallback).
-* `insert_part_from_library`, `get_parts_list`
-
-## Git sidecar integration (optional)
-
-When `generate_git_sidecar_after_save` is `true` in `freecad_mcp_settings.json`, the MCP add-on invokes the standalone `freecad-git` tool after a successful `.FCStd` save. Sidecar generation is opt-in, non-fatal to the save, and does not duplicate serialization logic.
-
-```json
-{
-  "generate_git_sidecar_after_save": true
-}
-```
-
-Requires `freecad-git` to be installed (`pip install -e tools/freecad_git` from the parent FreeCAD repository).
-
-## Testing (Docker only)
-
-Run the suite via Docker Compose from this directory — do not rely on host `pytest` for sign-off (e2e needs FreeCADCmd):
-
-```bash
-docker compose run --rm unit   # mock-based ops / template generation
-docker compose run --rm e2e    # live FreeCADCmd parametric + regression tests
-docker compose run --rm core   # FreeCAD core C++ repro markers
-docker compose run --rm benchmark # 20 task KPI report and quality gates
-```
-
-The benchmark writes `benchmark-results.json` and `benchmark-report.md`.
-Telemetry is one JSONL file per process/session under `debug_logs/` by default;
-set `FREECAD_MCP_DEBUG_LOG_DIR` to choose another directory.
-
-## Contributors
-
-<a href="https://github.com/neka-nat/freecad-mcp/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=neka-nat/freecad-mcp" />
-</a>
-
-Made with [contrib.rocks](https://contrib.rocks).
+MIT. See [LICENSE](LICENSE).

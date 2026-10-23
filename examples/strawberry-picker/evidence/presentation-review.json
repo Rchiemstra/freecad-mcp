@@ -1,0 +1,304 @@
+{
+  "result": "PASS",
+  "method": "Personally inspected eight decoded frames per final GIF, including frame zero and the final frame (32 frames); additionally inspected motion frame 106 and hero frame 167. Inspected all 35 final chapter QC images (five per chapter). Retained still images are unchanged from the prior review.",
+  "findings": {
+    "capture": "Recording transport uses a persistent session and 600 s HTTP deadline. Auto-save is disabled in user.cfg before GUI startup; the actual AutoSaver object has no registered timers. Popup notifications are disabled in the isolated capture profile.",
+    "provenance": "A legacy live auto-save timer was discovered despite its preference being disabled. Its failure occurred during clamp; the complete clamp was re-recorded after a clean restart with zero timers. Clean settled approach, cut, withdrawal and tray samples were retained. GUI takes join at matching fixed poses; no error is covered by painted viewport pixels.",
+    "openings_and_chrome": "All four first frames are readable and representative. Menu/status chrome is cropped, the extra preview stamp removed, and no dark chapter fades remain. The hero opens with the real fully revealed checkpoint hold at its original camera.",
+    "motion": "Low oblique close framing exposes the gold jaw and blade mechanism through cut and withdrawal. The cut fruit visibly leaves the cluster. A labelled fixed wider shot shows the tray preview.",
+    "clash": "The original archived head parts and surrounding head context are shaded and opaque. Actual intersection BReps are highlighted yellow in the native CAD viewport. The retained fix has no yellow intersections and uses the identical camera. Both captured head/target poses are verified at the origin.",
+    "fem": "The stress view has a readable von Mises scale, 0.000 to 1.367 MPa, using the same colormap and solver maximum as the nodal field.",
+    "labels": "The shorter two-line disclosure is larger and readable at 960 px; prompts, readbacks, result numbers and stated limits remain visible. Every generated caption is also checked against its widget bounds and delivery crop."
+  },
+  "chapter_samples_sha256": {
+    "01-start.png": "9fac93ee50e28a77e955dc37b9f77e80b272f1de12fd04c212149d4c0c232d43",
+    "01-one-third.png": "827cd2c97934379bd6408b12c23dd6051098ccdece269a04123c77d868969914",
+    "01-middle.png": "c38b57a7186254ce20ae21a64bf787f7318dccbcde5632f5b1b6030c95456060",
+    "01-two-thirds.png": "c59dbad4fc0fd24e64d65e73636a90aafe617a8e75a02deaed8fd268bf52a9dc",
+    "01-end.png": "c60bfe00defee4ba933a53204cb0921d9bd935c55c7552abb6a27f7d79f339b6",
+    "02-start.png": "1fd1f086ead2071dd71dc3500d681694ad5adebff44165712235e4aafd3870cf",
+    "02-one-third.png": "08449054d401fbde8bbf3081c741efbfc14c38582fe7da093eefa3d0635f857e",
+    "02-middle.png": "26761f9bd2cc337721faa2780f3645fd3c955b11107d85aa389433b512257988",
+    "02-two-thirds.png": "afad77d9f17206301ca59a0bd8d10540a52199885a2edc902fc37118c129130f",
+    "02-end.png": "608916d81030838bfe19e87a90cf4148ac73054ef1ca0cdfcff8cc3df3e97c32",
+    "03-start.png": "706e061a462dbbb3040406ce97795ddacd5bbca2a18b407f3b04367a8c97d7f6",
+    "03-one-third.png": "088359f2d20e8263c31a7e65d5bf4ad955910d2ce5adb8143f3867d78f76cd1b",
+    "03-middle.png": "67da764b431362446b658a38ed5dd811f5da33ce1f20a4b41e9c993f98bc5b9d",
+    "03-two-thirds.png": "4c9773ad834638455eb1557621c5a539241ec7ba85922f6303210346ad1c1f45",
+    "03-end.png": "fec2aa49be8147185dfce4f5d72ee118a1e2a185687cec4aa7029d5e4f86b4e5",
+    "04-start.png": "a74c80c227e59578da46a5f2bf45a8e1c72d0644af07d48a83906353a945246d",
+    "04-one-third.png": "a747b3b915a6835b45bdd5babc37f8a1f1a685c12daca2e5ab3e6acf71ae3cf7",
+    "04-middle.png": "b6bd143d2f896366749c989a5f1c4923827881bec21b58340990e83fb5d33f3c",
+    "04-two-thirds.png": "eb7e2fbd9f47e3f21f2913540b0b110e13c6e6f4bd7cb58502b9c4a51b6f0e4f",
+    "04-end.png": "12018208abe9052ae3c1771a74f0dcbce11ef20921613dd496990e3df4a915dc",
+    "05-start.png": "4f3d1ecfa7c1e817033191155bf697b283a79fe44855be8a622173d0320cef9b",
+    "05-one-third.png": "7d162e2924e4b830cb7726da8be1fbfcf7f3fb6f059455ef71a1c8a882feb385",
+    "05-middle.png": "797dd954db65465fe567792eb39223787ab14331e3a041e00900709094ba2f7c",
+    "05-two-thirds.png": "a47538769cb73a670c8a1aad8ae1e3e4e53d68bc897a6aaffadb8b3152827aec",
+    "05-end.png": "95e19710a6f2cb35585d12ddd9abda4ce6b64fbe4be392f91e12b0eca0d7d851",
+    "06-start.png": "4eeaceca9a421454900301e3aacd2a1c3a3626d53a1df409ffe478e18c56a171",
+    "06-one-third.png": "21bd55b1bf190b52e51c1a8ca64edc5a4bdd82986a08002f409cfbafb2b8f761",
+    "06-middle.png": "b667752efae0e07610069ab9bda717b0a90ea0578484dcd170fd297fd8a2488a",
+    "06-two-thirds.png": "13f6d3575def9237069869599a9e36266a2d483c2dea7c6ab36b55cfe132f53c",
+    "06-end.png": "46d9a58df3f96ad2b21f4072ddb8c8493f98ac592d17ea4f6a955e67900b3b1f",
+    "07-start.png": "f1e227627ba56358aa53874671dd825e5f460057aea89ae5ef6981eb547ab87d",
+    "07-one-third.png": "8bd6221b49de64451d2352c0df5c5922f4e3d4264faf073b87012996e893bd8b",
+    "07-middle.png": "eeb9175f62390642ec46fd06d714a63c674a56b6b9885a5934e194080bf65580",
+    "07-two-thirds.png": "8ef676ac60b4fdc4637e563c82c558697c20ee866a498401050cbdc3bbe82877",
+    "07-end.png": "5e27a36bb3d437ac10f1c19051b1ae466f96c8ec5a26e04f3d75387080a71d90"
+  },
+  "stills_sha256": {
+    "01_scene.png": "9100b0bbc3c4fbdfeb435e65071a20210bc629e9a75ff8e5802bd85fa9ae0ce0",
+    "02_closeup.png": "3465b0f97c02182f3b6fc0b37aab6bf76546ee8e16919b38113162f886a7b6b4",
+    "03_top.png": "d5d6d80ebfc025bd05763cc4db774a3dd03f47b1aa9f8aedf8fe21401063b6a5",
+    "04_parts.png": "8c287c51e3e6d7b3c64baf1d808e473189fc91b609b9a415587bf8764bcac417",
+    "05_narrow_gap.png": "d6fa2d3ddcf42f60ba7c4eeab5d5f68336bbf3ccca7df4b30bd11e3c29f748f3",
+    "06_fem.png": "771539087303224e72f4c0ad79527a30993135e5596b51e0511fb486bb7a9516",
+    "07_narrow_fixed.png": "c718012efbcaa8f64a25f2b9644c0d0c5380b767c0bca3ad424e010e8cb8d92b"
+  },
+  "gif_samples_sha256": {
+    "strawberry-picker-03-motion-0.png": "ec9cc12e2bd6cd84a36082be54414c4c8d6a5818f7aae3a16ea61f92c34c1018",
+    "strawberry-picker-03-motion-1.png": "3f6ec85c6b23b33b6f257259dd2ffee293b2daf0bce0ac6444915f55d6c5a765",
+    "strawberry-picker-03-motion-2.png": "ed97a26dee31def05ed02b518032c71215cb29b38087b636559e523e60894f4b",
+    "strawberry-picker-05-clearance-0.png": "51a102afee32e593f0cd8e2e74602df31d39752ebb2d096aaad8fed08ec616da",
+    "strawberry-picker-05-clearance-1.png": "1df28f682b4140064702b6579c68fd2cdf129af10ad4020bc32e6b5002d7ccb0",
+    "strawberry-picker-05-clearance-2.png": "3912125224455bd41857ef97bd6e1741344dba91985ac2c619ac3bd85d321987",
+    "strawberry-picker-0.png": "c442f57bb1ad316fb9cb25cb2538f21366cf4f17de3e3356f105e2212c0d4c4e",
+    "strawberry-picker-1.png": "89a78a6e391ea51fa19622fccae24f54e351bb9ba56718e42dcc8af9718e28dd",
+    "strawberry-picker-2.png": "e9f8deaefece0575f30efe139d4ead0800605aa44dd6b4ecbd3e1b7fe1a34a61",
+    "strawberry-picker-06-fem-0.png": "9c49f7160ce6a214a023946e5262b5d39c8f299fb3a303d3c2e5c87b5bad45ce",
+    "strawberry-picker-06-fem-1.png": "0b1bbb5312eb0b9657da55e70b911dfdb37e9c6123dd18ce287550d1f2bd6fe2",
+    "strawberry-picker-06-fem-2.png": "6212fea754a56f58a77293aeff0648365e1f1d8619b8c2aeecaad3fe60b421e9"
+  },
+  "reviewed_gif_sha256": {
+    "strawberry-picker-03-motion.gif": "742703da1fb1695e6d4bb338ecf074eadae107fd8498619767b7f6dc5c0f77e1",
+    "strawberry-picker-05-clearance.gif": "3ade20219e73154ee02de7253677852094b4c772ab0faeb5e9d672e8564a29ab",
+    "strawberry-picker.gif": "d5c378c9a0e320cb2c08afaaa3930d8d3c08bb9949a150cbf28ccc9bec0d7456",
+    "strawberry-picker-06-fem.gif": "4fd7fe42bb67b1dd7bfaa854afeda299181fddf02c81477cd18e84714365fb1d"
+  },
+  "gif_frame_samples": [
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 0,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0000.png",
+      "sha256": "42a1a3cb08c08c4ae8087fa49358b9794e88840cfe6649e6a46b2183962c1a6a"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 28,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0028.png",
+      "sha256": "aaee12da6529720ae9326c887667883c466d05948702ba9c9f536ce11ed87465"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 57,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0057.png",
+      "sha256": "c33d7994d19cdbb7bb8bfe5fb411605ee3dd54e5c1f7f9fcda165c0e0599bc11"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 85,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0085.png",
+      "sha256": "255a4ce223780b0a28befef789fbc87583a279496b3c11b334abb8a1bd8823ac"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 114,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0114.png",
+      "sha256": "95db48eb46d4fde71a34291f5aa7f3cba4019ce106e0ab87e9aae2d2970d7a1a"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 142,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0142.png",
+      "sha256": "fe1693893338cdd97c18ab0b1a707134a6af4026be527c6554b755199cb15bea"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 171,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0171.png",
+      "sha256": "6b1e662b50b77a68d558f7d6f4e2bddbcc4c476cf5ebb9c4cab9e1ebc7f1536e"
+    },
+    {
+      "gif": "strawberry-picker-03-motion.gif",
+      "frame": 199,
+      "path": "demo-out/stage3/manual-strawberry-picker-03-motion-0199.png",
+      "sha256": "671b9eff57276f91c6fef9922db38ec379398a98e6b797d5200aea86bf4bb719"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 0,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0000.png",
+      "sha256": "7ba8011455f32210be555607c6fa6a2786db6590cebb5761bc6c55d2b4905926"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 23,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0023.png",
+      "sha256": "12c5d38a61df36e1f32667890ef1150e365226692b2b2746450ed2d91296f3ea"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 45,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0045.png",
+      "sha256": "1161c5380c8dee9d310f1399aee86ae42e5293878a5b59c7fd39013adbb54181"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 68,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0068.png",
+      "sha256": "bfb7b3b37125b695f284f429b1772cd90dc14ba15f0f53f2708d357b47217610"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 91,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0091.png",
+      "sha256": "f3d8b059b12644d8f6f17409083a4796698aa92eaf5f2de1517708f91966a1c3"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 114,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0114.png",
+      "sha256": "249fbe4634d0cfc5198aafbfa9fdc7a241632c8a319c003a70da4deb843d87b8"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 136,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0136.png",
+      "sha256": "0e61947d55087215eb8d0857a3a60b2989514cb333abc470c757fa6fb091e7a2"
+    },
+    {
+      "gif": "strawberry-picker-05-clearance.gif",
+      "frame": 159,
+      "path": "demo-out/stage3/manual-strawberry-picker-05-clearance-0159.png",
+      "sha256": "f42380a0f9cc65b69b3901751c6cf279c177c9a430773bf286f79951281301ab"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 0,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0000.png",
+      "sha256": "9c1b1dc3382e84abc9f8e71448aa332ceb743f0033ab81193c29d4103f51dd00"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 20,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0020.png",
+      "sha256": "a2c6c3dbdacffcfee3880ee4fa9016beb69325217ff7837050f2850422e91f44"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 40,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0040.png",
+      "sha256": "91e3659192b620a69166f2e60be1b0230d19f39117d41a7f8e2119b1b179da44"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 60,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0060.png",
+      "sha256": "04f8823f555e9c1d0d70f406d55ee19c2703ff751ee4a32a783b313b976d4f3b"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 79,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0079.png",
+      "sha256": "12131fd487b4564a31219859d43f8e612402261591b3cb1078af152e5547f025"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 99,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0099.png",
+      "sha256": "b55b576ee09f94c3bbcac00e811223289767bf6bec2bfc7fdeb5a3073b917f97"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 119,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0119.png",
+      "sha256": "5b2d7ee0303042744266873adb21c75384b28e969cf94198a40a0144c820a33d"
+    },
+    {
+      "gif": "strawberry-picker-06-fem.gif",
+      "frame": 139,
+      "path": "demo-out/stage3/manual-strawberry-picker-06-fem-0139.png",
+      "sha256": "0795dab47d399680b9888b8456bbb509ae66f7107783372056c7b3a3a6c3faea"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 0,
+      "path": "demo-out/stage3/manual-strawberry-picker-0000.png",
+      "sha256": "43d2776ee209e4d0a8c7eca28a31c534d82b598507d920b391ac4aaff260c331"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 60,
+      "path": "demo-out/stage3/manual-strawberry-picker-0060.png",
+      "sha256": "ba1beb67212fc8c3f24ebddf5f7659a4e22baeed596fe9ebb0c61022ac1de389"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 120,
+      "path": "demo-out/stage3/manual-strawberry-picker-0120.png",
+      "sha256": "41c84922ebcdb9651a038ce8e5d18eef83268e364b107382bb86a4fcb66052e2"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 180,
+      "path": "demo-out/stage3/manual-strawberry-picker-0180.png",
+      "sha256": "c77fdc33b27f94acc075d397f3ddb63c7ab87548464a83785b76625c9fd9292b"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 239,
+      "path": "demo-out/stage3/manual-strawberry-picker-0239.png",
+      "sha256": "a0205ff75e5843b8897ca7e5f9191c49e8c6688a290d6f10c945657765c88dfa"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 299,
+      "path": "demo-out/stage3/manual-strawberry-picker-0299.png",
+      "sha256": "67691e78d4dfb30f69bee3941dff0fa3d872953e48d38f7fc2b5a40d7778e2f2"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 359,
+      "path": "demo-out/stage3/manual-strawberry-picker-0359.png",
+      "sha256": "9525d1bb3aa3eee9de1bff656d92439998ac20a291526419f2613f55544d840a"
+    },
+    {
+      "gif": "strawberry-picker.gif",
+      "frame": 419,
+      "path": "demo-out/stage3/manual-strawberry-picker-0419.png",
+      "sha256": "2fdbeaaa35f0d186531e5383ae04a7987a6b1d7fbb4b6f9154be4e934d77b5a1"
+    }
+  ],
+  "extra_problem_frames": {
+    "motion_106": "2be444cd6203737490669875510f46e39fa8b8f468222128649054a3deb5bd37",
+    "hero_167": "c1a03b390026ab85fca68294bd457b47c36fa337b1802fb6798a2332930d4945"
+  },
+  "mp4_sha256": "12ca40f0a103cd515c44a6680731f15490a917b5a205eb4a801f489e4e99bb55",
+  "capture_profile": {
+    "auto_save": false,
+    "popup_notifications": false,
+    "auto_save_timer_intervals_ms": [],
+    "auto_saver_objects": 1
+  },
+  "container_memory_bytes": 3221225472,
+  "container_memory_swap_bytes": 3221225472,
+  "automatic_frame_audit": {
+    "result": "PASS",
+    "decoded_frames": {
+      "assets/strawberry-picker-03-motion.gif": 200,
+      "assets/strawberry-picker-05-clearance.gif": 160,
+      "assets/strawberry-picker-06-fem.gif": 140,
+      "assets/strawberry-picker.gif": 420,
+      "demo-out/strawberry-picker.mp4": 2313
+    },
+    "artifact_sha256": {
+      "assets/strawberry-picker-03-motion.gif": "742703da1fb1695e6d4bb338ecf074eadae107fd8498619767b7f6dc5c0f77e1",
+      "assets/strawberry-picker-05-clearance.gif": "3ade20219e73154ee02de7253677852094b4c772ab0faeb5e9d672e8564a29ab",
+      "assets/strawberry-picker-06-fem.gif": "4fd7fe42bb67b1dd7bfaa854afeda299181fddf02c81477cd18e84714365fb1d",
+      "assets/strawberry-picker.gif": "d5c378c9a0e320cb2c08afaaa3930d8d3c08bb9949a150cbf28ccc9bec0d7456",
+      "demo-out/strawberry-picker.mp4": "12ca40f0a103cd515c44a6680731f15490a917b5a205eb4a801f489e4e99bb55"
+    },
+    "report_sha256": "760ccbb3d40a3bc4aee174267b7472e96d449e3a1dae2a875d999c5a264b9b9f"
+  }
+}

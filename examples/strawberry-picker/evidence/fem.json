@@ -1,0 +1,307 @@
+{
+  "geometry": {
+    "source": "strawberry_head_v2.MovingJaw",
+    "volume_mm3": 1886.0366874981528,
+    "solid_count": 1,
+    "faces": [
+      {
+        "name": "Face1",
+        "type": "Plane",
+        "center": [
+          -0.75,
+          -27.5,
+          2.8500000000000005
+        ],
+        "area": 54.15,
+        "radius": null,
+        "normal": [
+          0.0,
+          -1.0,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face2",
+        "type": "Plane",
+        "center": [
+          -4.75,
+          -14.250000000000002,
+          2.85
+        ],
+        "area": 151.2917876158518,
+        "radius": null,
+        "normal": [
+          -0.9984018457335854,
+          0.05651331202265578,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face3",
+        "type": "Plane",
+        "center": [
+          4.0,
+          -12.25,
+          2.85
+        ],
+        "area": 173.85,
+        "radius": null,
+        "normal": [
+          1.0,
+          -0.0,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face4",
+        "type": "Plane",
+        "center": [
+          -4.675000000000001,
+          3.500000000000001,
+          2.85
+        ],
+        "area": 51.87391468744189,
+        "radius": null,
+        "normal": [
+          -0.9889363528682975,
+          -0.14834045293024462,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face5",
+        "type": "Plane",
+        "center": [
+          0.9999999999999992,
+          9.000000000000002,
+          2.85
+        ],
+        "area": 76.47352483049282,
+        "radius": null,
+        "normal": [
+          0.894427190999916,
+          0.447213595499958,
+          0.0
+        ]
+      },
+      {
+        "name": "Face6",
+        "type": "Plane",
+        "center": [
+          -2.25,
+          15.0,
+          2.85
+        ],
+        "area": 2.85,
+        "radius": null,
+        "normal": [
+          -0.0,
+          1.0,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face7",
+        "type": "Plane",
+        "center": [
+          -5.424999999999997,
+          8.0,
+          2.85
+        ],
+        "area": 0.8550000000000324,
+        "radius": null,
+        "normal": [
+          0.0,
+          -1.0,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face8",
+        "type": "Plane",
+        "center": [
+          -2.5,
+          15.500000000000002,
+          2.85
+        ],
+        "area": 5.7,
+        "radius": null,
+        "normal": [
+          1.0,
+          -0.0,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face9",
+        "type": "Plane",
+        "center": [
+          -4.0,
+          16.0,
+          2.85
+        ],
+        "area": 17.1,
+        "radius": null,
+        "normal": [
+          -0.0,
+          1.0,
+          -0.0
+        ]
+      },
+      {
+        "name": "Face10",
+        "type": "Plane",
+        "center": [
+          -0.7565990812686134,
+          -7.814836783231173,
+          0.0
+        ],
+        "area": 330.8836293856408,
+        "radius": null,
+        "normal": [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      },
+      {
+        "name": "Face11",
+        "type": "Cylinder",
+        "center": [
+          0.0,
+          -4.689174395999806e-17,
+          2.85
+        ],
+        "area": 57.30265000147783,
+        "radius": 1.6,
+        "normal": null
+      },
+      {
+        "name": "Face12",
+        "type": "Cylinder",
+        "center": [
+          2.220446049250313e-16,
+          -24.0,
+          2.85
+        ],
+        "area": 42.976987501108376,
+        "radius": 1.2,
+        "normal": null
+      },
+      {
+        "name": "Face13",
+        "type": "Plane",
+        "center": [
+          -0.7565990812686132,
+          -7.814836783231173,
+          5.7
+        ],
+        "area": 330.8836293856408,
+        "radius": null,
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "name": "Face14",
+        "type": "Plane",
+        "center": [
+          -5.500000000000014,
+          12.0,
+          2.85
+        ],
+        "area": 45.6,
+        "radius": null,
+        "normal": [
+          -1.0,
+          1.6059947336021186e-29,
+          -4.806902509713667e-47
+        ]
+      }
+    ]
+  },
+  "material": {
+    "contract_version": 1,
+    "success": true,
+    "ok": true,
+    "outcome": "committed",
+    "committed": true,
+    "retry_safe": false,
+    "object_name": "JawPLA",
+    "object_type": "App::MaterialObjectPython",
+    "label": "JawPLA"
+  },
+  "fixed_faces": [
+    "Face11"
+  ],
+  "pad_face": {
+    "name": "Face14",
+    "type": "Plane",
+    "center": [
+      -5.500000000000014,
+      12.0,
+      2.85
+    ],
+    "area": 45.6,
+    "radius": null,
+    "normal": [
+      -1.0,
+      1.6059947336021186e-29,
+      -4.806902509713667e-47
+    ]
+  },
+  "load_conversion": {
+    "internal_value": 10000.0,
+    "force_N": 10.0
+  },
+  "mesh": {
+    "contract_version": 1,
+    "success": true,
+    "ok": true,
+    "outcome": "committed",
+    "committed": true,
+    "retry_safe": false,
+    "object_name": "JawCoarseMesh",
+    "object_type": "Fem::FemMeshShapeBaseObjectPython",
+    "label": "JawCoarseMesh"
+  },
+  "solve": {
+    "contract_version": 1,
+    "success": true,
+    "ok": true,
+    "outcome": "published",
+    "retry_safe": false,
+    "analysis_name": "JawAnalysis"
+  },
+  "results": {
+    "result_object": "CCX_Results001",
+    "node_count": 367,
+    "mesh_nodes": 367,
+    "mesh_volumes": 1063,
+    "max_von_mises_MPa": 1.3673728648580374,
+    "min_von_mises_MPa": 1.3861925569144424e-05,
+    "max_displacement_mm": 0.016612515745117476,
+    "safety_factor": 36.56647084713874,
+    "material": {
+      "Density": "1240 kg/m^3",
+      "Name": "PLA",
+      "PoissonRatio": "0.36",
+      "YieldStrength": "50 MPa",
+      "YoungsModulus": "3500 MPa"
+    },
+    "force_N": 10.0,
+    "force_direction": [
+      -1.0,
+      1.6059947336021186e-29,
+      -4.806902509713667e-47
+    ],
+    "mesh_min_mm": 1.5,
+    "mesh_max_mm": 3.0,
+    "addon_files": {
+      "rpc_server.methods.cad_methods_ops.typed_rpc_document": "/mcpfix/addon/FreeCADMCP/rpc_server/methods/cad_methods_ops/typed_rpc_document.py",
+      "rpc_server.rpc_server": "/mcpfix/addon/FreeCADMCP/rpc_server/rpc_server.py"
+    }
+  }
+}

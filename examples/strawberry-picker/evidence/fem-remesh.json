@@ -1,0 +1,98 @@
+{
+  "success": true,
+  "message": "Python code execution completed.\nOutput: {\"stress_MPa\": 1.379272015088064, \"displacement_mm\": 0.01667978260279075, \"yield_safety_factor\": 36.251007381461, \"elements\": 1061}\n",
+  "recompute_errors": [],
+  "session": {
+    "active_document_before": "fem",
+    "active_document_after": "fem",
+    "dirty_before": {
+      "fem": true,
+      "strawberry_head_v2": true
+    },
+    "dirty_after": {
+      "fem": true,
+      "strawberry_head_v2": true
+    },
+    "saved": false,
+    "saved_documents": [],
+    "file_path": "/demo/demo-out/stage2/fem.FCStd",
+    "target_recompute_errors": [],
+    "pre_existing_target_errors": [],
+    "unrelated_document_errors": []
+  },
+  "structured": {
+    "active_document_before": "fem",
+    "active_document_after": "fem",
+    "dirty_before": {
+      "fem": true,
+      "strawberry_head_v2": true
+    },
+    "dirty_after": {
+      "fem": true,
+      "strawberry_head_v2": true
+    },
+    "saved": false,
+    "saved_documents": [],
+    "file_path": "/demo/demo-out/stage2/fem.FCStd",
+    "target_recompute_errors": [],
+    "pre_existing_target_errors": [],
+    "unrelated_document_errors": []
+  },
+  "execution": {
+    "mode": "gui",
+    "venue": "document_owner_thread",
+    "document": "fem",
+    "document_source": "explicit"
+  },
+  "execution_category": "public_execute_code",
+  "code_analysis": {
+    "code_sha256": "8497c259e2119ada9edce802e1870cd24f12f8e442ba7ea833dede7c1a7f316d",
+    "code_bytes": 308,
+    "read_only": false,
+    "execution_mode": "gui",
+    "document_scope": [
+      "fem"
+    ],
+    "imports": [
+      "FreeCAD",
+      "json"
+    ],
+    "call_families": [
+      "App.getDocument",
+      "hasattr",
+      "json.dumps",
+      "len",
+      "max",
+      "print"
+    ],
+    "typed_tool_suggestions": [],
+    "ast_pattern_hash": "1f0caf8030a9d47dc69ace269c4d9ee153721a446683e51cd24ca0c58e28bf56",
+    "parse_error": null
+  },
+  "mutation_scope": {
+    "declared_documents": [
+      "fem"
+    ],
+    "transaction_coverage": "unavailable",
+    "rollback_policy": "none"
+  },
+  "request_id": "27858f1f-52c5-5101-ab3c-7e379fbd5b40",
+  "addon_runtime_id": "45846bef-0089-4958-9063-4f1b0c4b0bbf",
+  "active_document_before": "fem",
+  "active_document_after": "fem",
+  "dirty_before": {
+    "fem": true,
+    "strawberry_head_v2": true
+  },
+  "dirty_after": {
+    "fem": true,
+    "strawberry_head_v2": true
+  },
+  "saved": false,
+  "saved_documents": [],
+  "file_path": "/demo/demo-out/stage2/fem.FCStd",
+  "target_recompute_errors": [],
+  "pre_existing_target_errors": [],
+  "unrelated_document_errors": [],
+  "output": "Python code execution completed.\nOutput: {\"stress_MPa\": 1.379272015088064, \"displacement_mm\": 0.01667978260279075, \"yield_safety_factor\": 36.251007381461, \"elements\": 1061}\n"
+}
