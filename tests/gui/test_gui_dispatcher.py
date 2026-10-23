@@ -17,6 +17,7 @@ if not hasattr(FreeCADGui, "addCommand"):
 from addon.FreeCADMCP.rpc_server import gui_dispatcher as gui_dispatcher_module
 from addon.FreeCADMCP.rpc_server.gui_dispatcher import (
     GuiBusyAfterTimeout,
+    GuiDispatchTimeout,
     GuiDispatcher,
     GuiTaskError,
 )
@@ -117,16 +118,17 @@ def test_self_dispatch_and_queued_dispatch_share_exception_semantics():
 
     def worker():
         try:
-            dispatcher.submit(fail, timeout=1.0)
+            dispatcher.submit(fail, timeout=None)
         except GuiTaskError as exc:
             queued_error.append(str(exc))
 
     thread = threading.Thread(target=worker)
     thread.start()
-    deadline = time.monotonic() + 1.0
-    while thread.is_alive() and time.monotonic() < deadline:
-        app.processEvents()
-    thread.join(timeout=0.2)
+    try:
+        _process_until(app, lambda: not thread.is_alive(), timeout=30.0)
+    finally:
+        dispatcher.stop_accepting()
+        thread.join(timeout=30.0)
 
     assert queued_error == [direct_error]
 
@@ -281,40 +283,73 @@ def _capture_error(errors, callable_):
         errors.append(type(exc).__name__)
 
 
-def test_timeout_after_start_keeps_late_result_on_original_request():
+def test_timeout_after_start_keeps_late_result_on_original_request(monkeypatch):
     app = _app()
     dispatcher = GuiDispatcher()
     release = threading.Event()
+    queued = threading.Event()
+    started = threading.Event()
     errors = []
     late_executed = []
+    completed = []
+
+    original_enqueue = dispatcher._core._enqueue
+
+    def enqueue_before_timeout_wait(request):
+        # Exclude queue scheduling from this running-timeout test. The real
+        # short completion wait starts only once the GUI callable is running.
+        request.deadline_at = None
+        should_wake = original_enqueue(request)
+        queued.set()
+        assert started.wait(30.0)
+        return should_wake
+
+    monkeypatch.setattr(dispatcher._core, "_enqueue", enqueue_before_timeout_wait)
 
     def late_task():
-        release.wait(1.0)
+        started.set()
+        assert release.wait(30.0)
         late_executed.append("late")
         return "late"
 
-    first = threading.Thread(
-        target=lambda: _capture_error(
-            errors,
-            lambda: dispatcher.submit(late_task, 0.02),
-        )
-    )
+    def submit_first():
+        try:
+            dispatcher.submit(
+                late_task, 0.02, request_id="original",
+                on_complete=lambda request_id, outcome: completed.append(
+                    (request_id, outcome.ok, outcome.value)
+                ),
+            )
+        except GuiDispatchTimeout as exc:
+            errors.append(exc)
+        finally:
+            release.set()
+
+    first = threading.Thread(target=submit_first)
     first.start()
-    deadline = time.monotonic() + 1.0
-    while dispatcher.pending_count != 1 and time.monotonic() < deadline:
-        time.sleep(0.001)
-    threading.Timer(0.08, release.set).start()
-    dispatcher._drain_one()
-    first.join(timeout=0.2)
-    assert errors == ["GuiDispatchTimeout"]
+    assert queued.wait(30.0)
+    try:
+        dispatcher._drain_one()
+    finally:
+        release.set()
+    first.join(timeout=30.0)
+    assert not first.is_alive()
+    assert len(errors) == 1
+    assert errors[0].timeout_stage == "during_execution"
+    assert errors[0].execution_started is True
+    assert completed == [("original", True, "late")]
+    monkeypatch.setattr(dispatcher._core, "_enqueue", original_enqueue)
 
     second = []
     thread = threading.Thread(
-        target=lambda: second.append(dispatcher.submit(lambda: "second", 1.0))
+        target=lambda: second.append(dispatcher.submit(lambda: "second", None))
     )
     thread.start()
-    _process_until(app, lambda: not thread.is_alive())
-    thread.join(timeout=0.2)
+    try:
+        _process_until(app, lambda: not thread.is_alive(), timeout=30.0)
+    finally:
+        dispatcher.stop_accepting()
+        thread.join(timeout=30.0)
     assert late_executed == ["late"]
     assert second == ["second"]
 

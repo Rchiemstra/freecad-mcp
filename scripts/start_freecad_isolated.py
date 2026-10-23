@@ -9,6 +9,7 @@ process start, version and build metadata.  It never stops or reuses a process
 already listening on the configured endpoint, including the default :9875
 instance.  ``FREECAD_MCP_ISOLATED_FREECAD`` may select an absolute branch-built
 FreeCAD executable without changing the isolated profile or endpoint.
+``--rpc-wait-timeout SECONDS`` overrides the 60-second authenticated RPC wait.
 """
 from __future__ import annotations
 
@@ -146,6 +147,30 @@ def _consume_exit_status_file(argv: list[str]) -> tuple[Path | None, list[str]]:
         else:
             remainder.append(arg)
     return status_file, remainder
+
+
+def _consume_rpc_wait_timeout(argv: list[str]) -> tuple[float, list[str]]:
+    """Keep the readiness budget separate from FreeCAD's own arguments."""
+    timeout = 60.0
+    specified = False
+    remainder = []
+    args = iter(argv)
+    for arg in args:
+        if arg == "--rpc-wait-timeout" or arg.startswith("--rpc-wait-timeout="):
+            value = next(args, "") if arg == "--rpc-wait-timeout" else arg.split("=", 1)[1]
+            try:
+                parsed = float(value)
+            except ValueError:
+                parsed = 0.0
+            if specified or not 0.0 < parsed < float("inf"):
+                raise SystemExit(
+                    "--rpc-wait-timeout requires finite positive seconds, specified once"
+                )
+            timeout = parsed
+            specified = True
+        else:
+            remainder.append(arg)
+    return timeout, remainder
 
 
 def _wait_for_exit(process, status_file: Path) -> int:
@@ -1289,6 +1314,7 @@ def main() -> int:  # noqa: C901
     repo = _repo_root()
     supervise, launcher_argv = _consume_supervision_flag(sys.argv[1:])
     exit_status_file, launcher_argv = _consume_exit_status_file(launcher_argv)
+    rpc_wait_timeout, launcher_argv = _consume_rpc_wait_timeout(launcher_argv)
     if supervise and exit_status_file is not None:
         raise SystemExit("--exit-status-file cannot be combined with --supervise")
     profile_name, freecad_argv = _consume_launcher_args(launcher_argv)
@@ -1390,7 +1416,7 @@ def main() -> int:  # noqa: C901
             }
         )
 
-        deadline = time.monotonic() + 60.0
+        deadline = time.monotonic() + rpc_wait_timeout
         launcher_identity = make_mcp_runtime_identity(client_build_id=LAUNCHER_BUILD_ID)
         connection = FreeCADConnection(
             host=host,
@@ -1504,7 +1530,8 @@ def main() -> int:  # noqa: C901
 
     print(
         f"ERROR: FreeCAD started, but no authenticated isolated RPC appeared on "
-        f"{host}:{port} within 60 seconds. The exact spawned process was stopped "
+        f"{host}:{port} within {rpc_wait_timeout:g} seconds. "
+        "The exact spawned process was stopped "
         "when possible; unresolved launch state was preserved otherwise.",
         file=sys.stderr,
     )

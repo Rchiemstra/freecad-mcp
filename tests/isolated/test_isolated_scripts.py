@@ -173,6 +173,40 @@ def test_launcher_consumes_supervision_flag_without_forwarding_it() -> None:
     assert rest == ["--", "Macro.FCMacro"]
 
 
+@pytest.mark.parametrize("option, expected", [
+    ([], 60.0),
+    (["--rpc-wait-timeout", "180"], 180.0),
+    (["--rpc-wait-timeout=180"], 180.0),
+    (["--rpc-wait-timeout", "0.5"], 0.5),
+])
+def test_launcher_consumes_rpc_wait_timeout_without_forwarding_it(option, expected):
+    launcher = _load_script("start_freecad_isolated.py")
+    freecad_args = ["--log-file", "native.log", "--", "Macro.FCMacro"]
+
+    timeout, rest = launcher._consume_rpc_wait_timeout([*option, *freecad_args])
+
+    assert timeout == expected
+    assert rest == freecad_args
+
+
+@pytest.mark.parametrize("option", [
+    ["--rpc-wait-timeout"],
+    ["--rpc-wait-timeout="],
+    ["--rpc-wait-timeout", "invalid"],
+    ["--rpc-wait-timeout", "0"],
+    ["--rpc-wait-timeout", "-1"],
+    ["--rpc-wait-timeout", "nan"],
+    ["--rpc-wait-timeout", "inf"],
+    ["--rpc-wait-timeout", "-inf"],
+    ["--rpc-wait-timeout", "180", "--rpc-wait-timeout=60"],
+])
+def test_launcher_rejects_invalid_rpc_wait_timeout(option):
+    launcher = _load_script("start_freecad_isolated.py")
+
+    with pytest.raises(SystemExit, match="--rpc-wait-timeout requires"):
+        launcher._consume_rpc_wait_timeout(option)
+
+
 def test_supervised_posix_spawn_owns_new_session_and_disconnects_child_stdin(
     monkeypatch,
 ) -> None:
@@ -943,8 +977,11 @@ def test_launcher_rejects_authenticated_wrong_profile_path(tmp_path):
 
 @pytest.mark.parametrize("monitor", [False, True])
 @pytest.mark.parametrize("authenticated", [False, True])
+@pytest.mark.parametrize("rpc_wait_timeout, ready_after", [
+    (None, 0), (None, 61), (180, 61), (180, 181),
+])
 def test_launcher_does_not_write_readiness_before_handshake_verifies(
-    tmp_path, monkeypatch, monitor, authenticated
+    tmp_path, monkeypatch, capsys, monitor, authenticated, rpc_wait_timeout, ready_after
 ):
     launcher = _load_script("start_freecad_isolated.py")
     profile = tmp_path / launcher.PROFILE_NAME
@@ -995,10 +1032,19 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
 
     runtime_info = _runtime_info(profile)
     authenticated_proxy = _authenticated_proxy(launcher, profile, runtime_info, b"s" * 32)
+    clock = [0.0]
+    monkeypatch.setattr(launcher, "time", SimpleNamespace(
+        monotonic=lambda: clock[0], time=lambda: 0.0,
+    ))
+    ready = ready_after < (rpc_wait_timeout or 60)
+    proven = ready and authenticated
 
     class Proxy:
         @staticmethod
         def get_instance_info():
+            if clock[0] < ready_after:
+                clock[0] = ready_after
+                raise OSError("RPC is still starting")
             return runtime_info
 
         @staticmethod
@@ -1050,14 +1096,18 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
         launcher, "_write_manifest", lambda profile_path, value: writes.append(value)
     )
     args = ["start_freecad_isolated.py"]
+    if rpc_wait_timeout is not None:
+        args += ["--rpc-wait-timeout", str(rpc_wait_timeout)]
     if monitor:
         args += ["--exit-status-file", str(status_file)]
     monkeypatch.setattr(sys, "argv", args)
 
-    assert launcher.main() == (0 if authenticated else 1)
-    assert len(writes) == int(authenticated)
-    assert spawned[0].terminated is (not authenticated)
-    if authenticated and monitor:
+    assert launcher.main() == (0 if proven else 1)
+    assert len(writes) == int(proven)
+    assert spawned[0].terminated is (not proven)
+    if not ready:
+        assert f"within {rpc_wait_timeout or 60} seconds" in capsys.readouterr().err
+    if proven and monitor:
         assert json.loads(status_file.read_text()) == {"pid": 4321, "returncode": -11}
     else:
         assert not status_file.exists()
