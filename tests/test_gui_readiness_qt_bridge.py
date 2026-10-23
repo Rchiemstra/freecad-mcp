@@ -24,12 +24,17 @@ from addon.FreeCADMCP.rpc_server import server_shutdown
 
 pytestmark = pytest.mark.unit
 
+# Upper bound for waits that end as soon as the awaited state is reached. It only
+# stops a broken run, so it is generous enough for heavily loaded CI agents. The
+# deliberately short timeouts below stay literal.
+_SETTLE_SECONDS = 30.0
+
 
 def _app():
     return QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
 
 
-def _pump_until(app, predicate, timeout: float = 1.0) -> None:
+def _pump_until(app, predicate, timeout: float = _SETTLE_SECONDS) -> None:
     deadline = time.monotonic() + timeout
     while not predicate() and time.monotonic() < deadline:
         app.processEvents()
@@ -37,7 +42,7 @@ def _pump_until(app, predicate, timeout: float = 1.0) -> None:
     assert predicate()
 
 
-def _wait_until(predicate, timeout: float = 1.0) -> None:
+def _wait_until(predicate, timeout: float = _SETTLE_SECONDS) -> None:
     deadline = time.monotonic() + timeout
     while not predicate() and time.monotonic() < deadline:
         time.sleep(0.001)
@@ -113,7 +118,7 @@ def test_worker_document_events_are_delivered_on_qobject_owner(monkeypatch) -> N
         )
     )
     emitter.start()
-    emitter.join(timeout=1.0)
+    emitter.join(timeout=_SETTLE_SECONDS)
 
     assert delivered == []
     _pump_until(app, lambda: len(delivered) == 2)
@@ -145,7 +150,7 @@ def test_queued_stable_event_closes_probe_defer_race_and_preserves_order(
             target=lambda: dispatcher._queue_stable_document("Model")
         )
         emitter.start()
-        emitter.join(timeout=1.0)
+        emitter.join(timeout=_SETTLE_SECONDS)
         return GuiDeferDecision(("Model",), "native_recomputing")
 
     first = threading.Thread(
@@ -153,7 +158,7 @@ def test_queued_stable_event_closes_probe_defer_race_and_preserves_order(
         args=(
             lambda: dispatcher.submit(
                 lambda: executions.append("first") or "first",
-                1.0,
+                _SETTLE_SECONDS,
                 request_id="first-request",
                 session_id="session",
                 document_keys=("Model",),
@@ -171,7 +176,7 @@ def test_queued_stable_event_closes_probe_defer_race_and_preserves_order(
         args=(
             lambda: dispatcher.submit(
                 lambda: executions.append("second") or "second",
-                1.0,
+                _SETTLE_SECONDS,
                 request_id="second-request",
                 session_id="session",
                 document_keys=("Model",),
@@ -204,7 +209,7 @@ def test_off_owner_disposal_waits_for_owner_removal(monkeypatch) -> None:
     errors: list[BaseException] = []
     worker = threading.Thread(
         target=_capture,
-        args=(lambda: dispatcher.dispose(1.0), results, errors),
+        args=(lambda: dispatcher.dispose(_SETTLE_SECONDS), results, errors),
     )
     worker.start()
     _pump_until(app, lambda: not worker.is_alive())
@@ -230,7 +235,7 @@ def test_off_owner_disposal_failure_retains_and_retries(monkeypatch) -> None:
     first_errors: list[BaseException] = []
     first = threading.Thread(
         target=_capture,
-        args=(lambda: dispatcher.dispose(1.0), [], first_errors),
+        args=(lambda: dispatcher.dispose(_SETTLE_SECONDS), [], first_errors),
     )
     first.start()
     _pump_until(app, lambda: not first.is_alive())
@@ -246,7 +251,7 @@ def test_off_owner_disposal_failure_retains_and_retries(monkeypatch) -> None:
     retry_errors: list[BaseException] = []
     retry = threading.Thread(
         target=_capture,
-        args=(lambda: dispatcher.dispose(1.0), retry_results, retry_errors),
+        args=(lambda: dispatcher.dispose(_SETTLE_SECONDS), retry_results, retry_errors),
     )
     retry.start()
     _pump_until(app, lambda: not retry.is_alive())
@@ -333,7 +338,7 @@ def test_owner_joining_remote_shutdown_prepares_queued_dispatcher(monkeypatch) -
         dependencies=dependencies,
         wait_for_completion=True,
     )
-    remote.join(timeout=1.0)
+    remote.join(timeout=_SETTLE_SECONDS)
 
     assert owner_result == "RPC Server stopped."
     assert remote_results == ["RPC Server stopped."]
@@ -373,7 +378,7 @@ def test_late_qobject_deletion_allows_retained_runtime_retry(monkeypatch) -> Non
         ),
     )
     first.start()
-    first.join(timeout=1.0)
+    first.join(timeout=_SETTLE_SECONDS)
 
     assert first_errors == []
     assert len(first_results) == 1
@@ -385,7 +390,7 @@ def test_late_qobject_deletion_allows_retained_runtime_retry(monkeypatch) -> Non
     deferred_delete = getattr(QtCore.QEvent, "DeferredDelete", None)
     if deferred_delete is None:
         deferred_delete = QtCore.QEvent.Type.DeferredDelete
-    deadline = time.monotonic() + 1.0
+    deadline = time.monotonic() + _SETTLE_SECONDS
     deleted = False
     while not deleted and time.monotonic() < deadline:
         QtCore.QCoreApplication.sendPostedEvents(None, deferred_delete)
