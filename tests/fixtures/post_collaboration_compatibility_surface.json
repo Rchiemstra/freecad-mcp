@@ -7735,7 +7735,7 @@
     },
     {
       "path": "addon/FreeCADMCP/InitGui.py",
-      "line": 59,
+      "line": 62,
       "column": 8,
       "function": "_auto_start_mcp",
       "target": "rpc_server.rpc_server",
@@ -7743,7 +7743,7 @@
     },
     {
       "path": "addon/FreeCADMCP/InitGui.py",
-      "line": 116,
+      "line": 119,
       "column": 8,
       "function": "_initialize_rpc_runtime_shutdown",
       "target": "rpc_server.rpc_server",

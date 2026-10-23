@@ -33,6 +33,9 @@ def _ensure_freecad_mcp_package_path():
 
 try:
     _ensure_freecad_mcp_package_path()
+    from freecad_mcp.startup_progress import record_startup_phase
+
+    record_startup_phase("addon-imported")
     from freecad_mcp.assembly_api_bootstrap.install_runtime import install as _install_assembly_api
 
     _install_assembly_api(module_registry=sys.modules)

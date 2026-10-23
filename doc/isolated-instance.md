@@ -36,6 +36,39 @@ existing `mcpServers.freecad` value is unchanged. The generated command passes
 `--rpc-host`, `--rpc-port`, `--instance-id`, `--instance-manifest`, and
 `--auth-file`; environment values contain paths and IDs, never secret bytes.
 
+## Startup progress
+
+`--rpc-stall-timeout SECONDS` limits time without progress (default 60).
+`--rpc-wait-timeout SECONDS` remains an absolute safety cap (default 900),
+even if progress continues. Both accept finite positive seconds.
+Resource progress must accumulate at least 6 CPU seconds per 60 seconds of
+stall budget, or 1 MiB read, since the last progress mark. Idle GUI ticks do
+not extend startup. After `rpc-listening`, resource counters are ignored:
+authentication must finish within the stall budget of that phase.
+
+On Linux the launcher samples `/proc/<pid>/stat` user + system CPU time and
+`/proc/<pid>/io` `read_bytes` independently. Windows uses `GetProcessTimes`
+and `GetProcessIoCounters`. If counters cannot be read, or on other platforms,
+startup relies on phase hints and the same stall timeout and absolute cap.
+
+The launcher passes `FREECAD_MCP_STARTUP_PROGRESS_DIR` pointing to a fresh
+marker directory under the isolated profile's `temp`. Only these opted-in
+starts write `addon-imported`, `gui-ready`, and `rpc-listening` markers.
+Advancing phases count as progress; rewriting an old marker does not. These
+are hints only: readiness still requires the unchanged authenticated handshake.
+The launcher removes the marker directory when the wait ends; late hints are silent.
+The launcher's success line reports elapsed startup and observed phase times;
+failure reports the phase, seconds since progress, CPU seconds, read bytes,
+and available sources (`unavailable` means the counter could not be sampled).
+For example:
+
+```text
+ERROR: FreeCAD started, but no authenticated isolated RPC appeared on 127.0.0.1:9876: no-progress timeout (cap=900s, stall=60s); phase=gui-ready; idle=60.0s; cpu_seconds=4.25; read_bytes=1048576; sources=cpu,phases,read_bytes.
+```
+
+The live GUI suite relies on the launcher's exit and diagnostics during startup,
+with a defensive outer deadline of the launcher's cap plus 120 seconds.
+
 ## Manifest
 
 Manifest schema 1 includes:

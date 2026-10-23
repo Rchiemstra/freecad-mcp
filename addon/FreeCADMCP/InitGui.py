@@ -56,6 +56,9 @@ Gui.addWorkbench(FreeCADMCPAddonWorkbench())  # noqa: F821
 
 def _auto_start_mcp():
     try:
+        from freecad_mcp.startup_progress import record_startup_phase
+
+        record_startup_phase("gui-ready")
         from rpc_server import rpc_server
 
         settings = rpc_server.load_settings()
