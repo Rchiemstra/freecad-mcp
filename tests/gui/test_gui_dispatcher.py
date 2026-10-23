@@ -205,7 +205,9 @@ def test_submission_during_callback_cannot_lose_wakeup():
     dispatcher = GuiDispatcher()
     first_started = threading.Event()
     release_first = threading.Event()
-    results = []
+    # Each thread records its own result: the two submitting threads may
+    # return in either order, only a lost wakeup must fail the test.
+    results = {}
 
     def first_task():
         first_started.set()
@@ -213,8 +215,8 @@ def test_submission_during_callback_cannot_lose_wakeup():
         return "first"
 
     first = threading.Thread(
-        target=lambda: results.append(
-            dispatcher.submit(first_task, 2.0)
+        target=lambda: results.__setitem__(
+            "first", dispatcher.submit(first_task, 2.0)
         )
     )
     first.start()
@@ -225,7 +227,7 @@ def test_submission_during_callback_cannot_lose_wakeup():
     submit_second = threading.Thread(
         target=lambda: (
             first_started.wait(1.0),
-            results.append(dispatcher.submit(lambda: "second", 2.0)),
+            results.__setitem__("second", dispatcher.submit(lambda: "second", 2.0)),
         )
     )
     submit_second.start()
@@ -233,7 +235,7 @@ def test_submission_during_callback_cannot_lose_wakeup():
     _process_until(app, lambda: not first.is_alive() and not submit_second.is_alive())
     first.join(timeout=0.2)
     submit_second.join(timeout=0.2)
-    assert results == ["first", "second"]
+    assert results == {"first": "first", "second": "second"}
 
 
 def test_queued_callable_runs_on_dispatcher_thread():
