@@ -256,6 +256,9 @@ def _start_rpc_server_locked(
         abort_rpc_start(rpc_mod)
         return str(exc)
 
+    from freecad_mcp.startup_progress import record_startup_phase
+
+    record_startup_phase("rpc-listening")
     msg = f"RPC Server started at {actual_host}:{actual_port}."
     if remote_enabled:
         msg += f" Allowed IPs: {allowed_ips}"

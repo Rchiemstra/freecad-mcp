@@ -174,7 +174,7 @@ def test_launcher_consumes_supervision_flag_without_forwarding_it() -> None:
 
 
 @pytest.mark.parametrize("option, expected", [
-    ([], 60.0),
+    ([], 900.0),
     (["--rpc-wait-timeout", "180"], 180.0),
     (["--rpc-wait-timeout=180"], 180.0),
     (["--rpc-wait-timeout", "0.5"], 0.5),
@@ -977,11 +977,13 @@ def test_launcher_rejects_authenticated_wrong_profile_path(tmp_path):
 
 @pytest.mark.parametrize("monitor", [False, True])
 @pytest.mark.parametrize("authenticated", [False, True])
-@pytest.mark.parametrize("rpc_wait_timeout, ready_after", [
-    (None, 0), (None, 61), (180, 61), (180, 181),
+@pytest.mark.parametrize("progressing", [False, True])
+@pytest.mark.parametrize("rpc_wait_timeout, ready_after, handshake_delay", [
+    (None, 0, 0), (None, 61, 0), (180, 61, 0), (180, 181, 0), (180, 0, 181),
 ])
 def test_launcher_does_not_write_readiness_before_handshake_verifies(
-    tmp_path, monkeypatch, capsys, monitor, authenticated, rpc_wait_timeout, ready_after
+    tmp_path, monkeypatch, capsys, monitor, authenticated, progressing,
+    rpc_wait_timeout, ready_after, handshake_delay
 ):
     launcher = _load_script("start_freecad_isolated.py")
     profile = tmp_path / launcher.PROFILE_NAME
@@ -1016,6 +1018,7 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
             if timeout is None:
                 assert authenticated and monitor
                 assert Connection.disconnected
+                assert not list((profile / "temp").glob("mcp-startup-*"))
                 assert len(writes) == 1
                 assert json.loads(status_file.read_text()) == {
                     "pid": self.pid, "returncode": None,
@@ -1034,9 +1037,11 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     authenticated_proxy = _authenticated_proxy(launcher, profile, runtime_info, b"s" * 32)
     clock = [0.0]
     monkeypatch.setattr(launcher, "time", SimpleNamespace(
-        monotonic=lambda: clock[0], time=lambda: 0.0,
+        monotonic=lambda: clock[0], time=lambda: 0.0, sleep=lambda _seconds: None,
     ))
-    ready = ready_after < (rpc_wait_timeout or 60)
+    # Fake counters advance with the injected clock, simulating a busy startup.
+    monkeypatch.setattr(launcher, "_process_progress", lambda _pid: (clock[0] if progressing else None, None))
+    ready = ready_after < min(rpc_wait_timeout or 900, 60)
     proven = ready and authenticated
 
     class Proxy:
@@ -1044,11 +1049,14 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
         def get_instance_info():
             if clock[0] < ready_after:
                 clock[0] = ready_after
+                if progressing:
+                    raise launcher.JsonRpcRemoteError(-32000, "identity mismatch")
                 raise OSError("RPC is still starting")
             return runtime_info
 
         @staticmethod
         def handshake_v2(request):
+            clock[0] += handshake_delay  # The cap can pass during a valid proof.
             if authenticated:
                 return authenticated_proxy.handshake_v2(request)
             return {"client_nonce": request["client_nonce"], "proof": "not-a-proof"}
@@ -1070,12 +1078,19 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     )
 
     spawned = []
+    spawned_env = {}
 
     def spawn(command, **kwargs):
+        spawned_env.update(kwargs["env"])
         assert reservation.closed is True
         assert command == [str(freecad.resolve())]
         assert kwargs["start_new_session"] is (os.name != "nt")
         assert kwargs["stdin"] is None
+        # Even all phase markers cannot authorize readiness or replace HMAC.
+        marker_dir = Path(kwargs["env"][launcher.STARTUP_PROGRESS_ENV])
+        assert marker_dir.parent == profile / "temp"
+        for phase in launcher.STARTUP_PHASES:
+            (marker_dir / phase).touch()
         process = Process()
         spawned.append(process)
         return process
@@ -1106,12 +1121,25 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     assert len(writes) == int(proven)
     assert spawned[0].terminated is (not proven)
     if not ready:
-        assert f"within {rpc_wait_timeout or 60} seconds" in capsys.readouterr().err
+        failure = capsys.readouterr().err
+        reason = ("absolute cap reached" if ready_after >= (rpc_wait_timeout or 900)
+                  else "no-progress timeout")
+        assert reason in failure
+        assert "phase=rpc-listening" in failure
+        idle = f"idle={ready_after:.1f}s"
+        assert idle in failure
     if proven and monitor:
         assert json.loads(status_file.read_text()) == {"pid": 4321, "returncode": -11}
     else:
         assert not status_file.exists()
     assert not (profile / launcher.LAUNCH_STATE_FILENAME).exists()
+    marker_dir = Path(spawned_env[launcher.STARTUP_PROGRESS_ENV])
+    assert not marker_dir.exists()
+    monkeypatch.setenv(launcher.STARTUP_PROGRESS_ENV, str(marker_dir))
+    from freecad_mcp.startup_progress import record_startup_phase
+
+    record_startup_phase("rpc-listening")  # Late addon hints remain silent.
+    assert not marker_dir.exists()
 
 
 def test_launcher_preserves_launch_state_when_exact_child_resists_cleanup(

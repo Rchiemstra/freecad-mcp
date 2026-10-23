@@ -152,6 +152,10 @@ separate owner-only 256-bit authentication secret, RPC port 9876, and
 profile-secret-authenticated v2 handshake proves the exact launched PID,
 profile, runtime UUID, endpoint, protocol, process start, version, and build—not
 merely a successful `ping` or an unauthenticated status response.
+Startup tolerates slow machines while CPU time, disk reads, or add-on phases
+advance. `--rpc-stall-timeout` defaults to 60 seconds without progress;
+`--rpc-wait-timeout` is an absolute safety cap, defaulting to 900 seconds.
+See [startup progress](doc/isolated-instance.md#startup-progress).
 
 > **Security boundary:** leases prevent accidental cooperative MCP conflicts;
 > they are not a FreeCAD or Python sandbox. Python console code, macros,

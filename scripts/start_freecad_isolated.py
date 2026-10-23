@@ -9,7 +9,10 @@ process start, version and build metadata.  It never stops or reuses a process
 already listening on the configured endpoint, including the default :9875
 instance.  ``FREECAD_MCP_ISOLATED_FREECAD`` may select an absolute branch-built
 FreeCAD executable without changing the isolated profile or endpoint.
-``--rpc-wait-timeout SECONDS`` overrides the 60-second authenticated RPC wait.
+``--rpc-stall-timeout SECONDS`` bounds inactivity (default 60 seconds), using
+process CPU/read counters and launch-scoped addon phase hints. Authentication
+is still required. ``--rpc-wait-timeout SECONDS`` caps total startup (default
+900 seconds), even when progress continues.
 """
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ import json
 import os
 import signal
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -54,6 +58,11 @@ from freecad_mcp.rpc_auth import (  # noqa: E402
     make_mcp_runtime_identity,
     verify_handshake_response,
 )
+from freecad_mcp.startup_progress import (  # noqa: E402
+    DEFAULT_RPC_WAIT_TIMEOUT,
+    STARTUP_PHASES,
+    STARTUP_PROGRESS_ENV,
+)
 
 PROFILE_NAME = ".freecad-mcp-isolated"
 MANIFEST_FILENAME = "instance-manifest.json"
@@ -62,6 +71,13 @@ MANIFEST_SCHEMA_VERSION = 1
 LAUNCHER_BUILD_ID = f"{MCP_BUILD_ID}-isolated-launcher"
 FREECAD_EXECUTABLE_ENV = "FREECAD_MCP_ISOLATED_FREECAD"
 SUPERVISE_FLAG = "--supervise"
+DEFAULT_RPC_STALL_TIMEOUT = 60.0
+# Built debug GUI under xvfb-run, --cpus=0.5, RPC autostart off: over
+# 60.001s idle CPU rose 1.46s (0.02433s/s); read_bytes rose 0 (0 B/s).
+# Require over 4x that idle CPU per default stall window, accumulated from
+# the last progress mark rather than the last poll. Idle reads were zero.
+MIN_STARTUP_CPU_SECONDS = 6.0
+MIN_STARTUP_READ_BYTES = 1024 * 1024
 _MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -150,27 +166,186 @@ def _consume_exit_status_file(argv: list[str]) -> tuple[Path | None, list[str]]:
 
 
 def _consume_rpc_wait_timeout(argv: list[str]) -> tuple[float, list[str]]:
-    """Keep the readiness budget separate from FreeCAD's own arguments."""
-    timeout = 60.0
+    return _consume_timeout(argv, "--rpc-wait-timeout", DEFAULT_RPC_WAIT_TIMEOUT)
+
+
+def _consume_rpc_stall_timeout(argv: list[str]) -> tuple[float, list[str]]:
+    return _consume_timeout(argv, "--rpc-stall-timeout", DEFAULT_RPC_STALL_TIMEOUT)
+
+
+def _consume_timeout(
+    argv: list[str], option: str, default: float
+) -> tuple[float, list[str]]:
+    """Keep launcher budgets separate from FreeCAD's own arguments."""
+    timeout = default
     specified = False
     remainder = []
     args = iter(argv)
     for arg in args:
-        if arg == "--rpc-wait-timeout" or arg.startswith("--rpc-wait-timeout="):
-            value = next(args, "") if arg == "--rpc-wait-timeout" else arg.split("=", 1)[1]
+        if arg == option or arg.startswith(option + "="):
+            value = next(args, "") if arg == option else arg.split("=", 1)[1]
             try:
                 parsed = float(value)
             except ValueError:
                 parsed = 0.0
             if specified or not 0.0 < parsed < float("inf"):
                 raise SystemExit(
-                    "--rpc-wait-timeout requires finite positive seconds, specified once"
+                    f"{option} requires finite positive seconds, specified once"
                 )
             timeout = parsed
             specified = True
         else:
             remainder.append(arg)
     return timeout, remainder
+
+
+def _linux_process_progress(pid: int) -> tuple[float | None, int | None]:
+    cpu, read_bytes = None, None
+    try:
+        # comm can contain spaces and parentheses; field 3 follows its last ')'.
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        cpu = (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        for line in Path(f"/proc/{pid}/io").read_text().splitlines():
+            if line.startswith("read_bytes:"):
+                read_bytes = int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    return cpu, read_bytes
+
+
+def _windows_process_progress(pid: int) -> tuple[float | None, int | None]:
+    try:
+        return _query_windows_process_progress(pid)
+    except Exception:
+        # Optional hints: unsupported ctypes setup/calls must not stop launch.
+        return None, None
+
+
+def _query_windows_process_progress(pid: int) -> tuple[float | None, int | None]:
+    import ctypes
+    from ctypes import wintypes
+
+    class IO_COUNTERS(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_ulonglong) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+        )]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [
+        ctypes.POINTER(wintypes.FILETIME)
+    ] * 4
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    kernel32.GetProcessIoCounters.argtypes = [
+        wintypes.HANDLE, ctypes.POINTER(IO_COUNTERS),
+    ]
+    kernel32.GetProcessIoCounters.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(0x0400, False, pid)  # PROCESS_QUERY_INFORMATION
+    if not handle:
+        return None, None
+    cpu, read_bytes = None, None
+    try:
+        times = [wintypes.FILETIME() for _ in range(4)]
+        if kernel32.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
+            cpu = sum((t.dwHighDateTime << 32) + t.dwLowDateTime
+                      for t in times[2:]) / 10_000_000
+        counters = IO_COUNTERS()
+        if kernel32.GetProcessIoCounters(handle, ctypes.byref(counters)):
+            read_bytes = counters.ReadTransferCount
+    finally:
+        kernel32.CloseHandle(handle)
+    return cpu, read_bytes
+
+
+def _process_progress(pid: int) -> tuple[float | None, int | None]:
+    if sys.platform.startswith("linux"):
+        return _linux_process_progress(pid)
+    if sys.platform == "win32":
+        return _windows_process_progress(pid)
+    return None, None
+
+
+class _StartupWatchdog:
+    """Progress hints extend inactivity only, never identity or the safety cap."""
+
+    def __init__(
+        self, pid, phase_dir, *, stall_timeout, wait_timeout, clock=None, probe=None,
+    ):
+        self.clock = clock or time.monotonic
+        self.probe = probe or _process_progress
+        self.pid = pid
+        self.phase_dir = phase_dir
+        self.stall_timeout = stall_timeout
+        self.wait_timeout = wait_timeout
+        self.started = self.last_progress = self.clock()
+        self.cpu = self.read_bytes = None
+        self.progress_cpu = self.progress_read_bytes = 0
+        self.phase_index = -1
+        self.phases = []
+        self.sources = set()
+
+    def sample(self, *, report_only=False) -> str | None:
+        now = self.clock()
+        self.sources = set()
+        progressed = False
+        try:
+            if self.phase_dir.is_dir():
+                for index, phase in enumerate(STARTUP_PHASES):
+                    if index > self.phase_index and (self.phase_dir / phase).is_file():
+                        self.phase_index = index
+                        self.phases.append(f"{phase}@{now - self.started:.1f}s")
+                        progressed = True
+                self.sources.add("phases")
+        except OSError:
+            pass  # Unreadable hints must not interrupt a busy startup.
+        if report_only:
+            return None  # A completed identity proof cannot be timed out retroactively.
+        # Polling RPC itself burns CPU/IO. Once listening, only authentication
+        # can finish startup; resource counters cannot extend that deadline.
+        if self.phase_index < STARTUP_PHASES.index("rpc-listening"):
+            try:
+                cpu, read_bytes = self.probe(self.pid)
+            except Exception:
+                cpu, read_bytes = None, None
+            for source, value, previous, minimum in (
+                ("cpu", cpu, self.progress_cpu,
+                 MIN_STARTUP_CPU_SECONDS * self.stall_timeout / DEFAULT_RPC_STALL_TIMEOUT),
+                ("read_bytes", read_bytes, self.progress_read_bytes,
+                 MIN_STARTUP_READ_BYTES),
+            ):
+                if value is not None:
+                    self.sources.add(source)
+                    if value - previous >= minimum:
+                        progressed = True
+            if cpu is not None:
+                self.cpu = max(cpu, self.cpu or 0)
+            if read_bytes is not None:
+                self.read_bytes = max(read_bytes, self.read_bytes or 0)
+        if progressed:
+            self.last_progress = now
+            self.progress_cpu = self.cpu or 0
+            self.progress_read_bytes = self.read_bytes or 0
+        if now - self.started >= self.wait_timeout:
+            return "absolute cap reached"
+        if now - self.last_progress >= self.stall_timeout:
+            return "no-progress timeout"
+        return None
+
+    def describe(self) -> str:
+        phase = STARTUP_PHASES[self.phase_index] if self.phase_index >= 0 else "launched"
+        cpu = "unavailable" if self.cpu is None else f"{self.cpu:.2f}"
+        reads = "unavailable" if self.read_bytes is None else str(self.read_bytes)
+        return (
+            f"phase={phase}; idle={self.clock() - self.last_progress:.1f}s; "
+            f"cpu_seconds={cpu}; read_bytes={reads}; "
+            f"sources={','.join(sorted(self.sources)) or 'none'}"
+        )
 
 
 def _wait_for_exit(process, status_file: Path) -> int:
@@ -1315,6 +1490,7 @@ def main() -> int:  # noqa: C901
     supervise, launcher_argv = _consume_supervision_flag(sys.argv[1:])
     exit_status_file, launcher_argv = _consume_exit_status_file(launcher_argv)
     rpc_wait_timeout, launcher_argv = _consume_rpc_wait_timeout(launcher_argv)
+    rpc_stall_timeout, launcher_argv = _consume_rpc_stall_timeout(launcher_argv)
     if supervise and exit_status_file is not None:
         raise SystemExit("--exit-status-file cannot be combined with --supervise")
     profile_name, freecad_argv = _consume_launcher_args(launcher_argv)
@@ -1357,6 +1533,8 @@ def main() -> int:  # noqa: C901
         env["FREECAD_USER_HOME"] = str(profile)
         env["FREECAD_USER_DATA"] = str(profile)
         env["FREECAD_USER_TEMP"] = str(profile / "temp")
+        phase_dir = Path(tempfile.mkdtemp(prefix="mcp-startup-", dir=profile / "temp"))
+        env[STARTUP_PROGRESS_ENV] = str(phase_dir)
 
         print("Starting isolated FreeCAD:")
         print(f"  exe:      {freecad}")
@@ -1390,6 +1568,10 @@ def main() -> int:  # noqa: C901
                 supervise=False,
             )
         print(f"  pid:      {process.pid}")
+        watchdog = _StartupWatchdog(
+            process.pid, phase_dir, stall_timeout=rpc_stall_timeout,
+            wait_timeout=rpc_wait_timeout,
+        )
         # This record closes the crash window between Popen and authenticated
         # manifest publication. A caller can refuse or clean up this exact PID
         # even if the launcher itself is interrupted during readiness proof.
@@ -1416,7 +1598,6 @@ def main() -> int:  # noqa: C901
             }
         )
 
-        deadline = time.monotonic() + rpc_wait_timeout
         launcher_identity = make_mcp_runtime_identity(client_build_id=LAUNCHER_BUILD_ID)
         connection = FreeCADConnection(
             host=host,
@@ -1428,7 +1609,7 @@ def main() -> int:  # noqa: C901
             mcp_host=launcher_identity.hostname,
         )
         proxy = connection.server
-        while time.monotonic() < deadline:
+        while True:
             if supervisor_control is not None and supervisor_control.requested():
                 return _supervise_until_stop(
                     supervised_owner,
@@ -1446,10 +1627,17 @@ def main() -> int:  # noqa: C901
                     file=sys.stderr,
                 )
                 return exit_code or 1
+            failure = watchdog.sample()
+            if failure is not None:
+                failure_details = watchdog.describe()
+                break
             try:
                 info = proxy.get_instance_info()
             except (JsonRpcProtocolMismatchError, JsonRpcRemoteError, OSError):
-                if supervisor_control is None or not supervisor_control.wait(0.5):
+                if supervisor_control is None:
+                    time.sleep(0.5)
+                    continue
+                if not supervisor_control.wait(0.5):
                     continue
                 return _supervise_until_stop(
                     supervised_owner,
@@ -1467,10 +1655,17 @@ def main() -> int:  # noqa: C901
             except InstanceValidationError as exc:
                 print(
                     "ERROR: authenticated RPC endpoint identity validation failed: "
-                    f"{exc}. The exact spawned process will be stopped.",
+                    f"{exc}; {watchdog.describe()}. "
+                    "The exact spawned process will be stopped.",
                     file=sys.stderr,
                 )
                 return 1
+            watchdog.sample(report_only=True)
+            shutil.rmtree(phase_dir, ignore_errors=True)
+            print(
+                f"Startup authenticated after {watchdog.clock() - watchdog.started:.1f}s; "
+                f"phases={','.join(watchdog.phases) or 'none'}; {watchdog.describe()}"
+            )
             validated_manifest = dict(launch_manifest)
             validated_manifest.update(expectations)
             _write_manifest(profile, validated_manifest)
@@ -1513,6 +1708,7 @@ def main() -> int:  # noqa: C901
                 return _wait_for_exit(process, exit_status_file)
             return 0
     finally:
+        shutil.rmtree(phase_dir, ignore_errors=True)
         if supervised_owner is None and process is not None and not readiness_published:
             stopped = _terminate_spawned_process(process)
             if stopped:
@@ -1530,7 +1726,8 @@ def main() -> int:  # noqa: C901
 
     print(
         f"ERROR: FreeCAD started, but no authenticated isolated RPC appeared on "
-        f"{host}:{port} within {rpc_wait_timeout:g} seconds. "
+        f"{host}:{port}: {failure} (cap={rpc_wait_timeout:g}s, "
+        f"stall={rpc_stall_timeout:g}s); {failure_details}. "
         "The exact spawned process was stopped "
         "when possible; unresolved launch state was preserved otherwise.",
         file=sys.stderr,

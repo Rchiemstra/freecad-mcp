@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from freecad_mcp.startup_progress import DEFAULT_RPC_WAIT_TIMEOUT
 from tests.live_gui._process import ProcessMonitor, recover_if_dead, tail
 from tests.live_gui._support import MCP_ROOT, GuiLog, McpClient, close_documents
 
@@ -94,7 +95,7 @@ def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
     freecad_log = workdir / "freecad.log"
     exit_status = workdir / "freecad_exit.json"
     launcher = [sys.executable, "-u", str(MCP_ROOT / "scripts" / "start_freecad_isolated.py"),
-                "--rpc-wait-timeout", "180", "--exit-status-file", str(exit_status),
+                "--exit-status-file", str(exit_status),
                 "--log-file", str(freecad_log)]
     if sys.platform.startswith("linux"):
         # FreeCAD's C stdout can retain messages across several tests, even
@@ -109,7 +110,8 @@ def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
         )
     gui = None
     try:
-        deadline = time.monotonic() + 600
+        # The launcher owns readiness budgets; retain a backstop if it hangs.
+        deadline = time.monotonic() + DEFAULT_RPC_WAIT_TIMEOUT + 120
         while True:
             # The launcher publishes this only after proving RPC identity and
             # closing its readiness connection. Logs may be arbitrarily noisy.
