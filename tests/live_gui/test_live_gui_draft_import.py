@@ -40,24 +40,23 @@ def test_draft_factory_import_and_rectangle(mcp, gui_log):
     assert_clean(gui_log, r"Coin warning in \[faceset\]::GLRender\(\): Erroneous polygon detected\. Ignoring \(offset: 4, \[-1 2 3\]\)\. Should be within  \[0, 7\] This message will only be shown once, but more errors might be present")
 
 
-_DRAFT_FACTORY_CONTROLS = (
-    "test_annotation_presentation_after_commit_without_recompute",
-    "test_default_copies_on_document_owner_thread",
-    "test_factories_on_document_owner_thread",
-    "test_factories_on_main_thread",
-)
+_DRAFT_FACTORY_CONTROLS = {
+    "test_annotation_presentation_after_commit_without_recompute": 1,
+    "test_default_copies_on_document_owner_thread": 1,
+    "test_factories_on_document_owner_thread": 5,
+    "test_factories_on_main_thread": 2,
+}
 
 
-@pytest.mark.parametrize("control,factory_half", [
-    pytest.param(control, half, id=control + (f"_half_{half + 1}" if half is not None else ""))
-    for control in _DRAFT_FACTORY_CONTROLS
-    for half in ((0, 1) if control == "test_factories_on_document_owner_thread" else (None,))
+@pytest.mark.parametrize("control,factory_part,factory_parts", [
+    pytest.param(control, part, parts, id=control + (f"_part_{part + 1}_of_{parts}" if parts > 1 else ""))
+    for control, parts in _DRAFT_FACTORY_CONTROLS.items()
+    for part in range(parts)
 ])
-def test_draft_all_factory_thread_controls(mcp, gui_log, freecad_source_root, control, factory_half):
-    # The combined suite opens over 100 fixture documents and exceeds the
-    # 120s GUI request deadline on a constrained software-rendering CI worker.
-    # The owner factory method alone took 112s with one CPU; divide its cases
-    # into disjoint halves too, retaining the same deadline for every call.
+def test_draft_all_factory_thread_controls(mcp, gui_log, freecad_source_root, control, factory_part, factory_parts):
+    # On one CPU, owner factory halves took 45s/70s and main-thread factories
+    # took 41s. Use five/two parts to keep at least 3x headroom under the 120s
+    # GUI deadline, allowing for uneven factory costs in the owner halves.
     source = freecad_source_root / "src/Mod/Draft/drafttests/test_owner_thread_gui.py"
     code = f"""import importlib.util, unittest, io
 spec=importlib.util.spec_from_file_location('draft_owner_controls', {str(source)!r})
@@ -67,14 +66,20 @@ controls=unittest.defaultTestLoader.getTestCaseNames(module.DraftOwnerThreadFact
 assert set(controls) == set({_DRAFT_FACTORY_CONTROLS!r}), 'Update live Draft control list: ' + repr(controls)
 output=io.StringIO()
 case=module.DraftOwnerThreadFactories({control!r})
-factory_half={factory_half!r}
-if factory_half is not None:
+factory_part={factory_part!r}
+factory_parts={factory_parts!r}
+if factory_parts > 1:
     all_cases=case._cases
-    def half_cases(*args, **kwargs):
+    def part_cases(*args, **kwargs):
         cases=all_cases(*args, **kwargs)
-        middle=(len(cases) + 1) // 2
-        return cases[:middle] if factory_half == 0 else cases[middle:]
-    case._cases=half_cases
+        assert 0 <= factory_part < factory_parts <= len(cases)
+        # Adjacent boundaries from the full list cover every case exactly once.
+        start=len(cases) * factory_part // factory_parts
+        stop=len(cases) * (factory_part + 1) // factory_parts
+        cases=cases[start:stop]
+        assert len(cases) > 0
+        return cases
+    case._cases=part_cases
 suite=unittest.TestSuite([case])
 result=unittest.TextTestRunner(stream=output, verbosity=2).run(suite)
 assert result.wasSuccessful(), output.getvalue()
