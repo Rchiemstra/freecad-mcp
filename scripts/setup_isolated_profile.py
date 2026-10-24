@@ -43,22 +43,29 @@ def _freecad_mcp_root() -> Path:
 
 
 def _default_freecadcmd_path(repo: Path) -> str:
-    candidate = repo / "build" / "release" / "bin" / "FreeCADCmd.exe"
-    if candidate.is_file():
-        return str(candidate)
+    for name in ("FreeCADCmd.exe", "FreeCADCmd"):
+        candidate = repo / "build" / "release" / "bin" / name
+        if candidate.is_file():
+            return str(candidate)
     return ""
 
 
 def _default_freecad_exe_path(repo: Path) -> str:
-    candidate = repo / "build" / "release" / "bin" / "FreeCAD.exe"
-    if candidate.is_file():
-        return str(candidate)
+    for name in ("FreeCAD.exe", "FreeCAD"):
+        candidate = repo / "build" / "release" / "bin" / name
+        if candidate.is_file():
+            return str(candidate)
     return ""
 
 
 def _appdata_freecad() -> Path:
     appdata = os.environ.get("APPDATA") or ""
-    return Path(appdata) / "FreeCAD" if appdata else Path()
+    if appdata:
+        return Path(appdata) / "FreeCAD"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "FreeCAD"
+    data_home = os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
+    return Path(data_home) / "FreeCAD"
 
 
 def _resolve_profile(repo: Path, *, profile_name: str | None = None) -> Path:

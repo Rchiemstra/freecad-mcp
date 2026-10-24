@@ -68,3 +68,30 @@ def test_setup_records_freecadcmd_path_when_binary_exists(
         (profile / "freecad_mcp_settings.json").read_text(encoding="utf-8")
     )
     assert settings["freecadcmd_path"] == str(exe)
+
+
+def test_setup_records_linux_binaries(tmp_path) -> None:
+    setup = _load_setup()
+    binary_dir = tmp_path / "build/release/bin"
+    binary_dir.mkdir(parents=True)
+    for name in ("FreeCAD", "FreeCADCmd"):
+        (binary_dir / name).touch()
+    assert setup._default_freecadcmd_path(tmp_path) == str(binary_dir / "FreeCADCmd")
+    assert setup._default_freecad_exe_path(tmp_path) == str(binary_dir / "FreeCAD")
+
+
+def test_linux_profile_setup_does_not_mistake_cwd_for_appdata(
+    tmp_path, monkeypatch
+) -> None:
+    setup = _load_setup()
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.chdir(tmp_path)
+    user_profile = tmp_path / "data/FreeCAD"
+    user_profile.mkdir(parents=True)
+
+    setup._ensure_not_appdata(tmp_path / ".freecad-mcp-isolated")
+    assert setup._appdata_freecad() == user_profile
+    with pytest.raises(SystemExit, match="Refusing to install"):
+        setup._ensure_not_appdata(user_profile / "isolated")
