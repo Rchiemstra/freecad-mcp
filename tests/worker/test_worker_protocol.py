@@ -138,3 +138,34 @@ def test_validate_subelement_falls_back_to_shape_get_element():
         getSubObject=lambda _name: None,
     )
     validate_subelement_reference(target, "CustomEdge")
+
+
+def test_validate_subelement_accepts_origin_datum_without_a_shape():
+    datum = SimpleNamespace(Name="XY_Plane001", TypeId="App::Plane")
+    null_shape = SimpleNamespace(isNull=lambda: True)
+    calls = []
+
+    def get_subobject(name, ret_type=0):
+        calls.append((name, ret_type))
+        if name == "Origin002.XY_Plane001.":
+            return datum if ret_type == 1 else null_shape
+        return None
+
+    target = SimpleNamespace(Name="Arm", Shape=_EmptyShape(), getSubObject=get_subobject)
+    validate_subelement_reference(target, "Origin002.XY_Plane001.")
+    assert calls[-1] == ("Origin002.XY_Plane001.", 1)
+    with pytest.raises(ProtocolError):
+        validate_subelement_reference(target, "Origin002.MissingPlane.")
+
+
+def test_validate_subelement_does_not_use_owner_fallback_for_missing_geometry():
+    owner = SimpleNamespace(Name="Body")
+
+    def get_subobject(name, ret_type=0):
+        return owner if ret_type == 1 else None
+
+    target = SimpleNamespace(Name="Body", Shape=_EmptyShape(), getSubObject=get_subobject)
+    with pytest.raises(ProtocolError):
+        validate_subelement_reference(target, "MissingSemantic")
+    with pytest.raises(ProtocolError):
+        validate_subelement_reference(target, "Face999")
