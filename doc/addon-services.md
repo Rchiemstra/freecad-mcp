@@ -195,5 +195,17 @@ Register a short, background-safe cleanup that closes over only an opaque task
 handle, for example a cooperative cancellation request. It runs if native commit
 is rejected, rolled back, or uncertain. It must not access a document or GUI.
 Cleanup failure cannot convert a rejected commit into success.
+
+For detached native rendering or other short effects, register
+`context.after_commit(callback)`. It runs only after a proven terminal native
+commit, never during apply or after rejection, rollback, or an uncertain wait.
+Capture immutable values and document names, never live App objects. It runs
+outside owner admission; a display callback should only queue its immutable
+payload onto Qt. At most 16 actions are accepted. Each JSON receipt is limited
+to 32 KiB and returned in the host's `after_commit_results` array. A failed
+effect is reported there separately: the document's successful commit remains
+successful. Repeated waits do not repeat the effects. The original provider
+result remains in `result`.
+
 The bridge does not install add-ons, start per-add-on servers, or provide a worker
 that accepts arbitrary remote Python.

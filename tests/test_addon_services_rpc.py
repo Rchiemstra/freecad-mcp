@@ -191,3 +191,97 @@ def test_provider_cleanup_runs_only_when_native_commit_is_not_proven(rejected):
     result = service.invoke_addon_operation('Target', 'Example', 'run', {'value': 1})
     assert result['success'] is not rejected
     assert cleanup.call_count == int(rejected)
+
+
+@pytest.mark.parametrize("terminal,expected", [
+    ({"status": "Committed", "committed": True}, True),
+    ({"status": "PublicationFailed", "committed": False, "rollback_succeeded": True}, False),
+    ({"status": "Committed"}, False),
+])
+def test_display_is_scheduled_only_after_proven_commit(terminal, expected):
+    document = NativeDocument(status=terminal)
+    displayed = Mock(return_value={"display_task_id": "immutable-task", "state": "queued"})
+
+    def callback(context, _arguments):
+        context.after_commit(displayed)
+        displayed.assert_not_called()
+        return {"state": "awaiting_commit"}
+
+    service, _, validate = host(document, registry_with(callback))
+    result = service.invoke_addon_operation("Target", "Example", "run", {"value": 1})
+    assert displayed.call_count == int(expected)
+    if expected:
+        validate.assert_called_once_with(document)
+        assert result["after_commit_results"] == [{"success": True, "result": {
+            "display_task_id": "immutable-task", "state": "queued"}}]
+    else:
+        assert "after_commit_results" not in result
+
+
+def test_failed_after_commit_display_keeps_true_document_outcome():
+    def callback(context, _arguments):
+        context.document.value = 3
+        context.after_commit(Mock(side_effect=RuntimeError("view closed")))
+        return {"value": 3}
+
+    document = NativeDocument()
+    service, _, _ = host(document, registry_with(callback))
+    result = service.invoke_addon_operation("Target", "Example", "run", {"value": 1})
+    assert result["success"] and result["committed"] and document.value == 3
+    assert result["after_commit_results"] == [{"success": False, "error": "view closed"}]
+
+
+def test_late_apply_after_timeout_cancels_work_without_scheduling_display():
+    cleanup = Mock()
+    display = Mock()
+    deferred = {}
+
+    def callback(context, _arguments):
+        context.on_rejected(cleanup)
+        context.after_commit(display)
+        return {"job": "opaque"}
+
+    class Pending:
+        def await_result(self, timeout):
+            raise TimeoutError("native still pending")
+
+    def commit(_name, apply, postcondition, **_kwargs):
+        deferred.update(apply=apply, postcondition=postcondition)
+        return Pending()
+
+    pending = rpc.run_addon_operation(SimpleNamespace(commit_native_mutation=commit),
+        registry_with(callback), lambda _: None, "Target", "Example", "run", {"value": 1})
+    assert pending.await_result()["outcome"] == "uncertain"
+    document = NativeDocument()
+    deferred["apply"](document)
+    assert deferred["postcondition"](document)
+    cleanup.assert_called_once()
+    display.assert_not_called()
+
+
+def test_waiting_twice_does_not_repeat_after_commit_action():
+    display = Mock(return_value={"state": "queued"})
+    deferred = {}
+
+    def callback(context, _arguments):
+        context.after_commit(display)
+        return None
+
+    class Pending:
+        def await_result(self, timeout):
+            if not deferred.get("applied"):
+                deferred["apply"](document)
+                assert deferred["postcondition"](document)
+                deferred["applied"] = True
+            return {"status": "Committed", "committed": True}
+
+    def commit(_name, apply, postcondition, **_kwargs):
+        deferred.update(apply=apply, postcondition=postcondition)
+        return Pending()
+
+    document = NativeDocument()
+    pending = rpc.run_addon_operation(SimpleNamespace(commit_native_mutation=commit),
+        registry_with(callback), lambda _: None, "Target", "Example", "run", {"value": 1})
+    first = pending.await_result()
+    assert pending.await_result() == first
+    display.assert_called_once()

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from freecad_mcp.addon_services import ServiceContext, ServiceError
+import json
+import threading
+
+from freecad_mcp.addon_services import ServiceContext, ServiceError, _json_copy
 
 from .cad_methods_ops.native_commit_wait import defer_native_result
 
@@ -51,15 +54,66 @@ def run_addon_operation(bridge, registry, validate_document, doc_name, addon_id,
         return _failure("INVALID_ARGUMENT", "Supply doc_name, addon_id, operation and object arguments.")
     state = {"document": None, "applied": False, "validated": False, "result": None, "failure": None}
     cleanups = []
+    effects = []
+    effects_lock = threading.Lock()
+    effects_state = {"rejected": False, "results": None}
+
+    def register_cleanup(callback):
+        if not callable(callback):
+            raise ServiceError("INVALID_ARGUMENT", "Cleanup must be callable.")
+        with effects_lock:
+            rejected = effects_state["rejected"]
+            if not rejected:
+                cleanups.append(callback)
+        if rejected:
+            # A native owner callback may arrive after an RPC wait timed out.
+            try:
+                callback()
+            except Exception:
+                pass
+
+    def register_effect(callback):
+        if not callable(callback):
+            raise ServiceError("INVALID_ARGUMENT", "After-commit action must be callable.")
+        with effects_lock:
+            if len(effects) >= 16:
+                raise ServiceError("INVALID_ARGUMENT", "At most 16 after-commit actions are allowed.")
+            if not effects_state["rejected"]:
+                effects.append(callback)
 
     def cleanup():
-        while cleanups:
-            callback = cleanups.pop()
+        with effects_lock:
+            effects_state["rejected"] = True
+            effects.clear()
+            callbacks = list(reversed(cleanups))
+            cleanups.clear()
+        for callback in callbacks:
             try:
                 callback()
             except Exception:
                 # Cleanup cannot turn a rejected/uncertain commit into success.
                 pass
+
+    def after_commit():
+        with effects_lock:
+            if effects_state["results"] is not None:
+                return effects_state["results"]
+            callbacks = list(effects)
+            effects.clear()
+            cleanups.clear()
+            results = []
+            effects_state["results"] = results
+        for callback in callbacks:
+            try:
+                result = _json_copy(callback())
+                if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > 32768:
+                    raise ServiceError("PAYLOAD_TOO_LARGE", "After-commit receipts are limited to 32 KiB.")
+                results.append({"success": True, "result": result})
+            except Exception as exc:
+                # The document already committed. Report a separate display or
+                # scheduling failure, never claim that its mutation rolled back.
+                results.append({"success": False, "error": str(exc)[:4096]})
+        return results
 
     def apply(document):
         state["document"] = document
@@ -68,7 +122,8 @@ def run_addon_operation(bridge, registry, validate_document, doc_name, addon_id,
                 raise ServiceError("DOCUMENT_IDENTITY_MISMATCH", "Native apply received a different document.")
             state["result"] = registry.invoke(
                 addon_id, operation, arguments,
-                context=ServiceContext(document=document, access="mutation", actor_id="mcp", on_rejected=cleanups.append),
+                context=ServiceContext(document=document, access="mutation", actor_id="mcp",
+                                       on_rejected=register_cleanup, after_commit=register_effect),
             )
             state["applied"] = True
         except Exception as exc:
@@ -100,9 +155,13 @@ def run_addon_operation(bridge, registry, validate_document, doc_name, addon_id,
         if not rollback_invalid and not rollback_failed:
             if (status == "Committed" and committed is True and "rollback_succeeded" not in native
                     and state["validated"] and state["failure"] is None):
-                return {"success": True, "committed": True, "outcome": "committed", "retry_safe": False,
+                result = {"success": True, "committed": True, "outcome": "committed", "retry_safe": False,
                         "document_name": doc_name, "addon_id": addon_id,
                         "operation": operation, "result": state["result"]}
+                receipts = after_commit()
+                if receipts:
+                    result["after_commit_results"] = receipts
+                return result
             if committed is False and isinstance(status, str) and status in _REJECTED:
                 cleanup()
                 error = state["failure"] if status in {"ApplyFailed", "PostconditionFailed"} else None

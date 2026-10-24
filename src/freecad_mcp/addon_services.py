@@ -125,6 +125,7 @@ class ServiceContext:
     access: str
     actor_id: str = "local"
     on_rejected: Callable[[Callable[[], None]], None] | None = None
+    after_commit: Callable[[Callable[[], Any]], None] | None = None
 
 
 class Registry:
