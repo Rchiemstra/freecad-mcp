@@ -1062,6 +1062,7 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
             return {"client_nonce": request["client_nonce"], "proof": "not-a-proof"}
 
     writes = []
+    appearance_syncs = []
     monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path)
     monkeypatch.setenv(launcher.FREECAD_EXECUTABLE_ENV, str(freecad.resolve()))
     reservation = SimpleNamespace(closed=False)
@@ -1071,10 +1072,20 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
 
     reservation.close = close_reservation
     monkeypatch.setattr(launcher, "_reserve_endpoint", lambda *_args: reservation)
+
+    def sync_appearance(executable, profile_path):
+        assert reservation.closed is False
+        assert executable == freecad.resolve()
+        assert profile_path == profile
+        appearance_syncs.append(profile_path)
+
     monkeypatch.setattr(
         launcher,
         "_load_parent_start_freecad",
-        lambda: SimpleNamespace(_launch_env=lambda _executable: {}),
+        lambda: SimpleNamespace(
+            _launch_env=lambda _executable: {},
+            _sync_appearance_preferences=sync_appearance,
+        ),
     )
 
     spawned = []
@@ -1083,6 +1094,7 @@ def test_launcher_does_not_write_readiness_before_handshake_verifies(
     def spawn(command, **kwargs):
         spawned_env.update(kwargs["env"])
         assert reservation.closed is True
+        assert appearance_syncs == [profile]
         assert command == [str(freecad.resolve())]
         assert kwargs["start_new_session"] is (os.name != "nt")
         assert kwargs["stdin"] is None
@@ -1284,6 +1296,10 @@ def test_launcher_never_spawns_or_reuses_when_manifest_endpoint_is_occupied(
     monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path)
     monkeypatch.setattr(launcher, "_reserve_endpoint", occupied)
     monkeypatch.setattr(
+        launcher, "_load_parent_start_freecad",
+        lambda: pytest.fail("An occupied profile must not load or synchronize appearance helpers"),
+    )
+    monkeypatch.setattr(
         launcher.subprocess,
         "Popen",
         lambda *args, **kwargs: spawned.append((args, kwargs)),
@@ -1420,3 +1436,16 @@ def test_launcher_falls_back_to_build_library_path_without_parent_helper(
 
     assert env["LD_LIBRARY_PATH"] == f"{tmp_path / 'build' / 'debug' / 'lib'}:/opt/existing"
     assert env["PATH"] == os.environ["PATH"]
+
+
+def test_launcher_prefers_tracked_parent_helpers_for_shared_appearance(tmp_path, monkeypatch):
+    launcher = _load_script("start_freecad_isolated.py")
+    tracked = tmp_path / "FreeCAD/tools/launcher/start_freecad_impl.py"
+    tracked.parent.mkdir(parents=True)
+    tracked.write_text('def _launch_env(executable):\n    return {"STYLE_SOURCE": "tracked"}\n')
+    (tmp_path / "start_freecad.py").write_text('raise RuntimeError("legacy helper loaded")\n')
+    monkeypatch.setattr(launcher, "_repo_root", lambda: tmp_path / "FreeCAD")
+
+    helper = launcher._load_parent_start_freecad()
+
+    assert helper._launch_env(Path("FreeCAD")) == {"STYLE_SOURCE": "tracked"}
