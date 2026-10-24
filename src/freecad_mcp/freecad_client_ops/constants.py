@@ -31,6 +31,8 @@ DIRECT_READ_METHODS = frozenset(
         "cancel_worker_job",
         "get_document_lock",
         "list_document_locks",
+        "list_addons",
+        "describe_addon",
         "inspect_references",
         "get_active_screenshot",
         "capture_view_sequence",

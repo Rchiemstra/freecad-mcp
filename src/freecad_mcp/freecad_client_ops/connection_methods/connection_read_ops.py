@@ -21,6 +21,9 @@ execute_code = _generated.execute_code
 get_worker_status = _generated.get_worker_status
 cancel_worker_job = _generated.cancel_worker_job
 execute_code_async = _generated.execute_code_async
+list_addons = _generated.list_addons
+describe_addon = _generated.describe_addon
+invoke_addon_operation = _generated.invoke_addon_operation
 
 __all__ = [  # noqa: RUF022
     'ping',
@@ -40,4 +43,7 @@ __all__ = [  # noqa: RUF022
     'get_worker_status',
     'cancel_worker_job',
     'execute_code_async',
+    'list_addons',
+    'describe_addon',
+    'invoke_addon_operation',
 ]

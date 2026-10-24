@@ -67,6 +67,7 @@ def emit_auth_gate_refusal(
 
 AUTHENTICATED_METHODS = frozenset(
     {
+        "invoke_addon_operation",
         "acquire_document_lock",
         "adopt_dirty_document",
         "update_document_lock",

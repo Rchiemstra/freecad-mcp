@@ -36,6 +36,12 @@ try:
     from freecad_mcp.startup_progress import record_startup_phase
 
     record_startup_phase("addon-imported")
+    try:
+        from freecad_mcp.addon_services import install as _install_addon_services
+
+        _install_addon_services(App)
+    except Exception as service_error:
+        App.Console.PrintWarning(f"[FreeCADMCP] Add-on services bootstrap failed: {service_error}\n")
     from freecad_mcp.assembly_api_bootstrap.install_runtime import install as _install_assembly_api
 
     _install_assembly_api(module_registry=sys.modules)

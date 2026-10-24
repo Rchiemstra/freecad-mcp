@@ -187,6 +187,11 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.create_document = create_document
     FreeCADConnection.create_object = create_object
     FreeCADConnection.edit_object = edit_object
+    from .connection_methods import connection_read_ops as addon_services
+
+    FreeCADConnection.list_addons = addon_services.list_addons
+    FreeCADConnection.describe_addon = addon_services.describe_addon
+    FreeCADConnection.invoke_addon_operation = addon_services.invoke_addon_operation
     FreeCADConnection.inspect_references = inspect_references
     FreeCADConnection.repair_references = repair_references
     FreeCADConnection.delete_object = delete_object

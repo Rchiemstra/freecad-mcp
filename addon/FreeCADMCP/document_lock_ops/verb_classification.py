@@ -42,6 +42,10 @@ VERB_CLASSIFICATION: dict[str, tuple[VerbKind, Callable[[tuple], str | None]]] =
     "activate_document": (VerbKind.READ_ONLY, _params0_doc),
     "reload_document": (VerbKind.MUTATING, _params0_doc),
     "close_document": (VerbKind.MUTATING, _params0_doc),
+    # Cached host metadata has no document scope; every plugin invocation mutates.
+    "list_addons": (VerbKind.READ_ONLY, _none_doc),
+    "describe_addon": (VerbKind.READ_ONLY, _none_doc),
+    "invoke_addon_operation": (VerbKind.MUTATING, _params0_doc),
     # Mutating model ops
     "create_object": (VerbKind.MUTATING, _params0_doc),
     "edit_object": (VerbKind.MUTATING, _params0_doc),

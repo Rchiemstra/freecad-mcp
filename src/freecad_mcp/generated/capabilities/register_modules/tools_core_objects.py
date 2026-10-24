@@ -7,6 +7,9 @@ from mcp.server.fastmcp import Context
 from mcp.types import CallToolResult
 
 from freecad_mcp.operations import (
+    list_addons_operation,
+    describe_addon_operation,
+    invoke_addon_operation_operation,
     delete_object_operation,
     edit_object_operation,
     inspect_references_operation,
@@ -201,6 +204,33 @@ def _register_delete_object(
 
     exports['delete_object'] = delete_object
 
+def _register_list_addons(mcp, *, dependencies, exports):
+    @mcp.tool()
+    def list_addons(ctx: Context) -> CallToolResult:
+        """List cached metadata for installed FreeCAD add-on services. No document or GUI access."""
+        return list_addons_operation(server_connection())
+
+    exports["list_addons"] = list_addons
+
+
+def _register_describe_addon(mcp, *, dependencies, exports):
+    @mcp.tool()
+    def describe_addon(ctx: Context, addon_id: str) -> CallToolResult:
+        """Describe an installed add-on's cached operation schemas. No provider callbacks or document reads."""
+        return describe_addon_operation(server_connection(), addon_id)
+
+    exports["describe_addon"] = describe_addon
+
+
+def _register_invoke_addon_operation(mcp, *, dependencies, exports):
+    @mcp.tool()
+    def invoke_addon_operation(ctx: Context, doc_name: str, addon_id: str, operation: str, arguments: dict[str, Any]) -> CallToolResult:
+        """Invoke a registered installed add-on operation on an explicitly named document. Requires document mutation authority even for query operations; returns JSON only after native commit. Use registered start/poll/cancel operations for long jobs."""
+        return invoke_addon_operation_operation(server_connection(), doc_name, addon_id, operation, arguments)
+
+    exports["invoke_addon_operation"] = invoke_addon_operation
+
+
 def register(
     mcp: InstrumentedFastMCP,
     *,
@@ -228,5 +258,8 @@ def register(
         dependencies=dependencies,
         exports=exports,
     )
+    _register_list_addons(mcp, dependencies=dependencies, exports=exports)
+    _register_describe_addon(mcp, dependencies=dependencies, exports=exports)
+    _register_invoke_addon_operation(mcp, dependencies=dependencies, exports=exports)
     return exports
 

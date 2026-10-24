@@ -48,7 +48,7 @@
     "tools_advanced_b",
     "tools_advanced_b2"
   ],
-  "tool_count": 174,
+  "tool_count": 177,
   "tool_order": [
     "get_runtime_info",
     "check_rpc_sync",
@@ -71,6 +71,9 @@
     "inspect_references",
     "repair_references",
     "delete_object",
+    "list_addons",
+    "describe_addon",
+    "invoke_addon_operation",
     "execute_code_async",
     "execute_code",
     "get_worker_status",
@@ -382,6 +385,10 @@
       "docstring": "Delete an object without silently orphaning its dependents (I5 / P6).\n\nFreeCAD's delete deliberately does not remove an object's dependents, leaving\nthem Invalid. To avoid silent orphans this tool:\n  * ``recursive=True`` -> remove dependents (leaves first) then the object;\n  * ``force=True``      -> remove only the object and report the orphans left;\n  * otherwise           -> refuse (error ``OBJECT_HAS_DEPENDENTS``, nothing\n    deleted) and list the dependents in ``diagnostics.dependents``.\n\nArgs:\n    doc_name: The name of the document to delete the object from.\n    obj_name: The name of the object to delete.\n    recursive: If True, delete the object's dependents first (no orphans).\n    force: If True, delete only the object even if it has dependents (orphans\n        remain and are reported).\n\nReturns:\n    JSON ``{ok, object_name, deleted, orphans_left (force only), recompute}``\n    and a screenshot.",
       "signature": "(ctx: 'Context', doc_name: 'str', obj_name: 'str', recursive: 'bool' = False, force: 'bool' = False) -> 'CallToolResult'"
     },
+    "describe_addon": {
+      "docstring": "Describe an installed add-on's cached operation schemas. No provider callbacks or document reads.",
+      "signature": "(ctx: 'Context', addon_id: 'str') -> 'CallToolResult'"
+    },
     "diagnose_helix": {
       "docstring": "Diagnose a helix/helical-sweep: axis, placement, profile, handedness, pitch/height,\nresult.",
       "signature": "(ctx: 'Context', doc_name: 'str', helix_name: 'str') -> 'CallToolResult'"
@@ -546,9 +553,17 @@
       "docstring": "Inspect link/subelement properties without evaluating their owner shapes.\n\nThis is the recovery-safe alternative to ``get_object`` for a document that\ncontains stale ``EdgeNNN``, ``FaceNNN``, or ``VertexNNN`` references. It\nscans link properties such as ``Support``, ``AttachmentSupport``, and a\nsketch's ordered ``ExternalGeometry`` list. It never recomputes the document.\n\nArgs:\n    doc_name: Open FreeCAD document name.\n    object_names: Optional owner objects to inspect; omit to scan the document.\n    only_invalid: Return only properties containing invalid subelements.\n    validate: Resolve referenced subelements on their target shapes. Leave\n        false for circularly broken documents; validity is then reported as\n        unevaluated instead of reading ``Shape``.\n\nReturns:\n    Structured link properties, preserving target and subelement order.",
       "signature": "(ctx: 'Context', doc_name: 'str', object_names: 'list[str] | None' = None, only_invalid: 'bool' = False, validate: 'bool' = False) -> 'CallToolResult'"
     },
+    "invoke_addon_operation": {
+      "docstring": "Invoke a registered installed add-on operation on an explicitly named document. Requires document mutation authority even for query operations; returns JSON only after native commit. Use registered start/poll/cancel operations for long jobs.",
+      "signature": "(ctx: 'Context', doc_name: 'str', addon_id: 'str', operation: 'str', arguments: 'dict[str, Any]') -> 'CallToolResult'"
+    },
     "linear_pattern_feature": {
       "docstring": "Repeat an existing PartDesign feature along a straight direction.\n\nUse this after creating a sketch-based feature such as a Pad or Pocket.\nThe source feature must be inside a PartDesign Body.\n\nArgs:\n    doc_name: The document containing the body and source feature.\n    feature_name: Existing feature to repeat, for example `Pocket` or `Pad`.\n    pattern_name: Name for the resulting LinearPattern feature.\n    length: Total pattern length in mm.\n    occurrences: Number of repeated instances, including the original,\n        at most 100. Split the pattern or use fewer occurrences.\n    direction: Axis or reference edge. Examples: `X_Axis`, `Y_Axis`,\n        `Z_Axis`, or `ObjectName:Edge1`.\n    body_name: Optional explicit PartDesign Body name.\n    reversed_dir: If true, reverse the pattern direction.\n\nReturns:\n    A message indicating success or failure.\n\nExamples:\n    Pattern a pocket 5 times over 40 mm along X:\n    ```json\n    {\"doc_name\": \"Part\", \"feature_name\": \"Pocket\", \"pattern_name\": \"PocketArray\",\n     \"length\": 40, \"occurrences\": 5}\n    ```",
       "signature": "(ctx: 'Context', doc_name: 'str', feature_name: 'str', pattern_name: 'str', length: 'float', occurrences: 'int', direction: 'str' = 'X_Axis', body_name: 'str | None' = None, reversed_dir: 'bool' = False) -> 'CallToolResult'"
+    },
+    "list_addons": {
+      "docstring": "List cached metadata for installed FreeCAD add-on services. No document or GUI access.",
+      "signature": "(ctx: 'Context') -> 'CallToolResult'"
     },
     "list_document_locks": {
       "docstring": "List redacted local, foreign, stale, error, and dirty-recovery records.\n\nThe response contains no bearer tokens or token fingerprints.",

@@ -280,3 +280,24 @@ def execute_code_async(conn, code: str) -> dict[str, Any]:
             }
         return conn.server.execute_code_async(code)
 
+
+
+
+def list_addons(conn):
+    return conn.server.list_addons()
+
+
+def describe_addon(conn, addon_id: str):
+    return conn.server.describe_addon(addon_id)
+
+
+def invoke_addon_operation(conn, doc_name: str, addon_id: str, operation: str, arguments: dict):
+    params = {"doc_name": doc_name, "addon_id": addon_id, "operation": operation, "arguments": arguments}
+    routed = conn._invoke_mutation_v2(
+        "invoke_addon_operation", params, document_names=(doc_name,),
+        operation_name="Invoke add-on operation",
+    )
+    if routed is not None:
+        return routed
+    return conn.server.invoke_addon_operation(doc_name, addon_id, operation, arguments)
+

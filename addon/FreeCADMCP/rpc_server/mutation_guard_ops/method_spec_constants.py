@@ -4,6 +4,7 @@ from __future__ import annotations
 
 NATIVE_COMPATIBILITY_METHODS = frozenset(
     {
+        "invoke_addon_operation",
         "body_create",
         "body_set_tip",
         "clear_expression",
@@ -96,6 +97,7 @@ PARTDESIGN_METHODS = frozenset(
 
 PARTIAL_ROLLBACK_METHODS = frozenset(
     {
+        "invoke_addon_operation",
         "export_step",
         "export_stl",
         "export_brep",
