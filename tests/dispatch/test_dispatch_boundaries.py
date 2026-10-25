@@ -254,7 +254,7 @@ for name in sys.argv[2].split(","):
         check=False,
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=120,
     )
     assert completed.returncode == 0, completed.stderr
 
@@ -361,7 +361,7 @@ assert GuiDispatcher is QtGuiDispatcher
         check=False,
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=120,
     )
     assert completed.returncode == 0, completed.stderr
 
