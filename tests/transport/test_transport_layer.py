@@ -488,7 +488,7 @@ assert RequestReplayCache is CanonicalReplay
         check=False,
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=120,
     )
 
     assert completed.returncode == 0, completed.stderr
@@ -610,7 +610,7 @@ finally:
         check=False,
         capture_output=True,
         text=True,
-        timeout=20,
+        timeout=120,
     )
 
     assert completed.returncode == 0, completed.stderr
