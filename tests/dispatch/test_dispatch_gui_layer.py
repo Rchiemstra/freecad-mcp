@@ -316,15 +316,17 @@ def test_running_timeout_quarantines_until_late_completion() -> None:
 
     def slow() -> str:
         started.set()
-        release.wait(1.0)
+        release.wait(5.0)
         return "late"
 
     submitter = threading.Thread(
         target=_capture,
         args=(
+            # The timeout must outlast the drainer's start on a loaded machine,
+            # so that it expires while slow() runs, not while still queued.
             lambda: core.submit(
                 slow,
-                0.02,
+                0.5,
                 on_complete=lambda _request_id, outcome: completions.append(outcome),
             ),
             [],
@@ -340,8 +342,8 @@ def test_running_timeout_quarantines_until_late_completion() -> None:
 
     drainer = threading.Thread(target=drain_as_owner)
     drainer.start()
-    assert started.wait(1.0)
-    submitter.join(timeout=1.0)
+    assert started.wait(5.0)
+    submitter.join(timeout=5.0)
 
     assert len(first_errors) == 1
     assert isinstance(first_errors[0], GuiDispatchTimeout)
@@ -352,7 +354,7 @@ def test_running_timeout_quarantines_until_late_completion() -> None:
         core.submit(lambda: None, 0.01)
 
     release.set()
-    drainer.join(timeout=1.0)
+    drainer.join(timeout=5.0)
     assert len(completions) == 1
     assert completions[0].late is True
     harness.owner = threading.get_ident()
