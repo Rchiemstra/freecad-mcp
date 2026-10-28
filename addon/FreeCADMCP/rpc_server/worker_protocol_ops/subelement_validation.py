@@ -60,7 +60,15 @@ def _resolve_via_get_subobject(target: Any, name: str) -> Any | None:
     try:
         resolved = getter(name)
     except Exception:
-        return None
+        resolved = None
+    # Datum planes and axes can resolve to an App object while having no
+    # TopoShape. Only complete object paths may use retType=1: for a Face/Edge
+    # name it returns the owner even when that geometric element is missing.
+    if _is_null_subobject(resolved) and name.endswith(".") and _subelement_name_is_safe(name):
+        try:
+            resolved = getter(name, 1)
+        except Exception:
+            return None
     if _is_null_subobject(resolved):
         return None
     return resolved
