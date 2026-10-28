@@ -13,7 +13,7 @@ class ToggleRemoteConnectionsCommand:
             checked = bool(
                 self._dependencies.load_settings().get("remote_enabled", False)
             )
-        except Exception:  # noqa: BLE001 - keep commands available if settings fail
+        except Exception:  # keep commands available if settings fail
             checked = False
         return {
             "MenuText": "Remote Connections",

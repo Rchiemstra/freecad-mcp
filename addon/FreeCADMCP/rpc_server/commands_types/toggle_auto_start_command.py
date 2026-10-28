@@ -12,7 +12,7 @@ class ToggleAutoStartCommand:
             checked = bool(
                 self._dependencies.load_settings().get("auto_start_rpc", False)
             )
-        except Exception:  # noqa: BLE001 - keep commands available if settings fail
+        except Exception:  # keep commands available if settings fail
             checked = False
         return {
             "MenuText": "Auto-Start Server",
