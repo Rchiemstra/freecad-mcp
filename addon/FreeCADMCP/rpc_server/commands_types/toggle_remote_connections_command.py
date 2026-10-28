@@ -9,10 +9,16 @@ class ToggleRemoteConnectionsCommand:
         self._dependencies = dependencies or current_command_dependencies()
 
     def GetResources(self):
+        try:
+            checked = bool(
+                self._dependencies.load_settings().get("remote_enabled", False)
+            )
+        except Exception:  # keep commands available if settings fail
+            checked = False
         return {
             "MenuText": "Remote Connections",
             "ToolTip": "Enable or disable remote connections for the RPC server.",
-            "Checkable": True,
+            "Checkable": checked,
         }
 
     def Activated(self, checked=0):
