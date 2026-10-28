@@ -1468,9 +1468,11 @@ class _BuildTreeLaunchHelper:
 
 
 def _load_parent_start_freecad():
-    """Load FreeCADModeling/start_freecad.py for PATH/Qt helpers only."""
+    """Use the tracked launcher helpers, or the legacy modeling checkout."""
 
-    parent = _repo_root().parent / "start_freecad.py"
+    parent = _repo_root() / "tools" / "launcher" / "start_freecad_impl.py"
+    if not parent.is_file():
+        parent = _repo_root().parent / "start_freecad.py"
     if not parent.is_file():
         alt = _repo_root() / ".." / "start_freecad.py"
         parent = alt.resolve() if alt.is_file() else parent
@@ -1523,6 +1525,9 @@ def main() -> int:  # noqa: C901
     endpoint_reservation = _reserve_endpoint(host, port)
     try:
         helper = _load_parent_start_freecad()
+        sync_appearance = getattr(helper, "_sync_appearance_preferences", None)
+        if sync_appearance is not None:
+            sync_appearance(freecad, profile)
         # Launch FreeCAD directly so Popen.pid is the exact process identity
         # authenticated by the addon.  The general launcher may wrap build-tree
         # executables in ``pixi run``; on Windows that leaves Pixi as the parent
