@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
 import FreeCADGui
+import pytest
 
 if not hasattr(FreeCADGui, "addCommand"):
     FreeCADGui.addCommand = lambda *_args, **_kwargs: None
 
+from addon.FreeCADMCP.rpc_server import snapshot_service
 from addon.FreeCADMCP.rpc_server.worker_protocol import (
     CappedTextWriter,
     ProtocolError,
     reject_detectable_gui_usage,
     validate_subelement_reference,
 )
-from addon.FreeCADMCP.rpc_server import snapshot_service
 
 
 class _RaisingShape:
