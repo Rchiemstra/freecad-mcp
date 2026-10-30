@@ -83,6 +83,27 @@ def solve_assembly(conn, *args, **kwargs):
     return _impl(conn, *args, **kwargs)
 
 # subject: core
+def list_addons(conn, *args, **kwargs):
+    """Generated client stub for list_addons (read)."""
+    from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (
+        list_addons as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
+
+def describe_addon(conn, *args, **kwargs):
+    """Generated client stub for describe_addon (read)."""
+    from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (
+        describe_addon as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
+
+def invoke_addon_operation(conn, *args, **kwargs):
+    """Generated client stub for invoke_addon_operation (mutation)."""
+    from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (
+        invoke_addon_operation as _impl,
+    )
+    return _impl(conn, *args, **kwargs)
+
 def create_document(conn, *args, **kwargs):
     """Generated client stub for create_document (mutation)."""
     from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (

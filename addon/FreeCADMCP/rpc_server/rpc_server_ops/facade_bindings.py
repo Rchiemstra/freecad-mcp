@@ -110,6 +110,11 @@ def bind_freecad_rpc(FreeCADRPC):
     FreeCADRPC.create_object = cad_methods.create_object
     FreeCADRPC.edit_object = cad_methods.edit_object
     FreeCADRPC.delete_object = cad_methods.delete_object
+    from ..methods import addon_services
+
+    FreeCADRPC.list_addons = addon_services.list_addons
+    FreeCADRPC.describe_addon = addon_services.describe_addon
+    FreeCADRPC.invoke_addon_operation = addon_services.invoke_addon_operation
     FreeCADRPC.inspect_references = cad_methods.inspect_references
     FreeCADRPC.repair_references = cad_methods.repair_references
     FreeCADRPC.execute_code = cad_methods.execute_code

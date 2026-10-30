@@ -19,6 +19,9 @@ _JSON_TYPES = frozenset(
     {"array", "boolean", "integer", "null", "number", "object", "string"}
 )
 _PARAMETER_SCHEMAS: dict[str, dict] = {
+    "addon_id": {"type": "string"},
+    "arguments": {"type": "object"},
+    "operation": {"type": "string"},
     "attachment_offset": {"type": ["null", "object"]},
     "addresses": {"type": "array"},
     "axis": {"type": ["array", "object", "string"]},
@@ -378,7 +381,7 @@ def test_phase4_json_listener_round_trips_every_semantic_outcome():
             assert decoded["error"] == mapped
         assert contract["result_examples"], method_name
 
-    assert converted_failures == 176
+    assert converted_failures == 179
 
 
 def test_get_objects_result_schema_uses_v1_object_envelope():
@@ -446,7 +449,7 @@ def test_phase5_json_client_converts_every_documented_failure_to_native_error():
             assert error.data == mapped["data"], method_name
             assert error.semantic_code == mapped["data"]["error_code"], method_name
 
-    assert converted_failures == 176
+    assert converted_failures == 179
 
 
 def test_freecad_rpc_instance_exposes_same_public_names(freecad_rpc_class):

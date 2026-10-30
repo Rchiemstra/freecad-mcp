@@ -254,3 +254,14 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.finalize_document_edit = finalize_document_edit
     FreeCADConnection.release_document_lock = release_document_lock
     FreeCADConnection.force_release_stale_lock = force_release_stale_lock
+
+    # Import the leaf directly: the package barrel includes historical authority.
+    from .connection_methods.connection_read_ops import (
+        describe_addon,
+        invoke_addon_operation,
+        list_addons,
+    )
+
+    FreeCADConnection.list_addons = list_addons
+    FreeCADConnection.describe_addon = describe_addon
+    FreeCADConnection.invoke_addon_operation = invoke_addon_operation

@@ -35,6 +35,9 @@ def test_execution_policy_golden_mappings() -> None:
     assert policy_for("redo") is ExecutionPolicy.HISTORY_OPERATION
     assert policy_for("export_step") is ExecutionPolicy.EXTERNAL_EFFECT
     assert policy_for("set_color") is ExecutionPolicy.GUI_GLOBAL
+    assert policy_for("invoke_addon_operation") is ExecutionPolicy.DOCUMENT_MUTATION
+    assert "list_addons" not in EXECUTION_POLICIES
+    assert "describe_addon" not in EXECUTION_POLICIES
 
 
 def test_execute_code_has_no_cad_policy(manifests) -> None:
@@ -52,8 +55,8 @@ def test_execution_policy_is_not_mutation_class() -> None:
 
 def test_registry_counts() -> None:
     counts = Counter(EXECUTION_POLICIES.values())
-    assert len(EXECUTION_POLICIES) == 154
-    assert counts[ExecutionPolicy.DOCUMENT_MUTATION] == 90
+    assert len(EXECUTION_POLICIES) == 155
+    assert counts[ExecutionPolicy.DOCUMENT_MUTATION] == 91
     assert counts[ExecutionPolicy.DOCUMENT_QUERY] == 40
     assert counts[ExecutionPolicy.DOCUMENT_LIFECYCLE] == 5
     assert counts[ExecutionPolicy.HISTORY_OPERATION] == 2

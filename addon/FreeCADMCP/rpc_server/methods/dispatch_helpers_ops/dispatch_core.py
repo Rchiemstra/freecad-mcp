@@ -72,6 +72,8 @@ _READ_ONLY_REMOTE_METHODS = frozenset(
         "force_release_stale_lock",
         "open_document",
         "list_documents",
+        "list_addons",
+        "describe_addon",
         "activate_document",
         "snapshot",
         "inspect_references",

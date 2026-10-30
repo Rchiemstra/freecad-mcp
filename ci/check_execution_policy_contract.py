@@ -22,6 +22,8 @@ FORBIDDEN_REGISTRY_NAMES = frozenset(
 )
 _FORBIDDEN_REGISTRY_NAMES = FORBIDDEN_REGISTRY_NAMES
 _NON_CAD_REGISTER_PREFIXES = ("tools_lease", "tools_runtime", "tools_worker")
+# Host registry metadata never reads a document, even though registered in core.
+_HOST_METADATA_METHODS = frozenset({"list_addons", "describe_addon"})
 
 
 def _load_addon_execution_policies(root: Path) -> dict[str, str]:
@@ -71,6 +73,8 @@ def scan_typed_rpc_handler_names(root: Path) -> set[str]:
 
 
 def is_cad_tool(entry: ToolEntry) -> bool:
+    if entry.name in _HOST_METADATA_METHODS:
+        return False
     if entry.mutation_class in {MutationClass.LEASE, MutationClass.EXECUTION}:
         return False
     register_module = entry.register_module or ""

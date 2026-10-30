@@ -131,6 +131,30 @@
     {
       "execution_mode": "typed_gateway",
       "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.list_addons_operation",
+      "rpc_method": "list_addons",
+      "tool": "list_addons"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "read",
+      "operation_path": "freecad_mcp.operations.describe_addon_operation",
+      "rpc_method": "describe_addon",
+      "tool": "describe_addon"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
+      "mutation_class": "mutation",
+      "operation_path": "freecad_mcp.operations.invoke_addon_operation_operation",
+      "rpc_method": "invoke_addon_operation",
+      "tool": "invoke_addon_operation"
+    },
+    {
+      "execution_mode": "typed_gateway",
+      "gui_thread": false,
       "mutation_class": "mutation",
       "operation_path": "freecad_mcp.operations.create_document_operation",
       "rpc_method": "create_document",
@@ -1393,5 +1417,5 @@
       "tool": "get_worker_status"
     }
   ],
-  "tool_count": 174
+  "tool_count": 177
 }

@@ -98,6 +98,7 @@ _DOCUMENT_QUERY = (
 )
 
 _DOCUMENT_MUTATION = (
+    "invoke_addon_operation",
     "body_create",
     "body_set_tip",
     "boolean_difference",

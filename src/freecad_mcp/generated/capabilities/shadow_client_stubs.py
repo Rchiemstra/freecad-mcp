@@ -78,6 +78,18 @@ def solve_assembly(conn, *args, **kwargs):
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
 # subject: core
+def list_addons(conn, *args, **kwargs):
+    """INERT shadow stub for list_addons (read)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
+def describe_addon(conn, *args, **kwargs):
+    """INERT shadow stub for describe_addon (read)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
+def invoke_addon_operation(conn, *args, **kwargs):
+    """INERT shadow stub for invoke_addon_operation (mutation)."""
+    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
+
 def create_document(conn, *args, **kwargs):
     """INERT shadow stub for create_document (mutation)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)

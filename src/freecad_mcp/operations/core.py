@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .core_ops.addon_ops import (
+    list_addons_operation,
+    describe_addon_operation,
+    invoke_addon_operation_operation,
+)
 from .core_ops.document_ops import (
     close_document_operation,
     create_document_operation,
@@ -74,6 +79,9 @@ from .core_ops.sketch_ops import (
 )
 
 __all__ = [
+    "list_addons_operation",
+    "describe_addon_operation",
+    "invoke_addon_operation_operation",
     "_RECOMPUTE_LOG_SENTINEL",
     "_format_recompute_log",
     "close_document_operation",
