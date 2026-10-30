@@ -187,11 +187,6 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.create_document = create_document
     FreeCADConnection.create_object = create_object
     FreeCADConnection.edit_object = edit_object
-    from .connection_methods import connection_read_ops as addon_services
-
-    FreeCADConnection.list_addons = addon_services.list_addons
-    FreeCADConnection.describe_addon = addon_services.describe_addon
-    FreeCADConnection.invoke_addon_operation = addon_services.invoke_addon_operation
     FreeCADConnection.inspect_references = inspect_references
     FreeCADConnection.repair_references = repair_references
     FreeCADConnection.delete_object = delete_object
@@ -259,3 +254,14 @@ def bind_freecad_connection(FreeCADConnection):
     FreeCADConnection.finalize_document_edit = finalize_document_edit
     FreeCADConnection.release_document_lock = release_document_lock
     FreeCADConnection.force_release_stale_lock = force_release_stale_lock
+
+    # Import the leaf directly: the package barrel includes historical authority.
+    from .connection_methods.connection_read_ops import (
+        describe_addon,
+        invoke_addon_operation,
+        list_addons,
+    )
+
+    FreeCADConnection.list_addons = list_addons
+    FreeCADConnection.describe_addon = describe_addon
+    FreeCADConnection.invoke_addon_operation = invoke_addon_operation

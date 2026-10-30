@@ -87,6 +87,7 @@ EXPECTED_OPERATIONS_ALL = frozenset(
         "create_spur_gear_operation",
         "create_subshape_binder_operation",
         "delete_object_operation",
+        "describe_addon_operation",
         "diagnose_helix_operation",
         "diagnose_parametric_operation",
         "diagnose_pocket_operation",
@@ -127,8 +128,10 @@ EXPECTED_OPERATIONS_ALL = frozenset(
         "insert_part_from_library_operation",
         "inspect_geometry_operation",
         "inspect_references_operation",
+        "invoke_addon_operation_operation",
         "legacy_selector_doc_key",
         "linear_pattern_feature_operation",
+        "list_addons_operation",
         "list_document_locks_operation",
         "list_documents_operation",
         "list_expressions_operation",
@@ -223,11 +226,11 @@ EXPECTED_OPERATIONS_ALL = frozenset(
 )
 
 
-def test_operations_all_phase0_surface_is_168_symbols() -> None:
+def test_operations_all_phase0_surface_is_171_symbols() -> None:
     import freecad_mcp.operations as ops
 
     assert frozenset(ops.__all__) == EXPECTED_OPERATIONS_ALL
-    assert len(ops.__all__) == 168
+    assert len(ops.__all__) == 171
     assert "solve_assembly_operation" not in ops.__all__
     # Import remains available for server.py and direct callers (I9).
     assert hasattr(ops, "solve_assembly_operation")
