@@ -177,26 +177,32 @@ class HangMonitor:
             return HangVerdict(False, "none", "")
         try:
             answered = bool(probe())
-        except Exception:
+        except Exception:  # noqa: BLE001
             answered = False
         # Died while the probe was in flight: the crash path owns that.
         if poll() is not None:
             return HangVerdict(False, "none", "")
         if answered:
             return HangVerdict(False, "none", "")
-        report = collect(pid)
+        try:
+            report = collect(pid)
+        except Exception as exc:  # noqa: BLE001
+            report = f"Cannot collect native backtraces: {type(exc).__name__}: {exc}\n"
         message = _hang_message(self.hang_count + 1, nodeid, last_passed, self.max_hangs)
-        _write_report(
-            workdir,
-            nodeid=nodeid,
-            last_passed=last_passed,
-            pid=pid,
-            message=message,
-            stacks=report,
-            trigger=trigger,
-        )
-        stop()
         self.hang_count += 1
+        try:
+            _write_report(
+                workdir,
+                nodeid=nodeid,
+                last_passed=last_passed,
+                pid=pid,
+                message=message,
+                stacks=report,
+                trigger=trigger,
+            )
+        finally:
+            # A failed dump must not leave the stuck GUI running.
+            stop()
         action = "exit" if self.hang_count >= self.max_hangs else "restart"
         return HangVerdict(True, action, message)
 

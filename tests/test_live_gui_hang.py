@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 
@@ -210,6 +214,98 @@ def test_monitor_does_not_dump_when_the_probe_answers(tmp_path):
     assert collected == []
     assert stopped == []
     assert not (tmp_path / "freecad-hang.txt").exists()
+
+
+def test_failed_dump_still_stops_the_stuck_process(tmp_path, monkeypatch):
+    stopped: list[int] = []
+
+    def assess(monitor: HangMonitor, collect):
+        return monitor.assess(
+            poll=lambda: None,
+            probe=lambda: False,
+            pid=7,
+            workdir=tmp_path,
+            nodeid=NODE,
+            last_passed=PREVIOUS,
+            collect=collect,
+            stop=lambda: stopped.append(7),
+        )
+
+    def broken_gdb(_pid):
+        raise RuntimeError("gdb crashed")
+
+    monitor = HangMonitor()
+    verdict = assess(monitor, broken_gdb)
+    assert verdict.hung is True
+    assert stopped == [7]
+    report = (tmp_path / "freecad-hang.txt").read_text(encoding="utf-8")
+    assert "Cannot collect native backtraces: RuntimeError: gdb crashed" in report
+
+    def full_disk(*_args, **_kwargs):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr("tests.live_gui._hang._write_report", full_disk)
+    with pytest.raises(OSError, match="No space left"):
+        assess(monitor, lambda _pid: "#0 sleep\n")
+    assert stopped == [7, 7]
+    assert monitor.hang_count == 2
+
+
+def _answer(text: str, *, error: bool = False):
+    return SimpleNamespace(content=[SimpleNamespace(text=text)], isError=error, structuredContent=None)
+
+
+@pytest.mark.parametrize(
+    ("reply", "answered"),
+    [
+        ("documents", True),
+        ("rejected", True),
+        ("busy", False),
+        ("slow", False),
+        ("broken", False),
+    ],
+)
+def test_real_probe_answers_only_for_a_reply_that_is_not_a_deadline(reply, answered):
+    calls: list[tuple] = []
+
+    async def call_tool(tool, args):
+        calls.append((tool, args))
+        if reply == "documents":
+            return _answer("[]")
+        if reply == "rejected":
+            # Any reply proves the GUI thread runs, even a refusal.
+            return _answer("Document 'Missing' not found", error=True)
+        if reply == "busy":
+            return _answer(
+                "FreeCAD GUI is still executing a request that timed out "
+                "(request_id=7, method=execute_code)",
+                error=True,
+            )
+        if reply == "slow":
+            await asyncio.sleep(30)
+        raise RuntimeError("connection closed")
+
+    client = McpClient.__new__(McpClient)
+    client._loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=client._loop.run_forever, daemon=True)
+    thread.start()
+    client._session = SimpleNamespace(call_tool=call_tool)
+    try:
+        started = time.monotonic()
+        assert client.probe_liveness(timeout=0.5) is answered
+        assert time.monotonic() - started < 5
+        # A probe that gave up must cancel its call, not leave it queued.
+        asyncio.run_coroutine_threadsafe(_drain(), client._loop).result(5)
+    finally:
+        client._loop.call_soon_threadsafe(client._loop.stop)
+        thread.join(5)
+        client._loop.close()
+    assert calls == [("list_documents", {})]
+
+
+async def _drain() -> None:
+    pending = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+    await asyncio.gather(*pending, return_exceptions=True)
 
 
 def test_gdb_attach_failure_includes_the_reason(monkeypatch):

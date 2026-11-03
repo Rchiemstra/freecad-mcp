@@ -154,13 +154,13 @@ class McpClient:
 
     def probe_liveness(self, timeout: float = PROBE_TIMEOUT_SECONDS) -> bool:
         """True when a short GUI request gets any answer that is not itself a deadline."""
-        future = asyncio.run_coroutine_threadsafe(self._call("list_documents"), self._loop)
+        future = asyncio.run_coroutine_threadsafe(self._call("list_documents", {}), self._loop)
         try:
             result = future.result(timeout)
         except TimeoutError:
             future.cancel()
             return False
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
         return not is_rpc_deadline(None, _deadline_blob(result))
 
