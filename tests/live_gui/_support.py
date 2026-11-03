@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tests.live_gui._hang import PROBE_TIMEOUT_SECONDS, is_rpc_deadline
+
 MCP_ROOT = Path(__file__).resolve().parents[2]
 CALL_TIMEOUT = 180.0
 _PROBLEM = re.compile(
@@ -36,6 +38,16 @@ class ToolResult:
         return not self.is_error and (
             self.payload is None or self.payload.get("success") is not False
         )
+
+
+def _deadline_blob(result: ToolResult) -> str:
+    parts = [result.text]
+    payload = result.payload or {}
+    for key in ("error", "message"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+    return "\n".join(parts)
 
 
 def _payload(text: str) -> dict[str, Any] | None:
@@ -115,12 +127,15 @@ class McpClient:
         return ToolResult(tool, bool(result.isError), text, payload)
 
     def call(self, tool: str, **args: Any) -> ToolResult:
+        self._refuse_if_hung()
         try:
             result = self._run(self._call(tool, args))
-        except TimeoutError:
+        except TimeoutError as exc:
             self.gui_request_timed_out = True
+            self._notify_deadline(exc, str(exc))
             raise
         self._observe_timeout(result)
+        self._notify_deadline(None, _deadline_blob(result))
         if tool == "preview_attachment" and _preapply_preview_conflict(result):
             logging.getLogger(__name__).warning(
                 "preview_attachment: retrying once after pre-apply Conflict: %s", result.text,
@@ -129,11 +144,38 @@ class McpClient:
             # rejection, an uncertain outcome, or any other tool/error.
             try:
                 result = self._run(self._call(tool, args))
-            except TimeoutError:
+            except TimeoutError as exc:
                 self.gui_request_timed_out = True
+                self._notify_deadline(exc, str(exc))
                 raise
             self._observe_timeout(result)
+            self._notify_deadline(None, _deadline_blob(result))
         return result
+
+    def probe_liveness(self, timeout: float = PROBE_TIMEOUT_SECONDS) -> bool:
+        """True when a short GUI request gets any answer that is not itself a deadline."""
+        future = asyncio.run_coroutine_threadsafe(self._call("list_documents"), self._loop)
+        try:
+            result = future.result(timeout)
+        except TimeoutError:
+            future.cancel()
+            return False
+        except Exception:
+            return False
+        return not is_rpc_deadline(None, _deadline_blob(result))
+
+    def _refuse_if_hung(self) -> None:
+        if getattr(self, "freecad_hung", False):
+            from tests.live_gui._hang import FreeCadHung
+
+            raise FreeCadHung("FreeCAD stopped answering")
+
+    def _notify_deadline(self, exc: BaseException | None, text: str | None) -> None:
+        if not is_rpc_deadline(exc, text):
+            return
+        observer = getattr(self, "observe_deadline", None)
+        if observer is not None:
+            observer(exc, text)
 
     def _observe_timeout(self, result: ToolResult) -> None:
         if not result.ok and (
@@ -146,13 +188,16 @@ class McpClient:
         async def gather():
             return await asyncio.gather(*(self._call(tool, args) for tool, args in calls))
 
+        self._refuse_if_hung()
         try:
             results = self._run(gather())
-        except TimeoutError:
+        except TimeoutError as exc:
             self.gui_request_timed_out = True
+            self._notify_deadline(exc, str(exc))
             raise
         for result in results:
             self._observe_timeout(result)
+            self._notify_deadline(None, _deadline_blob(result))
         return results
 
     def close(self) -> None:

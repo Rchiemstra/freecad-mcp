@@ -52,6 +52,7 @@ markers = [
     "integration: real-subprocess tests against sibling monorepo tools (e.g. freecad-git CLI), no mocks",
     "requires_live_freecad_gui: tests that require a running FreeCAD GUI instance (skipped in headless CI)",
     "live_gui: drive a launched FreeCAD GUI (Xvfb) through the real MCP server; FreeCAD output must stay clean",
+    "hang_check: opt-in live check that a stuck FreeCAD GUI is dumped and the run fails",
 ]
 asyncio_mode = "auto"
 
