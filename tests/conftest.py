@@ -160,6 +160,8 @@ def pytest_configure(config: pytest.Config) -> None:
         "benchmark",
         "integration",
         "live_gui",
+        # Registered only here: pyproject.toml is an input of the MCP CI
+        # image key, so a marker line there would force a new image.
         "hang_check",
     ):
         config.addinivalue_line("markers", marker)
