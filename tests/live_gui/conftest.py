@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -179,6 +179,8 @@ class _LiveGuiSession:
         self.hung_nodeid: str | None = None
         self.session_finished = False
         self.hang_monitor = HangMonitor()
+        # pytest's capture manager; the live_gui fixture sets it.
+        self.capture = None
 
     def start(self) -> None:
         if self.gui is not None:
@@ -217,17 +219,18 @@ class _LiveGuiSession:
         if gui is None or gui.process is None:
             return
         try:
-            verdict = self.hang_monitor.assess(
-                poll=gui.process.poll,
-                probe=self._probe,
-                pid=gui.pid,
-                workdir=gui.workdir,
-                nodeid=self.current_nodeid or "the live GUI session",
-                last_passed=self.last_passed_nodeid,
-                collect=collect_native_backtraces,
-                stop=lambda: _stop(gui.pid),
-                trigger=text or ("" if exc is None else str(exc)),
-            )
+            with self._uncaptured():
+                verdict = self.hang_monitor.assess(
+                    poll=gui.process.poll,
+                    probe=self._probe,
+                    pid=gui.pid,
+                    workdir=gui.workdir,
+                    nodeid=self.current_nodeid or "the live GUI session",
+                    last_passed=self.last_passed_nodeid,
+                    collect=collect_native_backtraces,
+                    stop=lambda: _stop(gui.pid),
+                    trigger=text or ("" if exc is None else str(exc)),
+                )
         except (OSError, ValueError, RuntimeError) as monitor_error:
             self.abort_message = (
                 f"FreeCAD process monitoring failed during "
@@ -243,6 +246,13 @@ class _LiveGuiSession:
         if self.client is not None:
             self.client.freecad_hung = True
         raise FreeCadHung(verdict.message)
+
+    def _uncaptured(self):
+        # Write the dump straight to the step log. pytest.exit in makereport
+        # drops the captured output of the test that ends the session.
+        if self.capture is None:
+            return nullcontext()
+        return self.capture.global_and_fixture_disabled()
 
     def _probe(self) -> bool:
         client = self.client
@@ -328,6 +338,7 @@ def _live_gui_session(tmp_path_factory) -> Iterator[_LiveGuiSession]:
 @pytest.fixture
 def live_gui(_live_gui_session, request) -> Iterator[LiveGui]:
     _live_gui_session.current_nodeid = request.node.nodeid
+    _live_gui_session.capture = request.config.pluginmanager.getplugin("capturemanager")
     _live_gui_session.start()
     assert _live_gui_session.gui is not None
     try:

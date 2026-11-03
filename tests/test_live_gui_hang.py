@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 
 from scripts.start_freecad_isolated import _command_with_ptrace_permit
@@ -107,6 +109,32 @@ def test_hang_detected_dumps_named_tests_and_restarts(tmp_path, monkeypatch, cap
     assert session.recover(NODE) is True
     assert restarted == ["close", "start"]
     assert session.abort_message is None
+
+
+def test_hang_dump_bypasses_pytest_capture(tmp_path, monkeypatch):
+    # pytest.exit in makereport drops the captured output of the test that
+    # ends the session, so the second dump would never reach the step log.
+    session, _client, _process, _events, _restarted = _bind(tmp_path, monkeypatch, answered=False)
+    suspended: list[bool] = []
+    written: list[bool] = []
+
+    class _Capture:
+        @contextmanager
+        def global_and_fixture_disabled(self):
+            suspended.append(True)
+            try:
+                yield
+            finally:
+                suspended.pop()
+
+    session.capture = _Capture()
+    monkeypatch.setattr(
+        "tests.live_gui._hang._write_report", lambda *_a, **_k: written.append(bool(suspended)),
+    )
+    with pytest.raises(FreeCadHung):
+        _hit(session)
+    assert written == [True]
+    assert suspended == []
 
 
 def test_slow_call_with_a_live_probe_keeps_the_session(tmp_path, monkeypatch, capfd):
