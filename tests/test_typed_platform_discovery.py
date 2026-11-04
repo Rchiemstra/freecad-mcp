@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,7 @@ from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.typed_rpc_discovery imp
     discover_typed_rpc_handlers,
 )
 from ci.discover_typed_slice import (
+    TYPED_SLICE_CHECKED_ENV,
     discover_contract_check_scripts,
     discover_typed_mypy_files,
     run_discovered_mypy,
@@ -234,29 +236,95 @@ def test_discover_contract_check_scripts_picks_up_temporary_gate(tmp_path: Path)
     assert len(scripts) == 2
 
 
-def test_run_contract_checks_fails_on_failing_dummy_gate(tmp_path: Path) -> None:
-    ci_dir = tmp_path / "ci"
+def _copy_contract_runner(root: Path) -> Path:
+    ci_dir = root / "ci"
     ci_dir.mkdir()
     shutil.copy2(ROOT / "ci/discover_typed_slice.py", ci_dir / "discover_typed_slice.py")
     shutil.copy2(ROOT / "ci/run_contract_checks.py", ci_dir / "run_contract_checks.py")
-    (ci_dir / "check_ok_contract.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
-    (ci_dir / "check_dummy_op_contract.py").write_text("raise SystemExit(1)\n", encoding="utf-8")
+    return ci_dir
 
-    result = subprocess.run(
+
+def _run_contract_runner(
+    root: Path, *, inherited_flag: bool = False
+) -> subprocess.CompletedProcess[str]:
+    env = {key: value for key, value in os.environ.items() if key != TYPED_SLICE_CHECKED_ENV}
+    if inherited_flag:
+        env[TYPED_SLICE_CHECKED_ENV] = "1"
+    return subprocess.run(
         [sys.executable, "ci/run_contract_checks.py"],
-        cwd=tmp_path,
+        cwd=root,
         check=False,
+        capture_output=True,
+        text=True,
+        env=env,
     )
-    assert result.returncode != 0
+
+
+def test_run_contract_checks_fails_on_failing_dummy_gate(tmp_path: Path) -> None:
+    _write_dummy_op_tree(tmp_path, leaf_source="value: int = 1\n")
+    ci_dir = _copy_contract_runner(tmp_path)
+    (ci_dir / "check_ok_contract.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+    (ci_dir / "check_dummy_op_contract.py").write_text("raise SystemExit(3)\n", encoding="utf-8")
+
+    result = _run_contract_runner(tmp_path)
+
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "running ci/check_dummy_op_contract.py" in result.stdout
+
+
+def test_run_contract_checks_typechecks_once_for_all_gates(tmp_path: Path) -> None:
+    _write_dummy_op_tree(tmp_path, leaf_source="value: int = 1\n")
+    ci_dir = _copy_contract_runner(tmp_path)
+    # Each gate typechecks an empty folder, where a real mypy run fails.
+    gate = textwrap.dedent(
+        """\
+        import sys
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(root))
+        from ci.discover_typed_slice import run_discovered_mypy
+
+        (root / "empty").mkdir(exist_ok=True)
+        raise SystemExit(run_discovered_mypy(root / "empty"))
+        """
+    )
+    (ci_dir / "check_first_contract.py").write_text(gate, encoding="utf-8")
+    (ci_dir / "check_second_contract.py").write_text(gate, encoding="utf-8")
+
+    result = _run_contract_runner(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("Success: no issues found") == 1
+    assert result.stdout.count("typed slice mypy: already passed") == 2
+
+
+def test_run_contract_checks_stops_before_the_gates_when_mypy_fails(tmp_path: Path) -> None:
+    _write_dummy_op_tree(tmp_path, leaf_source="from typing import Any\n\nvalue: Any = 1\n")
+    ci_dir = _copy_contract_runner(tmp_path)
+    (ci_dir / "check_ok_contract.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    for inherited_flag in (False, True):
+        result = _run_contract_runner(tmp_path, inherited_flag=inherited_flag)
+
+        assert result.returncode != 0, inherited_flag
+        assert "typed contract checks: running" not in result.stdout
+
+
+def test_standalone_gate_still_typechecks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_dummy_op_tree(tmp_path, leaf_source="from typing import Any\n\nvalue: Any = 1\n")
+
+    monkeypatch.delenv(TYPED_SLICE_CHECKED_ENV, raising=False)
+    assert run_discovered_mypy(tmp_path) != 0
+
+    monkeypatch.setenv(TYPED_SLICE_CHECKED_ENV, "1")
+    assert run_discovered_mypy(tmp_path) == 0
 
 
 def test_run_contract_checks_runs_production_gates() -> None:
     scripts = discover_contract_check_scripts(ROOT)
     assert any(path.name == "check_body_create_contract.py" for path in scripts)
 
-    result = subprocess.run(
-        [sys.executable, "ci/run_contract_checks.py"],
-        cwd=ROOT,
-        check=False,
-    )
-    assert result.returncode == 0
+    result = _run_contract_runner(ROOT)
+
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,10 @@ _PLATFORM_FILES = (
     "src/freecad_mcp/freecad_client.py",
     "src/freecad_mcp/freecad_client_ops/freecad_connection.py",
 )
+
+# ``run_contract_checks.py`` typechecks the slice once and sets this for its gates. Every gate
+# runs the same whole-slice mypy, so one run covers them all.
+TYPED_SLICE_CHECKED_ENV = "FREECAD_MCP_TYPED_SLICE_CHECKED"
 
 _MYPY_GLOBS = (
     "addon/FreeCADMCP/_shared/protocol/*_contract.py",
@@ -97,6 +102,9 @@ def _invoke_discovered_mypy(root: Path) -> subprocess.CompletedProcess[str]:
 def run_discovered_mypy(root: Path, *, retry_internal_error: bool = False) -> int:
     """Typecheck the typed slice using the static ``pyproject.toml`` editor config."""
 
+    if os.environ.get(TYPED_SLICE_CHECKED_ENV) == "1":
+        print("typed slice mypy: already passed in this contract check run", flush=True)
+        return 0
     attempts = 2 if retry_internal_error else 1
     last: subprocess.CompletedProcess[str] | None = None
     for attempt in range(attempts):
@@ -105,7 +113,7 @@ def run_discovered_mypy(root: Path, *, retry_internal_error: bool = False) -> in
         if last.returncode == 0 or "INTERNAL ERROR" not in combined:
             return last.returncode
         if attempt == 0 and retry_internal_error:
-            print("retrying sketch_offset typecheck after mypy internal error", flush=True)
+            print("retrying typed slice mypy after an internal error", flush=True)
     assert last is not None
     return last.returncode
 
