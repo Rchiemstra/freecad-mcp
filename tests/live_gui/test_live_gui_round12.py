@@ -61,8 +61,8 @@ def test_trim_without_an_intersection_is_clear(mcp, gui_log):
     assert_ok(mcp.call("sketch_create", doc_name="R12Trim", sketch_name="Sk"))
     assert_ok(mcp.call("sketch_add_line", doc_name="R12Trim", sketch_name="Sk",
                        x1=0, y1=0, x2=20, y2=0))
-    # The original failure used the collapsed zero-width slot. FreeCAD's
-    # normal trim of an isolated curve deletes it successfully.
+    # Radius-0 arc. Unfixed OCCT 7.6 raises Standard_NullValue; a build that
+    # skips the intersector deletes the line. Both report TRIM_NO_INTERSECTION.
     assert_ok(mcp.call("execute_code", document="R12Trim", recompute="none",
                        code="import FreeCAD as App, Part\n"
                             "sk = App.getDocument('R12Trim').getObject('Sk')\n"
@@ -71,7 +71,7 @@ def test_trim_without_an_intersection_is_clear(mcp, gui_log):
     failed = mcp.call("sketch_trim", doc_name="R12Trim", sketch_name="Sk",
                       geo_index=0, point_x=5, point_y=5)
     assert not failed.ok
-    assert "no intersection near the trim point" in failed.text
+    assert _payload(failed)["error_code"] == "TRIM_NO_INTERSECTION"
     assert_ok(mcp.call("close_document", doc_name="R12Trim"))
     assert_clean(gui_log, "Standard_NullValue", "Edge too small")
 
