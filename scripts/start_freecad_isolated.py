@@ -1083,6 +1083,28 @@ class _SupervisorControl:
         self._handlers.clear()
 
 
+# Yama ptrace_scope=1 does not copy PR_SET_PTRACER across fork, only across
+# exec. The live-GUI runner sets FREECAD_MCP_PERMIT_PTRACE so gdb, which is not
+# an ancestor, can attach. The helper execs FreeCAD in place, so Popen.pid
+# stays the process the addon authenticates.
+_PTRACE_EXEC = """
+import ctypes, os, sys
+if sys.platform.startswith("linux"):
+    ctypes.CDLL(None).prctl(0x59616d61, ctypes.c_ulong(-1), 0, 0, 0)
+try:
+    os.execvp(sys.argv[1], sys.argv[1:])
+except OSError as exc:
+    print(str(exc), flush=True)
+    sys.exit(127)
+"""
+
+
+def _command_with_ptrace_permit(cmd: list[str]) -> list[str]:
+    if sys.platform.startswith("linux") and os.environ.get("FREECAD_MCP_PERMIT_PTRACE") == "1":
+        return [sys.executable, "-c", _PTRACE_EXEC, *cmd]
+    return list(cmd)
+
+
 def _spawn_freecad_process(
     cmd,
     *,
@@ -1091,6 +1113,8 @@ def _spawn_freecad_process(
     supervise: bool,
 ):
     """Spawn FreeCAD, binding supervised Windows children before first run."""
+
+    cmd = _command_with_ptrace_permit(list(cmd))
 
     if sys.platform == "win32" and supervise:
         windows_job = _WindowsLifetimeJob()

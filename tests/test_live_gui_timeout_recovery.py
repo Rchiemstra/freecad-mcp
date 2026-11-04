@@ -9,10 +9,12 @@ pytest_plugins = ["pytester"]
 pytestmark = pytest.mark.unit
 
 
+@pytest.mark.parametrize("probe", ["freecad_answers", "freecad_stuck"])
 @pytest.mark.parametrize("failure", ["executing", "busy", "transport", "parallel"])
-def test_timeout_fails_only_its_scenario(pytester, monkeypatch, failure):
-    # Exercise the real fixtures and client timeout tracking, replacing only
-    # the process/transport boundary. No GUI or two-minute sleep is needed.
+def test_timeout_fails_only_its_scenario(pytester, monkeypatch, failure, probe):
+    # Exercise the real fixtures, client timeout tracking and liveness probe,
+    # replacing only the process/transport boundary and gdb. No GUI or
+    # two-minute sleep is needed.
     root = Path(__file__).resolve().parents[1]
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(root), str(root / "src"))))
     events = pytester.path / "events.txt"
@@ -21,6 +23,8 @@ def test_timeout_fails_only_its_scenario(pytester, monkeypatch, failure):
 import asyncio
 import json
 import socket
+import subprocess
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from tests.live_gui import conftest as live
@@ -31,6 +35,7 @@ for name in ('live_gui', 'mcp', 'gui_log', '_live_gui_session', 'pytest_runtest_
         globals()[name] = getattr(live, name)
 
 starts = []
+stopped = set()
 ports = set()
 reservations = []
 port = 9876
@@ -59,24 +64,41 @@ def run(command, **kwargs):
         status.write_text(json.dumps({{'pid': pid, 'returncode': None}}))
         record(f'start {{pid}}')
     return SimpleNamespace(returncode=0)
-live.subprocess.run = run
 def popen(command, **kwargs):
     run(command, **kwargs)
     return SimpleNamespace(poll=lambda: None, wait=lambda **kwargs: 0)
-live.subprocess.Popen = popen
-live.ProcessMonitor = lambda *args: SimpleNamespace(poll=lambda: None, close=lambda: None)
-live._stop = lambda pid: record(f'stop {{pid}}')
+# Fake only the conftest's view. Patching the shared module would also
+# replace the Popen that the hang dump uses for gdb.
+live.subprocess = SimpleNamespace(
+    run=run, Popen=popen, STDOUT=subprocess.STDOUT,
+    TimeoutExpired=subprocess.TimeoutExpired,
+)
+def stop(pid):
+    record(f'stop {{pid}}')
+    stopped.add(pid)
+live._stop = stop
+live.ProcessMonitor = lambda launched, status, pid: SimpleNamespace(
+    poll=lambda: -15 if pid in stopped else None, close=lambda: None,
+)
+# Never attach a real gdb to a fake pid.
+live.collect_native_backtraces = lambda pid, **kwargs: record(f'gdb {{pid}}') or '#0 fake frame\\n'
 
 class Client(McpClient):
     def __init__(self, manifest, workdir):
         self.pid = starts[-1]
         self.gui_request_timed_out = False
         self.poisoned = False
-
-    def _run(self, coroutine, **kwargs):
-        return asyncio.run(coroutine)
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._thread.start()
 
     async def _call(self, tool, args):
+        if tool == 'list_documents':
+            record(f'probe {{self.pid}}')
+            if self.poisoned and {probe!r} == 'freecad_stuck':
+                return ToolResult(tool, True,
+                                  'FreeCAD GUI is still executing a request that timed out', {{}})
+            return ToolResult(tool, False, '[]', {{}})
         if tool == 'rejected':
             return ToolResult(tool, True, 'Expected model validation rejection', {{}})
         if tool == 'poison':
@@ -94,6 +116,9 @@ class Client(McpClient):
 
     def close(self):
         record(f'close {{self.pid}}')
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(10)
+        self._loop.close()
 
 live.McpClient = Client
 """
@@ -129,7 +154,20 @@ def test_03_healthy_session_is_reused(mcp, live_gui):
     )
     result = pytester.runpytest_subprocess("-q", "-p", "no:cacheprovider")
     result.assert_outcomes(failed=1, passed=4)
+    dumps = list(pytester.path.rglob("freecad-hang.txt"))
+    if probe == "freecad_stuck":
+        # Dump while the stuck process is alive, then kill it and restart.
+        expected = ["start 100", "probe 100", "gdb 100", "stop 100", "close 100"]
+        assert "FreeCadHung" in result.stdout.str()
+        assert "FREECAD HUNG" in result.stderr.str()
+        assert len(dumps) == 1
+        assert "test_01_offender" in dumps[0].read_text()
+        assert "#0 fake frame" in dumps[0].read_text()
+    else:
+        # A slow call that FreeCAD still answers is not a hang.
+        expected = ["start 100", "probe 100", "close 100", "stop 100"]
+        assert "FREECAD HUNG" not in result.stderr.str()
+        assert dumps == []
     assert events.read_text().splitlines() == [
-        "start 100", "close 100", "stop 100",
-        "start 101", "close 101", "stop 101",
+        *expected, "start 101", "close 101", "stop 101",
     ]

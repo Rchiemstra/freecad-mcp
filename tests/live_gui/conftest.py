@@ -19,13 +19,20 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from freecad_mcp.startup_progress import DEFAULT_RPC_WAIT_TIMEOUT
+from tests.live_gui._hang import (
+    PROBE_TIMEOUT_SECONDS,
+    FreeCadHung,
+    HangMonitor,
+    collect_native_backtraces,
+    is_rpc_deadline,
+)
 from tests.live_gui._process import ProcessMonitor, recover_if_dead, tail
 from tests.live_gui._support import MCP_ROOT, GuiLog, McpClient, close_documents
 
@@ -80,7 +87,14 @@ def _launch_live_gui(tmp_path_factory) -> Iterator[LiveGui]:
     _require_environment()
     workdir = tmp_path_factory.mktemp("live_gui")
     profile = workdir / "profile"
-    env = dict(os.environ, FREECAD_MCP_PROFILE_DIR=str(profile), PYTHONDONTWRITEBYTECODE="1")
+    env = dict(
+        os.environ,
+        FREECAD_MCP_PROFILE_DIR=str(profile),
+        PYTHONDONTWRITEBYTECODE="1",
+        # See start_freecad_isolated._command_with_ptrace_permit. Set on the
+        # launcher, which is the process that forks FreeCAD.
+        FREECAD_MCP_PERMIT_PTRACE="1",
+    )
     # The launcher's strict endpoint reservation also rejects an old socket
     # in TIME_WAIT. Each replacement profile needs its own unused endpoint.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reservation:
@@ -157,6 +171,16 @@ class _LiveGuiSession:
         self.gui: LiveGui | None = None
         self.client: McpClient | None = None
         self.abort_message: str | None = None
+        self.current_nodeid: str | None = None
+        self.last_passed_nodeid: str | None = None
+        self.hang_message: str | None = None
+        self.hang_action: str = "none"
+        self.hang_pending = False
+        self.hung_nodeid: str | None = None
+        self.session_finished = False
+        self.hang_monitor = HangMonitor()
+        # pytest's capture manager; the live_gui fixture sets it.
+        self.capture = None
 
     def start(self) -> None:
         if self.gui is not None:
@@ -164,6 +188,7 @@ class _LiveGuiSession:
         with ExitStack() as stack:
             gui = stack.enter_context(_launch_live_gui(self.tmp_path_factory))
             client = McpClient(gui.manifest, gui.workdir)
+            client.observe_deadline = self.observe_deadline
             stack.callback(client.close)
             self.stack = stack.pop_all()
             self.gui, self.client = gui, client
@@ -175,21 +200,92 @@ class _LiveGuiSession:
             self.gui = None
             self.client = None
 
-    def recover(self, nodeid: str) -> bool:
-        if self.gui is None or self.gui.process is None:
+    def _restart(self, nodeid: str) -> None:
+        try:
+            self.close()
+            self.start()
+        except (Exception, pytest.fail.Exception, pytest.skip.Exception) as exc:
+            # Fixture teardown can combine pytest.exit with another error
+            # into an ExceptionGroup. Exit from makereport instead.
+            self.abort_message = f"FreeCAD restart failed after {nodeid}: {exc}"
+
+    def observe_deadline(self, exc: BaseException | None, text: str | None) -> None:
+        """Probe after an RPC deadline. Raise when FreeCAD has stopped answering."""
+        if self.client is not None and getattr(self.client, "freecad_hung", False):
+            raise FreeCadHung(self.hang_message or "FreeCAD stopped answering")
+        if not is_rpc_deadline(exc, text):
+            return
+        gui = self.gui
+        if gui is None or gui.process is None:
+            return
+        try:
+            with self._uncaptured():
+                verdict = self.hang_monitor.assess(
+                    poll=gui.process.poll,
+                    probe=self._probe,
+                    pid=gui.pid,
+                    workdir=gui.workdir,
+                    nodeid=self.current_nodeid or "the live GUI session",
+                    last_passed=self.last_passed_nodeid,
+                    collect=collect_native_backtraces,
+                    stop=lambda: _stop(gui.pid),
+                    trigger=text or ("" if exc is None else str(exc)),
+                )
+        except (OSError, ValueError, RuntimeError) as monitor_error:
+            self.abort_message = (
+                f"FreeCAD process monitoring failed during "
+                f"{self.current_nodeid or 'the live GUI session'}: {monitor_error}"
+            )
+            return
+        if not verdict.hung:
+            return
+        self.hang_message = verdict.message
+        self.hang_action = verdict.action
+        self.hang_pending = True
+        self.hung_nodeid = self.current_nodeid
+        if self.client is not None:
+            self.client.freecad_hung = True
+        raise FreeCadHung(verdict.message)
+
+    def _uncaptured(self):
+        # Write the dump straight to the step log. pytest.exit in makereport
+        # drops the captured output of the test that ends the session.
+        if self.capture is None:
+            return nullcontext()
+        return self.capture.global_and_fixture_disabled()
+
+    def _probe(self) -> bool:
+        client = self.client
+        probe = getattr(client, "probe_liveness", None)
+        if not callable(probe):
+            return False
+        try:
+            return bool(probe(PROBE_TIMEOUT_SECONDS))
+        except Exception:
             return False
 
-        def restart():
-            try:
-                self.close()
-                self.start()
-            except (Exception, pytest.fail.Exception, pytest.skip.Exception) as exc:
-                # Fixture teardown can combine pytest.exit with another error
-                # into an ExceptionGroup. Exit from makereport instead.
-                self.abort_message = f"FreeCAD restart failed after {nodeid}: {exc}"
-
+    def recover(self, nodeid: str) -> bool:
+        if self.session_finished:
+            return False
+        if self.hang_pending:
+            self.hang_pending = False
+            if self.hang_action == "exit":
+                self.abort_message = self.hang_message or (
+                    f"FreeCAD stopped answering again during {nodeid}; "
+                    "ending the live GUI session"
+                )
+                self.session_finished = True
+                return False
+            # First hang: dump already happened and the process was killed.
+            # A fresh GUI lets the rest of the suite run. The next hang exits.
+            self._restart(nodeid)
+            return True
+        if self.gui is None or self.gui.process is None:
+            return False
         try:
-            return recover_if_dead(self.gui.process, self.gui.workdir, nodeid, restart)
+            return recover_if_dead(
+                self.gui.process, self.gui.workdir, nodeid, lambda: self._restart(nodeid),
+            )
         except (OSError, ValueError, RuntimeError) as exc:
             self.abort_message = f"FreeCAD process monitoring failed during {nodeid}: {exc}"
             return False
@@ -211,9 +307,20 @@ def pytest_runtest_makereport(item, call):
         died = _check_for_death(session, item)
         if session.abort_message:
             pytest.exit(session.abort_message, returncode=2)
-        if died and report.passed:
+        # Fakes used by fixture tests only carry the fields they need.
+        hung_node = getattr(session, "hung_nodeid", None)
+        if hung_node == item.nodeid and report.when == "call" and report.passed:
             report.outcome = "failed"
-            report.longrepr = f"FreeCAD died during {item.nodeid} ({report.when}); see stderr diagnostics"
+            report.longrepr = session.hang_message
+        elif died and report.passed:
+            report.outcome = "failed"
+            report.longrepr = (
+                f"FreeCAD died during {item.nodeid} ({report.when}); see stderr diagnostics"
+            )
+        if report.when == "call" and report.passed:
+            session.last_passed_nodeid = item.nodeid
+        if hung_node == item.nodeid and report.when == "call":
+            session.hung_nodeid = None
     if report.failed:
         item.stash[_TEST_FAILED] = True
     return report
@@ -230,6 +337,8 @@ def _live_gui_session(tmp_path_factory) -> Iterator[_LiveGuiSession]:
 
 @pytest.fixture
 def live_gui(_live_gui_session, request) -> Iterator[LiveGui]:
+    _live_gui_session.current_nodeid = request.node.nodeid
+    _live_gui_session.capture = request.config.pluginmanager.getplugin("capturemanager")
     _live_gui_session.start()
     assert _live_gui_session.gui is not None
     try:

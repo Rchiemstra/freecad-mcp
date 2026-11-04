@@ -152,7 +152,18 @@ def _reset_global_mutation_gate_state():
 # ---------------------------------------------------------------------------
 
 def pytest_configure(config: pytest.Config) -> None:
-    for marker in ("unit", "e2e", "core", "session_e2e", "benchmark", "integration", "live_gui"):
+    for marker in (
+        "unit",
+        "e2e",
+        "core",
+        "session_e2e",
+        "benchmark",
+        "integration",
+        "live_gui",
+        # Registered only here: pyproject.toml is an input of the MCP CI
+        # image key, so a marker line there would force a new image.
+        "hang_check",
+    ):
         config.addinivalue_line("markers", marker)
 
 
@@ -177,7 +188,17 @@ def pytest_collection_modifyitems(
     would pick them up and fail in an environment that was never meant to run
     them.
     """
-    layers = {"unit", "e2e", "core", "session_e2e", "benchmark", "integration", "live_gui"}
+    # hang_check is the opt-in FreeCAD hang dump. It must not be retagged unit.
+    layers = {
+        "unit",
+        "e2e",
+        "core",
+        "session_e2e",
+        "benchmark",
+        "integration",
+        "live_gui",
+        "hang_check",
+    }
     for item in items:
         if not layers.intersection(m.name for m in item.iter_markers()):
             item.add_marker(pytest.mark.unit)
