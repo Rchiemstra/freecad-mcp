@@ -463,48 +463,6 @@ def import_step(conn, *args, **kwargs):
     raise NotImplementedError(_CLIENT_STUB_NOT_IMPLEMENTED)
 
 # subject: lease
-def acquire_document_lock(conn, *args, **kwargs):
-    """Generated client stub for acquire_document_lock (lease)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_lease_ops import (
-        acquire_document_lock as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
-def adopt_dirty_document(conn, *args, **kwargs):
-    """Generated client stub for adopt_dirty_document (lease)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_lease_ops import (
-        adopt_dirty_document as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
-def get_document_lock(conn, *args, **kwargs):
-    """Generated client stub for get_document_lock (lease)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_lease_ops import (
-        get_document_lock as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
-def list_document_locks(conn, *args, **kwargs):
-    """Generated client stub for list_document_locks (lease)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_lease_ops import (
-        list_document_locks as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
-def release_document_lock(conn, *args, **kwargs):
-    """Generated client stub for release_document_lock (lease)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_save_ops import (
-        release_document_lock as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
-def update_document_lock(conn, *args, **kwargs):
-    """Generated client stub for update_document_lock (lease)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_lease_ops import (
-        update_document_lock as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
 def finalize_document_edit(conn, *args, **kwargs):
     """Generated client stub for finalize_document_edit (lease)."""
     from freecad_mcp.generated.capabilities.connection_methods.connection_save_ops import (
@@ -743,13 +701,6 @@ def check_rpc_sync(conn, *args, **kwargs):
     """Generated client stub for check_rpc_sync (read)."""
     from freecad_mcp.generated.capabilities.connection_methods.connection_read_ops import (
         check_rpc_sync as _impl,
-    )
-    return _impl(conn, *args, **kwargs)
-
-def claim_acquisition_result(conn, *args, **kwargs):
-    """Generated client stub for claim_acquisition_result (mutation)."""
-    from freecad_mcp.generated.capabilities.connection_methods.connection_control_ops import (
-        claim_acquisition_result as _impl,
     )
     return _impl(conn, *args, **kwargs)
 

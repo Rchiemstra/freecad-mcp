@@ -668,54 +668,6 @@
       "execution_mode": "typed_gateway",
       "gui_thread": false,
       "mutation_class": "lease",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "acquire_document_lock",
-      "tool": "acquire_document_lock"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
-      "mutation_class": "lease",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "adopt_dirty_document",
-      "tool": "adopt_dirty_document"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
-      "mutation_class": "lease",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "get_document_lock",
-      "tool": "get_document_lock"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
-      "mutation_class": "lease",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "list_document_locks",
-      "tool": "list_document_locks"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
-      "mutation_class": "lease",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "release_document_lock",
-      "tool": "release_document_lock"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
-      "mutation_class": "lease",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "update_document_lock",
-      "tool": "update_document_lock"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
-      "mutation_class": "lease",
       "operation_path": "freecad_mcp.capabilities.gateway_refs.connection:finalize_document_edit",
       "rpc_method": "finalize_document_edit",
       "tool": "finalize_document_edit"
@@ -1075,14 +1027,6 @@
     {
       "execution_mode": "typed_gateway",
       "gui_thread": false,
-      "mutation_class": "mutation",
-      "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-      "rpc_method": "claim_acquisition_result",
-      "tool": "claim_acquisition_result"
-    },
-    {
-      "execution_mode": "typed_gateway",
-      "gui_thread": false,
       "mutation_class": "read",
       "operation_path": "freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
       "rpc_method": "get_request_status",
@@ -1417,5 +1361,5 @@
       "tool": "get_worker_status"
     }
   ],
-  "tool_count": 177
+  "tool_count": 170
 }

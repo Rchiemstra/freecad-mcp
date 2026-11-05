@@ -35,7 +35,6 @@ def bind_tool_exports_part_2(
     pkg.recompute_document = exports['recompute_document']
     pkg.redo = exports['redo']
     pkg.refresh_view = exports['refresh_view']
-    pkg.release_document_lock = exports['release_document_lock']
     pkg.relink_references = exports['relink_references']
     pkg.reload_document = exports['reload_document']
     pkg.repair_references = exports['repair_references']
@@ -102,7 +101,6 @@ def bind_tool_exports_part_2(
     pkg.sweep_pipe = exports['sweep_pipe']
     pkg.translate = exports['translate']
     pkg.undo = exports['undo']
-    pkg.update_document_lock = exports['update_document_lock']
     pkg.validate_geometry = exports['validate_geometry']
     pkg.validate_movement_follow = exports['validate_movement_follow']
     namespace.update(vars(pkg))

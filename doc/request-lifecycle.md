@@ -1,5 +1,8 @@
 # Timeout, cancellation, recovery, and MCP Tasks
 
+The MCP server does not register a lease-claim tool. `cancel_request` and
+`get_request_status` remain the control-lane tools.
+
 GUI dispatch uses typed codes rather than parsing messages:
 
 - `GUI_TIMEOUT_BEFORE_EXECUTION`: removed from the queue; no GUI execution began.
@@ -18,13 +21,10 @@ After a timeout, call `get_request_status(request_id)`. States are `queued`,
 The response includes stage, execution/mutation start, cancellation,
 uncertainty, late-result availability, and `recovery_incident_id`.
 
-For acquire/adopt/create, status may also report `result_claimable` and a
-redacted `acquisition_claim` block. Raw lease tokens are never included.
-Reclaim a lost success with `claim_acquisition_result` (general serialized
-sync-tool lane) or by replaying the original authenticated request ID while the
-private claim vault holds the credential. The MCP control lane is
-`cancel_request` and `get_request_status` only; custody via
-`claim_acquisition_result` is isolated from cancel on the sync-tool lane (D6). An unacknowledged claim is not TTL-pruned or
+For a retired acquire/adopt/create attempt, status may also report
+`result_claimable` and a redacted `acquisition_claim` block. Raw lease tokens
+are never included. There is no MCP tool that custodies that credential. The
+MCP control lane is `cancel_request` and `get_request_status` only. An unacknowledged claim is not TTL-pruned or
 capacity-evicted, and the configured capacity is soft: a new raw credential is
 retained rather than rejected after authority may have published. Claims peek
 until `acknowledge_acquisition_claim` (or first authorized use) scrubs the
@@ -38,9 +38,8 @@ Document acquisition deadline hierarchy:
   auto-authorized with no FreeCAD pop-up. Taking over another agent's dirty
   ``LOCKED_ERROR`` lease returns a non-error `LOCKED_ERROR_HANDOFF_PENDING`
   immediately with a `request_id`; bounded GUI revalidation and hash/CAS claim
-  then escrow the credential. Resume with `get_request_status` (control lane)
-  then the public `claim_acquisition_result` (general serialized sync-tool lane)
-  to custody the lease into this process without exposing the raw token. Claim-phase GUI timeouts
+  then escrow the credential. Resume with `get_request_status` (control lane).
+  There is no MCP tool that custodies the lease. Claim-phase GUI timeouts
   leave the continuation `claiming_uncertain` until a late CAS escrows the
   grant; they do not journal a terminal failure over a possible late success.
 - Each acquire GUI phase (`reserve`, `snapshot/promote`): `ACQUIRE_GUI_PHASE_TIMEOUT_S` (45s).
@@ -63,8 +62,8 @@ before the atomic ``begin_claim`` gate (`state=cancelled`,
 the credential remains claimable.
 Same-runtime and cached-foreign orphan recovery likewise accept cancellation
 through snapshot and revalidation, then atomically close cancellation before
-sidecar/core handoff. Cached-foreign dirty state must enter through
-`adopt_dirty_document`; recovery never clears its live `Modified` state. The
+sidecar/core handoff. Cached-foreign dirty state stayed on the retired
+adoption path; recovery never clears its live `Modified` state. The
 new credential enters the private claim vault before in-memory publication; a
 core or vault failure rolls back prior authority (or CAS-deletes the exact
 newly created sidecar), while a post-boundary GUI timeout leaves the successful

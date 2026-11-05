@@ -134,29 +134,6 @@ def _register_get_request_status(
         )
 
     exports['get_request_status'] = get_request_status
-def _register_claim_acquisition_result(
-    mcp: InstrumentedFastMCP,
-    *,
-    dependencies: ToolDependencies,
-    exports: dict[str, object],
-) -> None:
-    @mcp.tool()
-    def claim_acquisition_result(ctx: Context, request_id: str) -> CallToolResult:
-        """Custody a lost or pending acquire/adopt/create lease credential.
-
-        Call after ``get_request_status`` reports ``result_claimable`` (for example
-        following an automatic ``LOCKED_ERROR_HANDOFF_PENDING`` handoff or a
-        transport-lost acquisition). This MCP process retains the one-time token;
-        the tool result never includes the raw credential secret.
-        """
-
-        del ctx, request_id
-        return tool_fail(
-            "Document lease authority was removed in Phase 18",
-            error_code="LEGACY_LEASE_AUTHORITY_REMOVED",
-        )
-
-    exports['claim_acquisition_result'] = claim_acquisition_result
 def _register_cancel_request(
     mcp: InstrumentedFastMCP,
     *,
@@ -218,11 +195,6 @@ def register(
         exports=exports,
     )
     _register_get_request_status(
-        mcp,
-        dependencies=dependencies,
-        exports=exports,
-    )
-    _register_claim_acquisition_result(
         mcp,
         dependencies=dependencies,
         exports=exports,

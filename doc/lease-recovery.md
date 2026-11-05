@@ -1,5 +1,8 @@
 # Lease recovery
 
+The MCP server does not register document-lease tools, including acquisition,
+adoption, and claim. Recovery text below describes the retired protocol.
+
 Recovery is deliberately conservative: a missing heartbeat is evidence of
 uncertainty, not permission to delete a lock. Keep the FCStd, adjacent sidecar,
 guard, and profile `lease-recovery` snapshots together until the document has
@@ -41,7 +44,7 @@ been inspected and resolved.
 - **Pre-fix worker snapshot reported as user intervention:** the exact
   `freecad_mcp_workers/.../snapshots/NNNN_*.FCStd` save signature may use the
   same guarded acquisition path after exact validation. A clean live document
-  uses `acquire_document_lock`; a dirty one uses `adopt_dirty_document`, takes
+  followed the retired clean path; a dirty one followed the retired adoption path, takes
   a fresh recovery snapshot, and remains dirty. For a process-local record,
   takeover already rotated to a discarded credential, so legacy records
   without an MCP hostname remain safe to recover. An imported cached record
@@ -78,8 +81,8 @@ been inspected and resolved.
   `last_verified_save_revision == last_mutation_revision`, and have no active
   migration. The addon repairs only exact-proxy identity metadata, hashes the
   saved FCStd off the GUI thread, proves the foreign FreeCAD authority
-  inactive, and snapshots the live document. Dirty state is never relabelled:
-  it requires `adopt_dirty_document` and remains dirty. After revalidation, one
+  inactive, and snapshots the live document. Dirty state is never relabelled
+  and remains dirty. After revalidation, one
   irreversible transaction atomically creates completed higher-generation
   authority, verifies the core owner/generation/provider, escrows the raw
   credential, and only then replaces the cached foreign record in memory. A
@@ -104,7 +107,7 @@ been inspected and resolved.
   `LOCKED_ERROR` fence remains. The credential owner may retry or correct the
   failure with typed, scoped mutation tools; arbitrary `execute_code` and
   legacy nested-code helpers remain blocked. If another MCP process must
-  continue, `adopt_dirty_document` verifies that
+  continue, the retired adoption path verifies that
   the saved baseline is unchanged, preserves the recovery snapshot, and
   atomically rotates the lease ID, generation, token digest, and owner.
 - **Dirty `LOCKED_ERROR` after closing without saving:** a normal acquire may
@@ -144,8 +147,8 @@ been inspected and resolved.
   renewed session token is expected and does not change request identity.
   Acquisition/create credentials are one-time results and are never stored in
   the public replay cache. After a transport-lost success, the same
-  authenticated MCP runtime may reclaim the credential repeatedly through
-  `claim_acquisition_result` or by replaying the original request ID until it
+  authenticated MCP runtime could reclaim the credential by replaying the
+  original request ID until it
   acknowledges custody (`acknowledge_acquisition_claim`) or first uses the
   credential. Unacknowledged vault entries do not expire, get evicted for a
   newer claim, or get rejected at the configured soft capacity. Preserving the
@@ -158,9 +161,8 @@ been inspected and resolved.
   adoption is auto-authorized with no FreeCAD pop-up. A live ``LOCKED_ERROR``
   handoff returns `LOCKED_ERROR_HANDOFF_PENDING` immediately while a background
   continuation performs bounded GUI authorization/revalidation and hash/CAS
-  claim. It escrows the credential for status polling via `get_request_status`
-  (control lane) then the public `claim_acquisition_result` tool (general
-  serialized sync-tool lane; custodies locally; never returns the raw token). Cancel the pre-CAS continuation with `cancel_request` only before the
+  claim. It escrows the credential for status polling via `get_request_status`.
+  There is no MCP claim tool. Cancel the pre-CAS continuation with `cancel_request` only before the
   atomic `begin_claim` gate; after that boundary cancel is not-cancellable and
   the credential stays claimable when escrowed. Post-gate CAS/validation failure
   still becomes terminal `failed` (no credential). A claim-phase GUI timeout

@@ -32,17 +32,6 @@ MANIFEST = SubjectManifest(
             register_module="tools_runtime_control",
         ),
         ToolEntry(
-            name="claim_acquisition_result",
-            docstring='Custody a lost or pending acquire/adopt/create lease credential.\n\nCall after ``get_request_status`` reports ``result_claimable`` (for example\nfollowing an automatic ``LOCKED_ERROR_HANDOFF_PENDING`` handoff or a\ntransport-lost acquisition). This MCP process retains the one-time token;\nthe tool result never includes the raw credential secret.',
-            signature="(ctx: 'Context', request_id: 'str') -> 'CallToolResult'",
-            operation_path="freecad_mcp.capabilities.legacy_shims.legacy_removed_tool",
-            rpc_method="claim_acquisition_result",
-            execution_mode=ExecutionMode.TYPED_GATEWAY,
-            gui_thread=False,
-            mutation_class=MutationClass.MUTATION,
-            register_module="tools_runtime_control",
-        ),
-        ToolEntry(
             name="get_request_status",
             docstring='Query a timed-out or long-running authenticated request without replaying it.',
             signature="(ctx: 'Context', request_id: 'str') -> 'CallToolResult'",

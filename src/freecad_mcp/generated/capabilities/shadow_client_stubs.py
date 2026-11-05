@@ -353,30 +353,6 @@ def import_step(conn, *args, **kwargs):
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
 # subject: lease
-def acquire_document_lock(conn, *args, **kwargs):
-    """INERT shadow stub for acquire_document_lock (lease)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
-def adopt_dirty_document(conn, *args, **kwargs):
-    """INERT shadow stub for adopt_dirty_document (lease)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
-def get_document_lock(conn, *args, **kwargs):
-    """INERT shadow stub for get_document_lock (lease)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
-def list_document_locks(conn, *args, **kwargs):
-    """INERT shadow stub for list_document_locks (lease)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
-def release_document_lock(conn, *args, **kwargs):
-    """INERT shadow stub for release_document_lock (lease)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
-def update_document_lock(conn, *args, **kwargs):
-    """INERT shadow stub for update_document_lock (lease)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
 def finalize_document_edit(conn, *args, **kwargs):
     """INERT shadow stub for finalize_document_edit (lease)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
@@ -559,10 +535,6 @@ def cancel_request(conn, *args, **kwargs):
 
 def check_rpc_sync(conn, *args, **kwargs):
     """INERT shadow stub for check_rpc_sync (read)."""
-    raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
-
-def claim_acquisition_result(conn, *args, **kwargs):
-    """INERT shadow stub for claim_acquisition_result (mutation)."""
     raise NotImplementedError(_SHADOW_STUB_NOT_IMPLEMENTED)
 
 def get_request_status(conn, *args, **kwargs):

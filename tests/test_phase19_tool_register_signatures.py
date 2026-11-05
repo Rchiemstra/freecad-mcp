@@ -28,9 +28,24 @@ _SKIP_MODULES = frozenset(
 
 _SELECTOR_MODULES = frozenset(
     {
+        "tools_lease_lifecycle",
+    }
+)
+_UNADVERTISED_REGISTER_MODULES = frozenset(
+    {
         "tools_lease_acquire_a",
         "tools_lease_acquire_b",
-        "tools_lease_lifecycle",
+    }
+)
+RETIRED_LEASE_TOOL_NAMES = frozenset(
+    {
+        "acquire_document_lock",
+        "adopt_dirty_document",
+        "claim_acquisition_result",
+        "get_document_lock",
+        "list_document_locks",
+        "release_document_lock",
+        "update_document_lock",
     }
 )
 
@@ -84,9 +99,14 @@ def test_register_without_module_document_selector_mutation(module):
     mcp = MagicMock(name="InstrumentedFastMCP")
     dependencies = _dependencies()
     exports = fresh.register(mcp, dependencies=dependencies)
+    module_name = fresh.__name__.rsplit(".", maxsplit=1)[-1]
 
     assert isinstance(exports, dict)
-    assert mcp.tool.called
+    if module_name in _UNADVERTISED_REGISTER_MODULES:
+        assert not mcp.tool.called
+        assert RETIRED_LEASE_TOOL_NAMES.isdisjoint(exports)
+    else:
+        assert mcp.tool.called
     assert not hasattr(fresh, "DocumentSelectorInput")
 
 

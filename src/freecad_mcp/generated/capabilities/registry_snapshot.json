@@ -48,19 +48,12 @@
     "tools_advanced_b",
     "tools_advanced_b2"
   ],
-  "tool_count": 177,
+  "tool_count": 170,
   "tool_order": [
     "get_runtime_info",
     "check_rpc_sync",
     "get_request_status",
-    "claim_acquisition_result",
     "cancel_request",
-    "acquire_document_lock",
-    "adopt_dirty_document",
-    "get_document_lock",
-    "list_document_locks",
-    "update_document_lock",
-    "release_document_lock",
     "save_document",
     "save_document_as",
     "save_document_copy",
@@ -229,17 +222,9 @@
     "run_fem_analysis"
   ],
   "tools": {
-    "acquire_document_lock": {
-      "docstring": "Acquire an exclusive renewable write lease for a FreeCAD document.\n\nPrefer ``selector`` with an addon-issued ``document_session_uuid`` plus\noptional name/path assertions. All supplied selector fields must resolve to\nthe same open document; ActiveDocument is never used. The one-time private\ncredential is retained by this MCP process for later calls.\n\n``doc_name``, ``file_path``, and ``session_id`` are deprecated selector\naliases. They still acquire through the authenticated protocol-v2 service\nand produce the same canonical schema-v2 sidecar as ``selector``.",
-      "signature": "(ctx: 'Context', doc_name: 'str' = '', file_path: 'str' = '', session_id: 'str' = '', task_description: 'str' = '', selector: 'DocumentSelectorInput | None' = None, agent_id: 'str' = '', hash_policy: \"Literal['sha256']\" = 'sha256') -> 'CallToolResult'"
-    },
     "activate_document": {
       "docstring": "Make an already-open document the active GUI document.",
       "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'"
-    },
-    "adopt_dirty_document": {
-      "docstring": "Adopt existing unsaved changes into the verified lease-v2 lifecycle.\n\nThe selector must contain ``document_name``, ``document_session_uuid``, or\n``canonical_path``. Initial adoption of an unlocked dirty document is\nauto-authorized (no FreeCAD pop-up). Taking over another agent's dirty\n``LOCKED_ERROR`` lease is also auto-authorized without a FreeCAD pop-up.\nThe bounded handoff runs asynchronously while the tool returns a non-error\n``LOCKED_ERROR_HANDOFF_PENDING`` result with a ``request_id``. Resume with\n``get_request_status`` then\n``claim_acquisition_result`` (same path as transport loss).\n``cancel_request`` aborts the handoff before CAS. Adoption creates a\nrecovery snapshot before this MCP process receives the lease credential.\nThe main FCStd is not saved by adoption.",
-      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', task_description: 'str' = '', agent_id: 'str' = '', hash_policy: \"Literal['sha256']\" = 'sha256') -> 'CallToolResult'"
     },
     "animate_placement": {
       "docstring": "Animate an object's Placement along keyframes or a path wire, capture frames, restore.\n\nPrefer this over Shape edits for App::Link visibility. Optionally encodes MP4\nvia system ffmpeg when ``encode_video=True``.",
@@ -304,10 +289,6 @@
     "check_rpc_sync": {
       "docstring": "Verify that the next FreeCAD GUI response belongs to this exact call.\n\nA unique nonce is round-tripped through FreeCAD's GUI task queue. Use this\nafter an execute timeout or before relying on model inspection results. A\ntimeout or nonce mismatch means the queue is not safe for further work.",
       "signature": "(ctx: 'Context') -> 'CallToolResult'"
-    },
-    "claim_acquisition_result": {
-      "docstring": "Custody a lost or pending acquire/adopt/create lease credential.\n\nCall after ``get_request_status`` reports ``result_claimable`` (for example\nfollowing an automatic ``LOCKED_ERROR_HANDOFF_PENDING`` handoff or a\ntransport-lost acquisition). This MCP process retains the one-time token;\nthe tool result never includes the raw credential secret.",
-      "signature": "(ctx: 'Context', request_id: 'str') -> 'CallToolResult'"
     },
     "clear_expression": {
       "docstring": "Clear an expression binding on an object property.",
@@ -461,10 +442,6 @@
       "docstring": "Property-annotated dependency graph from a root object (M13).\n\n``edges`` run from an object to what it depends on (upstream of the root),\nwith the link property and subelements. ``dependents`` lists the objects that\ndepend on the root, nearest first: what breaks if it is deleted.\n``history_order`` is the feature order of the root's Body (or of the root\nitself when it is a container). ``cycle_detected`` reports a link cycle.",
       "signature": "(ctx: 'Context', doc_name: 'str', root: 'str') -> 'CallToolResult'"
     },
-    "get_document_lock": {
-      "docstring": "Return redacted effective local/foreign lease state for one document.\n\nPrefer ``selector``. The legacy identity arguments remain temporarily for\noff/observe migration compatibility. Status never includes the bearer token\nor its fingerprint; malformed or conflicting sidecars report locked/unknown.",
-      "signature": "(ctx: 'Context', doc_name: 'str' = '', file_path: 'str' = '', session_id: 'str' = '', selector: 'DocumentSelectorInput | None' = None) -> 'CallToolResult'"
-    },
     "get_document_tree": {
       "docstring": "Return a compact document/container tree.\n\nArgs:\n    doc_name: Document to inspect.\n    root_filter: Optional Name/Label substring used to select tree roots.\n    max_depth: Maximum container depth to include.\n    include: Fields to include, defaulting to Name/Label/TypeId/Visibility/State.\n    include_properties: Optional object properties to include.\n    selected_nodes: Names/labels whose properties should be included.\n\nReturns:\n    JSON tree for compact agent inspection.",
       "signature": "(ctx: 'Context', doc_name: 'str', root_filter: 'str | None' = None, max_depth: 'int' = 4, include: 'list[str] | None' = None, include_properties: 'list[str] | None' = None, selected_nodes: 'list[str] | None' = None) -> 'CallToolResult'"
@@ -565,10 +542,6 @@
       "docstring": "List cached metadata for installed FreeCAD add-on services. No document or GUI access.",
       "signature": "(ctx: 'Context') -> 'CallToolResult'"
     },
-    "list_document_locks": {
-      "docstring": "List redacted local, foreign, stale, error, and dirty-recovery records.\n\nThe response contains no bearer tokens or token fingerprints.",
-      "signature": "(ctx: 'Context') -> 'CallToolResult'"
-    },
     "list_documents": {
       "docstring": "Get the list of open documents in FreeCAD.\n\nReturns:\n    A list of document names.",
       "signature": "(ctx: 'Context') -> 'CallToolResult'"
@@ -648,10 +621,6 @@
     "refresh_view": {
       "docstring": "Force a GUI redraw after Link/shape edits; optionally touch Placement and frame.",
       "signature": "(ctx: 'Context', focus_objects: 'list[str] | None' = None, focus_object: 'str | None' = None, touch_objects: 'list[str] | None' = None, fit: 'bool' = False, capture: 'bool' = False, view_name: \"Literal['Isometric', 'Front', 'Top', 'Right', 'Back', 'Left', 'Bottom', 'Dimetric', 'Trimetric']\" = 'Isometric') -> 'CallToolResult'"
-    },
-    "release_document_lock": {
-      "docstring": "CAS-release only a clean, verified saved/restored document lease.\n\nPrefer ``selector``; its credential is selected from private MCP memory.\n``doc_key`` and ``token`` are deprecated protocol-v1 compatibility fields\nfor off/observe migration only and are rejected for enforce-mode mutation.\nAgents cannot use this tool for dirty abandonment.",
-      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput | None' = None, disposition: \"Literal['saved', 'restored']\" = 'saved', doc_key: 'str' = '', token: 'str' = '') -> 'CallToolResult'"
     },
     "relink_references": {
       "docstring": "Re-point every reference to ``from_obj`` so it points to ``to_obj`` (M5).\n\nScans all link-type properties (AttachmentSupport, Support, Profile, Base,\nTool, Source, Group, ...) of all document objects and re-points them, making\nrebuilds non-destructive. Subshape names are preserved; mismatches surface\nvia the recompute log. Returns JSON ``{ok, from_obj, to_obj, relinked, count}``\nwhere ``relinked`` lists the rewritten ``Object.Property`` links; a relink that\nmatches nothing fails with RELINK_NOT_APPLIED.\n\nArgs:\n    doc_name: The document to edit.\n    from_obj: The object whose references are being redirected away from.\n    to_obj: The object references should now point to.",
@@ -924,10 +893,6 @@
     "undo": {
       "docstring": "Undo the last operation in a FreeCAD document.\n\nRequires a mutation-ready live document. Pending recompute work rejects undo;\nrun recompute_document before retrying. An empty live history reports Nothing\nto undo. Use get_mutation_readiness for live readiness and history counts;\nread-only execute_code workers inspect snapshot copies, not live undo history.\n\nArgs:\n    doc_name: The document to undo in.\n\nReturns:\n    A message indicating success or failure.",
       "signature": "(ctx: 'Context', doc_name: 'str') -> 'CallToolResult'"
-    },
-    "update_document_lock": {
-      "docstring": "Update bounded task/progress metadata without changing authority.\n\nState, heartbeat, dirty status, errors, and mutation revisions remain\nserver-owned and cannot be supplied through this tool.",
-      "signature": "(ctx: 'Context', selector: 'DocumentSelectorInput', task_description: 'str' = '', progress_detail: 'str' = '') -> 'CallToolResult'"
     },
     "validate_geometry": {
       "docstring": "Validate the geometry of a shape and return diagnostic information.\n\nChecks whether the shape is null, valid, closed, and reports face/edge/vertex\ncounts along with a BRep analysis result.\n\nArgs:\n    doc_name: Document containing the object.\n    obj_name: Name of the shape object.\n\nReturns:\n    JSON with validity flags, counts, volume/area, and BRep analysis output.",
