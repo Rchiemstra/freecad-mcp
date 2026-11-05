@@ -506,3 +506,42 @@ def test_abandoned_artifact_root_expires_without_removing_fresh_files(
         if survivor is not None:
             survivor.stop()
         crashed.stop()
+
+
+def test_artifact_root_survives_a_peer_unlinking_its_lock_before_it_is_held(
+    tmp_path, monkeypatch
+):
+    """Between creating its lock file and locking it, a manager's lock looks
+    abandoned, and a peer's sweep may unlink it. The manager must end up
+    holding a lock that peers can see."""
+
+    from addon.FreeCADMCP.rpc_server.worker_manager_ops import artifact_roots
+
+    real_lock = artifact_roots._exclusive_lock
+    unlinked = []
+
+    def peer_sweeps_first(fd):
+        if not unlinked:
+            for lock in (tmp_path / "workers").glob(".mcp_artifact_owner_*.lock"):
+                artifact_roots._unlink_if_abandoned(lock)
+                unlinked.append(lock)
+        real_lock(fd)
+
+    monkeypatch.setattr(artifact_roots, "_exclusive_lock", peer_sweeps_first)
+    root = tmp_path / "workers"
+    root.mkdir()
+    manager = WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=root,
+        autostart=False,
+    )
+    try:
+        assert unlinked and not unlinked[0].exists()
+        owner = manager._artifact_owner
+        assert owner.lock_path.exists()
+        assert not artifact_roots._lock_is_abandoned(owner.lock_path)
+        artifact_roots.reap_orphaned_artifact_roots(root, tmp_path / "elsewhere")
+        assert manager.artifact_root.is_dir()
+    finally:
+        manager.stop()

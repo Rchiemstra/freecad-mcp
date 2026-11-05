@@ -39,22 +39,30 @@ class ArtifactOwner:
 def create_artifact_root(temp_root: Path) -> ArtifactOwner:
     """Create a directory no other manager can claim, then publish it."""
 
-    token = uuid.uuid4().hex
-    lock_path = _lock_path(temp_root, token)
-    root = temp_root / f"{_ARTIFACT_PREFIX}{token}"
     flags = os.O_CREAT | os.O_EXCL | os.O_RDWR
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
-    fd = os.open(lock_path, flags, 0o600)
-    try:
-        os.write(fd, b"\0")
-        _exclusive_lock(fd)
-        root.mkdir(mode=0o700)
-    except OSError:
-        os.close(fd)
-        lock_path.unlink(missing_ok=True)
-        raise
-    return ArtifactOwner(path=root, lock_path=lock_path, lock_fd=fd)
+    while True:
+        token = uuid.uuid4().hex
+        lock_path = _lock_path(temp_root, token)
+        fd = os.open(lock_path, flags, 0o600)
+        try:
+            os.write(fd, b"\0")
+            _exclusive_lock(fd)
+            # Until the lock is held the file looks abandoned, so a peer's
+            # sweep may have unlinked it. A lock on an unlinked file protects
+            # nothing; start again under a new token.
+            if not _fd_is_at_path(fd, lock_path):
+                _unlock(fd)
+                os.close(fd)
+                continue
+            root = temp_root / f"{_ARTIFACT_PREFIX}{token}"
+            root.mkdir(mode=0o700)
+        except OSError:
+            os.close(fd)
+            lock_path.unlink(missing_ok=True)
+            raise
+        return ArtifactOwner(path=root, lock_path=lock_path, lock_fd=fd)
 
 
 def release_artifact_root(owner: ArtifactOwner) -> None:
@@ -196,6 +204,15 @@ def _unlink_if_abandoned(lock_path: Path) -> None:
         lock_path.unlink(missing_ok=True)
 
 
+def _fd_is_at_path(fd: int, path: Path) -> bool:
+    try:
+        held = os.fstat(fd)
+        named = os.stat(path)
+    except OSError:
+        return False
+    return (held.st_dev, held.st_ino) == (named.st_dev, named.st_ino)
+
+
 def _lock_is_abandoned(lock_path: Path) -> bool:
     try:
         fd = os.open(lock_path, os.O_RDWR)
@@ -240,7 +257,8 @@ def _try_exclusive_lock(fd: int) -> bool:
 
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    except OSError:
+        # Held by its owner, or no lock support here: treat it as alive.
         return False
     return True
 
