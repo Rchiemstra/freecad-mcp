@@ -152,7 +152,7 @@ Initial limits are: code 1 MiB, manifest 1 MiB, streaming stdout 1 MiB, result J
 
 Windows workers use a new process group, no console window, and a kill-on-close Job Object, with bounded wait and `taskkill /T /F` fallback. POSIX workers use a new session, process-group `SIGTERM`, a two-second wait, then `SIGKILL`.
 
-Shutdown order is: reject new requests/jobs, complete pending jobs with `server_stopping`, request active worker termination outside Qt, use bounded forced termination, initiate XML-RPC shutdown outside Qt, avoid unbounded GUI-thread joins, clean temporary resources outside Qt, and dispose Qt objects on Qt. An already-running live-document GUI operation cannot be safely interrupted; it is left draining.
+Shutdown order is: reject new requests/jobs, complete pending jobs with `server_stopping`, request active worker termination outside Qt, use bounded forced termination, initiate XML-RPC shutdown outside Qt, avoid unbounded GUI-thread joins, clean temporary resources outside Qt, and dispose Qt objects on Qt. If that forced termination leaves the worker process running, the manager keeps its handle, admission slot, workspace, and artifact-root lock, and does not start another active job or delete those files until the process exits. An already-running live-document GUI operation cannot be safely interrupted; it is left draining.
 
 Artifacts are staged privately, containment/size validated, promoted to manager ownership only after successful execution, assigned explicit handles/paths, expired after one hour, and removed on shutdown.
 

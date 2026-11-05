@@ -11,12 +11,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .process_control import terminate_process_tree
 from .telemetry import emit as emit_telemetry
 from .worker_manager_ops.artifact_roots import (
     create_artifact_root,
     refresh_artifact_storage,
-    release_artifact_root,
 )
 from .worker_manager_ops.build_identity import (
     BuildIdentity,
@@ -29,6 +27,11 @@ from .worker_manager_ops.executable_discovery import (
 )
 from .worker_manager_ops.lifecycle_codes import build_worker_error
 from .worker_manager_ops.link_warnings import apply_link_warnings, merge_link_warnings
+from .worker_manager_ops.retained_worker import (
+    process_still_running,
+    release_artifact_root_once,
+    request_process_termination,
+)
 from .worker_manager_ops.surfaces import attach_worker_manager_surfaces
 from .worker_manager_ops.temp_usage import (
     sweep_stale_workspaces,
@@ -81,6 +84,11 @@ class WorkerManager:
         self._active_process: subprocess.Popen | None = None
         self._active_job_id: str | None = None
         self._active_invocation: _WorkerInvocation | None = None
+        # Set when a kill does not exit the process. Cleared only after poll().
+        self._retained_workspace: Path | None = None
+        self._retained_job_object = None
+        self._terminate_lock = threading.Lock()
+        self._artifact_released = False
         self._invocations: dict[str, _WorkerInvocation] = {}
         self._work_queue: queue.Queue[_WorkerInvocation] = queue.Queue()
         self._admission = threading.BoundedSemaphore(4)
@@ -205,7 +213,7 @@ class WorkerManager:
             worker_job_id=job_id,
             payload={"state": "active" if active else "pending"},
         )
-        terminated = terminate_process_tree(process) if process is not None else False
+        terminated = request_process_termination(self, process) if process is not None else False
         if active and process is not None and not terminated:
             return {
                 "success": False,
@@ -278,20 +286,19 @@ class WorkerManager:
                         "server_stopping", "Worker manager is stopping", job_id=invocation.job_id
                     )
                     invocation.completed.set()
-        return True if process is None else terminate_process_tree(
-            process, grace=min(timeout, 2.0)
-        )
+        return request_process_termination(self, process, grace=min(timeout, 2.0))
 
     def stop(self, timeout: float = 4.0) -> bool:
-        stopped = self._begin_shutdown(timeout=timeout)
+        self._begin_shutdown(timeout=timeout)
         with self._start_lock:
             worker_started = self._worker_started
         if worker_started:
             self._worker_thread.join(timeout=max(0.1, timeout))
         thread_stopped = not worker_started or not self._worker_thread.is_alive()
-        if thread_stopped:
-            release_artifact_root(self._artifact_owner)
-        return stopped and thread_stopped
+        still_running = process_still_running(self._active_process)
+        if thread_stopped and not still_running:
+            release_artifact_root_once(self)
+        return thread_stopped and not still_running
 
     @staticmethod
     def _error(error_code: str, error: str, **execution) -> dict[str, Any]:

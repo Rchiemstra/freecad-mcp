@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import time
 
 from ..snapshot_service_ops.materialize_aliases import materialize_load_aliases
@@ -21,6 +20,7 @@ from .execute_job_helpers import (
 )
 from .execute_job_launch import launch_and_wait_for_worker
 from .lifecycle_codes import build_worker_error
+from .retained_worker import finish_job_process
 from .temp_usage import temp_usage
 from .worker_invocation import WorkerInvocation
 from .worker_version_mismatch import WorkerVersionMismatch
@@ -174,8 +174,4 @@ def execute_job_now(manager, invocation: WorkerInvocation) -> dict:
         manager._last_error = str(exc)
         return build_worker_error("worker_unavailable", str(exc), job_id=job_id)
     finally:
-        manager._active_process = None
-        manager._active_job_id = None
-        if job_object is not None:
-            job_object.close()
-        shutil.rmtree(workspace, ignore_errors=True)
+        finish_job_process(manager, workspace, job_object)

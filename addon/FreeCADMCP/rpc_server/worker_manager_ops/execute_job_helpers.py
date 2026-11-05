@@ -8,12 +8,13 @@ import threading
 import time
 from typing import Any
 
-from ..process_control import WindowsJobObject, terminate_process_tree
+from ..process_control import WindowsJobObject
 from ..telemetry import emit as emit_telemetry
 from ..worker_protocol import MAX_RESULT_BYTES, read_json_limited
 from .console import console_message
 from .lifecycle_codes import build_worker_error
 from .link_warnings import apply_link_warnings, merge_link_warnings
+from .retained_worker import request_process_termination
 from .temp_usage import temp_usage
 from .worker_invocation import WorkerInvocation
 
@@ -30,13 +31,17 @@ def wait_for_worker_process(
 ) -> tuple[int | None, dict[str, Any] | None]:
     deadline = time.monotonic() + timeout
     return_code: int | None = None
+    if job_object is not None:
+        with manager._terminate_lock:
+            if manager._retained_job_object is None:
+                manager._retained_job_object = job_object
     while True:
         polled = process.poll()
         if polled is not None:
             return_code = polled
             break
         if temp_usage(manager.temp_root) > manager.temp_root_limit_bytes:
-            terminated = terminate_process_tree(process, job_object)
+            terminated = request_process_termination(manager, process)
             log_thread.join(timeout=2.0)
             return None, build_worker_error(
                 "resource_limit_exceeded",
@@ -50,7 +55,7 @@ def wait_for_worker_process(
             break
         time.sleep(min(manager.monitor_interval_seconds, remaining))
     if process.poll() is None:
-        terminated = terminate_process_tree(process, job_object)
+        terminated = request_process_termination(manager, process)
         log_thread.join(timeout=2.0)
         emit_telemetry(
             "worker_manager",

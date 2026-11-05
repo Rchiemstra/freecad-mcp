@@ -40,8 +40,9 @@ def launch_and_wait_for_worker(
             env=manager._worker_environment(workspace),
             **popen_platform_options(),
         )
-        manager._active_process = process
-        manager._active_job_id = job_id
+        with manager._terminate_lock:
+            manager._active_process = process
+            manager._active_job_id = job_id
         log_thread = threading.Thread(
             target=drain_process_log,
             args=(process, log),
@@ -50,6 +51,8 @@ def launch_and_wait_for_worker(
         )
         log_thread.start()
         job_object = assign_windows_job_object(process)
+        with manager._terminate_lock:
+            manager._retained_job_object = job_object
         return_code, early_error = wait_for_worker_process(
             manager,
             process,
