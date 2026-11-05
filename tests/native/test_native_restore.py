@@ -79,7 +79,11 @@ def _prepare(document):
     if not isinstance(snaps, list):
         snaps = []
         module._mcp_snapshots = snaps
-    snaps.append({'id': 'snap-test', 'path': path, 'doc': document.Name})
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.snapshot_owner import (
+        snapshot_owner_fields,
+    )
+
+    snaps.append({'id': 'snap-test', 'path': path, 't': 0, **snapshot_owner_fields(document)})
     document.recompute()
     return body
 
@@ -334,3 +338,143 @@ def test_restore_native_validator_cannot_write_reloaded_object():
         assert _model_state(document) == loaded_state
     finally:
         FreeCAD.closeDocument(document.Name)
+
+
+def _isolate_snapshot_ring(FreeCAD):
+    previous = getattr(FreeCAD, "_mcp_snapshots", None)
+    FreeCAD._mcp_snapshots = []
+    return previous
+
+
+def _restore_snapshot_ring(FreeCAD, previous) -> None:
+    current = getattr(FreeCAD, "_mcp_snapshots", None)
+    if isinstance(current, list):
+        for row in current:
+            path = row.get("path") if isinstance(row, dict) else None
+            if isinstance(path, str):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    if isinstance(previous, list):
+        FreeCAD._mcp_snapshots = previous
+    else:
+        FreeCAD._mcp_snapshots = []
+
+
+def test_restore_native_reused_document_name_does_not_select_previous_snapshot():
+    _require_native_collaboration()
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_io_actions import (
+        snapshot_document,
+    )
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.snapshot_restore_target import (
+        resolve_restore_target,
+        validate_restore_target,
+    )
+
+    previous = _isolate_snapshot_ring(FreeCAD)
+    try:
+        first = FreeCAD.newDocument("MCPRestoreReuse")
+        first.addObject("App::FeaturePython", "Original")
+        first.recompute()
+        first_uid = str(first.Uid)
+        payload = snapshot_document(first)
+        snap_id = str(payload["snapshot_id"])
+        row = FreeCAD._mcp_snapshots[-1]
+        assert row["document_uid"] == first_uid
+        assert row["document_instance_id"] == first.collaborationIdentity()["instance_id"]
+        FreeCAD.closeDocument(first.Name)
+
+        second = FreeCAD.newDocument("MCPRestoreReuse")
+        second.addObject("App::FeaturePython", "Successor")
+        second.recompute()
+        assert second.Name == "MCPRestoreReuse"
+        assert str(second.Uid) != first_uid
+
+        result = run_restore(
+            _collaborators(FreeCAD, lambda _document: None),
+            second.Name,
+            snap_id,
+        )
+        assert result["success"] is False
+        assert result["error_code"] == "SNAPSHOT_NOT_FOUND"
+        assert second.getObject("Successor") is not None
+        assert second.getObject("Original") is None
+
+        omitted = run_restore(
+            _collaborators(FreeCAD, lambda _document: None),
+            second.Name,
+            None,
+        )
+        assert omitted["success"] is False
+        assert omitted["error_code"] == "SNAPSHOT_NOT_FOUND"
+        assert second.getObject("Original") is None
+
+        target, error = resolve_restore_target(second, snap_id)
+        assert error is None and target is not None
+        mismatch = validate_restore_target(target, second)
+        assert mismatch is not None
+        assert mismatch["error_code"] == "SNAPSHOT_DOCUMENT_MISMATCH"
+        missing, missing_error = resolve_restore_target(second, None)
+        assert missing is None
+        assert missing_error is not None
+        assert missing_error["error_code"] == "SNAPSHOT_DOCUMENT_MISMATCH"
+    finally:
+        for name in list(_documents(FreeCAD)):
+            _close_named(FreeCAD, name)
+        _restore_snapshot_ring(FreeCAD, previous)
+
+
+def test_restore_native_opened_copy_keeps_its_own_snapshot():
+    _require_native_collaboration()
+    import tempfile
+
+    import FreeCAD
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_io_actions import (
+        snapshot_document,
+    )
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.restore import run_restore
+
+    previous = _isolate_snapshot_ring(FreeCAD)
+    copy_path = ""
+    try:
+        source = FreeCAD.newDocument("MCPRestoreSource")
+        source.addObject("App::FeaturePython", "Original")
+        source.recompute()
+        payload = snapshot_document(source)
+        handle, copy_path = tempfile.mkstemp(suffix=".FCStd")
+        os.close(handle)
+        source.saveCopy(copy_path)
+        opened = FreeCAD.openDocument(copy_path)
+        assert str(opened.Uid) == str(source.Uid)
+        assert (
+            opened.collaborationIdentity()["instance_id"]
+            != source.collaborationIdentity()["instance_id"]
+        )
+
+        rejected = run_restore(
+            _collaborators(FreeCAD, lambda _document: None),
+            opened.Name,
+            str(payload["snapshot_id"]),
+        )
+        assert rejected["success"] is False
+        assert rejected["error_code"] == "SNAPSHOT_NOT_FOUND"
+
+        restored = run_restore(
+            _collaborators(FreeCAD, lambda _document: None),
+            source.Name,
+            str(payload["snapshot_id"]),
+        )
+        assert restored["success"] is True
+        assert source.getObject("Original") is not None
+    finally:
+        for name in list(_documents(FreeCAD)):
+            _close_named(FreeCAD, name)
+        if copy_path:
+            try:
+                os.remove(copy_path)
+            except OSError:
+                pass
+        _restore_snapshot_ring(FreeCAD, previous)

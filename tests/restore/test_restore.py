@@ -50,6 +50,10 @@ def PathWrite(path: str) -> None:
 
 class _Document:
     Name = "Doc"
+    Uid = "uid-doc"
+
+    def collaborationIdentity(self) -> dict[str, object]:
+        return {"instance_id": 1, "lifecycle_epoch": 1, "state": "Live"}
 
     def __init__(self, events: list[str], *, assigned_name: str | None = None) -> None:
         self.events = events
@@ -217,7 +221,15 @@ def _seed(document: _Document) -> None:
             handle, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
             os.close(handle)
             PathWrite(path)
-            document._mcp_snapshots.append({"id": "snap-test", "path": path, "doc": "Doc"})
+            document._mcp_snapshots.append(
+                {
+                    "id": "snap-test",
+                    "path": path,
+                    "doc": "Doc",
+                    "document_uid": document.Uid,
+                    "document_instance_id": document.collaborationIdentity()["instance_id"],
+                }
+            )
 
 
 def _collaborators(document: _Document | None, events: list[str], *, validator=None, final_result=None):
@@ -454,3 +466,82 @@ def test_broken_live_state_is_validated_only_after_snapshot_reload():
     assert document.restored_paths
     assert "Hole1" not in document.objects
     assert events.count("validate") == 1
+
+
+def _owned_snapshot(document: _Document, snapshot_id: str, *, uid: str, instance_id: int) -> str:
+    handle, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
+    os.close(handle)
+    PathWrite(path)
+    document._mcp_snapshots.append(
+        {
+            "id": snapshot_id,
+            "path": path,
+            "doc": document.Name,
+            "document_uid": uid,
+            "document_instance_id": instance_id,
+        }
+    )
+    return path
+
+
+def test_restore_rejects_snapshot_from_a_reused_document_name():
+    """A new document can reuse a closed document's name and must not inherit its snapshot."""
+
+    events: list[str] = []
+    successor = _Document(events)
+    successor.Uid = "uid-successor"
+    successor.collaborationIdentity = lambda: {
+        "instance_id": 2,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    _owned_snapshot(successor, "snap-previous", uid="uid-previous", instance_id=1)
+    collaborators, _api = _collaborators(successor, events)
+
+    result = run_restore(collaborators, successor.Name, "snap-previous")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert successor.restored_paths == []
+
+
+def test_restore_without_id_skips_a_newer_snapshot_from_a_reused_name():
+    events: list[str] = []
+    document = _Document(events)
+    document.Uid = "uid-live"
+    document.collaborationIdentity = lambda: {
+        "instance_id": 4,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    _owned_snapshot(document, "snap-live", uid="uid-live", instance_id=4)
+    _owned_snapshot(document, "snap-reused-name", uid="uid-closed", instance_id=3)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_restore(collaborators, document.Name, None)
+
+    assert result["success"] is True, result
+    assert result["restored_id"] == "snap-live"
+    assert document.restored_paths
+
+
+def test_restore_rejects_opened_copy_with_the_same_uid():
+    """An opened save copy shares Uid but is a different live document."""
+
+    events: list[str] = []
+    copy = _Document(events)
+    copy.Name = "Copy"
+    copy.Uid = "uid-shared"
+    copy.collaborationIdentity = lambda: {
+        "instance_id": 9,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    _owned_snapshot(copy, "snap-original", uid="uid-shared", instance_id=1)
+    collaborators, _api = _collaborators(copy, events)
+
+    result = run_restore(collaborators, copy.Name, "snap-original")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert copy.restored_paths == []
