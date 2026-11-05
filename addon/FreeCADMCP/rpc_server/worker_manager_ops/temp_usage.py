@@ -7,6 +7,8 @@ import shutil
 import time
 from pathlib import Path
 
+from .artifact_roots import refresh_artifact_storage
+
 
 def temp_usage(temp_root: Path) -> int:
     """Measure managed files without following links outside the temp root."""
@@ -39,15 +41,4 @@ def sweep_stale_workspaces(temp_root: Path, artifact_root: Path) -> None:
                 shutil.rmtree(child, ignore_errors=True)
         except OSError:
             pass
-    sweep_stale_artifacts(artifact_root)
-
-
-def sweep_stale_artifacts(artifact_root: Path) -> None:
-    artifact_cutoff = time.time() - 60 * 60
-    if artifact_root.exists():
-        for child in artifact_root.iterdir():
-            try:
-                if child.stat().st_mtime < artifact_cutoff:
-                    shutil.rmtree(child, ignore_errors=True)
-            except OSError:
-                pass
+    refresh_artifact_storage(temp_root, artifact_root)
