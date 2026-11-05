@@ -9,8 +9,9 @@ import time
 import uuid
 from contextlib import suppress
 
-from .typed_runtime import TypedMutationError, require_object
+from .snapshot_owner import snapshot_owner_fields
 from .typed_rpc_container_support import snapshot_rings
+from .typed_runtime import TypedMutationError, require_object
 
 
 def _vec(value: object) -> dict[str, float] | None:
@@ -245,6 +246,58 @@ def get_recompute_log_full(document: object) -> dict[str, object]:
 _SNAPSHOT_STORE: dict[str, dict[str, object]] = {}
 
 
+def _remember_snapshot(
+    document: object,
+    path: str,
+    rings: tuple[list[object], ...],
+    payload: dict[str, object],
+) -> dict[str, object]:
+    known_ids = {
+        row.get("id")
+        for ring in rings
+        for row in ring
+        if isinstance(row, dict)
+    }
+    snapshot_id = "snap-" + str(int(time.time() * 1000))
+    if snapshot_id in known_ids:
+        snapshot_id = str(uuid.uuid4())
+    try:
+        owner = snapshot_owner_fields(document)
+    except RuntimeError:
+        with suppress(Exception):
+            os.remove(path)
+        raise
+    row = {
+        "id": snapshot_id,
+        "path": path,
+        "t": time.time(),
+        **owner,
+    }
+    for ring in rings:
+        ring.append(row)
+        while len(ring) > 5:
+            old = ring.pop(0)
+            if not isinstance(old, dict):
+                continue
+            old_path = old.get("path")
+            if not isinstance(old_path, str) or not old_path:
+                continue
+            still_referenced = any(
+                isinstance(item, dict) and item.get("path") == old_path
+                for other in rings
+                for item in other
+            )
+            if not still_referenced:
+                with suppress(Exception):
+                    os.remove(old_path)
+    _SNAPSHOT_STORE[snapshot_id] = payload
+    return {
+        "snapshot_id": snapshot_id,
+        "doc": str(payload.get("doc", "")),
+        "count": max(len(ring) for ring in rings),
+    }
+
+
 def snapshot_document(document: object) -> dict[str, object]:
     payload = capture_state(document, None)
     rings = snapshot_rings(document)
@@ -273,44 +326,7 @@ def snapshot_document(document: object) -> dict[str, object]:
         with suppress(Exception):
             os.remove(path)
         raise
-    known_ids = {
-        row.get("id")
-        for ring in rings
-        for row in ring
-        if isinstance(row, dict)
-    }
-    snapshot_id = "snap-" + str(int(time.time() * 1000))
-    if snapshot_id in known_ids:
-        snapshot_id = str(uuid.uuid4())
-    row = {
-        "id": snapshot_id,
-        "path": path,
-        "doc": str(getattr(document, "Name", "") or payload.get("doc", "")),
-        "t": time.time(),
-    }
-    for ring in rings:
-        ring.append(row)
-        while len(ring) > 5:
-            old = ring.pop(0)
-            if not isinstance(old, dict):
-                continue
-            old_path = old.get("path")
-            if not isinstance(old_path, str) or not old_path:
-                continue
-            still_referenced = any(
-                isinstance(item, dict) and item.get("path") == old_path
-                for other in rings
-                for item in other
-            )
-            if not still_referenced:
-                with suppress(Exception):
-                    os.remove(old_path)
-    _SNAPSHOT_STORE[snapshot_id] = payload
-    return {
-        "snapshot_id": snapshot_id,
-        "doc": str(payload.get("doc", "")),
-        "count": max(len(ring) for ring in rings),
-    }
+    return _remember_snapshot(document, path, rings, payload)
 
 
 def run_transaction(document: object, label: str, code: str, dry_run: bool, commit_on_success: bool) -> dict[str, object]:

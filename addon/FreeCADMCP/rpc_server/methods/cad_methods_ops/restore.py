@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from .native_commit_wait import NativeOutcome, PendingNativeResult, settle_native_commit
-
+from .snapshot_owner import row_belongs_to_document
+from .typed_rpc_container_support import snapshot_ring, snapshot_rings
 from .typed_rpc_support import (
     nonempty_string,
     optional_string,
 )
-from .typed_rpc_container_support import snapshot_ring, snapshot_rings
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -79,7 +79,6 @@ def apply_restore(doc: RestoreDocument, request: RestoreRequest) -> RestoreRecei
 
     restored_id = ""
     snapshot_path: str | None = None
-    doc_name = str(getattr(doc, "Name", "") or request.doc_name)
     seen: set[int] = set()
     for store in snapshot_rings(doc):
         rows = list(reversed(store)) if request.snapshot_id is None else list(store)
@@ -93,8 +92,9 @@ def apply_restore(doc: RestoreDocument, request: RestoreRequest) -> RestoreRecei
             candidate = row.get("id")
             if not isinstance(candidate, str):
                 continue
-            row_doc = row.get("doc")
-            if isinstance(row_doc, str) and row_doc.strip() and row_doc not in {doc_name, str(request.doc_name)}:
+            # Names are reused after close, and a copy shares Uid. Match the
+            # live document's uid and collaboration instance instead.
+            if not row_belongs_to_document(row, doc):
                 continue
             if request.snapshot_id is None or candidate == request.snapshot_id:
                 restored_id = candidate

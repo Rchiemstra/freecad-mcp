@@ -55,8 +55,15 @@ def check_history_missing(op: str) -> None:
     assert result["error_code"] == "DOCUMENT_NOT_FOUND"
 
 
-def check_query_success(op: str, kind: str, run_args: Callable[[str, dict[str, str]], tuple]) -> None:
-    require_native_collaboration()
+def check_query_success(
+    op: str,
+    kind: str,
+    run_args: Callable[[str, dict[str, str]], tuple],
+    *,
+    require_native: bool = True,
+) -> None:
+    if require_native:
+        require_native_collaboration()
     import FreeCAD
 
     _, runner = load_runner(op)
@@ -72,8 +79,14 @@ def check_query_success(op: str, kind: str, run_args: Callable[[str, dict[str, s
         FreeCAD.closeDocument(doc_name)
 
 
-def check_query_missing(op: str, run_args: Callable[[str, dict[str, str]], tuple]) -> None:
-    require_native_collaboration()
+def check_query_missing(
+    op: str,
+    run_args: Callable[[str, dict[str, str]], tuple],
+    *,
+    require_native: bool = True,
+) -> None:
+    if require_native:
+        require_native_collaboration()
     import FreeCAD
 
     _, runner = load_runner(op)

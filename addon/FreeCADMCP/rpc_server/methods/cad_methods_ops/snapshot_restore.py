@@ -9,8 +9,9 @@ import FreeCAD
 
 from ...mutation_guard import validate_document_invariants
 from ...snapshot_service_ops.restore_snapshot import restore_snapshot_in_place_gui
-from .snapshot_restore_target import resolve_restore_target, validate_restore_target
 from .native_commit_wait import settle_native_commit
+from .snapshot_owner import snapshot_owner_fields
+from .snapshot_restore_target import resolve_restore_target, validate_restore_target
 
 
 def snapshot(self, doc_name: str) -> dict:
@@ -65,8 +66,14 @@ def snapshot_gui(doc_name: str):
                 os.remove(path)
             return {"ok": False, "error": f"Failed to save snapshot: {e}"}
         sid = "snap-" + str(int(time.time() * 1000))
+        try:
+            owner = snapshot_owner_fields(doc)
+        except RuntimeError as exc:
+            with contextlib.suppress(Exception):
+                os.remove(path)
+            return {"ok": False, "error": str(exc)}
         FreeCAD._mcp_snapshots.append(
-            {"id": sid, "path": path, "doc": doc.Name, "t": time.time()}
+            {"id": sid, "path": path, "t": time.time(), **owner}
         )
         while len(FreeCAD._mcp_snapshots) > 5:
             old = FreeCAD._mcp_snapshots.pop(0)
@@ -88,10 +95,10 @@ def restore_gui(self, doc_name: str, snapshot_id):
         doc = FreeCAD.getDocument(doc_name)
         if not doc:
             return {"ok": False, "error": f"Document '{doc_name}' not found."}
-        target, error = resolve_restore_target(doc_name, snapshot_id)
-        if error:
-            return error
-        validation_error = validate_restore_target(target, doc_name)
+        target, error = resolve_restore_target(doc, snapshot_id)
+        if error or target is None:
+            return error or {"ok": False, "error": "Snapshot not found"}
+        validation_error = validate_restore_target(target, doc)
         if validation_error:
             return validation_error
         snaps = getattr(FreeCAD, "_mcp_snapshots", [])

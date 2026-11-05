@@ -50,6 +50,10 @@ def PathWrite(path: str) -> None:
 
 class _Document:
     Name = "Doc"
+    Uid = "uid-doc"
+
+    def collaborationIdentity(self) -> dict[str, object]:
+        return {"instance_id": 1, "lifecycle_epoch": 1, "state": "Live"}
 
     def __init__(self, events: list[str], *, assigned_name: str | None = None) -> None:
         self.events = events
@@ -90,6 +94,17 @@ class _Document:
 
     def restore(self, path):
         self.restored_paths.append(path)
+
+
+class _StockDocument(_Document):
+    """A live document double for FreeCAD without collaborationIdentity()."""
+
+    collaborationIdentity = None
+
+    def __init__(self, events: list[str], *, uid: str, name: str = "Doc") -> None:
+        super().__init__(events)
+        self.Name = name
+        self.Uid = uid
 
 
 class _MutateThenRaiseDocument(_Document):
@@ -217,7 +232,15 @@ def _seed(document: _Document) -> None:
             handle, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
             os.close(handle)
             PathWrite(path)
-            document._mcp_snapshots.append({"id": "snap-test", "path": path, "doc": "Doc"})
+            document._mcp_snapshots.append(
+                {
+                    "id": "snap-test",
+                    "path": path,
+                    "doc": "Doc",
+                    "document_uid": document.Uid,
+                    "document_instance_id": document.collaborationIdentity()["instance_id"],
+                }
+            )
 
 
 def _collaborators(document: _Document | None, events: list[str], *, validator=None, final_result=None):
@@ -454,3 +477,191 @@ def test_broken_live_state_is_validated_only_after_snapshot_reload():
     assert document.restored_paths
     assert "Hole1" not in document.objects
     assert events.count("validate") == 1
+
+
+def _owned_snapshot(document: _Document, snapshot_id: str, *, uid: str, instance_id: int) -> str:
+    handle, path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
+    os.close(handle)
+    PathWrite(path)
+    document._mcp_snapshots.append(
+        {
+            "id": snapshot_id,
+            "path": path,
+            "doc": document.Name,
+            "document_uid": uid,
+            "document_instance_id": instance_id,
+        }
+    )
+    return path
+
+
+def test_restore_rejects_snapshot_from_a_reused_document_name():
+    """A new document can reuse a closed document's name and must not inherit its snapshot."""
+
+    events: list[str] = []
+    successor = _Document(events)
+    successor.Uid = "uid-successor"
+    successor.collaborationIdentity = lambda: {
+        "instance_id": 2,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    _owned_snapshot(successor, "snap-previous", uid="uid-previous", instance_id=1)
+    collaborators, _api = _collaborators(successor, events)
+
+    result = run_restore(collaborators, successor.Name, "snap-previous")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert successor.restored_paths == []
+
+
+def test_restore_without_id_skips_a_newer_snapshot_from_a_reused_name():
+    events: list[str] = []
+    document = _Document(events)
+    document.Uid = "uid-live"
+    document.collaborationIdentity = lambda: {
+        "instance_id": 4,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    _owned_snapshot(document, "snap-live", uid="uid-live", instance_id=4)
+    _owned_snapshot(document, "snap-reused-name", uid="uid-closed", instance_id=3)
+    collaborators, _api = _collaborators(document, events)
+
+    result = run_restore(collaborators, document.Name, None)
+
+    assert result["success"] is True, result
+    assert result["restored_id"] == "snap-live"
+    assert document.restored_paths
+
+
+def _unlink_snapshots(document: _Document) -> None:
+    for row in document._mcp_snapshots:
+        path = row.get("path") if isinstance(row, dict) else None
+        if isinstance(path, str):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def test_stock_document_snapshot_then_restore_without_collaboration_identity():
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_io_actions import (
+        snapshot_document,
+    )
+
+    events: list[str] = []
+    document = _StockDocument(events, uid="uid-stock")
+    try:
+        payload = snapshot_document(document)
+        collaborators, _api = _collaborators(document, events)
+        result = run_restore(collaborators, document.Name, str(payload["snapshot_id"]))
+    finally:
+        _unlink_snapshots(document)
+
+    assert result["success"] is True, result
+    assert result["restored_id"] == payload["snapshot_id"]
+    assert document.restored_paths
+
+
+def test_stock_reused_name_does_not_restore_the_previous_document():
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_io_actions import (
+        snapshot_document,
+    )
+
+    events: list[str] = []
+    previous = _StockDocument(events, uid="uid-previous", name="ReuseMe")
+    try:
+        payload = snapshot_document(previous)
+        successor = _StockDocument(events, uid="uid-successor", name="ReuseMe")
+        successor._mcp_snapshots = previous._mcp_snapshots
+        collaborators, _api = _collaborators(successor, events)
+        explicit = run_restore(collaborators, successor.Name, str(payload["snapshot_id"]))
+        omitted = run_restore(collaborators, successor.Name, None)
+    finally:
+        _unlink_snapshots(previous)
+
+    assert explicit["success"] is False
+    assert explicit["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert omitted["success"] is False
+    assert omitted["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert successor.restored_paths == []
+
+
+def test_stock_opened_copy_with_the_same_uid_does_not_restore():
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_io_actions import (
+        snapshot_document,
+    )
+
+    events: list[str] = []
+    source = _StockDocument(events, uid="uid-shared", name="Source")
+    try:
+        payload = snapshot_document(source)
+        copy = _StockDocument(events, uid="uid-shared", name="Copy")
+        copy._mcp_snapshots = source._mcp_snapshots
+        collaborators, _api = _collaborators(copy, events)
+        rejected = run_restore(collaborators, copy.Name, str(payload["snapshot_id"]))
+        restored = run_restore(
+            _collaborators(source, events)[0], source.Name, str(payload["snapshot_id"])
+        )
+    finally:
+        _unlink_snapshots(source)
+
+    assert rejected["success"] is False
+    assert rejected["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert copy.restored_paths == []
+    assert restored["success"] is True, restored
+    assert restored["restored_id"] == payload["snapshot_id"]
+    assert source.restored_paths
+
+
+def test_stock_restore_skips_a_row_written_with_no_owner_fields():
+    """A ring row from before owner fields has only the document name."""
+
+    from addon.FreeCADMCP.rpc_server.methods.cad_methods_ops.diagnostics_io_actions import (
+        snapshot_document,
+    )
+
+    events: list[str] = []
+    document = _StockDocument(events, uid="uid-stock", name="ReuseMe")
+    handle, old_path = tempfile.mkstemp(suffix=".FCStd", prefix="mcp_snap_")
+    os.close(handle)
+    PathWrite(old_path)
+    document._mcp_snapshots.append(
+        {"id": "snap-old", "path": old_path, "t": 0, "doc": document.Name}
+    )
+    try:
+        payload = snapshot_document(document)
+        collaborators, _api = _collaborators(document, events)
+        omitted = run_restore(collaborators, document.Name, None)
+        explicit = run_restore(collaborators, document.Name, "snap-old")
+    finally:
+        _unlink_snapshots(document)
+
+    assert omitted["success"] is True, omitted
+    assert omitted["restored_id"] == payload["snapshot_id"]
+    assert explicit["success"] is False
+    assert explicit["error_code"] == "SNAPSHOT_NOT_FOUND"
+
+
+def test_restore_rejects_opened_copy_with_the_same_uid():
+    """An opened save copy shares Uid but is a different live document."""
+
+    events: list[str] = []
+    copy = _Document(events)
+    copy.Name = "Copy"
+    copy.Uid = "uid-shared"
+    copy.collaborationIdentity = lambda: {
+        "instance_id": 9,
+        "lifecycle_epoch": 1,
+        "state": "Live",
+    }
+    _owned_snapshot(copy, "snap-original", uid="uid-shared", instance_id=1)
+    collaborators, _api = _collaborators(copy, events)
+
+    result = run_restore(collaborators, copy.Name, "snap-original")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SNAPSHOT_NOT_FOUND"
+    assert copy.restored_paths == []

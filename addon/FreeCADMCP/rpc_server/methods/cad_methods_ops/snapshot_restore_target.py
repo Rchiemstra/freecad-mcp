@@ -3,32 +3,54 @@
 from __future__ import annotations
 
 import os
+from typing import cast
 
 import FreeCAD
 
+from .snapshot_owner import row_belongs_to_document
+
+_MISMATCH: dict[str, object] = {
+    "ok": False,
+    "error_code": "SNAPSHOT_DOCUMENT_MISMATCH",
+    "error": "Snapshot belongs to a different document",
+}
+
+
+def _record(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    return cast(dict[str, object], value)
+
 
 def resolve_restore_target(
-    doc_name: str,
+    document: object,
     snapshot_id: str | None,
-) -> tuple[dict | None, dict | None]:
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
     snaps = getattr(FreeCAD, "_mcp_snapshots", [])
+    if not isinstance(snaps, list):
+        snaps = []
     if snapshot_id:
         for snap in snaps:
-            if snap["id"] == snapshot_id:
-                return snap, None
+            record = _record(snap)
+            if record is not None and record.get("id") == snapshot_id:
+                return record, None
         return None, {"ok": False, "error": f"Snapshot not found: {snapshot_id}"}
-    if not snaps:
-        return None, {"ok": False, "error": "No snapshots available to restore"}
-    return snaps[-1], None
+    for snap in reversed(snaps):
+        record = _record(snap)
+        if record is not None and row_belongs_to_document(record, document):
+            return record, None
+    if snaps:
+        return None, dict(_MISMATCH)
+    return None, {"ok": False, "error": "No snapshots available to restore"}
 
 
-def validate_restore_target(target: dict, doc_name: str) -> dict | None:
-    if str(target.get("doc") or "") != doc_name:
-        return {
-            "ok": False,
-            "error_code": "SNAPSHOT_DOCUMENT_MISMATCH",
-            "error": "Snapshot belongs to a different document",
-        }
-    if not os.path.exists(target["path"]):
-        return {"ok": False, "error": f"Snapshot file missing: {target['path']}"}
+def validate_restore_target(
+    target: dict[str, object],
+    document: object,
+) -> dict[str, object] | None:
+    if not row_belongs_to_document(target, document):
+        return dict(_MISMATCH)
+    path = target.get("path")
+    if not isinstance(path, str) or not os.path.exists(path):
+        return {"ok": False, "error": f"Snapshot file missing: {path}"}
     return None
