@@ -13,6 +13,11 @@ from typing import Any
 
 from .process_control import terminate_process_tree
 from .telemetry import emit as emit_telemetry
+from .worker_manager_ops.artifact_roots import (
+    create_artifact_root,
+    refresh_artifact_storage,
+    release_artifact_root,
+)
 from .worker_manager_ops.build_identity import (
     BuildIdentity,
     normalize_build_identity,
@@ -26,7 +31,6 @@ from .worker_manager_ops.lifecycle_codes import build_worker_error
 from .worker_manager_ops.link_warnings import apply_link_warnings, merge_link_warnings
 from .worker_manager_ops.surfaces import attach_worker_manager_surfaces
 from .worker_manager_ops.temp_usage import (
-    sweep_stale_artifacts,
     sweep_stale_workspaces,
     temp_usage,
 )
@@ -69,8 +73,10 @@ class WorkerManager:
         self.temp_root_limit_bytes = int(temp_root_limit_bytes)
         self.monitor_interval_seconds = max(0.01, float(monitor_interval_seconds))
         self.temp_root.mkdir(parents=True, exist_ok=True)
-        self.artifact_root = self.temp_root / "artifacts"
-        self.artifact_root.mkdir(parents=True, exist_ok=True)
+        # Private to this manager. A shared "artifacts" folder lets stop() on
+        # one FreeCAD instance delete files another instance still serves.
+        self._artifact_owner = create_artifact_root(self.temp_root)
+        self.artifact_root = self._artifact_owner.path
         self._state_lock = threading.Lock()
         self._active_process: subprocess.Popen | None = None
         self._active_job_id: str | None = None
@@ -111,7 +117,7 @@ class WorkerManager:
     def create_workspace(self) -> Path:
         if self._stopping:
             raise RuntimeError("server_stopping")
-        sweep_stale_artifacts(self.artifact_root)
+        refresh_artifact_storage(self.temp_root, self.artifact_root)
         if temp_usage(self.temp_root) >= self.temp_root_limit_bytes:
             raise RuntimeError("temporary worker root exceeds its configured limit")
         return Path(tempfile.mkdtemp(prefix="mcp_worker_", dir=self.temp_root))
@@ -284,7 +290,7 @@ class WorkerManager:
             self._worker_thread.join(timeout=max(0.1, timeout))
         thread_stopped = not worker_started or not self._worker_thread.is_alive()
         if thread_stopped:
-            shutil.rmtree(self.artifact_root, ignore_errors=True)
+            release_artifact_root(self._artifact_owner)
         return stopped and thread_stopped
 
     @staticmethod

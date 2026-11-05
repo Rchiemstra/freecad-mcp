@@ -374,3 +374,135 @@ def test_invalid_timeout_returns_a_protocol_error_and_keeps_the_worker_alive(tmp
         assert manager.status()["queue_depth"] == 0
     finally:
         manager.stop()
+
+
+def _manager_on_default_temp_root(tmp_path, monkeypatch) -> WorkerManager:
+    """Two FreeCAD processes both resolve the default worker temp root."""
+
+    monkeypatch.setattr(manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
+    return WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        autostart=False,
+    )
+
+
+def test_stopping_one_instance_preserves_the_other_instances_artifacts(
+    tmp_path, monkeypatch
+):
+    """Shutdown deletes this manager's artifacts and no other instance's."""
+
+    first = _manager_on_default_temp_root(tmp_path, monkeypatch)
+    second = _manager_on_default_temp_root(tmp_path, monkeypatch)
+    owned = first.artifact_root / "job-a" / "part.step"
+    owned.parent.mkdir(parents=True)
+    owned.write_bytes(b"step")
+    second_root = second.artifact_root
+    second_lock = second._artifact_owner.lock_path
+    try:
+        assert second.stop() is True
+        assert owned.is_file()
+        assert first.artifact_root != second_root
+        assert not second_root.exists()
+        assert not second_lock.exists()
+        assert not (first.temp_root / "artifacts").exists()
+    finally:
+        first.stop()
+    assert not owned.exists()
+    assert not first._artifact_owner.lock_path.exists()
+
+
+def test_live_instance_artifacts_survive_another_instances_cleanup(
+    tmp_path, monkeypatch
+):
+    """Startup and workspace admission must not expire another live owner."""
+
+    first = _manager_on_default_temp_root(tmp_path, monkeypatch)
+    owned = first.artifact_root / "job-old" / "part.step"
+    owned.parent.mkdir(parents=True)
+    owned.write_bytes(b"step")
+    expired = time.time() - 3700
+    os.utime(owned.parent, (expired, expired))
+    os.utime(owned, (expired, expired))
+    second = _manager_on_default_temp_root(tmp_path, monkeypatch)
+    try:
+        assert owned.is_file()
+        second.create_workspace()
+        assert owned.is_file()
+    finally:
+        first.stop()
+        second.stop()
+
+
+def test_managers_on_one_temp_root_keep_private_artifact_directories(tmp_path):
+    root = tmp_path / "workers"
+    first = WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=root,
+        autostart=False,
+    )
+    second = WorkerManager(
+        _runtime(),
+        "addon/FreeCADMCP/rpc_server",
+        temp_root=root,
+        autostart=False,
+    )
+    owned = first.artifact_root / "job-a" / "part.step"
+    owned.parent.mkdir(parents=True)
+    owned.write_bytes(b"step")
+    try:
+        assert second.stop() is True
+        assert owned.is_file()
+    finally:
+        first.stop()
+    assert not owned.exists()
+
+
+def test_startup_leaves_a_legacy_shared_artifact_directory_alone(tmp_path, monkeypatch):
+    """Old builds still use ``artifacts/``. A new instance must not remove it."""
+
+    legacy = tmp_path / "freecad_mcp_workers" / "artifacts" / "job" / "part.step"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"step")
+    manager = _manager_on_default_temp_root(tmp_path, monkeypatch)
+    try:
+        assert legacy.is_file()
+        manager.create_workspace()
+        assert legacy.is_file()
+    finally:
+        manager.stop()
+    assert legacy.is_file()
+
+
+def test_abandoned_artifact_root_expires_without_removing_fresh_files(
+    tmp_path, monkeypatch
+):
+    """A crash drops the lock. Peers reap only artifacts older than an hour."""
+
+    crashed = _manager_on_default_temp_root(tmp_path, monkeypatch)
+    survivor = None
+    stale = crashed.artifact_root / "old-job"
+    fresh = crashed.artifact_root / "new-job"
+    stale.mkdir()
+    fresh.mkdir()
+    (stale / "a.step").write_bytes(b"old")
+    (fresh / "b.step").write_bytes(b"new")
+    expired = time.time() - 3700
+    os.utime(stale / "a.step", (expired, expired))
+    os.utime(stale, (expired, expired))
+    os.close(crashed._artifact_owner.lock_fd)
+    crashed._artifact_owner.lock_fd = -1
+    try:
+        survivor = _manager_on_default_temp_root(tmp_path, monkeypatch)
+        assert not stale.exists()
+        assert (fresh / "b.step").is_file()
+        os.utime(fresh / "b.step", (expired, expired))
+        os.utime(fresh, (expired, expired))
+        survivor.create_workspace()
+        assert not crashed.artifact_root.exists()
+        assert not crashed._artifact_owner.lock_path.exists()
+    finally:
+        if survivor is not None:
+            survivor.stop()
+        crashed.stop()

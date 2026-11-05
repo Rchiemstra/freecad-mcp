@@ -14,6 +14,7 @@ def promote_artifacts(
     job_id: str,
 ) -> list[dict[str, Any]]:
     from ..worker_manager import MAX_ARTIFACT_BYTES, MAX_ARTIFACTS_TOTAL_BYTES
+    from ..worker_protocol_ops.constants import ARTIFACT_EXPIRY_SECONDS
     from ..worker_protocol_types.protocol_error import ProtocolError
 
     if not isinstance(artifacts, list):
@@ -43,6 +44,6 @@ def promote_artifacts(
             "format": item.get("format", source.suffix.lstrip(".")),
             "path": str(target),
             "size_bytes": size,
-            "expires_in_seconds": 3600,
+            "expires_in_seconds": ARTIFACT_EXPIRY_SECONDS,
         })
     return promoted
