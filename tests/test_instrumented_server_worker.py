@@ -298,7 +298,7 @@ def test_control_lane_tools_allowlist_matches_registered_mcp_control_tools():
     assert "acknowledge_acquisition_claim" not in registered
     assert "acknowledge_acquisition_claim" not in CONTROL_LANE_TOOLS
 
-    assert "claim_acquisition_result" in registered
+    assert "claim_acquisition_result" not in registered
     assert "claim_acquisition_result" not in CONTROL_LANE_TOOLS
 
     assert CONTROL_LANE_TOOLS == frozenset(
@@ -311,7 +311,7 @@ def test_control_lane_tools_allowlist_matches_registered_mcp_control_tools():
 
     assert "execute_code" in registered
     assert "execute_code" not in CONTROL_LANE_TOOLS
-    assert "acquire_document_lock" in registered
+    assert "acquire_document_lock" not in registered
     assert "acquire_document_lock" not in CONTROL_LANE_TOOLS
 
 

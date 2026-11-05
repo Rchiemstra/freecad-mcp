@@ -1501,7 +1501,7 @@
       },
       {
         "path": "src/freecad_mcp/server_ops/tool_exports/__init__.py",
-        "line": 95,
+        "line": 91,
         "column": 0,
         "symbol": "heartbeat_document_lock",
         "kind": "Name"

@@ -85,55 +85,28 @@ The setting is saved to `freecad_mcp_settings.json` and persists across sessions
 
 You can disable it at any time by unchecking **Auto-Start Server** in the same menu.
 
-## Per-document agent leases and isolated development
+## Document editing and isolated development
 
-FreeCAD MCP supports renewable per-document write leases. In `enforce` mode,
-each cooperative mutation must belong to the authenticated MCP runtime, name an
-explicit live document, carry that document's unguessable lease credential,
-and pass authorization again on FreeCAD's GUI thread. Ownership, current
-operation, heartbeat age, dirty state, and recovery errors remain visible in
-FreeCAD between MCP calls.
-
-The addon setting `document_lease_mode` has three compatibility levels:
-
-- `off` preserves an existing profile whose two legacy lock booleans were
-  both false. Recognized active v2 foreign sidecars still block writes.
-- `observe` is the default for a newly created ordinary profile. It displays
-  lease state and warnings without requiring legacy callers to acquire a
-  lease.
-- `enforce` requires a UUID profile identity, an owner-only authentication
-  secret, protocol v2, and exact lease credentials for every mutation.
-
-Existing settings are migrated explicitly: both legacy booleans true becomes
-`enforce`, lock enabled without enforcement becomes `observe`, and all other
-legacy combinations remain `off`. Malformed or unknown policy values prevent
-the RPC server from starting instead of silently selecting a weaker mode.
-
-Task descriptions stay in the addon's process-local status registry by
-default; schema-v2 sidecars write an empty `task_summary`. Administrators who
-accept the metadata exposure may set `persist_task_summary_in_sidecar=true`;
-only a sanitized, single-line summary of at most 256 characters is then
-persisted. Raw lease tokens and token fingerprints are never exposed through
-public status.
-
-A normal agent workflow acquires once, performs typed modelling calls against
-the returned document session, then uses typed finalization instead of raw
-Python save code:
+Document authority belongs to native FreeCAD collaboration. The MCP server
+does not register document-lease tools. Agents edit with the typed modelling
+tools and persist with `save_document`, `save_document_as`,
+`save_document_copy`, or `finalize_document_edit`:
 
 ```text
-acquire_document_lock({document_name: "Bracket"}, "Body → Sketch → Pad", agent_id)
 create_object(PartDesign::Body) / sketch_create / sketch_add_constraint / pad_feature
 finalize_document_edit(
-  {document_session_uuid: "<acquired session UUID>"},
+  {document_name: "Bracket"},
   save_mode="save",
   validation_profile="default"
 )
 ```
 
-The MCP process keeps the one-time token in memory, renews it automatically,
-and attaches the exact credential to each scoped mutation. A failed mutation
-or save retains the lease in a visible error state for retry or local recovery;
-it is never reported as a clean release.
+A failed save or finalization stays fail-closed. It is not a lease release.
+
+The addon setting `document_lease_mode` remains a compatibility value (`off`,
+`observe`, or `enforce`) for migrated profiles. It does not register lease
+acquisition, adoption, query, update, release, or claim tools. Malformed or
+unknown policy values prevent the RPC server from starting.
 
 For development beside an existing FreeCAD/MCP session, create the private
 manifest-driven instance:
@@ -157,12 +130,11 @@ advance. `--rpc-stall-timeout` defaults to 60 seconds without progress;
 `--rpc-wait-timeout` is an absolute safety cap, defaulting to 900 seconds.
 See [startup progress](doc/isolated-instance.md#startup-progress).
 
-> **Security boundary:** leases prevent accidental cooperative MCP conflicts;
-> they are not a FreeCAD or Python sandbox. Python console code, macros,
+> **Security boundary:** this server does not expose document-lease tools, and
+> it is not a FreeCAD or Python sandbox. Python console code, macros,
 > third-party C++ commands, or a malicious process running as the same OS user
-> can bypass pre-mutation checks. Unexpected changes are detected and fence the
-> agent, but absolute in-process immutability requires a FreeCAD core API. Keep
-> RPC on loopback or use an encrypted tunnel/TLS proxy for remote access.
+> can change a document. Keep RPC on loopback or use an encrypted tunnel/TLS
+> proxy for remote access.
 
 Documentation:
 

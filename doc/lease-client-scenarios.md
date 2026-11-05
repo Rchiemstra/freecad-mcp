@@ -1,10 +1,8 @@
 # Lease client scenarios
 
-This document maps the supported acquisition, save, reconnect, and recovery
-paths for any MCP client, including Claude, GPT Sol, and Cursor. Client names
-are display metadata only. Coordination is based on the authenticated MCP
-instance ID, addon runtime identity, document identity, lease ID, generation,
-and bearer token.
+The MCP server does not register document-lease tools. The diagrams below
+record the retired protocol. They are not MCP tool calls for Claude, GPT Sol,
+Cursor, or any other client. Client names are display metadata only.
 
 The recovery exception described here is intentionally narrow. A new client
 may replace a fenced acquisition reservation only when the reservation never
@@ -23,7 +21,7 @@ sequenceDiagram
     participant GUI as FreeCAD GUI
     participant Disk as FCStd + sidecar
 
-    Client->>RPC: acquire_document_lock(clean document)
+    Note over Client,RPC: retired; no MCP lease-acquire tool
     RPC->>Lease: CAS-publish ACQUIRING
     Lease->>Disk: create sidecar
     RPC->>Disk: hash saved baseline
@@ -32,9 +30,7 @@ sequenceDiagram
     RPC->>Lease: promote LOCKED_IDLE
     Lease-->>Client: one-time credential
 
-    Client->>RPC: acquire_document_lock(dirty document)
-    RPC-->>Client: DIRTY_REQUIRES_LOCAL_ADOPTION
-    Client->>RPC: adopt_dirty_document
+    Note over Client,RPC: retired; no MCP dirty-adoption tool
     Note over RPC: Initial dirty adoption auto-authorized (no pop-up)
     RPC->>Lease: CAS-publish dirty ACQUIRING
     RPC->>GUI: create owner-only saveCopy
@@ -61,7 +57,7 @@ sequenceDiagram
     participant Lease as Lease service
     participant Disk as FCStd + sidecar
 
-    Client->>RPC: adopt_dirty_document
+    Note over Client,RPC: retired; no MCP dirty-adoption tool
     RPC->>Disk: hash saved FCStd off-GUI
     RPC->>GUI: verify exact proxy + preserve Modified=true
     RPC->>GUI: create recovery saveCopy
@@ -72,8 +68,8 @@ sequenceDiagram
     Lease-->>Client: dirty LOCKED_IDLE credential
 ```
 
-`acquire_document_lock` still returns `DIRTY_REQUIRES_LOCAL_ADOPTION` for this
-case; it never silently treats revision equality as proof that the live
+The retired clean-acquire path returned `DIRTY_REQUIRES_LOCAL_ADOPTION` for this
+case; it never silently treated revision equality as proof that the live
 document is clean. A wrong intervention signature, changed baseline,
 live/unknown foreign owner, identity drift, or reappearing sidecar fails closed.
 
@@ -225,7 +221,7 @@ sequenceDiagram
 | Dirty | Unreturned abandoned `ACQUIRING` (request not live) | Same MCP instance | Adopt | Immediate CAS rotation without waiting for stale | `test_client_timeout_after_acquiring_allows_same_owner_retry` / `test_same_owner_fences_local_unreturned_acquiring_without_stale_wait` |
 | Dirty | Live `ACQUIRING` (request still inflight) | Same MCP, new request id | Adopt | `LEASE_CONFLICT` (no concurrent same-runtime fence) | `test_same_runtime_live_acquiring_is_not_fenced_by_concurrent_request` / `test_same_owner_live_request_blocks_concurrent_fence` |
 | Dirty | Live `ACQUIRING` reservation | Competing MCP instance | Adopt | `LEASE_CONFLICT` while original may still run | `test_foreign_live_acquiring_is_not_fenced_by_local_retry` / `test_competing_mcp_cannot_fence_live_local_acquiring` |
-| Any | Successful acquire/adopt response lost on the wire | Same MCP runtime + request id | Auto status/claim (tool path) or claim/replay | Durable peek until ack; status stays redacted | `test_adopt_transport_timeout_auto_claims_and_custodies_credential` / `test_acquisition_token_is_returned_once_and_claimable_after_response_loss` / `test_claim_acquisition_result_is_durable_until_ack` |
+| Any | Successful acquire/adopt response lost on the wire | Same MCP runtime + request id | Retired protocol only; no MCP claim tool | Durable peek until ack; status stays redacted | `test_adopt_transport_timeout_auto_claims_and_custodies_credential` / `test_acquisition_token_is_returned_once_and_claimable_after_response_loss` / `test_claim_acquisition_result_is_durable_until_ack` |
 | Dirty | Baseline hash exceeds `ACQUIRE_HASH_TIMEOUT_S` | n/a | Adopt | Abort `ACQUIRING`; no 90s wait | `test_hash_timeout_aborts_acquiring_without_long_wait` |
 | Clean | Unreturned `USER_INTERVENED` reservation | Same local runtime | Acquire | CAS rotation and new credential | `test_gui_save_refreshes_identity_and_clean_retry_fences_lost_reservation` and live `test_live_gui_save_close_reopen_rebinds_and_allows_clean_retry` |
 | Clean | Unreturned reservation after atomic GUI save | Same live proxy/path | Acquire | Identity refresh, then successful RPC acquisition | `test_gui_save_then_clean_acquire_avoids_identity_registration_deadlock` |

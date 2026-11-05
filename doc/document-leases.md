@@ -1,9 +1,10 @@
 # Per-document agent leases
 
-FreeCAD MCP uses renewable, per-document write leases to keep cooperative MCP
-agents from editing the same document concurrently. A lease does not make
-FreeCAD a sandbox; it authenticates and fences MCP mutations, makes ownership
-visible, and retains recoverable state when work cannot finish cleanly.
+The MCP server does not register document-lease tools. Document authority
+belongs to native FreeCAD collaboration. Agents persist documents with
+`save_document`, `save_document_as`, `save_document_copy`, and
+`finalize_document_edit`. The lifecycle below describes the retired lease
+protocol; it is not a sequence of MCP tool calls.
 
 ## Modes
 
@@ -31,9 +32,9 @@ active lease or recovery record exists.
 ## Lifecycle
 
 1. The MCP client authenticates to the exact addon profile/runtime.
-2. `acquire_document_lock` resolves a clean live FreeCAD document and returns a
+2. The retired protocol resolved a clean live FreeCAD document and returned a
    256-bit token once. The addon retains only its SHA-256 fingerprint. A
-   document that was already dirty must instead use `adopt_dirty_document`;
+   document that was already dirty used a separate adoption path;
    the addon auto-authorizes adoption without a FreeCAD pop-up, including an
    automatic handoff from another agent's dirty ``LOCKED_ERROR`` lease. The
    handoff revalidates the live document before atomically rotating authority.
@@ -82,17 +83,15 @@ If an imported foreign record was cached before its sidecar disappeared, that
 local worker-signature shortcut is not trusted. The addon must prove the
 recorded foreign FreeCAD authority inactive, independently re-hash the saved
 baseline, and snapshot the exact live proxy. Clean state can then self-recover
-through `acquire_document_lock`; dirty state must use `adopt_dirty_document`
-and remains dirty. Atomic sidecar creation, verified core fencing, and private
+through the retired clean-acquire path; dirty state used the retired adoption
+path and remains dirty. Atomic sidecar creation, verified core fencing, and private
 credential escrow complete before the immutable foreign cache is replaced.
 
-The public lifecycle tools are `acquire_document_lock`,
-`adopt_dirty_document`, `get_document_lock`, `list_document_locks`,
-`update_document_lock`, `save_document`,
-`save_document_as`, `finalize_document_edit`, and the lease-aware snapshot and
-restore tools. Heartbeat batching and reconciliation are authenticated internal
-control operations. Force release is deliberately absent from ordinary MCP
-tool exposure.
+The public document tools are `save_document`, `save_document_as`,
+`save_document_copy`, and `finalize_document_edit`, plus the snapshot and
+restore tools. Lease acquisition, adoption, query, update, release, and claim
+are not MCP tools. Heartbeat batching and reconciliation are not advertised.
+Force release is absent from ordinary MCP tool exposure.
 
 Every typed lifecycle selector exposes exactly three accepted keys:
 `document_name`, `document_session_uuid`, and `canonical_path`. At least one is
